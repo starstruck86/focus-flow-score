@@ -65,7 +65,7 @@ export const LifecycleSummaryBar = memo(function LifecycleSummaryBar({ summary: 
         {totalBlocked > 0 && (
           <>
             <span className="text-border">·</span>
-            <span className="text-destructive">{totalBlocked} blocked</span>
+            <span className="text-amber-500">{totalBlocked} need attention</span>
           </>
         )}
       </div>
