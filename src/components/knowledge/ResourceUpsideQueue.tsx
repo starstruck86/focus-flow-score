@@ -455,19 +455,19 @@ export function ResourceUpsideQueue() {
 
   return (
     <div className="space-y-3">
-      {/* Canonical summary header */}
-      <SummaryHeader
+      {/* Canonical pipeline dashboard */}
+      <PipelineDashboard
         summary={summary}
         totalCandidates={candidates.length}
         totalPromoted={promoted.size}
+        pipelineResult={pipelineResult}
+        batchRunning={batchRunning}
+        onRunPipeline={handleRunPipeline}
         onBulkTemplates={handleBulkPromoteTemplates}
         onBulkExamples={handleBulkPromoteExamples}
         onBulkActivate={handleBulkAutoActivate}
         onStartGuided={() => { setGuidedMode(true); setGuidedIndex(0); }}
         guidedAvailable={guidedItems.length}
-        onBatchBackfill={handleBatchBackfill}
-        batchRunning={batchRunning}
-        batchResult={batchResult}
       />
 
       {/* Stuck reasons */}
@@ -497,11 +497,16 @@ export function ResourceUpsideQueue() {
         />
       )}
 
-      {/* TOP 25 — Highest Impact */}
-      {!guidedMode && <Top25Section items={top25} promoted={promoted} onPromote={handlePromote} />}
+      {/* Resource Failure Queue — from pipeline diagnoses */}
+      {!guidedMode && pipelineResult && pipelineResult.diagnoses.length > 0 && (
+        <ResourceFailureQueue diagnoses={pipelineResult.diagnoses} />
+      )}
 
       {/* Trust Review Queue — extracted but not activated */}
       {!guidedMode && <TrustReviewQueue />}
+
+      {/* TOP 25 — Highest Impact */}
+      {!guidedMode && <Top25Section items={top25} promoted={promoted} onPromote={handlePromote} />}
 
       {/* Action buckets */}
       {!guidedMode && BUCKET_ORDER.map(bucket => (
