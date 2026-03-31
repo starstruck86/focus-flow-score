@@ -327,20 +327,22 @@ function extractTacticsFromText(
  * Heuristic extraction — produces ONLY actionable, execution-ready sales tactics.
  * Returns an ExtractionLog alongside the items for auditing.
  */
-export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeItemInsert[] {
+export function extractKnowledgeHeuristic(
+  source: ExtractionSource,
+  existingItems: Array<{ title: string; tactic_summary?: string | null }> = []
+): KnowledgeItemInsert[] {
   const { resourceId, userId, title, content, description, tags } = source;
   const text = [title, description, content].filter(Boolean).join('\n');
-  const items: KnowledgeItemInsert[] = [];
+  const rawItems: KnowledgeItemInsert[] = [];
   const rejectedReasons: string[] = [];
 
-  if (text.length < 100) return items;
+  if (text.length < 100) return rawItems;
 
   const competitor = detectCompetitor(text);
   const productArea = detectProductArea(text);
   const isProductKnowledge = PRODUCT_PATTERNS.some(p => p.test(text));
   const lower = text.toLowerCase();
 
-  // For each matching chapter, extract specific tactics (not summaries)
   for (const signal of CHAPTER_SIGNALS) {
     const matches = signal.patterns.filter(p => p.test(lower));
     if (matches.length === 0) continue;
@@ -365,19 +367,32 @@ export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeIt
         example_usage: tactic.example_usage,
       });
 
-      // Only create item if it passes actionability minimum
       if (confidence < 0.3) {
         rejectedReasons.push(`${tactic.title}: confidence too low (${(confidence * 100).toFixed(0)}%)`);
         continue;
       }
 
-      // Enforce structure: must have filled fields
       if (!tactic.tactic_summary || tactic.tactic_summary.length < 20) {
         rejectedReasons.push(`${tactic.title}: tactic_summary too short`);
         continue;
       }
 
-      items.push({
+      // Trust validation: 5-gate check
+      const trust = validateTrust(
+        {
+          title: tactic.title,
+          tactic_summary: tactic.tactic_summary,
+          when_to_use: tactic.when_to_use,
+          example_usage: tactic.example_usage,
+          chapter: tactic.chapter,
+        },
+        existingItems
+      );
+
+      // Only auto-activate if ALL gates pass
+      const autoActivate = trust.passed && confidence >= 0.4;
+
+      rawItems.push({
         user_id: userId,
         source_resource_id: resourceId,
         source_doctrine_id: null,
@@ -393,27 +408,31 @@ export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeIt
         when_to_use: tactic.when_to_use || null,
         when_not_to_use: tactic.when_not_to_use || null,
         example_usage: tactic.example_usage || null,
-        confidence_score: confidence,
-        status: confidence >= 0.4 ? 'active' : 'review_needed',
-        active: confidence >= 0.4,
+        confidence_score: trust.overall,
+        status: autoActivate ? 'active' : (trust.failedGates.length <= 1 ? 'extracted' : 'review_needed'),
+        active: autoActivate,
         user_edited: false,
         tags: structuredTags,
       });
     }
   }
 
-  // Log extraction results
-  const activatable = items.filter(i => (i.confidence_score ?? 0) >= 0.55);
+  // Deduplicate against existing + intra-batch
+  const { kept, duplicates } = deduplicateKnowledgeItems(rawItems, existingItems);
+  if (duplicates.length > 0) {
+    rejectedReasons.push(`${duplicates.length} duplicates suppressed`);
+  }
+
   log.info('Heuristic extraction complete', {
     resourceId,
     resourceTitle: title,
-    extracted_count: items.length,
-    activatable_count: activatable.length,
+    extracted_count: kept.length,
+    rejected_duplicates: duplicates.length,
     rejected_reasons: rejectedReasons.slice(0, 10),
     used_llm_fallback: false,
   });
 
-  return items;
+  return kept;
 }
 
 /**
