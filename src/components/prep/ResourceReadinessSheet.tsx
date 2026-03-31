@@ -232,6 +232,35 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [autoOpProgress, setAutoOpProgress] = useState<{ processed: number; total: number; current: string } | null>(null);
   const [lastAutoOpSummary, setLastAutoOpSummary] = useState<BatchSummary | null>(null);
 
+  // ── Queue selection state ──
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [queueProgress, setQueueProgress] = useState<QueueProgress | null>(null);
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const selectFromBucket = useCallback((bucket: ReadinessBucket, count?: number) => {
+    if (!audit) return;
+    const items = audit.buckets[bucket];
+    const ids = count ? items.slice(0, count).map(r => r.id) : items.map(r => r.id);
+    setSelectedIds(new Set(ids));
+  }, [audit]);
+
+  // Clear selection when bucket changes
+  useEffect(() => { clearSelection(); }, [expandedBucket, clearSelection]);
+
+  const handleQueueAction = useCallback((actionType: string, ids: string[]) => {
+    setConfirmAction({ type: actionType, ids });
+  }, []);
+
   // Canonical lifecycle — SINGLE SOURCE OF TRUTH
   const { summary: lifecycle, refetch: refetchLifecycle } = useCanonicalLifecycle();
 
