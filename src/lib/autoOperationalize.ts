@@ -592,11 +592,10 @@ function makeResult(
   knowledgeActivated: number,
   operationalized: boolean,
   needsReview: boolean,
+  reason?: string,
   extractionTier: AutoOperationalizeResult['extractionTier'] = 'none',
   outcome?: PipelineOutcome,
-  reason?: string,
 ): AutoOperationalizeResult {
-  // Derive outcome if not provided
   const derivedOutcome: PipelineOutcome = outcome
     ?? (operationalized ? 'operationalized'
       : extractionTier === 'lightweight' && knowledgeExtracted > 0 ? 'lightweight_extraction'
