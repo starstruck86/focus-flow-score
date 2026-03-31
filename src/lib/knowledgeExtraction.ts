@@ -12,6 +12,7 @@ import type { KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { createLogger } from '@/lib/logger';
 import { inferTags, mergeTags } from '@/lib/resourceTags';
+import { validateTrust, deduplicateKnowledgeItems, type TrustValidation } from '@/lib/trustValidation';
 
 const log = createLogger('KnowledgeExtraction');
 
