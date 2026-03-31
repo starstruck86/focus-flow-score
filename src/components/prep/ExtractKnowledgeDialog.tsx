@@ -73,8 +73,8 @@ export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props
         supabase.from('execution_templates' as any).select('title, body').eq('user_id', user.id).limit(200),
         supabase.from('execution_outputs').select('title, content').eq('user_id', user.id).eq('is_strong_example', true).limit(200),
       ]);
-      const existingTemplates = (existingTplRes.data || []) as Array<{ title: string; body?: string }>;
-      const existingExamples = (existingExRes.data || []) as Array<{ title: string; content?: string }>;
+      const existingTemplates = ((existingTplRes.data || []) as unknown as Array<{ title: string; body?: string }>);
+      const existingExamples = ((existingExRes.data || []) as unknown as Array<{ title: string; content?: string }>);
 
       const existingSourceIds = new Set(existingItems.map(i => i.source_resource_id).filter(Boolean));
       const existingForDedup = existingItems.map(i => ({ title: i.title, tactic_summary: i.tactic_summary }));
