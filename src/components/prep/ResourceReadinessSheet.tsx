@@ -284,14 +284,36 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           toast.error('No eligible resources found based on current filters');
           return;
         }
-        const results = await autoOperationalizeBatch(ids);
-        const summary = summarizeBatchResults(results);
-        if (summary.operationalized === 0 && summary.totalKnowledgeExtracted === 0) {
-          toast.warning(`0 resources operationalized — ${summary.needsReview} need review. Check audit for details.`);
-        } else {
-          toast.success(`Auto-operationalized: ${summary.operationalized} fully operationalized, ${summary.totalKnowledgeExtracted} extracted, ${summary.totalKnowledgeActivated} activated`);
+        setAutoOpProgress({ processed: 0, total: ids.length, current: 'Starting…' });
+        setLastAutoOpSummary(null);
+        try {
+          const results = await autoOperationalizeBatch(ids, (processed, total, currentTitle) => {
+            setAutoOpProgress({ processed, total, current: currentTitle });
+          });
+          const summary = summarizeBatchResults(results);
+          setLastAutoOpSummary(summary);
+
+          if (summary.operationalized === 0 && summary.totalKnowledgeExtracted === 0) {
+            toast.warning(`0 resources operationalized — ${summary.needsReview} need review. Check audit for details.`);
+          } else {
+            toast.success(
+              `Processed ${summary.total} → ${summary.operationalized} operationalized, ` +
+              `${summary.outcomes.partial_extraction} partial, ` +
+              `${summary.outcomes.lightweight_extraction} lightweight, ` +
+              `${summary.outcomes.needs_review} review, ` +
+              `${summary.totalKnowledgeExtracted} KI extracted`
+            );
+          }
+          if (summary.needsReview > 0) toast.info(`${summary.needsReview} resources need manual review`);
+        } catch (err: any) {
+          if (err?.message?.includes('CRITICAL MISMATCH')) {
+            toast.error('Pipeline eligibility mismatch — UI and execution disagree on what is eligible. Refreshing audit.');
+          } else {
+            toast.error(`Auto-operationalize failed: ${err?.message ?? 'Unknown error'}`);
+          }
+        } finally {
+          setAutoOpProgress(null);
         }
-        if (summary.needsReview > 0) toast.info(`${summary.needsReview} resources need manual review`);
       } else if (type === 'backfillAll' || type === 'backfillSmart') {
         const mode = type === 'backfillAll' ? 'all' : 'smart';
         setBackfillProgress({ processed: 0, total: 0 });
