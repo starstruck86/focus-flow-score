@@ -36,7 +36,8 @@ import {
 } from '@/lib/resourceClassifier';
 import { extractKnowledgeHeuristic, type ExtractionSource } from '@/lib/knowledgeExtraction';
 import { TrustReviewQueue } from '@/components/knowledge/TrustReviewQueue';
-import { ResourceFailureQueue, type ResourceDiagnosis } from '@/components/knowledge/ResourceFailureQueue';
+import { ResourceFailureQueue } from '@/components/knowledge/ResourceFailureQueue';
+import { usePipelineDiagnoses, useRunPipeline, type PipelineRunResult } from '@/hooks/usePipelineDiagnoses';
 import { useKnowledgeItems as useAllKnowledgeItems } from '@/hooks/useKnowledgeItems';
 import { useResources, type Resource } from '@/hooks/useResources';
 import { useInsertKnowledgeItems, type KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
