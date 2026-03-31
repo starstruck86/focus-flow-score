@@ -169,7 +169,8 @@ async function reopenResolution(resourceId: string) {
 
 // ── Content-based dedup & smart snippets ───────────────────
 
-import { contentSimilarity, generateSmartSnippet, shapeAsTemplate, shapeAsExample } from '@/lib/contentSignature';
+import { contentSimilarity, generateSmartSnippet } from '@/lib/contentSignature';
+import { TransformationPreviewDialog } from './TransformationPreviewDialog';
 
 // ── Component ──────────────────────────────────────────────
 
@@ -186,6 +187,12 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
     diagnosis: ResourceDiagnosis;
     type: 'template' | 'example';
     similar: { id: string; title: string; content: string; similarity: number }[];
+  } | null>(null);
+  const [transformPreview, setTransformPreview] = useState<{
+    diagnosis: ResourceDiagnosis;
+    type: 'template' | 'example';
+    originalContent: string;
+    resourceData: any;
   } | null>(null);
 
   // Fetch smart preview snippets (route-aware)
@@ -322,25 +329,14 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
       return;
     }
 
-    const shapedBody = shapeAsTemplate(resource.content as string).slice(0, 5000);
-    await supabase.from('execution_templates' as any).insert({
-      user_id: user.id,
-      title: resource.title,
-      body: shapedBody,
-      template_type: 'email',
-      output_type: 'custom',
-      template_origin: 'promoted_from_resource',
-      source_resource_id: resource.id,
-      status: 'active',
-      created_by_user: false,
-      tags: (resource as any).tags || [],
-    } as any);
-
-    await persistResolution(d.resource_id, 'promoted_template', `Promoted as template from "${resource.title}"`);
-    setResolved(prev => new Set(prev).add(d.resource_id));
-    invalidateAll();
-    toast.success('Promoted as template with real content');
-  }, [user, invalidateAll, checkDuplicatesBeforePromotion]);
+    // Show transformation preview instead of directly inserting
+    setTransformPreview({
+      diagnosis: d,
+      type: 'template',
+      originalContent: resource.content as string,
+      resourceData: resource,
+    });
+  }, [user, checkDuplicatesBeforePromotion]);
 
   const handlePromoteExample = useCallback(async (d: ResourceDiagnosis, skipDupCheck = false) => {
     if (!user) return;
@@ -361,20 +357,50 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
       return;
     }
 
-    const shapedContent = shapeAsExample(resource.content as string).slice(0, 5000);
-    await supabase.from('execution_outputs').insert({
-      user_id: user.id,
-      title: resource.title,
-      content: shapedContent,
-      output_type: 'custom',
-      is_strong_example: true,
+    // Show transformation preview instead of directly inserting
+    setTransformPreview({
+      diagnosis: d,
+      type: 'example',
+      originalContent: resource.content as string,
+      resourceData: resource,
     });
+  }, [user, checkDuplicatesBeforePromotion]);
 
-    await persistResolution(d.resource_id, 'promoted_example', `Promoted as example from "${resource.title}"`);
+  const handleConfirmTransformation = useCallback(async (shapedContent: string) => {
+    if (!user || !transformPreview) return;
+    const { diagnosis: d, type, resourceData: resource } = transformPreview;
+
+    if (type === 'template') {
+      await supabase.from('execution_templates' as any).insert({
+        user_id: user.id,
+        title: resource.title,
+        body: shapedContent.slice(0, 5000),
+        template_type: 'email',
+        output_type: 'custom',
+        template_origin: 'promoted_from_resource',
+        source_resource_id: resource.id,
+        status: 'active',
+        created_by_user: false,
+        tags: (resource as any).tags || [],
+      } as any);
+      await persistResolution(d.resource_id, 'promoted_template', `Promoted as template from "${resource.title}"`);
+      toast.success('Promoted as template');
+    } else {
+      await supabase.from('execution_outputs').insert({
+        user_id: user.id,
+        title: resource.title,
+        content: shapedContent.slice(0, 5000),
+        output_type: 'custom',
+        is_strong_example: true,
+      });
+      await persistResolution(d.resource_id, 'promoted_example', `Promoted as example from "${resource.title}"`);
+      toast.success('Promoted as example');
+    }
+
     setResolved(prev => new Set(prev).add(d.resource_id));
+    setTransformPreview(null);
     invalidateAll();
-    toast.success('Promoted as example with real content');
-  }, [user, invalidateAll, checkDuplicatesBeforePromotion]);
+  }, [user, transformPreview, invalidateAll]);
 
   const handleDismiss = useCallback(async (resourceId: string) => {
     await persistResolution(resourceId, 'dismissed', 'Dismissed by user');
@@ -684,6 +710,18 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
             )}
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Transformation preview dialog */}
+      {transformPreview && (
+        <TransformationPreviewDialog
+          open
+          onOpenChange={(open) => { if (!open) setTransformPreview(null); }}
+          originalContent={transformPreview.originalContent}
+          title={transformPreview.resourceData.title}
+          type={transformPreview.type}
+          onConfirm={handleConfirmTransformation}
+        />
       )}
     </>
   );
