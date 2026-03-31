@@ -1051,7 +1051,6 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                       </Collapsible>
                     )}
                   </div>
-                </div>
 
                 <Separator />
 
