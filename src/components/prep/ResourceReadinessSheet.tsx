@@ -1094,6 +1094,18 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
               <div className="space-y-2 text-sm">
                 {confirmAction?.type === 'delete' ? (
                   <p>These resources have very low content (&lt;50 chars) and no URL. This cannot be undone.</p>
+                ) : confirmAction?.type === 'autoOp' && confirmAction.ids ? (
+                  (() => {
+                    const est = estimateBatchOutput(confirmAction.ids.length);
+                    return (
+                      <>
+                        <p><strong>Processing:</strong> {confirmAction.ids.length} resources</p>
+                        <p><strong>Estimated output:</strong> {est.estimatedKnowledgeItems.min}–{est.estimatedKnowledgeItems.max} knowledge items</p>
+                        <p><strong>Estimated time:</strong> ~{est.estimatedTimeMinutes.min}–{est.estimatedTimeMinutes.max} minutes</p>
+                        <p className="text-muted-foreground"><strong>Will NOT:</strong> {BULK_ACTION_DESCRIPTIONS[confirmAction.type]?.wontDo}</p>
+                      </>
+                    );
+                  })()
                 ) : (
                   <>
                     <p><strong>Affects:</strong> {confirmAction?.ids?.length ?? 'all eligible'} {confirmAction?.ids ? 'resources' : 'knowledge items'}</p>
