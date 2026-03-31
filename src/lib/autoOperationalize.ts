@@ -393,10 +393,11 @@ export async function autoOperationalizeResource(
 
 /**
  * Run auto-operationalization on multiple resources.
- * Useful for bulk processing after imports or fixes.
+ * Includes mismatch guard and regression guard.
  */
 export async function autoOperationalizeBatch(
   resourceIds: string[],
+  onProgress?: (processed: number, total: number, currentTitle: string) => void,
 ): Promise<AutoOperationalizeResult[]> {
   log.info('Batch auto-operationalize starting', { totalIds: resourceIds.length });
 
@@ -406,23 +407,36 @@ export async function autoOperationalizeBatch(
   }
 
   const results: AutoOperationalizeResult[] = [];
-  let succeeded = 0, needsReview = 0, stopped = 0;
+  const outcomeCounts: Record<PipelineOutcome, number> = {
+    operationalized: 0,
+    partial_extraction: 0,
+    lightweight_extraction: 0,
+    needs_review: 0,
+    no_content: 0,
+    failed: 0,
+  };
 
-  for (const id of resourceIds) {
-    const result = await autoOperationalizeResource(id);
+  for (let i = 0; i < resourceIds.length; i++) {
+    const result = await autoOperationalizeResource(resourceIds[i]);
     results.push(result);
-    if (result.operationalized) succeeded++;
-    else if (result.needsReview) needsReview++;
-    else stopped++;
+    outcomeCounts[result.outcome]++;
+    onProgress?.(i + 1, resourceIds.length, result.resourceTitle || 'Untitled');
   }
+
+  const totalProcessed = results.filter(r => r.outcome !== 'no_content').length;
 
   log.info('Batch auto-operationalize complete', {
     total: resourceIds.length,
-    operationalized: succeeded,
-    needsReview,
-    stoppedEarly: stopped,
-    reasons: results.filter(r => r.reason).map(r => ({ id: r.resourceId, reason: r.reason })).slice(0, 20),
+    processed: totalProcessed,
+    outcomes: outcomeCounts,
+    reasons: results.filter(r => r.reason).map(r => ({ id: r.resourceId, outcome: r.outcome, reason: r.reason })).slice(0, 20),
   });
+
+  // Regression guard
+  checkRegressionGuard(resourceIds.length, totalProcessed, 'autoOperationalizeBatch');
+
+  // Mismatch guard: if we got IDs but processed 0, something is wrong
+  assertEligibilityAlignment(resourceIds.length, totalProcessed, 'autoOperationalizeBatch');
 
   return results;
 }
