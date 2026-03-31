@@ -377,8 +377,11 @@ export function ResourceUpsideQueue() {
 
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchResult, setBatchResult] = useState<{
-    processed: number; knowledge_created: number; templates_created: number;
+    processed: number; knowledge_created: number; knowledge_activated: number;
+    templates_created: number; examples_created: number;
+    duplicates_suppressed: number; trust_rejected: number;
     failed: number; remaining: number;
+    routed: Record<string, number>;
   } | null>(null);
 
   const handleBatchBackfill = useCallback(async () => {
