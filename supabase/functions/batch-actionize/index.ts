@@ -341,7 +341,8 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY')!,
       { global: { headers: { Authorization: authHeader } } },
     );
-    const { data: { user } } = await supabaseUser.auth.getUser();
+    const { data: { user }, error: authErr } = await supabaseUser.auth.getUser();
+    console.log('batch-actionize: auth result', user?.id || 'no user', authErr?.message || 'no error', 'body.user_id:', body.user_id);
     
     if (user) {
       userId = user.id;
