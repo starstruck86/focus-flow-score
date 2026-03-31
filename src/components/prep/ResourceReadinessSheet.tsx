@@ -442,6 +442,38 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                   <span><span className="font-medium text-foreground">No Content</span> — no usable content path</span>
                 </div>
 
+                {/* ── Batch Selection Panel ── */}
+                <Collapsible>
+                  <CollapsibleTrigger className="w-full flex items-center justify-between p-2 rounded-md border border-primary/20 bg-primary/5 hover:bg-primary/10 text-[11px] font-semibold text-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Zap className="h-3.5 w-3.5 text-primary" />
+                      Batch Processing
+                    </span>
+                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-2">
+                      <BatchSelectionPanel
+                        resources={[
+                          ...audit.buckets.extractable_not_operationalized,
+                          ...audit.buckets.needs_tagging,
+                          ...audit.buckets.ready,
+                          ...audit.buckets.content_backed_needs_fix,
+                          ...audit.buckets.low_quality_extraction,
+                        ].map(r => ({
+                          id: r.id,
+                          title: r.title,
+                          sourceType: r.resourceType,
+                          enrichmentStatus: r.enrichmentStatus,
+                          contentLength: r.contentLength,
+                          hasKnowledge: r.knowledgeItemCount > 0,
+                        }))}
+                        onComplete={runAudit}
+                      />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
                 {/* ── "What should I review first?" ── */}
                 {sweepSteps.length > 0 && (
                   <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-1.5">
