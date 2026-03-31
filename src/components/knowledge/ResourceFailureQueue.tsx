@@ -11,7 +11,8 @@ import {
 } from '@/components/ui/collapsible';
 import {
   ChevronDown, ChevronRight, AlertOctagon, RotateCcw,
-  FileText, Trash2, ArrowRight, Filter,
+  FileText, Trash2, ArrowRight, Filter, Wand2, Merge,
+  Crown, Star, RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,11 +22,16 @@ import { useQueryClient } from '@tanstack/react-query';
 
 // ── Types ──────────────────────────────────────────────────
 
+export type TerminalState =
+  | 'operationalized' | 'operationalized_partial'
+  | 'needs_review' | 'reference_supporting' | 'reference_needs_judgment'
+  | 'reference_low_leverage' | 'content_missing';
+
 export interface ResourceDiagnosis {
   resource_id: string;
   title: string;
   route: string;
-  terminal_state: 'operationalized' | 'needs_review' | 'reference_only' | 'content_missing';
+  terminal_state: TerminalState;
   failure_reasons: string[];
   retryable: boolean;
   recommended_fix: string;
@@ -44,9 +50,10 @@ export interface ResourceDiagnosis {
 interface ResourceFailureQueueProps {
   diagnoses: ResourceDiagnosis[];
   onRerunResource?: (resourceId: string) => void;
+  onRerunStrict?: (resourceId: string) => void;
 }
 
-// ── Failure labels ─────────────────────────────────────────
+// ── Labels ─────────────────────────────────────────────────
 
 const FAILURE_LABELS: Record<string, string> = {
   missing_content: 'Missing Content',
@@ -69,6 +76,15 @@ const FAILURE_LABELS: Record<string, string> = {
   extraction_error: 'Extraction Error',
 };
 
+const STATE_LABELS: Record<string, string> = {
+  operationalized_partial: 'Partial Success',
+  needs_review: 'Needs Review',
+  reference_supporting: 'Reference — Supporting',
+  reference_needs_judgment: 'Reference — Needs Judgment',
+  reference_low_leverage: 'Reference — Low Leverage',
+  content_missing: 'Missing Content',
+};
+
 const PRIORITY_BADGE: Record<string, string> = {
   high: 'bg-destructive/15 text-destructive border-destructive/30',
   medium: 'bg-status-yellow/15 text-status-yellow border-status-yellow/30',
@@ -79,23 +95,22 @@ type FailureFilter = string;
 
 // ── Component ──────────────────────────────────────────────
 
-export function ResourceFailureQueue({ diagnoses, onRerunResource }: ResourceFailureQueueProps) {
+export function ResourceFailureQueue({ diagnoses, onRerunResource, onRerunStrict }: ResourceFailureQueueProps) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(true);
   const [filters, setFilters] = useState<Set<FailureFilter>>(new Set());
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
-  // Only show needs_review and content_missing
+  // Show needs_review, content_missing, and operationalized_partial
   const failedDiagnoses = useMemo(() =>
     diagnoses.filter(d =>
-      (d.terminal_state === 'needs_review' || d.terminal_state === 'content_missing') &&
+      ['needs_review', 'content_missing', 'operationalized_partial'].includes(d.terminal_state) &&
       !dismissed.has(d.resource_id)
     ),
     [diagnoses, dismissed]
   );
 
-  // Count by failure reason for filter chips
   const reasonCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const d of failedDiagnoses) {
@@ -106,7 +121,6 @@ export function ResourceFailureQueue({ diagnoses, onRerunResource }: ResourceFai
     return counts;
   }, [failedDiagnoses]);
 
-  // Apply filters
   const filteredDiagnoses = useMemo(() => {
     if (filters.size === 0) return failedDiagnoses;
     return failedDiagnoses.filter(d =>
@@ -128,6 +142,29 @@ export function ResourceFailureQueue({ diagnoses, onRerunResource }: ResourceFai
     qc.invalidateQueries({ queryKey: ['resources'] });
     toast.success('Marked as reference');
   }, [qc]);
+
+  const handlePromoteTemplate = useCallback(async (d: ResourceDiagnosis) => {
+    if (!user) return;
+    await supabase.from('execution_templates' as any).insert({
+      user_id: user.id, title: d.title, body: '', template_type: 'email',
+      output_type: 'custom', template_origin: 'promoted_from_resource',
+      status: 'active', created_by_user: false,
+    } as any);
+    setDismissed(prev => new Set(prev).add(d.resource_id));
+    qc.invalidateQueries({ queryKey: ['resources'] });
+    toast.success('Promoted as template');
+  }, [user, qc]);
+
+  const handlePromoteExample = useCallback(async (d: ResourceDiagnosis) => {
+    if (!user) return;
+    await supabase.from('execution_outputs').insert({
+      user_id: user.id, title: d.title, content: '',
+      output_type: 'custom', is_strong_example: true,
+    });
+    setDismissed(prev => new Set(prev).add(d.resource_id));
+    qc.invalidateQueries({ queryKey: ['resources'] });
+    toast.success('Promoted as example');
+  }, [user, qc]);
 
   const handleDismiss = useCallback((resourceId: string) => {
     setDismissed(prev => new Set(prev).add(resourceId));
@@ -188,6 +225,11 @@ export function ResourceFailureQueue({ diagnoses, onRerunResource }: ResourceFai
                   <Badge variant="outline" className={cn('text-[9px]', PRIORITY_BADGE[d.priority])}>
                     {d.priority}
                   </Badge>
+                  {d.terminal_state !== 'needs_review' && (
+                    <Badge variant="outline" className="text-[9px]">
+                      {STATE_LABELS[d.terminal_state] || d.terminal_state}
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="text-[9px]">
                     {d.route || 'unrouted'}
                   </Badge>
@@ -234,6 +276,17 @@ export function ResourceFailureQueue({ diagnoses, onRerunResource }: ResourceFai
                     <RotateCcw className="h-3 w-3" /> Retry
                   </Button>
                 )}
+                {d.retryable && onRerunStrict && (
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => onRerunStrict(d.resource_id)}>
+                    <Wand2 className="h-3 w-3" /> Strict
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handlePromoteTemplate(d)}>
+                  <Crown className="h-3 w-3" /> Template
+                </Button>
+                <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handlePromoteExample(d)}>
+                  <Star className="h-3 w-3" /> Example
+                </Button>
                 <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handleMarkReference(d.resource_id)}>
                   <FileText className="h-3 w-3" /> Reference
                 </Button>
