@@ -21,7 +21,7 @@ interface QueueAction {
   variant?: 'default' | 'destructive';
 }
 
-const PRIMARY_ACTIONS: Record<ReadinessBucket, QueueAction> = {
+export const PRIMARY_ACTIONS: Record<ReadinessBucket, QueueAction> = {
   extractable_not_operationalized: { label: 'Extract Selected', icon: Sparkles, actionType: 'autoOp' },
   needs_tagging: { label: 'Auto-tag Selected', icon: Tag, actionType: 'tag' },
   ready: { label: 'Extract Selected', icon: Sparkles, actionType: 'autoOp' },

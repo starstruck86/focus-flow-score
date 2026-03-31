@@ -990,7 +990,7 @@ export function ResourceLibraryTable({
 
         {/* Sticky bulk action bar — uses queue-driven PRIMARY_ACTIONS */}
         {hasSelection && (() => {
-          const dominantBucket = getDominantBucket(selectedIds, getLifecycleStatus);
+          const dominantBucket = getDominantBucket(selectedIds, lifecycleMap);
           const action = dominantBucket ? PRIMARY_ACTIONS[dominantBucket] : PRIMARY_ACTIONS['extractable_not_operationalized'];
           const Icon = action.icon;
           return (
