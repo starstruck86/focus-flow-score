@@ -370,8 +370,10 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
     if (!user || !transformPreview) return;
     const { diagnosis: d, type, resourceData: resource } = transformPreview;
 
+    let assetId: string | undefined;
+
     if (type === 'template') {
-      await supabase.from('execution_templates' as any).insert({
+      const { data } = await supabase.from('execution_templates' as any).insert({
         user_id: user.id,
         title: resource.title,
         body: shapedContent.slice(0, 5000),
@@ -382,20 +384,41 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
         status: 'active',
         created_by_user: false,
         tags: (resource as any).tags || [],
-      } as any);
+      } as any).select('id').single();
+      assetId = (data as any)?.id;
       await persistResolution(d.resource_id, 'promoted_template', `Promoted as template from "${resource.title}"`);
       toast.success('Promoted as template');
     } else {
-      await supabase.from('execution_outputs').insert({
+      const { data } = await supabase.from('execution_outputs').insert({
         user_id: user.id,
         title: resource.title,
         content: shapedContent.slice(0, 5000),
         output_type: 'custom',
         is_strong_example: true,
-      });
+      }).select('id').single();
+      assetId = data?.id;
       await persistResolution(d.resource_id, 'promoted_example', `Promoted as example from "${resource.title}"`);
       toast.success('Promoted as example');
     }
+
+    // Persist provenance for audit trail
+    const transformResult = type === 'template'
+      ? (await import('@/lib/contentSignature')).shapeAsTemplate(resource.content || '')
+      : (await import('@/lib/contentSignature')).shapeAsExample(resource.content || '');
+
+    await supabase.from('asset_provenance').insert({
+      user_id: user.id,
+      asset_type: type,
+      asset_id: assetId || 'unknown',
+      source_resource_id: resource.id,
+      source_segment_index: null,
+      source_char_range: null,
+      source_heading: null,
+      transformed_content: shapedContent.slice(0, 5000),
+      removed_lines: transformResult.removedLines,
+      high_risk_removals: transformResult.highRiskRemovals,
+      original_content: (resource.content || '').slice(0, 5000),
+    } as any);
 
     setResolved(prev => new Set(prev).add(d.resource_id));
     setTransformPreview(null);
