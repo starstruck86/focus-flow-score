@@ -9,6 +9,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronDown, ChevronRight, FlaskConical } from 'lucide-react';
 import { ContextInputSection } from './ContextInputSection';
 import { WhatActuallyWorks } from './WhatActuallyWorks';
 import { ActionExecutionPanel } from './ActionExecutionPanel';
