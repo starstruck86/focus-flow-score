@@ -3892,6 +3892,45 @@ export type Database = {
         }
         Relationships: []
       }
+      stage_playbooks: {
+        Row: {
+          content: Json
+          created_at: string
+          generated_at: string
+          id: string
+          keystone_resource_ids: string[]
+          knowledge_item_count: number
+          resource_ids: string[]
+          stage_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          generated_at?: string
+          id?: string
+          keystone_resource_ids?: string[]
+          knowledge_item_count?: number
+          resource_ids?: string[]
+          stage_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          generated_at?: string
+          id?: string
+          keystone_resource_ids?: string[]
+          knowledge_item_count?: number
+          resource_ids?: string[]
+          stage_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       stage_resources: {
         Row: {
           created_at: string
