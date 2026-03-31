@@ -468,7 +468,7 @@ export function ResourceUpsideQueue() {
       {!guidedMode && (() => {
         const diagsToShow = pipelineResult?.diagnoses || persistedDiagnoses?.diagnoses || [];
         const activeRunId = pipelineResult?.run_id || persistedDiagnoses?.runId || null;
-        return diagsToShow.length > 0 ? <ResourceFailureQueue diagnoses={diagsToShow} runId={activeRunId} /> : null;
+        return diagsToShow.length > 0 ? <ResourceFailureQueue diagnoses={diagsToShow} runId={activeRunId} onRerunResource={rerunResource} onRerunStrict={rerunStrict} /> : null;
       })()}
 
       {/* Trust Review Queue — extracted but not activated */}
