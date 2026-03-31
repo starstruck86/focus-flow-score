@@ -15,7 +15,6 @@ export interface StageResource {
   // Joined resource fields
   resource_title?: string;
   resource_type?: string;
-  resource_source_type?: string;
 }
 
 export function useStageResources(stageId: string) {
