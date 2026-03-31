@@ -207,6 +207,8 @@ Deno.serve(async (req) => {
     const batchSize = Math.min(body.batchSize || 15, 50);
     const mode = body.mode || 'standard';
     const resumeRunId = body.run_id || null;
+    const strictMode = body.strict === true;
+    const singleResourceId = body.resource_id || null; // for single-resource retry
 
     // Create or resume pipeline_run record
     let runId: string;
