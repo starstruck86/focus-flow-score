@@ -4,11 +4,12 @@
  * Sections:
  * 1. Context Input (account, stage, persona, competitor, context items)
  * 2. Suggested Actions (button grid)
- * 3. Action Execution Panel (selected action + generate)
- * 4. Output (formatted, copyable, with evidence + save)
+ * 3. Context Confirmation (auto-detected signals + confirm/edit)
+ * 4. Action Execution Panel (selected action + generate)
+ * 5. Output (formatted, copyable, with evidence + save)
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
@@ -16,8 +17,10 @@ import { toast } from 'sonner';
 import { ContextInputSection } from './ContextInputSection';
 import { ActionGrid, type PrepAction } from './ActionGrid';
 import { ActionExecutionPanel } from './ActionExecutionPanel';
+import { ContextConfirmationPanel } from './ContextConfirmationPanel';
 import { PrepOutput } from './PrepOutput';
-import { fetchRankedResources, type RankedResource } from './resourceRanking';
+import { fetchRankedResources } from './resourceRanking';
+import { buildPrepContext, type PrepContext } from './buildPrepContext';
 import type { ContextItem } from './contextTypes';
 import type { EvidenceData } from './EvidencePanel';
 
@@ -34,6 +37,13 @@ export function PrepDealMode() {
 
   // Action state
   const [selectedAction, setSelectedAction] = useState<PrepAction | null>(null);
+
+  // Auto-context state
+  const [prepContext, setPrepContext] = useState<PrepContext | null>(null);
+  const [isLoadingContext, setIsLoadingContext] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [contextDismissed, setContextDismissed] = useState(false);
+  const lastContextAccountRef = useRef('');
 
   // Output state
   const [output, setOutput] = useState('');
@@ -59,18 +69,58 @@ export function PrepDealMode() {
   const handleAccountChange = useCallback((id: string) => {
     setAccountId(id);
     setAccountName(accounts.find(a => a.id === id)?.name || '');
+    setContextDismissed(false);
   }, [accounts]);
 
-  // Combine context items into text for the prompt
+  // Auto-build context when account + action are both set
+  useEffect(() => {
+    if (!accountId || !selectedAction || !user) {
+      setPrepContext(null);
+      setShowConfirmation(false);
+      return;
+    }
+    // Don't re-fetch if same account
+    if (lastContextAccountRef.current === accountId && prepContext) {
+      if (!contextDismissed) setShowConfirmation(true);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingContext(true);
+
+    buildPrepContext(accountId, user.id).then(ctx => {
+      if (cancelled) return;
+      setPrepContext(ctx);
+      lastContextAccountRef.current = accountId;
+      setIsLoadingContext(false);
+      if (ctx.signals.length > 0 && !contextDismissed) {
+        setShowConfirmation(true);
+      }
+    }).catch(() => {
+      if (!cancelled) setIsLoadingContext(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [accountId, selectedAction, user]);
+
+  // Combine manual context items + auto-context into text for the prompt
   const getContextText = useCallback(() => {
-    return contextItems
+    const manualParts = contextItems
       .map(item => {
         if (item.type === 'image') return `[Image attached: ${item.label}]`;
         return item.content;
       })
-      .filter(Boolean)
-      .join('\n\n');
-  }, [contextItems]);
+      .filter(Boolean);
+
+    // Prepend auto-context block if available
+    const parts: string[] = [];
+    if (prepContext?.contextBlock) {
+      parts.push(prepContext.contextBlock);
+    }
+    parts.push(...manualParts);
+
+    return parts.join('\n\n');
+  }, [contextItems, prepContext]);
 
   const handleGenerate = useCallback(async () => {
     if (!selectedAction || !user) return;
@@ -79,6 +129,7 @@ export function PrepDealMode() {
     setOutput('');
     setSubjectLine('');
     setEvidence(null);
+    setShowConfirmation(false);
 
     try {
       const contextText = getContextText();
@@ -125,7 +176,7 @@ export function PrepDealMode() {
           actionId: selectedAction.id,
           actionLabel: selectedAction.label,
           actionPrompt: selectedAction.systemPrompt,
-          accountName: accountName || undefined,
+          accountName: prepContext?.account?.name || accountName || undefined,
           stage: stage || undefined,
           persona: persona || undefined,
           competitor: competitor || undefined,
@@ -146,7 +197,14 @@ export function PrepDealMode() {
     } finally {
       setIsGenerating(false);
     }
-  }, [selectedAction, accountName, stage, persona, competitor, contextItems, user, getContextText]);
+  }, [selectedAction, accountName, stage, persona, competitor, contextItems, user, getContextText, prepContext]);
+
+  const handleEditContext = useCallback(() => {
+    setShowConfirmation(false);
+    setContextDismissed(true);
+    // Scroll to context section so user can edit fields
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -171,8 +229,19 @@ export function PrepDealMode() {
         onSelectAction={setSelectedAction}
       />
 
-      {/* Section 3: Execute */}
-      {selectedAction && (
+      {/* Section 3: Context Confirmation */}
+      {selectedAction && showConfirmation && prepContext && !isLoadingContext && (
+        <ContextConfirmationPanel
+          signals={prepContext.signals}
+          onConfirm={handleGenerate}
+          onEdit={handleEditContext}
+          isGenerating={isGenerating}
+          actionLabel={selectedAction.label}
+        />
+      )}
+
+      {/* Section 4: Execute (shown when confirmation dismissed or no auto-context) */}
+      {selectedAction && !showConfirmation && (
         <ActionExecutionPanel
           action={selectedAction}
           onGenerate={handleGenerate}
@@ -181,7 +250,7 @@ export function PrepDealMode() {
         />
       )}
 
-      {/* Section 4: Output */}
+      {/* Section 5: Output */}
       <PrepOutput
         output={output}
         onOutputChange={setOutput}
@@ -192,7 +261,7 @@ export function PrepDealMode() {
         onRegenerate={handleGenerate}
         evidence={evidence}
         actionLabel={selectedAction?.label || ''}
-        accountName={accountName}
+        accountName={prepContext?.account?.name || accountName}
       />
     </div>
   );
