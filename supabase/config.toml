@@ -110,3 +110,9 @@ verify_jwt = false
 
 [functions.dave-health-check]
 verify_jwt = false
+
+[functions.batch-actionize]
+verify_jwt = false
+
+[functions.extract-tactics]
+verify_jwt = false
