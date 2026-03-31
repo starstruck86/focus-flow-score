@@ -319,7 +319,7 @@ export function deduplicateExamples(
   return false;
 }
 
-// ── Resource Routing ───────────────────────────────────────
+// ── Resource Routing (content-based) ───────────────────────
 
 export type ResourceOutputPath = 'template_candidate' | 'example_candidate' | 'tactic_candidate' | 'reference_only';
 
@@ -329,30 +329,32 @@ export interface ResourceRoute {
   reasons: string[];
 }
 
-const TEMPLATE_SIGNALS = [
-  { pattern: /subject\s*:/i, weight: 0.2 },
-  { pattern: /dear\s|hi\s\[|hello\s\[/i, weight: 0.15 },
-  { pattern: /\[.*name.*\]|\[.*company.*\]|\{.*\}/i, weight: 0.2 },
-  { pattern: /step\s*\d|phase\s*\d/i, weight: 0.15 },
-  { pattern: /template|framework|playbook|checklist/i, weight: 0.15 },
-  { pattern: /agenda|outline|structure/i, weight: 0.1 },
+const TEMPLATE_STRUCTURE = [
+  { pattern: /\[.*?(name|company|title|role|date|amount|product).*?\]/i, weight: 0.25 },
+  { pattern: /\{.*?(name|company|title|role|date|amount|product).*?\}/i, weight: 0.25 },
+  { pattern: /step\s*\d|phase\s*\d|part\s*\d/i, weight: 0.15 },
+  { pattern: /^[-•*]\s+/m, weight: 0.1 },
+  { pattern: /subject\s*:/i, weight: 0.15 },
+  { pattern: /agenda\s*:/i, weight: 0.1 },
+  { pattern: /\d+\.\s+[A-Z]/m, weight: 0.1 },
 ];
 
-const EXAMPLE_SIGNALS = [
-  { pattern: /follow.up|recap|thank you for/i, weight: 0.15 },
-  { pattern: /we discussed|as we talked|per our conversation/i, weight: 0.2 },
-  { pattern: /next steps?|action items?/i, weight: 0.15 },
-  { pattern: /looking forward|excited to|pleased to/i, weight: 0.1 },
-  { pattern: /^(hi|hey|hello|dear)\s/im, weight: 0.1 },
+const EXAMPLE_STRUCTURE = [
+  { pattern: /^(hi|hey|hello|dear|good morning|good afternoon)\s/im, weight: 0.15 },
+  { pattern: /we (discussed|talked|agreed|reviewed|covered)/i, weight: 0.2 },
+  { pattern: /thank you for|thanks for|appreciate your/i, weight: 0.15 },
+  { pattern: /I (wanted|wanted to|am writing|am reaching|am following)/i, weight: 0.15 },
+  { pattern: /best regards|sincerely|cheers|thanks,?\s*$/im, weight: 0.1 },
+  { pattern: /next steps?\s*:/i, weight: 0.15 },
 ];
 
-const TACTIC_SIGNALS = [
-  { pattern: /\b(ask|say|use|try|respond|handle|frame|position)\b/i, weight: 0.1 },
-  { pattern: /when\s+(the|a|your|they)/i, weight: 0.15 },
-  { pattern: /objection|pushback|rebuttal/i, weight: 0.15 },
-  { pattern: /discovery|qualifying|pain/i, weight: 0.1 },
-  { pattern: /tactic|technique|approach|strategy/i, weight: 0.1 },
-  { pattern: /talk\s*track|script|phrasing/i, weight: 0.15 },
+const TACTIC_STRUCTURE = [
+  { pattern: /\bwhen\s+(the|a|your|they|you|it)\b/i, weight: 0.15 },
+  { pattern: /\binstead of\b.*\btry\b/i, weight: 0.15 },
+  { pattern: /\b(respond|handle|counter|address)\s+(by|with|using)\b/i, weight: 0.15 },
+  { pattern: /\bif\s+(they|the prospect|the buyer|your)\b/i, weight: 0.1 },
+  { pattern: /["'""].{10,}["'""]$/m, weight: 0.15 },
+  { pattern: /\b(why|because|this works because)\b/i, weight: 0.1 },
 ];
 
 export function routeResource(resource: {
@@ -362,45 +364,41 @@ export function routeResource(resource: {
   tags?: string[];
   content_length?: number;
 }): ResourceRoute {
-  const text = `${resource.title} ${resource.content || ''}`;
-  const contentLen = resource.content?.length || 0;
+  const content = resource.content || '';
+  const contentLen = content.length;
 
-  // Score each path
+  // Score each path using CONTENT structure only (not title keywords)
   let templateScore = 0;
   const templateReasons: string[] = [];
-  for (const s of TEMPLATE_SIGNALS) {
-    if (s.pattern.test(text)) {
+  for (const s of TEMPLATE_STRUCTURE) {
+    if (s.pattern.test(content)) {
       templateScore += s.weight;
       templateReasons.push(s.pattern.source.slice(0, 20));
     }
   }
-  // Templates need completeness: enough content and structure
   if (contentLen < 200) templateScore *= 0.3;
   if (contentLen > 500) templateScore += 0.1;
 
   let exampleScore = 0;
   const exampleReasons: string[] = [];
-  for (const s of EXAMPLE_SIGNALS) {
-    if (s.pattern.test(text)) {
+  for (const s of EXAMPLE_STRUCTURE) {
+    if (s.pattern.test(content)) {
       exampleScore += s.weight;
       exampleReasons.push(s.pattern.source.slice(0, 20));
     }
   }
-  // Examples need realistic length
   if (contentLen < 150) exampleScore *= 0.3;
 
   let tacticScore = 0;
   const tacticReasons: string[] = [];
-  for (const s of TACTIC_SIGNALS) {
-    if (s.pattern.test(text)) {
+  for (const s of TACTIC_STRUCTURE) {
+    if (s.pattern.test(content)) {
       tacticScore += s.weight;
       tacticReasons.push(s.pattern.source.slice(0, 20));
     }
   }
-  // Tactic-heavy content is often longer educational material
   if (contentLen > 300) tacticScore += 0.1;
 
-  // Pick highest path
   const scores: Array<{ path: ResourceOutputPath; score: number; reasons: string[] }> = [
     { path: 'template_candidate', score: templateScore, reasons: templateReasons },
     { path: 'example_candidate', score: exampleScore, reasons: exampleReasons },
@@ -410,7 +408,6 @@ export function routeResource(resource: {
   scores.sort((a, b) => b.score - a.score);
   const best = scores[0];
 
-  // If no path scores well, route to reference
   if (best.score < 0.25) {
     return { path: 'reference_only', confidence: 1 - best.score, reasons: ['low_signal'] };
   }
