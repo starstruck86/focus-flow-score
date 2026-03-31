@@ -528,33 +528,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                   )}
 
                   {lastAutoOpSummary && !autoOpProgress && (
-                    <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[10px] space-y-1">
-                      <p className="font-medium text-foreground">Last Auto-Operationalize Results</p>
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
-                        <span>Total processed:</span><span className="font-medium text-foreground">{lastAutoOpSummary.total}</span>
-                        <span>Operationalized:</span><span className="font-medium text-emerald-600">{lastAutoOpSummary.outcomes.operationalized}</span>
-                        <span>Partial extraction:</span><span className="font-medium text-foreground">{lastAutoOpSummary.outcomes.partial_extraction}</span>
-                        <span>Lightweight:</span><span className="font-medium text-foreground">{lastAutoOpSummary.outcomes.lightweight_extraction}</span>
-                        <span>Needs review:</span><span className={cn('font-medium', lastAutoOpSummary.outcomes.needs_review > 0 ? 'text-amber-500' : 'text-foreground')}>{lastAutoOpSummary.outcomes.needs_review}</span>
-                        <span>No content:</span><span className="font-medium text-muted-foreground">{lastAutoOpSummary.outcomes.no_content}</span>
-                        <span>KI extracted:</span><span className="font-medium text-foreground">{lastAutoOpSummary.totalKnowledgeExtracted}</span>
-                        <span>KI activated:</span><span className="font-medium text-foreground">{lastAutoOpSummary.totalKnowledgeActivated}</span>
-                      </div>
-                      {lastAutoOpSummary.failedResources.length > 0 && (
-                        <details className="mt-1">
-                          <summary className="text-[9px] text-muted-foreground cursor-pointer hover:text-foreground">
-                            {lastAutoOpSummary.failedResources.length} issues (click to expand)
-                          </summary>
-                          <div className="mt-1 max-h-24 overflow-y-auto space-y-0.5">
-                            {lastAutoOpSummary.failedResources.slice(0, 20).map(f => (
-                              <p key={f.id} className="text-[9px] text-muted-foreground truncate">
-                                <span className="font-medium">{f.outcome}</span>: {f.title} — {f.reason}
-                              </p>
-                            ))}
-                          </div>
-                        </details>
-                      )}
-                    </div>
+                    <OperatorSummaryPanel summary={lastAutoOpSummary} />
                   )}
 
                   {/* ── Backfill actions ── */}
