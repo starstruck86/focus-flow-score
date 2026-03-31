@@ -463,7 +463,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         ].map(r => ({
                           id: r.id,
                           title: r.title,
-                          sourceType: r.resourceType,
+                          sourceType: undefined,
                           enrichmentStatus: r.enrichmentStatus,
                           contentLength: r.contentLength,
                           hasKnowledge: r.knowledgeItemCount > 0,
