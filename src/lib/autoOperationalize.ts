@@ -218,7 +218,9 @@ export async function autoOperationalizeResource(
   const existingItems = (existingKI ?? []) as any[];
   const hasExistingKI = existingItems.length > 0;
 
-  if (!hasExistingKI && effectiveLength >= MIN_CONTENT_FOR_EXTRACTION) {
+  // Use tiered extraction based on contract tier
+  const canExtract = !hasExistingKI && (eligibility.extractionTier === 'full' || eligibility.extractionTier === 'lightweight' || eligibility.extractionTier === 'reduced');
+  if (canExtract) {
     // Extract knowledge heuristically
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
