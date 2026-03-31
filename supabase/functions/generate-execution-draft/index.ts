@@ -80,6 +80,14 @@ serve(async (req) => {
       parts.push(`\nAdditional instructions: ${customInstructions}`);
     }
 
+    if (tacticInjection) {
+      parts.push(tacticInjection);
+    }
+
+    if (promptInjection) {
+      parts.push(promptInjection);
+    }
+
     parts.push(
       `\nReturn ONLY the generated content. If it's an email, start with "Subject: <subject line>" on the first line, then a blank line, then the body.`
     );
