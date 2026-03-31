@@ -326,3 +326,32 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
     </div>
   );
 }
+
+/** Collapsible secondary evidence wrapper around WhatActuallyWorks */
+function EvidenceLayer({ stageId, defaultTactics, persona, competitor }: {
+  stageId: string;
+  defaultTactics: any[];
+  persona?: string;
+  competitor?: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 px-3 rounded-lg border border-border hover:bg-accent/30 transition-colors">
+        {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+        <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Supporting Evidence</span>
+        <span className="text-[10px] text-muted-foreground ml-1">Raw KIs &amp; tactics</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2">
+        <WhatActuallyWorks
+          stageId={stageId}
+          defaultTactics={defaultTactics}
+          persona={persona}
+          competitor={competitor}
+        />
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
