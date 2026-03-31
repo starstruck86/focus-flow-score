@@ -13,6 +13,8 @@ import { Save, FileText, Star, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSaveOutput } from '@/hooks/useExecutionOutputs';
 import { useCreateTemplate } from '@/hooks/useExecutionTemplates';
+import { useAuth } from '@/contexts/AuthContext';
+import { trackActionizationFeedback } from '@/lib/actionizationEngine';
 
 const USE_CASES = [
   'Discovery',
