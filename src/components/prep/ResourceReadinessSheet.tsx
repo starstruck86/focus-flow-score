@@ -337,7 +337,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         });
         setForceExtractProgress(null);
         setLastForceExtract(extractResult);
-        toast.success(`Force extract: ${extractResult.newKnowledgeItems} items created, ${extractResult.becameOperationalized} operationalized`);
+        toast.success(`Force extract: ${extractResult.newKnowledgeItems} items created, ${extractResult.becameOperationalized} ready to use`);
         if (extractResult.contentEmpty > 0) toast.warning(`${extractResult.contentEmpty} resources had empty content despite content_length`);
       } else if (type === 'kiScan') {
         const report = await scanExistingKnowledge();
