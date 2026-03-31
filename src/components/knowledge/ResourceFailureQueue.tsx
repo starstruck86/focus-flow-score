@@ -711,6 +711,18 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Transformation preview dialog */}
+      {transformPreview && (
+        <TransformationPreviewDialog
+          open
+          onOpenChange={(open) => { if (!open) setTransformPreview(null); }}
+          originalContent={transformPreview.originalContent}
+          title={transformPreview.resourceData.title}
+          type={transformPreview.type}
+          onConfirm={handleConfirmTransformation}
+        />
+      )}
     </>
   );
 }
