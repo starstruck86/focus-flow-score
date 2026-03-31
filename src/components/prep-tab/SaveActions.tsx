@@ -84,7 +84,11 @@ export function SaveActions({ output, subjectLine, actionLabel, accountName }: P
         use_case: useCase || null,
         tags: useCase ? [useCase.toLowerCase()] : [],
       }, {
-        onSuccess: () => { toast.success('Saved as Template'); setMode(null); },
+        onSuccess: () => {
+          toast.success('Saved as Template');
+          setMode(null);
+          if (user) trackActionizationFeedback(user.id, { outputId: 'save', tacticsUsed: [], promptsUsed: [], templatesUsed: [], action: 'saved_as_template' });
+        },
         onError: () => toast.error('Save failed'),
       });
     } else if (mode === 'example') {
