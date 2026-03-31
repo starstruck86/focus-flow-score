@@ -271,9 +271,9 @@ export function ResourceUpsideQueue() {
     }
     try {
       // Auto-activate high-confidence items
-      const toInsert = highQuality.map(item => ({
+      const toInsert: KnowledgeItemInsert[] = highQuality.map(item => ({
         ...item,
-        status: (item.confidence_score ?? 0) >= 0.6 && item.when_to_use ? 'active' : 'review_needed',
+        status: ((item.confidence_score ?? 0) >= 0.6 && item.when_to_use ? 'active' : 'review_needed') as 'active' | 'review_needed',
         active: (item.confidence_score ?? 0) >= 0.6 && !!item.when_to_use,
       }));
       await insertKnowledge.mutateAsync(toInsert);
