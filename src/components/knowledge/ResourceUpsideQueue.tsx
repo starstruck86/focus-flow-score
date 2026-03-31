@@ -35,6 +35,7 @@ import {
   type UpsideScore,
 } from '@/lib/resourceClassifier';
 import { extractKnowledgeHeuristic, type ExtractionSource } from '@/lib/knowledgeExtraction';
+import { TrustReviewQueue } from '@/components/knowledge/TrustReviewQueue';
 import { useKnowledgeItems as useAllKnowledgeItems } from '@/hooks/useKnowledgeItems';
 import { useResources, type Resource } from '@/hooks/useResources';
 import { useInsertKnowledgeItems, type KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
@@ -483,6 +484,9 @@ export function ResourceUpsideQueue() {
 
       {/* TOP 25 — Highest Impact */}
       {!guidedMode && <Top25Section items={top25} promoted={promoted} onPromote={handlePromote} />}
+
+      {/* Trust Review Queue — extracted but not activated */}
+      {!guidedMode && <TrustReviewQueue />}
 
       {/* Action buckets */}
       {!guidedMode && BUCKET_ORDER.map(bucket => (
