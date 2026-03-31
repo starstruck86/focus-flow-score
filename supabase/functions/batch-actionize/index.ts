@@ -486,8 +486,9 @@ Deno.serve(async (req) => {
               results.failure_breakdown['duplicate_template'] = (results.failure_breakdown['duplicate_template'] || 0) + 1;
               if (similar) mostSimilar = similar;
             } else {
+              const shapedBody = shapeAsTemplate(content).slice(0, 5000);
               const { error } = await supabaseAdmin.from('execution_templates').insert({
-                user_id: user.id, title: resource.title, body: content.slice(0, 5000),
+                user_id: user.id, title: resource.title, body: shapedBody,
                 template_type: 'email', output_type: 'custom', source_resource_id: resource.id,
                 tags: resource.tags || [], template_origin: 'promoted_from_resource',
                 status: 'active', created_by_user: false, confidence_score: 0.7,
