@@ -471,21 +471,8 @@ async function fetchEligibleResourceIds(
   if (error || !data) return [];
 
   return (data as any[]).filter(r => {
-    const contentLen = r.content_length ?? (r.content?.length ?? 0);
-    const isContentBacked = contentLen >= 200 || r.manual_content_present === true;
-    const isEnriched = ['enriched', 'deep_enriched', 'verified'].includes(r.enrichment_status);
-
-    // Must have some content path
-    if (!isContentBacked && !isEnriched) return false;
-
-    // Junk filter: too short and no enrichment
-    if (contentLen < 50 && !isEnriched && !r.manual_content_present) return false;
-
-    if (mode === 'smart') {
-      // Smart mode: only process resources that likely need work
-      const tags: string[] = r.tags ?? [];
-      const dims = new Set(tags.filter((t: string) => t.includes(':')).map((t: string) => t.split(':')[0]));
-      const hasRequiredTags = dims.has('skill') || dims.has('context');
+    // Use the shared pipeline contract
+    return isEligibleForExtraction(r).eligible;
 
       // If already has tags and is enriched, it's probably already processed
       // but we still include it — the pipeline is idempotent
