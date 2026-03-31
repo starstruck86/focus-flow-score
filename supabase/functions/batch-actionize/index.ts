@@ -316,6 +316,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    console.log('batch-actionize: request received', req.method);
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
