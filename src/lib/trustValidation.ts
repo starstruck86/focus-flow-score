@@ -335,6 +335,15 @@ const EXAMPLE_STRUCTURE = [
   { pattern: /next steps?\s*:/i, weight: 0.15 },
 ];
 
+const TACTIC_STRUCTURE = [
+  { pattern: /\bwhen\s+(the|a|your|they|you|it)\b/i, weight: 0.15 },
+  { pattern: /\binstead of\b.*\btry\b/i, weight: 0.15 },
+  { pattern: /\b(respond|handle|counter|address)\s+(by|with|using)\b/i, weight: 0.15 },
+  { pattern: /\bif\s+(they|the prospect|the buyer|your)\b/i, weight: 0.1 },
+  { pattern: /["'""].{10,}["'""]$/m, weight: 0.15 },
+  { pattern: /\b(why|because|this works because)\b/i, weight: 0.1 },
+];
+
 const DESCRIPTIVE_STRUCTURE = [
   { pattern: /\b(overview|introduction|background|context|summary)\b/i, weight: 0.15 },
   { pattern: /\b(in general|generally speaking|typically|usually)\b/i, weight: 0.15 },
