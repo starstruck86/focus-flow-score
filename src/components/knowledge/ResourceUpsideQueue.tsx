@@ -22,7 +22,7 @@ import {
 import {
   Crown, Star, Brain, FileText, ChevronDown, ChevronRight,
   AlertTriangle, ArrowUpRight, CheckCircle2, Sparkles, TrendingUp,
-  Archive, Zap, Play, SkipForward, Edit3,
+  Archive, Zap, Play, SkipForward, Edit3, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
