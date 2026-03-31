@@ -327,7 +327,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         });
         setBackfillProgress(null);
         setLastBackfillResult(result);
-        toast.success(`Backfill complete: ${result.operationalized} operationalized, ${result.totalKnowledgeExtracted} extracted, ${result.totalKnowledgeActivated} activated`);
+        toast.success(`Extraction complete: ${result.operationalized} fully extracted, ${result.totalKnowledgeExtracted} KI created, ${result.totalKnowledgeActivated} activated`);
         if (result.needsReview > 0) toast.info(`${result.needsReview} resources need manual review`);
         if (result.errors > 0) toast.warning(`${result.errors} errors during processing`);
       } else if (type === 'forceExtract') {
