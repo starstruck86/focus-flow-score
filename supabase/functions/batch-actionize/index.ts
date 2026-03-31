@@ -44,6 +44,35 @@ interface DiagnosisRow {
   route: string;
 }
 
+// ── Content Signature & Similarity (content-first) ─────────
+
+function contentSignature(text: string | null): string {
+  if (!text) return '';
+  return text.slice(0, 500).toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function contentSimilarity(a: string | null, b: string | null): number {
+  const sigA = contentSignature(a);
+  const sigB = contentSignature(b);
+  if (!sigA || !sigB) return 0;
+  const wordsA = new Set(sigA.split(' ').filter((w: string) => w.length > 2));
+  const wordsB = new Set(sigB.split(' ').filter((w: string) => w.length > 2));
+  if (wordsA.size === 0 || wordsB.size === 0) return 0;
+  let overlap = 0;
+  for (const w of wordsA) { if (wordsB.has(w)) overlap++; }
+  return (2 * overlap) / (wordsA.size + wordsB.size);
+}
+
+function isContentDuplicate(newContent: string, existingContents: string[], threshold = 0.65): { dup: boolean; similar?: string } {
+  let maxSim = 0;
+  let best: string | undefined;
+  for (const existing of existingContents) {
+    const sim = contentSimilarity(newContent, existing);
+    if (sim > maxSim) { maxSim = sim; best = existing; }
+  }
+  return { dup: maxSim > threshold, similar: maxSim > 0.4 ? best?.slice(0, 100) : undefined };
+}
+
 // ── Trust Validation ───────────────────────────────────────
 
 const GENERIC_PATTERNS = [
@@ -58,7 +87,7 @@ const AI_FILLER = [
 ];
 const ACTION_VERBS = /^(ask|say|write|send|use|open|start|frame|position|challenge|respond|handle|probe|build|create|demonstrate|show|tailor|highlight|compare|qualify|recap)/i;
 
-function validateItem(item: any, existingTitles: Set<string>) {
+function validateItem(item: any, existingContents: string[]) {
   const failedGates: string[] = [];
   let score = 0;
   const summary = item.tactic_summary || item.what_to_do || '';
@@ -66,76 +95,79 @@ function validateItem(item: any, existingTitles: Set<string>) {
   const when = item.when_to_use || '';
   const example = item.example_usage || item.example || '';
 
+  // Gate 1: Specificity (content-based)
   const genericHits = GENERIC_PATTERNS.filter(p => p.test(summary)).length;
   const specificity = Math.max(0, 0.5 - genericHits * 0.15 + (summary.length > 40 ? 0.1 : 0));
   if (specificity < 0.35) failedGates.push('specificity');
   score += specificity * 0.2;
 
-  const hasVerb = ACTION_VERBS.test(title) || ACTION_VERBS.test(summary);
+  // Gate 2: Actionability (content-based)
+  const hasVerb = ACTION_VERBS.test(summary);
   const actionability = (hasVerb ? 0.5 : 0.2) + (example.length > 15 ? 0.25 : 0) + (/["'"]/.test(summary) ? 0.15 : 0);
   if (actionability < 0.4) failedGates.push('actionability');
   score += Math.min(1, actionability) * 0.3;
 
-  const normTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-  let mostSimilar: string | undefined;
-  let maxSim = 0;
-  for (const existing of existingTitles) {
-    const w1 = new Set(normTitle.split(' '));
-    const w2 = new Set(existing.split(' '));
-    let overlap = 0;
-    for (const w of w1) { if (w2.has(w)) overlap++; }
-    const sim = w1.size + w2.size > 0 ? (2 * overlap) / (w1.size + w2.size) : 0;
-    if (sim > maxSim) { maxSim = sim; mostSimilar = existing; }
-  }
-  if (maxSim > 0.6) failedGates.push('distinctness');
-  score += (maxSim > 0.6 ? 0.1 : 0.8) * 0.2;
+  // Gate 3: Distinctness — CONTENT-FIRST (not title)
+  const itemContent = `${summary} ${when} ${example}`;
+  const { dup, similar } = isContentDuplicate(itemContent, existingContents);
+  if (dup) failedGates.push('distinctness');
+  score += (dup ? 0.1 : 0.8) * 0.2;
 
+  // Gate 4: Use-case clarity
   const hasWhen = when.length >= 10 && /\b(when|after|before|during|if|once)\b/i.test(when);
   if (!hasWhen) failedGates.push('use_case_clarity');
   score += (hasWhen ? 0.7 : 0.2) * 0.15;
 
+  // Gate 5: Phrasing quality
   const aiHits = AI_FILLER.filter(p => p.test(summary)).length;
   if (aiHits > 0) failedGates.push('phrasing_quality');
   score += (aiHits === 0 ? 0.7 : 0.3) * 0.15;
 
-  return { passed: failedGates.length === 0, score, failedGates, mostSimilar: maxSim > 0.4 ? mostSimilar : undefined };
+  return { passed: failedGates.length === 0, score, failedGates, mostSimilar: similar };
 }
 
-// ── Routing ────────────────────────────────────────────────
+// ── Content-Based Routing ──────────────────────────────────
 
-function routeResource(content: string, title: string): string[] {
-  const text = `${title} ${content}`;
+const TPL_STRUCTURE = [
+  /\[.*?(name|company|title|role|date|amount|product).*?\]/i,
+  /\{.*?(name|company|title|role|date|amount|product).*?\}/i,
+  /step\s*\d|phase\s*\d|part\s*\d/i,
+  /^[-•*]\s+/m,
+  /subject\s*:/i,
+  /agenda\s*:/i,
+  /\d+\.\s+[A-Z]/m,
+];
+const EX_STRUCTURE = [
+  /^(hi|hey|hello|dear|good morning|good afternoon)\s/im,
+  /we (discussed|talked|agreed|reviewed|covered)/i,
+  /thank you for|thanks for|appreciate your/i,
+  /I (wanted|wanted to|am writing|am reaching|am following)/i,
+  /best regards|sincerely|cheers|thanks,?\s*$/im,
+  /next steps?\s*:/i,
+];
+const TAC_STRUCTURE = [
+  /\bwhen\s+(the|a|your|they|you|it)\b/i,
+  /\binstead of\b.*\btry\b/i,
+  /\b(respond|handle|counter|address)\s+(by|with|using)\b/i,
+  /\bif\s+(they|the prospect|the buyer|your)\b/i,
+  /\b(technique|approach|method)\s*:/i,
+  /["'""].{10,}["'""]$/m,
+];
+
+function routeResource(content: string): string[] {
+  if (!content || content.length < 50) return ['reference'];
   const routes: string[] = [];
-  const tplSignals = [/subject\s*:/i, /dear\s/i, /\[.*name.*\]/i, /step\s*\d/i, /template/i, /agenda/i, /framework/i];
-  const exSignals = [/follow.up|recap/i, /we discussed/i, /next steps?/i, /^(hi|hey|hello)\s/im, /looking forward/i];
-  const tacSignals = [/\b(ask|say|use|try|respond|handle|frame)\b/i, /when\s+(the|a|your|they)/i, /objection/i, /discovery/i, /talk\s*track/i, /tactic/i];
-
-  if (tplSignals.filter(p => p.test(text)).length >= 2 && content.length >= 200) routes.push('template');
-  if (exSignals.filter(p => p.test(text)).length >= 2 && content.length >= 150) routes.push('example');
-  if (tacSignals.filter(p => p.test(text)).length >= 2 || content.length >= 100) routes.push('tactic');
+  if (TPL_STRUCTURE.filter(p => p.test(content)).length >= 2 && content.length >= 200) routes.push('template');
+  if (EX_STRUCTURE.filter(p => p.test(content)).length >= 2 && content.length >= 150) routes.push('example');
+  if (TAC_STRUCTURE.filter(p => p.test(content)).length >= 2 || (TAC_STRUCTURE.filter(p => p.test(content)).length >= 1 && content.length >= 300)) routes.push('tactic');
   if (routes.length === 0) routes.push('reference');
   return routes;
 }
 
 function classifyReferenceType(content: string, contentLen: number): TerminalState {
   if (contentLen < 100) return 'reference_low_leverage';
-  const hasOpinionSignals = /\b(should|recommend|suggest|advise|consider)\b/i.test(content);
-  if (hasOpinionSignals) return 'reference_needs_judgment';
+  if (/\b(should|recommend|suggest|advise|consider)\b/i.test(content)) return 'reference_needs_judgment';
   return 'reference_supporting';
-}
-
-// ── Dedup ──────────────────────────────────────────────────
-
-function isDuplicate(title: string, existingTitles: Set<string>): boolean {
-  const norm = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-  for (const existing of existingTitles) {
-    const w1 = new Set(norm.split(' '));
-    const w2 = new Set(existing.split(' '));
-    let overlap = 0;
-    for (const w of w1) { if (w2.has(w)) overlap++; }
-    if (w1.size + w2.size > 0 && (2 * overlap) / (w1.size + w2.size) > 0.7) return true;
-  }
-  return false;
 }
 
 // ── Remediation ────────────────────────────────────────────
@@ -145,18 +177,18 @@ function getRemediationPath(reason: ResourceFailureReason): string {
     missing_content: 'Re-enrich this resource, manually paste content, or upload a better source file.',
     extraction_returned_zero: 'Retry with LLM extraction, chunk the source differently, or expand context window.',
     extraction_too_generic: 'Re-extract with stricter prompt forcing exact phrasing and specific actions only.',
-    trust_failed_specificity: 'Rewrite the title and summary to include specific names, numbers, or concrete details.',
+    trust_failed_specificity: 'Rewrite the summary to include specific names, numbers, or concrete details.',
     trust_failed_actionability: 'Convert the principle into an action: add "what to do" + "when to use" + example phrasing.',
-    trust_failed_distinctness: 'Merge into the similar existing item, discard, or keep with differentiated angle.',
+    trust_failed_distinctness: 'Merge into the similar existing item, discard, or keep with differentiated content.',
     trust_failed_use_case_clarity: 'Add a specific trigger: "When [situation], use this to [outcome]."',
     trust_failed_phrasing_quality: 'Rewrite in natural rep language — remove corporate jargon and AI filler words.',
-    duplicate_template: 'Already exists as a template. Link to the existing one or differentiate the use case.',
-    duplicate_example: 'Already exists as an example. Link to the existing one or archive this copy.',
-    duplicate_knowledge: 'Already captured as a knowledge item. Merge additional insights or discard.',
+    duplicate_template: 'Content matches an existing template. Link to the existing one or differentiate the content.',
+    duplicate_example: 'Content matches an existing example. Link to the existing one or archive this copy.',
+    duplicate_knowledge: 'Content already captured. Merge additional insights or discard.',
     routed_reference_only: 'Low direct leverage — keep as background reference material or attempt manual promotion.',
     stale_blocker_state: 'Resource is stuck in a prior pipeline stage. Re-run enrichment or resolve the blocker.',
     malformed_source: 'Source content is corrupted or unreadable. Re-upload or paste clean content manually.',
-    template_incomplete: 'Template lacks required structure (subject, body, variables). Complete the missing sections.',
+    template_incomplete: 'Template lacks required structure (placeholders, steps, sections). Complete the missing sections.',
     example_not_strong_enough: 'Example lacks realism or clarity. Edit to add specific account context and real phrasing.',
     tactic_not_atomic: 'Tactic is too broad. Break into 2-3 specific, single-action items.',
     extraction_error: 'Technical extraction failure. Retry — if persistent, flag for manual review.',
@@ -208,7 +240,7 @@ Deno.serve(async (req) => {
     const mode = body.mode || 'standard';
     const resumeRunId = body.run_id || null;
     const strictMode = body.strict === true;
-    const singleResourceId = body.resource_id || null; // for single-resource retry
+    const singleResourceId = body.resource_id || null;
 
     // Create or resume pipeline_run record
     let runId: string;
@@ -228,27 +260,26 @@ Deno.serve(async (req) => {
       runId = runRow.id;
     }
 
-    // Fetch all existing assets for dedup
+    // Fetch all existing assets for CONTENT-BASED dedup
     const [existingKI, existingTpl, existingEx] = await Promise.all([
-      supabaseAdmin.from('knowledge_items').select('id, source_resource_id, title, tactic_summary').eq('user_id', user.id),
-      supabaseAdmin.from('execution_templates').select('id, title').eq('user_id', user.id),
-      supabaseAdmin.from('execution_outputs').select('id, title').eq('user_id', user.id).eq('is_strong_example', true),
+      supabaseAdmin.from('knowledge_items').select('id, source_resource_id, title, tactic_summary, when_to_use, example_usage').eq('user_id', user.id),
+      supabaseAdmin.from('execution_templates').select('id, title, body').eq('user_id', user.id),
+      supabaseAdmin.from('execution_outputs').select('id, title, content').eq('user_id', user.id).eq('is_strong_example', true),
     ]);
 
     const processedResourceIds = new Set(
       (existingKI.data || []).map((k: any) => k.source_resource_id).filter(Boolean)
     );
-    const existingKITitles = new Set(
-      (existingKI.data || []).map((k: any) => k.title?.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()).filter(Boolean)
-    );
-    const existingTplTitles = new Set(
-      (existingTpl.data || []).map((t: any) => t.title?.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()).filter(Boolean)
-    );
-    const existingExTitles = new Set(
-      (existingEx.data || []).map((e: any) => e.title?.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()).filter(Boolean)
-    );
 
-    // Check already-diagnosed resources in this run (for resume)
+    // Content pools for dedup (content-first, not title)
+    const existingKIContents = (existingKI.data || []).map((k: any) =>
+      `${k.tactic_summary || ''} ${k.when_to_use || ''} ${k.example_usage || ''}`
+    ).filter((c: string) => c.trim().length > 10);
+
+    const existingTplContents = (existingTpl.data || []).map((t: any) => t.body || '').filter((c: string) => c.length > 10);
+    const existingExContents = (existingEx.data || []).map((e: any) => e.content || '').filter((c: string) => c.length > 10);
+
+    // Check already-diagnosed resources
     const { data: existingDiagnoses } = await supabaseAdmin
       .from('pipeline_diagnoses')
       .select('resource_id')
@@ -256,7 +287,6 @@ Deno.serve(async (req) => {
       .eq('user_id', user.id);
     const alreadyDiagnosed = new Set((existingDiagnoses || []).map((d: any) => d.resource_id));
 
-    // Also exclude resources already resolved in prior runs
     const { data: resolvedDiags } = await supabaseAdmin
       .from('pipeline_diagnoses')
       .select('resource_id')
@@ -274,7 +304,6 @@ Deno.serve(async (req) => {
 
     const resources = allResources || [];
 
-    // Results tracking
     const results = {
       run_id: runId,
       total_resources: resources.length,
@@ -283,7 +312,6 @@ Deno.serve(async (req) => {
       remaining: 0,
       iterations_run: 0,
       converged: false,
-
       operationalized: 0,
       operationalized_partial: 0,
       needs_review: 0,
@@ -291,23 +319,19 @@ Deno.serve(async (req) => {
       reference_needs_judgment: 0,
       reference_low_leverage: 0,
       content_missing: 0,
-
       knowledge_created: 0,
       knowledge_activated: 0,
       templates_created: 0,
       examples_created: 0,
       duplicates_suppressed: 0,
       trust_rejected: 0,
-
       failure_breakdown: {} as Record<string, number>,
       trust_failure_breakdown: {} as Record<string, number>,
       diagnoses: [] as any[],
     };
 
-    // Filter pool — if single resource retry, only include that one
     let unprocessedPool: any[];
     if (singleResourceId) {
-      // For single-resource retry, clear its previous diagnosis and process it fresh
       await supabaseAdmin.from('pipeline_diagnoses')
         .delete()
         .eq('resource_id', singleResourceId)
@@ -319,7 +343,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Process one batch
     const batch = mode === 'full_backlog'
       ? unprocessedPool.slice(0, Math.min(unprocessedPool.length, 50))
       : unprocessedPool.slice(0, batchSize);
@@ -361,8 +384,8 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // STEP 1: Route
-        const routes = routeResource(content, resource.title);
+        // STEP 1: Route — CONTENT-BASED (no title in routing)
+        const routes = routeResource(content);
         diag.route = routes.join(', ');
 
         if (routes.length === 1 && routes[0] === 'reference') {
@@ -384,50 +407,58 @@ Deno.serve(async (req) => {
         const trustFailures: string[] = [];
         let mostSimilar: string | null = null;
 
-        // STEP 2a: Template route
+        // STEP 2a: Template route — CONTENT-BASED dedup
         if (routes.includes('template')) {
           if (contentLen < 200) {
             failureReasons.push('template_incomplete');
             results.failure_breakdown['template_incomplete'] = (results.failure_breakdown['template_incomplete'] || 0) + 1;
-          } else if (isDuplicate(resource.title, existingTplTitles)) {
-            failureReasons.push('duplicate_template');
-            results.duplicates_suppressed++;
-            results.failure_breakdown['duplicate_template'] = (results.failure_breakdown['duplicate_template'] || 0) + 1;
           } else {
-            const { error } = await supabaseAdmin.from('execution_templates').insert({
-              user_id: user.id, title: resource.title, body: content.slice(0, 5000),
-              template_type: 'email', output_type: 'custom', source_resource_id: resource.id,
-              tags: resource.tags || [], template_origin: 'promoted_from_resource',
-              status: 'active', created_by_user: false, confidence_score: 0.7,
-            });
-            if (!error) {
-              diag.assets_created.templates++;
-              results.templates_created++;
-              existingTplTitles.add(resource.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim());
-              createdSomething = true;
+            const { dup, similar } = isContentDuplicate(content, existingTplContents);
+            if (dup) {
+              failureReasons.push('duplicate_template');
+              results.duplicates_suppressed++;
+              results.failure_breakdown['duplicate_template'] = (results.failure_breakdown['duplicate_template'] || 0) + 1;
+              if (similar) mostSimilar = similar;
+            } else {
+              const { error } = await supabaseAdmin.from('execution_templates').insert({
+                user_id: user.id, title: resource.title, body: content.slice(0, 5000),
+                template_type: 'email', output_type: 'custom', source_resource_id: resource.id,
+                tags: resource.tags || [], template_origin: 'promoted_from_resource',
+                status: 'active', created_by_user: false, confidence_score: 0.7,
+              });
+              if (!error) {
+                diag.assets_created.templates++;
+                results.templates_created++;
+                existingTplContents.push(content.slice(0, 500));
+                createdSomething = true;
+              }
             }
           }
         }
 
-        // STEP 2b: Example route
+        // STEP 2b: Example route — CONTENT-BASED dedup
         if (routes.includes('example')) {
           if (contentLen < 150) {
             failureReasons.push('example_not_strong_enough');
             results.failure_breakdown['example_not_strong_enough'] = (results.failure_breakdown['example_not_strong_enough'] || 0) + 1;
-          } else if (isDuplicate(resource.title, existingExTitles)) {
-            failureReasons.push('duplicate_example');
-            results.duplicates_suppressed++;
-            results.failure_breakdown['duplicate_example'] = (results.failure_breakdown['duplicate_example'] || 0) + 1;
           } else {
-            const { error } = await supabaseAdmin.from('execution_outputs').insert({
-              user_id: user.id, title: resource.title, content: content.slice(0, 5000),
-              output_type: 'custom', is_strong_example: true,
-            });
-            if (!error) {
-              diag.assets_created.examples++;
-              results.examples_created++;
-              existingExTitles.add(resource.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim());
-              createdSomething = true;
+            const { dup, similar } = isContentDuplicate(content, existingExContents);
+            if (dup) {
+              failureReasons.push('duplicate_example');
+              results.duplicates_suppressed++;
+              results.failure_breakdown['duplicate_example'] = (results.failure_breakdown['duplicate_example'] || 0) + 1;
+              if (similar) mostSimilar = similar;
+            } else {
+              const { error } = await supabaseAdmin.from('execution_outputs').insert({
+                user_id: user.id, title: resource.title, content: content.slice(0, 5000),
+                output_type: 'custom', is_strong_example: true,
+              });
+              if (!error) {
+                diag.assets_created.examples++;
+                results.examples_created++;
+                existingExContents.push(content.slice(0, 500));
+                createdSomething = true;
+              }
             }
           }
         }
@@ -466,7 +497,8 @@ Deno.serve(async (req) => {
                 let allGeneric = true;
 
                 for (const item of items) {
-                  const validation = validateItem(item, existingKITitles);
+                  // Content-first validation (uses content pools, not title sets)
+                  const validation = validateItem(item, existingKIContents);
                   for (const gate of validation.failedGates) {
                     results.trust_failure_breakdown[gate] = (results.trust_failure_breakdown[gate] || 0) + 1;
                     if (!trustFailures.includes(gate)) trustFailures.push(gate);
@@ -501,7 +533,8 @@ Deno.serve(async (req) => {
                       ),
                     } : null,
                   });
-                  existingKITitles.add(item.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim());
+                  // Add to content pool for intra-batch dedup
+                  existingKIContents.push(`${item.tactic_summary || ''} ${item.when_to_use || ''} ${item.example_usage || ''}`);
                   if (!validation.passed) results.trust_rejected++;
                 }
 
@@ -590,7 +623,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Calculate remaining
     const processedIds = new Set(batch.map((r: any) => r.id));
     const remainingPool = unprocessedPool.filter((r: any) => !processedIds.has(r.id));
     results.remaining = remainingPool.length;
@@ -621,7 +653,6 @@ Deno.serve(async (req) => {
       },
     }).eq('id', runId);
 
-    // Sort diagnoses: needs_review first, then by priority
     const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
     results.diagnoses.sort((a: any, b: any) => {
       if (a.terminal_state === 'needs_review' && b.terminal_state !== 'needs_review') return -1;

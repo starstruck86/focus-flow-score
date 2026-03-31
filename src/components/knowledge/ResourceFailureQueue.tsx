@@ -167,15 +167,9 @@ async function reopenResolution(resourceId: string) {
   }
 }
 
-// ── Dedup check ────────────────────────────────────────────
+// ── Content-based dedup & smart snippets ───────────────────
 
-function titleSimilarity(a: string, b: string): number {
-  const w1 = new Set(a.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().split(/\s+/));
-  const w2 = new Set(b.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().split(/\s+/));
-  let overlap = 0;
-  for (const w of w1) { if (w2.has(w)) overlap++; }
-  return w1.size + w2.size > 0 ? (2 * overlap) / (w1.size + w2.size) : 0;
-}
+import { contentSimilarity, generateSmartSnippet } from '@/lib/contentSignature';
 
 // ── Component ──────────────────────────────────────────────
 
@@ -191,10 +185,10 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
   const [dupWarning, setDupWarning] = useState<{
     diagnosis: ResourceDiagnosis;
     type: 'template' | 'example';
-    similar: { id: string; title: string; similarity: number }[];
+    similar: { id: string; title: string; content: string; similarity: number }[];
   } | null>(null);
 
-  // Fetch content snippets for diagnoses
+  // Fetch smart preview snippets (route-aware)
   useEffect(() => {
     const ids = diagnoses.map(d => d.resource_id).filter(id => !snippets[id]);
     if (ids.length === 0) return;
@@ -207,7 +201,9 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
         const newSnippets: Record<string, string> = {};
         for (const r of data) {
           const content = (r as any).content || '';
-          newSnippets[r.id] = content.slice(0, 200).replace(/\n+/g, ' ').trim();
+          const diag = diagnoses.find(d => d.resource_id === r.id);
+          const route = diag?.route?.split(', ')[0] || 'reference';
+          newSnippets[r.id] = generateSmartSnippet(content, route, 200);
         }
         setSnippets(prev => ({ ...prev, ...newSnippets }));
       }
@@ -270,27 +266,41 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
   ): Promise<boolean> => {
     if (!user) return false;
 
-    // Fetch existing assets to check for similarity
+    // Fetch source resource content for content-based comparison
+    const { data: sourceRes } = await supabase
+      .from('resources')
+      .select('content')
+      .eq('id', d.resource_id)
+      .single();
+    const sourceContent = (sourceRes as any)?.content || '';
+
+    // Fetch existing assets with content for content-based dedup
     const table = type === 'template' ? 'execution_templates' : 'execution_outputs';
+    const contentField = type === 'template' ? 'body' : 'content';
     const { data: existing } = await supabase
       .from(table as any)
-      .select('id, title')
+      .select(`id, title, ${contentField}`)
       .eq('user_id', user.id)
       .limit(200);
 
-    if (!existing || existing.length === 0) return true; // no duplicates possible
+    if (!existing || existing.length === 0) return true;
 
     const similar = (existing as any[])
-      .map(e => ({ id: e.id, title: e.title, similarity: titleSimilarity(d.title, e.title) }))
+      .map(e => ({
+        id: e.id,
+        title: e.title,
+        content: (e[contentField] || '').slice(0, 200),
+        similarity: contentSimilarity(sourceContent, e[contentField] || ''),
+      }))
       .filter(e => e.similarity > 0.5)
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, 5);
 
     if (similar.length > 0) {
       setDupWarning({ diagnosis: d, type, similar });
-      return false; // will proceed after confirmation
+      return false;
     }
-    return true; // no dups found
+    return true;
   }, [user]);
 
   const handlePromoteTemplate = useCallback(async (d: ResourceDiagnosis, skipDupCheck = false) => {
@@ -586,19 +596,23 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
                 Similar {dupWarning.type === 'template' ? 'Templates' : 'Examples'} Found
               </DialogTitle>
               <DialogDescription className="text-xs">
-                Before creating a new {dupWarning.type} from &ldquo;{dupWarning.diagnosis.title}&rdquo;, review these similar existing assets:
+                Before creating a new {dupWarning.type} from &ldquo;{dupWarning.diagnosis.title}&rdquo;, review these existing assets with similar content:
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {dupWarning.similar.map(s => (
-                <div key={s.id} className="p-2 rounded border border-border bg-muted/30 text-xs flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-medium text-foreground truncate">{s.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{Math.round(s.similarity * 100)}% similar</p>
+                <div key={s.id} className="p-2 rounded border border-border bg-muted/30 text-xs space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-foreground truncate flex-1">{s.title}</p>
+                    <Badge variant="outline" className="text-[9px] shrink-0">
+                      {Math.round(s.similarity * 100)}% content match
+                    </Badge>
                   </div>
-                  <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 shrink-0">
-                    <Eye className="h-3 w-3" /> View
-                  </Button>
+                  {s.content && (
+                    <p className="text-[10px] text-muted-foreground line-clamp-2 italic border-l-2 border-border pl-2">
+                      {s.content}…
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
