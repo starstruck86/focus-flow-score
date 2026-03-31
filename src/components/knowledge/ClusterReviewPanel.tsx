@@ -88,8 +88,10 @@ export function ClusterReviewPanel({ resources, onResolved }: ClusterReviewPanel
     const member = cluster.members.find(m => m.id === candidateId);
     if (!member) return;
 
+    let assetId: string | undefined;
+
     if (role === 'template') {
-      await supabase.from('execution_templates' as any).insert({
+      const { data } = await supabase.from('execution_templates' as any).insert({
         user_id: user.id,
         title: member.title,
         body: shapedContent.slice(0, 5000),
@@ -100,16 +102,37 @@ export function ClusterReviewPanel({ resources, onResolved }: ClusterReviewPanel
         status: 'active',
         created_by_user: false,
         tags: [],
-      } as any);
+      } as any).select('id').single();
+      assetId = (data as any)?.id;
     } else {
-      await supabase.from('execution_outputs').insert({
+      const { data } = await supabase.from('execution_outputs').insert({
         user_id: user.id,
         title: member.title,
         content: shapedContent.slice(0, 5000),
         output_type: 'custom',
         is_strong_example: true,
-      });
+      }).select('id').single();
+      assetId = data?.id;
     }
+
+    // Persist provenance
+    const transformResult = role === 'template'
+      ? (await import('@/lib/contentSignature')).shapeAsTemplate(member.content)
+      : (await import('@/lib/contentSignature')).shapeAsExample(member.content);
+
+    await supabase.from('asset_provenance').insert({
+      user_id: user.id,
+      asset_type: role,
+      asset_id: assetId || 'unknown',
+      source_resource_id: member.id,
+      source_segment_index: null,
+      source_char_range: null,
+      source_heading: null,
+      transformed_content: shapedContent.slice(0, 5000),
+      removed_lines: transformResult.removedLines,
+      high_risk_removals: transformResult.highRiskRemovals,
+      original_content: member.content.slice(0, 5000),
+    } as any);
 
     // Mark non-canonical members as reference
     const otherIds = cluster.members.filter(m => m.id !== candidateId).map(m => m.id);
@@ -119,16 +142,29 @@ export function ClusterReviewPanel({ resources, onResolved }: ClusterReviewPanel
         .in('id', otherIds);
     }
 
+    // Persist cluster resolution
     const resolution = resolveCluster(
       cluster, candidateId, role,
       `Promoted as ${role}. ${cluster.members.length - 1} duplicates demoted to reference.`
     );
+
+    await supabase.from('cluster_resolutions').insert({
+      user_id: user.id,
+      cluster_id: cluster.id,
+      canonical_resource_id: candidateId,
+      canonical_role: role,
+      reasoning: resolution.reasoning,
+      demoted_members: resolution.demotedMembers,
+      resolved_by: user.id,
+    } as any);
+
     markResolved(cluster.id, resolution);
     setTransformPreview(null);
     toast.success(`Cluster resolved: "${member.title}" promoted as ${role}`);
   }, [user, transformPreview, markResolved]);
 
   const handleDismissCluster = useCallback(async (cluster: ContentCluster) => {
+    if (!user) return;
     const ids = cluster.members.map(m => m.id);
     await supabase.from('resources')
       .update({ content_classification: 'reference' } as any)
@@ -137,9 +173,21 @@ export function ClusterReviewPanel({ resources, onResolved }: ClusterReviewPanel
       cluster, ids[0], 'reference',
       `All ${ids.length} members marked as reference.`
     );
+
+    // Persist cluster resolution
+    await supabase.from('cluster_resolutions').insert({
+      user_id: user.id,
+      cluster_id: cluster.id,
+      canonical_resource_id: ids[0],
+      canonical_role: 'reference',
+      reasoning: resolution.reasoning,
+      demoted_members: resolution.demotedMembers,
+      resolved_by: user.id,
+    } as any);
+
     markResolved(cluster.id, resolution);
     toast.success(`Cluster resolved — ${ids.length} resources marked as reference`);
-  }, [markResolved]);
+  }, [user, markResolved]);
 
   if (activeClusters.length === 0 && resolutions.length === 0) return null;
 
