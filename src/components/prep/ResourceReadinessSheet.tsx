@@ -1138,7 +1138,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {confirmAction?.type === 'delete'
-                ? `Delete ${confirmAction.ids?.length ?? 0} junk resources?`
+                ? `Delete ${confirmAction.ids?.length ?? 0} low-value resources?`
                 : BULK_ACTION_DESCRIPTIONS[confirmAction?.type ?? '']?.title ?? 'Confirm Action'
               }
             </AlertDialogTitle>
