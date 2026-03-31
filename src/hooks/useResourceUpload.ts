@@ -47,7 +47,7 @@ async function classifyResource(payload: {
   return data as ClassificationResult;
 }
 
-async function extractTextFromFile(file: File): Promise<string> {
+export async function extractTextFromFile(file: File): Promise<string> {
   const ext = file.name.split('.').pop()?.toLowerCase();
   if (['txt', 'md', 'csv', 'json', 'xml', 'html'].includes(ext || '')) {
     return await file.text();

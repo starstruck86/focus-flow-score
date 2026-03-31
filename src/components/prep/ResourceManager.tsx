@@ -766,7 +766,7 @@ export function ResourceManager() {
                     if (result.operationalized || result.knowledgeExtracted > 0) {
                       toast.success(`Extracted ${result.knowledgeExtracted} knowledge items`);
                     } else {
-                      toast.info(result.failureReason || 'No knowledge items extracted');
+                      toast.info(result.reason || 'No knowledge items extracted');
                     }
                   } catch (error: any) {
                     toast.error('Extraction failed', { description: error?.message });
