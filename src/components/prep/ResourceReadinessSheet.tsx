@@ -33,7 +33,7 @@ import {
   type ReadinessBucket,
   type AuditedResource,
 } from '@/lib/resourceAudit';
-import { autoOperationalizeBatch, summarizeBatchResults, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BlockedReason } from '@/lib/autoOperationalize';
+import { autoOperationalizeBatch, summarizeBatchResults, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, estimateBatchOutput, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BlockedReason, type BatchSummary } from '@/lib/autoOperationalize';
 import { LifecycleSummaryBar } from './LifecycleSummaryBar';
 import { useCanonicalLifecycle, STAGE_LABELS, STAGE_COLORS } from '@/hooks/useCanonicalLifecycle';
 import { deriveCanonicalStage, type LifecycleStage } from '@/lib/canonicalLifecycle';
