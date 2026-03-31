@@ -1,6 +1,7 @@
 /**
  * Resource Failure Review Queue — shows resource-level pipeline failures
  * with root causes, remediation paths, and quick actions.
+ * Resolution actions are persisted to pipeline_diagnoses.
  */
 
 import { useState, useMemo, useCallback } from 'react';
@@ -11,7 +12,7 @@ import {
 } from '@/components/ui/collapsible';
 import {
   ChevronDown, ChevronRight, AlertOctagon, RotateCcw,
-  FileText, Trash2, ArrowRight, Filter, Wand2, Merge,
+  FileText, Trash2, ArrowRight, Filter, Wand2,
   Crown, Star, RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -49,6 +50,7 @@ export interface ResourceDiagnosis {
 
 interface ResourceFailureQueueProps {
   diagnoses: ResourceDiagnosis[];
+  runId?: string | null;
   onRerunResource?: (resourceId: string) => void;
   onRerunStrict?: (resourceId: string) => void;
 }
@@ -93,22 +95,48 @@ const PRIORITY_BADGE: Record<string, string> = {
 
 type FailureFilter = string;
 
+// ── Persist resolution action ──────────────────────────────
+
+async function persistResolution(
+  resourceId: string,
+  action: string,
+  notes: string,
+) {
+  // Update the latest diagnosis for this resource
+  const { data: diags } = await supabase
+    .from('pipeline_diagnoses')
+    .select('id')
+    .eq('resource_id', resourceId)
+    .eq('resolution_status', 'unresolved')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (diags && diags.length > 0) {
+    await supabase.from('pipeline_diagnoses').update({
+      resolution_status: 'resolved',
+      resolution_action: action,
+      resolution_notes: notes,
+      resolved_at: new Date().toISOString(),
+    } as any).eq('id', (diags[0] as any).id);
+  }
+}
+
 // ── Component ──────────────────────────────────────────────
 
-export function ResourceFailureQueue({ diagnoses, onRerunResource, onRerunStrict }: ResourceFailureQueueProps) {
+export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onRerunStrict }: ResourceFailureQueueProps) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(true);
   const [filters, setFilters] = useState<Set<FailureFilter>>(new Set());
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [resolved, setResolved] = useState<Set<string>>(new Set());
 
   // Show needs_review, content_missing, and operationalized_partial
   const failedDiagnoses = useMemo(() =>
     diagnoses.filter(d =>
       ['needs_review', 'content_missing', 'operationalized_partial'].includes(d.terminal_state) &&
-      !dismissed.has(d.resource_id)
+      !resolved.has(d.resource_id)
     ),
-    [diagnoses, dismissed]
+    [diagnoses, resolved]
   );
 
   const reasonCounts = useMemo(() => {
@@ -138,37 +166,87 @@ export function ResourceFailureQueue({ diagnoses, onRerunResource, onRerunStrict
 
   const handleMarkReference = useCallback(async (resourceId: string) => {
     await supabase.from('resources').update({ content_classification: 'reference' } as any).eq('id', resourceId);
-    setDismissed(prev => new Set(prev).add(resourceId));
+    await persistResolution(resourceId, 'marked_reference', 'Marked as reference material');
+    setResolved(prev => new Set(prev).add(resourceId));
     qc.invalidateQueries({ queryKey: ['resources'] });
+    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
     toast.success('Marked as reference');
   }, [qc]);
 
   const handlePromoteTemplate = useCallback(async (d: ResourceDiagnosis) => {
     if (!user) return;
+    // Fetch actual resource content
+    const { data: resource } = await supabase
+      .from('resources')
+      .select('id, title, content, tags, resource_type')
+      .eq('id', d.resource_id)
+      .single();
+
+    if (!resource || !resource.content) {
+      toast.error('Cannot promote: resource content not found');
+      return;
+    }
+
     await supabase.from('execution_templates' as any).insert({
-      user_id: user.id, title: d.title, body: '', template_type: 'email',
-      output_type: 'custom', template_origin: 'promoted_from_resource',
-      status: 'active', created_by_user: false,
+      user_id: user.id,
+      title: resource.title,
+      body: (resource.content as string).slice(0, 5000),
+      template_type: 'email',
+      output_type: 'custom',
+      template_origin: 'promoted_from_resource',
+      source_resource_id: resource.id,
+      status: 'active',
+      created_by_user: false,
+      tags: (resource as any).tags || [],
     } as any);
-    setDismissed(prev => new Set(prev).add(d.resource_id));
+
+    await persistResolution(d.resource_id, 'promoted_template', `Promoted as template from resource "${resource.title}"`);
+    setResolved(prev => new Set(prev).add(d.resource_id));
     qc.invalidateQueries({ queryKey: ['resources'] });
-    toast.success('Promoted as template');
+    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    toast.success('Promoted as template with real content');
   }, [user, qc]);
 
   const handlePromoteExample = useCallback(async (d: ResourceDiagnosis) => {
     if (!user) return;
+    // Fetch actual resource content
+    const { data: resource } = await supabase
+      .from('resources')
+      .select('id, title, content, tags')
+      .eq('id', d.resource_id)
+      .single();
+
+    if (!resource || !resource.content) {
+      toast.error('Cannot promote: resource content not found');
+      return;
+    }
+
     await supabase.from('execution_outputs').insert({
-      user_id: user.id, title: d.title, content: '',
-      output_type: 'custom', is_strong_example: true,
+      user_id: user.id,
+      title: resource.title,
+      content: (resource.content as string).slice(0, 5000),
+      output_type: 'custom',
+      is_strong_example: true,
     });
-    setDismissed(prev => new Set(prev).add(d.resource_id));
+
+    await persistResolution(d.resource_id, 'promoted_example', `Promoted as example from resource "${resource.title}"`);
+    setResolved(prev => new Set(prev).add(d.resource_id));
     qc.invalidateQueries({ queryKey: ['resources'] });
-    toast.success('Promoted as example');
+    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    toast.success('Promoted as example with real content');
   }, [user, qc]);
 
-  const handleDismiss = useCallback((resourceId: string) => {
-    setDismissed(prev => new Set(prev).add(resourceId));
-  }, []);
+  const handleDismiss = useCallback(async (resourceId: string) => {
+    await persistResolution(resourceId, 'dismissed', 'Dismissed by user');
+    setResolved(prev => new Set(prev).add(resourceId));
+    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    toast.success('Dismissed — will not resurface');
+  }, [qc]);
+
+  const handleRetry = useCallback(async (resourceId: string) => {
+    await persistResolution(resourceId, 'retry_requested', 'User requested retry');
+    if (onRerunResource) onRerunResource(resourceId);
+  }, [onRerunResource]);
 
   if (failedDiagnoses.length === 0) return null;
 
@@ -185,7 +263,7 @@ export function ResourceFailureQueue({ diagnoses, onRerunResource, onRerunStrict
 
       <CollapsibleContent className="px-3 pb-3 space-y-2">
         <p className="text-[10px] text-muted-foreground">
-          Resources that could not be fully operationalized. Each shows why it failed and how to fix it.
+          Resources that could not be fully operationalized. Actions are persisted — resolved items won't resurface.
         </p>
 
         {/* Filter chips */}
@@ -272,7 +350,7 @@ export function ResourceFailureQueue({ diagnoses, onRerunResource, onRerunStrict
               {/* Actions */}
               <div className="flex flex-col gap-1 shrink-0">
                 {d.retryable && onRerunResource && (
-                  <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => onRerunResource(d.resource_id)}>
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handleRetry(d.resource_id)}>
                     <RotateCcw className="h-3 w-3" /> Retry
                   </Button>
                 )}

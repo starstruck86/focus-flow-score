@@ -467,7 +467,8 @@ export function ResourceUpsideQueue() {
       {/* Resource Failure Queue — from pipeline diagnoses (persisted or live) */}
       {!guidedMode && (() => {
         const diagsToShow = pipelineResult?.diagnoses || persistedDiagnoses?.diagnoses || [];
-        return diagsToShow.length > 0 ? <ResourceFailureQueue diagnoses={diagsToShow} /> : null;
+        const activeRunId = pipelineResult?.run_id || persistedDiagnoses?.runId || null;
+        return diagsToShow.length > 0 ? <ResourceFailureQueue diagnoses={diagsToShow} runId={activeRunId} /> : null;
       })()}
 
       {/* Trust Review Queue — extracted but not activated */}
@@ -569,6 +570,7 @@ function PipelineDashboard({
   const totalRef = r ? (r.reference_supporting + r.reference_needs_judgment + r.reference_low_leverage) : 0;
   const totalDone = r ? (r.operationalized + r.operationalized_partial + r.already_operationalized) : 0;
   const convergencePct = r && r.total_resources > 0 ? Math.round((totalDone / r.total_resources) * 100) : null;
+  const stallInfo = r?.stall_detected ? r : (persistedDiagnoses as any)?.stallInfo;
 
   return (
     <div className="border border-border rounded-lg bg-card p-4 space-y-3">
@@ -611,6 +613,22 @@ function PipelineDashboard({
           <div className="text-center p-1.5 rounded-md bg-muted/30 border border-border">
             <p className="text-sm font-bold text-foreground">{r.remaining}</p>
             <p className="text-[8px] text-muted-foreground leading-tight">Remaining</p>
+          </div>
+        </div>
+      )}
+
+      {/* Stall detection warning */}
+      {stallInfo && (stallInfo.stall_detected || stallInfo.stall_reason) && (
+        <div className="rounded-md bg-status-yellow/10 border border-status-yellow/30 p-2.5 text-xs space-y-1">
+          <p className="font-medium text-status-yellow text-[11px] flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Pipeline Stalled
+          </p>
+          <p className="text-[10px] text-muted-foreground">{stallInfo.stall_reason}</p>
+          <div className="flex gap-3 text-[10px] text-muted-foreground">
+            {(stallInfo.no_progress_iterations ?? 0) > 0 && <span>No-progress iterations: <span className="font-medium text-foreground">{stallInfo.no_progress_iterations}</span></span>}
+            {(stallInfo.repeated_failure_resources ?? 0) > 0 && <span>Repeated failures: <span className="font-medium text-foreground">{stallInfo.repeated_failure_resources}</span></span>}
+            {(stallInfo.stalled_resources ?? 0) > 0 && <span>Stalled resources: <span className="font-medium text-foreground">{stallInfo.stalled_resources}</span></span>}
           </div>
         </div>
       )}
