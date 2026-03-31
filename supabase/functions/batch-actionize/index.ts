@@ -185,14 +185,49 @@ const TAC_STRUCTURE = [
   /["'""].{10,}["'""]$/m,
 ];
 
+const DESCRIPTIVE_SIGNALS = [
+  /\b(overview|introduction|background|context|summary)\b/i,
+  /\b(in general|generally speaking|typically|usually|often)\b/i,
+  /\b(various|several|many|numerous) (ways|methods|approaches)\b/i,
+  /\b(history|evolution|landscape|ecosystem|industry)\b/i,
+  /\b(according to|research shows|studies indicate)\b/i,
+];
+
 function routeResource(content: string): string[] {
   if (!content || content.length < 50) return ['reference'];
   const routes: string[] = [];
   if (TPL_STRUCTURE.filter(p => p.test(content)).length >= 2 && content.length >= 200) routes.push('template');
   if (EX_STRUCTURE.filter(p => p.test(content)).length >= 2 && content.length >= 150) routes.push('example');
-  if (TAC_STRUCTURE.filter(p => p.test(content)).length >= 2 || (TAC_STRUCTURE.filter(p => p.test(content)).length >= 1 && content.length >= 300)) routes.push('tactic');
+  // Hardened tactic routing: require stronger evidence, penalize descriptive content
+  const tacHits = TAC_STRUCTURE.filter(p => p.test(content)).length;
+  const descHits = DESCRIPTIVE_SIGNALS.filter(p => p.test(content)).length;
+  if (tacHits >= 2 && descHits < tacHits) routes.push('tactic');
+  else if (tacHits >= 3 && content.length >= 200) routes.push('tactic');
   if (routes.length === 0) routes.push('reference');
   return routes;
+}
+
+// ── Content Transformation ─────────────────────────────────
+
+function shapeAsTemplate(content: string): string {
+  let s = content;
+  s = s.replace(/\{(\w+)\}/g, (_, n: string) => `[${n.charAt(0).toUpperCase() + n.slice(1)}]`);
+  s = s.replace(/^(note|comment|explanation|context|background|tip|reminder)\s*:.*$/gim, '');
+  s = s.replace(/^\/\/.*$/gm, '');
+  s = s.replace(/^\(.*?\)\s*$/gm, '');
+  s = s.replace(/^(template|email template|draft|version \d+)\s*:?\s*$/gim, '');
+  s = s.replace(/\n{3,}/g, '\n\n');
+  return s.trim();
+}
+
+function shapeAsExample(content: string): string {
+  let s = content;
+  s = s.replace(/^(note|comment|internal|draft note|meta|context)\s*:.*$/gim, '');
+  s = s.replace(/^\/\/.*$/gm, '');
+  s = s.replace(/^\[?(internal|draft|wip|todo)\]?\s*$/gim, '');
+  s = s.replace(/^(version|v\d+|last updated|status)\s*:.*$/gim, '');
+  s = s.replace(/\n{3,}/g, '\n\n');
+  return s.trim();
 }
 
 function classifyReferenceType(content: string, contentLen: number): TerminalState {
