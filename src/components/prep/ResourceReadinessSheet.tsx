@@ -516,6 +516,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         <Rocket className="h-3 w-3" />
                         Test (5)
                       </Button>
+                    )}
                     {audit.counts.junk_or_low_signal > 0 && (
                       <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
                         onClick={() => setConfirmAction({ type: 'delete', ids: audit.buckets.junk_or_low_signal.map(r => r.id) })}>
