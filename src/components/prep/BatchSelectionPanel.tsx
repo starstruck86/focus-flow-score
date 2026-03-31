@@ -77,7 +77,14 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
   const [progress, setProgress] = useState<BatchProgress | null>(null);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [showJobs, setShowJobs] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
+  const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof computeBatchMetrics>> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Load metrics on mount
+  useEffect(() => {
+    loadBatchRunHistory(20).then(runs => computeBatchMetrics(runs).then(setMetrics));
+  }, [progress?.isRunning]);
 
   // ── Selection helpers ──────────────────────────────────
 
