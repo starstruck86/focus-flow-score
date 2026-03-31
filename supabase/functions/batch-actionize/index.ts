@@ -236,7 +236,46 @@ function classifyReferenceType(content: string, contentLen: number): TerminalSta
   return 'reference_supporting';
 }
 
-// ── Remediation ────────────────────────────────────────────
+// ── Segment-Level Routing ──────────────────────────────────
+
+interface ContentSegmentEF {
+  index: number;
+  content: string;
+  heading?: string;
+  charRange: [number, number];
+}
+
+function segmentContent(content: string): ContentSegmentEF[] {
+  if (!content || content.length < 200) {
+    return [{ index: 0, content, charRange: [0, content?.length || 0] }];
+  }
+  const headingPattern = /^(#{1,3})\s+(.+)$/gm;
+  const headings: Array<{ title: string; pos: number }> = [];
+  let m;
+  while ((m = headingPattern.exec(content)) !== null) {
+    headings.push({ title: m[2], pos: m.index });
+  }
+  if (headings.length < 2) {
+    return [{ index: 0, content, charRange: [0, content.length] }];
+  }
+  const segs: ContentSegmentEF[] = [];
+  for (let i = 0; i < headings.length; i++) {
+    const start = headings[i].pos;
+    const end = i + 1 < headings.length ? headings[i + 1].pos : content.length;
+    const segContent = content.slice(start, end).trim();
+    if (segContent.length >= 50) {
+      segs.push({ index: segs.length, content: segContent, heading: headings[i].title, charRange: [start, end] });
+    }
+  }
+  if (headings[0].pos > 80) {
+    const pre = content.slice(0, headings[0].pos).trim();
+    if (pre.length >= 50) segs.unshift({ index: -1, content: pre, charRange: [0, headings[0].pos] });
+  }
+  // Re-index
+  segs.forEach((s, i) => s.index = i);
+  return segs.length > 0 ? segs : [{ index: 0, content, charRange: [0, content.length] }];
+}
+
 
 function getRemediationPath(reason: ResourceFailureReason): string {
   const paths: Record<ResourceFailureReason, string> = {
@@ -450,8 +489,25 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // STEP 1: Route — CONTENT-BASED (no title in routing)
-        const routes = routeResource(content);
+        // STEP 1: Segment-level routing — split document into chunks,
+        // route each independently, then aggregate routes
+        const segments = segmentContent(content);
+        const aggregatedRoutes = new Set<string>();
+        const segmentProvenance: Array<{ index: number; route: string; charRange: [number, number]; heading?: string }> = [];
+        
+        for (const seg of segments) {
+          const segRoutes = routeResource(seg.content);
+          for (const r of segRoutes) aggregatedRoutes.add(r);
+          segmentProvenance.push({
+            index: seg.index,
+            route: segRoutes[0],
+            charRange: seg.charRange,
+            heading: seg.heading,
+          });
+        }
+        
+        // Use aggregated routes (union of all segment routes)
+        const routes = Array.from(aggregatedRoutes);
         diag.route = routes.join(', ');
 
         if (routes.length === 1 && routes[0] === 'reference') {
@@ -463,7 +519,7 @@ Deno.serve(async (req) => {
           if (typeof results[stateKey] === 'number') (results as any)[stateKey]++;
           results.failure_breakdown['routed_reference_only'] = (results.failure_breakdown['routed_reference_only'] || 0) + 1;
           diagnosisRows.push(diag);
-          results.diagnoses.push({ ...diag, title: resource.title });
+          results.diagnoses.push({ ...diag, title: resource.title, segment_provenance: segmentProvenance });
           results.total_processed++;
           continue;
         }

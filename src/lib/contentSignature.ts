@@ -257,12 +257,26 @@ const PRESERVE_LINE_PATTERNS = [
   /["'""].{5,}["'""]/,
 ];
 
+// High-risk patterns — warn aggressively if these are removed
+const HIGH_RISK_PATTERNS = [
+  { pattern: /["'""].{5,}["'""]/, label: 'quoted phrasing' },
+  { pattern: /\[.*?\]|\{.*?\}/, label: 'placeholder' },
+  { pattern: /\b(when|if|before|after|unless|during)\s+(the|a|you|they)\b/i, label: 'conditional logic' },
+  { pattern: /\b(persona|audience|tone|voice|style|constraint|rule)\b/i, label: 'persona/constraint' },
+  { pattern: /\b(instruction|requirement|must|should|always|never)\b/i, label: 'instruction' },
+];
+
 function isMetaLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
-  // Check if preserved first — preservation wins
   if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) return false;
   return META_LINE_PATTERNS.some(p => p.test(trimmed));
+}
+
+export interface HighRiskRemoval {
+  line: string;
+  lineNumber: number;
+  riskLabels: string[];
 }
 
 export interface TransformationResult {
@@ -270,6 +284,24 @@ export interface TransformationResult {
   removedLines: string[];
   originalLineCount: number;
   shapedLineCount: number;
+  highRiskRemovals: HighRiskRemoval[];
+}
+
+/**
+ * Classify removed lines for high-risk warnings.
+ */
+function classifyRemovedLines(removedLines: Array<{ line: string; lineNumber: number }>): HighRiskRemoval[] {
+  const highRisk: HighRiskRemoval[] = [];
+  for (const { line, lineNumber } of removedLines) {
+    const labels: string[] = [];
+    for (const { pattern, label } of HIGH_RISK_PATTERNS) {
+      if (pattern.test(line)) labels.push(label);
+    }
+    if (labels.length > 0) {
+      highRisk.push({ line, lineNumber, riskLabels: labels });
+    }
+  }
+  return highRisk;
 }
 
 /**
@@ -279,28 +311,27 @@ export interface TransformationResult {
 export function shapeAsTemplate(content: string): TransformationResult {
   const lines = content.split('\n');
   const kept: string[] = [];
-  const removedLines: string[] = [];
+  const removedLines: Array<{ line: string; lineNumber: number }> = [];
 
-  for (const line of lines) {
-    if (isMetaLine(line)) {
-      removedLines.push(line);
+  for (let i = 0; i < lines.length; i++) {
+    if (isMetaLine(lines[i])) {
+      removedLines.push({ line: lines[i], lineNumber: i + 1 });
     } else {
-      // Normalize placeholders: {company} → [Company]
-      let shaped = line.replace(/\{(\w+)\}/g, (_, name) =>
+      let shaped = lines[i].replace(/\{(\w+)\}/g, (_, name) =>
         `[${name.charAt(0).toUpperCase() + name.slice(1)}]`
       );
       kept.push(shaped);
     }
   }
 
-  // Collapse excessive blank lines
   let result = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
   return {
     shaped: result,
-    removedLines,
+    removedLines: removedLines.map(r => r.line),
     originalLineCount: lines.length,
     shapedLineCount: result.split('\n').length,
+    highRiskRemovals: classifyRemovedLines(removedLines),
   };
 }
 
@@ -311,7 +342,7 @@ export function shapeAsTemplate(content: string): TransformationResult {
 export function shapeAsExample(content: string): TransformationResult {
   const lines = content.split('\n');
   const kept: string[] = [];
-  const removedLines: string[] = [];
+  const removedLines: Array<{ line: string; lineNumber: number }> = [];
 
   const EXAMPLE_META = [
     /^(note|comment|internal|draft note|meta|context)\s*:/i,
@@ -320,19 +351,18 @@ export function shapeAsExample(content: string): TransformationResult {
     /^(version|v\d+|last updated|status)\s*:/i,
   ];
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
     if (!trimmed) {
-      kept.push(line);
+      kept.push(lines[i]);
       continue;
     }
-    // Preserve first
     if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) {
-      kept.push(line);
+      kept.push(lines[i]);
     } else if (EXAMPLE_META.some(p => p.test(trimmed))) {
-      removedLines.push(line);
+      removedLines.push({ line: lines[i], lineNumber: i + 1 });
     } else {
-      kept.push(line);
+      kept.push(lines[i]);
     }
   }
 
@@ -340,32 +370,36 @@ export function shapeAsExample(content: string): TransformationResult {
 
   return {
     shaped: result,
-    removedLines,
+    removedLines: removedLines.map(r => r.line),
     originalLineCount: lines.length,
     shapedLineCount: result.split('\n').length,
+    highRiskRemovals: classifyRemovedLines(removedLines),
   };
 }
 
-// ── Segment-Level Routing ──────────────────────────────────
+// ── Segment-Level Routing (First-Class) ────────────────────
 
 export interface ContentSegment {
   index: number;
   content: string;
   heading?: string;
   route: ContentRoute;
+  allRoutes: ContentRoute[];
   confidence: number;
+  charRange: [number, number];
 }
 
 /**
  * Split content into logical segments (by headings or double-newlines)
  * and route each independently. Enables multi-asset extraction from one resource.
+ * Segments are first-class: each carries provenance (charRange, heading, route).
  */
 export function segmentAndRoute(content: string): ContentSegment[] {
   if (!content || content.length < 100) {
-    return [{ index: 0, content, route: routeByContent(content)[0], confidence: 0.5 }];
+    const routes = routeByContent(content);
+    return [{ index: 0, content, route: routes[0], allRoutes: routes, confidence: 0.5, charRange: [0, content?.length || 0] }];
   }
 
-  // Split by markdown headings or double-newline paragraphs
   const headingPattern = /^(#{1,3})\s+(.+)$/gm;
   const headings: Array<{ index: number; level: number; title: string; pos: number }> = [];
   let match;
@@ -373,46 +407,50 @@ export function segmentAndRoute(content: string): ContentSegment[] {
     headings.push({ index: headings.length, level: match[1].length, title: match[2], pos: match.index });
   }
 
-  let rawSegments: Array<{ content: string; heading?: string }>;
+  let rawSegments: Array<{ content: string; heading?: string; charStart: number; charEnd: number }>;
 
   if (headings.length >= 2) {
-    // Split by headings
     rawSegments = [];
     for (let i = 0; i < headings.length; i++) {
       const start = headings[i].pos;
       const end = i + 1 < headings.length ? headings[i + 1].pos : content.length;
       const segContent = content.slice(start, end).trim();
       if (segContent.length >= 50) {
-        rawSegments.push({ content: segContent, heading: headings[i].title });
+        rawSegments.push({ content: segContent, heading: headings[i].title, charStart: start, charEnd: end });
       }
     }
-    // Include any preamble before first heading
     if (headings[0].pos > 80) {
       const preamble = content.slice(0, headings[0].pos).trim();
       if (preamble.length >= 50) {
-        rawSegments.unshift({ content: preamble });
+        rawSegments.unshift({ content: preamble, charStart: 0, charEnd: headings[0].pos });
       }
     }
   } else {
-    // Split by double-newlines into paragraphs, then group into segments of ≥150 chars
     const paragraphs = content.split(/\n{2,}/).filter(p => p.trim().length > 20);
     if (paragraphs.length <= 2) {
-      return [{ index: 0, content, route: routeByContent(content)[0], confidence: 0.5 }];
+      const routes = routeByContent(content);
+      return [{ index: 0, content, route: routes[0], allRoutes: routes, confidence: 0.5, charRange: [0, content.length] }];
     }
     rawSegments = [];
     let buffer = '';
+    let bufStart = 0;
+    let pos = 0;
     for (const para of paragraphs) {
+      const paraStart = content.indexOf(para, pos);
+      if (!buffer) bufStart = paraStart;
       buffer += (buffer ? '\n\n' : '') + para;
+      pos = paraStart + para.length;
       if (buffer.length >= 200) {
-        rawSegments.push({ content: buffer });
+        rawSegments.push({ content: buffer, charStart: bufStart, charEnd: pos });
         buffer = '';
       }
     }
-    if (buffer.length >= 50) rawSegments.push({ content: buffer });
+    if (buffer.length >= 50) rawSegments.push({ content: buffer, charStart: bufStart, charEnd: pos });
   }
 
   if (rawSegments.length <= 1) {
-    return [{ index: 0, content, route: routeByContent(content)[0], confidence: 0.5 }];
+    const routes = routeByContent(content);
+    return [{ index: 0, content, route: routes[0], allRoutes: routes, confidence: 0.5, charRange: [0, content.length] }];
   }
 
   return rawSegments.map((seg, i) => {
@@ -422,7 +460,9 @@ export function segmentAndRoute(content: string): ContentSegment[] {
       content: seg.content,
       heading: seg.heading,
       route: routes[0],
+      allRoutes: routes,
       confidence: scoreRouteConfidence(seg.content, routes[0]),
+      charRange: [seg.charStart, seg.charEnd] as [number, number],
     };
   });
 }
@@ -529,14 +569,59 @@ function scoreTacticCandidate(content: string): number {
   return Math.max(0, Math.min(1, score));
 }
 
-// ── Content Clustering ─────────────────────────────────────
+// ── Content Clustering (with canonical resolution) ─────────
+
+export interface ClusterMember {
+  id: string;
+  title: string;
+  content: string;
+  similarity: number;
+}
+
+export interface ClusterCandidate {
+  id: string;
+  title: string;
+  score: number;
+  reasoning: string;
+}
 
 export interface ContentCluster {
   id: string;
-  members: Array<{ id: string; title: string; content: string; similarity: number }>;
-  bestTemplate?: { id: string; title: string; score: number };
-  bestExample?: { id: string; title: string; score: number };
-  bestTactic?: { id: string; title: string; score: number };
+  members: ClusterMember[];
+  bestTemplate?: ClusterCandidate;
+  bestExample?: ClusterCandidate;
+  bestTactic?: ClusterCandidate;
+  canonicalId?: string;
+  canonicalRole?: ContentRoute;
+  canonicalReasoning?: string;
+}
+
+export interface ClusterResolution {
+  clusterId: string;
+  canonicalResourceId: string;
+  canonicalRole: ContentRoute;
+  reasoning: string;
+  demotedMembers: Array<{ id: string; duplicateOf: string }>;
+}
+
+function buildCandidateReasoning(content: string, role: ContentRoute, score: number): string {
+  const parts: string[] = [];
+  if (role === 'template') {
+    const ph = (content.match(/\[.*?\]|\{.*?\}/g) || []).length;
+    const steps = (content.match(/^(step\s*\d|phase\s*\d|\d+\.)\s/gim) || []).length;
+    if (ph > 0) parts.push(`${ph} placeholders`);
+    if (steps > 0) parts.push(`${steps} steps`);
+    if (content.length >= 300) parts.push('complete length');
+  } else if (role === 'example') {
+    if (/^(hi|hey|hello|dear)\s/im.test(content)) parts.push('has greeting');
+    if (/next steps?\s*:/i.test(content)) parts.push('has CTA');
+    if (/best regards|sincerely|cheers/im.test(content)) parts.push('has closing');
+  } else if (role === 'tactic') {
+    if (/["'""].{10,}["'""]/m.test(content)) parts.push('has talk track');
+    if (/\bwhen\s+(the|a|your)\b/i.test(content)) parts.push('has trigger');
+    if (content.length <= 500) parts.push('atomic length');
+  }
+  return parts.length > 0 ? `Score ${(score * 100).toFixed(0)}%: ${parts.join(', ')}` : `Score ${(score * 100).toFixed(0)}%`;
 }
 
 /**
@@ -569,21 +654,34 @@ export function clusterByContent(
     }
 
     if (cluster.members.length > 1) {
-      // Use role-specific scoring for best candidates
       for (const member of cluster.members) {
         const tplScore = scoreTemplateCandidate(member.content);
         const exScore = scoreExampleCandidate(member.content);
         const tacScore = scoreTacticCandidate(member.content);
 
         if (tplScore > 0.2 && (!cluster.bestTemplate || tplScore > cluster.bestTemplate.score)) {
-          cluster.bestTemplate = { id: member.id, title: member.title, score: tplScore };
+          cluster.bestTemplate = { id: member.id, title: member.title, score: tplScore, reasoning: buildCandidateReasoning(member.content, 'template', tplScore) };
         }
         if (exScore > 0.2 && (!cluster.bestExample || exScore > cluster.bestExample.score)) {
-          cluster.bestExample = { id: member.id, title: member.title, score: exScore };
+          cluster.bestExample = { id: member.id, title: member.title, score: exScore, reasoning: buildCandidateReasoning(member.content, 'example', exScore) };
         }
         if (tacScore > 0.2 && (!cluster.bestTactic || tacScore > cluster.bestTactic.score)) {
-          cluster.bestTactic = { id: member.id, title: member.title, score: tacScore };
+          cluster.bestTactic = { id: member.id, title: member.title, score: tacScore, reasoning: buildCandidateReasoning(member.content, 'tactic', tacScore) };
         }
+      }
+
+      // Auto-select canonical: highest-scoring candidate across roles
+      const candidates = [
+        cluster.bestTemplate ? { ...cluster.bestTemplate, role: 'template' as ContentRoute } : null,
+        cluster.bestExample ? { ...cluster.bestExample, role: 'example' as ContentRoute } : null,
+        cluster.bestTactic ? { ...cluster.bestTactic, role: 'tactic' as ContentRoute } : null,
+      ].filter(Boolean) as Array<ClusterCandidate & { role: ContentRoute }>;
+
+      if (candidates.length > 0) {
+        const best = candidates.reduce((a, b) => a.score > b.score ? a : b);
+        cluster.canonicalId = best.id;
+        cluster.canonicalRole = best.role;
+        cluster.canonicalReasoning = best.reasoning;
       }
 
       clusters.push(cluster);
@@ -591,4 +689,24 @@ export function clusterByContent(
   }
 
   return clusters;
+}
+
+/**
+ * Build a resolution record for a cluster.
+ */
+export function resolveCluster(
+  cluster: ContentCluster,
+  canonicalId: string,
+  canonicalRole: ContentRoute,
+  reasoning: string,
+): ClusterResolution {
+  return {
+    clusterId: cluster.id,
+    canonicalResourceId: canonicalId,
+    canonicalRole,
+    reasoning,
+    demotedMembers: cluster.members
+      .filter(m => m.id !== canonicalId)
+      .map(m => ({ id: m.id, duplicateOf: canonicalId })),
+  };
 }

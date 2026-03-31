@@ -1,6 +1,8 @@
 /**
  * Transformation Preview Dialog
  * Shows original vs transformed content with removed lines before promotion.
+ * Includes high-risk warnings for removed quoted phrasing, placeholders,
+ * conditionals, and persona/constraint language.
  */
 
 import { useMemo } from 'react';
@@ -8,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, Check, Minus, Eye } from 'lucide-react';
+import { AlertTriangle, Check, Minus, Eye, ShieldAlert } from 'lucide-react';
 import { shapeAsTemplate, shapeAsExample, type TransformationResult } from '@/lib/contentSignature';
 
 interface TransformationPreviewDialogProps {
@@ -35,6 +37,7 @@ export function TransformationPreviewDialog({
   }, [originalContent, type]);
 
   const hasRemovals = result.removedLines.length > 0;
+  const hasHighRisk = result.highRiskRemovals.length > 0;
   const removalPct = result.originalLineCount > 0
     ? Math.round((result.removedLines.length / result.originalLineCount) * 100)
     : 0;
@@ -52,7 +55,7 @@ export function TransformationPreviewDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-3 text-[10px]">
+        <div className="flex items-center gap-3 text-[10px] flex-wrap">
           <Badge variant="outline" className="text-[10px]">
             {result.originalLineCount} → {result.shapedLineCount} lines
           </Badge>
@@ -64,6 +67,11 @@ export function TransformationPreviewDialog({
           {!hasRemovals && (
             <Badge variant="outline" className="text-[10px] border-status-green/50 text-status-green">
               <Check className="h-2.5 w-2.5 mr-1" /> No lines removed
+            </Badge>
+          )}
+          {hasHighRisk && (
+            <Badge variant="outline" className="text-[10px] border-destructive/50 text-destructive">
+              <ShieldAlert className="h-2.5 w-2.5 mr-1" /> {result.highRiskRemovals.length} high-risk
             </Badge>
           )}
         </div>
@@ -92,8 +100,35 @@ export function TransformationPreviewDialog({
           </div>
         </div>
 
-        {/* Removed lines */}
-        {hasRemovals && (
+        {/* High-risk removals — shown FIRST if present */}
+        {hasHighRisk && (
+          <div className="p-2 rounded border border-destructive/30 bg-destructive/5 space-y-1.5">
+            <p className="text-[10px] font-semibold text-destructive flex items-center gap-1">
+              <ShieldAlert className="h-3.5 w-3.5" /> High-Risk Removals — Review Carefully
+            </p>
+            <ScrollArea className="max-h-[100px]">
+              <div className="space-y-1">
+                {result.highRiskRemovals.map((hr, i) => (
+                  <div key={i} className="flex items-start gap-2 text-[10px]">
+                    <div className="flex gap-1 shrink-0 mt-0.5">
+                      {hr.riskLabels.map(label => (
+                        <Badge key={label} variant="outline" className="text-[9px] border-destructive/40 text-destructive">
+                          {label}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="text-destructive/80 font-mono line-through truncate">
+                      L{hr.lineNumber}: {hr.line || '(empty)'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+
+        {/* Other removed lines */}
+        {hasRemovals && !hasHighRisk && (
           <div>
             <p className="text-[10px] font-medium text-status-yellow mb-1 flex items-center gap-1">
               <Minus className="h-3 w-3" /> Removed Lines
@@ -105,6 +140,26 @@ export function TransformationPreviewDialog({
                     {line || '(empty line)'}
                   </p>
                 ))}
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+
+        {/* Non-high-risk removals when high-risk is shown */}
+        {hasHighRisk && result.removedLines.length > result.highRiskRemovals.length && (
+          <div>
+            <p className="text-[10px] font-medium text-muted-foreground mb-1 flex items-center gap-1">
+              <Minus className="h-3 w-3" /> Other Removed Lines
+            </p>
+            <ScrollArea className="max-h-[80px] border rounded-md bg-muted/30">
+              <div className="p-2 space-y-0.5">
+                {result.removedLines
+                  .filter(line => !result.highRiskRemovals.some(hr => hr.line === line))
+                  .map((line, i) => (
+                    <p key={i} className="text-[10px] text-muted-foreground font-mono line-through">
+                      {line || '(empty line)'}
+                    </p>
+                  ))}
               </div>
             </ScrollArea>
           </div>
@@ -130,7 +185,7 @@ export function TransformationPreviewDialog({
               onOpenChange(false);
             }}
           >
-            Confirm & Promote
+            {hasHighRisk ? 'Confirm Despite Warnings' : 'Confirm & Promote'}
           </Button>
         </DialogFooter>
       </DialogContent>
