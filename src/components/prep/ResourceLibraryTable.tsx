@@ -21,7 +21,7 @@ import {
   Star, BookOpen, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { type EnrichmentStatus } from '@/lib/resourceEligibility';
+import { type EnrichmentStatus, getResourceOrigin } from '@/lib/resourceEligibility';
 import {
   getQualityTierLabel, getQualityTierColor,
 } from '@/lib/resourceQuality';
