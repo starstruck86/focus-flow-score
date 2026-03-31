@@ -1,6 +1,6 @@
 /**
  * Hook for persistent pipeline diagnoses, run-until-clean orchestration,
- * and stall detection.
+ * stall detection, and single-resource retry (standard vs strict).
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -46,7 +46,7 @@ export interface PipelineRunResult {
   stalled_resources: number;
 }
 
-/** Fetch the latest persisted diagnoses for the user */
+/** Fetch the latest persisted diagnoses for the user, reconciling with pipeline_runs */
 export function usePipelineDiagnoses() {
   const { user } = useAuth();
   return useQuery({
@@ -55,22 +55,52 @@ export function usePipelineDiagnoses() {
       // Get latest pipeline_run
       const { data: latestRun } = await supabase
         .from('pipeline_runs' as any)
-        .select('id, status, stall_reason, no_progress_iterations, stalled_resources, repeated_failure_resources')
+        .select('id, status, stall_reason, no_progress_iterations, stalled_resources, repeated_failure_resources, total_resources, total_processed, converged, summary_json')
         .eq('user_id', user!.id)
         .order('created_at', { ascending: false })
         .limit(1);
 
-      if (!latestRun || latestRun.length === 0) return { diagnoses: [], runId: null, stallInfo: null };
+      if (!latestRun || latestRun.length === 0) return { diagnoses: [], runId: null, stallInfo: null, reconciledSummary: null };
 
       const run = latestRun[0] as any;
       const runId = run.id;
 
-      const { data } = await supabase
+      // Fetch unresolved diagnoses for this run
+      const { data: unresolvedDiags } = await supabase
         .from('pipeline_diagnoses')
         .select('*')
         .eq('run_id', runId)
         .eq('resolution_status', 'unresolved')
         .order('priority', { ascending: true });
+
+      // Fetch ALL diagnoses for this run (for reconciled counts)
+      const { data: allDiags } = await supabase
+        .from('pipeline_diagnoses')
+        .select('terminal_state, resolution_status')
+        .eq('run_id', runId);
+
+      // Reconcile counts from actual persisted diagnoses
+      const reconciledSummary = {
+        operationalized: 0,
+        operationalized_partial: 0,
+        needs_review: 0,
+        reference_supporting: 0,
+        reference_needs_judgment: 0,
+        reference_low_leverage: 0,
+        content_missing: 0,
+        resolved: 0,
+        total: (allDiags || []).length,
+      };
+      for (const d of (allDiags || []) as any[]) {
+        if (d.resolution_status === 'resolved') {
+          reconciledSummary.resolved++;
+          continue;
+        }
+        const key = d.terminal_state as keyof typeof reconciledSummary;
+        if (key in reconciledSummary && typeof reconciledSummary[key] === 'number') {
+          (reconciledSummary as any)[key]++;
+        }
+      }
 
       return {
         runId,
@@ -80,7 +110,15 @@ export function usePipelineDiagnoses() {
           stalled_resources: run.stalled_resources || 0,
           repeated_failure_resources: run.repeated_failure_resources || 0,
         },
-        diagnoses: (data || []).map((d: any) => ({
+        reconciledSummary,
+        runMeta: {
+          status: run.status,
+          total_resources: run.total_resources,
+          total_processed: run.total_processed,
+          converged: run.converged,
+          summary_json: run.summary_json,
+        },
+        diagnoses: (unresolvedDiags || []).map((d: any) => ({
           resource_id: d.resource_id,
           title: d.resource_id, // enriched client-side
           route: d.route || '',
@@ -109,6 +147,56 @@ export function useRunPipeline() {
   const [result, setResult] = useState<PipelineRunResult | null>(null);
   const abortRef = useRef(false);
 
+  const invalidateAll = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+    qc.invalidateQueries({ queryKey: ['resources'] });
+    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+  }, [qc]);
+
+  /** Retry a single resource (standard mode) */
+  const rerunResource = useCallback(async (resourceId: string) => {
+    if (!user) return;
+    try {
+      toast.info('Retrying extraction…');
+      const { data, error } = await supabase.functions.invoke('batch-actionize', {
+        body: { batchSize: 1, mode: 'standard', resource_id: resourceId, strict: false },
+      });
+      if (error) throw error;
+      const diag = data?.diagnoses?.[0];
+      if (diag?.terminal_state === 'operationalized' || diag?.terminal_state === 'operationalized_partial') {
+        toast.success(`Retry succeeded: ${diag.terminal_state}`);
+      } else {
+        toast.warning(`Retry completed: ${diag?.terminal_state || 'unknown'} — ${(diag?.failure_reasons || []).join(', ')}`);
+      }
+      invalidateAll();
+    } catch (err) {
+      console.error('Retry failed:', err);
+      toast.error('Retry failed');
+    }
+  }, [user, invalidateAll]);
+
+  /** Retry a single resource with strict extraction */
+  const rerunStrict = useCallback(async (resourceId: string) => {
+    if (!user) return;
+    try {
+      toast.info('Strict retry: different prompt, chunking, and model…');
+      const { data, error } = await supabase.functions.invoke('batch-actionize', {
+        body: { batchSize: 1, mode: 'standard', resource_id: resourceId, strict: true },
+      });
+      if (error) throw error;
+      const diag = data?.diagnoses?.[0];
+      if (diag?.terminal_state === 'operationalized' || diag?.terminal_state === 'operationalized_partial') {
+        toast.success(`Strict retry succeeded: ${diag.terminal_state}`);
+      } else {
+        toast.warning(`Strict retry completed: ${diag?.terminal_state || 'unknown'} — ${(diag?.failure_reasons || []).join(', ')}`);
+      }
+      invalidateAll();
+    } catch (err) {
+      console.error('Strict retry failed:', err);
+      toast.error('Strict retry failed');
+    }
+  }, [user, invalidateAll]);
+
   const run = useCallback(async (mode: 'standard' | 'full_backlog' | 'run_until_clean' = 'standard') => {
     if (!user || running) return;
     setRunning(true);
@@ -125,7 +213,7 @@ export function useRunPipeline() {
         // Stall detection state
         let noProgressCount = 0;
         let prevRemaining = Infinity;
-        const failureSignatures = new Map<string, number>(); // resource_id -> consecutive same-failure count
+        const failureSignatures = new Map<string, number>();
 
         while (iteration < maxIterations && !abortRef.current) {
           iteration++;
@@ -175,7 +263,6 @@ export function useRunPipeline() {
           // ── Stall detection ──────────────────────────
           const currentRemaining = data.remaining ?? 0;
 
-          // 1. No progress: remaining didn't decrease
           if (currentRemaining >= prevRemaining && data.total_processed > 0) {
             noProgressCount++;
           } else {
@@ -183,19 +270,16 @@ export function useRunPipeline() {
           }
           prevRemaining = currentRemaining;
 
-          // 2. Track repeated failures per resource
           for (const diag of (data.diagnoses || [])) {
             const sig = `${diag.resource_id}:${(diag.failure_reasons || []).sort().join(',')}`;
             failureSignatures.set(sig, (failureSignatures.get(sig) || 0) + 1);
           }
           const repeatedFailures = [...failureSignatures.values()].filter(c => c >= 2).length;
 
-          // Update stall metrics
           totalResult!.no_progress_iterations = noProgressCount;
           totalResult!.repeated_failure_resources = repeatedFailures;
           totalResult!.stalled_resources = currentRemaining;
 
-          // 3. Check stall conditions
           let stallReason: string | null = null;
           if (noProgressCount >= 3) {
             stallReason = `No progress for ${noProgressCount} consecutive iterations — remaining resources may require manual intervention.`;
@@ -210,7 +294,6 @@ export function useRunPipeline() {
             totalResult!.stall_reason = stallReason;
             totalResult!.converged = false;
 
-            // Update pipeline_run with stall info
             await supabase.from('pipeline_runs' as any).update({
               stall_reason: stallReason,
               no_progress_iterations: noProgressCount,
@@ -228,7 +311,6 @@ export function useRunPipeline() {
 
           if (data.remaining === 0 || data.total_processed === 0) {
             totalResult!.converged = true;
-            // Update pipeline_run as completed
             await supabase.from('pipeline_runs' as any).update({
               status: 'completed',
               completed_at: new Date().toISOString(),
@@ -265,20 +347,18 @@ export function useRunPipeline() {
         toast.success(`Pipeline: ${data.operationalized} operationalized · ${data.needs_review} need review`);
       }
 
-      qc.invalidateQueries({ queryKey: ['knowledge-items'] });
-      qc.invalidateQueries({ queryKey: ['resources'] });
-      qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+      invalidateAll();
     } catch (err) {
       console.error('Pipeline failed:', err);
       toast.error('Pipeline failed');
     } finally {
       setRunning(false);
     }
-  }, [user, running, qc]);
+  }, [user, running, invalidateAll]);
 
   const abort = useCallback(() => {
     abortRef.current = true;
   }, []);
 
-  return { run, abort, running, result };
+  return { run, abort, running, result, rerunResource, rerunStrict };
 }

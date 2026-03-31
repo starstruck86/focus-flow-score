@@ -378,7 +378,7 @@ export function ResourceUpsideQueue() {
 
   // ── Pipeline orchestration ────────────────────────────────
 
-  const { run: runPipeline, abort: abortPipeline, running: batchRunning, result: pipelineResult } = useRunPipeline();
+  const { run: runPipeline, abort: abortPipeline, running: batchRunning, result: pipelineResult, rerunResource, rerunStrict } = useRunPipeline();
   const { data: persistedDiagnoses } = usePipelineDiagnoses();
 
   const handleRunPipeline = useCallback(async (mode: 'standard' | 'full_backlog' | 'run_until_clean' = 'standard') => {
@@ -468,7 +468,7 @@ export function ResourceUpsideQueue() {
       {!guidedMode && (() => {
         const diagsToShow = pipelineResult?.diagnoses || persistedDiagnoses?.diagnoses || [];
         const activeRunId = pipelineResult?.run_id || persistedDiagnoses?.runId || null;
-        return diagsToShow.length > 0 ? <ResourceFailureQueue diagnoses={diagsToShow} runId={activeRunId} /> : null;
+        return diagsToShow.length > 0 ? <ResourceFailureQueue diagnoses={diagsToShow} runId={activeRunId} onRerunResource={rerunResource} onRerunStrict={rerunStrict} /> : null;
       })()}
 
       {/* Trust Review Queue — extracted but not activated */}

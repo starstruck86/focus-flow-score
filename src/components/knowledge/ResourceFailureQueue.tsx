@@ -1,19 +1,29 @@
 /**
  * Resource Failure Review Queue — shows resource-level pipeline failures
  * with root causes, remediation paths, and quick actions.
- * Resolution actions are persisted to pipeline_diagnoses.
+ * 
+ * Features:
+ * - Content preview snippet per row
+ * - Dedup check before promotion
+ * - Persisted resolutions (survive refresh)
+ * - Reversible resolutions (reopen dismissed/promoted/referenced)
+ * - Resolution history
+ * - Differentiated Retry vs Strict Retry
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from '@/components/ui/dialog';
+import {
   ChevronDown, ChevronRight, AlertOctagon, RotateCcw,
   FileText, Trash2, ArrowRight, Filter, Wand2,
-  Crown, Star, RefreshCw,
+  Crown, Star, Undo2, History, AlertTriangle, Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -46,6 +56,15 @@ export interface ResourceDiagnosis {
   };
   trust_failures: string[];
   most_similar_existing?: string;
+  content_snippet?: string;
+}
+
+interface ResolvedDiagnosis {
+  resource_id: string;
+  title: string;
+  resolution_action: string;
+  resolution_notes: string;
+  resolved_at: string;
 }
 
 interface ResourceFailureQueueProps {
@@ -93,6 +112,15 @@ const PRIORITY_BADGE: Record<string, string> = {
   low: 'bg-muted text-muted-foreground border-border',
 };
 
+const RESOLUTION_LABELS: Record<string, string> = {
+  dismissed: 'Dismissed',
+  marked_reference: 'Marked Reference',
+  promoted_template: 'Promoted Template',
+  promoted_example: 'Promoted Example',
+  retry_requested: 'Retry Requested',
+  strict_retry_requested: 'Strict Retry Requested',
+};
+
 type FailureFilter = string;
 
 // ── Persist resolution action ──────────────────────────────
@@ -102,7 +130,6 @@ async function persistResolution(
   action: string,
   notes: string,
 ) {
-  // Update the latest diagnosis for this resource
   const { data: diags } = await supabase
     .from('pipeline_diagnoses')
     .select('id')
@@ -121,6 +148,35 @@ async function persistResolution(
   }
 }
 
+async function reopenResolution(resourceId: string) {
+  const { data: diags } = await supabase
+    .from('pipeline_diagnoses')
+    .select('id')
+    .eq('resource_id', resourceId)
+    .eq('resolution_status', 'resolved')
+    .order('resolved_at', { ascending: false })
+    .limit(1);
+
+  if (diags && diags.length > 0) {
+    await supabase.from('pipeline_diagnoses').update({
+      resolution_status: 'unresolved',
+      resolution_action: null,
+      resolution_notes: null,
+      resolved_at: null,
+    } as any).eq('id', (diags[0] as any).id);
+  }
+}
+
+// ── Dedup check ────────────────────────────────────────────
+
+function titleSimilarity(a: string, b: string): number {
+  const w1 = new Set(a.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().split(/\s+/));
+  const w2 = new Set(b.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().split(/\s+/));
+  let overlap = 0;
+  for (const w of w1) { if (w2.has(w)) overlap++; }
+  return w1.size + w2.size > 0 ? (2 * overlap) / (w1.size + w2.size) : 0;
+}
+
 // ── Component ──────────────────────────────────────────────
 
 export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onRerunStrict }: ResourceFailureQueueProps) {
@@ -129,6 +185,35 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
   const [open, setOpen] = useState(true);
   const [filters, setFilters] = useState<Set<FailureFilter>>(new Set());
   const [resolved, setResolved] = useState<Set<string>>(new Set());
+  const [showHistory, setShowHistory] = useState(false);
+  const [resolvedItems, setResolvedItems] = useState<ResolvedDiagnosis[]>([]);
+  const [snippets, setSnippets] = useState<Record<string, string>>({});
+  const [dupWarning, setDupWarning] = useState<{
+    diagnosis: ResourceDiagnosis;
+    type: 'template' | 'example';
+    similar: { id: string; title: string; similarity: number }[];
+  } | null>(null);
+
+  // Fetch content snippets for diagnoses
+  useEffect(() => {
+    const ids = diagnoses.map(d => d.resource_id).filter(id => !snippets[id]);
+    if (ids.length === 0) return;
+    const fetchSnippets = async () => {
+      const { data } = await supabase
+        .from('resources')
+        .select('id, content, title')
+        .in('id', ids.slice(0, 50));
+      if (data) {
+        const newSnippets: Record<string, string> = {};
+        for (const r of data) {
+          const content = (r as any).content || '';
+          newSnippets[r.id] = content.slice(0, 200).replace(/\n+/g, ' ').trim();
+        }
+        setSnippets(prev => ({ ...prev, ...newSnippets }));
+      }
+    };
+    fetchSnippets();
+  }, [diagnoses]);
 
   // Show needs_review, content_missing, and operationalized_partial
   const failedDiagnoses = useMemo(() =>
@@ -164,18 +249,58 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
     });
   }, []);
 
+  // ── Resolution handlers ──────────────────────────────────
+
+  const invalidateAll = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['resources'] });
+    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+  }, [qc]);
+
   const handleMarkReference = useCallback(async (resourceId: string) => {
     await supabase.from('resources').update({ content_classification: 'reference' } as any).eq('id', resourceId);
     await persistResolution(resourceId, 'marked_reference', 'Marked as reference material');
     setResolved(prev => new Set(prev).add(resourceId));
-    qc.invalidateQueries({ queryKey: ['resources'] });
-    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    invalidateAll();
     toast.success('Marked as reference');
-  }, [qc]);
+  }, [invalidateAll]);
 
-  const handlePromoteTemplate = useCallback(async (d: ResourceDiagnosis) => {
+  const checkDuplicatesBeforePromotion = useCallback(async (
+    d: ResourceDiagnosis,
+    type: 'template' | 'example',
+  ): Promise<boolean> => {
+    if (!user) return false;
+
+    // Fetch existing assets to check for similarity
+    const table = type === 'template' ? 'execution_templates' : 'execution_outputs';
+    const { data: existing } = await supabase
+      .from(table as any)
+      .select('id, title')
+      .eq('user_id', user.id)
+      .limit(200);
+
+    if (!existing || existing.length === 0) return true; // no duplicates possible
+
+    const similar = (existing as any[])
+      .map(e => ({ id: e.id, title: e.title, similarity: titleSimilarity(d.title, e.title) }))
+      .filter(e => e.similarity > 0.5)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 5);
+
+    if (similar.length > 0) {
+      setDupWarning({ diagnosis: d, type, similar });
+      return false; // will proceed after confirmation
+    }
+    return true; // no dups found
+  }, [user]);
+
+  const handlePromoteTemplate = useCallback(async (d: ResourceDiagnosis, skipDupCheck = false) => {
     if (!user) return;
-    // Fetch actual resource content
+
+    if (!skipDupCheck) {
+      const canProceed = await checkDuplicatesBeforePromotion(d, 'template');
+      if (!canProceed) return;
+    }
+
     const { data: resource } = await supabase
       .from('resources')
       .select('id, title, content, tags, resource_type')
@@ -200,16 +325,20 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
       tags: (resource as any).tags || [],
     } as any);
 
-    await persistResolution(d.resource_id, 'promoted_template', `Promoted as template from resource "${resource.title}"`);
+    await persistResolution(d.resource_id, 'promoted_template', `Promoted as template from "${resource.title}"`);
     setResolved(prev => new Set(prev).add(d.resource_id));
-    qc.invalidateQueries({ queryKey: ['resources'] });
-    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    invalidateAll();
     toast.success('Promoted as template with real content');
-  }, [user, qc]);
+  }, [user, invalidateAll, checkDuplicatesBeforePromotion]);
 
-  const handlePromoteExample = useCallback(async (d: ResourceDiagnosis) => {
+  const handlePromoteExample = useCallback(async (d: ResourceDiagnosis, skipDupCheck = false) => {
     if (!user) return;
-    // Fetch actual resource content
+
+    if (!skipDupCheck) {
+      const canProceed = await checkDuplicatesBeforePromotion(d, 'example');
+      if (!canProceed) return;
+    }
+
     const { data: resource } = await supabase
       .from('resources')
       .select('id, title, content, tags')
@@ -229,156 +358,317 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
       is_strong_example: true,
     });
 
-    await persistResolution(d.resource_id, 'promoted_example', `Promoted as example from resource "${resource.title}"`);
+    await persistResolution(d.resource_id, 'promoted_example', `Promoted as example from "${resource.title}"`);
     setResolved(prev => new Set(prev).add(d.resource_id));
-    qc.invalidateQueries({ queryKey: ['resources'] });
-    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    invalidateAll();
     toast.success('Promoted as example with real content');
-  }, [user, qc]);
+  }, [user, invalidateAll, checkDuplicatesBeforePromotion]);
 
   const handleDismiss = useCallback(async (resourceId: string) => {
     await persistResolution(resourceId, 'dismissed', 'Dismissed by user');
     setResolved(prev => new Set(prev).add(resourceId));
-    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    invalidateAll();
     toast.success('Dismissed — will not resurface');
-  }, [qc]);
+  }, [invalidateAll]);
 
   const handleRetry = useCallback(async (resourceId: string) => {
-    await persistResolution(resourceId, 'retry_requested', 'User requested retry');
+    await persistResolution(resourceId, 'retry_requested', 'Standard retry requested');
+    setResolved(prev => new Set(prev).add(resourceId));
     if (onRerunResource) onRerunResource(resourceId);
   }, [onRerunResource]);
 
-  if (failedDiagnoses.length === 0) return null;
+  const handleStrictRetry = useCallback(async (resourceId: string) => {
+    await persistResolution(resourceId, 'strict_retry_requested', 'Strict retry: different prompt, chunking, model');
+    setResolved(prev => new Set(prev).add(resourceId));
+    if (onRerunStrict) onRerunStrict(resourceId);
+  }, [onRerunStrict]);
+
+  // ── Resolution history ───────────────────────────────────
+
+  const loadResolutionHistory = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('pipeline_diagnoses')
+      .select('resource_id, resolution_action, resolution_notes, resolved_at')
+      .eq('user_id', user.id)
+      .eq('resolution_status', 'resolved')
+      .order('resolved_at', { ascending: false })
+      .limit(50);
+
+    if (data) {
+      // Fetch resource titles
+      const ids = (data as any[]).map(d => d.resource_id);
+      const { data: resources } = await supabase
+        .from('resources')
+        .select('id, title')
+        .in('id', ids);
+      const titleMap = new Map((resources || []).map((r: any) => [r.id, r.title]));
+
+      setResolvedItems((data as any[]).map(d => ({
+        resource_id: d.resource_id,
+        title: titleMap.get(d.resource_id) || d.resource_id,
+        resolution_action: d.resolution_action,
+        resolution_notes: d.resolution_notes || '',
+        resolved_at: d.resolved_at,
+      })));
+    }
+    setShowHistory(true);
+  }, [user]);
+
+  const handleReopen = useCallback(async (resourceId: string) => {
+    await reopenResolution(resourceId);
+    setResolved(prev => {
+      const next = new Set(prev);
+      next.delete(resourceId);
+      return next;
+    });
+    setResolvedItems(prev => prev.filter(i => i.resource_id !== resourceId));
+    invalidateAll();
+    toast.success('Reopened — resource will appear in queue again');
+  }, [invalidateAll]);
+
+  if (failedDiagnoses.length === 0 && resolvedItems.length === 0 && !showHistory) return null;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="border border-destructive/20 rounded-lg bg-destructive/5">
-      <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-2.5 px-3 hover:bg-destructive/10 transition-colors">
-        {open ? <ChevronDown className="h-3.5 w-3.5 text-destructive" /> : <ChevronRight className="h-3.5 w-3.5 text-destructive" />}
-        <AlertOctagon className="h-4 w-4 text-destructive" />
-        <span className="text-xs font-semibold text-foreground">Resource Failures — Needs Fix</span>
-        <Badge variant="outline" className="text-[10px] ml-auto bg-destructive/15 text-destructive border-destructive/30">
-          {filteredDiagnoses.length}{filters.size > 0 ? ` / ${failedDiagnoses.length}` : ''}
-        </Badge>
-      </CollapsibleTrigger>
+    <>
+      <Collapsible open={open} onOpenChange={setOpen} className="border border-destructive/20 rounded-lg bg-destructive/5">
+        <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-2.5 px-3 hover:bg-destructive/10 transition-colors">
+          {open ? <ChevronDown className="h-3.5 w-3.5 text-destructive" /> : <ChevronRight className="h-3.5 w-3.5 text-destructive" />}
+          <AlertOctagon className="h-4 w-4 text-destructive" />
+          <span className="text-xs font-semibold text-foreground">Resource Failures — Needs Fix</span>
+          <Badge variant="outline" className="text-[10px] ml-auto bg-destructive/15 text-destructive border-destructive/30">
+            {filteredDiagnoses.length}{filters.size > 0 ? ` / ${failedDiagnoses.length}` : ''}
+          </Badge>
+        </CollapsibleTrigger>
 
-      <CollapsibleContent className="px-3 pb-3 space-y-2">
-        <p className="text-[10px] text-muted-foreground">
-          Resources that could not be fully operationalized. Actions are persisted — resolved items won't resurface.
-        </p>
-
-        {/* Filter chips */}
-        <div className="flex flex-wrap gap-1">
-          {Object.entries(reasonCounts)
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 8)
-            .map(([reason, count]) => {
-              const isActive = filters.has(reason);
-              return (
-                <Button
-                  key={reason}
-                  size="sm"
-                  variant={isActive ? 'default' : 'outline'}
-                  className={cn('h-6 text-[10px] gap-1', !isActive && 'opacity-70')}
-                  onClick={() => toggleFilter(reason)}
-                >
-                  <Filter className="h-2.5 w-2.5" />
-                  {FAILURE_LABELS[reason] || reason} ({count})
-                </Button>
-              );
-            })}
-          {filters.size > 0 && (
-            <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground" onClick={() => setFilters(new Set())}>
-              Clear
+        <CollapsibleContent className="px-3 pb-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] text-muted-foreground">
+              Actions are persisted. Resolved items can be reopened from history.
+            </p>
+            <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground" onClick={loadResolutionHistory}>
+              <History className="h-3 w-3" /> History
             </Button>
-          )}
-        </div>
-
-        {/* Resource rows */}
-        {filteredDiagnoses.slice(0, 30).map(d => (
-          <div key={d.resource_id} className="p-2.5 rounded-md border border-border bg-card text-xs space-y-1.5">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="font-medium text-foreground">{d.title}</span>
-                  <Badge variant="outline" className={cn('text-[9px]', PRIORITY_BADGE[d.priority])}>
-                    {d.priority}
-                  </Badge>
-                  {d.terminal_state !== 'needs_review' && (
-                    <Badge variant="outline" className="text-[9px]">
-                      {STATE_LABELS[d.terminal_state] || d.terminal_state}
-                    </Badge>
-                  )}
-                  <Badge variant="outline" className="text-[9px]">
-                    {d.route || 'unrouted'}
-                  </Badge>
-                </div>
-
-                {/* Failure reasons */}
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {d.failure_reasons.map(r => (
-                    <Badge key={r} variant="outline" className="text-[9px] border-destructive/30 bg-destructive/5 text-destructive">
-                      {FAILURE_LABELS[r] || r}
-                    </Badge>
-                  ))}
-                </div>
-
-                {/* Similar existing */}
-                {d.most_similar_existing && (
-                  <p className="text-[10px] text-status-yellow mt-0.5">
-                    Similar to: "{d.most_similar_existing}"
-                  </p>
-                )}
-
-                {/* Assets created (partial success) */}
-                {(d.assets_created.knowledge_items > 0 || d.assets_created.templates > 0 || d.assets_created.examples > 0) && (
-                  <p className="text-[10px] text-status-green mt-0.5">
-                    Partial: {d.assets_created.knowledge_items > 0 ? `${d.assets_created.knowledge_items} KI (${d.assets_created.knowledge_activated} active)` : ''}
-                    {d.assets_created.templates > 0 ? ` · ${d.assets_created.templates} template` : ''}
-                    {d.assets_created.examples > 0 ? ` · ${d.assets_created.examples} example` : ''}
-                  </p>
-                )}
-
-                {/* Remediation */}
-                <div className="mt-1.5 p-1.5 rounded bg-muted/50 border border-border">
-                  <p className="text-[10px] text-muted-foreground flex items-start gap-1">
-                    <ArrowRight className="h-2.5 w-2.5 mt-0.5 shrink-0 text-primary" />
-                    <span>{d.recommended_fix.split(' | ')[0]}</span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex flex-col gap-1 shrink-0">
-                {d.retryable && onRerunResource && (
-                  <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handleRetry(d.resource_id)}>
-                    <RotateCcw className="h-3 w-3" /> Retry
-                  </Button>
-                )}
-                {d.retryable && onRerunStrict && (
-                  <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => onRerunStrict(d.resource_id)}>
-                    <Wand2 className="h-3 w-3" /> Strict
-                  </Button>
-                )}
-                <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handlePromoteTemplate(d)}>
-                  <Crown className="h-3 w-3" /> Template
-                </Button>
-                <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handlePromoteExample(d)}>
-                  <Star className="h-3 w-3" /> Example
-                </Button>
-                <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handleMarkReference(d.resource_id)}>
-                  <FileText className="h-3 w-3" /> Reference
-                </Button>
-                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground" onClick={() => handleDismiss(d.resource_id)}>
-                  <Trash2 className="h-3 w-3" /> Dismiss
-                </Button>
-              </div>
-            </div>
           </div>
-        ))}
-        {filteredDiagnoses.length > 30 && (
-          <p className="text-[10px] text-muted-foreground text-center py-1">+ {filteredDiagnoses.length - 30} more</p>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
+
+          {/* Filter chips */}
+          <div className="flex flex-wrap gap-1">
+            {Object.entries(reasonCounts)
+              .sort(([,a], [,b]) => b - a)
+              .slice(0, 8)
+              .map(([reason, count]) => {
+                const isActive = filters.has(reason);
+                return (
+                  <Button
+                    key={reason}
+                    size="sm"
+                    variant={isActive ? 'default' : 'outline'}
+                    className={cn('h-6 text-[10px] gap-1', !isActive && 'opacity-70')}
+                    onClick={() => toggleFilter(reason)}
+                  >
+                    <Filter className="h-2.5 w-2.5" />
+                    {FAILURE_LABELS[reason] || reason} ({count})
+                  </Button>
+                );
+              })}
+            {filters.size > 0 && (
+              <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground" onClick={() => setFilters(new Set())}>
+                Clear
+              </Button>
+            )}
+          </div>
+
+          {/* Resource rows */}
+          {filteredDiagnoses.slice(0, 30).map(d => {
+            const snippet = snippets[d.resource_id];
+            return (
+              <div key={d.resource_id} className="p-2.5 rounded-md border border-border bg-card text-xs space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-medium text-foreground">{d.title}</span>
+                      <Badge variant="outline" className={cn('text-[9px]', PRIORITY_BADGE[d.priority])}>
+                        {d.priority}
+                      </Badge>
+                      {d.terminal_state !== 'needs_review' && (
+                        <Badge variant="outline" className="text-[9px]">
+                          {STATE_LABELS[d.terminal_state] || d.terminal_state}
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-[9px]">
+                        {d.route || 'unrouted'}
+                      </Badge>
+                    </div>
+
+                    {/* Content preview snippet */}
+                    {snippet && (
+                      <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2 italic border-l-2 border-border pl-2">
+                        {snippet}{snippet.length >= 200 ? '…' : ''}
+                      </p>
+                    )}
+
+                    {/* Failure reasons */}
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {d.failure_reasons.map(r => (
+                        <Badge key={r} variant="outline" className="text-[9px] border-destructive/30 bg-destructive/5 text-destructive">
+                          {FAILURE_LABELS[r] || r}
+                        </Badge>
+                      ))}
+                    </div>
+
+                    {/* Similar existing */}
+                    {d.most_similar_existing && (
+                      <p className="text-[10px] text-status-yellow mt-0.5">
+                        Similar to: &ldquo;{d.most_similar_existing}&rdquo;
+                      </p>
+                    )}
+
+                    {/* Assets created (partial success) */}
+                    {(d.assets_created.knowledge_items > 0 || d.assets_created.templates > 0 || d.assets_created.examples > 0) && (
+                      <p className="text-[10px] text-status-green mt-0.5">
+                        Partial: {d.assets_created.knowledge_items > 0 ? `${d.assets_created.knowledge_items} KI (${d.assets_created.knowledge_activated} active)` : ''}
+                        {d.assets_created.templates > 0 ? ` · ${d.assets_created.templates} template` : ''}
+                        {d.assets_created.examples > 0 ? ` · ${d.assets_created.examples} example` : ''}
+                      </p>
+                    )}
+
+                    {/* Remediation */}
+                    <div className="mt-1.5 p-1.5 rounded bg-muted/50 border border-border">
+                      <p className="text-[10px] text-muted-foreground flex items-start gap-1">
+                        <ArrowRight className="h-2.5 w-2.5 mt-0.5 shrink-0 text-primary" />
+                        <span>{d.recommended_fix.split(' | ')[0]}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-col gap-1 shrink-0">
+                    {d.retryable && onRerunResource && (
+                      <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handleRetry(d.resource_id)} title="Standard retry — same extraction strategy">
+                        <RotateCcw className="h-3 w-3" /> Retry
+                      </Button>
+                    )}
+                    {d.retryable && onRerunStrict && (
+                      <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 border-primary/30" onClick={() => handleStrictRetry(d.resource_id)} title="Strict retry — different prompt, chunking, model, higher quality bar">
+                        <Wand2 className="h-3 w-3 text-primary" /> Strict
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handlePromoteTemplate(d)}>
+                      <Crown className="h-3 w-3" /> Template
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handlePromoteExample(d)}>
+                      <Star className="h-3 w-3" /> Example
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => handleMarkReference(d.resource_id)}>
+                      <FileText className="h-3 w-3" /> Reference
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground" onClick={() => handleDismiss(d.resource_id)}>
+                      <Trash2 className="h-3 w-3" /> Dismiss
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {filteredDiagnoses.length > 30 && (
+            <p className="text-[10px] text-muted-foreground text-center py-1">+ {filteredDiagnoses.length - 30} more</p>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Duplicate warning dialog */}
+      {dupWarning && (
+        <Dialog open onOpenChange={() => setDupWarning(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-sm flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-status-yellow" />
+                Similar {dupWarning.type === 'template' ? 'Templates' : 'Examples'} Found
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Before creating a new {dupWarning.type} from &ldquo;{dupWarning.diagnosis.title}&rdquo;, review these similar existing assets:
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {dupWarning.similar.map(s => (
+                <div key={s.id} className="p-2 rounded border border-border bg-muted/30 text-xs flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground truncate">{s.title}</p>
+                    <p className="text-[10px] text-muted-foreground">{Math.round(s.similarity * 100)}% similar</p>
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 shrink-0">
+                    <Eye className="h-3 w-3" /> View
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDupWarning(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => {
+                  const dw = dupWarning;
+                  setDupWarning(null);
+                  if (dw.type === 'template') {
+                    handlePromoteTemplate(dw.diagnosis, true);
+                  } else {
+                    handlePromoteExample(dw.diagnosis, true);
+                  }
+                }}
+              >
+                Create Anyway
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Resolution history dialog */}
+      {showHistory && (
+        <Dialog open onOpenChange={() => setShowHistory(false)}>
+          <DialogContent className="max-w-lg max-h-[70vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-sm flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" />
+                Resolution History
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Previously resolved diagnoses. Reopen any to put it back in the review queue.
+              </DialogDescription>
+            </DialogHeader>
+            {resolvedItems.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">No resolved items yet.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {resolvedItems.map(item => (
+                  <div key={`${item.resource_id}-${item.resolved_at}`} className="p-2 rounded border border-border bg-card text-xs flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground truncate">{item.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Badge variant="outline" className="text-[9px]">
+                          {RESOLUTION_LABELS[item.resolution_action] || item.resolution_action}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(item.resolved_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      {item.resolution_notes && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{item.resolution_notes}</p>
+                      )}
+                    </div>
+                    <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 shrink-0" onClick={() => handleReopen(item.resource_id)}>
+                      <Undo2 className="h-3 w-3" /> Reopen
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
