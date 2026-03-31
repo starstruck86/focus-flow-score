@@ -516,8 +516,9 @@ Deno.serve(async (req) => {
               results.failure_breakdown['duplicate_example'] = (results.failure_breakdown['duplicate_example'] || 0) + 1;
               if (similar) mostSimilar = similar;
             } else {
+              const shapedContent = shapeAsExample(content).slice(0, 5000);
               const { error } = await supabaseAdmin.from('execution_outputs').insert({
-                user_id: user.id, title: resource.title, content: content.slice(0, 5000),
+                user_id: user.id, title: resource.title, content: shapedContent,
                 output_type: 'custom', is_strong_example: true,
               });
               if (!error) {
