@@ -491,7 +491,7 @@ export function segmentAndRoute(content: string): ContentSegment[] {
   }
 
   // Route each segment
-  let segments = rawSegments.map((seg, i) => {
+  let segments: ContentSegment[] = rawSegments.map((seg, i) => {
     const routes = routeByContent(seg.content);
     return {
       index: i,
