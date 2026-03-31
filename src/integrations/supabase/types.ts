@@ -3892,6 +3892,36 @@ export type Database = {
         }
         Relationships: []
       }
+      stage_resources: {
+        Row: {
+          created_at: string
+          id: string
+          is_keystone: boolean
+          resource_id: string
+          stage_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_keystone?: boolean
+          resource_id: string
+          stage_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_keystone?: boolean
+          resource_id?: string
+          stage_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       strategy_outcomes: {
         Row: {
           account_type: string | null
