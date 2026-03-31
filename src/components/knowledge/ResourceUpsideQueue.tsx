@@ -617,6 +617,22 @@ function PipelineDashboard({
         </div>
       )}
 
+      {/* Stall detection warning */}
+      {stallInfo && (stallInfo.stall_detected || stallInfo.stall_reason) && (
+        <div className="rounded-md bg-status-yellow/10 border border-status-yellow/30 p-2.5 text-xs space-y-1">
+          <p className="font-medium text-status-yellow text-[11px] flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Pipeline Stalled
+          </p>
+          <p className="text-[10px] text-muted-foreground">{stallInfo.stall_reason}</p>
+          <div className="flex gap-3 text-[10px] text-muted-foreground">
+            {(stallInfo.no_progress_iterations ?? 0) > 0 && <span>No-progress iterations: <span className="font-medium text-foreground">{stallInfo.no_progress_iterations}</span></span>}
+            {(stallInfo.repeated_failure_resources ?? 0) > 0 && <span>Repeated failures: <span className="font-medium text-foreground">{stallInfo.repeated_failure_resources}</span></span>}
+            {(stallInfo.stalled_resources ?? 0) > 0 && <span>Stalled resources: <span className="font-medium text-foreground">{stallInfo.stalled_resources}</span></span>}
+          </div>
+        </div>
+      )}
+
       {/* Split reference detail */}
       {r && totalRef > 0 && (
         <div className="flex gap-2 text-[10px] text-muted-foreground">
