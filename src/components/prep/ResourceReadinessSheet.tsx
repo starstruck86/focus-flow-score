@@ -138,7 +138,7 @@ const BUCKET_ORDER: ReadinessBucket[] = [
 
 const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wontDo: string }> = {
   fix: {
-    title: 'Fix Content-Backed Resources',
+    title: 'Fix Content Issues',
     safe: 'Clears stale blocker states on resources that already have valid content (>200 chars). Re-verifies each resource before fixing.',
     wontDo: 'Will not touch resources without content. Will not delete or modify content.',
   },
@@ -153,19 +153,19 @@ const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wo
     wontDo: 'Will not activate items without contexts. Will not activate low-confidence items.',
   },
   autoOp: {
-    title: 'Auto-Operationalize Ready Resources',
-    safe: 'Runs the full pipeline (tag → extract → activate) on content-backed resources that are not yet operationalized.',
-    wontDo: 'Will not touch junk, missing-content, or already-operationalized resources. Will not auto-activate low-confidence items.',
+    title: 'Extract Knowledge from Ready Resources',
+    safe: 'Runs the full pipeline (tag → extract → activate) on content-backed resources that have no knowledge yet.',
+    wontDo: 'Will not touch junk, missing-content, or already-processed resources. Will not auto-activate low-confidence items.',
   },
   backfillAll: {
-    title: 'Operationalize All Existing Resources',
+    title: 'Extract from All Resources',
     safe: 'Runs the full pipeline on ALL eligible content-backed resources. Idempotent — already-processed resources pass through quickly.',
     wontDo: 'Will not touch junk or missing-content resources. Will not auto-activate low-confidence items. Will not overwrite user-edited knowledge.',
   },
   backfillSmart: {
-    title: 'Operationalize All Eligible (Smart)',
-    safe: 'Only processes resources in fixable/extractable/needs-tagging/ready buckets. Faster and more targeted than full backfill.',
-    wontDo: 'Will not touch junk, missing-content, or already-operationalized resources. Will not auto-activate low-confidence items.',
+    title: 'Extract from All Eligible (Smart)',
+    safe: 'Only processes resources in fixable/extractable/needs-tagging/ready buckets. Faster and more targeted than full extraction.',
+    wontDo: 'Will not touch junk, missing-content, or already-processed resources. Will not auto-activate low-confidence items.',
   },
   forceExtract: {
     title: 'Force Extract All Missing Knowledge',
@@ -196,6 +196,11 @@ const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wo
     title: 'Full Knowledge Remediation',
     safe: 'Runs the complete backfill: activates qualified items, rewrites weak ones from source, and archives junk.',
     wontDo: 'Will not touch user-edited items. Will not delete — only archives.',
+  },
+  delete: {
+    title: 'Delete Low-Value Resources',
+    safe: 'Permanently removes junk resources with very low content (<50 chars) and no URL.',
+    wontDo: 'Cannot be undone.',
   },
 };
 
@@ -294,14 +299,14 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           setLastAutoOpSummary(summary);
 
           if (summary.operationalized === 0 && summary.totalKnowledgeExtracted === 0) {
-            toast.warning(`0 resources operationalized — ${summary.needsReview} need review. Check audit for details.`);
+            toast.warning(`0 resources produced knowledge — ${summary.needsReview} need review. Check audit for details.`);
           } else {
             toast.success(
-              `Processed ${summary.total} → ${summary.operationalized} operationalized, ` +
+              `Processed ${summary.total} → ${summary.operationalized} extracted, ` +
               `${summary.outcomes.partial_extraction} partial, ` +
               `${summary.outcomes.lightweight_extraction} lightweight, ` +
               `${summary.outcomes.needs_review} review, ` +
-              `${summary.totalKnowledgeExtracted} KI extracted`
+              `${summary.totalKnowledgeExtracted} KI created`
             );
           }
           if (summary.needsReview > 0) toast.info(`${summary.needsReview} resources need manual review`);
@@ -309,7 +314,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           if (err?.message?.includes('CRITICAL MISMATCH')) {
             toast.error('Pipeline eligibility mismatch — UI and execution disagree on what is eligible. Refreshing audit.');
           } else {
-            toast.error(`Auto-operationalize failed: ${err?.message ?? 'Unknown error'}`);
+            toast.error(`Extraction failed: ${err?.message ?? 'Unknown error'}`);
           }
         } finally {
           setAutoOpProgress(null);
@@ -322,7 +327,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         });
         setBackfillProgress(null);
         setLastBackfillResult(result);
-        toast.success(`Backfill complete: ${result.operationalized} operationalized, ${result.totalKnowledgeExtracted} extracted, ${result.totalKnowledgeActivated} activated`);
+        toast.success(`Extraction complete: ${result.operationalized} fully extracted, ${result.totalKnowledgeExtracted} KI created, ${result.totalKnowledgeActivated} activated`);
         if (result.needsReview > 0) toast.info(`${result.needsReview} resources need manual review`);
         if (result.errors > 0) toast.warning(`${result.errors} errors during processing`);
       } else if (type === 'forceExtract') {
@@ -332,7 +337,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         });
         setForceExtractProgress(null);
         setLastForceExtract(extractResult);
-        toast.success(`Force extract: ${extractResult.newKnowledgeItems} items created, ${extractResult.becameOperationalized} operationalized`);
+        toast.success(`Force extract: ${extractResult.newKnowledgeItems} items created, ${extractResult.becameOperationalized} ready to use`);
         if (extractResult.contentEmpty > 0) toast.warning(`${extractResult.contentEmpty} resources had empty content despite content_length`);
       } else if (type === 'kiScan') {
         const report = await scanExistingKnowledge();
@@ -1052,6 +1057,29 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                     )}
                   </div>
 
+                {/* ── Acceptance Checklist ── */}
+                {(lastAutoOpSummary || lastBackfillResult) && (
+                  <div className="rounded-md border border-border bg-muted/20 p-2 text-[10px] space-y-1">
+                    <p className="font-medium text-foreground text-[11px]">Workflow Checklist</p>
+                    <div className="space-y-0.5">
+                      {[
+                        { label: 'Test batch completed', done: !!lastAutoOpSummary && (lastAutoOpSummary.total <= 5) },
+                        { label: 'Full extraction completed', done: !!lastAutoOpSummary && (lastAutoOpSummary.total > 5) || !!lastBackfillResult },
+                        { label: 'Failures reviewed', done: !!lastAutoOpSummary && lastAutoOpSummary.failedResources.length === 0 },
+                        { label: 'Knowledge activated', done: !!lastAutoOpSummary && lastAutoOpSummary.totalKnowledgeActivated > 0 || !!lastBackfillResult && lastBackfillResult.totalKnowledgeActivated > 0 },
+                      ].map(item => (
+                        <div key={item.label} className="flex items-center gap-1.5">
+                          {item.done
+                            ? <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                            : <div className="h-3 w-3 rounded-full border border-muted-foreground/40 shrink-0" />
+                          }
+                          <span className={cn(item.done ? 'text-foreground' : 'text-muted-foreground')}>{item.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <Separator />
 
                 {/* ── Bucket list ── */}
@@ -1110,7 +1138,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {confirmAction?.type === 'delete'
-                ? `Delete ${confirmAction.ids?.length ?? 0} junk resources?`
+                ? `Delete ${confirmAction.ids?.length ?? 0} low-value resources?`
                 : BULK_ACTION_DESCRIPTIONS[confirmAction?.type ?? '']?.title ?? 'Confirm Action'
               }
             </AlertDialogTitle>
@@ -1268,7 +1296,7 @@ function OperatorSummaryPanel({ summary }: { summary: BatchSummary }) {
         <div className="grid grid-cols-3 gap-1 pt-1">
           <div className="text-center p-1 rounded bg-emerald-500/10">
             <p className="text-sm font-bold text-emerald-600">{summary.outcomes.operationalized}</p>
-            <p className="text-[8px] text-muted-foreground">Operationalized</p>
+            <p className="text-[8px] text-muted-foreground">Extracted</p>
           </div>
           <div className="text-center p-1 rounded bg-blue-500/10">
             <p className="text-sm font-bold text-blue-500">{summary.outcomes.partial_extraction + summary.outcomes.lightweight_extraction}</p>
@@ -1352,7 +1380,7 @@ function buildSweepGuidance(audit: AuditSummary): string[] {
   if (c.needs_tagging > 0)
     steps.push(`Add missing required tags to ${c.needs_tagging} resources`);
   if (c.operationalized > 0)
-    steps.push(`Review ${c.operationalized} operationalized resources already driving behavior`);
+    steps.push(`${c.operationalized} resources already producing usable knowledge`);
   if (c.blocked_incorrectly > 0)
     steps.push(`Manually review ${c.blocked_incorrectly} incorrectly blocked resources`);
 
