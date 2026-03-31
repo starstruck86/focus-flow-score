@@ -65,7 +65,7 @@ export const LifecycleSummaryBar = memo(function LifecycleSummaryBar({ summary: 
         {totalBlocked > 0 && (
           <>
             <span className="text-border">·</span>
-            <span className="text-destructive">{totalBlocked} blocked</span>
+            <span className="text-amber-500">{totalBlocked} need attention</span>
           </>
         )}
       </div>
@@ -89,8 +89,8 @@ export const LifecycleSummaryBar = memo(function LifecycleSummaryBar({ summary: 
         <Collapsible>
           <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
             <span className="font-medium text-foreground flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3 text-destructive" />
-              {totalBlocked} blocked resource{totalBlocked !== 1 ? 's' : ''}
+              <AlertTriangle className="h-3 w-3 text-amber-500" />
+              {totalBlocked} resource{totalBlocked !== 1 ? 's' : ''} need attention
             </span>
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </CollapsibleTrigger>
@@ -101,7 +101,7 @@ export const LifecycleSummaryBar = memo(function LifecycleSummaryBar({ summary: 
                 return (
                   <div key={reason} className="contents">
                     <span>{HUMAN_BLOCKED_LABELS[reason] ?? reason}</span>
-                    <span className="font-medium text-destructive">{count}</span>
+                    <span className="font-medium text-amber-500">{count}</span>
                   </div>
                 );
               })}
