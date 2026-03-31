@@ -15,8 +15,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { inferTags, mergeTags, type StructuredTag } from './resourceTags';
 import { extractKnowledgeHeuristic, extractKnowledgeLLMFallback, type ExtractionSource } from './knowledgeExtraction';
 import { createLogger } from '@/lib/logger';
+import {
+  isEligibleForExtraction,
+  isContentBacked as contractIsContentBacked,
+  assertEligibilityAlignment,
+  checkRegressionGuard,
+  estimateBatchOutput,
+  type PipelineOutcome,
+  type EligibilityResult,
+  ENRICHED_STATUSES,
+} from './pipelineContract';
 
 const log = createLogger('AutoOperationalize');
+
+// Re-export for consumers
+export { estimateBatchOutput, type PipelineOutcome } from './pipelineContract';
 
 // ── Pipeline Stages ────────────────────────────────────────
 
