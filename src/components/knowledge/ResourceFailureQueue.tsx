@@ -361,10 +361,11 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
       return;
     }
 
+    const shapedContent = shapeAsExample(resource.content as string).slice(0, 5000);
     await supabase.from('execution_outputs').insert({
       user_id: user.id,
       title: resource.title,
-      content: (resource.content as string).slice(0, 5000),
+      content: shapedContent,
       output_type: 'custom',
       is_strong_example: true,
     });
