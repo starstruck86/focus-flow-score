@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { Sparkles, Wrench, Tag } from 'lucide-react';
+import { PRIMARY_ACTIONS } from '@/components/prep/QueueActionBar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
