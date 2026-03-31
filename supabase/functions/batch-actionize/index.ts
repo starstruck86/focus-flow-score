@@ -359,7 +359,7 @@ Deno.serve(async (req) => {
           status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      userId = userId;
+      userId = user.id;
     }
 
     const body = (req as any).__parsedBody || await req.json();
