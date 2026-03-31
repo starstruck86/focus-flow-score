@@ -287,31 +287,6 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
       {/* Stage Playbook */}
       <StagePlaybookSection stageId={stage.id} stageLabel={stage.label} />
 
-      <ProactiveGuidance
-        stageId={stage.id}
-        persona={persona}
-        competitor={competitor}
-        hasContext={contextItems.length > 0}
-        onSelectAction={handleSelectActionById}
-        onChangeStage={onChangeStage}
-      />
-
-      {/* 3. What Actually Works */}
-      <WhatActuallyWorks
-        stageId={stage.id}
-        defaultTactics={stage.defaultTactics}
-        persona={persona}
-        competitor={competitor}
-      />
-
-      {/* 4. Best Assets */}
-      <BestAssets
-        templates={rankedTemplates}
-        examples={rankedExamples}
-        knowledgeItems={rankedKI}
-        isLoading={assetsLoading}
-      />
-
       {/* 5. Execution */}
       {selectedAction && (
         <ActionExecutionPanel
