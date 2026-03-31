@@ -136,6 +136,15 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
 
   // ── Batch execution ────────────────────────────────────
 
+  // Build a source type lookup for resources
+  const sourceTypeLookup = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof normalizeSourceType>>();
+    for (const r of resources) {
+      map.set(r.id, normalizeSourceType(r.resourceType, r.fileUrl));
+    }
+    return map;
+  }, [resources]);
+
   const runAction = useCallback(async (action: BatchAction) => {
     const selected = resources.filter(r => selectedIds.has(r.id));
     if (selected.length === 0) {
@@ -145,33 +154,26 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
 
     const controller = new AbortController();
     abortRef.current = controller;
+    const cfg = { batchSize: 15, maxConcurrency: 3, interBatchDelayMs: 750 };
+
+    // Create persistent batch run record
+    const batchRunId = await createBatchRun(action, selected.length, cfg.batchSize, cfg.maxConcurrency);
 
     try {
-      await runBatchQueue(
-        selected.map(r => ({ id: r.id, title: r.title, sourceType: r.sourceType })),
+      const result = await runBatchQueue(
+        selected.map(r => ({
+          id: r.id,
+          title: r.title,
+          sourceType: sourceTypeLookup.get(r.id) ?? 'unknown',
+        })),
         action,
         {
           extractResource: async (resourceId, method) => {
-            // Use autoOperationalizeResource as the extraction engine
-            try {
-              const result = await autoOperationalizeResource(resourceId);
-              return {
-                success: result.operationalized || result.knowledgeExtracted > 0,
-                contentLength: result.knowledgeExtracted,
-                error: result.reason,
-              };
-            } catch (err: any) {
-              return { success: false, error: err?.message || 'Extraction failed' };
-            }
+            const srcType = sourceTypeLookup.get(resourceId) ?? 'unknown';
+            return dispatchExtractionMethod(resourceId, method, srcType);
           },
           enrichResource: async (resourceId) => {
-            // Enrichment is part of the autoOperationalize flow
-            try {
-              const result = await autoOperationalizeResource(resourceId);
-              return { success: result.success, error: result.reason };
-            } catch (err: any) {
-              return { success: false, error: err?.message };
-            }
+            return runEnrichmentOnly(resourceId);
           },
           hasExtractedContent: async (resourceId) => {
             const { data } = await supabase
@@ -181,11 +183,20 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
               .limit(1);
             return (data?.length ?? 0) > 0;
           },
+          hasActiveJob: async (resourceId) => {
+            return hasActiveJobInDB(resourceId);
+          },
           onProgress: (p) => setProgress({ ...p }),
         },
-        { batchSize: 15, maxConcurrency: 3, interBatchDelayMs: 750 },
+        cfg,
         controller.signal,
       );
+
+      // Persist results
+      if (batchRunId) {
+        await finalizeBatchRun(batchRunId, result);
+        await persistJobRecords(batchRunId, result.jobs);
+      }
 
       onComplete?.();
     } catch (err: any) {
@@ -193,7 +204,7 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
     } finally {
       abortRef.current = null;
     }
-  }, [selectedIds, resources, onComplete]);
+  }, [selectedIds, resources, onComplete, sourceTypeLookup]);
 
   const cancelBatch = useCallback(() => {
     abortRef.current?.abort();
