@@ -376,7 +376,7 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
       const { data } = await supabase.from('execution_templates' as any).insert({
         user_id: user.id,
         title: resource.title,
-        body: shapedContent.slice(0, 5000),
+        body: shapedContent,
         template_type: 'email',
         output_type: 'custom',
         template_origin: 'promoted_from_resource',
