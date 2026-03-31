@@ -234,40 +234,7 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
       {/* Stage description */}
       <p className="text-xs text-muted-foreground">{stage.description}</p>
 
-      {/* 1. Context */}
-      <ContextInputSection
-        accounts={accounts}
-        accountId={accountId}
-        onAccountChange={handleAccountChange}
-        stage={stage.label}
-        onStageChange={() => {}}
-        persona={persona}
-        onPersonaChange={setPersona}
-        competitor={competitor}
-        onCompetitorChange={setCompetitor}
-        contextItems={contextItems}
-        onContextItemsChange={setContextItems}
-      />
-
-      {/* Proactive Guidance */}
-      <ProactiveGuidance
-        stageId={stage.id}
-        persona={persona}
-        competitor={competitor}
-        hasContext={contextItems.length > 0}
-        onSelectAction={handleSelectActionById}
-        onChangeStage={onChangeStage}
-      />
-
-      {/* 2. What Actually Works */}
-      <WhatActuallyWorks
-        stageId={stage.id}
-        defaultTactics={stage.defaultTactics}
-        persona={persona}
-        competitor={competitor}
-      />
-
-      {/* 3. Recommended Actions (dynamically ranked) */}
+      {/* 1. Recommended Actions (dynamically ranked) — shown first */}
       <div className="space-y-2">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recommended Actions</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
@@ -298,6 +265,39 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
           })}
         </div>
       </div>
+
+      {/* 2. Context */}
+      <ContextInputSection
+        accounts={accounts}
+        accountId={accountId}
+        onAccountChange={handleAccountChange}
+        stage={stage.label}
+        onStageChange={() => {}}
+        persona={persona}
+        onPersonaChange={setPersona}
+        competitor={competitor}
+        onCompetitorChange={setCompetitor}
+        contextItems={contextItems}
+        onContextItemsChange={setContextItems}
+      />
+
+      {/* Proactive Guidance */}
+      <ProactiveGuidance
+        stageId={stage.id}
+        persona={persona}
+        competitor={competitor}
+        hasContext={contextItems.length > 0}
+        onSelectAction={handleSelectActionById}
+        onChangeStage={onChangeStage}
+      />
+
+      {/* 3. What Actually Works */}
+      <WhatActuallyWorks
+        stageId={stage.id}
+        defaultTactics={stage.defaultTactics}
+        persona={persona}
+        competitor={competitor}
+      />
 
       {/* 4. Best Assets */}
       <BestAssets
