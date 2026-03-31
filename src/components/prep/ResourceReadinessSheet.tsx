@@ -502,6 +502,20 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         Auto-Operationalize {audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging}
                       </Button>
                     )}
+                    {/* Test mode: run on 5 resources */}
+                    {(audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging) > 5 && (
+                      <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 text-muted-foreground" disabled={!!actionLoading}
+                        onClick={() => {
+                          const ids = [
+                            ...audit.buckets.extractable_not_operationalized,
+                            ...audit.buckets.needs_tagging,
+                            ...audit.buckets.ready,
+                          ].map(r => r.id).slice(0, 5);
+                          setConfirmAction({ type: 'autoOp', ids });
+                        }}>
+                        <Rocket className="h-3 w-3" />
+                        Test (5)
+                      </Button>
                     {audit.counts.junk_or_low_signal > 0 && (
                       <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
                         onClick={() => setConfirmAction({ type: 'delete', ids: audit.buckets.junk_or_low_signal.map(r => r.id) })}>
