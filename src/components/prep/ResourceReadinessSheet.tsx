@@ -1357,7 +1357,7 @@ function buildSweepGuidance(audit: AuditSummary): string[] {
   if (c.needs_tagging > 0)
     steps.push(`Add missing required tags to ${c.needs_tagging} resources`);
   if (c.operationalized > 0)
-    steps.push(`Review ${c.operationalized} operationalized resources already driving behavior`);
+    steps.push(`${c.operationalized} resources already producing usable knowledge`);
   if (c.blocked_incorrectly > 0)
     steps.push(`Manually review ${c.blocked_incorrectly} incorrectly blocked resources`);
 
