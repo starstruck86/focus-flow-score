@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useStagePlaybook, type PlaybookSection, type PlaybookItem } from '@/hooks/useStagePlaybook';
 import { useStageResources } from '@/hooks/useStageResources';
-import { STAGE_FRAMEWORK_MAP, getFrameworkColorClasses } from '@/data/stageFrameworkMap';
+import { STAGE_FRAMEWORK_MAP, getFrameworkColorClasses, FRAMEWORK_AUTHORS } from '@/data/stageFrameworkMap';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
-import { BookOpen, ChevronDown, ChevronRight, Copy, RefreshCw, Loader2, Quote, AlertTriangle, Lightbulb, MessageSquare, HelpCircle, Layers, CheckCircle } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronRight, Copy, RefreshCw, Loader2, Quote, AlertTriangle, Lightbulb, MessageSquare, HelpCircle, Layers, CheckCircle, Star, FileText, Brain } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -22,6 +22,17 @@ const TYPE_CONFIG: Record<string, { icon: typeof BookOpen; color: string; label:
   warning: { icon: AlertTriangle, color: 'text-destructive', label: 'Warning' },
   tip: { icon: Lightbulb, color: 'text-primary', label: 'Tip' },
 };
+
+/** Source type icon for citations */
+function CitationSourceIcon({ citation }: { citation: string }) {
+  if (citation.startsWith('[Keystone:') || citation.includes('KEYSTONE')) {
+    return <Star className="h-2.5 w-2.5 text-amber-500 shrink-0" />;
+  }
+  if (citation.startsWith('[KI:') || citation.includes('Knowledge Item')) {
+    return <Brain className="h-2.5 w-2.5 text-violet-500 shrink-0" />;
+  }
+  return <FileText className="h-2.5 w-2.5 text-muted-foreground shrink-0" />;
+}
 
 function PlaybookItemRow({ item }: { item: PlaybookItem }) {
   const config = TYPE_CONFIG[item.type] || TYPE_CONFIG.tactic;
@@ -44,7 +55,10 @@ function PlaybookItemRow({ item }: { item: PlaybookItem }) {
       {showCitations && item.citations?.length > 0 && (
         <div className="mt-1.5 pl-3 border-l-2 border-muted space-y-0.5">
           {item.citations.map((c, i) => (
-            <p key={i} className="text-[10px] text-muted-foreground italic">{c}</p>
+            <p key={i} className="text-[10px] text-muted-foreground italic flex items-center gap-1">
+              <CitationSourceIcon citation={c} />
+              {c}
+            </p>
           ))}
         </div>
       )}
@@ -52,11 +66,15 @@ function PlaybookItemRow({ item }: { item: PlaybookItem }) {
   );
 }
 
+/** Always show "Framework — Who" */
 function FrameworkBadgeInline({ framework }: { framework: string }) {
   const colors = getFrameworkColorClasses(framework);
+  const who = FRAMEWORK_AUTHORS[framework] || '';
+  const label = who ? `${framework} — ${who}` : framework;
   return (
-    <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold border', colors.bg, colors.text, colors.border)}>
-      {framework}
+    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border', colors.bg, colors.text, colors.border)}>
+      <BookOpen className="h-2.5 w-2.5" />
+      {label}
     </span>
   );
 }
@@ -66,7 +84,6 @@ function PlaybookSectionBlock({ section, defaultOpen }: { section: PlaybookSecti
   const framework = section.framework;
   const fwColors = framework ? getFrameworkColorClasses(framework) : null;
 
-  // Strip framework prefix from title for cleaner display
   const displayTitle = framework && section.title.startsWith(framework + ':')
     ? section.title.slice(framework.length + 1).trim()
     : section.title;
@@ -91,7 +108,6 @@ function PlaybookSectionBlock({ section, defaultOpen }: { section: PlaybookSecti
   );
 }
 
-/** Group sections by framework for visual clustering */
 function groupByFramework(sections: PlaybookSection[]): { framework: string | null; sections: PlaybookSection[] }[] {
   const groups: { framework: string | null; sections: PlaybookSection[] }[] = [];
   let current: { framework: string | null; sections: PlaybookSection[] } | null = null;
@@ -122,7 +138,11 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
   const handleCopy = () => {
     if (!playbook?.content) return;
     const text = playbook.content.sections
-      .map(s => `## ${s.framework ? `[${s.framework}] ` : ''}${s.title}\n${s.items.map(i => `- ${i.content}${i.citations?.length ? ` [${i.citations.join('; ')}]` : ''}`).join('\n')}`)
+      .map(s => {
+        const fw = s.framework ? FRAMEWORK_AUTHORS[s.framework] : null;
+        const prefix = s.framework ? `[${s.framework}${fw ? ` — ${fw}` : ''}] ` : '';
+        return `## ${prefix}${s.title}\n${s.items.map(i => `- ${i.content}${i.citations?.length ? ` [${i.citations.join('; ')}]` : ''}`).join('\n')}`;
+      })
       .join('\n\n');
     const full = `# ${playbook.content.title}\n${playbook.content.summary}\n\n${text}`;
     navigator.clipboard.writeText(full);
@@ -139,10 +159,10 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
         <div>
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
             <BookOpen className="h-3.5 w-3.5" />
-            Sales Operating System
+            Generated Playbook
           </h3>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            Unified playbook: GAP · Challenger · MEDDPICC · CoM
+            AI-synthesized execution guidance from your resources
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -169,18 +189,12 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
         </div>
       </div>
 
-      {/* Framework legend for this stage */}
+      {/* Framework legend */}
       {!content && hasResources && !generate.isPending && stageFrameworks.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {stageFrameworks.map(f => {
-            const colors = getFrameworkColorClasses(f.framework);
-            return (
-              <div key={f.framework} className={cn('flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px]', colors.bg, colors.border)}>
-                <span className={cn('font-semibold', colors.text)}>{f.framework}</span>
-                <span className="text-muted-foreground">— {f.role}</span>
-              </div>
-            );
-          })}
+          {stageFrameworks.map(f => (
+            <FrameworkBadgeInline key={f.framework} framework={f.framework} />
+          ))}
         </div>
       )}
 
@@ -188,7 +202,6 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
         <div className="rounded-lg border border-dashed border-muted-foreground/20 p-6 text-center">
           <BookOpen className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">Add resources to this stage to generate a playbook</p>
-          <p className="text-[10px] text-muted-foreground mt-1">Select Keystone Resources for foundational guidance</p>
         </div>
       )}
 
@@ -199,7 +212,6 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
           <p className="text-[10px] text-muted-foreground mt-1">
             {stageResources.length} resource{stageResources.length > 1 ? 's' : ''} assigned
             {keystoneResources.length > 0 && ` · ${keystoneResources.length} keystone`}
-            {` · ${stageFrameworks.length} frameworks`}
           </p>
           <Button size="sm" className="mt-3 h-7 text-xs gap-1" onClick={handleGenerate}>
             <BookOpen className="h-3 w-3" /> Generate Playbook
@@ -210,8 +222,8 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
       {generate.isPending && (
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-8 text-center">
           <Loader2 className="h-8 w-8 text-primary animate-spin mx-auto mb-3" />
-          <p className="text-sm text-foreground font-medium">Compiling unified playbook…</p>
-          <p className="text-[10px] text-muted-foreground mt-1">Synthesizing GAP Selling · Challenger · MEDDPICC · Command of the Message</p>
+          <p className="text-sm text-foreground font-medium">Compiling playbook…</p>
+          <p className="text-[10px] text-muted-foreground mt-1">Synthesizing across all frameworks with quality guardrails</p>
         </div>
       )}
 
@@ -230,7 +242,6 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
               <Badge variant="outline" className="text-[9px]">
                 Generated {new Date(playbook!.generated_at).toLocaleDateString()}
               </Badge>
-              {/* Framework badges */}
               {stageFrameworks.map(f => (
                 <FrameworkBadgeInline key={f.framework} framework={f.framework} />
               ))}

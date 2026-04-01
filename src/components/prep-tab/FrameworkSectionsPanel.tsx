@@ -1,13 +1,14 @@
 /**
  * FrameworkSectionsPanel — renders predefined framework-driven sections
  * for a Prep stage and auto-populates them with matching KIs.
+ * Includes a framework summary banner at the top of each page.
  */
 
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { STAGE_FRAMEWORK_MAP, getFrameworkColorClasses, FRAMEWORK_AUTHORS } from '@/data/stageFrameworkMap';
+import { STAGE_FRAMEWORK_MAP, getFrameworkColorClasses } from '@/data/stageFrameworkMap';
 import type { StageFrameworkRole, FrameworkSection } from '@/data/stageFrameworkMap';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +66,37 @@ function FrameworkBadgeLabel({ framework, who }: { framework: string; who: strin
   );
 }
 
+/** Compact framework role descriptions for each framework */
+const FRAMEWORK_ROLE_LABELS: Record<string, string> = {
+  'GAP Selling': 'Discovery & problem depth',
+  'Challenger': 'Insight, reframe & teaching',
+  'MEDDPICC': 'Deal qualification & progression',
+  'Command of the Message': 'Structure & narrative',
+};
+
+/** Framework summary banner at the top of each page */
+function FrameworkSummaryBanner({ frameworks }: { frameworks: StageFrameworkRole[] }) {
+  return (
+    <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+        Frameworks applied on this page
+      </p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {frameworks.map(f => {
+          const colors = getFrameworkColorClasses(f.framework);
+          return (
+            <div key={f.framework} className="flex items-center gap-1.5 text-[10px]">
+              <span className={cn('font-semibold', colors.text)}>{f.framework}</span>
+              <span className="text-muted-foreground">— {f.who}</span>
+              <span className="text-muted-foreground/60">({FRAMEWORK_ROLE_LABELS[f.framework] || f.role})</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SectionBlock({
   section,
   kis,
@@ -96,7 +128,10 @@ function SectionBlock({
             {ki.tactic_summary && (
               <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">{ki.tactic_summary}</p>
             )}
-            {ki.who && (
+            {ki.who && ki.framework && (
+              <span className="text-[9px] text-muted-foreground">[{ki.framework} — {ki.who}]</span>
+            )}
+            {ki.who && !ki.framework && (
               <span className="text-[9px] text-muted-foreground">— {ki.who}</span>
             )}
           </div>
@@ -118,10 +153,9 @@ function FrameworkBlock({
   const [open, setOpen] = useState(defaultOpen ?? true);
   const colors = getFrameworkColorClasses(frameworkRole.framework);
 
-  // Match KIs: framework matches, plus fuzzy match on section headings
+  // Match KIs to sections by keyword overlap
   const matchKIsToSection = (section: FrameworkSection): KI[] => {
     const headingLower = section.heading.toLowerCase();
-    // Simple keyword matching — KIs whose title or tactic mentions the section heading words
     return kis.filter(ki => {
       const text = `${ki.title} ${ki.tactic_summary || ''}`.toLowerCase();
       const words = headingLower.split(/\s+/).filter(w => w.length > 3);
@@ -129,7 +163,6 @@ function FrameworkBlock({
     });
   };
 
-  // KIs not matched to any section
   const matchedIds = new Set<string>();
   const sectionKIs = frameworkRole.sections.map(section => {
     const matched = matchKIsToSection(section);
@@ -147,7 +180,7 @@ function FrameworkBlock({
       )}>
         {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
         <FrameworkBadgeLabel framework={frameworkRole.framework} who={frameworkRole.who} />
-        <span className="text-[10px] text-muted-foreground ml-1">— {frameworkRole.role}</span>
+        <span className="text-[10px] text-muted-foreground ml-1 hidden sm:inline">— {frameworkRole.role}</span>
         <Badge variant="secondary" className="text-[9px] ml-auto">{kis.length}</Badge>
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-2 space-y-0.5 pb-1">
@@ -167,9 +200,8 @@ function FrameworkBlock({
 
 export function FrameworkSectionsPanel({ stageId, stageLabel }: Props) {
   const stageFrameworks = STAGE_FRAMEWORK_MAP[stageId] || [];
-  const { data: allKIs = [], isLoading } = useStageKIs(stageId);
+  const { data: allKIs = [] } = useStageKIs(stageId);
 
-  // Group KIs by framework
   const kisByFramework = useMemo(() => {
     const map = new Map<string, KI[]>();
     for (const ki of allKIs) {
@@ -186,6 +218,9 @@ export function FrameworkSectionsPanel({ stageId, stageLabel }: Props) {
 
   return (
     <div className="space-y-2">
+      {/* Framework summary banner */}
+      <FrameworkSummaryBanner frameworks={stageFrameworks} />
+
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
