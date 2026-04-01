@@ -284,15 +284,16 @@ export function useDeleteResource() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { deleteResourceWithCleanup } = await import('@/lib/resourceDelete');
-      await deleteResourceWithCleanup(id);
+      return deleteResourceWithCleanup(id);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['resources'] });
       qc.invalidateQueries({ queryKey: ['all-resources'] });
       qc.invalidateQueries({ queryKey: ['knowledge-items'] });
       qc.invalidateQueries({ queryKey: ['incoming-queue'] });
       qc.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
-      toast.success('Resource deleted');
+      const kiMsg = result.kiDeleted > 0 ? ` and ${result.kiDeleted} knowledge items` : '';
+      toast.success(`Resource${kiMsg} deleted`);
     },
     onError: (err: Error) => toast.error(`Delete failed: ${err.message}`),
   });
@@ -314,7 +315,8 @@ export function useBulkDeleteResources() {
       if (result.errors.length > 0) {
         toast.error(`Deleted ${result.deleted}, ${result.errors.length} failed: ${result.errors[0]}`);
       } else {
-        toast.success(`Deleted ${result.deleted} resources`);
+        const kiMsg = result.kiDeleted > 0 ? ` and ${result.kiDeleted} knowledge items` : '';
+        toast.success(`${result.deleted} resources${kiMsg} deleted`);
       }
     },
     onError: (err: Error) => toast.error(`Bulk delete failed: ${err.message}`),

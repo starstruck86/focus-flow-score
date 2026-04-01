@@ -31,25 +31,26 @@ const RELATED_TABLES_BY_SOURCE_RESOURCE_ID = [
 /**
  * Delete a single resource and its related records.
  */
-export async function deleteResourceWithCleanup(resourceId: string): Promise<void> {
+export async function deleteResourceWithCleanup(resourceId: string): Promise<{ kiDeleted: number }> {
   console.log('[ResourceDelete] Deleting resource:', resourceId);
-  await cleanupRelatedRecords([resourceId]);
+  const counts = await cleanupRelatedRecords([resourceId]);
   const { error } = await supabase.from('resources').delete().eq('id', resourceId);
   if (error) {
     console.error('[ResourceDelete] Failed:', error);
     throw new Error(`Failed to delete resource: ${error.message}`);
   }
-  console.log('[ResourceDelete] Success:', resourceId);
+  console.log('[ResourceDelete] Success:', resourceId, 'KIs removed:', counts.kiDeleted);
+  return counts;
 }
 
 /**
  * Delete multiple resources and their related records.
  */
-export async function bulkDeleteResources(ids: string[]): Promise<{ deleted: number; errors: string[] }> {
-  if (ids.length === 0) return { deleted: 0, errors: [] };
+export async function bulkDeleteResources(ids: string[]): Promise<{ deleted: number; kiDeleted: number; errors: string[] }> {
+  if (ids.length === 0) return { deleted: 0, kiDeleted: 0, errors: [] };
   console.log('[ResourceDelete] Bulk deleting:', ids.length, 'resources');
 
-  await cleanupRelatedRecords(ids);
+  const counts = await cleanupRelatedRecords(ids);
 
   let deleted = 0;
   const errors: string[] = [];
@@ -65,26 +66,35 @@ export async function bulkDeleteResources(ids: string[]): Promise<{ deleted: num
     }
   }
 
-  console.log('[ResourceDelete] Bulk result:', { deleted, errors: errors.length });
-  return { deleted, errors };
+  console.log('[ResourceDelete] Bulk result:', { deleted, kiDeleted: counts.kiDeleted, errors: errors.length });
+  return { deleted, kiDeleted: counts.kiDeleted, errors };
 }
 
 /**
  * Clean up related records for a set of resource IDs.
  */
-async function cleanupRelatedRecords(resourceIds: string[]): Promise<void> {
-  // Clean tables with resource_id
-  for (const table of RELATED_TABLES_BY_RESOURCE_ID) {
-    try {
-      for (let i = 0; i < resourceIds.length; i += BATCH_SIZE) {
-        await (supabase as any).from(table).delete().in('resource_id', resourceIds.slice(i, i + BATCH_SIZE));
-      }
-    } catch {
-      // Non-fatal — some tables may not have matching rows or lack delete RLS
+async function cleanupRelatedRecords(resourceIds: string[]): Promise<{ kiDeleted: number }> {
+  let kiDeleted = 0;
+
+  // 1. Delete knowledge_items FIRST (primary downstream artifacts)
+  try {
+    for (let i = 0; i < resourceIds.length; i += BATCH_SIZE) {
+      const batch = resourceIds.slice(i, i + BATCH_SIZE);
+      // Count before delete
+      const { count } = await supabase
+        .from('knowledge_items')
+        .select('id', { count: 'exact', head: true })
+        .in('source_resource_id', batch);
+      kiDeleted += count ?? 0;
+      await supabase.from('knowledge_items').delete().in('source_resource_id', batch);
     }
+  } catch (e) {
+    console.error('[ResourceDelete] Failed to delete knowledge_items:', e);
   }
-  // Clean tables with source_resource_id
+
+  // 2. Clean tables with source_resource_id (excluding knowledge_items, already handled)
   for (const table of RELATED_TABLES_BY_SOURCE_RESOURCE_ID) {
+    if (table === 'knowledge_items') continue;
     try {
       for (let i = 0; i < resourceIds.length; i += BATCH_SIZE) {
         await (supabase as any).from(table).delete().in('source_resource_id', resourceIds.slice(i, i + BATCH_SIZE));
@@ -93,6 +103,19 @@ async function cleanupRelatedRecords(resourceIds: string[]): Promise<void> {
       // Non-fatal
     }
   }
+
+  // 3. Clean tables with resource_id
+  for (const table of RELATED_TABLES_BY_RESOURCE_ID) {
+    try {
+      for (let i = 0; i < resourceIds.length; i += BATCH_SIZE) {
+        await (supabase as any).from(table).delete().in('resource_id', resourceIds.slice(i, i + BATCH_SIZE));
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  return { kiDeleted };
 }
 
 /**
