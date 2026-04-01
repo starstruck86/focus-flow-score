@@ -3,6 +3,7 @@ import { Layout } from '@/components/Layout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Crosshair, Brain, Download } from 'lucide-react';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
+import { PodcastQueueIndicator } from '@/components/prep/PodcastQueueIndicator';
 
 // Consolidated workspaces
 import { PrepCommandCenter } from '@/components/prep-tab/PrepCommandCenter';
