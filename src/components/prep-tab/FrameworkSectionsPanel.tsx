@@ -14,7 +14,7 @@ import type { StageFrameworkRole, FrameworkSection } from '@/data/stageFramework
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ChevronDown, ChevronRight, BookOpen, Lightbulb, Info } from 'lucide-react';
+import { ChevronDown, ChevronRight, BookOpen, Lightbulb, Info, HelpCircle, MessageSquare, Eye, ArrowRight } from 'lucide-react';
 import { SectionFeedback, KIPlacementFeedback } from './PlaybookFeedbackControls';
 import { cn } from '@/lib/utils';
 
