@@ -1,87 +1,66 @@
 
 
-# Will This Plan Work for "Getting to Club" (id1696635955)?
+# Scaling Podcast Import for 600+ Episodes
 
-## Yes — with caveats. Here's exactly what works and what doesn't today.
+## Current State
 
-### What works right now (no changes needed)
+The podcast import (`PodcastImportModal`) uses a **manual sequential `for` loop** to process episodes one-by-one. Meanwhile, the YouTube playlist import (`PlaylistImportModal`) already uses `useBulkIngestion` + `BulkIngestionPanel` — which provides batching (5-10 at a time), pause/resume/cancel, deduplication, progress tracking, and inter-batch delays. The podcast modal should use the same pattern.
 
-The URL `https://podcasts.apple.com/us/podcast/getting-to-club/id1696635955` will be correctly parsed by `extractApplePodcastId` — it extracts `1696635955`. The iTunes Lookup API will return the RSS feed URL, and the RSS parser will pull all episodes with titles and audio enclosure URLs. The import modal will show the full episode list with checkboxes. This part works.
+Additionally, the `import-podcast` edge function relies solely on the RSS feed, which often caps at 100-300 episodes. For a 600+ episode show, this means silently returning a partial list.
 
-### What breaks — 3 critical gaps
+## What to Build
 
-**Gap 1: Transcript never reaches the resource**
-After import, each episode is stored as a resource with a URL (the audio enclosure). When transcription runs via `processAudioResource`, the transcript lands in `audio_jobs.transcript_text` — but it is **never written back** to `resources.content`. The `extract-tactics` edge function reads from `resources.content`, so it finds nothing. KI extraction silently produces zero results.
+### 1. Wire PodcastImportModal to useBulkIngestion
 
-**Gap 2: 10,000 character content cap**
-`extract-tactics` (lines 91–101) truncates content to ~10,000 characters. A 45–60 minute podcast episode produces ~50,000–90,000 characters of transcript. That means ~85% of the content is silently dropped, and KIs only come from the first ~10 minutes of each episode.
+Replace the sequential `handleImport` loop with the existing `useBulkIngestion` hook + `BulkIngestionPanel` component — mirroring exactly how `PlaylistImportModal` works.
 
-**Gap 3: No show-level organization**
-Importing all episodes from "Getting to Club" creates dozens of flat resource rows with no grouping by show. No `source_registry` entry is created. No guest names are extracted from episode titles. When you later import a second podcast, everything becomes an undifferentiated pile.
+- Import `useBulkIngestion` and `BulkIngestionPanel`
+- Map selected episodes to `sourceItems` format (`{ url, title, videoId?, channel?, publishDate?, duration? }`)
+- Move the `source_registry` upsert to run **before** starting the bulk job (keep that logic)
+- After source_registry is created, start the bulk ingestion which handles: classify → save → enrich per item, with batching, dedup, retry, pause/cancel
+- Remove the old sequential `handleImport`, `importProgress` state, and manual progress bar
+- The bulk engine already skips duplicates by canonical URL, so re-importing the same show won't create duplicates
 
-### No auto-trigger gap
-There IS actually an auto-trigger — `useAddUrlResource` calls `autoOperationalizeResource` fire-and-forget after import. But it will fail silently because Gap 1 means there's no content to extract from.
+### 2. Supplement RSS with iTunes Search API for large shows
 
----
+In `supabase/functions/import-podcast/index.ts`, after fetching the RSS feed:
 
-## Updated Build Plan
+- Compare RSS episode count against `trackCount` from the iTunes lookup response
+- If RSS returned significantly fewer episodes than `trackCount`, paginate through the iTunes Search API (`entity=podcastEpisode&limit=200` with `offset`) to get additional episodes
+- Merge iTunes results with RSS results, deduplicating by title similarity or enclosure URL match
+- Return the combined list with a `source_counts` field so the client knows: `{ rss_count, itunes_count, total_returned }`
 
-### Step 1: Transcript writeback in audioOrchestrator
-**File:** `src/lib/salesBrain/audioOrchestrator.ts`
+### 3. Import-only mode (skip auto-transcription on bulk)
 
-After successful transcription in `transcribeDirectAudio` (around line 348), add:
-- Write `transcript_text` to `resources.content` and `resources.cleaned_content`
-- Set `resources.extraction_method = 'audio_transcription'`
-- Set `resources.content_status = 'enriched'`
-- Then call `autoOperationalizeResource(resourceId)` to trigger KI extraction
+The current transcript writeback in `audioOrchestrator.ts` triggers `autoOperationalizeResource` after every transcription. For 600 episodes imported at once, this would cascade into 600 transcription + extraction jobs.
 
-This closes the pipeline: import → transcribe → writeback → extract KIs.
+- In `PodcastImportModal`, do **not** trigger transcription during bulk import — the `useBulkIngestion` hook's `processItem` handles classify → save → enrich, which is the right pipeline for URL resources
+- Audio transcription should be triggered separately via the existing "Deep Enrich" flow where the user controls batch size
+- The key insight: bulk podcast import creates resources with metadata; transcription + KI extraction happens later in controlled batches
 
-### Step 2: Chunked extraction in extract-tactics
-**File:** `supabase/functions/extract-tactics/index.ts`
+### 4. Smart selection helpers for large lists
 
-Replace the 10k truncation (lines 89–101) with:
-- If content < 12,000 chars: single-pass (as today)
-- If content > 12,000 chars: split into ~8,000 char chunks on paragraph boundaries with 500 char overlap
-- Run the AI extraction prompt on each chunk sequentially (to avoid rate limiting)
-- Include chunk position in user prompt: "Chunk 2 of 5"
-- Request 2–4 plays per chunk (not 2–6)
-- After all chunks: deduplicate by title similarity (lowercase, strip punctuation, >60% shared words = duplicate — keep the one with longer `source_excerpt`)
-- Cap total at 12–15 KIs per resource
-- Add `source_location` chunk reference
-- On 429: retry once after 2s, skip chunk if retry fails
-- Return `chunks_total`, `chunks_processed`, `chunks_failed` alongside `items`
+Add selection shortcuts above the episode list when episode count > 50:
 
-### Step 3: Enrich import-podcast with show + episode metadata
-**File:** `supabase/functions/import-podcast/index.ts`
+- "Newest 50" / "Newest 100" buttons (based on `published` date sort)
+- "Episodes with guests" (filter where `guest` is non-null)
+- Show count of episodes with detected guests vs total
 
-- Extract from RSS: `<itunes:author>`, `<itunes:duration>`, `<pubDate>`, `<description>` per episode
-- Extract show-level: `<title>` (channel), `<itunes:author>`, `<description>`, `<itunes:image>`
-- Return show metadata in response: `{ show_title, show_author, show_description, show_image }`
-- Return per-episode: `{ title, url, description, duration, published, episode_number }`
-- Parse guest names from episode titles using common patterns (`"X | Y"`, `"X with Y"`, `"X feat. Y"`)
-- Support single-episode import: detect `?i=` parameter, use iTunes episode lookup to filter to just that episode
+### 5. Episode dedup indicator
 
-### Step 4: Auto-create source_registry entry per podcast
-**File:** `src/components/prep/PodcastImportModal.tsx`
+Before starting import, check existing resources by enclosure URL and mark already-imported episodes:
 
-- After fetching episodes, upsert a `source_registry` row with `name = show_title`, `source_type = 'podcast_rss'`, `url = RSS feed URL`, `metadata = { show_author, show_description, episode_count }`
-- Link every imported episode's `source_registry_id` to this entry
-- Populate `resources.author_or_speaker` from parsed guest name
-
-### Step 5: Add podcast/speaker filters
-**Files:** Resource list and KI list components
-
-- Filter resources by `source_registry_id` (show)
-- Filter resources by `author_or_speaker`
-- Filter KIs by `who` and source podcast
+- Query user's resources where `file_url` matches any episode URL
+- Show "X already imported" badge, auto-deselect those
+- This prevents duplicate imports when re-visiting the same show
 
 ---
 
 ## Technical Details
 
-- No new database tables or columns needed — `source_registry`, `resources.source_registry_id`, `resources.author_or_speaker` all exist
-- Edge functions `extract-tactics` and `import-podcast` need redeployment
-- Gemini 2.5 Flash supports ~1M token context; chunking is for extraction quality, not model limits — focused chunks produce better attribution
-- Sequential chunk processing to avoid rate limiting on the AI gateway
+- `useBulkIngestion` already handles: batching (configurable 1-10), pause/resume/cancel, inter-item delays (1.2s), inter-batch delays (2.5s), canonical dedup, progress UI via `BulkIngestionPanel`, retry failed items
+- The `source_registry` upsert + metadata population (guest, speaker, published date) stays in the modal but runs once before bulk start
+- After bulk import creates the resources, the user can use Deep Enrich to batch-process transcription + KI extraction at their pace
+- iTunes Search API max is `limit=200` per call; for 600 episodes need 3 paginated calls with `offset=0,200,400`
+- No new DB tables, columns, or migrations needed
 
