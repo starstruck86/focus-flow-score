@@ -2887,9 +2887,12 @@ export type Database = {
       }
       podcast_import_queue: {
         Row: {
+          artwork_url: string | null
           attempts: number
+          audio_url: string | null
           content_validation: Json | null
           created_at: string
+          episode_description: string | null
           episode_duration: string | null
           episode_guest: string | null
           episode_published: string | null
@@ -2897,15 +2900,21 @@ export type Database = {
           episode_url: string
           error_message: string | null
           failure_type: string | null
+          host_platform: string | null
           id: string
           ki_count: number | null
           ki_status: string | null
+          metadata_status: string | null
+          original_episode_url: string | null
           platform: string | null
           processed_at: string | null
           raw_transcript: string | null
+          resolution_method: string | null
+          resolved_url: string | null
           resource_id: string | null
           review_reason: string | null
           show_author: string | null
+          show_title: string | null
           source_registry_id: string | null
           status: string
           structured_transcript: string | null
@@ -2917,9 +2926,12 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          artwork_url?: string | null
           attempts?: number
+          audio_url?: string | null
           content_validation?: Json | null
           created_at?: string
+          episode_description?: string | null
           episode_duration?: string | null
           episode_guest?: string | null
           episode_published?: string | null
@@ -2927,15 +2939,21 @@ export type Database = {
           episode_url: string
           error_message?: string | null
           failure_type?: string | null
+          host_platform?: string | null
           id?: string
           ki_count?: number | null
           ki_status?: string | null
+          metadata_status?: string | null
+          original_episode_url?: string | null
           platform?: string | null
           processed_at?: string | null
           raw_transcript?: string | null
+          resolution_method?: string | null
+          resolved_url?: string | null
           resource_id?: string | null
           review_reason?: string | null
           show_author?: string | null
+          show_title?: string | null
           source_registry_id?: string | null
           status?: string
           structured_transcript?: string | null
@@ -2947,9 +2965,12 @@ export type Database = {
           user_id: string
         }
         Update: {
+          artwork_url?: string | null
           attempts?: number
+          audio_url?: string | null
           content_validation?: Json | null
           created_at?: string
+          episode_description?: string | null
           episode_duration?: string | null
           episode_guest?: string | null
           episode_published?: string | null
@@ -2957,15 +2978,21 @@ export type Database = {
           episode_url?: string
           error_message?: string | null
           failure_type?: string | null
+          host_platform?: string | null
           id?: string
           ki_count?: number | null
           ki_status?: string | null
+          metadata_status?: string | null
+          original_episode_url?: string | null
           platform?: string | null
           processed_at?: string | null
           raw_transcript?: string | null
+          resolution_method?: string | null
+          resolved_url?: string | null
           resource_id?: string | null
           review_reason?: string | null
           show_author?: string | null
+          show_title?: string | null
           source_registry_id?: string | null
           status?: string
           structured_transcript?: string | null
@@ -3669,6 +3696,8 @@ export type Database = {
           account_id: string | null
           advanced_extraction_attempts: number | null
           advanced_extraction_status: string | null
+          artwork_url: string | null
+          audio_url: string | null
           author_or_speaker: string | null
           block_auto_fixable: boolean | null
           block_last_attempt_at: string | null
@@ -3692,6 +3721,7 @@ export type Database = {
           enrichment_audit_log: Json
           enrichment_status: string
           enrichment_version: number
+          episode_description: string | null
           external_id: string | null
           extraction_method: string | null
           extraction_priority_factors: Json | null
@@ -3700,6 +3730,7 @@ export type Database = {
           failure_reason: string | null
           file_url: string | null
           folder_id: string | null
+          host_platform: string | null
           id: string
           is_screenshot_template: boolean | null
           is_template: boolean | null
@@ -3713,8 +3744,10 @@ export type Database = {
           lightweight_extraction: Json | null
           manual_content_present: boolean | null
           manual_input_required: boolean | null
+          metadata_status: string | null
           next_best_action: string | null
           opportunity_id: string | null
+          original_url: string | null
           pipeline_queue: string | null
           platform_status: string | null
           recovery_attempt_count: number | null
@@ -3724,6 +3757,7 @@ export type Database = {
           resolution_method: string | null
           resource_type: string
           screenshot_structure: string | null
+          show_title: string | null
           source_created_at: string | null
           source_published_at: string | null
           source_registry_id: string | null
@@ -3731,6 +3765,7 @@ export type Database = {
           tags: string[] | null
           template_category: string | null
           title: string
+          transcript_status: string | null
           updated_at: string
           user_id: string
           validation_version: number
@@ -3740,6 +3775,8 @@ export type Database = {
           account_id?: string | null
           advanced_extraction_attempts?: number | null
           advanced_extraction_status?: string | null
+          artwork_url?: string | null
+          audio_url?: string | null
           author_or_speaker?: string | null
           block_auto_fixable?: boolean | null
           block_last_attempt_at?: string | null
@@ -3763,6 +3800,7 @@ export type Database = {
           enrichment_audit_log?: Json
           enrichment_status?: string
           enrichment_version?: number
+          episode_description?: string | null
           external_id?: string | null
           extraction_method?: string | null
           extraction_priority_factors?: Json | null
@@ -3771,6 +3809,7 @@ export type Database = {
           failure_reason?: string | null
           file_url?: string | null
           folder_id?: string | null
+          host_platform?: string | null
           id?: string
           is_screenshot_template?: boolean | null
           is_template?: boolean | null
@@ -3784,8 +3823,10 @@ export type Database = {
           lightweight_extraction?: Json | null
           manual_content_present?: boolean | null
           manual_input_required?: boolean | null
+          metadata_status?: string | null
           next_best_action?: string | null
           opportunity_id?: string | null
+          original_url?: string | null
           pipeline_queue?: string | null
           platform_status?: string | null
           recovery_attempt_count?: number | null
@@ -3795,6 +3836,7 @@ export type Database = {
           resolution_method?: string | null
           resource_type?: string
           screenshot_structure?: string | null
+          show_title?: string | null
           source_created_at?: string | null
           source_published_at?: string | null
           source_registry_id?: string | null
@@ -3802,6 +3844,7 @@ export type Database = {
           tags?: string[] | null
           template_category?: string | null
           title: string
+          transcript_status?: string | null
           updated_at?: string
           user_id: string
           validation_version?: number
@@ -3811,6 +3854,8 @@ export type Database = {
           account_id?: string | null
           advanced_extraction_attempts?: number | null
           advanced_extraction_status?: string | null
+          artwork_url?: string | null
+          audio_url?: string | null
           author_or_speaker?: string | null
           block_auto_fixable?: boolean | null
           block_last_attempt_at?: string | null
@@ -3834,6 +3879,7 @@ export type Database = {
           enrichment_audit_log?: Json
           enrichment_status?: string
           enrichment_version?: number
+          episode_description?: string | null
           external_id?: string | null
           extraction_method?: string | null
           extraction_priority_factors?: Json | null
@@ -3842,6 +3888,7 @@ export type Database = {
           failure_reason?: string | null
           file_url?: string | null
           folder_id?: string | null
+          host_platform?: string | null
           id?: string
           is_screenshot_template?: boolean | null
           is_template?: boolean | null
@@ -3855,8 +3902,10 @@ export type Database = {
           lightweight_extraction?: Json | null
           manual_content_present?: boolean | null
           manual_input_required?: boolean | null
+          metadata_status?: string | null
           next_best_action?: string | null
           opportunity_id?: string | null
+          original_url?: string | null
           pipeline_queue?: string | null
           platform_status?: string | null
           recovery_attempt_count?: number | null
@@ -3866,6 +3915,7 @@ export type Database = {
           resolution_method?: string | null
           resource_type?: string
           screenshot_structure?: string | null
+          show_title?: string | null
           source_created_at?: string | null
           source_published_at?: string | null
           source_registry_id?: string | null
@@ -3873,6 +3923,7 @@ export type Database = {
           tags?: string[] | null
           template_category?: string | null
           title?: string
+          transcript_status?: string | null
           updated_at?: string
           user_id?: string
           validation_version?: number
