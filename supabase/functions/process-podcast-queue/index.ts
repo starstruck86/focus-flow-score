@@ -1,8 +1,12 @@
 /**
  * process-podcast-queue
  * ---------------------
- * Processes one podcast_import_queue item through the full pipeline:
- * Claim → Dedup → Resolve → Transcribe → Validate → Preprocess → Save → KI Extract
+ * Processes one podcast_import_queue item through the pipeline:
+ * Claim → Dedup → Resolve → Transcribe → Validate → Preprocess → Save
+ * 
+ * KI extraction is NOT auto-triggered. After transcript is saved,
+ * ki_status is set to 'ready_for_review' so the user can inspect
+ * transcript quality before manually triggering KI generation.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -126,6 +130,7 @@ Deno.serve(async (req) => {
         resource_id: existing[0].id,
         processed_at: now(),
         transcript_status: "skipped_duplicate",
+        ki_status: "skipped",
         error_message: "Already imported (dedup)",
       });
       return json({ processed: 1, result: "skipped_duplicate", resource_id: existing[0].id });
@@ -212,7 +217,6 @@ Deno.serve(async (req) => {
     });
 
     if (!validation.valid) {
-      // Content invalid — terminal failure, no retry
       await supabase
         .from("podcast_import_queue")
         .update({
@@ -234,6 +238,9 @@ Deno.serve(async (req) => {
 
     // ── Step 6: Preprocess transcript into structured markdown ──
     let structuredContent = transcriptText;
+    let sectionCount = 0;
+    let preprocessValid = true;
+
     try {
       const preprocessResp = await fetch(`${supabaseUrl}/functions/v1/preprocess-transcript`, {
         method: "POST",
@@ -251,23 +258,66 @@ Deno.serve(async (req) => {
 
       if (preprocessResp.ok) {
         const preprocessResult = await preprocessResp.json();
-        if (preprocessResult.structured_transcript && preprocessResult.structured_transcript.length > 200) {
-          structuredContent = preprocessResult.structured_transcript;
-          console.log(`Preprocessed: ${transcriptText.length} → ${structuredContent.length} chars, ${preprocessResult.section_count} sections`);
-        } else {
-          console.warn("Preprocessing returned insufficient content, using raw transcript");
+        const structured = preprocessResult.structured_transcript || "";
+        sectionCount = preprocessResult.section_count || 0;
+        const pValidation = preprocessResult.validation || { valid: true, issues: [] };
+
+        // ── Preprocess validation guardrails ──
+        const retentionRatio = structured.length / Math.max(transcriptText.length, 1);
+        const tooFewHeadings = sectionCount < 2;
+        const tooCompressed = retentionRatio < 0.15;
+        const tooShort = structured.length < 200;
+        const hasIssues = !pValidation.valid;
+
+        if (tooFewHeadings || tooCompressed || tooShort || hasIssues) {
+          const issues: string[] = [];
+          if (tooFewHeadings) issues.push(`too_few_headings (${sectionCount})`);
+          if (tooCompressed) issues.push(`over_compressed (${Math.round(retentionRatio * 100)}% retained)`);
+          if (tooShort) issues.push(`too_short (${structured.length} chars)`);
+          if (hasIssues) issues.push(...(pValidation.issues || []));
+
+          console.warn(`Preprocess validation failed: ${issues.join(", ")}`);
+
+          // Mark as failed with preprocess_invalid — don't save garbage
+          await supabase
+            .from("podcast_import_queue")
+            .update({
+              status: "failed",
+              transcript_status: "transcript_failed",
+              failure_type: "preprocess_invalid",
+              error_message: `Preprocessing guardrails failed: ${issues.join("; ")}`,
+              processed_at: now(),
+              transcript_length: transcriptText.length,
+              transcript_section_count: sectionCount,
+              transcript_preview: transcriptText.slice(0, 500),
+              content_validation: { ...validation.details, preprocess_issues: issues, retention_ratio: retentionRatio },
+            })
+            .eq("id", queueItem.id);
+
+          return json({ processed: 1, result: "preprocess_invalid", issues });
         }
+
+        structuredContent = structured;
+        console.log(`Preprocessed: ${transcriptText.length} → ${structuredContent.length} chars, ${sectionCount} sections`);
       } else {
         console.warn(`Preprocessing failed (${preprocessResp.status}), using raw transcript`);
+        sectionCount = 0;
       }
     } catch (err) {
       console.warn(`Preprocessing error: ${err.message}, using raw transcript`);
     }
 
+    // Update transcript preview data
+    await updateQueueItem(supabase, queueItem.id, {
+      transcript_status: "transcript_structured",
+      transcript_length: structuredContent.length,
+      transcript_section_count: sectionCount,
+      transcript_preview: structuredContent.slice(0, 500),
+    });
+
     // ── Step 7: Create resource ──
     let resourceId: string;
     try {
-      // Find or create folder for podcasts
       let folderId: string | null = null;
       const folderName = "Podcasts";
       const { data: folders } = await supabase
@@ -303,7 +353,7 @@ Deno.serve(async (req) => {
         folder_id: folderId,
         file_url: queueItem.episode_url,
         content: structuredContent,
-        content_status: "enriched", // Already processed — skip enrich-resource-content
+        content_status: "enriched",
         content_length: structuredContent.length,
       };
 
@@ -332,59 +382,19 @@ Deno.serve(async (req) => {
       return json({ processed: 1, result: "failed", error: err.message });
     }
 
-    // ── Step 8: Mark resource complete ──
+    // ── Step 8: Mark complete — KIs NOT auto-triggered ──
     await updateQueueItem(supabase, queueItem.id, {
       status: "complete",
       resource_id: resourceId,
       processed_at: now(),
+      ki_status: "ready_for_review",
     });
-
-    // ── Step 9: Auto-trigger KI extraction ──
-    let kiCount = 0;
-    try {
-      await updateQueueItem(supabase, queueItem.id, { ki_status: "extracting" });
-
-      const actionizeResp = await fetch(`${supabaseUrl}/functions/v1/batch-actionize`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${serviceRoleKey}`,
-        },
-        body: JSON.stringify({
-          batchSize: 1,
-          resource_id: resourceId,
-          user_id: queueItem.user_id,
-        }),
-      });
-
-      if (actionizeResp.ok) {
-        const actionizeResult = await actionizeResp.json();
-        kiCount = actionizeResult.knowledge_created || 0;
-        await updateQueueItem(supabase, queueItem.id, {
-          ki_status: kiCount > 0 ? "extracted" : "extracted",
-          ki_count: kiCount,
-        });
-        console.log(`KI extraction: ${kiCount} items created for resource ${resourceId}`);
-      } else {
-        const errText = await actionizeResp.text();
-        console.warn(`KI extraction failed (${actionizeResp.status}): ${errText}`);
-        await updateQueueItem(supabase, queueItem.id, {
-          ki_status: "ki_failed",
-          error_message: `Resource saved but KI extraction failed: ${errText.slice(0, 200)}`,
-        });
-      }
-    } catch (err) {
-      console.warn(`KI extraction error: ${err.message}`);
-      await updateQueueItem(supabase, queueItem.id, {
-        ki_status: "ki_failed",
-      });
-    }
 
     return json({
       processed: 1,
       result: "complete",
       resource_id: resourceId,
-      ki_count: kiCount,
+      ki_status: "ready_for_review",
     });
   } catch (err) {
     console.error("process-podcast-queue fatal error:", err);
@@ -415,8 +425,7 @@ async function updateQueueItem(supabase: any, id: string, fields: Record<string,
 async function handleFailure(supabase: any, item: any, errorMessage: string, failureType?: string) {
   const newAttempts = (item.attempts || 0) + 1;
 
-  // Terminal failure types — never retry
-  const terminalTypes = ["content_invalid", "content_invalid_html", "content_invalid_css", "content_bot_or_login_wall", "content_ui_fragments"];
+  const terminalTypes = ["content_invalid", "content_invalid_html", "content_invalid_css", "content_bot_or_login_wall", "content_ui_fragments", "preprocess_invalid"];
   const isTerminal = failureType && terminalTypes.includes(failureType);
   const newStatus = isTerminal || newAttempts >= MAX_ATTEMPTS ? "failed" : "queued";
 

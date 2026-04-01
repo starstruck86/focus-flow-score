@@ -2906,6 +2906,9 @@ export type Database = {
           show_author: string | null
           source_registry_id: string | null
           status: string
+          transcript_length: number | null
+          transcript_preview: string | null
+          transcript_section_count: number | null
           transcript_status: string | null
           updated_at: string
           user_id: string
@@ -2930,6 +2933,9 @@ export type Database = {
           show_author?: string | null
           source_registry_id?: string | null
           status?: string
+          transcript_length?: number | null
+          transcript_preview?: string | null
+          transcript_section_count?: number | null
           transcript_status?: string | null
           updated_at?: string
           user_id: string
@@ -2954,6 +2960,9 @@ export type Database = {
           show_author?: string | null
           source_registry_id?: string | null
           status?: string
+          transcript_length?: number | null
+          transcript_preview?: string | null
+          transcript_section_count?: number | null
           transcript_status?: string | null
           updated_at?: string
           user_id?: string

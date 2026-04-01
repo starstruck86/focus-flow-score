@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckCircle2, XCircle, Loader2, Clock, Ban, Trash2, Brain, AlertTriangle } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { CheckCircle2, XCircle, Loader2, Clock, Ban, Trash2, Brain, AlertTriangle, ChevronDown, ChevronRight, Sparkles, FileText } from 'lucide-react';
 import type { QueueItem, QueueStats } from '@/hooks/usePodcastQueue';
 
 interface PodcastQueueProgressProps {
@@ -12,6 +14,9 @@ interface PodcastQueueProgressProps {
   isDone: boolean;
   onCancel: () => void;
   onClear: () => void;
+  onGenerateKIs?: (queueItemId: string) => void;
+  onGenerateAllKIs?: () => void;
+  generatingKIs?: Set<string>;
 }
 
 const statusIcon = (status: QueueItem['status']) => {
@@ -35,13 +40,14 @@ const platformLabel = (platform: string | null) => {
   return labels[platform] || platform;
 };
 
-const transcriptLabel = (status: string | null) => {
+const transcriptStatusLabel = (status: string | null) => {
   if (!status || status === 'pending') return null;
   const labels: Record<string, { text: string; color: string }> = {
     resolving_link: { text: 'Resolving…', color: 'text-yellow-500' },
     audio_resolved: { text: 'Audio found', color: 'text-blue-500' },
     transcribing: { text: 'Transcribing…', color: 'text-yellow-500' },
-    transcript_ready: { text: 'Transcript ✓', color: 'text-green-500' },
+    transcript_ready: { text: 'Raw ✓', color: 'text-green-500' },
+    transcript_structured: { text: 'Structured ✓', color: 'text-green-500' },
     transcript_found: { text: 'Transcript ✓', color: 'text-green-500' },
     transcript_failed: { text: 'Failed', color: 'text-destructive' },
     transcript_unavailable: { text: 'Unavailable', color: 'text-muted-foreground' },
@@ -50,10 +56,11 @@ const transcriptLabel = (status: string | null) => {
   return labels[status] || { text: status, color: 'text-muted-foreground' };
 };
 
-const kiLabel = (kiStatus: string | null, kiCount: number) => {
+const kiStatusLabel = (kiStatus: string | null, kiCount: number) => {
   if (!kiStatus || kiStatus === 'pending') return null;
   switch (kiStatus) {
-    case 'extracting': return { text: 'Extracting KIs…', color: 'text-yellow-500' };
+    case 'ready_for_review': return { text: 'Ready for KI', color: 'text-blue-500' };
+    case 'extracting': return { text: 'Extracting…', color: 'text-yellow-500' };
     case 'extracted': return { text: `${kiCount} KI${kiCount !== 1 ? 's' : ''}`, color: 'text-green-500' };
     case 'ki_failed': return { text: 'KI failed', color: 'text-destructive' };
     case 'skipped': return { text: 'Skipped', color: 'text-muted-foreground' };
@@ -73,11 +80,22 @@ const failureLabel = (type: string | null) => {
     transcript_unavailable_from_link: 'No transcript',
     audio_unresolvable: 'No audio',
     extraction_blocked: 'Save error',
+    preprocess_invalid: 'Bad preprocessing',
   };
   return labels[type] || type;
 };
 
-export function PodcastQueueProgress({ items, stats, isActive, isDone, onCancel, onClear }: PodcastQueueProgressProps) {
+function formatBytes(chars: number): string {
+  if (chars < 1000) return `${chars} chars`;
+  return `${(chars / 1000).toFixed(1)}K chars`;
+}
+
+export function PodcastQueueProgress({
+  items, stats, isActive, isDone, onCancel, onClear,
+  onGenerateKIs, onGenerateAllKIs, generatingKIs,
+}: PodcastQueueProgressProps) {
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+
   const progressPct = stats.total > 0
     ? Math.round(((stats.complete + stats.failed + stats.skipped) / stats.total) * 100)
     : 0;
@@ -121,6 +139,12 @@ export function PodcastQueueProgress({ items, stats, isActive, isDone, onCancel,
             {stats.failed} failed
           </Badge>
         )}
+        {stats.readyForKI > 0 && (
+          <Badge variant="outline" className="text-[10px] gap-1 border-blue-500/30">
+            <FileText className="h-3 w-3 text-blue-500" />
+            {stats.readyForKI} ready for KI
+          </Badge>
+        )}
         {stats.totalKIs > 0 && (
           <Badge variant="outline" className="text-[10px] gap-1 border-green-500/30">
             <Brain className="h-3 w-3 text-green-500" />
@@ -130,46 +154,100 @@ export function PodcastQueueProgress({ items, stats, isActive, isDone, onCancel,
       </div>
 
       {/* Scrollable item list */}
-      <ScrollArea className="max-h-[200px] border rounded-md">
+      <ScrollArea className="max-h-[280px] border rounded-md">
         <div className="p-2 space-y-0.5">
           {items.map(item => {
             const platform = platformLabel(item.platform);
-            const transcript = transcriptLabel(item.transcript_status);
-            const ki = kiLabel(item.ki_status, item.ki_count);
+            const transcript = transcriptStatusLabel(item.transcript_status);
+            const ki = kiStatusLabel(item.ki_status, item.ki_count);
             const failure = item.status === 'failed' ? failureLabel(item.failure_type) : null;
+            const isExpanded = expandedItem === item.id;
+            const isGenerating = generatingKIs?.has(item.id);
+            const canGenerateKI = item.ki_status === 'ready_for_review' && item.resource_id && !isGenerating;
 
             return (
-              <div key={item.id} className="flex items-center gap-2 py-1 px-2 rounded text-xs hover:bg-muted/50">
-                {statusIcon(item.status)}
-                <span className="flex-1 truncate">{item.episode_title}</span>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {platform && (
-                    <span className="text-[10px] text-muted-foreground">{platform}</span>
-                  )}
-                  {transcript && (
-                    <span className={`text-[10px] ${transcript.color}`}>{transcript.text}</span>
-                  )}
-                  {ki && (
-                    <span className={`text-[10px] ${ki.color}`}>{ki.text}</span>
-                  )}
-                  {failure && (
-                    <span className="text-[10px] text-destructive flex items-center gap-0.5">
-                      <AlertTriangle className="h-2.5 w-2.5" />
-                      {failure}
-                    </span>
-                  )}
-                  {!failure && item.error_message && item.status === 'failed' && (
-                    <span className="text-[10px] text-destructive truncate max-w-[120px]">{item.error_message}</span>
-                  )}
-                </div>
-              </div>
+              <Collapsible key={item.id} open={isExpanded} onOpenChange={() => setExpandedItem(isExpanded ? null : item.id)}>
+                <CollapsibleTrigger asChild>
+                  <div className="flex items-center gap-2 py-1.5 px-2 rounded text-xs hover:bg-muted/50 cursor-pointer">
+                    {statusIcon(item.status)}
+                    <span className="flex-1 truncate">{item.episode_title}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {platform && (
+                        <span className="text-[10px] text-muted-foreground">{platform}</span>
+                      )}
+                      {transcript && (
+                        <span className={`text-[10px] ${transcript.color}`}>{transcript.text}</span>
+                      )}
+                      {ki && (
+                        <span className={`text-[10px] ${ki.color}`}>{ki.text}</span>
+                      )}
+                      {failure && (
+                        <span className="text-[10px] text-destructive flex items-center gap-0.5">
+                          <AlertTriangle className="h-2.5 w-2.5" />
+                          {failure}
+                        </span>
+                      )}
+                      {isExpanded ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+
+                <CollapsibleContent>
+                  <div className="ml-5 pl-2 border-l border-border space-y-2 py-2 text-[11px]">
+                    {/* Transcript stats */}
+                    {(item.transcript_length > 0 || item.transcript_section_count > 0) && (
+                      <div className="flex items-center gap-3 text-muted-foreground">
+                        <span>{formatBytes(item.transcript_length)}</span>
+                        {item.transcript_section_count > 0 && (
+                          <span>{item.transcript_section_count} sections</span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Transcript preview */}
+                    {item.transcript_preview && (
+                      <div className="bg-muted/30 rounded p-2 text-[10px] text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-[120px] overflow-y-auto">
+                        {item.transcript_preview}
+                      </div>
+                    )}
+
+                    {/* Error message */}
+                    {item.error_message && (
+                      <div className="text-[10px] text-destructive">
+                        {item.error_message}
+                      </div>
+                    )}
+
+                    {/* Generate KIs button */}
+                    {canGenerateKI && onGenerateKIs && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-[10px] h-6 gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onGenerateKIs(item.id);
+                        }}
+                      >
+                        <Sparkles className="h-3 w-3" /> Generate KIs
+                      </Button>
+                    )}
+
+                    {isGenerating && (
+                      <div className="flex items-center gap-1 text-[10px] text-yellow-500">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Extracting knowledge items…
+                      </div>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             );
           })}
         </div>
       </ScrollArea>
 
       {/* Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {isActive && (
           <Button variant="outline" size="sm" className="text-xs gap-1" onClick={onCancel}>
             <Ban className="h-3 w-3" /> Cancel remaining
@@ -178,6 +256,11 @@ export function PodcastQueueProgress({ items, stats, isActive, isDone, onCancel,
         {isDone && (
           <Button variant="outline" size="sm" className="text-xs gap-1" onClick={onClear}>
             <Trash2 className="h-3 w-3" /> Clear queue
+          </Button>
+        )}
+        {stats.readyForKI > 0 && onGenerateAllKIs && (
+          <Button variant="default" size="sm" className="text-xs gap-1" onClick={onGenerateAllKIs}>
+            <Sparkles className="h-3 w-3" /> Generate KIs ({stats.readyForKI})
           </Button>
         )}
         {isActive && (
