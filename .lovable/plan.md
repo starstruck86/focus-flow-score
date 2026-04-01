@@ -1,108 +1,87 @@
 
 
-# Deep Resource Enrichment + Remaining 11 Features
+# Will This Plan Work for "Getting to Club" (id1696635955)?
 
-This plan consolidates the new deep enrichment requirements with the 11 previously identified unbuilt features into a single execution pass.
+## Yes — with caveats. Here's exactly what works and what doesn't today.
 
----
+### What works right now (no changes needed)
 
-## Part A: Deep Resource Enrichment (New)
+The URL `https://podcasts.apple.com/us/podcast/getting-to-club/id1696635955` will be correctly parsed by `extractApplePodcastId` — it extracts `1696635955`. The iTunes Lookup API will return the RSS feed URL, and the RSS parser will pull all episodes with titles and audio enclosure URLs. The import modal will show the full episode list with checkboxes. This part works.
 
-### A1. Database Migration
-Add `enriched_at` and `content_length` columns to the `resources` table, backfill existing enriched rows.
+### What breaks — 3 critical gaps
 
-```sql
-ALTER TABLE resources ADD COLUMN enriched_at timestamptz;
-ALTER TABLE resources ADD COLUMN content_length integer;
-UPDATE resources SET enriched_at = updated_at, content_length = length(coalesce(content, ''))
-  WHERE content_status = 'enriched';
-```
+**Gap 1: Transcript never reaches the resource**
+After import, each episode is stored as a resource with a URL (the audio enclosure). When transcription runs via `processAudioResource`, the transcript lands in `audio_jobs.transcript_text` — but it is **never written back** to `resources.content`. The `extract-tactics` edge function reads from `resources.content`, so it finds nothing. KI extraction silently produces zero results.
 
-### A2. Edge Function: Deeper Scraping
-Modify `enrich-resource-content/index.ts`:
-- Raise `CONTENT_CAP` from 15,000 to 60,000 characters
-- YouTube URLs: increase `waitFor` to 8000ms for transcript loading
-- Store `enriched_at = now()` and `content_length` on every successful enrichment
-- Accept `force: true` param to re-enrich already-enriched resources
-- Accept `resource_ids: string[]` for batch-by-IDs mode (re-enrich specific selected resources regardless of status)
-- Single mode: allow re-enrichment when `force: true` (currently only works on placeholders)
+**Gap 2: 10,000 character content cap**
+`extract-tactics` (lines 91–101) truncates content to ~10,000 characters. A 45–60 minute podcast episode produces ~50,000–90,000 characters of transcript. That means ~85% of the content is silently dropped, and KIs only come from the first ~10 minutes of each episode.
 
-### A3. Resource List UI: Enrichment Metadata + Selection
-Modify `ResourceManager.tsx`:
-- Below each external resource's date line, show enrichment info: "Enriched 3d ago - 14.2K chars" or shallow warning for < 5K chars
-- "Enrich Content" / "Re-enrich" dropdown item available for ALL external resources (not just `placeholder` status)
-- Add checkbox selection mode with `selectedResourceIds` state (Set)
-- Checkbox visible on hover or when any resource is selected
-- Floating bulk action bar at bottom when selection active: "N selected" + "Re-enrich Selected" + "Clear"
-- Re-enrich calls edge function with `{ resource_ids: [...], force: true }`
+**Gap 3: No show-level organization**
+Importing all episodes from "Getting to Club" creates dozens of flat resource rows with no grouping by show. No `source_registry` entry is created. No guest names are extracted from episode titles. When you later import a second podcast, everything becomes an undifferentiated pile.
 
-### A4. Intelligence Dashboard: Shallow/Stale Stats
-Modify `ResourceIntelligenceDashboard.tsx`:
-- Query now includes `enriched_at` and `content_length` from resources
-- Add "Shallow Content" stat (enriched resources with content_length < 5000)
-- Add "Stale" stat (enriched_at > 30 days ago)
-- "Re-enrich Shallow" button targeting resources with content_length < 5000
+### No auto-trigger gap
+There IS actually an auto-trigger — `useAddUrlResource` calls `autoOperationalizeResource` fire-and-forget after import. But it will fail silently because Gap 1 means there's no content to extract from.
 
 ---
 
-## Part B: Remaining 11 Features
+## Updated Build Plan
 
-### B1. Wake Word Wiring
-- `Layout.tsx`: Import and wire `useWakeWord({ onWake: handleOpenDave, enabled })` 
-- `Settings.tsx`: Add "Hey Dave" toggle, localStorage-persisted, hidden on unsupported browsers
+### Step 1: Transcript writeback in audioOrchestrator
+**File:** `src/lib/salesBrain/audioOrchestrator.ts`
 
-### B2. Scorecard Q&A UI
-- `Coach.tsx`: Add "Ask about this" button on each ScoreBlock
-- Opens inline dialog, calls `explain-score` edge function with grade data + transcript excerpt
-- Renders markdown response
+After successful transcription in `transcribeDirectAudio` (around line 348), add:
+- Write `transcript_text` to `resources.content` and `resources.cleaned_content`
+- Set `resources.extraction_method = 'audio_transcription'`
+- Set `resources.content_status = 'enriched'`
+- Then call `autoOperationalizeResource(resourceId)` to trigger KI extraction
 
-### B3. Post-Call Task Creation
-- `Coach.tsx`: After grading, if `missed_opportunities.length > 0`, show "Create Follow-up Tasks" prompt with pre-filled suggestions linked to account/opportunity
+This closes the pipeline: import → transcribe → writeback → extract KIs.
 
-### B4. Scorecard-Resource Cross-Reference
-- `Coach.tsx`: For weak categories (score < 3/5), query `resource_digests` matching use_cases
-- Surface "Study Material" links on scorecard
+### Step 2: Chunked extraction in extract-tactics
+**File:** `supabase/functions/extract-tactics/index.ts`
 
-### B5. grade-transcript Resource Metadata
-- `grade-transcript/index.ts`: Return `resource_id` and title alongside custom grading criteria so client can link back
+Replace the 10k truncation (lines 89–101) with:
+- If content < 12,000 chars: single-pass (as today)
+- If content > 12,000 chars: split into ~8,000 char chunks on paragraph boundaries with 500 char overlap
+- Run the AI extraction prompt on each chunk sequentially (to avoid rate limiting)
+- Include chunk position in user prompt: "Chunk 2 of 5"
+- Request 2–4 plays per chunk (not 2–6)
+- After all chunks: deduplicate by title similarity (lowercase, strip punctuation, >60% shared words = duplicate — keep the one with longer `source_excerpt`)
+- Cap total at 12–15 KIs per resource
+- Add `source_location` chunk reference
+- On 429: retry once after 2s, skip chunk if retry fails
+- Return `chunks_total`, `chunks_processed`, `chunks_failed` alongside `items`
 
-### B6. Digest Viewer in ResourceEditor
-- `ResourceEditor.tsx`: Add collapsible "Intelligence" section showing takeaways, use_cases, grading_criteria from the resource's digest, plus "Re-operationalize" button
+### Step 3: Enrich import-podcast with show + episode metadata
+**File:** `supabase/functions/import-podcast/index.ts`
 
-### B7. Pre-Call Resource Recommendations
-- `PreCallCoach.tsx`: Query `resource_digests` matching call context, surface 1-3 recommended resources with key takeaways
+- Extract from RSS: `<itunes:author>`, `<itunes:duration>`, `<pubDate>`, `<description>` per episode
+- Extract show-level: `<title>` (channel), `<itunes:author>`, `<description>`, `<itunes:image>`
+- Return show metadata in response: `{ show_title, show_author, show_description, show_image }`
+- Return per-episode: `{ title, url, description, duration, published, episode_number }`
+- Parse guest names from episode titles using common patterns (`"X | Y"`, `"X with Y"`, `"X feat. Y"`)
+- Support single-episode import: detect `?i=` parameter, use iTunes episode lookup to filter to just that episode
 
-### B8. Content Builder Transcript Intelligence
-- `ContentBuilder.tsx`: When account selected, fetch recent `transcript_grades`, surface pain points/objections as clickable chips that inject into generation prompt
+### Step 4: Auto-create source_registry entry per podcast
+**File:** `src/components/prep/PodcastImportModal.tsx`
 
-### B9. WHOOP Sync Reliability
-- `whoop-sync/index.ts`: Return `{ needsReconnect: true }` with 200 on token refresh failure instead of 500
-- `WhoopIntegration.tsx`: Detect `needsReconnect`, show reconnect button, auto-sync when stale
+- After fetching episodes, upsert a `source_registry` row with `name = show_title`, `source_type = 'podcast_rss'`, `url = RSS feed URL`, `metadata = { show_author, show_description, episode_count }`
+- Link every imported episode's `source_registry_id` to this entry
+- Populate `resources.author_or_speaker` from parsed guest name
 
-### B10. Dave Action Toasts
-- `clientTools.ts`: After each DB-writing tool success, emit `toast.success()` with action description
+### Step 5: Add podcast/speaker filters
+**Files:** Resource list and KI list components
 
-### B11. Dave Activity Log
-- `clientTools.ts`: Append action summaries to `localStorage` key `dave-activity-${today}`
+- Filter resources by `source_registry_id` (show)
+- Filter resources by `author_or_speaker`
+- Filter KIs by `who` and source podcast
 
 ---
 
-## Execution Order
+## Technical Details
 
-| Step | Items | Files |
-|------|-------|-------|
-| 1 | DB migration (A1) | migration SQL |
-| 2 | Deep enrichment edge function (A2) | `enrich-resource-content/index.ts` |
-| 3 | Resource list UI + bulk selection (A3) | `ResourceManager.tsx` |
-| 4 | Intelligence dashboard shallow/stale stats (A4) | `ResourceIntelligenceDashboard.tsx` |
-| 5 | Scorecard Q&A + post-call tasks + cross-ref (B2-B4) | `Coach.tsx` |
-| 6 | Digest viewer (B6) | `ResourceEditor.tsx` |
-| 7 | grade-transcript metadata (B5) | `grade-transcript/index.ts` |
-| 8 | Pre-call recommendations (B7) | `PreCallCoach.tsx` |
-| 9 | Content Builder intel (B8) | `ContentBuilder.tsx` |
-| 10 | Wake word wiring (B1) | `Layout.tsx`, `Settings.tsx` |
-| 11 | WHOOP reliability (B9) | `whoop-sync/index.ts`, `WhoopIntegration.tsx` |
-| 12 | Dave toasts + activity log (B10-B11) | `clientTools.ts` |
-
-**Total: 15 features across ~12 files, 1 DB migration, 1 edge function update.**
+- No new database tables or columns needed — `source_registry`, `resources.source_registry_id`, `resources.author_or_speaker` all exist
+- Edge functions `extract-tactics` and `import-podcast` need redeployment
+- Gemini 2.5 Flash supports ~1M token context; chunking is for extraction quality, not model limits — focused chunks produce better attribution
+- Sequential chunk processing to avoid rate limiting on the AI gateway
 
