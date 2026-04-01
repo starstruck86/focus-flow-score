@@ -2694,6 +2694,34 @@ async function orchestrateEnrichment(
     };
   }
 
+  // ── HARD BLOCK: Audio/podcast resources must NEVER use generic enrichment ──
+  // They must go through the transcript-first podcast pipeline exclusively.
+  const isAudioType = resource.resource_type && ['audio', 'podcast', 'transcript'].includes(resource.resource_type.toLowerCase());
+  const isAudioSource = source.source_type === 'podcast' || source.source_type === 'direct_audio';
+  if (isAudioType || isAudioSource) {
+    console.log(`[Orchestrate] AUDIO HARD BLOCK: id=${resourceId} resource_type=${resource.resource_type} source_type=${source.source_type} — routing to transcript pipeline`);
+
+    await setEnrichmentStatus(supabase, resourceId, 'needs_transcript', {
+      failure_reason: 'Audio/podcast content — must use transcript pipeline, not generic enrichment',
+      content_classification: 'audio',
+      recovery_status: 'pending_transcription',
+      recovery_reason: 'Audio resource blocked from generic enrichment — use podcast import or paste transcript',
+      next_best_action: 'start_transcription',
+      manual_input_required: false,
+      recovery_queue_bucket: 'auto_fixable',
+      transcript_status: resource.transcript_status || 'pending',
+    });
+
+    return {
+      resource_id: resourceId, url: url || '', source_classification: source,
+      final_status: 'blocked_audio', method_used: null, methods_attempted: [],
+      attempt_count: 0, extracted_text_length: 0, completeness_score: 0,
+      confidence_score: 0, missing_fields: ['transcript'],
+      failure_reason: 'Audio/podcast resources must use the transcript pipeline. Generic enrichment is blocked.',
+      recovery_hint: 'Import via podcast pipeline, paste transcript, or upload audio file for transcription.',
+    };
+  }
+
   // No URL
   if (!url || !url.startsWith("http")) {
     return {
