@@ -207,20 +207,26 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
   const selectedCount = selected.size;
   const showQueue = enqueued || queue.isActive || queue.isDone;
 
+  const ctaLabel = selectedCount === 0
+    ? 'Select episodes to queue'
+    : selectedCount === 1
+      ? 'Queue 1 episode'
+      : `Queue ${selectedCount} episodes`;
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Podcast className="h-5 w-5 text-primary" />
             Import Podcast
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
           {/* URL input — hide when queue is active */}
           {!showQueue && (
-            <>
+            <div className="flex-shrink-0 space-y-2">
               <p className="text-xs text-muted-foreground">
                 Paste an Apple Podcasts, Spotify, or RSS feed URL. Episodes are imported server-side — you can close the browser.
               </p>
@@ -236,12 +242,12 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
                   {fetching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Fetch'}
                 </Button>
               </div>
-            </>
+            </div>
           )}
 
           {/* Show metadata */}
           {showMeta?.show_title && !showQueue && (
-            <div className="flex items-center gap-3 p-2 rounded-md bg-muted/50">
+            <div className="flex-shrink-0 flex items-center gap-3 p-2 rounded-md bg-muted/50">
               {showMeta.show_image && (
                 <img src={showMeta.show_image} alt="" className="h-10 w-10 rounded-md object-cover" />
               )}
@@ -256,53 +262,84 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
 
           {/* Episode list with selection helpers */}
           {episodes.length > 0 && !showQueue && (
-            <>
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span>{episodes.length} episodes · {selectedCount} selected</span>
-                  {alreadyImported.size > 0 && (
-                    <Badge variant="outline" className="text-[10px] gap-1">
-                      <CheckCircle2 className="h-3 w-3 text-status-green" />
-                      {alreadyImported.size} already imported
-                    </Badge>
-                  )}
+            <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
+              {/* Selection header */}
+              <div className="flex-shrink-0 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">Selected: {selectedCount} episode{selectedCount !== 1 ? 's' : ''}</span>
+                    {alreadyImported.size > 0 && (
+                      <Badge variant="outline" className="text-[10px] gap-1">
+                        <CheckCircle2 className="h-3 w-3 text-status-green" />
+                        {alreadyImported.size} imported
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground">{episodes.length} total</span>
                 </div>
-                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={toggleAll}>
-                  {selected.size === newEpisodeCount ? 'Deselect All' : 'Select All'}
-                </Button>
-              </div>
 
-              {/* Smart selection helpers for large lists */}
-              {episodes.length > 50 && (
+                {/* Quick select buttons */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] text-muted-foreground">Quick select:</span>
-                  <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1" onClick={() => selectNewest(50)}>
-                    <CalendarDays className="h-3 w-3" /> Newest 50
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1" onClick={() => selectNewest(100)}>
-                    <CalendarDays className="h-3 w-3" /> Newest 100
-                  </Button>
+                  <span className="text-[10px] text-muted-foreground">Quick:</span>
+                  {[1, 2, 3].map(n => (
+                    <Button
+                      key={n}
+                      variant={selectedCount === n ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-6 text-[10px] px-2"
+                      onClick={() => selectNewest(n)}
+                    >
+                      {n}
+                    </Button>
+                  ))}
+                  {episodes.length > 50 && (
+                    <>
+                      <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={() => selectNewest(50)}>
+                        50
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={() => selectNewest(100)}>
+                        100
+                      </Button>
+                    </>
+                  )}
                   {guestCount > 0 && (
-                    <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1" onClick={selectWithGuests}>
-                      <Users className="h-3 w-3" /> With guests ({guestCount})
+                    <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={selectWithGuests}>
+                      <Users className="h-3 w-3" /> Guests ({guestCount})
                     </Button>
                   )}
+                  <div className="flex-1" />
+                  <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={toggleAll}>
+                    {selected.size === newEpisodeCount ? 'Clear All' : 'Select All'}
+                  </Button>
                 </div>
-              )}
+              </div>
 
-              <ScrollArea className="max-h-[260px] border rounded-md">
-                <div className="p-2 space-y-1">
+              {/* Scrollable episode list */}
+              <ScrollArea className="flex-1 min-h-0 border rounded-md">
+                <div className="p-1 space-y-0.5">
                   {episodes.map((episode, i) => {
                     const imported = alreadyImported.has(i);
+                    const isSelected = selected.has(i);
                     return (
-                      <label
+                      <div
                         key={i}
-                        className={`flex items-center gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer text-sm ${imported ? 'opacity-50' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => !imported && toggleEpisode(i)}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !imported && toggleEpisode(i); }}}
+                        className={`flex items-center gap-2 p-2 rounded cursor-pointer text-sm transition-colors ${
+                          imported
+                            ? 'opacity-40 cursor-not-allowed'
+                            : isSelected
+                              ? 'bg-primary/10 ring-1 ring-primary/30'
+                              : 'hover:bg-muted/50'
+                        }`}
                       >
                         <Checkbox
-                          checked={selected.has(i)}
+                          checked={isSelected}
                           onCheckedChange={() => toggleEpisode(i)}
                           disabled={imported}
+                          onClick={e => e.stopPropagation()}
                         />
                         <div className="flex-1 min-w-0">
                           <span className="block truncate">{episode.title}</span>
@@ -322,17 +359,17 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
                             <ExternalLink className="h-3 w-3" />
                           </a>
                         )}
-                      </label>
+                      </div>
                     );
                   })}
                 </div>
               </ScrollArea>
 
-              {/* Start import button */}
-              {selectedCount > 0 && (
+              {/* Fixed footer CTA */}
+              <div className="flex-shrink-0 pt-1">
                 <Button
                   onClick={handleStartImport}
-                  disabled={queue.loading}
+                  disabled={queue.loading || selectedCount === 0}
                   className="w-full gap-2"
                 >
                   {queue.loading ? (
@@ -340,10 +377,10 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
                   ) : (
                     <Podcast className="h-4 w-4" />
                   )}
-                  Queue {selectedCount} episodes for import
+                  {ctaLabel}
                 </Button>
-              )}
-            </>
+              </div>
+            </div>
           )}
 
           {/* Queue progress panel */}
@@ -377,7 +414,7 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
         </div>
 
         {(showQueue && !queue.isActive) && (
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0">
             <Button variant="outline" onClick={handleClose}>Close</Button>
           </DialogFooter>
         )}
