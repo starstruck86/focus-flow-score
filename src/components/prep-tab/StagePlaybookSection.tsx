@@ -34,34 +34,42 @@ function CitationSourceIcon({ citation }: { citation: string }) {
   return <FileText className="h-2.5 w-2.5 text-muted-foreground shrink-0" />;
 }
 
-function PlaybookItemRow({ item }: { item: PlaybookItem }) {
+function PlaybookItemRow({ item, stageId, framework, sectionHeading }: { item: PlaybookItem; stageId: string; framework?: string; sectionHeading: string }) {
   const config = TYPE_CONFIG[item.type] || TYPE_CONFIG.tactic;
   const Icon = config.icon;
   const [showCitations, setShowCitations] = useState(false);
 
   return (
-    <div className="group relative pl-6 py-1.5">
+    <div className="group/item relative pl-6 py-1.5 flex items-start gap-1">
       <Icon className={cn('absolute left-0 top-2 h-4 w-4', config.color)} />
-      <p className="text-sm text-foreground leading-relaxed">{item.content}</p>
-      {item.citations?.length > 0 && (
-        <button
-          onClick={() => setShowCitations(!showCitations)}
-          className="inline-flex items-center gap-1 mt-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Quote className="h-3 w-3" />
-          {item.citations.length} source{item.citations.length > 1 ? 's' : ''}
-        </button>
-      )}
-      {showCitations && item.citations?.length > 0 && (
-        <div className="mt-1.5 pl-3 border-l-2 border-muted space-y-0.5">
-          {item.citations.map((c, i) => (
-            <p key={i} className="text-[10px] text-muted-foreground italic flex items-center gap-1">
-              <CitationSourceIcon citation={c} />
-              {c}
-            </p>
-          ))}
-        </div>
-      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-foreground leading-relaxed">{item.content}</p>
+        {item.citations?.length > 0 && (
+          <button
+            onClick={() => setShowCitations(!showCitations)}
+            className="inline-flex items-center gap-1 mt-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Quote className="h-3 w-3" />
+            {item.citations.length} source{item.citations.length > 1 ? 's' : ''}
+          </button>
+        )}
+        {showCitations && item.citations?.length > 0 && (
+          <div className="mt-1.5 pl-3 border-l-2 border-muted space-y-0.5">
+            {item.citations.map((c, i) => (
+              <p key={i} className="text-[10px] text-muted-foreground italic flex items-center gap-1">
+                <CitationSourceIcon citation={c} />
+                {c}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+      <PlaybookItemFeedback
+        stageId={stageId}
+        framework={framework}
+        sectionHeading={sectionHeading}
+        itemContent={item.content}
+      />
     </div>
   );
 }
