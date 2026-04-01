@@ -10,7 +10,7 @@ import { Loader2, Podcast, ExternalLink } from 'lucide-react';
 import { useClassifyResource, useAddUrlResource } from '@/hooks/useResourceUpload';
 import { insertSource, getSources } from '@/data/source-registry';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/components/auth/AuthProvider';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 type Episode = {
