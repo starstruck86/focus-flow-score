@@ -225,11 +225,13 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
       try {
         // Look for existing resource with same user + lesson URL
-        const { data: existingResources } = await supabase
+        const { data: existingResources, error: dedupErr } = await supabase
           .from('resources')
           .select('id')
           .eq('file_url', lesson.url)
           .limit(1);
+        
+        console.log('[CourseImport] Dedup check for', lesson.url, '→ found:', existingResources?.length, 'error:', dedupErr?.message);
 
         let resourceId: string | null = null;
 
