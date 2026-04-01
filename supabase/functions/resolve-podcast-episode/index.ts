@@ -370,13 +370,29 @@ async function resolveAnchorEpisode(url: string): Promise<ResolveResult> {
   // Try to derive RSS feed URL — Anchor provides RSS at anchor.fm/s/{showId}/podcast/rss
   // or for new Spotify-hosted: podcasters.spotify.com/pod/{showName}/rss
   
+  // Stage 0: Check for embedded audio URL in anchor play URLs
+  const embeddedAudio = extractEmbeddedAudioUrl(url);
+  if (embeddedAudio) {
+    resolution.audioEnclosureUrl = embeddedAudio;
+    stages.push({ stage: 'extract_embedded_audio', status: 'done', detail: `Direct audio: ${embeddedAudio.slice(0, 80)}` });
+  }
+
+  // Try to derive RSS feed from the URL pattern
+  const showIdMatch = url.match(/anchor\.fm\/s\/([a-f0-9]+)\//i);
+  if (showIdMatch) {
+    const rssFeedCandidate = `https://anchor.fm/s/${showIdMatch[1]}/podcast/rss`;
+    resolution.rssFeedUrl = rssFeedCandidate;
+    stages.push({ stage: 'derived_rss_feed', status: 'done', detail: rssFeedCandidate });
+  }
+
   stages.push({ stage: 'resolving_anchor_rss', status: 'running' });
   
   // Try to scrape the anchor page to find the RSS link or audio player
   const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
   let pageContent = '';
   
-  if (firecrawlKey) {
+  // Only scrape if we don't already have audio
+  if (!resolution.audioEnclosureUrl && firecrawlKey) {
     try {
       const scrapeResp = await fetch('https://api.firecrawl.dev/v1/scrape', {
         method: 'POST',
@@ -395,10 +411,12 @@ async function resolveAnchorEpisode(url: string): Promise<ResolveResult> {
         }
         
         // Look for RSS link
-        const rssMatch = html.match(/(?:href)="(https?:\/\/[^"]*\/rss[^"]*)"/i)
-          || html.match(/(?:href)="(https?:\/\/anchor\.fm\/s\/[^"]*\/podcast\/rss)"/i);
-        if (rssMatch) {
-          resolution.rssFeedUrl = rssMatch[1];
+        if (!resolution.rssFeedUrl) {
+          const rssMatch = html.match(/(?:href)="(https?:\/\/[^"]*\/rss[^"]*)"/i)
+            || html.match(/(?:href)="(https?:\/\/anchor\.fm\/s\/[^"]*\/podcast\/rss)"/i);
+          if (rssMatch) {
+            resolution.rssFeedUrl = rssMatch[1];
+          }
         }
         
         // Extract title from page
@@ -418,6 +436,8 @@ async function resolveAnchorEpisode(url: string): Promise<ResolveResult> {
     } catch (e) {
       stages[stages.length - 1] = { stage: 'resolving_anchor_rss', status: 'failed', detail: String(e) };
     }
+  } else if (resolution.audioEnclosureUrl) {
+    stages[stages.length - 1] = { stage: 'resolving_anchor_rss', status: 'skipped', detail: 'Audio already extracted from URL' };
   } else {
     stages[stages.length - 1] = { stage: 'resolving_anchor_rss', status: 'failed', detail: 'No Firecrawl key for page scrape' };
   }
