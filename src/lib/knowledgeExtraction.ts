@@ -209,6 +209,8 @@ interface ExtractedTactic {
   chapter: string;
   sub_chapter: string | null;
   knowledge_type: 'skill' | 'product' | 'competitive';
+  who?: string | null;
+  framework?: string | null;
 }
 
 /**
