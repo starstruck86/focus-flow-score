@@ -1,0 +1,3 @@
+ALTER TABLE public.course_lesson_imports
+ADD CONSTRAINT course_lesson_imports_user_lesson_course_unique
+UNIQUE (user_id, lesson_url, original_course_url);
