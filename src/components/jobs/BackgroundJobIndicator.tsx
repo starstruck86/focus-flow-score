@@ -8,7 +8,7 @@ import { Loader2, AlertTriangle, CheckCircle2, Inbox } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function BackgroundJobIndicator() {
-  const counts = useBackgroundJobs(selectJobCounts);
+  const counts = useBackgroundJobs(useShallow(selectJobCounts));
   const toggleDrawer = useBackgroundJobs((s) => s.toggleDrawer);
 
   // Nothing to show
