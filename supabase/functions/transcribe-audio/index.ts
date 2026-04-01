@@ -81,9 +81,11 @@ serve(async (req) => {
 
     const ct = (meta.contentType || "").toLowerCase();
     const isAudio = ct.includes("audio") || ct.includes("mpeg") || ct.includes("octet-stream") || ct.includes("mp3") || ct.includes("ogg") || ct.includes("wav") || ct.includes("webm");
-    // Some CDNs return generic content types for audio — if the URL has an audio extension, allow it
+    const isVideo = ct.includes("video") || ct.includes("mp4");
+    // Some CDNs return generic content types for audio — if the URL has an audio/video extension, allow it
     const urlLooksAudio = /\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)(\?|#|$)/i.test(audio_url);
-    if (!isAudio && !urlLooksAudio) {
+    const urlLooksVideo = /\.(mp4|webm|mov)(\?|#|$)/i.test(audio_url);
+    if (!isAudio && !isVideo && !urlLooksAudio && !urlLooksVideo) {
       return jsonResp({
         success: false,
         failureCode: "INVALID_CONTENT_TYPE",
