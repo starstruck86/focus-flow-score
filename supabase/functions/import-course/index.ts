@@ -594,25 +594,25 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     content = videoEmbeds.join('\n') + '\n\n' + content;
   }
   
-  // Transcribe Wistia videos
+  // Resolve Wistia video media URLs for transcription
+  let mediaUrl = '';
+  let videoDuration = 0;
   const wistiaIds = videoEmbeds
     .filter(v => v.startsWith('[Wistia Video:'))
     .map(v => v.match(/\[Wistia Video: ([a-z0-9]+)\]/i)?.[1])
     .filter(Boolean) as string[];
   
   if (wistiaIds.length > 0) {
-    debug.push(`Transcribing ${wistiaIds.length} Wistia video(s)...`);
-    // Transcribe the first/primary video (most lessons have one)
-    const transcript = await transcribeWistiaVideo(wistiaIds[0], debug);
-    if (transcript) {
-      content = content + '\n\n--- Video Transcript ---\n\n' + transcript;
-      debug.push(`Appended transcript: ${transcript.length} chars`);
+    const resolved = await resolveWistiaMediaUrl(wistiaIds[0], debug);
+    if (resolved) {
+      mediaUrl = resolved.url;
+      videoDuration = resolved.duration;
     }
   }
   
-  debug.push(`Content extracted: ${content.length} chars, type: ${type}`);
+  debug.push(`Content extracted: ${content.length} chars, type: ${type}, mediaUrl: ${mediaUrl ? 'yes' : 'no'}`);
   
-  return { title, content, type, debug };
+  return { title, content, type, debug, media_url: mediaUrl || undefined, video_duration: videoDuration || undefined };
 }
 
 Deno.serve(async (req) => {
