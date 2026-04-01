@@ -2696,9 +2696,9 @@ async function orchestrateEnrichment(
 
   // ── HARD BLOCK: Audio/podcast resources must NEVER use generic enrichment ──
   // They must go through the transcript-first podcast pipeline exclusively.
-  const isAudioType = resource.resource_type && ['audio', 'podcast', 'transcript'].includes(resource.resource_type.toLowerCase());
-  const isAudioSource = source.source_type === 'podcast' || source.source_type === 'direct_audio';
-  if (isAudioType || isAudioSource) {
+  const isAudioResourceType = resource.resource_type && ['audio', 'podcast', 'transcript'].includes(resource.resource_type.toLowerCase());
+  const isAudioSourceType = source.source_type === 'podcast' || source.source_type === 'direct_audio';
+  if (isAudioResourceType || isAudioSourceType) {
     console.log(`[Orchestrate] AUDIO HARD BLOCK: id=${resourceId} resource_type=${resource.resource_type} source_type=${source.source_type} — routing to transcript pipeline`);
 
     await setEnrichmentStatus(supabase, resourceId, 'needs_transcript', {
