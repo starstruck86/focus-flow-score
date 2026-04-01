@@ -15,6 +15,12 @@ export interface QueueItem {
   resource_id: string | null;
   attempts: number;
   processed_at: string | null;
+  platform: string | null;
+  transcript_status: string | null;
+  failure_type: string | null;
+  content_validation: Record<string, any> | null;
+  ki_status: string | null;
+  ki_count: number;
 }
 
 export interface QueueStats {
@@ -24,6 +30,20 @@ export interface QueueStats {
   complete: number;
   failed: number;
   skipped: number;
+  totalKIs: number;
+}
+
+function detectPlatform(url: string): string {
+  const u = url.toLowerCase();
+  if (u.includes("spotify.com") || u.includes("open.spotify")) return "spotify";
+  if (u.includes("apple.com/podcast") || u.includes("podcasts.apple")) return "apple";
+  if (u.includes("youtube.com") || u.includes("youtu.be")) return "youtube";
+  if (u.includes("anchor.fm") || u.includes("podcasters.spotify")) return "anchor";
+  if (u.includes("buzzsprout.com")) return "buzzsprout";
+  if (u.includes("libsyn.com")) return "libsyn";
+  if (u.endsWith(".mp3") || u.endsWith(".m4a") || u.endsWith(".wav")) return "direct_audio";
+  if (u.includes("/feed") || u.includes("rss") || u.includes(".xml")) return "rss_direct";
+  return "unknown";
 }
 
 export function usePodcastQueue() {
@@ -36,7 +56,7 @@ export function usePodcastQueue() {
     if (!user) return;
     const { data } = await supabase
       .from('podcast_import_queue')
-      .select('id, episode_url, episode_title, status, error_message, resource_id, attempts, processed_at')
+      .select('id, episode_url, episode_title, status, error_message, resource_id, attempts, processed_at, platform, transcript_status, failure_type, content_validation, ki_status, ki_count')
       .eq('user_id', user.id)
       .in('status', ['queued', 'processing', 'complete', 'failed', 'skipped'])
       .order('created_at', { ascending: true });
@@ -79,9 +99,10 @@ export function usePodcastQueue() {
 
   // ── Stats ──
   const stats: QueueStats = useMemo(() => {
-    const s = { total: items.length, queued: 0, processing: 0, complete: 0, failed: 0, skipped: 0 };
+    const s = { total: items.length, queued: 0, processing: 0, complete: 0, failed: 0, skipped: 0, totalKIs: 0 };
     items.forEach(i => {
-      if (i.status in s) s[i.status as keyof Omit<QueueStats, 'total'>]++;
+      if (i.status in s) s[i.status as keyof Omit<QueueStats, 'total' | 'totalKIs'>]++;
+      s.totalKIs += i.ki_count || 0;
     });
     return s;
   }, [items]);
@@ -114,6 +135,7 @@ export function usePodcastQueue() {
       episode_duration: ep.duration || null,
       show_author: showAuthor || null,
       status: 'queued' as const,
+      platform: detectPlatform(ep.url),
     }));
 
     // Insert in batches of 100
