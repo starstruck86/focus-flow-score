@@ -116,7 +116,9 @@ Format as JSON array:
   "why_it_matters": "concrete impact statement",
   "chapter": "cold_calling|discovery|objection_handling|negotiation|competitors|personas|messaging|closing|stakeholder_navigation|expansion|demo|follow_up",
   "knowledge_type": "skill|product|competitive",
-  "sub_chapter": "optional"
+  "sub_chapter": "optional",
+  "who": "thought leader behind this (e.g. Keenan, Chris Voss). Empty string if unknown.",
+  "framework": "methodology name (e.g. GAP Selling, MEDDICC). Empty string if not applicable."
 }]
 
 Only return the JSON array, no markdown.`;

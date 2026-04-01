@@ -25,6 +25,8 @@ export interface KnowledgeItem {
   active: boolean;
   user_edited: boolean;
   tags: string[];
+  who: string | null;
+  framework: string | null;
   created_at: string;
   updated_at: string;
 }
