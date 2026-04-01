@@ -347,6 +347,26 @@ export async function transcribeDirectAudio(
       updated_at: new Date().toISOString(),
     }).eq('id', job.id);
 
+    // ── Transcript writeback: push transcript into resources.content ──
+    if (!isQualityFailed && result.transcript && result.transcript.length > 100) {
+      console.log(`[audioOrchestrator] Writing back transcript to resource ${resourceId} (${result.totalWords} words)`);
+      await (supabase as any).from('resources').update({
+        content: result.transcript,
+        cleaned_content: result.transcript,
+        extraction_method: 'audio_transcription',
+        content_status: 'enriched',
+        updated_at: new Date().toISOString(),
+      }).eq('id', resourceId);
+
+      // Trigger KI extraction now that content is available
+      try {
+        const { autoOperationalizeResource } = await import('@/lib/autoOperationalize');
+        autoOperationalizeResource(resourceId).catch((e: any) =>
+          console.warn('[audioOrchestrator] Auto-operationalize failed (non-fatal):', e?.message)
+        );
+      } catch { /* dynamic import guard */ }
+    }
+
     return {
       success: true, jobId: job.id, transcript: result.transcript, totalWords: result.totalWords,
       quality, failureCode: null, failureReason: null,

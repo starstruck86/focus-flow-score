@@ -5,48 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-trace-id',
 };
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const { title, content, description, tags, resourceType } = await req.json();
-
-    if (!content || content.length < 100) {
-      return new Response(JSON.stringify({ items: [] }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: 'AI not configured' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const systemPrompt = `You are an elite sales execution coach. Extract TACTICAL PLAYS from content.
+const SYSTEM_PROMPT = `You are an elite sales execution coach. Extract TACTICAL PLAYS from content.
 
 A Knowledge Item is a PLAY — a structured, situational, reusable tactical entry that tells a rep exactly when, why, and how to execute. Every play must be FULLY ATTRIBUTED to its source.
 
@@ -83,118 +42,268 @@ QUALITY GATES — REJECT any item that:
 - Has no clear source attribution
 - Could apply to any situation (not situational enough)
 
-Return 2-6 high-quality tactical plays as a JSON array. Fewer is better — quality over quantity.
+Return 2-4 high-quality tactical plays as a JSON array. Fewer is better — quality over quantity.
 Only return the JSON array, no markdown fences.`;
 
-    // Chunk content for extraction
-    let contentForExtraction: string;
-    if (content.length > 3000) {
-      const paragraphs = content.split(/\n\n+/).filter((p: string) => p.trim().length > 50);
-      let accumulated = '';
-      for (const p of paragraphs) {
-        if (accumulated.length + p.length > 10000) break;
-        accumulated += p + '\n\n';
-      }
-      contentForExtraction = accumulated || content.slice(0, 10000);
+const CHUNK_SIZE = 8000;
+const CHUNK_OVERLAP = 500;
+const MAX_KIS_PER_RESOURCE = 15;
+const SINGLE_PASS_THRESHOLD = 12000;
+
+/** Split content into overlapping chunks on paragraph boundaries */
+function chunkContent(content: string): string[] {
+  if (content.length <= SINGLE_PASS_THRESHOLD) return [content];
+
+  const paragraphs = content.split(/\n\n+/).filter(p => p.trim().length > 20);
+  const chunks: string[] = [];
+  let current = '';
+  let overlapBuffer = '';
+
+  for (const para of paragraphs) {
+    if (current.length + para.length > CHUNK_SIZE && current.length > 0) {
+      chunks.push(current);
+      // Start next chunk with overlap from end of current
+      overlapBuffer = current.slice(-CHUNK_OVERLAP);
+      current = overlapBuffer + '\n\n' + para;
     } else {
-      contentForExtraction = content.slice(0, 12000);
+      current += (current ? '\n\n' : '') + para;
+    }
+  }
+  if (current.trim().length > 200) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
+/** Call AI gateway for a single chunk */
+async function extractFromChunk(
+  apiKey: string,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<any[]> {
+  const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      max_tokens: 6000,
+      temperature: 0.2,
+    }),
+  });
+
+  if (!res.ok) {
+    const status = res.status;
+    // On 429 retry once after 2s
+    if (status === 429) {
+      await new Promise(r => setTimeout(r, 2000));
+      const retry = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          max_tokens: 6000,
+          temperature: 0.2,
+        }),
+      });
+      if (!retry.ok) throw new Error(`AI error after retry: ${retry.status}`);
+      const retryResult = await retry.json();
+      return parseAiResponse(retryResult);
+    }
+    throw new Error(`AI error: ${status}`);
+  }
+
+  const result = await res.json();
+  return parseAiResponse(result);
+}
+
+function parseAiResponse(result: any): any[] {
+  const raw = result.choices?.[0]?.message?.content || '[]';
+  try {
+    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch {
+    return [];
+  }
+}
+
+/** Deduplicate by title similarity */
+function deduplicateItems(items: any[]): any[] {
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  const words = (s: string) => new Set(normalize(s).split(/\s+/).filter(w => w.length > 2));
+
+  const result: any[] = [];
+  for (const item of items) {
+    const itemWords = words(item.title || '');
+    let isDupe = false;
+    for (let i = 0; i < result.length; i++) {
+      const existingWords = words(result[i].title || '');
+      // Check containment or >60% word overlap
+      const intersection = [...itemWords].filter(w => existingWords.has(w));
+      const overlapRatio = intersection.length / Math.min(itemWords.size, existingWords.size);
+      if (overlapRatio > 0.6 || normalize(item.title).includes(normalize(result[i].title)) || normalize(result[i].title).includes(normalize(item.title))) {
+        isDupe = true;
+        // Keep the one with longer source_excerpt
+        if ((item.source_excerpt?.length || 0) > (result[i].source_excerpt?.length || 0)) {
+          result[i] = item;
+        }
+        break;
+      }
+    }
+    if (!isDupe) result.push(item);
+  }
+  return result;
+}
+
+/** Validate a single extracted item */
+function validateItem(item: any): boolean {
+  const MIN_FIELD_LEN = 40;
+  const HTML_PATTERN = /<[a-z][\s\S]*>/i;
+
+  if (!item.framework || item.framework.trim() === '') return false;
+  if (!item.who || item.who.trim() === '') return false;
+  if (!item.source_excerpt || item.source_excerpt.length < 20) return false;
+  if (!item.source_location || item.source_location.trim() === '') return false;
+  if (!item.title) return false;
+  if (!item.tactic_summary || item.tactic_summary.length < 30) return false;
+  if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return false;
+  if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return false;
+  if (!item.how_to_execute || item.how_to_execute.length < MIN_FIELD_LEN) return false;
+  if (!item.when_to_use || item.when_to_use.length < 20) return false;
+
+  const example = item.example_usage || item.example || '';
+  if (example.length < 30) return false;
+
+  const allText = [item.title, item.tactic_summary, item.macro_situation, item.how_to_execute, example].join(' ');
+  if (HTML_PATTERN.test(allText)) return false;
+
+  return true;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const userPrompt = `Extract structured tactical plays from this ${resourceType || 'document'}:
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
 
-Title: ${title}
-${description ? `Description: ${description}` : ''}
-Tags: ${(tags || []).join(', ')}
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-Content:
-${contentForExtraction}
+    const { title, content, description, tags, resourceType } = await req.json();
 
-Remember: every play MUST include source_excerpt (verbatim quote), source_location, framework, and who. No play without attribution.`;
-
-    const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 6000,
-        temperature: 0.2,
-      }),
-    });
-
-    if (!aiRes.ok) {
-      const status = aiRes.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: 'Rate limited, try again later' }), {
-          status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: 'Credits exhausted' }), {
-          status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      console.error('AI error:', status, await aiRes.text());
-      return new Response(JSON.stringify({ items: [] }), {
+    if (!content || content.length < 100) {
+      return new Response(JSON.stringify({ items: [], chunks_total: 0, chunks_processed: 0, chunks_failed: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const aiResult = await aiRes.json();
-    const raw = aiResult.choices?.[0]?.message?.content || '[]';
-
-    let items;
-    try {
-      const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      items = JSON.parse(cleaned);
-    } catch {
-      items = [];
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      return new Response(JSON.stringify({ error: 'AI not configured' }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    // Strict validation — reject low-quality or unattributed items
-    const MIN_FIELD_LEN = 40;
-    const HTML_PATTERN = /<[a-z][\s\S]*>/i;
+    // ── Chunked extraction ──
+    const chunks = chunkContent(content);
+    const totalChunks = chunks.length;
+    let processedChunks = 0;
+    let failedChunks = 0;
+    const allItems: any[] = [];
 
-    const validated = (items || []).filter((item: any) => {
-      // Required attribution
-      if (!item.framework || item.framework.trim() === '') return false;
-      if (!item.who || item.who.trim() === '') return false;
-      if (!item.source_excerpt || item.source_excerpt.length < 20) return false;
-      if (!item.source_location || item.source_location.trim() === '') return false;
+    console.log(`[extract-tactics] Content: ${content.length} chars → ${totalChunks} chunk(s)`);
 
-      // Required tactical depth
-      if (!item.title) return false;
-      if (!item.tactic_summary || item.tactic_summary.length < 30) return false;
-      if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return false;
-      if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return false;
-      if (!item.how_to_execute || item.how_to_execute.length < MIN_FIELD_LEN) return false;
-      if (!item.when_to_use || item.when_to_use.length < 20) return false;
+    for (let i = 0; i < chunks.length; i++) {
+      const chunkLabel = totalChunks > 1 ? `Chunk ${i + 1} of ${totalChunks}` : '';
+      const approxPosition = totalChunks > 1
+        ? `~${Math.round((i / totalChunks) * 100)}% through the content`
+        : '';
 
-      // Example required
-      const example = item.example_usage || item.example || '';
-      if (example.length < 30) return false;
+      const userPrompt = `Extract structured tactical plays from this ${resourceType || 'document'}:
 
-      // Reject HTML/CSS artifacts
-      const allText = [item.title, item.tactic_summary, item.macro_situation, item.how_to_execute, example].join(' ');
-      if (HTML_PATTERN.test(allText)) return false;
+Title: ${title}
+${description ? `Description: ${description}` : ''}
+Tags: ${(tags || []).join(', ')}
+${chunkLabel ? `\nPosition: ${chunkLabel} (${approxPosition})` : ''}
+${totalChunks > 1 ? `\nIMPORTANT: Extract 2-4 plays from THIS section only. Do not repeat plays from other sections.` : ''}
 
-      return true;
-    }).map((item: any) => ({
-      ...item,
-      tactic_summary: item.tactic_summary,
-      example_usage: item.example_usage || item.example,
-      why_it_matters: item.why_it_matters || item.why_this_works || item.micro_strategy,
-      what_this_unlocks: item.what_this_unlocks || null,
-      source_title: title, // from the resource being extracted
-    }));
+Content:
+${chunks[i]}
 
-    return new Response(JSON.stringify({ items: validated }), {
+Remember: every play MUST include source_excerpt (verbatim quote), source_location, framework, and who. No play without attribution.`;
+
+      try {
+        const chunkItems = await extractFromChunk(LOVABLE_API_KEY, SYSTEM_PROMPT, userPrompt);
+        // Tag items with chunk position
+        for (const item of chunkItems) {
+          if (totalChunks > 1 && item.source_location) {
+            item.source_location = `${chunkLabel} — ${item.source_location}`;
+          }
+        }
+        allItems.push(...chunkItems);
+        processedChunks++;
+        console.log(`[extract-tactics] ${chunkLabel || 'Single pass'}: ${chunkItems.length} items`);
+      } catch (err) {
+        failedChunks++;
+        console.error(`[extract-tactics] ${chunkLabel} failed:`, err);
+      }
+    }
+
+    // Deduplicate across chunks
+    const deduped = deduplicateItems(allItems);
+
+    // Validate and normalize
+    const validated = deduped
+      .filter(validateItem)
+      .slice(0, MAX_KIS_PER_RESOURCE)
+      .map((item: any) => ({
+        ...item,
+        tactic_summary: item.tactic_summary,
+        example_usage: item.example_usage || item.example,
+        why_it_matters: item.why_it_matters || item.why_this_works || item.micro_strategy,
+        what_this_unlocks: item.what_this_unlocks || null,
+        source_title: title,
+      }));
+
+    console.log(`[extract-tactics] Final: ${validated.length} validated items from ${processedChunks}/${totalChunks} chunks`);
+
+    return new Response(JSON.stringify({
+      items: validated,
+      chunks_total: totalChunks,
+      chunks_processed: processedChunks,
+      chunks_failed: failedChunks,
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
