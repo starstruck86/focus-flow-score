@@ -7,60 +7,76 @@ const corsHeaders = {
 };
 
 const STAGE_LABELS: Record<string, string> = {
-  outbound: "Outbound Prospecting",
-  discovery: "Discovery",
-  demo: "Demo / Presentation",
-  pricing: "Pricing & Negotiation",
-  champion: "Champion Building",
+  outbound: "Account Snapshot",
+  discovery: "Discovery Prep",
+  demo: "Demo Prep",
+  pricing: "Pricing & ROI",
+  champion: "Champion / Alignment",
   procurement: "Procurement",
   closing: "Closing",
   post_sale: "Post-Sale / Expansion",
+  call_plan: "Call Plan",
+  deal_strategy: "Deal Strategy",
+  follow_up: "Follow-Up / Recap",
 };
 
-/**
- * Unified Sales Operating System — framework roles per stage.
- * Each framework owns a specific function; the playbook merges them.
- */
-const STAGE_FRAMEWORKS: Record<string, { framework: string; role: string; sections: string[] }[]> = {
+const FRAMEWORK_AUTHORS: Record<string, string> = {
+  "GAP Selling": "Keenan",
+  "Challenger": "Dixon",
+  "MEDDPICC": "McMahon",
+  "Command of the Message": "Force Management",
+};
+
+const STAGE_FRAMEWORKS: Record<string, { framework: string; who: string; role: string; sections: string[] }[]> = {
   outbound: [
-    { framework: "GAP Selling", role: "Problem-centric messaging", sections: ["Problem Hypotheses", "Current State Triggers", "Impact Hooks"] },
-    { framework: "Challenger", role: "Insight-led outreach", sections: ["Reframe Angles", "Teaching POVs", "Constructive Tension Openers"] },
-    { framework: "Command of the Message", role: "Value messaging structure", sections: ["Value Pillars for Outreach", "Required Capabilities Hooks"] },
+    { framework: "Challenger", who: "Dixon", role: "Hypothesis-driven outreach", sections: ["Business Overview", "Digital / Lifecycle Signals", "Challenger Hypothesis"] },
+    { framework: "GAP Selling", who: "Keenan", role: "Problem-centric messaging", sections: ["Problem Hypotheses", "Impact Hooks"] },
+    { framework: "Command of the Message", who: "Force Management", role: "Value messaging structure", sections: ["Value Pillars for Outreach"] },
   ],
   discovery: [
-    { framework: "GAP Selling", role: "Current state → future state → gap → impact", sections: ["Current State Questions", "Future State Vision", "Gap Identification", "Impact Quantification"] },
-    { framework: "Challenger", role: "Blind spots & reframes", sections: ["Blind Spot Insights", "Reframe Ideas", "Commercial Teaching Moments"] },
-    { framework: "Command of the Message", role: "Conversation structure & pillars", sections: ["Conversation Flow", "Required Capabilities", "Positive Business Outcomes"] },
-    { framework: "MEDDPICC", role: "Early qualification signals", sections: ["Metrics to Uncover", "Economic Buyer Signals", "Champion Indicators"] },
+    { framework: "GAP Selling", who: "Keenan", role: "Current state > future state > gap > impact", sections: ["Current State", "Desired State", "Problems / Gaps", "Impact"] },
+    { framework: "Challenger", who: "Dixon", role: "Blind spots & reframes", sections: ["Blind Spots", "Reframe Ideas", "Insight Hooks"] },
+    { framework: "Command of the Message", who: "Force Management", role: "Conversation structure & pillars", sections: ["Three Conversation Pillars"] },
+    { framework: "MEDDPICC", who: "McMahon", role: "Early qualification signals", sections: ["Metrics to Uncover", "Economic Buyer Signals", "Champion Indicators"] },
+  ],
+  call_plan: [
+    { framework: "Command of the Message", who: "Force Management", role: "Conversation structure", sections: ["Opening", "Agenda", "Flow"] },
+    { framework: "GAP Selling", who: "Keenan", role: "Key discovery questions", sections: ["Key Discovery Questions"] },
+    { framework: "Challenger", who: "Dixon", role: "Where to introduce insights", sections: ["Insight Introduction Points"] },
   ],
   demo: [
-    { framework: "Challenger", role: "Teaching moments & insight delivery", sections: ["Teaching Moments", "Insight Sequence", "Constructive Tension Points"] },
-    { framework: "Command of the Message", role: "Narrative flow & structure", sections: ["Demo Storyline", "Value Framework Alignment", "Before/After Narrative"] },
-    { framework: "GAP Selling", role: "Tie to customer problems", sections: ["Problem-to-Feature Mapping", "Gap Visualization", "Impact Reinforcement"] },
+    { framework: "Challenger", who: "Dixon", role: "Teaching moments & insight delivery", sections: ["Teaching Moments", "Reframe"] },
+    { framework: "Command of the Message", who: "Force Management", role: "Narrative flow & structure", sections: ["Demo Narrative", "Demo Flow"] },
+    { framework: "GAP Selling", who: "Keenan", role: "Tie to customer problems", sections: ["Problem-to-Feature Mapping"] },
+  ],
+  deal_strategy: [
+    { framework: "MEDDPICC", who: "McMahon", role: "Full deal qualification & progression", sections: ["Metrics", "Economic Buyer", "Decision Criteria", "Decision Process", "Paper Process", "Competition", "Champion"] },
+    { framework: "GAP Selling", who: "Keenan", role: "Urgency & cost of inaction", sections: ["Urgency"] },
+    { framework: "Challenger", who: "Dixon", role: "Risk framing", sections: ["Risk Framing"] },
   ],
   pricing: [
-    { framework: "Command of the Message", role: "Value justification", sections: ["Value Framework Recap", "ROI Narrative", "Positive Business Outcomes"] },
-    { framework: "GAP Selling", role: "Cost of inaction", sections: ["Current State Cost", "Gap Urgency", "Impact of Delay"] },
-    { framework: "MEDDPICC", role: "Decision process navigation", sections: ["Decision Criteria Alignment", "Decision Process Map", "Paper Process Steps"] },
+    { framework: "Command of the Message", who: "Force Management", role: "Value justification", sections: ["Value Framework Recap", "ROI Narrative"] },
+    { framework: "GAP Selling", who: "Keenan", role: "Cost of inaction", sections: ["Current State Cost", "Impact of Delay"] },
+    { framework: "MEDDPICC", who: "McMahon", role: "Decision process navigation", sections: ["Decision Criteria Alignment", "Paper Process Steps"] },
   ],
   champion: [
-    { framework: "MEDDPICC", role: "Champion development & testing", sections: ["Champion Identification", "Champion Testing Questions", "Champion Coaching Plan"] },
-    { framework: "Challenger", role: "Equipping champions with insights", sections: ["Internal Selling Insights", "Reframe Ammunition", "Executive Talking Points"] },
-    { framework: "Command of the Message", role: "Arming with value narrative", sections: ["Champion Value Story", "Required Capabilities Brief", "Competitive Differentiation"] },
+    { framework: "MEDDPICC", who: "McMahon", role: "Champion development & testing", sections: ["Champion Identification", "Champion Testing", "Champion Coaching"] },
+    { framework: "Challenger", who: "Dixon", role: "Equipping with insights", sections: ["Internal Selling Insights", "Executive Talking Points"] },
+    { framework: "Command of the Message", who: "Force Management", role: "Arming with value narrative", sections: ["Champion Value Story"] },
   ],
   procurement: [
-    { framework: "MEDDPICC", role: "Paper process & decision navigation", sections: ["Decision Process Mapping", "Paper Process Steps", "Risk Identification"] },
-    { framework: "Command of the Message", role: "Maintaining value through procurement", sections: ["Value Recap for Procurement", "Concession Strategy", "Differentiation Defense"] },
+    { framework: "MEDDPICC", who: "McMahon", role: "Paper process & decision navigation", sections: ["Decision Process Map", "Risk Identification"] },
+    { framework: "Command of the Message", who: "Force Management", role: "Maintaining value through procurement", sections: ["Value Recap", "Concession Strategy"] },
   ],
   closing: [
-    { framework: "MEDDPICC", role: "Final qualification & risk check", sections: ["MEDDPICC Scorecard Review", "Risk Signals", "Competition Assessment"] },
-    { framework: "GAP Selling", role: "Urgency reinforcement", sections: ["Gap Urgency Recap", "Cost of Inaction", "Impact Timeline"] },
-    { framework: "Command of the Message", role: "Final value alignment", sections: ["Executive Value Summary", "Before/After Narrative", "Decision Confidence"] },
+    { framework: "MEDDPICC", who: "McMahon", role: "Final qualification & risk check", sections: ["MEDDPICC Scorecard", "Risk Signals"] },
+    { framework: "GAP Selling", who: "Keenan", role: "Urgency reinforcement", sections: ["Cost of Inaction"] },
+    { framework: "Command of the Message", who: "Force Management", role: "Final value alignment", sections: ["Executive Value Summary"] },
   ],
   post_sale: [
-    { framework: "GAP Selling", role: "New gaps for expansion", sections: ["Expansion Gaps", "New Future State Vision", "Adoption Impact"] },
-    { framework: "MEDDPICC", role: "Expansion qualification", sections: ["New Metrics & Success", "Expansion Champion", "Cross-Sell Qualification"] },
-    { framework: "Challenger", role: "Ongoing insight delivery", sections: ["Strategic Business Reviews", "Industry Insight Sharing", "Proactive Teaching"] },
+    { framework: "GAP Selling", who: "Keenan", role: "New gaps for expansion", sections: ["Expansion Gaps", "New Future State"] },
+    { framework: "MEDDPICC", who: "McMahon", role: "Expansion qualification", sections: ["New Metrics & Success", "Expansion Champion"] },
+    { framework: "Challenger", who: "Dixon", role: "Ongoing insight delivery", sections: ["Strategic Insights", "Proactive Teaching"] },
   ],
 };
 
@@ -141,34 +157,34 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Build resource map for citations
     const resourceMap = new Map(resources.map(r => [r.id, r]));
+    const keystoneIdSet = new Set(keystone_resource_ids || []);
 
-    // Build context for AI
+    // Build context — tag each source as Keystone, Supporting, or KI
     const keystoneContext = (keystone_resource_ids || [])
       .map((id: string) => {
         const r = resourceMap.get(id);
         if (!r) return null;
         const linkedKIs = allKIs.filter(ki => ki.source_resource_id === id);
-        return `### [KEYSTONE] ${r.title} (${r.resource_type})
+        return `### [KEYSTONE RESOURCE] ${r.title} (${r.resource_type})
 Tags: ${(r.tags || []).join(", ") || "none"}
 Content preview: ${(r.content || "").slice(0, 600)}
 Linked Knowledge Items (${linkedKIs.length}):
-${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework}]` : ''}: ${ki.tactic_summary || "N/A"}`).join("\n")}`;
+${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework} — ${ki.who || ''}]` : ''}: ${ki.tactic_summary || "N/A"}`).join("\n")}`;
       })
       .filter(Boolean)
       .join("\n\n---\n\n");
 
     const supportingContext = (resource_ids || [])
-      .filter((id: string) => !(keystone_resource_ids || []).includes(id))
+      .filter((id: string) => !keystoneIdSet.has(id))
       .map((id: string) => {
         const r = resourceMap.get(id);
         if (!r) return null;
         const linkedKIs = allKIs.filter(ki => ki.source_resource_id === id);
-        return `### [SUPPORTING] ${r.title} (${r.resource_type})
+        return `### [SUPPORTING RESOURCE] ${r.title} (${r.resource_type})
 Content preview: ${(r.content || "").slice(0, 400)}
 Linked KIs (${linkedKIs.length}):
-${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework}]` : ''}: ${ki.tactic_summary || "N/A"}`).join("\n")}`;
+${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework} — ${ki.who || ''}]` : ''}: ${ki.tactic_summary || "N/A"}`).join("\n")}`;
       })
       .filter(Boolean)
       .join("\n\n---\n\n");
@@ -176,8 +192,9 @@ ${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework}]` : ''}:
     const kiContext = allKIs
       .map(ki => {
         const source = resourceMap.get(ki.source_resource_id);
+        const sourceType = keystoneIdSet.has(ki.source_resource_id) ? "Keystone" : "Supporting";
         const attribution = [ki.framework, ki.who].filter(Boolean).join(" — ");
-        return `- [KI:${ki.id.slice(0, 8)}] ${ki.title}${attribution ? ` [${attribution}]` : ""} (from: ${source?.title || "Unknown"})
+        return `- [KI:${ki.id.slice(0, 8)}] ${ki.title}${attribution ? ` [${attribution}]` : ""} (from ${sourceType}: ${source?.title || "Unknown"})
   Summary: ${ki.tactic_summary || "N/A"}
   Why: ${ki.why_it_matters || "N/A"}
   When: ${ki.when_to_use || "N/A"}
@@ -185,11 +202,14 @@ ${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework}]` : ''}:
       })
       .join("\n");
 
-    const resourceIndex = resources.map((r, i) => `[R${i + 1}] ${r.title}`).join("\n");
+    const resourceIndex = resources.map((r, i) => {
+      const type = keystoneIdSet.has(r.id) ? "KEYSTONE" : "SUPPORTING";
+      return `[R${i + 1}:${type}] ${r.title}`;
+    }).join("\n");
 
-    // Build the framework-driven section spec
+    // Build the framework-driven section spec with author attribution
     const frameworkSpec = stageFrameworks
-      .map(f => `### ${f.framework} (Role: ${f.role})
+      .map(f => `### ${f.framework} — ${f.who} (Role: ${f.role})
 Generate these sections:
 ${f.sections.map(s => `  - "${f.framework}: ${s}"`).join("\n")}`)
       .join("\n\n");
@@ -197,40 +217,55 @@ ${f.sections.map(s => `  - "${f.framework}: ${s}"`).join("\n")}`)
     const systemPrompt = `You are an elite sales execution strategist building a UNIFIED PLAYBOOK for the "${stageLabel}" stage.
 
 This playbook integrates FOUR sales frameworks as a single Sales Operating System:
-- GAP Selling → discovery (current state, future state, gaps, impact)
-- Challenger → POV and teaching (reframes, insights, urgency)
-- MEDDPICC → deal qualification and progression
-- Command of the Message → structure and narrative
+- GAP Selling (Keenan) = Discovery — current state, future state, gaps, impact
+- Challenger (Dixon) = Insight, reframe & teaching
+- MEDDPICC (McMahon) = Deal qualification & progression
+- Command of the Message (Force Management) = Structure & narrative
 
-CRITICAL: Do NOT create separate playbooks per framework. Instead, produce ONE unified playbook where each section is LABELED with the framework it belongs to.
+CRITICAL: Produce ONE unified playbook where each section is LABELED with the framework it belongs to.
 
 FRAMEWORK-DRIVEN SECTIONS FOR THIS STAGE:
 ${frameworkSpec}
 
-RULES:
-1. Each section title MUST be prefixed with the framework name: "Framework: Section Title"
-2. Every section MUST include a "framework" field identifying which framework owns it
-3. EVERY major insight MUST include a citation: [Resource: Name] or [KI: title]
-4. Include framework attribution where known: [Framework — Author]
-5. Prioritize Keystone Resource insights as foundational
-6. KIs tagged with a specific framework should populate that framework's sections
-7. Be SPECIFIC and ACTIONABLE — not generic advice
-8. Include verbatim talk tracks and questions where available
-9. If a KI doesn't match a specific framework, place it in the most relevant section
+OUTPUT QUALITY GUARDRAILS — MANDATORY:
+1. Each section MUST contain at least ONE highly specific item (a real question to ask, a talk track, or a concrete hypothesis)
+2. Each section with a discovery or teaching role MUST include at least one practical question or verbatim talk track
+3. ZERO filler content — no "consider exploring..." or "it would be beneficial to..." or "think about..."
+4. NO repeated insights across sections — if a concept appears in GAP Selling, do NOT repeat it in Challenger
+5. Every item should be something a rep can SAY, ASK, or DO in the next meeting
+6. Prefer specific company/industry language over generic advice
+7. Talk tracks should sound like a real human speaking, not a consultant writing a report
+
+CITATION RULES:
+1. Every major insight MUST include a citation
+2. Citations MUST indicate source type using this format:
+   - "[Keystone: Resource Title]" for keystone resources
+   - "[Supporting: Resource Title]" for supporting resources
+   - "[KI: Knowledge Item Title]" for knowledge items
+3. Include framework attribution: [Framework — Author] (e.g., [GAP Selling — Keenan])
+4. Prioritize Keystone Resource insights as foundational — they define the strategy
+
+ITEM TYPES — use the most specific type:
+- "question" — a specific discovery or qualifying question to ask
+- "talk_track" — exact words to say in a conversation
+- "tactic" — a specific action to take
+- "warning" — a risk or red flag to watch for
+- "tip" — a practical tip or insight
+- "framework" — a structural element or framework guidance
 
 Return a JSON object:
 {
   "title": "string — playbook title",
-  "summary": "string — 1-2 sentence overview mentioning the unified framework approach",
+  "summary": "string — 1-2 sentence overview of the unified approach",
   "sections": [
     {
-      "title": "string — e.g. 'GAP Selling: Current State Questions'",
-      "framework": "string — the framework name (GAP Selling, Challenger, MEDDPICC, Command of the Message)",
+      "title": "string — e.g. 'GAP Selling: Current State'",
+      "framework": "string — the framework name",
       "items": [
         {
-          "content": "string — the insight, tactic, or guidance",
-          "citations": ["string — source references"],
-          "type": "tactic" | "question" | "talk_track" | "framework" | "warning" | "tip"
+          "content": "string — the specific insight, question, talk track, or tactic",
+          "citations": ["string — e.g. '[Keystone: GAP Selling Playbook]'"],
+          "type": "question" | "talk_track" | "tactic" | "warning" | "tip" | "framework"
         }
       ]
     }
@@ -251,7 +286,7 @@ ${supportingContext || "None"}
 ALL KNOWLEDGE ITEMS (${allKIs.length}):
 ${kiContext || "None extracted"}
 
-Generate the unified ${stageLabel} stage playbook now.`;
+Generate the unified ${stageLabel} stage playbook now. Remember: specific questions, real talk tracks, zero filler.`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -265,7 +300,7 @@ Generate the unified ${stageLabel} stage playbook now.`;
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.3,
+        temperature: 0.25,
       }),
     });
 
