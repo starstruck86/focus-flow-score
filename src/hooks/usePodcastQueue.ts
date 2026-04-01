@@ -37,6 +37,7 @@ export interface QueueStats {
   skipped: number;
   totalKIs: number;
   readyForKI: number;
+  awaitingApproval: number;
 }
 
 function detectPlatform(url: string): string {
