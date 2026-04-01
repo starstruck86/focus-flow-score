@@ -245,6 +245,29 @@ export function usePodcastQueue() {
     setItems(prev => prev.filter(i => !['complete', 'failed', 'skipped'].includes(i.status)));
   }, [user]);
 
+  // ── Approve transcript (user trusts it for KI generation) ──
+  const approveTranscript = useCallback(async (queueItemId: string) => {
+    if (!user) return;
+    await (supabase as any)
+      .from('podcast_import_queue')
+      .update({ ki_status: 'ready_for_review', updated_at: new Date().toISOString() })
+      .eq('id', queueItemId);
+    toast.success('Transcript approved — ready for KI generation');
+  }, [user]);
+
+  // ── Approve all awaiting transcripts (bulk) ──
+  const approveAllTranscripts = useCallback(async () => {
+    if (!user) return;
+    const awaiting = items.filter(i => i.ki_status === 'awaiting_approval' && i.resource_id);
+    if (awaiting.length === 0) return;
+    await (supabase as any)
+      .from('podcast_import_queue')
+      .update({ ki_status: 'ready_for_review', updated_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .eq('ki_status', 'awaiting_approval');
+    toast.success(`${awaiting.length} transcript${awaiting.length !== 1 ? 's' : ''} approved`);
+  }, [user, items]);
+
   return {
     items,
     stats,
@@ -257,5 +280,7 @@ export function usePodcastQueue() {
     clearDone,
     generateKIs,
     generateAllKIs,
+    approveTranscript,
+    approveAllTranscripts,
   };
 }
