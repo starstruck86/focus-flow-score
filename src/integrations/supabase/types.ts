@@ -925,6 +925,83 @@ export type Database = {
         }
         Relationships: []
       }
+      course_lesson_imports: {
+        Row: {
+          course_title: string | null
+          created_at: string
+          id: string
+          import_error: string | null
+          import_status: string
+          import_substatus: string | null
+          lesson_index: number | null
+          lesson_type: string | null
+          lesson_url: string
+          module_name: string | null
+          original_course_url: string
+          platform: string | null
+          provider_video_type: string | null
+          provider_video_url: string | null
+          resource_id: string | null
+          source_lesson_title: string | null
+          transcript_status: string | null
+          transcript_text: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          course_title?: string | null
+          created_at?: string
+          id?: string
+          import_error?: string | null
+          import_status?: string
+          import_substatus?: string | null
+          lesson_index?: number | null
+          lesson_type?: string | null
+          lesson_url: string
+          module_name?: string | null
+          original_course_url: string
+          platform?: string | null
+          provider_video_type?: string | null
+          provider_video_url?: string | null
+          resource_id?: string | null
+          source_lesson_title?: string | null
+          transcript_status?: string | null
+          transcript_text?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          course_title?: string | null
+          created_at?: string
+          id?: string
+          import_error?: string | null
+          import_status?: string
+          import_substatus?: string | null
+          lesson_index?: number | null
+          lesson_type?: string | null
+          lesson_url?: string
+          module_name?: string | null
+          original_course_url?: string
+          platform?: string | null
+          provider_video_type?: string | null
+          provider_video_url?: string | null
+          resource_id?: string | null
+          source_lesson_title?: string | null
+          transcript_status?: string | null
+          transcript_text?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_lesson_imports_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       custom_prompts: {
         Row: {
           content_type: string | null

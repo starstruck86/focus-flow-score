@@ -7,8 +7,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, BookOpen, ExternalLink, Video, FileText, HelpCircle } from 'lucide-react';
+import { Loader2, BookOpen, ExternalLink, Video, FileText, HelpCircle, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { useClassifyResource, useAddUrlResource } from '@/hooks/useResourceUpload';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { validateLessonContent } from '@/lib/courseImportValidation';
 import { toast } from 'sonner';
 
 type LessonItem = {
@@ -18,6 +21,15 @@ type LessonItem = {
   index: number;
   duration?: string;
   type?: string;
+};
+
+type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 'saving_resource' | 'transcribing' | 'complete' | 'failed';
+
+type LessonImportResult = {
+  lessonIndex: number;
+  status: LessonImportStatus;
+  error?: string;
+  resourceId?: string;
 };
 
 interface CourseImportModalProps {
@@ -31,6 +43,11 @@ const TYPE_ICONS: Record<string, typeof Video> = {
   quiz: HelpCircle,
 };
 
+const STATUS_ICONS: Record<string, typeof CheckCircle2> = {
+  complete: CheckCircle2,
+  failed: XCircle,
+};
+
 export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps) {
   const [url, setUrl] = useState('');
   const [fetching, setFetching] = useState(false);
@@ -40,7 +57,9 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0, current: '' });
+  const [lessonResults, setLessonResults] = useState<LessonImportResult[]>([]);
 
+  const { user } = useAuth();
   const classify = useClassifyResource();
   const addUrl = useAddUrlResource();
 
@@ -49,6 +68,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     setFetching(true);
     setLessons([]);
     setCourseTitle('');
+    setLessonResults([]);
     try {
       const { data, error } = await trackedInvoke<any>('import-course', {
         body: { url: url.trim(), action: 'discover' },
@@ -91,75 +111,188 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     setSelected(new Set(lessons.slice(0, count).map((_, i) => i)));
   };
 
+  const updateLessonResult = (lessonIndex: number, update: Partial<LessonImportResult>) => {
+    setLessonResults(prev => {
+      const existing = prev.find(r => r.lessonIndex === lessonIndex);
+      if (existing) {
+        return prev.map(r => r.lessonIndex === lessonIndex ? { ...r, ...update } : r);
+      }
+      return [...prev, { lessonIndex, status: 'queued', ...update } as LessonImportResult];
+    });
+  };
+
+  /** Write a lineage row to course_lesson_imports */
+  const writeLineageRow = async (params: {
+    resourceId: string | null;
+    lesson: LessonItem;
+    status: string;
+    substatus?: string;
+    error?: string;
+    mediaUrl?: string;
+    videoType?: string;
+  }) => {
+    if (!user) return;
+    try {
+      await supabase.from('course_lesson_imports' as any).insert({
+        user_id: user.id,
+        resource_id: params.resourceId,
+        original_course_url: url.trim(),
+        lesson_url: params.lesson.url,
+        course_title: courseTitle,
+        platform,
+        module_name: params.lesson.module || null,
+        lesson_index: params.lesson.index,
+        lesson_type: params.lesson.type || 'text',
+        source_lesson_title: params.lesson.title,
+        import_status: params.status,
+        import_substatus: params.substatus || null,
+        import_error: params.error || null,
+        provider_video_url: params.mediaUrl || null,
+        provider_video_type: params.videoType || null,
+        transcript_status: params.mediaUrl ? 'transcript_pending' : null,
+      } as any);
+    } catch (e) {
+      console.warn('Failed to write course lineage row:', e);
+    }
+  };
+
+  /** Update lineage row status by lesson_url */
+  const updateLineageRow = async (lessonUrl: string, updates: Record<string, any>) => {
+    if (!user) return;
+    try {
+      await (supabase.from('course_lesson_imports' as any) as any)
+        .update(updates)
+        .eq('user_id', user.id)
+        .eq('lesson_url', lessonUrl)
+        .eq('original_course_url', url.trim());
+    } catch (e) {
+      console.warn('Failed to update course lineage row:', e);
+    }
+  };
+
   const handleImport = useCallback(async () => {
     const toImport = lessons.filter((_, i) => selected.has(i));
     if (toImport.length === 0) return;
     setImporting(true);
     setImportProgress({ done: 0, total: toImport.length, current: '' });
+    setLessonResults(toImport.map((_, i) => ({ lessonIndex: i, status: 'queued' as const })));
 
     let successCount = 0;
     for (let i = 0; i < toImport.length; i++) {
       const lesson = toImport[i];
-      setImportProgress({ done: i, total: toImport.length, current: lesson.title });
+
+      // === FETCH LESSON ===
+      updateLessonResult(i, { status: 'fetching_lesson' });
+      setImportProgress({ done: i, total: toImport.length, current: `Fetching: ${lesson.title}` });
+
+      let lessonData: any = null;
       try {
-        // First fetch the lesson content
-        const { data: lessonData } = await trackedInvoke<any>('import-course', {
+        const { data, error } = await trackedInvoke<any>('import-course', {
           body: { url: url.trim(), action: 'fetch_lesson', lesson_url: lesson.url },
           timeoutMs: 60_000,
         });
+        if (error) throw error;
+        lessonData = data;
+      } catch (e: any) {
+        const errMsg = e?.message || 'Failed to fetch lesson';
+        updateLessonResult(i, { status: 'failed', error: errMsg });
+        await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'fetching_lesson', error: errMsg });
+        setImportProgress({ done: i + 1, total: toImport.length, current: '' });
+        continue;
+      }
 
-        // Classify and add as resource
+      // === VALIDATE CONTENT ===
+      updateLessonResult(i, { status: 'validating_content' });
+      setImportProgress({ done: i, total: toImport.length, current: `Validating: ${lesson.title}` });
+
+      const contentToValidate = lessonData?.content || '';
+      const validation = validateLessonContent(contentToValidate);
+
+      if (!validation.valid) {
+        const errMsg = validation.reason || 'Content validation failed';
+        updateLessonResult(i, { status: 'failed', error: errMsg });
+        await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'validating_content', error: `${validation.code}: ${errMsg}` });
+        setImportProgress({ done: i + 1, total: toImport.length, current: '' });
+        console.warn(`Validation failed for "${lesson.title}": ${errMsg}`);
+        continue;
+      }
+
+      // === CLASSIFY & SAVE ===
+      updateLessonResult(i, { status: 'saving_resource' });
+      setImportProgress({ done: i, total: toImport.length, current: `Saving: ${lesson.title}` });
+
+      try {
         const classification = await classify.mutateAsync({ url: lesson.url });
         if (classification.title === 'Untitled' || classification.title.length < 3) {
           classification.title = lesson.title;
         }
-        // Override with lesson content if we got it
         if (lessonData?.success && lessonData.content && lessonData.content.length > 50) {
           classification.scraped_content = lessonData.content;
         }
         classification.resource_type = lesson.type === 'video' ? 'video' : 'article';
         classification.tags = [...(classification.tags || []), 'course', courseTitle].filter(Boolean);
-        
+
         const result = await addUrl.mutateAsync({ url: lesson.url, classification });
+        const resourceId = result?.id || null;
+
+        // Write lineage
+        await writeLineageRow({
+          resourceId,
+          lesson,
+          status: 'complete',
+          substatus: 'saved',
+          mediaUrl: lessonData?.media_url || undefined,
+          videoType: lessonData?.media_url ? 'wistia' : undefined,
+        });
+
         successCount++;
 
-        // If the lesson has a Wistia video with a media_url, trigger transcription
-        if (lessonData?.media_url && result?.id) {
+        // === TRANSCRIBE (if video with media_url) ===
+        if (lessonData?.media_url && resourceId) {
+          updateLessonResult(i, { status: 'transcribing' });
+          setImportProgress({ done: i, total: toImport.length, current: `${lesson.title} (transcribing video...)` });
           try {
-            setImportProgress({ done: i, total: toImport.length, current: `${lesson.title} (transcribing video...)` });
             const { data: txData } = await trackedInvoke<any>('transcribe-audio', {
-              body: { audio_url: lessonData.media_url, resource_id: result.id },
+              body: { audio_url: lessonData.media_url, resource_id: resourceId },
               timeoutMs: 120_000,
             });
             if (txData?.success && txData.transcript) {
-              // Update the resource with the transcript appended
-            const { supabase } = await import('@/integrations/supabase/client');
               const { data: existing } = await supabase
                 .from('resources')
                 .select('content')
-                .eq('id', result.id)
+                .eq('id', resourceId)
                 .single();
               const updated = (existing?.content || '') + '\n\n--- Video Transcript ---\n\n' + txData.transcript;
-              await supabase.from('resources').update({ content: updated } as any).eq('id', result.id);
+              await supabase.from('resources').update({ content: updated } as any).eq('id', resourceId);
+              await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete', transcript_text: txData.transcript });
               console.log(`Transcribed video for ${lesson.title}: ${txData.transcript.length} chars`);
+            } else {
+              await updateLineageRow(lesson.url, { transcript_status: 'transcript_failed' });
             }
           } catch (txErr) {
             console.warn(`Video transcription failed for ${lesson.title}:`, txErr);
+            await updateLineageRow(lesson.url, { transcript_status: 'transcript_failed' });
           }
         }
-      } catch (e) {
+
+        updateLessonResult(i, { status: 'complete', resourceId: resourceId || undefined });
+      } catch (e: any) {
+        const errMsg = e?.message || 'Failed to save resource';
+        updateLessonResult(i, { status: 'failed', error: errMsg });
+        await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'saving_resource', error: errMsg });
         console.error(`Failed to import ${lesson.title}:`, e);
       }
       setImportProgress({ done: i + 1, total: toImport.length, current: '' });
     }
 
-    toast.success(`Imported ${successCount} of ${toImport.length} lessons`);
+    const failedCount = toImport.length - successCount;
+    if (failedCount > 0) {
+      toast.warning(`Imported ${successCount} of ${toImport.length} lessons (${failedCount} failed)`);
+    } else {
+      toast.success(`Imported ${successCount} of ${toImport.length} lessons`);
+    }
     setImporting(false);
-    setLessons([]);
-    setUrl('');
-    setSelected(new Set());
-    onOpenChange(false);
-  }, [lessons, selected, classify, addUrl, onOpenChange, url, courseTitle]);
+  }, [lessons, selected, classify, addUrl, url, courseTitle, platform, user]);
 
   const selectedCount = selected.size;
   const progressPct = importProgress.total > 0 ? (importProgress.done / importProgress.total) * 100 : 0;
@@ -171,6 +304,14 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     if (!modules.has(mod)) modules.set(mod, []);
     modules.get(mod)!.push({ lesson, index: i });
   });
+
+  // Find result for a lesson by its original index in the toImport array
+  const getResultForLesson = (originalIndex: number): LessonImportResult | undefined => {
+    // Map original lesson index to toImport index
+    const toImport = lessons.filter((_, i) => selected.has(i));
+    const toImportIdx = toImport.findIndex(l => l.index === originalIndex);
+    return lessonResults.find(r => r.lessonIndex === toImportIdx);
+  };
 
   return (
     <Dialog open={open} onOpenChange={importing ? undefined : onOpenChange}>
@@ -284,13 +425,43 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
             <div className="space-y-2 flex-shrink-0">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span className="truncate flex-1">
-                  {importProgress.current
-                    ? `Importing: ${importProgress.current}`
-                    : 'Importing & classifying...'}
+                  {importProgress.current || 'Importing & classifying...'}
                 </span>
                 <span className="ml-2">{importProgress.done} / {importProgress.total}</span>
               </div>
               <Progress value={progressPct} className="h-2" />
+
+              {/* Per-lesson status during import */}
+              {lessonResults.length > 0 && (
+                <ScrollArea className="max-h-32 border rounded-md mt-2">
+                  <div className="p-2 space-y-1">
+                    {lessonResults.map((r, idx) => {
+                      const toImport = lessons.filter((_, i) => selected.has(i));
+                      const lesson = toImport[r.lessonIndex];
+                      if (!lesson) return null;
+                      const StatusIcon = r.status === 'complete' ? CheckCircle2
+                        : r.status === 'failed' ? XCircle
+                        : null;
+                      return (
+                        <div key={idx} className="flex items-center gap-2 text-[11px]">
+                          {StatusIcon ? (
+                            <StatusIcon className={`h-3 w-3 flex-shrink-0 ${r.status === 'complete' ? 'text-green-500' : 'text-destructive'}`} />
+                          ) : (
+                            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
+                          )}
+                          <span className="truncate flex-1">{lesson.title}</span>
+                          {r.status === 'failed' && r.error && (
+                            <span className="text-destructive truncate max-w-[140px]" title={r.error}>{r.error}</span>
+                          )}
+                          {r.status !== 'complete' && r.status !== 'failed' && r.status !== 'queued' && (
+                            <Badge variant="outline" className="text-[9px] h-4">{r.status.replace('_', ' ')}</Badge>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
             </div>
           )}
         </div>
