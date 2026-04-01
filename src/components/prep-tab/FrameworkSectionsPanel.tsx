@@ -293,7 +293,6 @@ function SectionBlock({
     </Collapsible>
   );
 }
-}
 
 function FrameworkBlock({
   frameworkRole,
