@@ -63,6 +63,89 @@ function createCookieJar(): CookieJar {
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
+/**
+ * Fetch a Wistia video's smallest MP4 URL from the public embed API,
+ * download it, and transcribe via ElevenLabs Scribe.
+ */
+async function transcribeWistiaVideo(videoId: string, debug: string[]): Promise<string> {
+  const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+  if (!ELEVENLABS_API_KEY) {
+    debug.push('ELEVENLABS_API_KEY not configured — skipping transcription');
+    return '';
+  }
+
+  try {
+    // 1. Get media info from Wistia's public embed API
+    debug.push(`Fetching Wistia media info for ${videoId}...`);
+    const mediaResp = await fetch(`https://fast.wistia.com/embed/medias/${videoId}.json`, {
+      headers: { 'User-Agent': UA },
+    });
+    if (!mediaResp.ok) {
+      debug.push(`Wistia API returned ${mediaResp.status}`);
+      await mediaResp.text();
+      return '';
+    }
+    const mediaData = await mediaResp.json();
+    const assets = mediaData?.media?.assets || [];
+    const duration = mediaData?.media?.duration || 0;
+    debug.push(`Wistia video: ${Math.round(duration)}s, ${assets.length} assets`);
+
+    // 2. Find the smallest MP4 asset (we only need audio quality)
+    const mp4Assets = assets
+      .filter((a: { type?: string; container?: string; url?: string }) => 
+        a.container === 'mp4' && a.url
+      )
+      .sort((a: { size?: number }, b: { size?: number }) => (a.size || 0) - (b.size || 0));
+
+    if (mp4Assets.length === 0) {
+      debug.push('No MP4 assets found in Wistia response');
+      return '';
+    }
+
+    const smallest = mp4Assets[0];
+    debug.push(`Using smallest MP4: ${smallest.width}x${smallest.height}, ~${Math.round((smallest.size || 0) / 1024 / 1024)}MB`);
+
+    // 3. Download the MP4
+    debug.push('Downloading video for transcription...');
+    const videoResp = await fetch(smallest.url);
+    if (!videoResp.ok) {
+      debug.push(`Video download failed: ${videoResp.status}`);
+      await videoResp.text();
+      return '';
+    }
+    const videoBlob = await videoResp.blob();
+    debug.push(`Downloaded ${Math.round(videoBlob.size / 1024 / 1024)}MB`);
+
+    // 4. Send to ElevenLabs Scribe for transcription
+    debug.push('Sending to ElevenLabs Scribe...');
+    const formData = new FormData();
+    formData.append('file', new File([videoBlob], `${videoId}.mp4`, { type: 'video/mp4' }));
+    formData.append('model_id', 'scribe_v2');
+    formData.append('tag_audio_events', 'false');
+    formData.append('diarize', 'false');
+
+    const scribeResp = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+      method: 'POST',
+      headers: { 'xi-api-key': ELEVENLABS_API_KEY },
+      body: formData,
+    });
+
+    if (!scribeResp.ok) {
+      const errText = await scribeResp.text();
+      debug.push(`Scribe API error ${scribeResp.status}: ${errText.substring(0, 200)}`);
+      return '';
+    }
+
+    const scribeResult = await scribeResp.json();
+    const transcript = scribeResult.text || '';
+    debug.push(`Transcription complete: ${transcript.length} chars`);
+    return transcript;
+  } catch (err) {
+    debug.push(`Transcription error: ${err instanceof Error ? err.message : String(err)}`);
+    return '';
+  }
+}
+
 async function kajabiLogin(baseUrl: string, jar: CookieJar): Promise<{ success: boolean; debug: string[] }> {
   const email = Deno.env.get('COURSE_PLATFORM_EMAIL');
   const password = Deno.env.get('COURSE_PLATFORM_PASSWORD');
