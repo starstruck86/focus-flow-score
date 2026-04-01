@@ -1,6 +1,6 @@
 import { usePodcastQueue } from '@/hooks/usePodcastQueue';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle2, Podcast } from 'lucide-react';
+import { Loader2, CheckCircle2, Podcast, Brain } from 'lucide-react';
 
 /**
  * Small indicator badge for the Prep page header showing active podcast queue progress.
@@ -18,6 +18,11 @@ export function PodcastQueueIndicator() {
         <Loader2 className="h-3 w-3 animate-spin text-primary" />
         <Podcast className="h-3 w-3" />
         Importing: {done}/{stats.total}
+        {stats.totalKIs > 0 && (
+          <span className="flex items-center gap-0.5 ml-1">
+            · <Brain className="h-2.5 w-2.5 text-green-500" /> {stats.totalKIs}
+          </span>
+        )}
       </Badge>
     );
   }
@@ -28,6 +33,11 @@ export function PodcastQueueIndicator() {
         <CheckCircle2 className="h-3 w-3 text-primary" />
         <Podcast className="h-3 w-3" />
         {stats.complete} imported{stats.failed > 0 ? `, ${stats.failed} failed` : ''}
+        {stats.totalKIs > 0 && (
+          <span className="flex items-center gap-0.5 ml-1">
+            · <Brain className="h-2.5 w-2.5 text-green-500" /> {stats.totalKIs} KIs
+          </span>
+        )}
       </Badge>
     );
   }

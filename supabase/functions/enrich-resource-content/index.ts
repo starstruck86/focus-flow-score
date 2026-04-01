@@ -2281,7 +2281,7 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
     case 'pdf':
       return [firecrawlScrape, firecrawlFullPage];
     case 'podcast':
-      return [podcastResolveAndTranscribe, directAudioTranscribe, firecrawlScrape];
+      return [podcastResolveAndTranscribe, directAudioTranscribe];
     case 'direct_audio':
       return [directAudioTranscribe];
     case 'zoom_recording':
