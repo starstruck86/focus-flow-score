@@ -30,6 +30,16 @@ export interface QueueItem {
   review_reason: string | null;
   raw_transcript: string | null;
   structured_transcript: string | null;
+  // Source identity fields
+  original_episode_url: string | null;
+  resolved_url: string | null;
+  audio_url: string | null;
+  host_platform: string | null;
+  episode_description: string | null;
+  artwork_url: string | null;
+  show_title: string | null;
+  resolution_method: string | null;
+  metadata_status: string | null;
 }
 
 export interface QueueStats {
