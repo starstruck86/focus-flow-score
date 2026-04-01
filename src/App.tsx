@@ -13,6 +13,8 @@ import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { JournalPromptManager } from "@/components/journal";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ReviewModeBanner } from "@/components/ReviewModeBanner";
+import { BackgroundJobIndicator } from "@/components/jobs/BackgroundJobIndicator";
+import { BackgroundJobDrawer } from "@/components/jobs/BackgroundJobDrawer";
 import Dashboard from "./pages/Dashboard";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
 import Renewals from "./pages/Renewals";
@@ -71,6 +73,8 @@ const App = () => (
               <Sonner />
               <ReviewModeBanner />
               <OfflineBanner />
+              <BackgroundJobIndicator />
+              <BackgroundJobDrawer />
               <BrowserRouter>
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
