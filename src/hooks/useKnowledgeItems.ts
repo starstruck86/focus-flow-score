@@ -20,6 +20,10 @@ export interface KnowledgeItem {
   when_to_use: string | null;
   when_not_to_use: string | null;
   example_usage: string | null;
+  macro_situation: string | null;
+  micro_strategy: string | null;
+  how_to_execute: string | null;
+  what_this_unlocks: string | null;
   confidence_score: number;
   status: 'extracted' | 'review_needed' | 'approved' | 'active' | 'stale';
   active: boolean;

@@ -46,119 +46,63 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Standard vs Strict extraction prompts ─────────────
-    const standardSystemPrompt = `You are a sales execution coach. Extract ACTIONABLE UNITS from content.
+    const systemPrompt = `You are an elite sales execution coach. Extract TACTICAL PLAYS from content.
 
-Every unit must be something a sales rep can directly:
-- SAY in a conversation
-- ASK a prospect
-- WRITE in an email/doc
-- USE in a deal workflow
+A Knowledge Item is a PLAY — a structured, situational, reusable tactical entry that tells a rep exactly when, why, and how to execute.
 
-RULES:
-- Each unit must be a SPECIFIC ACTION, not a concept or summary
-- Each unit must include EXACT PHRASING the rep can use
-- If you cannot provide real words/phrases to say/write, DO NOT include it
-- REJECT anything generic, conceptual, or descriptive-only
+EVERY knowledge item MUST include ALL of these fields with PARAGRAPH-LEVEL depth (not 1-2 sentences):
 
-BAD (REJECT these):
-- "Discovery is important" (concept)
-- "Build rapport with prospects" (vague)
-- "Understanding pricing helps close deals" (summary)
+1. "title" — verb-led action title (e.g. "Reframe the budget objection using cost-of-inaction")
+2. "framework" — methodology this belongs to (GAP Selling, Challenger Sale, MEDDPICC, Command of the Message, SPIN, or empty string)
+3. "who" — thought leader (Keenan, Dixon, McMahon, Force Management, Chris Voss, or empty string)
+4. "macro_situation" — WHEN does this play apply? Describe the big-picture scenario in 2-4 sentences. Include deal stage, buyer behavior, competitive dynamics. Example: "You're mid-discovery with a prospect who has admitted operational pain but hasn't connected it to financial impact. They're still in 'exploring' mode and haven't built internal urgency. There may be competing priorities that could stall the deal."
+5. "micro_strategy" — WHAT are you specifically doing? 2-3 sentences on the tactical approach. Example: "You're going to bridge their operational complaint to a quantified business impact by asking a sequence of impact questions that force them to calculate the cost themselves."
+6. "why_it_matters" — WHY does this work? 2-3 sentences on the psychology or sales principle. Example: "Prospects who self-discover the financial impact of their problem are 3x more likely to act with urgency. When they calculate the number themselves, they own it — it's no longer your claim, it's their reality."
+7. "how_to_execute" — HOW to do it, step by step. 3-5 concrete steps with exact phrasing where applicable. Must be immediately usable in a real conversation.
+8. "what_this_unlocks" — OUTCOME: what happens when you execute this well? 2-3 sentences. Example: "The prospect shifts from 'exploring' to 'committed buyer.' They start asking YOU how fast you can implement, and they volunteer to bring in their CFO."
+9. "when_to_use" — specific trigger conditions (2-3 sentences, not a single phrase)
+10. "when_not_to_use" — boundaries and anti-patterns (2-3 sentences)
+11. "example_usage" — a REALISTIC, conversational talk track or email snippet. Must sound like a real human, not a textbook. Minimum 3-4 sentences.
+12. "tactic_summary" — concise 2-3 sentence summary of the play for quick reference
+13. "chapter" — one of: cold_calling|discovery|objection_handling|negotiation|competitors|personas|messaging|closing|stakeholder_navigation|expansion|demo|follow_up
+14. "knowledge_type" — skill|product|competitive
+15. "sub_chapter" — optional sub-category
 
-GOOD:
-- title: "Ask the cost-of-inaction question"
-  action_type: "ask"
-  what_to_do: "After prospect names a pain, ask: 'What happens if you don't fix this in 6 months?'"
-  when_to_use: "After prospect admits a specific pain point during discovery"
-  example: "So you mentioned losing 15% of customers at renewal. What happens to your revenue if that continues for another year?"
+QUALITY GATES — REJECT any item that:
+- Has any field shorter than 2 sentences (except title, chapter, knowledge_type, sub_chapter, who, framework)
+- Is generic advice without specific phrasing
+- Contains UI/HTML/CSS artifacts
+- Describes what to think rather than what to DO
+- Could apply to any situation (not situational enough)
 
-Return 3-10 actionable units as a JSON array:
-[{
-  "title": "short verb-led title",
-  "action_type": "say|ask|write|use",
-  "what_to_do": "EXACTLY what to do — include specific words, phrases, or steps",
-  "when_to_use": "specific trigger moment or context",
-  "when_not_to_use": "when this would backfire",
-  "example": "realistic talk track, email snippet, or exact phrasing",
-  "why_it_matters": "one sentence on impact",
-  "chapter": "cold_calling|discovery|objection_handling|negotiation|competitors|personas|messaging|closing|stakeholder_navigation|expansion|demo|follow_up",
-  "knowledge_type": "skill|product|competitive",
-  "sub_chapter": "optional sub-category",
-  "who": "person or thought leader behind this idea (e.g. Keenan, Matthew Dixon, Chris Voss). Use their known name. Leave empty string if unknown.",
-  "framework": "methodology or system this belongs to (e.g. GAP Selling, Challenger Sale, MEDDICC, SPIN Selling). Leave empty string if not clearly tied to a framework."
-}]
+Return 2-6 high-quality tactical plays as a JSON array. Fewer is better — quality over quantity.
 
-Only return the JSON array, no markdown.`;
+Only return the JSON array, no markdown fences.`;
 
-    const strictSystemPrompt = `You are a STRICT sales execution extraction engine. Your job is to find ONLY the most specific, highest-quality actionable units.
-
-STRICT MODE RULES — these override everything else:
-1. EXACT PHRASES ONLY: Every unit MUST contain actual words a rep would say or write. Quote them directly.
-2. NO GENERIC ACTIONS: "Follow up" or "Research the company" are NOT valid. Must include HOW + WHAT EXACT WORDS.
-3. MINIMUM SPECIFICITY: Every unit must reference a specific situation, persona type, objection, or deal stage.
-4. PHRASING QUALITY: The example must sound like a real human rep, not an AI or textbook.
-5. ATOMIC ACTIONS: One action per unit. If it has "and" connecting two different actions, split it.
-6. SENTENCE-LEVEL EXTRACTION: Look for individual sentences or paragraphs that contain real talk tracks, questions, or phrases.
-7. CHUNK DIFFERENTLY: Scan the content in small paragraphs, not as a whole. Extract from each paragraph independently.
-8. REJECT AGGRESSIVELY: If in doubt, do NOT include it. Quality over quantity.
-
-Return 2-8 MAXIMUM units. Fewer is better if the content doesn't have enough specifics.
-
-Format as JSON array:
-[{
-  "title": "short verb-led title (MUST start with action verb)",
-  "action_type": "say|ask|write|use",
-  "what_to_do": "EXACT phrasing to use — must include quoted speech or specific steps",
-  "when_to_use": "specific trigger: 'When [exact situation], after [exact event]'",
-  "when_not_to_use": "specific counter-trigger",
-  "example": "REALISTIC phrasing as a rep would actually say/write it — no corporate jargon",
-  "why_it_matters": "concrete impact statement",
-  "chapter": "cold_calling|discovery|objection_handling|negotiation|competitors|personas|messaging|closing|stakeholder_navigation|expansion|demo|follow_up",
-  "knowledge_type": "skill|product|competitive",
-  "sub_chapter": "optional",
-  "who": "thought leader behind this (e.g. Keenan, Chris Voss). Empty string if unknown.",
-  "framework": "methodology name (e.g. GAP Selling, MEDDICC). Empty string if not applicable."
-}]
-
-Only return the JSON array, no markdown.`;
-
-    const systemPrompt = strict ? strictSystemPrompt : standardSystemPrompt;
-
-    // Strict mode: chunk content into smaller segments for better extraction
+    // Chunk content for better extraction
     let contentForExtraction: string;
-    if (strict && content.length > 3000) {
-      // Split into paragraphs, take meaningful ones
+    if (content.length > 3000) {
       const paragraphs = content.split(/\n\n+/).filter((p: string) => p.trim().length > 50);
-      // Take first 8000 chars worth of meaningful paragraphs
       let accumulated = '';
       for (const p of paragraphs) {
-        if (accumulated.length + p.length > 8000) break;
+        if (accumulated.length + p.length > 10000) break;
         accumulated += p + '\n\n';
       }
-      contentForExtraction = accumulated || content.slice(0, 8000);
+      contentForExtraction = accumulated || content.slice(0, 10000);
     } else {
       contentForExtraction = content.slice(0, 12000);
     }
 
-    const userPrompt = strict
-      ? `STRICT EXTRACTION — find only the most specific, quotable, usable actions from this ${resourceType || 'document'}.
-
-Title: ${title}
-${description ? `Description: ${description}` : ''}
-Tags: ${(tags || []).join(', ')}
-
-Scan each paragraph independently. Extract ONLY units with real quoted phrasing:
-
-${contentForExtraction}`
-      : `Extract actionable units from this ${resourceType || 'document'}:
+    const userPrompt = `Extract structured tactical plays from this ${resourceType || 'document'}:
 
 Title: ${title}
 ${description ? `Description: ${description}` : ''}
 Tags: ${(tags || []).join(', ')}
 
 Content:
-${contentForExtraction}`;
+${contentForExtraction}
+
+Remember: each play must be a COMPLETE tactical entry with paragraph-level depth in every field. No short fragments.`;
 
     const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -167,13 +111,13 @@ ${contentForExtraction}`;
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
       },
       body: JSON.stringify({
-        model: strict ? 'google/gemini-2.5-flash' : 'google/gemini-3-flash-preview',
+        model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        max_tokens: strict ? 2000 : 3000,
-        temperature: strict ? 0.15 : 0.3,
+        max_tokens: 6000,
+        temperature: 0.2,
       }),
     });
 
@@ -206,19 +150,24 @@ ${contentForExtraction}`;
       items = [];
     }
 
-    // Validate: must have action-oriented fields
-    const minExampleLen = strict ? 25 : 15;
-    const minWhatLen = strict ? 30 : 20;
-    const validated = (items || []).filter((item: any) =>
-      item.title &&
-      item.what_to_do && item.what_to_do.length >= minWhatLen &&
-      item.example && item.example.length >= minExampleLen &&
-      item.when_to_use && item.when_to_use.length >= 10 &&
-      item.action_type
-    ).map((item: any) => ({
+    // Quality validation — reject low-quality items
+    const MIN_FIELD_LEN = 40;
+    const validated = (items || []).filter((item: any) => {
+      if (!item.title || !item.tactic_summary) return false;
+      if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return false;
+      if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return false;
+      if (!item.how_to_execute || item.how_to_execute.length < MIN_FIELD_LEN) return false;
+      if (!item.what_this_unlocks || item.what_this_unlocks.length < MIN_FIELD_LEN) return false;
+      if (!item.when_to_use || item.when_to_use.length < 20) return false;
+      if (!item.example_usage && !item.example) return false;
+      const example = item.example_usage || item.example || '';
+      if (example.length < 30) return false;
+      return true;
+    }).map((item: any) => ({
       ...item,
-      tactic_summary: item.what_to_do,
-      example_usage: item.example,
+      tactic_summary: item.tactic_summary,
+      example_usage: item.example_usage || item.example,
+      why_it_matters: item.why_it_matters || item.micro_strategy,
     }));
 
     return new Response(JSON.stringify({ items: validated, mode: strict ? 'strict' : 'standard' }), {
