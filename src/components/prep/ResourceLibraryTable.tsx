@@ -616,7 +616,7 @@ export function ResourceLibraryTable({
                         'cursor-pointer border-b border-border transition-colors hover:bg-muted/50',
                         DENSITY_ROW_CLASS[density],
                         isSelected && 'bg-primary/5',
-                        expandedId === resource.id && 'bg-muted/30 border-b-0',
+                        expandedId === resource.id && 'bg-primary/5 border-b-0 border-l-2 border-l-primary',
                         drift.hasDrift && 'border-l-2 border-l-status-yellow',
                       )}
                       onClick={() => setExpandedId(prev => prev === resource.id ? null : resource.id)}
