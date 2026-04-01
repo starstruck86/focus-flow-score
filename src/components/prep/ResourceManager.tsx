@@ -792,41 +792,40 @@ export function ResourceManager() {
                   break;
                 }
                 case 'reparse_file': {
-                  // Re-parse uploaded file (PDF/ebook) — re-extract text from storage
+                  // Re-parse uploaded file via dedicated server-side pipeline
                   const origin = getResourceOrigin(resource);
                   if (origin !== 'uploaded_file') {
                     toast.error('This resource is not an uploaded file');
                     break;
                   }
-                  toast.info('Re-parsing file...');
+                  const parseToastId = toast.loading('Parsing uploaded file…');
                   try {
-                    // Get signed URL and re-extract
-                    const { data: signedData } = await supabase.storage
-                      .from('resource-files')
-                      .createSignedUrl(resource.file_url!, 3600);
-                    if (!signedData?.signedUrl) {
-                      toast.error('Could not access file in storage');
-                      break;
-                    }
-                    // Fetch the file and re-extract text
-                    const fileRes = await fetch(signedData.signedUrl);
-                    const blob = await fileRes.blob();
-                    const file = new File([blob], resource.title || 'file', { type: blob.type });
-                    const { extractTextFromFile } = await import('@/hooks/useResourceUpload');
-                    const content = await extractTextFromFile(file);
-                    if (content && content.length > 50) {
-                      await supabase.from('resources').update({
-                        content,
-                        enrichment_status: 'deep_enriched' as any,
-                        failure_reason: null,
-                      }).eq('id', resource.id);
+                    const { parseUploadedFile } = await import('@/hooks/useResourceUpload');
+                    const result = await parseUploadedFile(resource.id);
+                    
+                    if (result.success) {
+                      toast.success(
+                        `Parsed successfully: ${result.content_length?.toLocaleString()} chars extracted`,
+                        { id: parseToastId, description: `Parser: ${result.parser_used || 'auto'}` }
+                      );
                       queryClient.invalidateQueries({ queryKey: ['resources'] });
-                      toast.success(`Re-parsed: ${content.length} chars extracted`);
+                      queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+                      queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
                     } else {
-                      toast.warning('Could not extract meaningful text from file');
+                      const reason = result.diagnostics?.result as string || 'unknown';
+                      const reasonLabels: Record<string, string> = {
+                        unsupported_type: 'Unsupported file type',
+                        file_missing_from_storage: 'File missing from storage',
+                        quality_gate_failed: 'Could not extract meaningful text',
+                      };
+                      toast.error(reasonLabels[reason] || 'Parse failed', {
+                        id: parseToastId,
+                        description: result.error || `Diagnostics: ${reason}`,
+                      });
+                      queryClient.invalidateQueries({ queryKey: ['resources'] });
                     }
                   } catch (error: any) {
-                    toast.error('File re-parse failed', { description: error?.message });
+                    toast.error('File parse failed', { id: parseToastId, description: error?.message });
                   }
                   break;
                 }
