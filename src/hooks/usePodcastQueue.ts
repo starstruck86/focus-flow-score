@@ -270,6 +270,39 @@ export function usePodcastQueue() {
     toast.success(`${awaiting.length} transcript${awaiting.length !== 1 ? 's' : ''} approved`);
   }, [user, items]);
 
+  // ── Reject transcript ──
+  const rejectTranscript = useCallback(async (queueItemId: string, reason?: string) => {
+    if (!user) return;
+    await (supabase as any)
+      .from('podcast_import_queue')
+      .update({
+        ki_status: 'rejected',
+        error_message: reason ? `Rejected: ${reason}` : 'Transcript rejected by user',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', queueItemId);
+    toast.success('Transcript rejected');
+  }, [user]);
+
+  // ── Reprocess transcript (re-queue for preprocessing) ──
+  const reprocessTranscript = useCallback(async (queueItemId: string) => {
+    if (!user) return;
+    await (supabase as any)
+      .from('podcast_import_queue')
+      .update({
+        ki_status: 'pending',
+        transcript_status: 'transcript_ready',
+        error_message: null,
+        transcript_preview: null,
+        transcript_length: 0,
+        transcript_section_count: 0,
+        status: 'queued',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', queueItemId);
+    toast.success('Queued for reprocessing');
+  }, [user]);
+
   return {
     items,
     stats,
