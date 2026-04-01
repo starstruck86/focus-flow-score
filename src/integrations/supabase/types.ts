@@ -2093,8 +2093,10 @@ export type Database = {
           source_doctrine_id: string | null
           source_excerpt: string | null
           source_heading: string | null
+          source_location: string | null
           source_resource_id: string | null
           source_segment_index: number | null
+          source_title: string | null
           status: string
           sub_chapter: string | null
           tactic_summary: string | null
@@ -2129,8 +2131,10 @@ export type Database = {
           source_doctrine_id?: string | null
           source_excerpt?: string | null
           source_heading?: string | null
+          source_location?: string | null
           source_resource_id?: string | null
           source_segment_index?: number | null
+          source_title?: string | null
           status?: string
           sub_chapter?: string | null
           tactic_summary?: string | null
@@ -2165,8 +2169,10 @@ export type Database = {
           source_doctrine_id?: string | null
           source_excerpt?: string | null
           source_heading?: string | null
+          source_location?: string | null
           source_resource_id?: string | null
           source_segment_index?: number | null
+          source_title?: string | null
           status?: string
           sub_chapter?: string | null
           tactic_summary?: string | null
