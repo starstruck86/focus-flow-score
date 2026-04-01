@@ -19,6 +19,7 @@ import { NextStepGuidance } from './NextStepGuidance';
 import { fetchRankedResources, type RankedResource } from './resourceRanking';
 import { StageResourcesSection } from './StageResourcesSection';
 import { StagePlaybookSection } from './StagePlaybookSection';
+import { FrameworkSectionsPanel } from './FrameworkSectionsPanel';
 import { rankActions } from './actionRanking';
 import { fetchActionizedAssets, buildTacticInjection, buildPromptInjection, trackActionizationFeedback, type ActionizedTactic, type ActionizedPrompt } from '@/lib/actionizationEngine';
 import type { ContextItem } from './contextTypes';
@@ -286,7 +287,10 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
       {/* Keystone & Supporting Resources */}
       <StageResourcesSection stageId={stage.id} stageLabel={stage.label} />
 
-      {/* Stage Playbook */}
+      {/* Framework-Driven Sections (Sales Operating System) */}
+      <FrameworkSectionsPanel stageId={stage.id} stageLabel={stage.label} />
+
+      {/* Stage Playbook (generated) */}
       <StagePlaybookSection stageId={stage.id} stageLabel={stage.label} />
 
       {/* 5. Execution */}
