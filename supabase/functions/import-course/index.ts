@@ -65,7 +65,7 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (
 
 /**
  * Fetch a Wistia video's smallest MP4 URL from the public embed API,
- * download it, and transcribe via ElevenLabs Scribe.
+ * then transcribe via ElevenLabs Scribe using the URL directly (no download).
  */
 async function transcribeWistiaVideo(videoId: string, debug: string[]): Promise<string> {
   const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
@@ -103,26 +103,16 @@ async function transcribeWistiaVideo(videoId: string, debug: string[]): Promise<
     }
 
     const smallest = mp4Assets[0];
-    debug.push(`Using smallest MP4: ${smallest.width}x${smallest.height}, ~${Math.round((smallest.size || 0) / 1024 / 1024)}MB`);
+    const videoUrl = smallest.url.startsWith('//') ? `https:${smallest.url}` : smallest.url;
+    debug.push(`Using smallest MP4: ${smallest.width}x${smallest.height}, URL-based transcription`);
 
-    // 3. Download the MP4
-    debug.push('Downloading video for transcription...');
-    const videoResp = await fetch(smallest.url);
-    if (!videoResp.ok) {
-      debug.push(`Video download failed: ${videoResp.status}`);
-      await videoResp.text();
-      return '';
-    }
-    const videoBlob = await videoResp.blob();
-    debug.push(`Downloaded ${Math.round(videoBlob.size / 1024 / 1024)}MB`);
-
-    // 4. Send to ElevenLabs Scribe for transcription
-    debug.push('Sending to ElevenLabs Scribe...');
+    // 3. Send URL directly to ElevenLabs Scribe (no download needed)
+    debug.push('Sending to ElevenLabs Scribe via URL...');
     const formData = new FormData();
-    formData.append('file', new File([videoBlob], `${videoId}.mp4`, { type: 'video/mp4' }));
     formData.append('model_id', 'scribe_v2');
     formData.append('tag_audio_events', 'false');
     formData.append('diarize', 'false');
+    formData.append('cloud_storage_url', videoUrl);
 
     const scribeResp = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
       method: 'POST',
