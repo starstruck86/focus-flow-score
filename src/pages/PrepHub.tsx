@@ -3,6 +3,7 @@ import { Layout } from '@/components/Layout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Crosshair, Brain, Download } from 'lucide-react';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
+import { PodcastQueueIndicator } from '@/components/prep/PodcastQueueIndicator';
 
 // Consolidated workspaces
 import { PrepCommandCenter } from '@/components/prep-tab/PrepCommandCenter';
@@ -31,6 +32,7 @@ export default function PrepHub() {
             <p className="text-xs text-muted-foreground">Prep · Knowledge · Ingest</p>
           </div>
           <div className="flex items-center gap-2">
+            <PodcastQueueIndicator />
             <VoiceCommandButton />
           </div>
         </div>

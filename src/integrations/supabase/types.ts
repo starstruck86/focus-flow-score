@@ -2885,6 +2885,71 @@ export type Database = {
         }
         Relationships: []
       }
+      podcast_import_queue: {
+        Row: {
+          attempts: number
+          created_at: string
+          episode_duration: string | null
+          episode_guest: string | null
+          episode_published: string | null
+          episode_title: string
+          episode_url: string
+          error_message: string | null
+          id: string
+          processed_at: string | null
+          resource_id: string | null
+          show_author: string | null
+          source_registry_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          episode_duration?: string | null
+          episode_guest?: string | null
+          episode_published?: string | null
+          episode_title: string
+          episode_url: string
+          error_message?: string | null
+          id?: string
+          processed_at?: string | null
+          resource_id?: string | null
+          show_author?: string | null
+          source_registry_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          episode_duration?: string | null
+          episode_guest?: string | null
+          episode_published?: string | null
+          episode_title?: string
+          episode_url?: string
+          error_message?: string | null
+          id?: string
+          processed_at?: string | null
+          resource_id?: string | null
+          show_author?: string | null
+          source_registry_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "podcast_import_queue_source_registry_id_fkey"
+            columns: ["source_registry_id"]
+            isOneToOne: false
+            referencedRelation: "source_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       power_hour_sessions: {
         Row: {
           connects: number

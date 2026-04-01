@@ -11,8 +11,8 @@ import { insertSource, getSources } from '@/data/source-registry';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { useBulkIngestion } from '@/hooks/useBulkIngestion';
-import { BulkIngestionPanel } from './BulkIngestionPanel';
+import { usePodcastQueue } from '@/hooks/usePodcastQueue';
+import { PodcastQueueProgress } from './PodcastQueueProgress';
 
 type Episode = {
   title: string;
@@ -45,11 +45,10 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [alreadyImported, setAlreadyImported] = useState<Set<number>>(new Set());
   const [sourceRegistryId, setSourceRegistryId] = useState<string | null>(null);
+  const [enqueued, setEnqueued] = useState(false);
 
   const { user } = useAuth();
-  const bulk = useBulkIngestion();
-  const isProcessing = bulk.state.status === 'running' || bulk.state.status === 'paused';
-  const isDone = bulk.state.status === 'completed' || bulk.state.status === 'failed' || bulk.state.status === 'cancelled';
+  const queue = usePodcastQueue();
 
   // ── Fetch episodes ──────────────────────────────────────────
   const handleFetch = useCallback(async () => {
@@ -59,6 +58,7 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
     setShowMeta(null);
     setAlreadyImported(new Set());
     setSourceRegistryId(null);
+    setEnqueued(false);
     try {
       const { data, error } = await trackedInvoke<any>('import-podcast', {
         body: { url: url.trim() },
@@ -77,7 +77,6 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
       if (user) {
         try {
           const epUrls = eps.map(e => e.url).filter(Boolean);
-          // Query in batches of 50 to avoid URL length issues
           const importedUrls = new Set<string>();
           for (let i = 0; i < epUrls.length; i += 50) {
             const batch = epUrls.slice(i, i + 50);
@@ -91,10 +90,8 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
           const alreadySet = new Set<number>();
           eps.forEach((ep, idx) => { if (importedUrls.has(ep.url)) alreadySet.add(idx); });
           setAlreadyImported(alreadySet);
-          // Select only non-imported episodes
           setSelected(new Set(eps.map((_, i) => i).filter(i => !alreadySet.has(i))));
         } catch {
-          // Fallback: select all
           setSelected(new Set(eps.map((_, i) => i)));
         }
       } else {
@@ -163,7 +160,6 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
   };
 
   const selectNewest = (count: number) => {
-    // Episodes are typically in reverse-chronological order from RSS
     const eligible = episodes.map((_, i) => i).filter(i => !alreadyImported.has(i));
     setSelected(new Set(eligible.slice(0, count)));
   };
@@ -176,27 +172,28 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
   const guestCount = useMemo(() => episodes.filter(e => e.guest).length, [episodes]);
   const newEpisodeCount = episodes.length - alreadyImported.size;
 
-  // ── Map selected episodes to bulk ingestion format ──────────
-  const selectedEpisodes = useMemo(
-    () => episodes
+  // ── Start server-side import ───────────────────────────────
+  const handleStartImport = useCallback(async () => {
+    const selectedEps = episodes
       .filter((_, i) => selected.has(i))
       .map(ep => ({
         url: ep.url,
         title: ep.title,
-        publishDate: ep.published,
+        guest: ep.guest,
+        published: ep.published,
         duration: ep.duration,
-        channel: showMeta?.show_author || undefined,
-      })),
-    [episodes, selected, showMeta]
-  );
+      }));
+
+    if (selectedEps.length === 0) return;
+
+    await queue.enqueue(selectedEps, sourceRegistryId, showMeta?.show_author);
+    setEnqueued(true);
+    toast.success(`Queued ${selectedEps.length} episodes for server-side import`);
+  }, [episodes, selected, sourceRegistryId, showMeta, queue]);
 
   // ── Close handler ──────────────────────────────────────────
   const handleClose = () => {
-    if (isProcessing) return;
-    if (isDone) {
-      // After bulk completes, link resources to source_registry + populate metadata
-      linkImportedResources();
-      bulk.reset();
+    if (!enqueued && !queue.isActive) {
       setEpisodes([]);
       setShowMeta(null);
       setUrl('');
@@ -207,33 +204,11 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
     onOpenChange(false);
   };
 
-  // ── Post-import: link resources to source_registry ─────────
-  const linkImportedResources = useCallback(async () => {
-    if (!sourceRegistryId || !user) return;
-    const completedItems = bulk.state.items.filter(i => i.stage === 'complete' && i.existingResourceId);
-    if (completedItems.length === 0) return;
-
-    for (const item of completedItems) {
-      try {
-        const updateFields: Record<string, any> = { source_registry_id: sourceRegistryId };
-        // Find matching episode for metadata
-        const ep = episodes.find(e => e.url === item.url);
-        if (ep?.guest) updateFields.author_or_speaker = ep.guest;
-        else if (showMeta?.show_author) updateFields.author_or_speaker = showMeta.show_author;
-        if (ep?.published) {
-          try { updateFields.source_published_at = new Date(ep.published).toISOString(); } catch { /* skip */ }
-        }
-        await (supabase as any).from('resources').update(updateFields).eq('id', item.existingResourceId);
-      } catch (e) {
-        console.warn('Failed to link resource:', e);
-      }
-    }
-  }, [sourceRegistryId, user, bulk.state.items, episodes, showMeta]);
-
   const selectedCount = selected.size;
+  const showQueue = enqueued || queue.isActive || queue.isDone;
 
   return (
-    <Dialog open={open} onOpenChange={isProcessing ? undefined : handleClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -243,11 +218,11 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* URL input — hide during processing */}
-          {!isProcessing && !isDone && (
+          {/* URL input — hide when queue is active */}
+          {!showQueue && (
             <>
               <p className="text-xs text-muted-foreground">
-                Paste an Apple Podcasts, Spotify, or RSS feed URL to import episodes with controlled batching.
+                Paste an Apple Podcasts, Spotify, or RSS feed URL. Episodes are imported server-side — you can close the browser.
               </p>
               <div className="flex gap-2">
                 <Input
@@ -265,7 +240,7 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
           )}
 
           {/* Show metadata */}
-          {showMeta?.show_title && !isProcessing && !isDone && (
+          {showMeta?.show_title && !showQueue && (
             <div className="flex items-center gap-3 p-2 rounded-md bg-muted/50">
               {showMeta.show_image && (
                 <img src={showMeta.show_image} alt="" className="h-10 w-10 rounded-md object-cover" />
@@ -280,7 +255,7 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
           )}
 
           {/* Episode list with selection helpers */}
-          {episodes.length > 0 && !isProcessing && !isDone && (
+          {episodes.length > 0 && !showQueue && (
             <>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -352,28 +327,48 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
                   })}
                 </div>
               </ScrollArea>
+
+              {/* Start import button */}
+              {selectedCount > 0 && (
+                <Button
+                  onClick={handleStartImport}
+                  disabled={queue.loading}
+                  className="w-full gap-2"
+                >
+                  {queue.loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Podcast className="h-4 w-4" />
+                  )}
+                  Queue {selectedCount} episodes for import
+                </Button>
+              )}
             </>
           )}
 
-          {/* Bulk ingestion panel */}
-          {(isProcessing || isDone || (episodes.length > 0 && !isDone && bulk.state.status === 'idle' && selectedCount > 0)) && (
-            <BulkIngestionPanel
-              state={bulk.state}
-              onSetBatchSize={bulk.setBatchSize}
-              onSetReprocessMode={bulk.setReprocessMode}
-              onStart={bulk.start}
-              onPause={bulk.pause}
-              onResume={bulk.resume}
-              onCancel={bulk.cancel}
-              onReset={bulk.reset}
-              hasFailures={bulk.hasFailures}
-              sourceItems={selectedEpisodes}
-              sourceLabel="episodes"
+          {/* Queue progress panel */}
+          {showQueue && (
+            <PodcastQueueProgress
+              items={queue.items}
+              stats={queue.stats}
+              isActive={queue.isActive}
+              isDone={queue.isDone}
+              onCancel={queue.cancelRemaining}
+              onClear={() => {
+                queue.clearDone();
+                setEnqueued(false);
+                setEpisodes([]);
+                setShowMeta(null);
+                setUrl('');
+                setSelected(new Set());
+                setAlreadyImported(new Set());
+                setSourceRegistryId(null);
+              }}
             />
           )}
         </div>
 
-        {isDone && (
+        {(showQueue && !queue.isActive) && (
           <DialogFooter>
             <Button variant="outline" onClick={handleClose}>Close</Button>
           </DialogFooter>
