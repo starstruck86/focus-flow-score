@@ -430,6 +430,27 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     videoEmbeds.push(`[YouTube Video: ${ym[1]}]`);
   }
   
+  // Sproutvideo (commonly used by Kajabi)
+  const sproutMatches = html.matchAll(/videos-cdn\.sproutvideo\.com\/([a-z0-9]+)/gi);
+  for (const sm of sproutMatches) {
+    if (!videoEmbeds.some(v => v.includes(sm[1]))) {
+      videoEmbeds.push(`[SproutVideo: ${sm[1]}]`);
+    }
+  }
+  
+  // Generic iframe video embeds
+  if (videoEmbeds.length === 0) {
+    const iframeMatches = html.matchAll(/<iframe[^>]*src="([^"]*(?:video|player|embed)[^"]*)"/gi);
+    for (const im of iframeMatches) {
+      videoEmbeds.push(`[Video Embed: ${im[1]}]`);
+    }
+  }
+  
+  // Kajabi's native video player  
+  if (videoEmbeds.length === 0 && /data-controller="[^"]*video/i.test(html)) {
+    videoEmbeds.push(`[Kajabi Native Video]`);
+  }
+  
   debug.push(`Video embeds found: ${videoEmbeds.length}`);
   
   // Strip comments sections before content extraction
