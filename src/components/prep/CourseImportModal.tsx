@@ -219,23 +219,48 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         continue;
       }
 
-      // === CLASSIFY & SAVE ===
+      // === CHECK FOR EXISTING RESOURCE (dedup) ===
       updateLessonResult(i, { status: 'saving_resource' });
       setImportProgress({ done: i, total: toImport.length, current: `Saving: ${lesson.title}` });
 
       try {
-        const classification = await classify.mutateAsync({ url: lesson.url });
-        if (classification.title === 'Untitled' || classification.title.length < 3) {
-          classification.title = lesson.title;
-        }
-        if (lessonData?.success && lessonData.content && lessonData.content.length > 50) {
-          classification.scraped_content = lessonData.content;
-        }
-        classification.resource_type = lesson.type === 'video' ? 'video' : 'article';
-        classification.tags = [...(classification.tags || []), 'course', courseTitle].filter(Boolean);
+        // Look for existing resource with same user + lesson URL
+        const { data: existingResources } = await supabase
+          .from('resources')
+          .select('id')
+          .eq('file_url', lesson.url)
+          .limit(1);
 
-        const result = await addUrl.mutateAsync({ url: lesson.url, classification });
-        const resourceId = result?.id || null;
+        let resourceId: string | null = null;
+
+        if (existingResources && existingResources.length > 0) {
+          // Reuse existing resource — update its content
+          resourceId = existingResources[0].id;
+          const updatePayload: Record<string, any> = {
+            updated_at: new Date().toISOString(),
+          };
+          if (lessonData?.success && lessonData.content && lessonData.content.length > 50) {
+            updatePayload.content = lessonData.content;
+            updatePayload.content_status = 'enriched';
+          }
+          updatePayload.title = lesson.title;
+          updatePayload.resource_type = lesson.type === 'video' ? 'video' : 'article';
+          await supabase.from('resources').update(updatePayload as any).eq('id', resourceId);
+        } else {
+          // No existing resource — classify and create new
+          const classification = await classify.mutateAsync({ url: lesson.url });
+          if (classification.title === 'Untitled' || classification.title.length < 3) {
+            classification.title = lesson.title;
+          }
+          if (lessonData?.success && lessonData.content && lessonData.content.length > 50) {
+            classification.scraped_content = lessonData.content;
+          }
+          classification.resource_type = lesson.type === 'video' ? 'video' : 'article';
+          classification.tags = [...(classification.tags || []), 'course', courseTitle].filter(Boolean);
+
+          const result = await addUrl.mutateAsync({ url: lesson.url, classification });
+          resourceId = result?.id || null;
+        }
 
         // Write lineage
         await writeLineageRow({
