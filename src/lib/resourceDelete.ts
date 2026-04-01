@@ -73,19 +73,28 @@ export async function bulkDeleteResources(ids: string[]): Promise<{ deleted: num
 /**
  * Clean up related records for a set of resource IDs.
  */
-async function cleanupRelatedRecords(resourceIds: string[]): Promise<void> {
-  // Clean tables with resource_id
-  for (const table of RELATED_TABLES_BY_RESOURCE_ID) {
-    try {
-      for (let i = 0; i < resourceIds.length; i += BATCH_SIZE) {
-        await (supabase as any).from(table).delete().in('resource_id', resourceIds.slice(i, i + BATCH_SIZE));
-      }
-    } catch {
-      // Non-fatal — some tables may not have matching rows or lack delete RLS
+async function cleanupRelatedRecords(resourceIds: string[]): Promise<{ kiDeleted: number }> {
+  let kiDeleted = 0;
+
+  // 1. Delete knowledge_items FIRST (primary downstream artifacts)
+  try {
+    for (let i = 0; i < resourceIds.length; i += BATCH_SIZE) {
+      const batch = resourceIds.slice(i, i + BATCH_SIZE);
+      // Count before delete
+      const { count } = await supabase
+        .from('knowledge_items')
+        .select('id', { count: 'exact', head: true })
+        .in('source_resource_id', batch);
+      kiDeleted += count ?? 0;
+      await supabase.from('knowledge_items').delete().in('source_resource_id', batch);
     }
+  } catch (e) {
+    console.error('[ResourceDelete] Failed to delete knowledge_items:', e);
   }
-  // Clean tables with source_resource_id
+
+  // 2. Clean tables with source_resource_id (excluding knowledge_items, already handled)
   for (const table of RELATED_TABLES_BY_SOURCE_RESOURCE_ID) {
+    if (table === 'knowledge_items') continue;
     try {
       for (let i = 0; i < resourceIds.length; i += BATCH_SIZE) {
         await (supabase as any).from(table).delete().in('source_resource_id', resourceIds.slice(i, i + BATCH_SIZE));
@@ -94,6 +103,19 @@ async function cleanupRelatedRecords(resourceIds: string[]): Promise<void> {
       // Non-fatal
     }
   }
+
+  // 3. Clean tables with resource_id
+  for (const table of RELATED_TABLES_BY_RESOURCE_ID) {
+    try {
+      for (let i = 0; i < resourceIds.length; i += BATCH_SIZE) {
+        await (supabase as any).from(table).delete().in('resource_id', resourceIds.slice(i, i + BATCH_SIZE));
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  return { kiDeleted };
 }
 
 /**
