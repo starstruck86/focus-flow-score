@@ -198,7 +198,35 @@ Deno.serve(async (req) => {
       }
 
       const hasTranscriptFromResolve = resolveResult?.transcript && resolveResult.transcript.length > 200;
-      const hasAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url;
+      const hasAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
+        resolveResult?.resolution?.audioEnclosureUrl;
+
+      // ── Persist resolved metadata on the queue item ──
+      const resolvedMeta: Record<string, any> = {};
+      if (resolveResult?.metadata) {
+        const m = resolveResult.metadata;
+        if (m.title && !queueItem.episode_title) resolvedMeta.episode_title = m.title;
+        if (m.showName) resolvedMeta.show_title = m.showName;
+        if (m.description) resolvedMeta.episode_description = m.description?.slice(0, 5000);
+        if (m.artworkUrl) resolvedMeta.artwork_url = m.artworkUrl;
+        if (m.publishDate && !queueItem.episode_published) resolvedMeta.episode_published = m.publishDate;
+      }
+      if (resolveResult?.resolution) {
+        const r = resolveResult.resolution;
+        if (r.canonicalPageUrl) resolvedMeta.resolved_url = r.canonicalPageUrl;
+        if (r.audioEnclosureUrl) resolvedMeta.audio_url = r.audioEnclosureUrl;
+      }
+      // Detect host platform from resolved/audio URL
+      const resolvedAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
+        resolveResult?.resolution?.audioEnclosureUrl || '';
+      const hostPlatform = detectHostPlatform(resolvedAudioUrl || resolveResult?.resolution?.rssFeedUrl || '');
+      if (hostPlatform) resolvedMeta.host_platform = hostPlatform;
+      resolvedMeta.resolution_method = hasTranscriptFromResolve ? 'transcript_found' : (hasAudioUrl ? 'transcribed' : 'unresolved');
+      resolvedMeta.metadata_status = (resolvedMeta.show_title || resolvedMeta.episode_description) ? 'resolved' : 'partial';
+
+      if (Object.keys(resolvedMeta).length > 0) {
+        await updateQueueItem(supabase, queueItem.id, resolvedMeta);
+      }
 
       if (!hasTranscriptFromResolve && !hasAudioUrl) {
         await handleFailure(supabase, queueItem, "No transcript or audio URL found", "transcript_unavailable_from_link");
