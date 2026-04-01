@@ -20,13 +20,6 @@ const STAGE_LABELS: Record<string, string> = {
   follow_up: "Follow-Up / Recap",
 };
 
-const FRAMEWORK_AUTHORS: Record<string, string> = {
-  "GAP Selling": "Keenan",
-  "Challenger": "Dixon",
-  "MEDDPICC": "McMahon",
-  "Command of the Message": "Force Management",
-};
-
 const STAGE_FRAMEWORKS: Record<string, { framework: string; who: string; role: string; sections: string[] }[]> = {
   outbound: [
     { framework: "Challenger", who: "Dixon", role: "Hypothesis-driven outreach", sections: ["Business Overview", "Digital / Lifecycle Signals", "Challenger Hypothesis"] },
@@ -166,17 +159,13 @@ Deno.serve(async (req) => {
     const resourceMap = new Map(resources.map(r => [r.id, r]));
     const keystoneIdSet = new Set(keystone_resource_ids || []);
 
-    // Build context — tag each source as Keystone, Supporting, or KI
+    // Build context
     const keystoneContext = (keystone_resource_ids || [])
       .map((id: string) => {
         const r = resourceMap.get(id);
         if (!r) return null;
         const linkedKIs = allKIs.filter(ki => ki.source_resource_id === id);
-        return `### [KEYSTONE RESOURCE] ${r.title} (${r.resource_type})
-Tags: ${(r.tags || []).join(", ") || "none"}
-Content preview: ${(r.content || "").slice(0, 600)}
-Linked Knowledge Items (${linkedKIs.length}):
-${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework} — ${ki.who || ''}]` : ''}: ${ki.tactic_summary || "N/A"}`).join("\n")}`;
+        return `### [KEYSTONE RESOURCE] ${r.title} (${r.resource_type})\nTags: ${(r.tags || []).join(", ") || "none"}\nContent preview: ${(r.content || "").slice(0, 600)}\nLinked KIs (${linkedKIs.length}):\n${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework} — ${ki.who || ''}]` : ''}: ${ki.tactic_summary || "N/A"}`).join("\n")}`;
       })
       .filter(Boolean)
       .join("\n\n---\n\n");
@@ -187,10 +176,7 @@ ${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework} — ${ki
         const r = resourceMap.get(id);
         if (!r) return null;
         const linkedKIs = allKIs.filter(ki => ki.source_resource_id === id);
-        return `### [SUPPORTING RESOURCE] ${r.title} (${r.resource_type})
-Content preview: ${(r.content || "").slice(0, 400)}
-Linked KIs (${linkedKIs.length}):
-${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework} — ${ki.who || ''}]` : ''}: ${ki.tactic_summary || "N/A"}`).join("\n")}`;
+        return `### [SUPPORTING RESOURCE] ${r.title} (${r.resource_type})\nContent preview: ${(r.content || "").slice(0, 400)}\nLinked KIs (${linkedKIs.length}):\n${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework} — ${ki.who || ''}]` : ''}: ${ki.tactic_summary || "N/A"}`).join("\n")}`;
       })
       .filter(Boolean)
       .join("\n\n---\n\n");
@@ -200,11 +186,7 @@ ${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework} — ${ki
         const source = resourceMap.get(ki.source_resource_id);
         const sourceType = keystoneIdSet.has(ki.source_resource_id) ? "Keystone" : "Supporting";
         const attribution = [ki.framework, ki.who].filter(Boolean).join(" — ");
-        return `- [KI:${ki.id.slice(0, 8)}] ${ki.title}${attribution ? ` [${attribution}]` : ""} (from ${sourceType}: ${source?.title || "Unknown"})
-  Summary: ${ki.tactic_summary || "N/A"}
-  Why: ${ki.why_it_matters || "N/A"}
-  When: ${ki.when_to_use || "N/A"}
-  Example: ${ki.example_usage || "N/A"}`;
+        return `- [KI:${ki.id.slice(0, 8)}] ${ki.title}${attribution ? ` [${attribution}]` : ""} (from ${sourceType}: ${source?.title || "Unknown"})\n  Summary: ${ki.tactic_summary || "N/A"}\n  Why: ${ki.why_it_matters || "N/A"}\n  When: ${ki.when_to_use || "N/A"}\n  Example: ${ki.example_usage || "N/A"}`;
       })
       .join("\n");
 
@@ -213,14 +195,11 @@ ${linkedKIs.map(ki => `- ${ki.title}${ki.framework ? ` [${ki.framework} — ${ki
       return `[R${i + 1}:${type}] ${r.title}`;
     }).join("\n");
 
-    // Build the framework-driven section spec with author attribution
     const frameworkSpec = stageFrameworks
-      .map(f => `### ${f.framework} — ${f.who} (Role: ${f.role})
-Generate these sections:
-${f.sections.map(s => `  - "${f.framework}: ${s}"`).join("\n")}`)
+      .map(f => `### ${f.framework} — ${f.who} (Role: ${f.role})\nGenerate these sections:\n${f.sections.map(s => `  - "${f.framework}: ${s}"`).join("\n")}`)
       .join("\n\n");
 
-    const systemPrompt = `You are an elite sales execution strategist building a UNIFIED PLAYBOOK for the "${stageLabel}" stage.
+    const systemPrompt = `You are an elite sales execution strategist building a TACTICAL PLAYBOOK for the "${stageLabel}" stage.
 
 This playbook integrates FOUR sales frameworks as a single Sales Operating System:
 - GAP Selling (Keenan) = Discovery — current state, future state, gaps, impact
@@ -228,71 +207,61 @@ This playbook integrates FOUR sales frameworks as a single Sales Operating Syste
 - MEDDPICC (McMahon) = Deal qualification & progression
 - Command of the Message (Force Management) = Structure & narrative
 
-CRITICAL: Produce ONE unified playbook where each section is LABELED with the framework it belongs to.
+CRITICAL: Produce ONE unified playbook. Each section MUST be a TACTICAL EXECUTION BLOCK, not a summary.
 
 FRAMEWORK-DRIVEN SECTIONS FOR THIS STAGE:
 ${frameworkSpec}
 
+SECTION OUTPUT STRUCTURE — MANDATORY FOR EVERY SECTION:
+Each section must contain ALL of these fields:
+1. "objective" — one sentence stating what the rep must accomplish in this section
+2. "questions" — 3-5 specific questions to ask the prospect (verbatim, ready to use)
+3. "talk_tracks" — 2-3 exact phrases/sentences the rep can say (natural speech, not consultant language)
+4. "hypotheses" — 1-3 beliefs about this prospect/situation that need to be validated
+5. "signals" — 2-4 signal interpretations: what good vs bad answers mean (format: "If they say X → it means Y → do Z")
+6. "next_steps" — 1-3 concrete actions to take after this section (specific, not generic)
+
+FRAMEWORK-SPECIFIC CONTENT RULES:
+- GAP Selling KIs → prioritize populating questions and hypotheses
+- Challenger KIs → prioritize populating talk_tracks and hypotheses
+- MEDDPICC KIs → prioritize populating signals and next_steps
+- Command of the Message KIs → prioritize populating talk_tracks and questions
+
 OUTPUT QUALITY GUARDRAILS — MANDATORY:
-1. Each section MUST contain at least ONE highly specific item (a real question to ask, a talk track, or a concrete hypothesis)
-2. Each section with a discovery or teaching role MUST include at least one practical question or verbatim talk track
-3. ZERO filler content — no "consider exploring..." or "it would be beneficial to..." or "think about..."
-4. NO repeated insights across sections — if a concept appears in GAP Selling, do NOT repeat it in Challenger
-5. Every item should be something a rep can SAY, ASK, or DO in the next meeting
-6. Prefer specific company/industry language over generic advice
-7. Talk tracks should sound like a real human speaking, not a consultant writing a report
+1. ZERO high-level summaries — no "consider exploring" or "it would be beneficial"
+2. Every question must be a real question a human would ask in conversation
+3. Every talk track must sound like a real person speaking — contractions, natural phrasing
+4. Every signal must have a clear "If X → then Y" structure
+5. Every next step must be a specific verb-led action (e.g., "Send the ROI calc to Sarah by Friday")
+6. NO repeated content across sections
+7. Prefer account/industry-specific language over generic advice
 
 CITATION RULES:
-1. Every major insight MUST include a citation
-2. Citations MUST indicate source type using this format:
-   - "[Keystone: Resource Title]" for keystone resources
-   - "[Supporting: Resource Title]" for supporting resources
-   - "[KI: Knowledge Item Title]" for knowledge items
-3. Include framework attribution: [Framework — Author] (e.g., [GAP Selling — Keenan])
-4. Prioritize Keystone Resource insights as foundational — they define the strategy
-
-ITEM TYPES — use the most specific type:
-- "question" — a specific discovery or qualifying question to ask
-- "talk_track" — exact words to say in a conversation
-- "tactic" — a specific action to take
-- "warning" — a risk or red flag to watch for
-- "tip" — a practical tip or insight
-- "framework" — a structural element or framework guidance
+- Each item in questions, talk_tracks, hypotheses, signals, next_steps can have an optional "citations" array
+- Citations format: "[Keystone: Title]", "[Supporting: Title]", or "[KI: Title]"
+- Prioritize Keystone insights as foundational
 
 Return a JSON object:
 {
   "title": "string — playbook title",
-  "summary": "string — 1-2 sentence overview of the unified approach",
+  "summary": "string — 1-2 sentence overview",
   "sections": [
     {
       "title": "string — e.g. 'GAP Selling: Current State'",
       "framework": "string — the framework name",
-      "items": [
-        {
-          "content": "string — the specific insight, question, talk track, or tactic",
-          "citations": ["string — e.g. '[Keystone: GAP Selling Playbook]'"],
-          "type": "question" | "talk_track" | "tactic" | "warning" | "tip" | "framework"
-        }
-      ]
+      "objective": "string — what the rep must accomplish",
+      "questions": [{ "content": "string", "citations": ["string"] }],
+      "talk_tracks": [{ "content": "string", "citations": ["string"] }],
+      "hypotheses": [{ "content": "string", "citations": ["string"] }],
+      "signals": [{ "content": "string", "citations": ["string"] }],
+      "next_steps": [{ "content": "string", "citations": ["string"] }]
     }
   ]
 }
 
 Return ONLY valid JSON, no markdown fences.`;
 
-    const userPrompt = `RESOURCE INDEX:
-${resourceIndex}
-
-KEYSTONE RESOURCES:
-${keystoneContext || "None selected"}
-
-SUPPORTING RESOURCES:
-${supportingContext || "None"}
-
-ALL KNOWLEDGE ITEMS (${allKIs.length}):
-${kiContext || "None extracted"}
-
-Generate the unified ${stageLabel} stage playbook now. Remember: specific questions, real talk tracks, zero filler.`;
+    const userPrompt = `RESOURCE INDEX:\n${resourceIndex}\n\nKEYSTONE RESOURCES:\n${keystoneContext || "None selected"}\n\nSUPPORTING RESOURCES:\n${supportingContext || "None"}\n\nALL KNOWLEDGE ITEMS (${allKIs.length}):\n${kiContext || "None extracted"}\n\nGenerate the tactical ${stageLabel} stage playbook now. Every section needs real questions, real talk tracks, real signals. Zero filler.`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

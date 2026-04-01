@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { useStagePlaybook, type PlaybookSection, type PlaybookItem } from '@/hooks/useStagePlaybook';
+import { useStagePlaybook, type PlaybookSection, type TacticalItem } from '@/hooks/useStagePlaybook';
 import { useStageResources } from '@/hooks/useStageResources';
 import { STAGE_FRAMEWORK_MAP, getFrameworkColorClasses, FRAMEWORK_AUTHORS } from '@/data/stageFrameworkMap';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
-import { BookOpen, ChevronDown, ChevronRight, Copy, RefreshCw, Loader2, Quote, AlertTriangle, Lightbulb, MessageSquare, HelpCircle, Layers, CheckCircle, Star, FileText, Brain } from 'lucide-react';
+import {
+  BookOpen, ChevronDown, ChevronRight, Copy, RefreshCw, Loader2, Quote,
+  HelpCircle, MessageSquare, Lightbulb, Eye, ArrowRight, Star, FileText, Brain, Target,
+} from 'lucide-react';
 import { SectionFeedback, PlaybookItemFeedback } from './PlaybookFeedbackControls';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -15,16 +18,6 @@ interface Props {
   stageLabel: string;
 }
 
-const TYPE_CONFIG: Record<string, { icon: typeof BookOpen; color: string; label: string }> = {
-  tactic: { icon: CheckCircle, color: 'text-emerald-500', label: 'Tactic' },
-  question: { icon: HelpCircle, color: 'text-blue-500', label: 'Question' },
-  talk_track: { icon: MessageSquare, color: 'text-violet-500', label: 'Talk Track' },
-  framework: { icon: Layers, color: 'text-amber-500', label: 'Framework' },
-  warning: { icon: AlertTriangle, color: 'text-destructive', label: 'Warning' },
-  tip: { icon: Lightbulb, color: 'text-primary', label: 'Tip' },
-};
-
-/** Source type icon for citations */
 function CitationSourceIcon({ citation }: { citation: string }) {
   if (citation.startsWith('[Keystone:') || citation.includes('KEYSTONE')) {
     return <Star className="h-2.5 w-2.5 text-amber-500 shrink-0" />;
@@ -35,29 +28,35 @@ function CitationSourceIcon({ citation }: { citation: string }) {
   return <FileText className="h-2.5 w-2.5 text-muted-foreground shrink-0" />;
 }
 
-function PlaybookItemRow({ item, stageId, framework, sectionHeading }: { item: PlaybookItem; stageId: string; framework?: string; sectionHeading: string }) {
-  const config = TYPE_CONFIG[item.type] || TYPE_CONFIG.tactic;
-  const Icon = config.icon;
+function TacticalItemRow({ item, icon: Icon, color, stageId, framework, sectionHeading, label }: {
+  item: TacticalItem;
+  icon: typeof HelpCircle;
+  color: string;
+  stageId: string;
+  framework?: string;
+  sectionHeading: string;
+  label: string;
+}) {
   const [showCitations, setShowCitations] = useState(false);
 
   return (
-    <div className="group/item relative pl-6 py-1.5 flex items-start gap-1">
-      <Icon className={cn('absolute left-0 top-2 h-4 w-4', config.color)} />
+    <div className="group/item relative pl-5 py-1 flex items-start gap-1">
+      <Icon className={cn('absolute left-0 top-1.5 h-3.5 w-3.5', color)} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-foreground leading-relaxed">{item.content}</p>
-        {item.citations?.length > 0 && (
+        <p className="text-[13px] text-foreground leading-relaxed">{item.content}</p>
+        {item.citations && item.citations.length > 0 && (
           <button
             onClick={() => setShowCitations(!showCitations)}
-            className="inline-flex items-center gap-1 mt-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1 mt-0.5 text-[9px] text-muted-foreground hover:text-foreground transition-colors"
           >
-            <Quote className="h-3 w-3" />
+            <Quote className="h-2.5 w-2.5" />
             {item.citations.length} source{item.citations.length > 1 ? 's' : ''}
           </button>
         )}
-        {showCitations && item.citations?.length > 0 && (
-          <div className="mt-1.5 pl-3 border-l-2 border-muted space-y-0.5">
+        {showCitations && item.citations && item.citations.length > 0 && (
+          <div className="mt-1 pl-3 border-l-2 border-muted space-y-0.5">
             {item.citations.map((c, i) => (
-              <p key={i} className="text-[10px] text-muted-foreground italic flex items-center gap-1">
+              <p key={i} className="text-[9px] text-muted-foreground italic flex items-center gap-1">
                 <CitationSourceIcon citation={c} />
                 {c}
               </p>
@@ -75,7 +74,31 @@ function PlaybookItemRow({ item, stageId, framework, sectionHeading }: { item: P
   );
 }
 
-/** Always show "Framework — Who" */
+function TacticalBlock({ label, items, icon: Icon, color, stageId, framework, sectionHeading }: {
+  label: string;
+  items: TacticalItem[];
+  icon: typeof HelpCircle;
+  color: string;
+  stageId: string;
+  framework?: string;
+  sectionHeading: string;
+}) {
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon className={cn('h-3 w-3', color)} />
+        <span className={cn('text-[10px] font-semibold uppercase tracking-wider', color)}>{label}</span>
+        <Badge variant="secondary" className="text-[8px] h-3.5 px-1">{items.length}</Badge>
+      </div>
+      {items.map((item, i) => (
+        <TacticalItemRow key={i} item={item} icon={Icon} color={color} stageId={stageId} framework={framework} sectionHeading={sectionHeading} label={label} />
+      ))}
+    </div>
+  );
+}
+
 function FrameworkBadgeInline({ framework }: { framework: string }) {
   const colors = getFrameworkColorClasses(framework);
   const who = FRAMEWORK_AUTHORS[framework] || '';
@@ -97,6 +120,9 @@ function PlaybookSectionBlock({ section, stageId, defaultOpen }: { section: Play
     ? section.title.slice(framework.length + 1).trim()
     : section.title;
 
+  const itemCount = (section.questions?.length || 0) + (section.talk_tracks?.length || 0) +
+    (section.hypotheses?.length || 0) + (section.signals?.length || 0) + (section.next_steps?.length || 0);
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className={cn(
@@ -107,12 +133,22 @@ function PlaybookSectionBlock({ section, stageId, defaultOpen }: { section: Play
         {framework && <FrameworkBadgeInline framework={framework} />}
         <span className="text-sm font-medium text-foreground">{displayTitle}</span>
         <SectionFeedback stageId={stageId} framework={framework} sectionHeading={displayTitle} />
-        <Badge variant="secondary" className="text-[9px] ml-auto">{section.items.length}</Badge>
+        <Badge variant="secondary" className="text-[9px] ml-auto">{itemCount}</Badge>
       </CollapsibleTrigger>
-      <CollapsibleContent className="pl-4 space-y-1 pb-2">
-        {section.items.map((item, i) => (
-          <PlaybookItemRow key={i} item={item} stageId={stageId} framework={framework} sectionHeading={displayTitle} />
-        ))}
+      <CollapsibleContent className="pl-4 pb-3 space-y-3">
+        {/* Objective */}
+        {section.objective && (
+          <div className="flex items-start gap-2 bg-muted/30 rounded-md px-3 py-2">
+            <Target className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+            <p className="text-xs text-foreground font-medium leading-relaxed">{section.objective}</p>
+          </div>
+        )}
+
+        <TacticalBlock label="Questions" items={section.questions} icon={HelpCircle} color="text-blue-500" stageId={stageId} framework={framework} sectionHeading={displayTitle} />
+        <TacticalBlock label="Talk Tracks" items={section.talk_tracks} icon={MessageSquare} color="text-violet-500" stageId={stageId} framework={framework} sectionHeading={displayTitle} />
+        <TacticalBlock label="Hypotheses" items={section.hypotheses} icon={Lightbulb} color="text-amber-500" stageId={stageId} framework={framework} sectionHeading={displayTitle} />
+        <TacticalBlock label="Signals" items={section.signals} icon={Eye} color="text-emerald-500" stageId={stageId} framework={framework} sectionHeading={displayTitle} />
+        <TacticalBlock label="Next Steps" items={section.next_steps} icon={ArrowRight} color="text-primary" stageId={stageId} framework={framework} sectionHeading={displayTitle} />
       </CollapsibleContent>
     </Collapsible>
   );
@@ -151,7 +187,17 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
       .map(s => {
         const fw = s.framework ? FRAMEWORK_AUTHORS[s.framework] : null;
         const prefix = s.framework ? `[${s.framework}${fw ? ` — ${fw}` : ''}] ` : '';
-        return `## ${prefix}${s.title}\n${s.items.map(i => `- ${i.content}${i.citations?.length ? ` [${i.citations.join('; ')}]` : ''}`).join('\n')}`;
+        const parts: string[] = [`## ${prefix}${s.title}`];
+        if (s.objective) parts.push(`Objective: ${s.objective}`);
+        const renderItems = (label: string, items?: TacticalItem[]) => {
+          if (items?.length) parts.push(`${label}:\n${items.map(i => `- ${i.content}`).join('\n')}`);
+        };
+        renderItems('Questions', s.questions);
+        renderItems('Talk Tracks', s.talk_tracks);
+        renderItems('Hypotheses', s.hypotheses);
+        renderItems('Signals', s.signals);
+        renderItems('Next Steps', s.next_steps);
+        return parts.join('\n');
       })
       .join('\n\n');
     const full = `# ${playbook.content.title}\n${playbook.content.summary}\n\n${text}`;
@@ -169,10 +215,10 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
         <div>
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
             <BookOpen className="h-3.5 w-3.5" />
-            Generated Playbook
+            Tactical Playbook
           </h3>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            AI-synthesized execution guidance from your resources
+            Questions, talk tracks, signals & next steps from your resources
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -199,7 +245,6 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
         </div>
       </div>
 
-      {/* Framework legend */}
       {!content && hasResources && !generate.isPending && stageFrameworks.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {stageFrameworks.map(f => (
@@ -232,8 +277,8 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
       {generate.isPending && (
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-8 text-center">
           <Loader2 className="h-8 w-8 text-primary animate-spin mx-auto mb-3" />
-          <p className="text-sm text-foreground font-medium">Compiling playbook…</p>
-          <p className="text-[10px] text-muted-foreground mt-1">Synthesizing across all frameworks with quality guardrails</p>
+          <p className="text-sm text-foreground font-medium">Compiling tactical playbook…</p>
+          <p className="text-[10px] text-muted-foreground mt-1">Generating questions, talk tracks, signals & next steps</p>
         </div>
       )}
 

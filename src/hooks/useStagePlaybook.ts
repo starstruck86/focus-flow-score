@@ -3,16 +3,20 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
-export interface PlaybookItem {
+export interface TacticalItem {
   content: string;
-  citations: string[];
-  type: 'tactic' | 'question' | 'talk_track' | 'framework' | 'warning' | 'tip';
+  citations?: string[];
 }
 
 export interface PlaybookSection {
   title: string;
   framework?: string;
-  items: PlaybookItem[];
+  objective: string;
+  questions: TacticalItem[];
+  talk_tracks: TacticalItem[];
+  hypotheses: TacticalItem[];
+  signals: TacticalItem[];
+  next_steps: TacticalItem[];
 }
 
 export interface PlaybookContent {
