@@ -44,6 +44,7 @@ import { useInUseResources } from '@/hooks/useInUseResources';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
+import { InlineResourceDetail } from './InlineResourceDetail';
 
 // ── Types ──────────────────────────────────────────────────
 type SortKey = 'title' | 'resource_type' | 'enrichment_status' | 'last_quality_tier' | 'last_quality_score' | 'created_at' | 'enriched_at' | 'enrichment_version' | 'subtype';
@@ -615,7 +616,7 @@ export function ResourceLibraryTable({
                         'cursor-pointer border-b border-border transition-colors hover:bg-muted/50',
                         DENSITY_ROW_CLASS[density],
                         isSelected && 'bg-primary/5',
-                        expandedId === resource.id && 'bg-muted/30 border-b-0',
+                        expandedId === resource.id && 'bg-primary/5 border-b-0 border-l-2 border-l-primary',
                         drift.hasDrift && 'border-l-2 border-l-status-yellow',
                       )}
                       onClick={() => setExpandedId(prev => prev === resource.id ? null : resource.id)}
@@ -931,76 +932,13 @@ export function ResourceLibraryTable({
                     </tr>
                     {/* Expanded lifecycle detail panel */}
                     {expandedId === resource.id && (
-                      <tr className="bg-muted/20 border-b border-border">
-                        <td colSpan={12} className="px-4 py-3">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                            <div>
-                              <p className="text-muted-foreground mb-0.5">Lifecycle Stage</p>
-                              <p className="font-medium">{lc ? getStageFriendlyLabel(lc.stage) : 'Unknown'}</p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground mb-0.5">Status</p>
-                              <p className="font-medium">
-                                {lc?.blocked !== 'none' ? (
-                                  <span className="text-destructive">{getBlockedLabel(lc!.blocked)}</span>
-                                ) : (
-                                  <span className="text-emerald-600">No blockers</span>
-                                )}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground mb-0.5">Next Best Action</p>
-                              <p className="font-medium text-primary">
-                                {lc?.blocked !== 'none' ? getNextBestAction(lc!.blocked) : 'None needed'}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground mb-0.5">In Use</p>
-                              <p className="font-medium">
-                                {inUseIds.has(resource.id) ? (
-                                  <span className="text-blue-600">Yes</span>
-                                ) : 'No'}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground mb-0.5">Knowledge Items</p>
-                              <p className="font-medium">{lc?.kiCount ?? 0} total, {lc?.activeKi ?? 0} active, {lc?.activeKiWithCtx ?? 0} with contexts</p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground mb-0.5">Asset Type</p>
-                              <p className="font-medium">{getAssetTypeLabel(resource) || 'Untagged'}</p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground mb-0.5">Last Updated</p>
-                              <p className="font-medium">{formatDate(resource.updated_at)}</p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground mb-0.5">Resource Type</p>
-                              <p className="font-medium capitalize">{resource.resource_type}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border">
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onResourceClick(resource); }}>
-                              <Eye className="h-3 w-3 mr-1" /> Full Details
-                            </Button>
-                            {lc?.blocked === 'no_extraction' && (
-                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onAction('extract', resource); }}>
-                                <Zap className="h-3 w-3 mr-1" /> Run Extraction
-                              </Button>
-                            )}
-                            {lc?.blocked === 'empty_content' && (
-                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => {
-                                e.stopPropagation();
-                                const origin = getResourceOrigin(resource);
-                                onAction(origin === 'uploaded_file' ? 'reparse_file' : 'deep_enrich', resource);
-                              }}>
-                                <RefreshCw className="h-3 w-3 mr-1" /> {getResourceOrigin(resource) === 'uploaded_file' ? 'Re-parse File' : 'Re-fetch Content'}
-                              </Button>
-                            )}
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onAction('mark_template', resource); }}>
-                              <Star className="h-3 w-3 mr-1" /> Use as Template
-                            </Button>
-                          </div>
+                      <tr>
+                        <td colSpan={12} className="p-0">
+                          <InlineResourceDetail
+                            resource={resource}
+                            onClose={() => setExpandedId(null)}
+                            onAction={onAction}
+                          />
                         </td>
                       </tr>
                     )}
