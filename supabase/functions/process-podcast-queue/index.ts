@@ -233,7 +233,7 @@ Deno.serve(async (req) => {
 
       const hasTranscriptFromResolve = resolveResult?.transcript && resolveResult.transcript.length > 200;
       const hasAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
-        resolveResult?.resolution?.audioEnclosureUrl;
+        resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl;
 
       // ── Persist resolved metadata on the queue item ──
       const resolvedMeta: Record<string, any> = {};
