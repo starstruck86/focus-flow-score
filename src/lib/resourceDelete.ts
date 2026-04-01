@@ -31,15 +31,16 @@ const RELATED_TABLES_BY_SOURCE_RESOURCE_ID = [
 /**
  * Delete a single resource and its related records.
  */
-export async function deleteResourceWithCleanup(resourceId: string): Promise<void> {
+export async function deleteResourceWithCleanup(resourceId: string): Promise<{ kiDeleted: number }> {
   console.log('[ResourceDelete] Deleting resource:', resourceId);
-  await cleanupRelatedRecords([resourceId]);
+  const counts = await cleanupRelatedRecords([resourceId]);
   const { error } = await supabase.from('resources').delete().eq('id', resourceId);
   if (error) {
     console.error('[ResourceDelete] Failed:', error);
     throw new Error(`Failed to delete resource: ${error.message}`);
   }
-  console.log('[ResourceDelete] Success:', resourceId);
+  console.log('[ResourceDelete] Success:', resourceId, 'KIs removed:', counts.kiDeleted);
+  return counts;
 }
 
 /**
