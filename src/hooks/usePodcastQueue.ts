@@ -38,6 +38,7 @@ export interface QueueStats {
   totalKIs: number;
   readyForKI: number;
   awaitingApproval: number;
+  rejected: number;
 }
 
 function detectPlatform(url: string): string {
