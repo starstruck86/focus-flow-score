@@ -43,6 +43,26 @@ function detectPlatform(url: string): string {
   return "unknown";
 }
 
+// ── Host platform detection (where podcast is actually hosted) ──
+function detectHostPlatform(url: string): string | null {
+  if (!url) return null;
+  const u = url.toLowerCase();
+  if (u.includes("anchor.fm") || u.includes("podcasters.spotify")) return "anchor";
+  if (u.includes("buzzsprout.com")) return "buzzsprout";
+  if (u.includes("libsyn.com")) return "libsyn";
+  if (u.includes("podbean.com")) return "podbean";
+  if (u.includes("transistor.fm")) return "transistor";
+  if (u.includes("simplecast.com")) return "simplecast";
+  if (u.includes("megaphone.fm")) return "megaphone";
+  if (u.includes("spreaker.com")) return "spreaker";
+  if (u.includes("soundcloud.com")) return "soundcloud";
+  if (u.includes("captivate.fm")) return "captivate";
+  if (u.includes("blubrry.com")) return "blubrry";
+  if (u.includes("acast.com")) return "acast";
+  if (u.includes("omny.fm") || u.includes("omnystudio")) return "omny";
+  return null;
+}
+
 // ── Content validation ──
 function validateContent(content: string): { valid: boolean; reason: string | null; details: Record<string, any> } {
   const details: Record<string, any> = { length: content.length };
