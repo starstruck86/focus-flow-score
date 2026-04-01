@@ -12,6 +12,7 @@ import { Play, CheckCircle2, Clock, AlertTriangle, Eye, Sparkles, Zap } from 'lu
 import { cn } from '@/lib/utils';
 import { useKnowledgeItems, useUpdateKnowledgeItem, type KnowledgeItem } from '@/hooks/useKnowledgeItems';
 import { toast } from 'sonner';
+import { FrameworkBadge } from '@/components/knowledge/FrameworkBadge';
 
 const CHAPTER_LABELS: Record<string, string> = {
   cold_calling: 'Cold Calling',
