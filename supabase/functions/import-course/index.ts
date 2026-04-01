@@ -1,24 +1,16 @@
 /**
- * import-course: Authenticates to course platforms (Kajabi, Thinkific, etc.)
- * and scrapes curriculum structure + lesson content.
+ * import-course: Authenticates to Kajabi course platforms and scrapes curriculum.
  * 
- * Supports two modes:
- *   1. { url, action: "discover" } → returns curriculum structure (modules + lessons)
- *   2. { url, action: "fetch_lesson", lesson_url } → returns full lesson content
+ * Modes:
+ *   { url, action: "discover" } → returns curriculum structure
+ *   { url, action: "fetch_lesson", lesson_url } → returns lesson content
+ *   { url, action: "debug_login" } → returns login debug info
  */
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-trace-id',
 };
-
-function detectPlatform(url: string): 'kajabi' | 'thinkific' | 'teachable' | 'unknown' {
-  const hostname = new URL(url).hostname.toLowerCase();
-  if (hostname.includes('thinkific')) return 'thinkific';
-  if (hostname.includes('teachable')) return 'teachable';
-  // Kajabi custom domains don't include "kajabi" — detect from page content later
-  return 'kajabi'; // default assumption for custom domains
-}
 
 interface CookieJar {
   cookies: Map<string, string>;
@@ -31,14 +23,35 @@ function createCookieJar(): CookieJar {
   return {
     cookies,
     addFromHeaders(headers: Headers) {
-      const setCookies = headers.getSetCookie?.() || [];
-      for (const sc of setCookies) {
-        const parts = sc.split(';')[0];
-        const eqIdx = parts.indexOf('=');
-        if (eqIdx > 0) {
-          const name = parts.substring(0, eqIdx).trim();
-          const value = parts.substring(eqIdx + 1).trim();
-          cookies.set(name, value);
+      // Try getSetCookie first (Deno 1.37+), fallback to manual parsing
+      let setCookieHeaders: string[] = [];
+      try {
+        setCookieHeaders = headers.getSetCookie?.() || [];
+      } catch { /* fallback below */ }
+      
+      // Fallback: iterate all headers
+      if (setCookieHeaders.length === 0) {
+        headers.forEach((value, key) => {
+          if (key.toLowerCase() === 'set-cookie') {
+            setCookieHeaders.push(value);
+          }
+        });
+      }
+      
+      for (const sc of setCookieHeaders) {
+        // Handle multiple cookies in one header (comma-separated)
+        const cookieParts = sc.split(',').map(s => s.trim());
+        for (const part of cookieParts) {
+          const nameValue = part.split(';')[0];
+          const eqIdx = nameValue.indexOf('=');
+          if (eqIdx > 0) {
+            const name = nameValue.substring(0, eqIdx).trim();
+            const value = nameValue.substring(eqIdx + 1).trim();
+            // Skip cookie attributes that look like names
+            if (!['path', 'domain', 'expires', 'max-age', 'samesite', 'secure', 'httponly'].includes(name.toLowerCase())) {
+              cookies.set(name, value);
+            }
+          }
         }
       }
     },
@@ -48,9 +61,12 @@ function createCookieJar(): CookieJar {
   };
 }
 
-async function kajabiLogin(baseUrl: string, jar: CookieJar): Promise<boolean> {
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+
+async function kajabiLogin(baseUrl: string, jar: CookieJar): Promise<{ success: boolean; debug: string[] }> {
   const email = Deno.env.get('COURSE_PLATFORM_EMAIL');
   const password = Deno.env.get('COURSE_PLATFORM_PASSWORD');
+  const debug: string[] = [];
 
   if (!email || !password) {
     throw new Error('Course platform credentials not configured');
@@ -58,89 +74,117 @@ async function kajabiLogin(baseUrl: string, jar: CookieJar): Promise<boolean> {
 
   const origin = new URL(baseUrl).origin;
 
-  // Step 1: GET the login page to get CSRF token + cookies
-  console.log('Fetching login page...');
+  // Step 1: GET the login page to get cookies + CSRF token
+  debug.push('Step 1: Fetching login page...');
   const loginPageResp = await fetch(`${origin}/login`, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-      'Accept': 'text/html,application/xhtml+xml',
-    },
-    redirect: 'manual',
+    headers: { 'User-Agent': UA, 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
+    redirect: 'follow',
   });
-
   jar.addFromHeaders(loginPageResp.headers);
   const loginHtml = await loginPageResp.text();
+  debug.push(`Login page: ${loginPageResp.status}, ${loginHtml.length} chars, ${jar.cookies.size} cookies`);
 
-  // Extract CSRF token
-  const csrfMatch = loginHtml.match(/name="authenticity_token"\s+value="([^"]+)"/);
-  const csrfToken = csrfMatch?.[1] || '';
-
+  // Try multiple CSRF token patterns
+  let csrfToken = '';
+  
+  // Pattern 1: hidden input authenticity_token
+  const inputMatch = loginHtml.match(/name="authenticity_token"[^>]*value="([^"]+)"/i) ||
+                     loginHtml.match(/value="([^"]+)"[^>]*name="authenticity_token"/i);
+  if (inputMatch) {
+    csrfToken = inputMatch[1];
+    debug.push(`CSRF from input: ${csrfToken.substring(0, 20)}...`);
+  }
+  
+  // Pattern 2: meta tag
   if (!csrfToken) {
-    console.warn('No CSRF token found, attempting login anyway');
+    const metaMatch = loginHtml.match(/<meta\s+name="csrf-token"\s+content="([^"]+)"/i) ||
+                      loginHtml.match(/<meta\s+content="([^"]+)"\s+name="csrf-token"/i);
+    if (metaMatch) {
+      csrfToken = metaMatch[1];
+      debug.push(`CSRF from meta: ${csrfToken.substring(0, 20)}...`);
+    }
+  }
+  
+  // Pattern 3: in script tag (Kajabi sometimes injects via JS)
+  if (!csrfToken) {
+    const scriptMatch = loginHtml.match(/csrf[_-]?token['":\s]+['"]([^'"]+)['"]/i) ||
+                        loginHtml.match(/authenticity[_-]?token['":\s]+['"]([^'"]+)['"]/i);
+    if (scriptMatch) {
+      csrfToken = scriptMatch[1];
+      debug.push(`CSRF from script: ${csrfToken.substring(0, 20)}...`);
+    }
   }
 
-  console.log('Submitting login form...');
+  if (!csrfToken) {
+    debug.push('WARNING: No CSRF token found in any pattern');
+    // Log a snippet of the HTML around form elements for debugging
+    const formIdx = loginHtml.indexOf('new_member_session');
+    if (formIdx > -1) {
+      debug.push(`Form context: ${loginHtml.substring(formIdx, formIdx + 500).replace(/\s+/g, ' ')}`);
+    }
+  }
 
   // Step 2: POST login
+  debug.push('Step 2: Submitting login...');
   const formData = new URLSearchParams();
+  formData.append('utf8', '✓');
   if (csrfToken) formData.append('authenticity_token', csrfToken);
   formData.append('member[email]', email);
   formData.append('member[password]', password);
-  formData.append('commit', 'Log In');
+  formData.append('member[remember_me]', '0');
+  formData.append('commit', 'Login');
 
   const loginResp = await fetch(`${origin}/login`, {
     method: 'POST',
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      'User-Agent': UA,
       'Content-Type': 'application/x-www-form-urlencoded',
       'Cookie': jar.toString(),
-      'Accept': 'text/html,application/xhtml+xml',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Referer': `${origin}/login`,
+      'Origin': origin,
     },
     body: formData.toString(),
     redirect: 'manual',
   });
 
   jar.addFromHeaders(loginResp.headers);
-
-  // Follow redirects manually to collect all cookies
+  const loginStatus = loginResp.status;
   const location = loginResp.headers.get('location');
-  console.log(`Login response: ${loginResp.status}, redirect: ${location}`);
+  debug.push(`Login response: ${loginStatus}, location: ${location}, cookies: ${jar.cookies.size}`);
+  
+  // Consume response body
+  const loginBody = await loginResp.text();
 
+  // Follow redirects manually to collect all session cookies
   if (location) {
     const redirectUrl = location.startsWith('http') ? location : `${origin}${location}`;
-    const followResp = await fetch(redirectUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Cookie': jar.toString(),
-        'Accept': 'text/html',
-      },
-      redirect: 'manual',
-    });
-    jar.addFromHeaders(followResp.headers);
-    await followResp.text(); // consume body
-
-    // Follow one more redirect if needed
-    const loc2 = followResp.headers.get('location');
-    if (loc2) {
-      const url2 = loc2.startsWith('http') ? loc2 : `${origin}${loc2}`;
-      const r2 = await fetch(url2, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-          'Cookie': jar.toString(),
-          'Accept': 'text/html',
-        },
+    debug.push(`Following redirect: ${redirectUrl}`);
+    
+    let currentUrl = redirectUrl;
+    for (let i = 0; i < 5; i++) {
+      const r = await fetch(currentUrl, {
+        headers: { 'User-Agent': UA, 'Cookie': jar.toString(), 'Accept': 'text/html' },
         redirect: 'manual',
       });
-      jar.addFromHeaders(r2.headers);
-      await r2.text();
+      jar.addFromHeaders(r.headers);
+      await r.text();
+      
+      const nextLoc = r.headers.get('location');
+      if (!nextLoc || r.status < 300 || r.status >= 400) {
+        debug.push(`Redirect chain ended at ${r.status}, cookies: ${jar.cookies.size}`);
+        break;
+      }
+      currentUrl = nextLoc.startsWith('http') ? nextLoc : `${origin}${nextLoc}`;
+      debug.push(`Following redirect ${i+2}: ${currentUrl}`);
     }
   }
 
-  // Check if we're logged in (look for session cookie or lack of login redirect)
-  const hasCookies = jar.cookies.size > 2;
-  console.log(`Login result: ${hasCookies ? 'success' : 'may have failed'} (${jar.cookies.size} cookies)`);
-  return hasCookies;
+  // Determine success: 302 redirect typically means success, 422/200 with form means failure
+  const isSuccess = loginStatus === 302 || loginStatus === 301;
+  debug.push(`Login ${isSuccess ? 'SUCCEEDED' : 'FAILED'} (status: ${loginStatus})`);
+  
+  return { success: isSuccess, debug };
 }
 
 interface LessonInfo {
@@ -149,90 +193,81 @@ interface LessonInfo {
   module: string;
   index: number;
   duration?: string;
-  type?: string; // video, text, quiz, etc.
+  type?: string;
 }
 
-function parseKajabiCurriculum(html: string, baseOrigin: string): LessonInfo[] {
+function parseCurriculum(html: string, baseOrigin: string): LessonInfo[] {
   const lessons: LessonInfo[] = [];
-  let index = 0;
-
-  // Kajabi course pages typically have a sidebar/curriculum with module/lesson structure
-  // Pattern 1: Look for curriculum sections with links
-  const moduleRegex = /<(?:div|section|h[2-4])[^>]*class="[^"]*(?:category|module|section|chapter)[^"]*"[^>]*>[\s\S]*?<\/(?:div|section|h[2-4])>/gi;
+  const seen = new Set<string>();
   
-  // More reliable: extract all lesson links with their context
-  // Kajabi uses data attributes and specific CSS classes
+  // Kajabi uses specific patterns in course pages
+  // Look for post/lesson links within category sections
   
-  // Try to find structured lesson data in the HTML
-  // Pattern: Look for lesson list items with links
-  const lessonLinkRegex = /<a[^>]*href="([^"]*(?:\/(?:lessons|posts|chapters|modules|categories)\/[^"]*|\/[^"]*(?:lesson|post|chapter)[^"]*))"[^>]*>([\s\S]*?)<\/a>/gi;
-  
-  let currentModule = 'Main Content';
-  let match;
-  
-  // First pass: try to extract module headings
+  // Extract module/category headings with their positions
   const moduleHeadings: { text: string; position: number }[] = [];
-  const headingRegex = /<(?:h[2-4]|div|span)[^>]*class="[^"]*(?:category-title|module-title|section-title|chapter-title|subcategory__title)[^"]*"[^>]*>([\s\S]*?)<\/(?:h[2-4]|div|span)>/gi;
-  while ((match = headingRegex.exec(html)) !== null) {
-    const text = match[1].replace(/<[^>]+>/g, '').trim();
-    if (text) moduleHeadings.push({ text, position: match.index });
-  }
   
-  // Also look for category/section divs
-  const catRegex = /class="[^"]*(?:category__|subcategory__|module-)[^"]*"[\s\S]*?(?:category-title|module-title|subcategory__title)[^"]*"[^>]*>([\s\S]*?)<\//gi;
-  while ((match = catRegex.exec(html)) !== null) {
-    const text = match[1].replace(/<[^>]+>/g, '').trim();
-    if (text && !moduleHeadings.find(m => m.text === text)) {
-      moduleHeadings.push({ text, position: match.index });
+  // Pattern: Kajabi category titles
+  const headingPatterns = [
+    /class="[^"]*(?:category-title|subcategory__title|module-title|section-heading)[^"]*"[^>]*>([\s\S]*?)<\//gi,
+    /<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/gi,
+  ];
+  
+  for (const pattern of headingPatterns) {
+    let m;
+    while ((m = pattern.exec(html)) !== null) {
+      const text = m[1].replace(/<[^>]+>/g, '').trim();
+      if (text && text.length > 2 && text.length < 200) {
+        moduleHeadings.push({ text, position: m.index });
+      }
     }
   }
   
-  // Second pass: extract lesson links
-  const seen = new Set<string>();
+  // Extract lesson links
   const linkRegex = /<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let currentModule = 'Course Content';
+  let match;
+  let index = 0;
   
   while ((match = linkRegex.exec(html)) !== null) {
     const href = match[1];
-    const linkText = match[2].replace(/<[^>]+>/g, '').trim();
+    const rawText = match[2];
+    const linkText = rawText.replace(/<[^>]+>/g, '').trim();
     
-    // Filter for lesson-like URLs
-    if (!href || !linkText) continue;
-    if (href.includes('/login') || href.includes('/signup') || href === '#') continue;
-    if (href.includes('/products/') && !href.includes('/categories/') && !href.includes('/posts/')) continue;
+    if (!href || !linkText || linkText.length < 3 || linkText.length > 300) continue;
+    if (href === '#' || href === '/') continue;
+    if (/\/(login|signup|password|checkout|cart)/.test(href)) continue;
+    if (/\.(css|js|png|jpg|svg|ico|woff)/.test(href)) continue;
     
-    // Must look like a lesson URL
-    const isLesson = /\/(lessons|posts|chapters|categories\/[^/]+\/posts)\//.test(href) ||
-                     (href.includes('/posts/') && linkText.length > 3);
+    // Must look like a lesson/post URL for Kajabi
+    const isLesson = /\/(posts|lessons|chapters)\//.test(href) ||
+                     /\/categories\/[^/]+\/posts\//.test(href);
     
     if (!isLesson) continue;
     
     const fullUrl = href.startsWith('http') ? href : `${baseOrigin}${href}`;
     const normalized = fullUrl.replace(/[?#].*$/, '');
-    
     if (seen.has(normalized)) continue;
     seen.add(normalized);
     
-    // Determine current module based on position
-    const pos = match.index;
+    // Determine current module from nearest preceding heading
     for (let i = moduleHeadings.length - 1; i >= 0; i--) {
-      if (moduleHeadings[i].position < pos) {
+      if (moduleHeadings[i].position < match.index) {
         currentModule = moduleHeadings[i].text;
         break;
       }
     }
     
-    // Detect lesson type from surrounding HTML context
-    const context = html.substring(Math.max(0, match.index - 200), match.index + match[0].length + 200);
+    // Detect type from context
+    const context = html.substring(Math.max(0, match.index - 300), match.index + match[0].length + 300);
     let type = 'text';
-    if (/video|play|watch/i.test(context)) type = 'video';
+    if (/video|wistia|vimeo|youtube|play-button|video-icon/i.test(context)) type = 'video';
     else if (/quiz|assessment/i.test(context)) type = 'quiz';
-    else if (/download|pdf/i.test(context)) type = 'download';
+    else if (/download|\.pdf/i.test(context)) type = 'download';
     
-    // Extract duration if present
-    const durMatch = context.match(/(\d+)\s*(?:min|minutes?|hrs?|hours?)/i);
+    const durMatch = context.match(/(\d+)\s*(?:min|minutes?)/i);
     
     lessons.push({
-      title: linkText.substring(0, 200),
+      title: linkText,
       url: fullUrl,
       module: currentModule,
       index: index++,
@@ -244,98 +279,112 @@ function parseKajabiCurriculum(html: string, baseOrigin: string): LessonInfo[] {
   return lessons;
 }
 
-async function discoverCurriculum(courseUrl: string): Promise<{ platform: string; title: string; lessons: LessonInfo[] }> {
+async function discoverCurriculum(courseUrl: string): Promise<{ platform: string; title: string; lessons: LessonInfo[]; debug: string[] }> {
   const jar = createCookieJar();
   const origin = new URL(courseUrl).origin;
   
-  // Login first
-  const loggedIn = await kajabiLogin(courseUrl, jar);
+  const { success: loggedIn, debug } = await kajabiLogin(courseUrl, jar);
+  
   if (!loggedIn) {
-    console.warn('Login may have failed, attempting to fetch course page anyway');
+    debug.push('Login failed — attempting course page fetch anyway');
   }
   
-  // Fetch the course page
-  console.log('Fetching course page:', courseUrl);
+  // Fetch the course page with session cookies
+  debug.push(`Fetching course page: ${courseUrl}`);
   const courseResp = await fetch(courseUrl, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      'User-Agent': UA,
       'Cookie': jar.toString(),
-      'Accept': 'text/html',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     },
     redirect: 'follow',
   });
   
+  jar.addFromHeaders(courseResp.headers);
   const courseHtml = await courseResp.text();
-  console.log(`Course page fetched: ${courseResp.status}, ${courseHtml.length} chars`);
+  debug.push(`Course page: ${courseResp.status}, ${courseHtml.length} chars, final URL: ${courseResp.url}`);
   
-  // Check if we got redirected to login
-  if (courseHtml.includes('member[password]') || courseResp.url.includes('/login')) {
-    throw new Error('Authentication failed — could not access course content. Please verify your credentials.');
+  // Check if still on login page
+  const isLoginPage = courseHtml.includes('member[password]') && courseHtml.includes('new_member_session');
+  if (isLoginPage) {
+    debug.push('Still on login page — authentication did not persist');
+    return {
+      platform: 'kajabi',
+      title: 'Authentication Required',
+      lessons: [],
+      debug,
+    };
   }
   
   // Extract course title
-  const titleMatch = courseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const titleMatch = courseHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || 
+                     courseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const courseTitle = titleMatch?.[1]?.replace(/<[^>]+>/g, '').trim() || 'Untitled Course';
   
-  // Detect platform from HTML
+  // Detect platform
   let platform = 'kajabi';
-  if (courseHtml.includes('thinkific')) platform = 'thinkific';
-  else if (courseHtml.includes('teachable')) platform = 'teachable';
-  else if (courseHtml.includes('kajabi') || courseHtml.includes('Kajabi')) platform = 'kajabi';
+  if (/thinkific/i.test(courseHtml)) platform = 'thinkific';
+  else if (/teachable/i.test(courseHtml)) platform = 'teachable';
   
   // Parse curriculum
-  const lessons = parseKajabiCurriculum(courseHtml, origin);
+  const lessons = parseCurriculum(courseHtml, origin);
+  debug.push(`Found ${lessons.length} lessons`);
   
-  console.log(`Found ${lessons.length} lessons in ${platform} course "${courseTitle}"`);
-  
-  // If we found zero lessons, try fetching with Firecrawl as fallback
+  // If zero lessons, try broader extraction
   if (lessons.length === 0) {
-    console.log('No lessons found via HTML parsing, trying alternative patterns...');
-    
-    // Try broader link extraction
-    const allLinks: LessonInfo[] = [];
-    const broadRegex = /<a[^>]*href="(\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+    debug.push('No structured lessons found — trying broad link extraction');
+    const broadLessons: LessonInfo[] = [];
+    const broadSeen = new Set<string>();
+    const linkRegex = /<a[^>]*href="(\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
     let m;
-    const seenUrls = new Set<string>();
     
-    while ((m = broadRegex.exec(courseHtml)) !== null) {
+    while ((m = linkRegex.exec(courseHtml)) !== null) {
       const href = m[1];
       const text = m[2].replace(/<[^>]+>/g, '').trim();
-      
       if (!text || text.length < 3 || text.length > 200) continue;
-      if (href === '/' || href.includes('/login') || href.includes('/signup')) continue;
+      if (href === '/' || /\/(login|signup|password|checkout)/.test(href)) continue;
       if (/\.(css|js|png|jpg|svg|ico)/.test(href)) continue;
       
       const fullUrl = `${origin}${href}`;
-      if (seenUrls.has(fullUrl)) continue;
-      seenUrls.add(fullUrl);
+      if (broadSeen.has(fullUrl)) continue;
+      broadSeen.add(fullUrl);
       
-      allLinks.push({
+      broadLessons.push({
         title: text,
         url: fullUrl,
         module: 'Course Content',
-        index: allLinks.length,
+        index: broadLessons.length,
         type: 'text',
       });
     }
     
-    if (allLinks.length > 0) {
-      return { platform, title: courseTitle, lessons: allLinks };
-    }
+    debug.push(`Broad extraction found ${broadLessons.length} links`);
+    
+    // Also log some HTML structure for debugging
+    const bodySnippet = courseHtml.substring(0, 2000).replace(/\s+/g, ' ');
+    debug.push(`HTML start: ${bodySnippet.substring(0, 500)}`);
+    
+    return { platform, title: courseTitle, lessons: broadLessons, debug };
   }
   
-  return { platform, title: courseTitle, lessons };
+  return { platform, title: courseTitle, lessons, debug };
 }
 
-async function fetchLessonContent(lessonUrl: string): Promise<{ title: string; content: string; type: string }> {
+async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise<{ title: string; content: string; type: string; debug: string[] }> {
   const jar = createCookieJar();
+  const debug: string[] = [];
   
-  await kajabiLogin(lessonUrl, jar);
+  const { success: loggedIn, debug: loginDebug } = await kajabiLogin(courseUrl, jar);
+  debug.push(...loginDebug);
   
-  console.log('Fetching lesson:', lessonUrl);
+  if (!loggedIn) {
+    debug.push('Login failed for lesson fetch');
+  }
+  
+  debug.push(`Fetching lesson: ${lessonUrl}`);
   const resp = await fetch(lessonUrl, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      'User-Agent': UA,
       'Cookie': jar.toString(),
       'Accept': 'text/html',
     },
@@ -343,36 +392,27 @@ async function fetchLessonContent(lessonUrl: string): Promise<{ title: string; c
   });
   
   const html = await resp.text();
+  debug.push(`Lesson page: ${resp.status}, ${html.length} chars`);
   
-  // Extract title
   const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const title = titleMatch?.[1]?.replace(/<[^>]+>/g, '').trim() || 'Untitled Lesson';
   
-  // Detect lesson type
   let type = 'text';
-  if (html.includes('wistia') || html.includes('vimeo') || html.includes('youtube') || html.includes('video-player')) {
-    type = 'video';
-  }
+  if (/wistia|vimeo|youtube|video-player/i.test(html)) type = 'video';
   
-  // Extract main content — try multiple patterns for Kajabi
+  // Extract content from multiple possible containers
   let content = '';
+  const contentPatterns = [
+    /class="[^"]*(?:post__body|lesson-body|post-body|entry-content|kjb-html-content|article-content)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|article|section)>/i,
+    /<main[^>]*>([\s\S]*?)<\/main>/i,
+    /<article[^>]*>([\s\S]*?)<\/article>/i,
+  ];
   
-  // Pattern 1: Kajabi post body
-  const bodyMatch = html.match(/class="[^"]*(?:post__body|lesson-body|post-body|entry-content|article-content|kjb-html-content)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|article|section)>/i);
-  if (bodyMatch) {
-    content = bodyMatch[1];
-  }
-  
-  // Pattern 2: Main content area
-  if (!content) {
-    const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
-    if (mainMatch) content = mainMatch[1];
-  }
-  
-  // Pattern 3: Article tag
-  if (!content) {
-    const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-    if (articleMatch) content = articleMatch[1];
+  for (const pattern of contentPatterns) {
+    const m = html.match(pattern);
+    if (m && m[1].length > content.length) {
+      content = m[1];
+    }
   }
   
   // Clean HTML to text
@@ -380,8 +420,6 @@ async function fetchLessonContent(lessonUrl: string): Promise<{ title: string; c
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<nav[\s\S]*?<\/nav>/gi, '')
-    .replace(/<header[\s\S]*?<\/header>/gi, '')
-    .replace(/<footer[\s\S]*?<\/footer>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:p|div|li|h[1-6])>/gi, '\n')
     .replace(/<(?:li)>/gi, '• ')
@@ -395,7 +433,9 @@ async function fetchLessonContent(lessonUrl: string): Promise<{ title: string; c
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   
-  return { title, content, type };
+  debug.push(`Content extracted: ${content.length} chars, type: ${type}`);
+  
+  return { title, content, type, debug };
 }
 
 Deno.serve(async (req) => {
@@ -417,19 +457,27 @@ Deno.serve(async (req) => {
     if (action === 'fetch_lesson') {
       if (!lesson_url) {
         return new Response(
-          JSON.stringify({ success: false, error: 'lesson_url is required for fetch_lesson' }),
+          JSON.stringify({ success: false, error: 'lesson_url is required' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      
-      const result = await fetchLessonContent(lesson_url);
+      const result = await fetchLessonContent(url, lesson_url);
       return new Response(
         JSON.stringify({ success: true, ...result }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Default: discover curriculum
+    if (action === 'debug_login') {
+      const jar = createCookieJar();
+      const { success, debug } = await kajabiLogin(url, jar);
+      return new Response(
+        JSON.stringify({ success, debug, cookies: [...jar.cookies.keys()] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Default: discover
     const result = await discoverCurriculum(url);
     return new Response(
       JSON.stringify({ success: true, ...result }),
