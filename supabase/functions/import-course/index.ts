@@ -403,19 +403,86 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
   let type = 'text';
   if (/wistia|vimeo|youtube|video-player/i.test(html)) type = 'video';
   
-  // Extract content from multiple possible containers
+  // Extract video embed info
+  const videoEmbeds: string[] = [];
+  
+  // Wistia
+  const wistiaMatches = html.matchAll(/wistia_async_([a-z0-9]+)/gi);
+  for (const wm of wistiaMatches) {
+    videoEmbeds.push(`[Wistia Video: ${wm[1]}]`);
+  }
+  const wistiaIframe = html.matchAll(/fast\.wistia\.\w+\/embed\/(?:iframe|medias)\/([a-z0-9]+)/gi);
+  for (const wm of wistiaIframe) {
+    if (!videoEmbeds.some(v => v.includes(wm[1]))) {
+      videoEmbeds.push(`[Wistia Video: ${wm[1]}]`);
+    }
+  }
+  
+  // Vimeo
+  const vimeoMatches = html.matchAll(/player\.vimeo\.com\/video\/(\d+)/gi);
+  for (const vm of vimeoMatches) {
+    videoEmbeds.push(`[Vimeo Video: ${vm[1]}]`);
+  }
+  
+  // YouTube
+  const ytMatches = html.matchAll(/(?:youtube\.com\/embed\/|youtu\.be\/)([a-zA-Z0-9_-]+)/gi);
+  for (const ym of ytMatches) {
+    videoEmbeds.push(`[YouTube Video: ${ym[1]}]`);
+  }
+  
+  debug.push(`Video embeds found: ${videoEmbeds.length}`);
+  
+  // Strip comments sections before content extraction
+  let cleanedHtml = html
+    .replace(/<section[^>]*(?:comments|discussion)[^>]*>[\s\S]*?<\/section>/gi, '')
+    .replace(/<div[^>]*(?:id|class)="[^"]*(?:comments|comment-section|disqus|discussion)[^"]*"[^>]*>[\s\S]*?<\/div>\s*(?:<\/div>\s*)*$/gi, '')
+    .replace(/<div[^>]*class="[^"]*(?:kjb-comments|post-comments|comment-list|comments-container)[^"]*"[\s\S]*$/gi, '');
+  
+  // Extract content from multiple possible Kajabi containers
   let content = '';
   const contentPatterns = [
-    /class="[^"]*(?:post__body|lesson-body|post-body|entry-content|kjb-html-content|article-content)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|article|section)>/i,
+    // Kajabi-specific patterns
+    /class="[^"]*(?:kjb-html-content|post__body|post-body)[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /class="[^"]*(?:product-post__body|lesson-content|course-content)[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    // Data attribute patterns Kajabi uses
+    /data-post-body[^>]*>([\s\S]*?)<\/div>/i,
+    // Broader containers
     /<main[^>]*>([\s\S]*?)<\/main>/i,
     /<article[^>]*>([\s\S]*?)<\/article>/i,
   ];
   
   for (const pattern of contentPatterns) {
-    const m = html.match(pattern);
+    const m = cleanedHtml.match(pattern);
     if (m && m[1].length > content.length) {
       content = m[1];
     }
+  }
+  
+  // If still no content, try to find the post container by looking at the page structure
+  if (!content) {
+    // Kajabi wraps lesson content in a specific section — try extracting between known markers
+    const postStart = cleanedHtml.indexOf('class="post__body"') || 
+                      cleanedHtml.indexOf('class="product-post"') ||
+                      cleanedHtml.indexOf('data-controller="post"');
+    if (postStart > -1) {
+      // Grab a large chunk from the post area
+      const chunk = cleanedHtml.substring(postStart, postStart + 20000);
+      content = chunk;
+      debug.push(`Fallback: extracted from post marker at ${postStart}`);
+    }
+  }
+  
+  // Last resort: grab everything between the video embed area and comments/footer
+  if (!content || content.length < 50) {
+    // Find the main content area by removing nav, header, footer, comments
+    let bodyContent = cleanedHtml
+      .replace(/[\s\S]*?<body[^>]*>/i, '')
+      .replace(/<\/body>[\s\S]*/i, '')
+      .replace(/<header[\s\S]*?<\/header>/gi, '')
+      .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, '');
+    content = bodyContent;
+    debug.push(`Last resort: using full body (${bodyContent.length} chars)`);
   }
   
   // Clean HTML to text
@@ -423,6 +490,8 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    // Remove comment-related content that might remain
+    .replace(/<[^>]*(?:comment|reply|avatar)[^>]*>[\s\S]*?<\/[^>]+>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:p|div|li|h[1-6])>/gi, '\n')
     .replace(/<(?:li)>/gi, '• ')
@@ -435,6 +504,11 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/&#39;/g, "'")
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+  
+  // Prepend video embed references so they're captured in the resource
+  if (videoEmbeds.length > 0) {
+    content = videoEmbeds.join('\n') + '\n\n' + content;
+  }
   
   debug.push(`Content extracted: ${content.length} chars, type: ${type}`);
   
