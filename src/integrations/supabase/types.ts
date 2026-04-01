@@ -2888,6 +2888,7 @@ export type Database = {
       podcast_import_queue: {
         Row: {
           attempts: number
+          content_validation: Json | null
           created_at: string
           episode_duration: string | null
           episode_guest: string | null
@@ -2895,17 +2896,23 @@ export type Database = {
           episode_title: string
           episode_url: string
           error_message: string | null
+          failure_type: string | null
           id: string
+          ki_count: number | null
+          ki_status: string | null
+          platform: string | null
           processed_at: string | null
           resource_id: string | null
           show_author: string | null
           source_registry_id: string | null
           status: string
+          transcript_status: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           attempts?: number
+          content_validation?: Json | null
           created_at?: string
           episode_duration?: string | null
           episode_guest?: string | null
@@ -2913,17 +2920,23 @@ export type Database = {
           episode_title: string
           episode_url: string
           error_message?: string | null
+          failure_type?: string | null
           id?: string
+          ki_count?: number | null
+          ki_status?: string | null
+          platform?: string | null
           processed_at?: string | null
           resource_id?: string | null
           show_author?: string | null
           source_registry_id?: string | null
           status?: string
+          transcript_status?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           attempts?: number
+          content_validation?: Json | null
           created_at?: string
           episode_duration?: string | null
           episode_guest?: string | null
@@ -2931,12 +2944,17 @@ export type Database = {
           episode_title?: string
           episode_url?: string
           error_message?: string | null
+          failure_type?: string | null
           id?: string
+          ki_count?: number | null
+          ki_status?: string | null
+          platform?: string | null
           processed_at?: string | null
           resource_id?: string | null
           show_author?: string | null
           source_registry_id?: string | null
           status?: string
+          transcript_status?: string | null
           updated_at?: string
           user_id?: string
         }
