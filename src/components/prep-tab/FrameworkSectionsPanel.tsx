@@ -312,12 +312,14 @@ function FrameworkBlock({
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-2 space-y-0.5 pb-1">
         {sectionKIs.map(({ section, kis: sKIs }) => (
-          <SectionBlock key={section.heading} section={section} kis={sKIs} defaultOpen={sKIs.length > 0} />
+          <SectionBlock key={section.heading} section={section} kis={sKIs} stageId={stageId} framework={frameworkRole.framework} defaultOpen={sKIs.length > 0} />
         ))}
         {unmatchedKIs.length > 0 && (
           <SectionBlock
             section={{ heading: 'Additional Insights', description: 'Other relevant knowledge items for this framework' }}
             kis={unmatchedKIs}
+            stageId={stageId}
+            framework={frameworkRole.framework}
           />
         )}
       </CollapsibleContent>
