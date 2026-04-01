@@ -49,10 +49,29 @@ async function classifyResource(payload: {
 
 export async function extractTextFromFile(file: File): Promise<string> {
   const ext = file.name.split('.').pop()?.toLowerCase();
-  if (['txt', 'md', 'csv', 'json', 'xml', 'html'].includes(ext || '')) {
+  if (['txt', 'md', 'csv', 'json', 'xml', 'html', 'htm', 'log', 'rtf'].includes(ext || '')) {
     return await file.text();
   }
+  // For PDF/DOCX/etc, return empty — server-side parsing handles these
   return '';
+}
+
+/**
+ * Trigger server-side file parsing for a resource.
+ * Returns parsed content length or throws.
+ */
+export async function parseUploadedFile(resourceId: string): Promise<{
+  success: boolean;
+  content_length?: number;
+  parser_used?: string;
+  diagnostics?: Record<string, unknown>;
+  error?: string;
+}> {
+  const { data, error } = await supabase.functions.invoke('parse-uploaded-file', {
+    body: { resource_id: resourceId },
+  });
+  if (error) throw error;
+  return data;
 }
 
 /**
