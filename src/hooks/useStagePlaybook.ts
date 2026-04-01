@@ -11,6 +11,7 @@ export interface PlaybookItem {
 
 export interface PlaybookSection {
   title: string;
+  framework?: string;
   items: PlaybookItem[];
 }
 
