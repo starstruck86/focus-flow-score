@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
     if (allResourceIds.length > 0) {
       const { data } = await admin
         .from("knowledge_items")
-        .select("id, title, knowledge_type, chapter, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, confidence_score, source_resource_id, tags, who, framework")
+        .select("id, title, knowledge_type, chapter, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, confidence_score, source_resource_id, tags, who, framework, macro_situation, micro_strategy, how_to_execute, what_this_unlocks")
         .eq("user_id", user.id)
         .eq("active", true)
         .in("source_resource_id", allResourceIds)
@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
     // Also fetch KIs that match stage context
     const { data: stageKIs } = await admin
       .from("knowledge_items")
-      .select("id, title, knowledge_type, chapter, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, confidence_score, source_resource_id, tags, who, framework")
+      .select("id, title, knowledge_type, chapter, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, confidence_score, source_resource_id, tags, who, framework, macro_situation, micro_strategy, how_to_execute, what_this_unlocks")
       .eq("user_id", user.id)
       .eq("active", true)
       .contains("applies_to_contexts", [stage_id])
@@ -186,7 +186,18 @@ Deno.serve(async (req) => {
         const source = resourceMap.get(ki.source_resource_id);
         const sourceType = keystoneIdSet.has(ki.source_resource_id) ? "Keystone" : "Supporting";
         const attribution = [ki.framework, ki.who].filter(Boolean).join(" — ");
-        return `- [KI:${ki.id.slice(0, 8)}] ${ki.title}${attribution ? ` [${attribution}]` : ""} (from ${sourceType}: ${source?.title || "Unknown"})\n  Summary: ${ki.tactic_summary || "N/A"}\n  Why: ${ki.why_it_matters || "N/A"}\n  When: ${ki.when_to_use || "N/A"}\n  Example: ${ki.example_usage || "N/A"}`;
+        const parts = [
+          `- [KI:${ki.id.slice(0, 8)}] ${ki.title}${attribution ? ` [${attribution}]` : ""} (from ${sourceType}: ${source?.title || "Unknown"})`,
+          ki.macro_situation ? `  Situation: ${ki.macro_situation}` : null,
+          ki.micro_strategy ? `  Strategy: ${ki.micro_strategy}` : null,
+          `  Summary: ${ki.tactic_summary || "N/A"}`,
+          ki.how_to_execute ? `  How: ${ki.how_to_execute}` : null,
+          `  Why: ${ki.why_it_matters || "N/A"}`,
+          `  When: ${ki.when_to_use || "N/A"}`,
+          ki.what_this_unlocks ? `  Unlocks: ${ki.what_this_unlocks}` : null,
+          `  Example: ${ki.example_usage || "N/A"}`,
+        ].filter(Boolean);
+        return parts.join("\n");
       })
       .join("\n");
 
