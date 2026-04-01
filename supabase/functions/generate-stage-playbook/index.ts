@@ -147,7 +147,8 @@ You have access to the user's Keystone Resources (foundational frameworks), Supp
 CRITICAL RULES:
 1. Synthesize all inputs into a STRUCTURED, ACTIONABLE playbook
 2. EVERY major insight MUST include a citation: [Resource: Name] or [KI: title]
-3. Prioritize Keystone Resource insights — they define the foundational approach
+3. Include framework attribution where known: [Framework — Author] (e.g. [GAP Selling — Keenan])
+4. Prioritize Keystone Resource insights — they define the foundational approach
 4. Supporting Resources add tactical depth
 5. KIs provide specific, tested tactics — cite them by title
 6. Organize into clear sections appropriate for the "${stageLabel}" stage
