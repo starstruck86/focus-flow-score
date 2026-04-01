@@ -146,10 +146,10 @@ export function BackgroundJobDrawer() {
   const setOpen = useBackgroundJobs((s) => s.setDrawerOpen);
   const clearCompleted = useBackgroundJobs((s) => s.clearCompleted);
 
-  const active = useBackgroundJobs(selectActiveJobs, shallowEqual);
-  const review = useBackgroundJobs(selectReviewJobs, shallowEqual);
-  const failed = useBackgroundJobs(selectFailedJobs, shallowEqual);
-  const completed = useBackgroundJobs(selectCompletedJobs, shallowEqual);
+  const active = useBackgroundJobs(useShallow(selectActiveJobs));
+  const review = useBackgroundJobs(useShallow(selectReviewJobs));
+  const failed = useBackgroundJobs(useShallow(selectFailedJobs));
+  const completed = useBackgroundJobs(useShallow(selectCompletedJobs));
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
