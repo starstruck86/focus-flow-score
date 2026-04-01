@@ -536,6 +536,8 @@ export async function extractKnowledgeLLMFallback(
           active: autoActivate,
           user_edited: false,
           tags: [...source.tags, item.knowledge_type || 'skill', item.chapter || 'messaging'],
+          who: item.who || null,
+          framework: item.framework || null,
         });
       }
 
