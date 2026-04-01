@@ -8,9 +8,28 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Loader2, Podcast, ExternalLink } from 'lucide-react';
 import { useClassifyResource, useAddUrlResource } from '@/hooks/useResourceUpload';
+import { insertSource, getSources } from '@/data/source-registry';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/components/auth/AuthProvider';
 import { toast } from 'sonner';
 
-type Episode = { title: string; url: string };
+type Episode = {
+  title: string;
+  url: string;
+  description?: string;
+  duration?: string;
+  published?: string;
+  episode_number?: string;
+  guest?: string | null;
+};
+
+type ShowMetadata = {
+  show_title: string;
+  show_author: string;
+  show_description: string;
+  show_image: string;
+  feed_url: string;
+};
 
 interface PodcastImportModalProps {
   open: boolean;
@@ -21,10 +40,12 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
   const [url, setUrl] = useState('');
   const [fetching, setFetching] = useState(false);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [showMeta, setShowMeta] = useState<ShowMetadata | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
 
+  const { user } = useAuth();
   const classify = useClassifyResource();
   const addUrl = useAddUrlResource();
 
@@ -32,6 +53,7 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
     if (!url.trim()) return;
     setFetching(true);
     setEpisodes([]);
+    setShowMeta(null);
     try {
       const { data, error } = await trackedInvoke<any>('import-podcast', {
         body: { url: url.trim() },
@@ -44,8 +66,10 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
         return;
       }
       setEpisodes(eps);
+      setShowMeta(data.show || null);
       setSelected(new Set(eps.map((_, i) => i)));
-      toast.success(`Found ${eps.length} episodes`);
+      const showName = data.show?.show_title ? ` from "${data.show.show_title}"` : '';
+      toast.success(`Found ${eps.length} episodes${showName}`);
     } catch (e: any) {
       toast.error(e.message || 'Failed to fetch podcast');
     } finally {
@@ -69,10 +93,48 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
 
   const handleImport = useCallback(async () => {
     const toImport = episodes.filter((_, i) => selected.has(i));
-    if (toImport.length === 0) return;
+    if (toImport.length === 0 || !user) return;
     setImporting(true);
     setImportProgress({ done: 0, total: toImport.length });
 
+    // ── Step 1: Upsert source_registry entry for the show ──
+    let sourceRegistryId: string | null = null;
+    if (showMeta?.show_title) {
+      try {
+        // Check if we already have a registry entry for this feed URL
+        const existing = await getSources(user.id);
+        const match = existing.find(
+          s => s.source_type === 'podcast_rss' && s.url === showMeta.feed_url
+        );
+        if (match) {
+          sourceRegistryId = match.id;
+        } else {
+          const newSource = await insertSource({
+            user_id: user.id,
+            name: showMeta.show_title,
+            source_type: 'podcast_rss',
+            url: showMeta.feed_url,
+            external_id: null,
+            polling_enabled: false,
+            poll_interval_hours: 24,
+            trust_weight: 0.8,
+            status: 'active',
+            metadata: {
+              show_author: showMeta.show_author,
+              show_description: showMeta.show_description,
+              show_image: showMeta.show_image,
+              episode_count: toImport.length,
+              imported_at: new Date().toISOString(),
+            },
+          });
+          sourceRegistryId = newSource.id;
+        }
+      } catch (e) {
+        console.warn('Failed to create source registry entry:', e);
+      }
+    }
+
+    // ── Step 2: Import each episode ──
     let successCount = 0;
     for (let i = 0; i < toImport.length; i++) {
       const episode = toImport[i];
@@ -81,7 +143,24 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
         if (classification.title === 'Untitled' || classification.title.length < 3) {
           classification.title = episode.title;
         }
-        await addUrl.mutateAsync({ url: episode.url, classification });
+        const resource = await addUrl.mutateAsync({ url: episode.url, classification });
+
+        // Link resource to source_registry and populate metadata
+        if (resource?.id) {
+          const updateFields: Record<string, any> = {};
+          if (sourceRegistryId) updateFields.source_registry_id = sourceRegistryId;
+          if (episode.guest) updateFields.author_or_speaker = episode.guest;
+          else if (showMeta?.show_author) updateFields.author_or_speaker = showMeta.show_author;
+          if (episode.published) {
+            try {
+              updateFields.source_published_at = new Date(episode.published).toISOString();
+            } catch { /* invalid date */ }
+          }
+          if (Object.keys(updateFields).length > 0) {
+            await (supabase as any).from('resources').update(updateFields).eq('id', resource.id);
+          }
+        }
+
         successCount++;
       } catch (e) {
         console.error(`Failed to import ${episode.title}:`, e);
@@ -92,10 +171,11 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
     toast.success(`Imported ${successCount} of ${toImport.length} episodes`);
     setImporting(false);
     setEpisodes([]);
+    setShowMeta(null);
     setUrl('');
     setSelected(new Set());
     onOpenChange(false);
-  }, [episodes, selected, classify, addUrl, onOpenChange]);
+  }, [episodes, selected, classify, addUrl, onOpenChange, user, showMeta]);
 
   const selectedCount = selected.size;
   const progressPct = importProgress.total > 0 ? (importProgress.done / importProgress.total) * 100 : 0;
@@ -127,6 +207,20 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
             </Button>
           </div>
 
+          {showMeta?.show_title && !importing && (
+            <div className="flex items-center gap-3 p-2 rounded-md bg-muted/50">
+              {showMeta.show_image && (
+                <img src={showMeta.show_image} alt="" className="h-10 w-10 rounded-md object-cover" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{showMeta.show_title}</p>
+                {showMeta.show_author && (
+                  <p className="text-xs text-muted-foreground truncate">{showMeta.show_author}</p>
+                )}
+              </div>
+            </div>
+          )}
+
           {episodes.length > 0 && !importing && (
             <>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -146,7 +240,14 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
                         checked={selected.has(i)}
                         onCheckedChange={() => toggleEpisode(i)}
                       />
-                      <span className="flex-1 truncate">{episode.title}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="block truncate">{episode.title}</span>
+                        {episode.guest && (
+                          <span className="block text-xs text-muted-foreground truncate">
+                            Guest: {episode.guest}
+                          </span>
+                        )}
+                      </div>
                       {episode.url && (
                         <a
                           href={episode.url}
