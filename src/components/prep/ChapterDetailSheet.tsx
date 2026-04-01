@@ -39,10 +39,23 @@ interface Props {
 export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, onPractice, onPracticeTactic }: Props) {
   const { data: items = [] } = useKnowledgeItems(chapter ?? undefined);
   const update = useUpdateKnowledgeItem();
+  const [whoFilter, setWhoFilter] = useState<string | null>(null);
+  const [frameworkFilter, setFrameworkFilter] = useState<string | null>(null);
+
+  // Unique speakers and frameworks for filter chips
+  const speakers = useMemo(() => [...new Set(items.map(i => i.who).filter(Boolean) as string[])].sort(), [items]);
+  const frameworks = useMemo(() => [...new Set(items.map(i => i.framework).filter(Boolean) as string[])].sort(), [items]);
+
+  const filteredItems = useMemo(() => {
+    let filtered = items;
+    if (whoFilter) filtered = filtered.filter(i => i.who === whoFilter);
+    if (frameworkFilter) filtered = filtered.filter(i => i.framework === frameworkFilter);
+    return filtered;
+  }, [items, whoFilter, frameworkFilter]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, KnowledgeItem[]>();
-    for (const item of items) {
+    for (const item of filteredItems) {
       const key = item.sub_chapter || 'general';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(item);
@@ -52,7 +65,7 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
       const activeB = b[1].filter(i => i.active).length;
       return activeB - activeA;
     });
-  }, [items]);
+  }, [filteredItems]);
 
   if (!chapter) return null;
 
