@@ -17,6 +17,7 @@ export type CanonicalSourceType =
 const URL_PATTERNS: Array<[RegExp, CanonicalSourceType]> = [
   [/youtube\.com|youtu\.be/i, 'youtube'],
   [/zoom\.(us|com)/i, 'zoom'],
+  [/kajabi(-cdn)?\.com|\.kajabi\./i, 'webpage'],
   [/thinkific\.com/i, 'thinkific'],
   [/\.pdf(\?|$)/i, 'pdf'],
   [/\.(mp3|wav|ogg|m4a|aac|flac)(\?|$)/i, 'audio'],
