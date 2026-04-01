@@ -2902,10 +2902,13 @@ export type Database = {
           ki_status: string | null
           platform: string | null
           processed_at: string | null
+          raw_transcript: string | null
           resource_id: string | null
+          review_reason: string | null
           show_author: string | null
           source_registry_id: string | null
           status: string
+          structured_transcript: string | null
           transcript_length: number | null
           transcript_preview: string | null
           transcript_section_count: number | null
@@ -2929,10 +2932,13 @@ export type Database = {
           ki_status?: string | null
           platform?: string | null
           processed_at?: string | null
+          raw_transcript?: string | null
           resource_id?: string | null
+          review_reason?: string | null
           show_author?: string | null
           source_registry_id?: string | null
           status?: string
+          structured_transcript?: string | null
           transcript_length?: number | null
           transcript_preview?: string | null
           transcript_section_count?: number | null
@@ -2956,10 +2962,13 @@ export type Database = {
           ki_status?: string | null
           platform?: string | null
           processed_at?: string | null
+          raw_transcript?: string | null
           resource_id?: string | null
+          review_reason?: string | null
           show_author?: string | null
           source_registry_id?: string | null
           status?: string
+          structured_transcript?: string | null
           transcript_length?: number | null
           transcript_preview?: string | null
           transcript_section_count?: number | null
