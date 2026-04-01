@@ -264,7 +264,7 @@ function KnowledgeTab({ resourceId }: { resourceId: string }) {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('knowledge_items')
-        .select('id, title, tactic_summary, confidence_score, framework, who, active, chapter, status, applies_to_contexts, tags')
+        .select('id, title, tactic_summary, confidence_score, framework, who, active, chapter, status, applies_to_contexts, tags, macro_situation, micro_strategy, how_to_execute, what_this_unlocks, when_to_use, example_usage')
         .eq('source_resource_id', resourceId)
         .order('confidence_score', { ascending: false });
       if (error) throw error;
