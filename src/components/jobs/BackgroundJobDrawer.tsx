@@ -1,7 +1,7 @@
 /**
  * BackgroundJobDrawer — slide-up drawer showing all background jobs.
  */
-import { shallow as shallowEqual } from 'zustand/shallow';
+import { useShallow } from 'zustand/react/shallow';
 import {
   useBackgroundJobs,
   selectActiveJobs,
