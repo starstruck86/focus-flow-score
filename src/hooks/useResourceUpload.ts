@@ -236,16 +236,45 @@ export function useUploadResource() {
         );
       } else {
         toast.success('Resource uploaded and classified');
-        // Fire-and-forget auto-operationalization for non-ZIP uploads
+
         if (data?.id) {
-          autoOperationalizeResource(data.id).then(result => {
-            qc.invalidateQueries({ queryKey: ['knowledge-items'] });
-            if (result.operationalized) {
-              toast.success(`Auto-operationalized — ${result.knowledgeExtracted} extracted, ${result.knowledgeActivated} activated`);
-            } else if (result.stagesCompleted.includes('knowledge_extracted')) {
-              toast.info(`${result.knowledgeExtracted} knowledge items extracted — review to activate`);
-            }
-          }).catch(() => { /* non-fatal */ });
+          // Check if this is a binary file that needs server-side parsing
+          const ext = variables.file.name.split('.').pop()?.toLowerCase() || '';
+          const needsServerParse = ['pdf', 'docx', 'doc', 'pptx', 'ppt'].includes(ext);
+
+          if (needsServerParse) {
+            // Trigger server-side file parsing first, then auto-operationalize
+            toast.info('Parsing uploaded file…');
+            parseUploadedFile(data.id).then(parseResult => {
+              qc.invalidateQueries({ queryKey: ['resources'] });
+              if (parseResult.success) {
+                toast.success(`Parsed: ${parseResult.content_length?.toLocaleString()} chars extracted`);
+                // Now auto-operationalize with real content
+                autoOperationalizeResource(data.id).then(result => {
+                  qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+                  if (result.operationalized) {
+                    toast.success(`Auto-operationalized — ${result.knowledgeExtracted} extracted, ${result.knowledgeActivated} activated`);
+                  } else if (result.stagesCompleted.includes('knowledge_extracted')) {
+                    toast.info(`${result.knowledgeExtracted} knowledge items extracted — review to activate`);
+                  }
+                }).catch(() => { /* non-fatal */ });
+              } else {
+                toast.warning('File parsing returned limited content — may need manual review');
+              }
+            }).catch(() => {
+              toast.warning('Server-side file parsing failed — try Re-parse later');
+            });
+          } else {
+            // Text-based files: auto-operationalize directly
+            autoOperationalizeResource(data.id).then(result => {
+              qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+              if (result.operationalized) {
+                toast.success(`Auto-operationalized — ${result.knowledgeExtracted} extracted, ${result.knowledgeActivated} activated`);
+              } else if (result.stagesCompleted.includes('knowledge_extracted')) {
+                toast.info(`${result.knowledgeExtracted} knowledge items extracted — review to activate`);
+              }
+            }).catch(() => { /* non-fatal */ });
+          }
         }
       }
     },
