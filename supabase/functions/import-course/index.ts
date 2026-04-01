@@ -270,7 +270,7 @@ function parseCurriculum(html: string, baseOrigin: string): LessonInfo[] {
     const durMatch = context.match(/(\d+)\s*(?:min|minutes?)/i);
     
     lessons.push({
-      title: linkText,
+      title: linkTextClean,
       url: fullUrl,
       module: currentModule,
       index: index++,
