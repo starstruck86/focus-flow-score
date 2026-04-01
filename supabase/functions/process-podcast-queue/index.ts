@@ -439,17 +439,30 @@ Deno.serve(async (req) => {
           `Source: podcast · Ingested ${new Date().toISOString().split("T")[0]}`,
         ].filter(Boolean).join("\n");
 
+        const detectedPlatformTag = detectPlatform(queueItem.episode_url);
         const insertPayload: Record<string, any> = {
           user_id: queueItem.user_id,
           title: queueItem.episode_title || queueItem.episode_url,
           description,
           resource_type: "transcript",
-          tags: ["podcast", detectPlatform(queueItem.episode_url)].filter(t => t !== "unknown"),
+          tags: ["podcast", detectedPlatformTag].filter(t => t !== "unknown"),
           folder_id: folderId,
           file_url: queueItem.episode_url,
           content: structuredContent,
           content_status: "enriched",
           content_length: structuredContent.length,
+          enrichment_status: "deep_enriched",
+          // Source identity preservation
+          original_url: queueItem.original_episode_url || queueItem.episode_url,
+          audio_url: queueItem.audio_url || null,
+          host_platform: queueItem.host_platform || null,
+          show_title: queueItem.show_title || queueItem.show_author || null,
+          episode_description: queueItem.episode_description?.slice(0, 5000) || null,
+          artwork_url: queueItem.artwork_url || null,
+          transcript_status: "transcript_structured",
+          metadata_status: queueItem.metadata_status || "pending",
+          resolution_method: queueItem.resolution_method || "transcribed",
+          content_classification: "audio",
         };
 
         if (queueItem.source_registry_id) {
