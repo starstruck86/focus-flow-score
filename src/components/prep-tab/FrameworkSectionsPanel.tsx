@@ -14,7 +14,7 @@ import type { StageFrameworkRole, FrameworkSection } from '@/data/stageFramework
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ChevronDown, ChevronRight, BookOpen, Lightbulb, Info } from 'lucide-react';
+import { ChevronDown, ChevronRight, BookOpen, Lightbulb, Info, HelpCircle, MessageSquare, Eye, ArrowRight } from 'lucide-react';
 import { SectionFeedback, KIPlacementFeedback } from './PlaybookFeedbackControls';
 import { cn } from '@/lib/utils';
 
@@ -202,6 +202,20 @@ function FrameworkSummaryBanner({ frameworks }: { frameworks: StageFrameworkRole
   );
 }
 
+/** Map framework to primary tactical role for KIs */
+const FRAMEWORK_KI_ROLES: Record<string, { primary: string; secondary: string }> = {
+  'GAP Selling': { primary: 'Questions & Hypotheses', secondary: 'questions' },
+  'Challenger': { primary: 'Talk Tracks & Insights', secondary: 'talk_tracks' },
+  'MEDDPICC': { primary: 'Signals & Next Steps', secondary: 'signals' },
+  'Command of the Message': { primary: 'Talk Tracks & Questions', secondary: 'talk_tracks' },
+};
+
+const ROLE_ICONS: Record<string, { icon: typeof HelpCircle; color: string }> = {
+  questions: { icon: HelpCircle, color: 'text-blue-500' },
+  talk_tracks: { icon: MessageSquare, color: 'text-violet-500' },
+  signals: { icon: Eye, color: 'text-emerald-500' },
+};
+
 function SectionBlock({
   section,
   kis,
@@ -216,12 +230,17 @@ function SectionBlock({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
+  const fwRole = framework ? FRAMEWORK_KI_ROLES[framework] : null;
+  const roleIcon = fwRole ? ROLE_ICONS[fwRole.secondary] : null;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className="group/section flex items-center gap-2 w-full py-1.5 px-2 hover:bg-accent/30 rounded transition-colors">
         {open ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
         <span className="text-xs font-medium text-foreground">{section.heading}</span>
+        {fwRole && (
+          <span className="text-[9px] text-muted-foreground/60 hidden sm:inline">→ {fwRole.primary}</span>
+        )}
         <SectionFeedback stageId={stageId} framework={framework} sectionHeading={section.heading} />
         {kis.length > 0 && (
           <Badge variant="secondary" className="text-[9px] ml-auto">{kis.length}</Badge>
@@ -233,37 +252,42 @@ function SectionBlock({
           <p className="text-[10px] text-muted-foreground/60">No matching knowledge items yet</p>
         )}
         <TooltipProvider delayDuration={200}>
-          {kis.map(ki => (
-            <div key={ki.id} className="group/ki pl-4 py-1 border-l-2 border-muted flex items-start gap-1">
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-foreground font-medium">{ki.title}</p>
-                {ki.tactic_summary && (
-                  <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">{ki.tactic_summary}</p>
-                )}
-                {ki.who && ki.framework && (
-                  <span className="text-[9px] text-muted-foreground">[{ki.framework} — {ki.who}]</span>
-                )}
-                {ki.who && !ki.framework && (
-                  <span className="text-[9px] text-muted-foreground">— {ki.who}</span>
-                )}
+          {kis.map(ki => {
+            const RoleIcon = roleIcon?.icon || Lightbulb;
+            const roleColor = roleIcon?.color || 'text-muted-foreground';
+            return (
+              <div key={ki.id} className="group/ki pl-5 py-1 border-l-2 border-muted flex items-start gap-1 relative">
+                <RoleIcon className={cn('absolute left-0 top-1.5 h-3.5 w-3.5', roleColor)} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-foreground font-medium">{ki.title}</p>
+                  {ki.tactic_summary && (
+                    <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">{ki.tactic_summary}</p>
+                  )}
+                  {ki.why_it_matters && (
+                    <p className="text-[10px] text-muted-foreground/70 mt-0.5 italic">↳ {ki.why_it_matters}</p>
+                  )}
+                  {ki.who && ki.framework && (
+                    <span className="text-[9px] text-muted-foreground">[{ki.framework} — {ki.who}]</span>
+                  )}
+                </div>
+                <KIPlacementFeedback
+                  stageId={stageId}
+                  framework={framework}
+                  sectionHeading={section.heading}
+                  kiId={ki.id}
+                  kiTitle={ki.title}
+                />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className={cn('h-3 w-3 mt-0.5 shrink-0 cursor-help', MATCH_REASON_COLORS[ki.matchReason])} />
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="text-xs max-w-[200px]">
+                    <p className="font-medium">{MATCH_REASON_LABELS[ki.matchReason]}</p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
-              <KIPlacementFeedback
-                stageId={stageId}
-                framework={framework}
-                sectionHeading={section.heading}
-                kiId={ki.id}
-                kiTitle={ki.title}
-              />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className={cn('h-3 w-3 mt-0.5 shrink-0 cursor-help', MATCH_REASON_COLORS[ki.matchReason])} />
-                </TooltipTrigger>
-                <TooltipContent side="left" className="text-xs max-w-[200px]">
-                  <p className="font-medium">{MATCH_REASON_LABELS[ki.matchReason]}</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          ))}
+            );
+          })}
         </TooltipProvider>
       </CollapsibleContent>
     </Collapsible>
