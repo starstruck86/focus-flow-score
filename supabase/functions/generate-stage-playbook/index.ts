@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
     if (allResourceIds.length > 0) {
       const { data } = await admin
         .from("knowledge_items")
-        .select("id, title, knowledge_type, chapter, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, confidence_score, source_resource_id, tags")
+        .select("id, title, knowledge_type, chapter, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, confidence_score, source_resource_id, tags, who, framework")
         .eq("user_id", user.id)
         .eq("active", true)
         .in("source_resource_id", allResourceIds)
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
     // Also fetch KIs that match stage context
     const { data: stageKIs } = await admin
       .from("knowledge_items")
-      .select("id, title, knowledge_type, chapter, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, confidence_score, source_resource_id, tags")
+      .select("id, title, knowledge_type, chapter, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, confidence_score, source_resource_id, tags, who, framework")
       .eq("user_id", user.id)
       .eq("active", true)
       .contains("applies_to_contexts", [stage_id])
@@ -128,7 +128,8 @@ ${linkedKIs.map(ki => `- ${ki.title}: ${ki.tactic_summary || "N/A"}`).join("\n")
     const kiContext = allKIs
       .map(ki => {
         const source = resourceMap.get(ki.source_resource_id);
-        return `- [KI:${ki.id.slice(0, 8)}] ${ki.title} (from: ${source?.title || "Unknown"})
+        const attribution = [ki.framework, ki.who].filter(Boolean).join(' — ');
+        return `- [KI:${ki.id.slice(0, 8)}] ${ki.title}${attribution ? ` [${attribution}]` : ''} (from: ${source?.title || "Unknown"})
   Summary: ${ki.tactic_summary || "N/A"}
   Why: ${ki.why_it_matters || "N/A"}
   When: ${ki.when_to_use || "N/A"}
@@ -146,7 +147,8 @@ You have access to the user's Keystone Resources (foundational frameworks), Supp
 CRITICAL RULES:
 1. Synthesize all inputs into a STRUCTURED, ACTIONABLE playbook
 2. EVERY major insight MUST include a citation: [Resource: Name] or [KI: title]
-3. Prioritize Keystone Resource insights — they define the foundational approach
+3. Include framework attribution where known: [Framework — Author] (e.g. [GAP Selling — Keenan])
+4. Prioritize Keystone Resource insights — they define the foundational approach
 4. Supporting Resources add tactical depth
 5. KIs provide specific, tested tactics — cite them by title
 6. Organize into clear sections appropriate for the "${stageLabel}" stage

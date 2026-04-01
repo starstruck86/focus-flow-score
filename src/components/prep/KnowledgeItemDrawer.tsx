@@ -53,6 +53,8 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
     chapter: '',
     sub_chapter: '',
     knowledge_type: 'skill' as string,
+    who: '',
+    framework: '',
   });
 
   useEffect(() => {
@@ -67,6 +69,8 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
         chapter: item.chapter,
         sub_chapter: item.sub_chapter || '',
         knowledge_type: item.knowledge_type,
+        who: item.who || '',
+        framework: item.framework || '',
       });
     }
   }, [item]);
@@ -179,6 +183,28 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
                   placeholder="e.g. openers, pricing_traps"
                   className="text-xs"
                 />
+              </div>
+
+              {/* Attribution */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Who (Author / Thought Leader)</Label>
+                  <Input
+                    value={form.who}
+                    onChange={e => setForm(f => ({ ...f, who: e.target.value }))}
+                    placeholder="e.g. Keenan, Chris Voss"
+                    className="text-xs"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Framework</Label>
+                  <Input
+                    value={form.framework}
+                    onChange={e => setForm(f => ({ ...f, framework: e.target.value }))}
+                    placeholder="e.g. GAP Selling, MEDDICC"
+                    className="text-xs"
+                  />
+                </div>
               </div>
 
               <Separator />

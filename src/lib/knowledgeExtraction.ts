@@ -209,6 +209,8 @@ interface ExtractedTactic {
   chapter: string;
   sub_chapter: string | null;
   knowledge_type: 'skill' | 'product' | 'competitive';
+  who?: string | null;
+  framework?: string | null;
 }
 
 /**
@@ -413,6 +415,8 @@ export function extractKnowledgeHeuristic(
         active: autoActivate,
         user_edited: false,
         tags: structuredTags,
+        who: tactic.who || null,
+        framework: tactic.framework || null,
       });
     }
   }
@@ -534,6 +538,8 @@ export async function extractKnowledgeLLMFallback(
           active: autoActivate,
           user_edited: false,
           tags: [...source.tags, item.knowledge_type || 'skill', item.chapter || 'messaging'],
+          who: item.who || null,
+          framework: item.framework || null,
         });
       }
 
