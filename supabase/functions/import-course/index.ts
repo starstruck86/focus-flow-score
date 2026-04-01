@@ -640,6 +640,22 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     content = videoEmbeds.join('\n') + '\n\n' + content;
   }
   
+  // Transcribe Wistia videos
+  const wistiaIds = videoEmbeds
+    .filter(v => v.startsWith('[Wistia Video:'))
+    .map(v => v.match(/\[Wistia Video: ([a-z0-9]+)\]/i)?.[1])
+    .filter(Boolean) as string[];
+  
+  if (wistiaIds.length > 0) {
+    debug.push(`Transcribing ${wistiaIds.length} Wistia video(s)...`);
+    // Transcribe the first/primary video (most lessons have one)
+    const transcript = await transcribeWistiaVideo(wistiaIds[0], debug);
+    if (transcript) {
+      content = content + '\n\n--- Video Transcript ---\n\n' + transcript;
+      debug.push(`Appended transcript: ${transcript.length} chars`);
+    }
+  }
+  
   debug.push(`Content extracted: ${content.length} chars, type: ${type}`);
   
   return { title, content, type, debug };
