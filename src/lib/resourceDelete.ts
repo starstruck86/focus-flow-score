@@ -46,11 +46,11 @@ export async function deleteResourceWithCleanup(resourceId: string): Promise<{ k
 /**
  * Delete multiple resources and their related records.
  */
-export async function bulkDeleteResources(ids: string[]): Promise<{ deleted: number; errors: string[] }> {
-  if (ids.length === 0) return { deleted: 0, errors: [] };
+export async function bulkDeleteResources(ids: string[]): Promise<{ deleted: number; kiDeleted: number; errors: string[] }> {
+  if (ids.length === 0) return { deleted: 0, kiDeleted: 0, errors: [] };
   console.log('[ResourceDelete] Bulk deleting:', ids.length, 'resources');
 
-  await cleanupRelatedRecords(ids);
+  const counts = await cleanupRelatedRecords(ids);
 
   let deleted = 0;
   const errors: string[] = [];
@@ -66,8 +66,8 @@ export async function bulkDeleteResources(ids: string[]): Promise<{ deleted: num
     }
   }
 
-  console.log('[ResourceDelete] Bulk result:', { deleted, errors: errors.length });
-  return { deleted, errors };
+  console.log('[ResourceDelete] Bulk result:', { deleted, kiDeleted: counts.kiDeleted, errors: errors.length });
+  return { deleted, kiDeleted: counts.kiDeleted, errors };
 }
 
 /**
