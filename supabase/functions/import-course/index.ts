@@ -63,6 +63,43 @@ function createCookieJar(): CookieJar {
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
+/**
+ * Resolve a Wistia video ID to its smallest MP4 URL via the public embed API.
+ */
+async function resolveWistiaMediaUrl(videoId: string, debug: string[]): Promise<{ url: string; duration: number } | null> {
+  try {
+    debug.push(`Resolving Wistia media URL for ${videoId}...`);
+    const mediaResp = await fetch(`https://fast.wistia.com/embed/medias/${videoId}.json`, {
+      headers: { 'User-Agent': UA },
+    });
+    if (!mediaResp.ok) {
+      debug.push(`Wistia API returned ${mediaResp.status}`);
+      await mediaResp.text();
+      return null;
+    }
+    const mediaData = await mediaResp.json();
+    const assets = mediaData?.media?.assets || [];
+    const duration = mediaData?.media?.duration || 0;
+
+    const mp4Assets = assets
+      .filter((a: { container?: string; url?: string }) => a.container === 'mp4' && a.url)
+      .sort((a: { size?: number }, b: { size?: number }) => (a.size || 0) - (b.size || 0));
+
+    if (mp4Assets.length === 0) {
+      debug.push('No MP4 assets found');
+      return null;
+    }
+
+    const smallest = mp4Assets[0];
+    const url = smallest.url.startsWith('//') ? `https:${smallest.url}` : smallest.url;
+    debug.push(`Resolved: ${smallest.width}x${smallest.height}, ${Math.round(duration)}s`);
+    return { url, duration };
+  } catch (err) {
+    debug.push(`Wistia resolve error: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
 async function kajabiLogin(baseUrl: string, jar: CookieJar): Promise<{ success: boolean; debug: string[] }> {
   const email = Deno.env.get('COURSE_PLATFORM_EMAIL');
   const password = Deno.env.get('COURSE_PLATFORM_PASSWORD');
@@ -557,9 +594,25 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     content = videoEmbeds.join('\n') + '\n\n' + content;
   }
   
-  debug.push(`Content extracted: ${content.length} chars, type: ${type}`);
+  // Resolve Wistia video media URLs for transcription
+  let mediaUrl = '';
+  let videoDuration = 0;
+  const wistiaIds = videoEmbeds
+    .filter(v => v.startsWith('[Wistia Video:'))
+    .map(v => v.match(/\[Wistia Video: ([a-z0-9]+)\]/i)?.[1])
+    .filter(Boolean) as string[];
   
-  return { title, content, type, debug };
+  if (wistiaIds.length > 0) {
+    const resolved = await resolveWistiaMediaUrl(wistiaIds[0], debug);
+    if (resolved) {
+      mediaUrl = resolved.url;
+      videoDuration = resolved.duration;
+    }
+  }
+  
+  debug.push(`Content extracted: ${content.length} chars, type: ${type}, mediaUrl: ${mediaUrl ? 'yes' : 'no'}`);
+  
+  return { title, content, type, debug, media_url: mediaUrl || undefined, video_duration: videoDuration || undefined };
 }
 
 Deno.serve(async (req) => {

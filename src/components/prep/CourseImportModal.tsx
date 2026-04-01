@@ -120,8 +120,33 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         classification.resource_type = lesson.type === 'video' ? 'video' : 'article';
         classification.tags = [...(classification.tags || []), 'course', courseTitle].filter(Boolean);
         
-        await addUrl.mutateAsync({ url: lesson.url, classification });
+        const result = await addUrl.mutateAsync({ url: lesson.url, classification });
         successCount++;
+
+        // If the lesson has a Wistia video with a media_url, trigger transcription
+        if (lessonData?.media_url && result?.id) {
+          try {
+            setImportProgress({ done: i, total: toImport.length, current: `${lesson.title} (transcribing video...)` });
+            const { data: txData } = await trackedInvoke<any>('transcribe-audio', {
+              body: { audio_url: lessonData.media_url, resource_id: result.id },
+              timeoutMs: 120_000,
+            });
+            if (txData?.success && txData.transcript) {
+              // Update the resource with the transcript appended
+            const { supabase } = await import('@/integrations/supabase/client');
+              const { data: existing } = await supabase
+                .from('resources')
+                .select('content')
+                .eq('id', result.id)
+                .single();
+              const updated = (existing?.content || '') + '\n\n--- Video Transcript ---\n\n' + txData.transcript;
+              await supabase.from('resources').update({ content: updated } as any).eq('id', result.id);
+              console.log(`Transcribed video for ${lesson.title}: ${txData.transcript.length} chars`);
+            }
+          } catch (txErr) {
+            console.warn(`Video transcription failed for ${lesson.title}:`, txErr);
+          }
+        }
       } catch (e) {
         console.error(`Failed to import ${lesson.title}:`, e);
       }
