@@ -403,26 +403,123 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
   let type = 'text';
   if (/wistia|vimeo|youtube|video-player/i.test(html)) type = 'video';
   
-  // Extract content from multiple possible containers
+  // Extract video embed info
+  const videoEmbeds: string[] = [];
+  
+  // Wistia
+  const wistiaMatches = html.matchAll(/wistia_async_([a-z0-9]+)/gi);
+  for (const wm of wistiaMatches) {
+    videoEmbeds.push(`[Wistia Video: ${wm[1]}]`);
+  }
+  const wistiaIframe = html.matchAll(/fast\.wistia\.\w+\/embed\/(?:iframe|medias)\/([a-z0-9]+)/gi);
+  for (const wm of wistiaIframe) {
+    if (!videoEmbeds.some(v => v.includes(wm[1]))) {
+      videoEmbeds.push(`[Wistia Video: ${wm[1]}]`);
+    }
+  }
+  
+  // Vimeo
+  const vimeoMatches = html.matchAll(/player\.vimeo\.com\/video\/(\d+)/gi);
+  for (const vm of vimeoMatches) {
+    videoEmbeds.push(`[Vimeo Video: ${vm[1]}]`);
+  }
+  
+  // YouTube
+  const ytMatches = html.matchAll(/(?:youtube\.com\/embed\/|youtu\.be\/)([a-zA-Z0-9_-]+)/gi);
+  for (const ym of ytMatches) {
+    videoEmbeds.push(`[YouTube Video: ${ym[1]}]`);
+  }
+  
+  // Sproutvideo (commonly used by Kajabi)
+  const sproutMatches = html.matchAll(/videos-cdn\.sproutvideo\.com\/([a-z0-9]+)/gi);
+  for (const sm of sproutMatches) {
+    if (!videoEmbeds.some(v => v.includes(sm[1]))) {
+      videoEmbeds.push(`[SproutVideo: ${sm[1]}]`);
+    }
+  }
+  
+  // Generic iframe video embeds
+  if (videoEmbeds.length === 0) {
+    const iframeMatches = html.matchAll(/<iframe[^>]*src="([^"]*(?:video|player|embed)[^"]*)"/gi);
+    for (const im of iframeMatches) {
+      videoEmbeds.push(`[Video Embed: ${im[1]}]`);
+    }
+  }
+  
+  // Kajabi's native video player  
+  if (videoEmbeds.length === 0 && /data-controller="[^"]*video/i.test(html)) {
+    videoEmbeds.push(`[Kajabi Native Video]`);
+  }
+  
+  debug.push(`Video embeds found: ${videoEmbeds.length}`);
+  
+  // Strip comments sections before content extraction
+  // Kajabi uses data-controller="comments" or similar patterns
+  let cleanedHtml = html
+    .replace(/<[^>]*data-controller="[^"]*comment[^"]*"[^>]*>[\s\S]*$/gi, '')
+    .replace(/<section[^>]*(?:comments|discussion)[^>]*>[\s\S]*?<\/section>/gi, '')
+    .replace(/<div[^>]*(?:id|class)="[^"]*(?:comments|comment-section|disqus|discussion|kjb-comments|post-comments)[^"]*"[^>]*>[\s\S]*$/gi, '');
+  
+  // Also strip footer sections  
+  cleanedHtml = cleanedHtml
+    .replace(/<footer[\s\S]*$/gi, '')
+    .replace(/<div[^>]*class="[^"]*(?:coach-section|about-coach|instructor-bio|customer-portal)[^"]*"[\s\S]*$/gi, '');
+  
+  // Extract content — try Kajabi-specific post body first
   let content = '';
+  
+  // Look for the actual lesson body content by scanning for class names
+  const classNames = [...cleanedHtml.matchAll(/class="([^"]+)"/gi)].map(m => m[1]);
+  const postBodyClasses = classNames.filter(c => /post|lesson|content|body/i.test(c) && !/nav|header|sidebar|menu/i.test(c));
+  debug.push(`Post-related classes: ${postBodyClasses.slice(0, 5).join(', ')}`);
+  
+  // Try to extract from Kajabi's known content containers
   const contentPatterns = [
-    /class="[^"]*(?:post__body|lesson-body|post-body|entry-content|kjb-html-content|article-content)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|article|section)>/i,
-    /<main[^>]*>([\s\S]*?)<\/main>/i,
-    /<article[^>]*>([\s\S]*?)<\/article>/i,
+    // Kajabi content-wrap is the main lesson content area
+    /class="[^"]*content-wrap[^"]*"[^>]*>([\s\S]+)/i,
+    // Kajabi post body
+    /class="[^"]*(?:kjb-html-content)[^"]*"[^>]*>([\s\S]+)/i,
+    /class="[^"]*(?:post__body|post-body)[^"]*"[^>]*>([\s\S]+)/i,
+    /class="[^"]*(?:product-post__body|lesson-content|course-content)[^"]*"[^>]*>([\s\S]+)/i,
+    /data-post-body[^>]*>([\s\S]+)/i,
   ];
   
   for (const pattern of contentPatterns) {
-    const m = html.match(pattern);
+    const m = cleanedHtml.match(pattern);
     if (m && m[1].length > content.length) {
       content = m[1];
+      debug.push(`Matched pattern: ${pattern.source.substring(0, 40)}`);
     }
   }
+  
+  // Fallback: use main or article
+  if (!content || content.length < 50) {
+    const mainMatch = cleanedHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+    if (mainMatch) content = mainMatch[1];
+  }
+  
+  // Last resort: strip nav/header from body
+  if (!content || content.length < 50) {
+    content = cleanedHtml
+      .replace(/[\s\S]*?<body[^>]*>/i, '')
+      .replace(/<\/body>[\s\S]*/i, '')
+      .replace(/<header[\s\S]*?<\/header>/gi, '')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, '');
+    debug.push(`Last resort: using full body (${content.length} chars)`);
+  }
+  
+  // Post-extraction: remove sidebar/playlist content
+  content = content
+    .replace(/<div[^>]*class="[^"]*(?:playlist|sidebar|navigation|breadcrumb)[^"]*"[\s\S]*?<\/div>/gi, '')
+    .replace(/<div[^>]*class="[^"]*(?:mark-complete|next-lesson|prev-lesson)[^"]*"[\s\S]*?<\/div>/gi, '');
   
   // Clean HTML to text
   content = content
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    // Remove comment-related content that might remain
+    .replace(/<[^>]*(?:comment|reply|avatar)[^>]*>[\s\S]*?<\/[^>]+>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:p|div|li|h[1-6])>/gi, '\n')
     .replace(/<(?:li)>/gi, '• ')
@@ -435,6 +532,30 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/&#39;/g, "'")
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+  
+  // Remove common nav/UI noise from the text output
+  content = content
+    .replace(/^[\s\S]*?(?=(?:Introduction|Chapter|Module|Lesson|Section)\b)/i, '') // Skip to first heading-like word
+    .replace(/\b(?:Store|My Library|Search|Settings|Logout|Log Out|Sign Out)\b/g, '')
+    .replace(/Mark As Complete/gi, '')
+    .replace(/Great Job! Keep Going!/gi, '')
+    .replace(/Next Lesson/gi, '')
+    .replace(/Next Section/gi, '')
+    .replace(/Play Now/gi, '')
+    .replace(/Will Begin In \d+ Seconds/gi, '')
+    .replace(/Cancel/g, '')
+    .replace(/Module \d+ of \d+/gi, '')
+    .replace(/\d+ Modules/gi, '')
+    .replace(/^\s*(?:Back|Next|Previous)\s*$/gm, '')
+    .replace(/^\s*\|\s*$/gm, '')
+    .replace(/^\s*\d+\s*$/gm, '') // Standalone numbers (playlist indices)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  
+  // Prepend video embed references so they're captured in the resource
+  if (videoEmbeds.length > 0) {
+    content = videoEmbeds.join('\n') + '\n\n' + content;
+  }
   
   debug.push(`Content extracted: ${content.length} chars, type: ${type}`);
   
