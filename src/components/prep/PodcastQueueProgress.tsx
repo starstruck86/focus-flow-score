@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { CheckCircle2, XCircle, Loader2, Clock, Ban, Trash2, Brain, AlertTriangle, ChevronDown, ChevronRight, Sparkles, FileText } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, Clock, Ban, Trash2, Brain, AlertTriangle, ChevronDown, ChevronRight, Sparkles, FileText, ShieldCheck, Eye } from 'lucide-react';
 import type { QueueItem, QueueStats } from '@/hooks/usePodcastQueue';
 
 interface PodcastQueueProgressProps {
@@ -16,6 +16,8 @@ interface PodcastQueueProgressProps {
   onClear: () => void;
   onGenerateKIs?: (queueItemId: string) => void;
   onGenerateAllKIs?: () => void;
+  onApproveTranscript?: (queueItemId: string) => void;
+  onApproveAllTranscripts?: () => void;
   generatingKIs?: Set<string>;
 }
 
@@ -59,7 +61,8 @@ const transcriptStatusLabel = (status: string | null) => {
 const kiStatusLabel = (kiStatus: string | null, kiCount: number) => {
   if (!kiStatus || kiStatus === 'pending') return null;
   switch (kiStatus) {
-    case 'ready_for_review': return { text: 'Ready for KI', color: 'text-blue-500' };
+    case 'awaiting_approval': return { text: 'Needs approval', color: 'text-amber-500' };
+    case 'ready_for_review': return { text: 'Approved', color: 'text-blue-500' };
     case 'extracting': return { text: 'Extracting…', color: 'text-yellow-500' };
     case 'extracted': return { text: `${kiCount} KI${kiCount !== 1 ? 's' : ''}`, color: 'text-green-500' };
     case 'ki_failed': return { text: 'KI failed', color: 'text-destructive' };
@@ -92,7 +95,7 @@ function formatBytes(chars: number): string {
 
 export function PodcastQueueProgress({
   items, stats, isActive, isDone, onCancel, onClear,
-  onGenerateKIs, onGenerateAllKIs, generatingKIs,
+  onGenerateKIs, onGenerateAllKIs, onApproveTranscript, onApproveAllTranscripts, generatingKIs,
 }: PodcastQueueProgressProps) {
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
 
@@ -139,6 +142,12 @@ export function PodcastQueueProgress({
             {stats.failed} failed
           </Badge>
         )}
+        {stats.awaitingApproval > 0 && (
+          <Badge variant="outline" className="text-[10px] gap-1 border-amber-500/30">
+            <Eye className="h-3 w-3 text-amber-500" />
+            {stats.awaitingApproval} needs review
+          </Badge>
+        )}
         {stats.readyForKI > 0 && (
           <Badge variant="outline" className="text-[10px] gap-1 border-blue-500/30">
             <FileText className="h-3 w-3 text-blue-500" />
@@ -163,6 +172,7 @@ export function PodcastQueueProgress({
             const failure = item.status === 'failed' ? failureLabel(item.failure_type) : null;
             const isExpanded = expandedItem === item.id;
             const isGenerating = generatingKIs?.has(item.id);
+            const canApprove = item.ki_status === 'awaiting_approval' && item.resource_id;
             const canGenerateKI = item.ki_status === 'ready_for_review' && item.resource_id && !isGenerating;
 
             return (
@@ -218,7 +228,22 @@ export function PodcastQueueProgress({
                       </div>
                     )}
 
-                    {/* Generate KIs button */}
+                    {/* Approve Transcript button */}
+                    {canApprove && onApproveTranscript && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-[10px] h-6 gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onApproveTranscript(item.id);
+                        }}
+                      >
+                        <ShieldCheck className="h-3 w-3" /> Approve Transcript
+                      </Button>
+                    )}
+
+                    {/* Generate KIs button — only after approval */}
                     {canGenerateKI && onGenerateKIs && (
                       <Button
                         variant="outline"
@@ -256,6 +281,11 @@ export function PodcastQueueProgress({
         {isDone && (
           <Button variant="outline" size="sm" className="text-xs gap-1" onClick={onClear}>
             <Trash2 className="h-3 w-3" /> Clear queue
+          </Button>
+        )}
+        {stats.awaitingApproval > 0 && onApproveAllTranscripts && (
+          <Button variant="outline" size="sm" className="text-xs gap-1" onClick={onApproveAllTranscripts}>
+            <ShieldCheck className="h-3 w-3" /> Approve All ({stats.awaitingApproval})
           </Button>
         )}
         {stats.readyForKI > 0 && onGenerateAllKIs && (
