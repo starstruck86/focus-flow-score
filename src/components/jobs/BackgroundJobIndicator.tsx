@@ -3,11 +3,12 @@
  * Shows summary of running / review / failed jobs. Clicks open the drawer.
  */
 import { useBackgroundJobs, selectJobCounts } from '@/store/useBackgroundJobs';
+import { useShallow } from 'zustand/react/shallow';
 import { Loader2, AlertTriangle, CheckCircle2, Inbox } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function BackgroundJobIndicator() {
-  const counts = useBackgroundJobs(selectJobCounts);
+  const counts = useBackgroundJobs(useShallow(selectJobCounts));
   const toggleDrawer = useBackgroundJobs((s) => s.toggleDrawer);
 
   // Nothing to show

@@ -1,6 +1,7 @@
 /**
  * BackgroundJobDrawer — slide-up drawer showing all background jobs.
  */
+import { useShallow } from 'zustand/react/shallow';
 import {
   useBackgroundJobs,
   selectActiveJobs,
@@ -145,10 +146,10 @@ export function BackgroundJobDrawer() {
   const setOpen = useBackgroundJobs((s) => s.setDrawerOpen);
   const clearCompleted = useBackgroundJobs((s) => s.clearCompleted);
 
-  const active = useBackgroundJobs(selectActiveJobs);
-  const review = useBackgroundJobs(selectReviewJobs);
-  const failed = useBackgroundJobs(selectFailedJobs);
-  const completed = useBackgroundJobs(selectCompletedJobs);
+  const active = useBackgroundJobs(useShallow(selectActiveJobs));
+  const review = useBackgroundJobs(useShallow(selectReviewJobs));
+  const failed = useBackgroundJobs(useShallow(selectFailedJobs));
+  const completed = useBackgroundJobs(useShallow(selectCompletedJobs));
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
