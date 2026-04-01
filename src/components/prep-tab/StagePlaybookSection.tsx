@@ -261,7 +261,7 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
             {groups.map((group, gi) => (
               <div key={gi}>
                 {group.sections.map((section, si) => (
-                  <PlaybookSectionBlock key={`${gi}-${si}`} section={section} defaultOpen={gi === 0 && si < 2} />
+                  <PlaybookSectionBlock key={`${gi}-${si}`} section={section} stageId={stageId} defaultOpen={gi === 0 && si < 2} />
                 ))}
               </div>
             ))}
