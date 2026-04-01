@@ -1,7 +1,8 @@
 /**
  * FrameworkSectionsPanel — renders predefined framework-driven sections
  * for a Prep stage and auto-populates them with matching KIs.
- * Includes a framework summary banner at the top of each page.
+ * Uses tiered relevance: framework → tags/contexts → keyword fallback.
+ * Includes match reason metadata and framework summary banner.
  */
 
 import { useState, useMemo } from 'react';
@@ -12,7 +13,8 @@ import { STAGE_FRAMEWORK_MAP, getFrameworkColorClasses } from '@/data/stageFrame
 import type { StageFrameworkRole, FrameworkSection } from '@/data/stageFrameworkMap';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronRight, BookOpen, Lightbulb } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ChevronDown, ChevronRight, BookOpen, Lightbulb, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -29,9 +31,17 @@ interface KI {
   framework: string | null;
   confidence_score: number;
   source_resource_id: string | null;
+  tags: string[];
+  applies_to_contexts: string[];
 }
 
-/** Fetch all KIs that match any framework used by this stage */
+type MatchReason = 'framework' | 'stage_context' | 'tag' | 'keyword';
+
+interface MatchedKI extends KI {
+  matchReason: MatchReason;
+}
+
+/** Fetch all KIs that match any framework used by this stage, plus context-matched */
 function useStageKIs(stageId: string) {
   const { user } = useAuth();
   const stageFrameworks = STAGE_FRAMEWORK_MAP[stageId] || [];
@@ -41,17 +51,120 @@ function useStageKIs(stageId: string) {
     queryKey: ['stage-framework-kis', user?.id, stageId],
     enabled: !!user && frameworkNames.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Fetch framework-matched KIs
+      const { data: fwData, error: fwErr } = await supabase
         .from('knowledge_items' as any)
-        .select('id, title, tactic_summary, why_it_matters, who, framework, confidence_score, source_resource_id')
+        .select('id, title, tactic_summary, why_it_matters, who, framework, confidence_score, source_resource_id, tags, applies_to_contexts')
         .eq('active', true)
         .in('framework', frameworkNames)
         .order('confidence_score', { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as KI[];
+      if (fwErr) throw fwErr;
+
+      // Fetch stage-context-matched KIs
+      const { data: ctxData, error: ctxErr } = await supabase
+        .from('knowledge_items' as any)
+        .select('id, title, tactic_summary, why_it_matters, who, framework, confidence_score, source_resource_id, tags, applies_to_contexts')
+        .eq('active', true)
+        .contains('applies_to_contexts', [stageId])
+        .order('confidence_score', { ascending: false })
+        .limit(30);
+      if (ctxErr) throw ctxErr;
+
+      // Deduplicate
+      const map = new Map<string, KI>();
+      for (const ki of [...(fwData ?? []), ...(ctxData ?? [])] as unknown as KI[]) {
+        if (!map.has(ki.id)) map.set(ki.id, ki);
+      }
+      return Array.from(map.values());
     },
   });
 }
+
+/** Tiered matching: framework > tags/contexts > keyword */
+function matchKIsToSection(
+  kis: KI[],
+  section: FrameworkSection,
+  frameworkName: string,
+  stageId: string,
+): MatchedKI[] {
+  const results: MatchedKI[] = [];
+  const usedIds = new Set<string>();
+
+  // Tier 1: Framework match — KI.framework matches this framework block
+  for (const ki of kis) {
+    if (ki.framework === frameworkName && !usedIds.has(ki.id)) {
+      // Check if section heading has any relevance to KI
+      const headingLower = section.heading.toLowerCase();
+      const text = `${ki.title} ${ki.tactic_summary || ''} ${(ki.tags || []).join(' ')}`.toLowerCase();
+      const words = headingLower.split(/\s+/).filter(w => w.length > 3);
+      if (words.some(w => text.includes(w))) {
+        results.push({ ...ki, matchReason: 'framework' });
+        usedIds.add(ki.id);
+      }
+    }
+  }
+
+  // Tier 2: Stage context match
+  for (const ki of kis) {
+    if (usedIds.has(ki.id)) continue;
+    if ((ki.applies_to_contexts || []).includes(stageId)) {
+      const headingLower = section.heading.toLowerCase();
+      const text = `${ki.title} ${ki.tactic_summary || ''} ${(ki.tags || []).join(' ')}`.toLowerCase();
+      const words = headingLower.split(/\s+/).filter(w => w.length > 3);
+      if (words.some(w => text.includes(w))) {
+        results.push({ ...ki, matchReason: 'stage_context' });
+        usedIds.add(ki.id);
+      }
+    }
+  }
+
+  // Tier 3: Tag overlap
+  for (const ki of kis) {
+    if (usedIds.has(ki.id)) continue;
+    const sectionWords = section.heading.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    const kiTags = (ki.tags || []).map(t => t.toLowerCase());
+    if (sectionWords.some(w => kiTags.some(t => t.includes(w) || w.includes(t)))) {
+      results.push({ ...ki, matchReason: 'tag' });
+      usedIds.add(ki.id);
+    }
+  }
+
+  // Tier 4: Keyword fallback (title + tactic_summary)
+  for (const ki of kis) {
+    if (usedIds.has(ki.id)) continue;
+    const headingLower = section.heading.toLowerCase();
+    const text = `${ki.title} ${ki.tactic_summary || ''}`.toLowerCase();
+    const words = headingLower.split(/\s+/).filter(w => w.length > 3);
+    if (words.some(w => text.includes(w))) {
+      results.push({ ...ki, matchReason: 'keyword' });
+      usedIds.add(ki.id);
+    }
+  }
+
+  return results.sort((a, b) => b.confidence_score - a.confidence_score);
+}
+
+const MATCH_REASON_LABELS: Record<MatchReason, string> = {
+  framework: 'Matched by framework',
+  stage_context: 'Matched by stage context',
+  tag: 'Matched by tag',
+  keyword: 'Matched by keyword similarity',
+};
+
+const MATCH_REASON_COLORS: Record<MatchReason, string> = {
+  framework: 'text-emerald-500',
+  stage_context: 'text-blue-500',
+  tag: 'text-violet-500',
+  keyword: 'text-muted-foreground',
+};
+
+/** Compact framework role descriptions */
+const FRAMEWORK_ROLE_LABELS: Record<string, string> = {
+  'GAP Selling': 'Discovery & problem depth',
+  'Challenger': 'Insight, reframe & teaching',
+  'MEDDPICC': 'Deal qualification & progression',
+  'Command of the Message': 'Structure & narrative',
+};
 
 function FrameworkBadgeLabel({ framework, who }: { framework: string; who: string }) {
   const colors = getFrameworkColorClasses(framework);
@@ -66,15 +179,6 @@ function FrameworkBadgeLabel({ framework, who }: { framework: string; who: strin
   );
 }
 
-/** Compact framework role descriptions for each framework */
-const FRAMEWORK_ROLE_LABELS: Record<string, string> = {
-  'GAP Selling': 'Discovery & problem depth',
-  'Challenger': 'Insight, reframe & teaching',
-  'MEDDPICC': 'Deal qualification & progression',
-  'Command of the Message': 'Structure & narrative',
-};
-
-/** Framework summary banner at the top of each page */
 function FrameworkSummaryBanner({ frameworks }: { frameworks: StageFrameworkRole[] }) {
   return (
     <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
@@ -103,7 +207,7 @@ function SectionBlock({
   defaultOpen,
 }: {
   section: FrameworkSection;
-  kis: KI[];
+  kis: MatchedKI[];
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
@@ -122,20 +226,32 @@ function SectionBlock({
         {kis.length === 0 && (
           <p className="text-[10px] text-muted-foreground/60">No matching knowledge items yet</p>
         )}
-        {kis.map(ki => (
-          <div key={ki.id} className="pl-4 py-1 border-l-2 border-muted">
-            <p className="text-xs text-foreground font-medium">{ki.title}</p>
-            {ki.tactic_summary && (
-              <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">{ki.tactic_summary}</p>
-            )}
-            {ki.who && ki.framework && (
-              <span className="text-[9px] text-muted-foreground">[{ki.framework} — {ki.who}]</span>
-            )}
-            {ki.who && !ki.framework && (
-              <span className="text-[9px] text-muted-foreground">— {ki.who}</span>
-            )}
-          </div>
-        ))}
+        <TooltipProvider delayDuration={200}>
+          {kis.map(ki => (
+            <div key={ki.id} className="pl-4 py-1 border-l-2 border-muted flex items-start gap-1">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-foreground font-medium">{ki.title}</p>
+                {ki.tactic_summary && (
+                  <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">{ki.tactic_summary}</p>
+                )}
+                {ki.who && ki.framework && (
+                  <span className="text-[9px] text-muted-foreground">[{ki.framework} — {ki.who}]</span>
+                )}
+                {ki.who && !ki.framework && (
+                  <span className="text-[9px] text-muted-foreground">— {ki.who}</span>
+                )}
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className={cn('h-3 w-3 mt-0.5 shrink-0 cursor-help', MATCH_REASON_COLORS[ki.matchReason])} />
+                </TooltipTrigger>
+                <TooltipContent side="left" className="text-xs max-w-[200px]">
+                  <p className="font-medium">{MATCH_REASON_LABELS[ki.matchReason]}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          ))}
+        </TooltipProvider>
       </CollapsibleContent>
     </Collapsible>
   );
@@ -144,33 +260,29 @@ function SectionBlock({
 function FrameworkBlock({
   frameworkRole,
   kis,
+  stageId,
   defaultOpen,
 }: {
   frameworkRole: StageFrameworkRole;
   kis: KI[];
+  stageId: string;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? true);
   const colors = getFrameworkColorClasses(frameworkRole.framework);
 
-  // Match KIs to sections by keyword overlap
-  const matchKIsToSection = (section: FrameworkSection): KI[] => {
-    const headingLower = section.heading.toLowerCase();
-    return kis.filter(ki => {
-      const text = `${ki.title} ${ki.tactic_summary || ''}`.toLowerCase();
-      const words = headingLower.split(/\s+/).filter(w => w.length > 3);
-      return words.some(w => text.includes(w));
-    });
-  };
-
+  // Tiered matching per section
   const matchedIds = new Set<string>();
   const sectionKIs = frameworkRole.sections.map(section => {
-    const matched = matchKIsToSection(section);
+    const matched = matchKIsToSection(kis, section, frameworkRole.framework, stageId);
     matched.forEach(ki => matchedIds.add(ki.id));
     return { section, kis: matched };
   });
 
-  const unmatchedKIs = kis.filter(ki => !matchedIds.has(ki.id));
+  // Unmatched KIs that belong to this framework
+  const unmatchedKIs: MatchedKI[] = kis
+    .filter(ki => ki.framework === frameworkRole.framework && !matchedIds.has(ki.id))
+    .map(ki => ({ ...ki, matchReason: 'framework' as MatchReason }));
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -181,7 +293,9 @@ function FrameworkBlock({
         {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
         <FrameworkBadgeLabel framework={frameworkRole.framework} who={frameworkRole.who} />
         <span className="text-[10px] text-muted-foreground ml-1 hidden sm:inline">— {frameworkRole.role}</span>
-        <Badge variant="secondary" className="text-[9px] ml-auto">{kis.length}</Badge>
+        <Badge variant="secondary" className="text-[9px] ml-auto">
+          {sectionKIs.reduce((s, x) => s + x.kis.length, 0) + unmatchedKIs.length}
+        </Badge>
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-2 space-y-0.5 pb-1">
         {sectionKIs.map(({ section, kis: sKIs }) => (
@@ -209,8 +323,14 @@ export function FrameworkSectionsPanel({ stageId, stageLabel }: Props) {
       if (!map.has(fw)) map.set(fw, []);
       map.get(fw)!.push(ki);
     }
+    // Also add KIs without framework to all framework buckets for context matching
+    const noFw = allKIs.filter(ki => !ki.framework);
+    for (const fr of stageFrameworks) {
+      const existing = map.get(fr.framework) || [];
+      map.set(fr.framework, [...existing, ...noFw.filter(ki => !existing.some(e => e.id === ki.id))]);
+    }
     return map;
-  }, [allKIs]);
+  }, [allKIs, stageFrameworks]);
 
   if (stageFrameworks.length === 0) return null;
 
@@ -218,7 +338,6 @@ export function FrameworkSectionsPanel({ stageId, stageLabel }: Props) {
 
   return (
     <div className="space-y-2">
-      {/* Framework summary banner */}
       <FrameworkSummaryBanner frameworks={stageFrameworks} />
 
       <div className="flex items-center justify-between">
@@ -239,6 +358,7 @@ export function FrameworkSectionsPanel({ stageId, stageLabel }: Props) {
             key={fr.framework}
             frameworkRole={fr}
             kis={kisByFramework.get(fr.framework) || []}
+            stageId={stageId}
             defaultOpen={i === 0}
           />
         ))}

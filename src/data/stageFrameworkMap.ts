@@ -379,6 +379,52 @@ export const STAGE_FRAMEWORK_MAP: Record<string, StageFrameworkRole[]> = {
       color: 'violet',
     },
   ],
+
+  /* ─── Follow-Up / Recap ─── */
+  follow_up: [
+    {
+      framework: 'Command of the Message',
+      who: 'Force Management',
+      role: 'Recap structure & value reinforcement',
+      sections: [
+        { heading: 'Recap Email Structure', description: 'How to structure a recap that reinforces value and locks in next steps' },
+        { heading: 'Executive Summary', description: 'One-page summary for stakeholders who missed the meeting' },
+        { heading: 'Value Recap', description: 'Restate value pillars in the context of what was discussed' },
+      ],
+      color: 'amber',
+    },
+    {
+      framework: 'MEDDPICC',
+      who: 'McMahon',
+      role: 'Mutual action plan & next steps',
+      sections: [
+        { heading: 'Mutual Action Plan', description: 'Shared milestones, owners, and deadlines to close' },
+        { heading: 'Next Steps & Commitments', description: 'Specific actions agreed upon with owners and dates' },
+        { heading: 'Decision Process Update', description: 'Updated view of timeline, stakeholders, and approval steps' },
+      ],
+      color: 'blue',
+    },
+    {
+      framework: 'GAP Selling',
+      who: 'Keenan',
+      role: 'Gap confirmation & impact reinforcement',
+      sections: [
+        { heading: 'Confirmed Gaps', description: 'Gaps validated during the meeting — restate for alignment' },
+        { heading: 'Impact Reinforcement', description: 'Restate the cost of inaction based on what was shared' },
+      ],
+      color: 'emerald',
+    },
+    {
+      framework: 'Challenger',
+      who: 'Dixon',
+      role: 'Follow-up insights & urgency',
+      sections: [
+        { heading: 'Follow-Up Insight', description: 'A new insight or data point to share post-meeting that creates urgency' },
+        { heading: 'Internal Champion Talking Points', description: 'Specific points your champion can use to advocate internally' },
+      ],
+      color: 'violet',
+    },
+  ],
 };
 
 /** Framework color mapping for UI badges */
