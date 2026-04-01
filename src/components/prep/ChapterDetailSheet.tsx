@@ -143,6 +143,40 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
               <span>Dave will use {activeCount} active items when you practice this chapter</span>
             </div>
           )}
+          {/* Speaker / Framework filter chips */}
+          {(speakers.length > 1 || frameworks.length > 1) && (
+            <div className="mt-2 flex gap-1.5 flex-wrap">
+              {speakers.length > 1 && speakers.map(s => (
+                <Badge
+                  key={`who-${s}`}
+                  variant={whoFilter === s ? 'default' : 'outline'}
+                  className="cursor-pointer text-[10px] h-5"
+                  onClick={() => setWhoFilter(whoFilter === s ? null : s)}
+                >
+                  {s}
+                </Badge>
+              ))}
+              {frameworks.length > 1 && frameworks.map(f => (
+                <Badge
+                  key={`fw-${f}`}
+                  variant={frameworkFilter === f ? 'default' : 'outline'}
+                  className="cursor-pointer text-[10px] h-5"
+                  onClick={() => setFrameworkFilter(frameworkFilter === f ? null : f)}
+                >
+                  {f}
+                </Badge>
+              ))}
+              {(whoFilter || frameworkFilter) && (
+                <Badge
+                  variant="secondary"
+                  className="cursor-pointer text-[10px] h-5"
+                  onClick={() => { setWhoFilter(null); setFrameworkFilter(null); }}
+                >
+                  Clear filters
+                </Badge>
+              )}
+            </div>
+          )}
         </SheetHeader>
 
         <ScrollArea className="h-[calc(100vh-130px)]">
