@@ -73,6 +73,8 @@ const App = () => (
               <Sonner />
               <ReviewModeBanner />
               <OfflineBanner />
+              <BackgroundJobIndicator />
+              <BackgroundJobDrawer />
               <BrowserRouter>
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
