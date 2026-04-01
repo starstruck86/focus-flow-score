@@ -46,6 +46,7 @@ import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { PlaylistImportModal } from './PlaylistImportModal';
 import { PodcastImportModal } from './PodcastImportModal';
 import { WebpageImportModal } from './WebpageImportModal';
+import { CourseImportModal } from './CourseImportModal';
 import { DeepEnrichModal } from './DeepEnrichModal';
 import { EnrichmentJobIndicator } from './EnrichmentJobIndicator';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
@@ -130,6 +131,7 @@ export function ResourceManager() {
   const [showPlaylistImport, setShowPlaylistImport] = useState(false);
   const [showPodcastImport, setShowPodcastImport] = useState(false);
   const [showWebpageImport, setShowWebpageImport] = useState(false);
+  const [showCourseImport, setShowCourseImport] = useState(false);
 
   // AI Discover states
   const [showDiscover, setShowDiscover] = useState(false);
@@ -560,6 +562,9 @@ export function ResourceManager() {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowWebpageImport(true)}>
               <Globe className="h-3.5 w-3.5 mr-2" /> Import from Webpage
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowCourseImport(true)}>
+              <BookOpen className="h-3.5 w-3.5 mr-2" /> Import Course
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -1223,6 +1228,7 @@ export function ResourceManager() {
       <PlaylistImportModal open={showPlaylistImport} onOpenChange={setShowPlaylistImport} />
       <PodcastImportModal open={showPodcastImport} onOpenChange={setShowPodcastImport} />
       <WebpageImportModal open={showWebpageImport} onOpenChange={setShowWebpageImport} />
+      <CourseImportModal open={showCourseImport} onOpenChange={setShowCourseImport} />
       <AIGenerateDialog
         open={showAIGenerate}
         onOpenChange={(open) => { setShowAIGenerate(open); if (!open) { setGenerateSourceId(null); setGenerateInitialType(undefined); } }}
