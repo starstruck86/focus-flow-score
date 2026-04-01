@@ -4,8 +4,18 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { CheckCircle2, XCircle, Loader2, Clock, Ban, Trash2, Brain, AlertTriangle, ChevronDown, ChevronRight, Sparkles, FileText, ShieldCheck, Eye } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { CheckCircle2, XCircle, Loader2, Clock, Ban, Trash2, Brain, AlertTriangle, ChevronDown, ChevronRight, Sparkles, FileText, ShieldCheck, Eye, ThumbsDown, RefreshCw, Filter } from 'lucide-react';
 import type { QueueItem, QueueStats } from '@/hooks/usePodcastQueue';
+
+type FilterMode = 'all' | 'awaiting' | 'approved' | 'rejected';
+
+const REJECT_REASONS = [
+  'Too messy',
+  'Too generic',
+  'Bad structure',
+  'Wrong content',
+];
 
 interface PodcastQueueProgressProps {
   items: QueueItem[];
@@ -18,6 +28,8 @@ interface PodcastQueueProgressProps {
   onGenerateAllKIs?: () => void;
   onApproveTranscript?: (queueItemId: string) => void;
   onApproveAllTranscripts?: () => void;
+  onRejectTranscript?: (queueItemId: string, reason?: string) => void;
+  onReprocessTranscript?: (queueItemId: string) => void;
   generatingKIs?: Set<string>;
 }
 
@@ -63,6 +75,7 @@ const kiStatusLabel = (kiStatus: string | null, kiCount: number) => {
   switch (kiStatus) {
     case 'awaiting_approval': return { text: 'Needs approval', color: 'text-amber-500' };
     case 'ready_for_review': return { text: 'Approved', color: 'text-blue-500' };
+    case 'rejected': return { text: 'Rejected', color: 'text-destructive' };
     case 'extracting': return { text: 'Extracting…', color: 'text-yellow-500' };
     case 'extracted': return { text: `${kiCount} KI${kiCount !== 1 ? 's' : ''}`, color: 'text-green-500' };
     case 'ki_failed': return { text: 'KI failed', color: 'text-destructive' };
@@ -95,13 +108,23 @@ function formatBytes(chars: number): string {
 
 export function PodcastQueueProgress({
   items, stats, isActive, isDone, onCancel, onClear,
-  onGenerateKIs, onGenerateAllKIs, onApproveTranscript, onApproveAllTranscripts, generatingKIs,
+  onGenerateKIs, onGenerateAllKIs, onApproveTranscript, onApproveAllTranscripts,
+  onRejectTranscript, onReprocessTranscript, generatingKIs,
 }: PodcastQueueProgressProps) {
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterMode>('all');
 
   const progressPct = stats.total > 0
     ? Math.round(((stats.complete + stats.failed + stats.skipped) / stats.total) * 100)
     : 0;
+
+  const filteredItems = items.filter(item => {
+    if (filter === 'all') return true;
+    if (filter === 'awaiting') return item.ki_status === 'awaiting_approval';
+    if (filter === 'approved') return item.ki_status === 'ready_for_review';
+    if (filter === 'rejected') return item.ki_status === 'rejected';
+    return true;
+  });
 
   return (
     <div className="space-y-3">
@@ -154,6 +177,12 @@ export function PodcastQueueProgress({
             {stats.readyForKI} ready for KI
           </Badge>
         )}
+        {stats.rejected > 0 && (
+          <Badge variant="outline" className="text-[10px] gap-1 border-destructive/30">
+            <ThumbsDown className="h-3 w-3 text-destructive" />
+            {stats.rejected} rejected
+          </Badge>
+        )}
         {stats.totalKIs > 0 && (
           <Badge variant="outline" className="text-[10px] gap-1 border-green-500/30">
             <Brain className="h-3 w-3 text-green-500" />
@@ -162,10 +191,33 @@ export function PodcastQueueProgress({
         )}
       </div>
 
+      {/* Filter tabs */}
+      {(stats.awaitingApproval > 0 || stats.rejected > 0 || stats.readyForKI > 0) && (
+        <div className="flex items-center gap-1 text-[10px]">
+          <Filter className="h-3 w-3 text-muted-foreground" />
+          {(['all', 'awaiting', 'approved', 'rejected'] as FilterMode[]).map(f => {
+            const count = f === 'all' ? items.length : f === 'awaiting' ? stats.awaitingApproval : f === 'approved' ? stats.readyForKI : stats.rejected;
+            if (f !== 'all' && count === 0) return null;
+            return (
+              <Button
+                key={f}
+                variant={filter === f ? 'default' : 'ghost'}
+                size="sm"
+                className="text-[10px] h-5 px-2"
+                onClick={() => setFilter(f)}
+              >
+                {f === 'all' ? 'All' : f === 'awaiting' ? 'Needs Review' : f === 'approved' ? 'Approved' : 'Rejected'}
+                {count > 0 && ` (${count})`}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Scrollable item list */}
       <ScrollArea className="max-h-[280px] border rounded-md">
         <div className="p-2 space-y-0.5">
-          {items.map(item => {
+          {filteredItems.map(item => {
             const platform = platformLabel(item.platform);
             const transcript = transcriptStatusLabel(item.transcript_status);
             const ki = kiStatusLabel(item.ki_status, item.ki_count);
@@ -173,7 +225,9 @@ export function PodcastQueueProgress({
             const isExpanded = expandedItem === item.id;
             const isGenerating = generatingKIs?.has(item.id);
             const canApprove = item.ki_status === 'awaiting_approval' && item.resource_id;
+            const canReject = item.ki_status === 'awaiting_approval' && item.resource_id;
             const canGenerateKI = item.ki_status === 'ready_for_review' && item.resource_id && !isGenerating;
+            const isRejected = item.ki_status === 'rejected';
 
             return (
               <Collapsible key={item.id} open={isExpanded} onOpenChange={() => setExpandedItem(isExpanded ? null : item.id)}>
@@ -221,40 +275,74 @@ export function PodcastQueueProgress({
                       </div>
                     )}
 
-                    {/* Error message */}
+                    {/* Error / rejection message */}
                     {item.error_message && (
                       <div className="text-[10px] text-destructive">
                         {item.error_message}
                       </div>
                     )}
 
-                    {/* Approve Transcript button */}
-                    {canApprove && onApproveTranscript && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-[10px] h-6 gap-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onApproveTranscript(item.id);
-                        }}
-                      >
-                        <ShieldCheck className="h-3 w-3" /> Approve Transcript
-                      </Button>
+                    {/* Approve / Reject buttons */}
+                    {canApprove && (
+                      <div className="flex items-center gap-1.5">
+                        {onApproveTranscript && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-[10px] h-6 gap-1"
+                            onClick={(e) => { e.stopPropagation(); onApproveTranscript(item.id); }}
+                          >
+                            <ShieldCheck className="h-3 w-3" /> Approve
+                          </Button>
+                        )}
+                        {canReject && onRejectTranscript && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-[10px] h-6 gap-1 text-destructive hover:text-destructive"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <ThumbsDown className="h-3 w-3" /> Reject
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                              {REJECT_REASONS.map(reason => (
+                                <DropdownMenuItem key={reason} onClick={() => onRejectTranscript(item.id, reason)}>
+                                  {reason}
+                                </DropdownMenuItem>
+                              ))}
+                              <DropdownMenuItem onClick={() => onRejectTranscript(item.id)}>
+                                No reason
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
                     )}
 
-                    {/* Generate KIs button — only after approval */}
+                    {/* Generate KIs button — only after approval, never for rejected */}
                     {canGenerateKI && onGenerateKIs && (
                       <Button
                         variant="outline"
                         size="sm"
                         className="text-[10px] h-6 gap-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onGenerateKIs(item.id);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); onGenerateKIs(item.id); }}
                       >
                         <Sparkles className="h-3 w-3" /> Generate KIs
+                      </Button>
+                    )}
+
+                    {/* Reprocess button for rejected items */}
+                    {isRejected && onReprocessTranscript && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-[10px] h-6 gap-1"
+                        onClick={(e) => { e.stopPropagation(); onReprocessTranscript(item.id); }}
+                      >
+                        <RefreshCw className="h-3 w-3" /> Reprocess Transcript
                       </Button>
                     )}
 

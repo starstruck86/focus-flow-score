@@ -38,6 +38,7 @@ export interface QueueStats {
   totalKIs: number;
   readyForKI: number;
   awaitingApproval: number;
+  rejected: number;
 }
 
 function detectPlatform(url: string): string {
@@ -107,12 +108,13 @@ export function usePodcastQueue() {
 
   // ── Stats ──
   const stats: QueueStats = useMemo(() => {
-    const s = { total: items.length, queued: 0, processing: 0, complete: 0, failed: 0, skipped: 0, totalKIs: 0, readyForKI: 0, awaitingApproval: 0 };
+    const s = { total: items.length, queued: 0, processing: 0, complete: 0, failed: 0, skipped: 0, totalKIs: 0, readyForKI: 0, awaitingApproval: 0, rejected: 0 };
     items.forEach(i => {
-      if (i.status in s) s[i.status as keyof Omit<QueueStats, 'total' | 'totalKIs' | 'readyForKI' | 'awaitingApproval'>]++;
+      if (i.status in s) s[i.status as keyof Omit<QueueStats, 'total' | 'totalKIs' | 'readyForKI' | 'awaitingApproval' | 'rejected'>]++;
       s.totalKIs += i.ki_count || 0;
       if (i.ki_status === 'ready_for_review' && i.resource_id) s.readyForKI++;
       if (i.ki_status === 'awaiting_approval' && i.resource_id) s.awaitingApproval++;
+      if (i.ki_status === 'rejected') s.rejected++;
     });
     return s;
   }, [items]);
@@ -268,6 +270,39 @@ export function usePodcastQueue() {
     toast.success(`${awaiting.length} transcript${awaiting.length !== 1 ? 's' : ''} approved`);
   }, [user, items]);
 
+  // ── Reject transcript ──
+  const rejectTranscript = useCallback(async (queueItemId: string, reason?: string) => {
+    if (!user) return;
+    await (supabase as any)
+      .from('podcast_import_queue')
+      .update({
+        ki_status: 'rejected',
+        error_message: reason ? `Rejected: ${reason}` : 'Transcript rejected by user',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', queueItemId);
+    toast.success('Transcript rejected');
+  }, [user]);
+
+  // ── Reprocess transcript (re-queue for preprocessing) ──
+  const reprocessTranscript = useCallback(async (queueItemId: string) => {
+    if (!user) return;
+    await (supabase as any)
+      .from('podcast_import_queue')
+      .update({
+        ki_status: 'pending',
+        transcript_status: 'transcript_ready',
+        error_message: null,
+        transcript_preview: null,
+        transcript_length: 0,
+        transcript_section_count: 0,
+        status: 'queued',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', queueItemId);
+    toast.success('Queued for reprocessing');
+  }, [user]);
+
   return {
     items,
     stats,
@@ -282,5 +317,7 @@ export function usePodcastQueue() {
     generateAllKIs,
     approveTranscript,
     approveAllTranscripts,
+    rejectTranscript,
+    reprocessTranscript,
   };
 }
