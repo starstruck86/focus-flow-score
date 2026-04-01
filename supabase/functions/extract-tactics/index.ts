@@ -84,7 +84,9 @@ Return 3-10 actionable units as a JSON array:
   "why_it_matters": "one sentence on impact",
   "chapter": "cold_calling|discovery|objection_handling|negotiation|competitors|personas|messaging|closing|stakeholder_navigation|expansion|demo|follow_up",
   "knowledge_type": "skill|product|competitive",
-  "sub_chapter": "optional sub-category"
+  "sub_chapter": "optional sub-category",
+  "who": "person or thought leader behind this idea (e.g. Keenan, Matthew Dixon, Chris Voss). Use their known name. Leave empty string if unknown.",
+  "framework": "methodology or system this belongs to (e.g. GAP Selling, Challenger Sale, MEDDICC, SPIN Selling). Leave empty string if not clearly tied to a framework."
 }]
 
 Only return the JSON array, no markdown.`;
