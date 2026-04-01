@@ -121,7 +121,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     });
   };
 
-  /** Write a lineage row to course_lesson_imports */
+  /** Upsert a lineage row to course_lesson_imports (canonical current state) */
   const writeLineageRow = async (params: {
     resourceId: string | null;
     lesson: LessonItem;
@@ -133,7 +133,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   }) => {
     if (!user) return;
     try {
-      await supabase.from('course_lesson_imports' as any).insert({
+      const row = {
         user_id: user.id,
         resource_id: params.resourceId,
         original_course_url: url.trim(),
@@ -150,7 +150,9 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         provider_video_url: params.mediaUrl || null,
         provider_video_type: params.videoType || null,
         transcript_status: params.mediaUrl ? 'transcript_pending' : null,
-      } as any);
+      };
+      await (supabase.from('course_lesson_imports' as any) as any)
+        .upsert(row, { onConflict: 'user_id,lesson_url,original_course_url' });
     } catch (e) {
       console.warn('Failed to write course lineage row:', e);
     }
