@@ -907,6 +907,7 @@ export function ResourceManager() {
                   toast.success('Marked as duplicate');
                   break;
                 case 'delete':
+                  if (!confirm('Delete this resource? This cannot be undone.')) break;
                   deleteResource.mutate(resource.id);
                   break;
                 case 'bulk_delete': {
