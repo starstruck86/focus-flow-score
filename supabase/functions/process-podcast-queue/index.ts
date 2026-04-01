@@ -124,13 +124,16 @@ Deno.serve(async (req) => {
 
     const queueItem = candidates[0];
     const isReprocessStructure = queueItem.transcript_status === "transcript_ready" && queueItem.raw_transcript;
+    const detectedPlatform = detectPlatform(queueItem.episode_url);
 
     const { error: claimErr } = await supabase
       .from("podcast_import_queue")
       .update({
         status: "processing",
         updated_at: now(),
-        platform: detectPlatform(queueItem.episode_url),
+        platform: detectedPlatform,
+        // Preserve original URL on first processing
+        original_episode_url: queueItem.original_episode_url || queueItem.episode_url,
         transcript_status: isReprocessStructure ? "transcript_ready" : "resolving_link",
       })
       .eq("id", queueItem.id)
