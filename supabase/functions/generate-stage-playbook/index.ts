@@ -78,6 +78,12 @@ const STAGE_FRAMEWORKS: Record<string, { framework: string; who: string; role: s
     { framework: "MEDDPICC", who: "McMahon", role: "Expansion qualification", sections: ["New Metrics & Success", "Expansion Champion"] },
     { framework: "Challenger", who: "Dixon", role: "Ongoing insight delivery", sections: ["Strategic Insights", "Proactive Teaching"] },
   ],
+  follow_up: [
+    { framework: "Command of the Message", who: "Force Management", role: "Recap structure & value reinforcement", sections: ["Recap Email Structure", "Executive Summary", "Value Recap"] },
+    { framework: "MEDDPICC", who: "McMahon", role: "Mutual action plan & next steps", sections: ["Mutual Action Plan", "Next Steps & Commitments", "Decision Process Update"] },
+    { framework: "GAP Selling", who: "Keenan", role: "Gap confirmation & impact reinforcement", sections: ["Confirmed Gaps", "Impact Reinforcement"] },
+    { framework: "Challenger", who: "Dixon", role: "Follow-up insights & urgency", sections: ["Follow-Up Insight", "Internal Champion Talking Points"] },
+  ],
 };
 
 Deno.serve(async (req) => {
