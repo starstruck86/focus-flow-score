@@ -354,6 +354,9 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
               isActive={queue.isActive}
               isDone={queue.isDone}
               onCancel={queue.cancelRemaining}
+              onGenerateKIs={queue.generateKIs}
+              onGenerateAllKIs={queue.generateAllKIs}
+              generatingKIs={queue.generatingKIs}
               onClear={() => {
                 queue.clearDone();
                 setEnqueued(false);

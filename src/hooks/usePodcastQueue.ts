@@ -1,10 +1,12 @@
 /**
  * Hook for managing podcast import queue with Realtime updates.
  * Inserts episodes into podcast_import_queue and subscribes to live progress.
+ * Provides generateKIs action for user-controlled KI extraction.
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 export interface QueueItem {
   id: string;
@@ -21,6 +23,9 @@ export interface QueueItem {
   content_validation: Record<string, any> | null;
   ki_status: string | null;
   ki_count: number;
+  transcript_preview: string | null;
+  transcript_length: number;
+  transcript_section_count: number;
 }
 
 export interface QueueStats {
@@ -31,6 +36,7 @@ export interface QueueStats {
   failed: number;
   skipped: number;
   totalKIs: number;
+  readyForKI: number;
 }
 
 function detectPlatform(url: string): string {
@@ -50,13 +56,14 @@ export function usePodcastQueue() {
   const { user } = useAuth();
   const [items, setItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [generatingKIs, setGeneratingKIs] = useState<Set<string>>(new Set());
 
   // ── Load existing queue items on mount ──
   const loadItems = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
       .from('podcast_import_queue')
-      .select('id, episode_url, episode_title, status, error_message, resource_id, attempts, processed_at, platform, transcript_status, failure_type, content_validation, ki_status, ki_count')
+      .select('id, episode_url, episode_title, status, error_message, resource_id, attempts, processed_at, platform, transcript_status, failure_type, content_validation, ki_status, ki_count, transcript_preview, transcript_length, transcript_section_count')
       .eq('user_id', user.id)
       .in('status', ['queued', 'processing', 'complete', 'failed', 'skipped'])
       .order('created_at', { ascending: true });
@@ -99,16 +106,85 @@ export function usePodcastQueue() {
 
   // ── Stats ──
   const stats: QueueStats = useMemo(() => {
-    const s = { total: items.length, queued: 0, processing: 0, complete: 0, failed: 0, skipped: 0, totalKIs: 0 };
+    const s = { total: items.length, queued: 0, processing: 0, complete: 0, failed: 0, skipped: 0, totalKIs: 0, readyForKI: 0 };
     items.forEach(i => {
-      if (i.status in s) s[i.status as keyof Omit<QueueStats, 'total' | 'totalKIs'>]++;
+      if (i.status in s) s[i.status as keyof Omit<QueueStats, 'total' | 'totalKIs' | 'readyForKI'>]++;
       s.totalKIs += i.ki_count || 0;
+      if (i.ki_status === 'ready_for_review' && i.resource_id) s.readyForKI++;
     });
     return s;
   }, [items]);
 
   const isActive = stats.queued > 0 || stats.processing > 0;
   const isDone = stats.total > 0 && !isActive;
+
+  // ── Generate KIs for a single queue item ──
+  const generateKIs = useCallback(async (queueItemId: string) => {
+    const item = items.find(i => i.id === queueItemId);
+    if (!item?.resource_id || !user) return;
+
+    setGeneratingKIs(prev => new Set(prev).add(queueItemId));
+
+    try {
+      // Update ki_status to extracting
+      await (supabase as any)
+        .from('podcast_import_queue')
+        .update({ ki_status: 'extracting', updated_at: new Date().toISOString() })
+        .eq('id', queueItemId);
+
+      const { data, error } = await supabase.functions.invoke('batch-actionize', {
+        body: {
+          batchSize: 1,
+          resource_id: item.resource_id,
+          user_id: user.id,
+        },
+      });
+
+      if (error) throw error;
+
+      const kiCount = data?.knowledge_created || 0;
+      await (supabase as any)
+        .from('podcast_import_queue')
+        .update({
+          ki_status: 'extracted',
+          ki_count: kiCount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', queueItemId);
+
+      toast.success(`Generated ${kiCount} knowledge item${kiCount !== 1 ? 's' : ''}`);
+    } catch (err: any) {
+      console.error('KI generation failed:', err);
+      await (supabase as any)
+        .from('podcast_import_queue')
+        .update({
+          ki_status: 'ki_failed',
+          error_message: `KI extraction failed: ${err.message?.slice(0, 200) || 'Unknown error'}`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', queueItemId);
+
+      toast.error('KI extraction failed');
+    } finally {
+      setGeneratingKIs(prev => {
+        const next = new Set(prev);
+        next.delete(queueItemId);
+        return next;
+      });
+    }
+  }, [items, user]);
+
+  // ── Generate KIs for all ready items (bulk) ──
+  const generateAllKIs = useCallback(async () => {
+    const readyItems = items.filter(i => i.ki_status === 'ready_for_review' && i.resource_id);
+    if (readyItems.length === 0) return;
+
+    toast.info(`Generating KIs for ${readyItems.length} episode${readyItems.length !== 1 ? 's' : ''}...`);
+
+    for (const item of readyItems) {
+      await generateKIs(item.id);
+    }
+  }, [items, generateKIs]);
 
   // ── Enqueue episodes ──
   const enqueue = useCallback(async (
@@ -138,7 +214,6 @@ export function usePodcastQueue() {
       platform: detectPlatform(ep.url),
     }));
 
-    // Insert in batches of 100
     for (let i = 0; i < rows.length; i += 100) {
       const batch = rows.slice(i, i + 100);
       await (supabase as any).from('podcast_import_queue').insert(batch);
@@ -174,8 +249,11 @@ export function usePodcastQueue() {
     isActive,
     isDone,
     loading,
+    generatingKIs,
     enqueue,
     cancelRemaining,
     clearDone,
+    generateKIs,
+    generateAllKIs,
   };
 }
