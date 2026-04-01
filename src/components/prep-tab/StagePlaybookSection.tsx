@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { BookOpen, ChevronDown, ChevronRight, Copy, RefreshCw, Loader2, Quote, AlertTriangle, Lightbulb, MessageSquare, HelpCircle, Layers, CheckCircle, Star, FileText, Brain } from 'lucide-react';
+import { SectionFeedback, PlaybookItemFeedback } from './PlaybookFeedbackControls';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
