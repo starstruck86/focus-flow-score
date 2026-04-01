@@ -21,6 +21,12 @@ type ShowMetadata = {
   feed_url: string;
 };
 
+type SourceCounts = {
+  rss_count: number;
+  itunes_count: number;
+  total_returned: number;
+};
+
 /** Extract Apple Podcasts ID from URL */
 function extractApplePodcastId(url: string): string | null {
   const match = url.match(/\/id(\d+)/);
@@ -41,19 +47,17 @@ function extractSpotifyShowId(url: string): string | null {
 
 /** Try to extract guest name from episode title */
 function extractGuest(title: string, showTitle: string): string | null {
-  // Remove show name prefix if present
   let cleaned = title;
   if (showTitle && cleaned.toLowerCase().startsWith(showTitle.toLowerCase())) {
     cleaned = cleaned.slice(showTitle.length).replace(/^[\s:|-]+/, '');
   }
 
-  // Common patterns: "Show | Guest Name", "X with Guest Name", "X feat. Guest", "X ft. Guest", "X featuring Guest"
   const patterns = [
-    /\|\s*(.+)$/,                           // "Title | Guest Name"
-    /(?:^|\s)(?:with|w\/)\s+([A-Z][a-z]+ [A-Z][a-z]+)/,  // "with First Last"
-    /(?:feat\.?|ft\.?|featuring)\s+(.+?)(?:\s*[-|]|$)/i,    // "feat. Guest"
-    /(?:^|\s)x\s+([A-Z][a-z]+ [A-Z][a-z]+)/,               // "Show x Guest Name"
-    /(?:guest|interview):\s*(.+?)(?:\s*[-|]|$)/i,            // "Guest: Name"
+    /\|\s*(.+)$/,
+    /(?:^|\s)(?:with|w\/)\s+([A-Z][a-z]+ [A-Z][a-z]+)/,
+    /(?:feat\.?|ft\.?|featuring)\s+(.+?)(?:\s*[-|]|$)/i,
+    /(?:^|\s)x\s+([A-Z][a-z]+ [A-Z][a-z]+)/,
+    /(?:guest|interview):\s*(.+?)(?:\s*[-|]|$)/i,
   ];
 
   for (const pattern of patterns) {
@@ -68,7 +72,6 @@ function extractGuest(title: string, showTitle: string): string | null {
 
 /** Extract show-level metadata from RSS channel */
 function extractShowMetadata(xml: string): Omit<ShowMetadata, 'feed_url'> {
-  // Get channel-level content (before first <item>)
   const channelEnd = xml.indexOf('<item');
   const channelXml = channelEnd > 0 ? xml.slice(0, channelEnd) : xml.slice(0, 5000);
 
@@ -118,7 +121,75 @@ function parseRssEpisodes(xml: string, limit: number, showTitle: string): Episod
   return episodes;
 }
 
-async function fetchApplePodcastEpisodes(podcastId: string, limit: number, episodeId?: string | null): Promise<{ episodes: Episode[], show: ShowMetadata }> {
+/** Fetch episodes from iTunes Search API to supplement RSS */
+async function fetchItunesEpisodes(podcastId: string, limit: number, showTitle: string): Promise<Episode[]> {
+  const episodes: Episode[] = [];
+  const maxPerCall = 200;
+  
+  for (let offset = 0; offset < limit; offset += maxPerCall) {
+    const currentLimit = Math.min(maxPerCall, limit - offset);
+    const url = `https://itunes.apple.com/lookup?id=${podcastId}&entity=podcastEpisode&limit=${currentLimit}&offset=${offset}`;
+    console.log(`iTunes Search API: offset=${offset}, limit=${currentLimit}`);
+    
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.warn(`iTunes API returned ${res.status} at offset ${offset}`);
+        break;
+      }
+      const data = await res.json();
+      const results = data.results || [];
+      
+      // First result is the show itself, rest are episodes
+      const episodeResults = results.filter((r: any) => r.wrapperType === 'podcastEpisode');
+      
+      if (episodeResults.length === 0) break;
+      
+      for (const ep of episodeResults) {
+        episodes.push({
+          title: ep.trackName || `Episode ${episodes.length + 1}`,
+          url: ep.episodeUrl || ep.trackViewUrl || '',
+          description: (ep.description || '').slice(0, 1000),
+          duration: ep.trackTimeMillis ? String(Math.round(ep.trackTimeMillis / 1000)) : undefined,
+          published: ep.releaseDate || undefined,
+          episode_number: undefined,
+          guest: extractGuest(ep.trackName || '', showTitle),
+        });
+      }
+      
+      // If we got fewer than requested, we've reached the end
+      if (episodeResults.length < currentLimit) break;
+    } catch (e) {
+      console.warn(`iTunes Search API error at offset ${offset}:`, e);
+      break;
+    }
+  }
+  
+  return episodes;
+}
+
+/** Deduplicate episodes by title similarity or URL match */
+function deduplicateEpisodes(rssEpisodes: Episode[], itunesEpisodes: Episode[]): Episode[] {
+  const seen = new Map<string, Episode>();
+  
+  // RSS episodes take priority (they have enclosure URLs)
+  for (const ep of rssEpisodes) {
+    const key = ep.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 80);
+    seen.set(key, ep);
+  }
+  
+  // Add iTunes episodes that aren't already covered
+  for (const ep of itunesEpisodes) {
+    const key = ep.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 80);
+    if (!seen.has(key)) {
+      seen.set(key, ep);
+    }
+  }
+  
+  return Array.from(seen.values());
+}
+
+async function fetchApplePodcastEpisodes(podcastId: string, limit: number, episodeId?: string | null): Promise<{ episodes: Episode[], show: ShowMetadata, source_counts: SourceCounts }> {
   const lookupRes = await fetch(`https://itunes.apple.com/lookup?id=${podcastId}&entity=podcast`);
   const lookupData = await lookupRes.json();
   const podcast = lookupData.results?.[0];
@@ -126,7 +197,8 @@ async function fetchApplePodcastEpisodes(podcastId: string, limit: number, episo
     throw new Error('Could not find RSS feed for this podcast');
   }
 
-  console.log(`Found RSS feed: ${podcast.feedUrl}`);
+  const trackCount = podcast.trackCount || 0;
+  console.log(`Found RSS feed: ${podcast.feedUrl} — trackCount: ${trackCount}`);
 
   const rssRes = await fetch(podcast.feedUrl);
   if (!rssRes.ok) throw new Error(`Failed to fetch RSS feed: ${rssRes.status}`);
@@ -135,7 +207,19 @@ async function fetchApplePodcastEpisodes(podcastId: string, limit: number, episo
   const showMeta = extractShowMetadata(rssXml);
   const show: ShowMetadata = { ...showMeta, feed_url: podcast.feedUrl };
 
-  let episodes = parseRssEpisodes(rssXml, limit, show.show_title);
+  let rssEpisodes = parseRssEpisodes(rssXml, limit, show.show_title);
+  const rssCount = rssEpisodes.length;
+  let itunesCount = 0;
+  let episodes = rssEpisodes;
+
+  // If RSS returned significantly fewer episodes than trackCount, supplement with iTunes Search API
+  if (trackCount > 0 && rssCount < trackCount * 0.8 && rssCount < limit) {
+    console.log(`RSS returned ${rssCount} of ~${trackCount} episodes — supplementing with iTunes Search API`);
+    const itunesEpisodes = await fetchItunesEpisodes(podcastId, limit, show.show_title);
+    itunesCount = itunesEpisodes.length;
+    console.log(`iTunes returned ${itunesCount} additional episodes`);
+    episodes = deduplicateEpisodes(rssEpisodes, itunesEpisodes);
+  }
 
   // Add Apple Podcasts URLs where possible
   episodes = episodes.map((ep) => ({
@@ -145,7 +229,6 @@ async function fetchApplePodcastEpisodes(podcastId: string, limit: number, episo
 
   // If single episode import, filter by episode ID
   if (episodeId) {
-    // Try iTunes episode lookup for title match
     try {
       const epLookup = await fetch(`https://itunes.apple.com/lookup?id=${episodeId}&entity=podcastEpisode`);
       const epData = await epLookup.json();
@@ -158,14 +241,20 @@ async function fetchApplePodcastEpisodes(podcastId: string, limit: number, episo
         }
       }
     } catch {
-      // Non-fatal: just return all episodes
+      // Non-fatal
     }
   }
 
-  return { episodes, show };
+  const source_counts: SourceCounts = {
+    rss_count: rssCount,
+    itunes_count: itunesCount,
+    total_returned: episodes.length,
+  };
+
+  return { episodes, show, source_counts };
 }
 
-async function fetchSpotifyEpisodes(showId: string, limit: number): Promise<{ episodes: Episode[], show: ShowMetadata }> {
+async function fetchSpotifyEpisodes(showId: string, limit: number): Promise<{ episodes: Episode[], show: ShowMetadata, source_counts: SourceCounts }> {
   const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
   if (!apiKey) throw new Error('Firecrawl not configured — needed for Spotify import');
 
@@ -217,7 +306,6 @@ async function fetchSpotifyEpisodes(showId: string, limit: number): Promise<{ ep
     url: epUrl,
   }));
 
-  // Try to match titles from markdown
   const lines = markdown.split('\n');
   let epIdx = 0;
   for (let i = 0; i < lines.length && epIdx < episodes.length; i++) {
@@ -241,11 +329,10 @@ async function fetchSpotifyEpisodes(showId: string, limit: number): Promise<{ ep
     feed_url: showUrl,
   };
 
-  // Try to get show title from markdown
   const h1 = markdown.match(/^#\s+(.+)/m);
   if (h1) show.show_title = h1[1].trim();
 
-  return { episodes, show };
+  return { episodes, show, source_counts: { rss_count: 0, itunes_count: 0, total_returned: episodes.length } };
 }
 
 Deno.serve(async (req) => {
@@ -267,6 +354,7 @@ Deno.serve(async (req) => {
     let episodes: Episode[] = [];
     let show: ShowMetadata = { show_title: '', show_author: '', show_description: '', show_image: '', feed_url: '' };
     let source = '';
+    let source_counts: SourceCounts = { rss_count: 0, itunes_count: 0, total_returned: 0 };
 
     const appleId = extractApplePodcastId(url);
     const appleEpisodeId = extractAppleEpisodeId(url);
@@ -278,14 +366,15 @@ Deno.serve(async (req) => {
       const result = await fetchApplePodcastEpisodes(appleId, MAX_EPISODES, appleEpisodeId);
       episodes = result.episodes;
       show = result.show;
+      source_counts = result.source_counts;
     } else if (spotifyId) {
       source = 'spotify';
       console.log(`Fetching Spotify episodes for show: ${spotifyId}`);
       const result = await fetchSpotifyEpisodes(spotifyId, MAX_EPISODES);
       episodes = result.episodes;
       show = result.show;
+      source_counts = result.source_counts;
     } else {
-      // Try treating as direct RSS feed
       console.log('Trying as direct RSS feed URL:', url);
       try {
         const rssRes = await fetch(url.trim());
@@ -296,6 +385,7 @@ Deno.serve(async (req) => {
           const showMeta = extractShowMetadata(rssXml);
           show = { ...showMeta, feed_url: url.trim() };
           episodes = parseRssEpisodes(rssXml, MAX_EPISODES, show.show_title);
+          source_counts = { rss_count: episodes.length, itunes_count: 0, total_returned: episodes.length };
         } else {
           throw new Error('Not a recognized podcast URL.');
         }
@@ -307,10 +397,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Found ${episodes.length} episodes from ${source} — show: "${show.show_title}"`);
+    console.log(`Found ${episodes.length} episodes from ${source} — show: "${show.show_title}" (RSS: ${source_counts.rss_count}, iTunes: ${source_counts.itunes_count})`);
 
     return new Response(
-      JSON.stringify({ success: true, episodes, source, show }),
+      JSON.stringify({ success: true, episodes, source, show, source_counts }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
