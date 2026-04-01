@@ -382,19 +382,19 @@ Deno.serve(async (req) => {
       return json({ processed: 1, result: "failed", error: err.message });
     }
 
-    // ── Step 8: Mark complete — KIs NOT auto-triggered ──
+    // ── Step 8: Mark complete — awaiting user approval before KI generation ──
     await updateQueueItem(supabase, queueItem.id, {
       status: "complete",
       resource_id: resourceId,
       processed_at: now(),
-      ki_status: "ready_for_review",
+      ki_status: "awaiting_approval",
     });
 
     return json({
       processed: 1,
       result: "complete",
       resource_id: resourceId,
-      ki_status: "ready_for_review",
+      ki_status: "awaiting_approval",
     });
   } catch (err) {
     console.error("process-podcast-queue fatal error:", err);
