@@ -32,6 +32,7 @@ export default function PrepHub() {
             <p className="text-xs text-muted-foreground">Prep · Knowledge · Ingest</p>
           </div>
           <div className="flex items-center gap-2">
+            <PodcastQueueIndicator />
             <VoiceCommandButton />
           </div>
         </div>
