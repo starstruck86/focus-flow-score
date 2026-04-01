@@ -15,6 +15,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ChevronDown, ChevronRight, BookOpen, Lightbulb, Info } from 'lucide-react';
+import { SectionFeedback, KIPlacementFeedback } from './PlaybookFeedbackControls';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -204,19 +205,24 @@ function FrameworkSummaryBanner({ frameworks }: { frameworks: StageFrameworkRole
 function SectionBlock({
   section,
   kis,
+  stageId,
+  framework,
   defaultOpen,
 }: {
   section: FrameworkSection;
   kis: MatchedKI[];
+  stageId: string;
+  framework?: string;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 w-full py-1.5 px-2 hover:bg-accent/30 rounded transition-colors">
+      <CollapsibleTrigger className="group/section flex items-center gap-2 w-full py-1.5 px-2 hover:bg-accent/30 rounded transition-colors">
         {open ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
         <span className="text-xs font-medium text-foreground">{section.heading}</span>
+        <SectionFeedback stageId={stageId} framework={framework} sectionHeading={section.heading} />
         {kis.length > 0 && (
           <Badge variant="secondary" className="text-[9px] ml-auto">{kis.length}</Badge>
         )}
@@ -228,7 +234,7 @@ function SectionBlock({
         )}
         <TooltipProvider delayDuration={200}>
           {kis.map(ki => (
-            <div key={ki.id} className="pl-4 py-1 border-l-2 border-muted flex items-start gap-1">
+            <div key={ki.id} className="group/ki pl-4 py-1 border-l-2 border-muted flex items-start gap-1">
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-foreground font-medium">{ki.title}</p>
                 {ki.tactic_summary && (
@@ -241,6 +247,13 @@ function SectionBlock({
                   <span className="text-[9px] text-muted-foreground">— {ki.who}</span>
                 )}
               </div>
+              <KIPlacementFeedback
+                stageId={stageId}
+                framework={framework}
+                sectionHeading={section.heading}
+                kiId={ki.id}
+                kiTitle={ki.title}
+              />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Info className={cn('h-3 w-3 mt-0.5 shrink-0 cursor-help', MATCH_REASON_COLORS[ki.matchReason])} />
@@ -299,12 +312,14 @@ function FrameworkBlock({
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-2 space-y-0.5 pb-1">
         {sectionKIs.map(({ section, kis: sKIs }) => (
-          <SectionBlock key={section.heading} section={section} kis={sKIs} defaultOpen={sKIs.length > 0} />
+          <SectionBlock key={section.heading} section={section} kis={sKIs} stageId={stageId} framework={frameworkRole.framework} defaultOpen={sKIs.length > 0} />
         ))}
         {unmatchedKIs.length > 0 && (
           <SectionBlock
             section={{ heading: 'Additional Insights', description: 'Other relevant knowledge items for this framework' }}
             kis={unmatchedKIs}
+            stageId={stageId}
+            framework={frameworkRole.framework}
           />
         )}
       </CollapsibleContent>

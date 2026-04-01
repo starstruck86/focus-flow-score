@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { BookOpen, ChevronDown, ChevronRight, Copy, RefreshCw, Loader2, Quote, AlertTriangle, Lightbulb, MessageSquare, HelpCircle, Layers, CheckCircle, Star, FileText, Brain } from 'lucide-react';
+import { SectionFeedback, PlaybookItemFeedback } from './PlaybookFeedbackControls';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -34,34 +35,42 @@ function CitationSourceIcon({ citation }: { citation: string }) {
   return <FileText className="h-2.5 w-2.5 text-muted-foreground shrink-0" />;
 }
 
-function PlaybookItemRow({ item }: { item: PlaybookItem }) {
+function PlaybookItemRow({ item, stageId, framework, sectionHeading }: { item: PlaybookItem; stageId: string; framework?: string; sectionHeading: string }) {
   const config = TYPE_CONFIG[item.type] || TYPE_CONFIG.tactic;
   const Icon = config.icon;
   const [showCitations, setShowCitations] = useState(false);
 
   return (
-    <div className="group relative pl-6 py-1.5">
+    <div className="group/item relative pl-6 py-1.5 flex items-start gap-1">
       <Icon className={cn('absolute left-0 top-2 h-4 w-4', config.color)} />
-      <p className="text-sm text-foreground leading-relaxed">{item.content}</p>
-      {item.citations?.length > 0 && (
-        <button
-          onClick={() => setShowCitations(!showCitations)}
-          className="inline-flex items-center gap-1 mt-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Quote className="h-3 w-3" />
-          {item.citations.length} source{item.citations.length > 1 ? 's' : ''}
-        </button>
-      )}
-      {showCitations && item.citations?.length > 0 && (
-        <div className="mt-1.5 pl-3 border-l-2 border-muted space-y-0.5">
-          {item.citations.map((c, i) => (
-            <p key={i} className="text-[10px] text-muted-foreground italic flex items-center gap-1">
-              <CitationSourceIcon citation={c} />
-              {c}
-            </p>
-          ))}
-        </div>
-      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-foreground leading-relaxed">{item.content}</p>
+        {item.citations?.length > 0 && (
+          <button
+            onClick={() => setShowCitations(!showCitations)}
+            className="inline-flex items-center gap-1 mt-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Quote className="h-3 w-3" />
+            {item.citations.length} source{item.citations.length > 1 ? 's' : ''}
+          </button>
+        )}
+        {showCitations && item.citations?.length > 0 && (
+          <div className="mt-1.5 pl-3 border-l-2 border-muted space-y-0.5">
+            {item.citations.map((c, i) => (
+              <p key={i} className="text-[10px] text-muted-foreground italic flex items-center gap-1">
+                <CitationSourceIcon citation={c} />
+                {c}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+      <PlaybookItemFeedback
+        stageId={stageId}
+        framework={framework}
+        sectionHeading={sectionHeading}
+        itemContent={item.content}
+      />
     </div>
   );
 }
@@ -79,7 +88,7 @@ function FrameworkBadgeInline({ framework }: { framework: string }) {
   );
 }
 
-function PlaybookSectionBlock({ section, defaultOpen }: { section: PlaybookSection; defaultOpen?: boolean }) {
+function PlaybookSectionBlock({ section, stageId, defaultOpen }: { section: PlaybookSection; stageId: string; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const framework = section.framework;
   const fwColors = framework ? getFrameworkColorClasses(framework) : null;
@@ -91,17 +100,18 @@ function PlaybookSectionBlock({ section, defaultOpen }: { section: PlaybookSecti
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className={cn(
-        'flex items-center gap-2 w-full py-2 hover:bg-accent/30 rounded px-2 transition-colors',
+        'group/section flex items-center gap-2 w-full py-2 hover:bg-accent/30 rounded px-2 transition-colors',
         fwColors && `border-l-2 ${fwColors.border}`
       )}>
         {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
         {framework && <FrameworkBadgeInline framework={framework} />}
         <span className="text-sm font-medium text-foreground">{displayTitle}</span>
+        <SectionFeedback stageId={stageId} framework={framework} sectionHeading={displayTitle} />
         <Badge variant="secondary" className="text-[9px] ml-auto">{section.items.length}</Badge>
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-4 space-y-1 pb-2">
         {section.items.map((item, i) => (
-          <PlaybookItemRow key={i} item={item} />
+          <PlaybookItemRow key={i} item={item} stageId={stageId} framework={framework} sectionHeading={displayTitle} />
         ))}
       </CollapsibleContent>
     </Collapsible>
@@ -251,7 +261,7 @@ export function StagePlaybookSection({ stageId, stageLabel }: Props) {
             {groups.map((group, gi) => (
               <div key={gi}>
                 {group.sections.map((section, si) => (
-                  <PlaybookSectionBlock key={`${gi}-${si}`} section={section} defaultOpen={gi === 0 && si < 2} />
+                  <PlaybookSectionBlock key={`${gi}-${si}`} section={section} stageId={stageId} defaultOpen={gi === 0 && si < 2} />
                 ))}
               </div>
             ))}
