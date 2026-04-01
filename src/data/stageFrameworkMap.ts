@@ -353,7 +353,7 @@ export const STAGE_FRAMEWORK_MAP: Record<string, StageFrameworkRole[]> = {
       who: 'Keenan',
       role: 'New gaps for expansion',
       sections: [
-        { heading: 'Expansion Gaps', description: 'New problems that have emerged or weren't addressed' },
+        { heading: 'Expansion Gaps', description: 'New problems that have emerged or were not addressed' },
         { heading: 'New Future State', description: 'What their next level of success looks like' },
       ],
       color: 'emerald',
