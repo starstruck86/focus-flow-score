@@ -46,6 +46,7 @@ import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { PlaylistImportModal } from './PlaylistImportModal';
 import { PodcastImportModal } from './PodcastImportModal';
 import { WebpageImportModal } from './WebpageImportModal';
+import { CourseImportModal } from './CourseImportModal';
 import { DeepEnrichModal } from './DeepEnrichModal';
 import { EnrichmentJobIndicator } from './EnrichmentJobIndicator';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
