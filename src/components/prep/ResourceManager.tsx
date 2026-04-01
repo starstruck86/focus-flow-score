@@ -173,7 +173,12 @@ export function ResourceManager() {
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
-    ? resources.filter(r => r.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    ? resources.filter(r => {
+        const q = searchQuery.toLowerCase();
+        return r.title.toLowerCase().includes(q)
+          || (r as any).author_or_speaker?.toLowerCase().includes(q)
+          || (r as any).tags?.some((t: string) => t.toLowerCase().includes(q));
+      })
     : resources;
 
   const navigateToFolder = useCallback((folder: ResourceFolder) => {

@@ -3,7 +3,7 @@
  * with approve+activate quick action and tactic-specific practice
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -39,10 +39,23 @@ interface Props {
 export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, onPractice, onPracticeTactic }: Props) {
   const { data: items = [] } = useKnowledgeItems(chapter ?? undefined);
   const update = useUpdateKnowledgeItem();
+  const [whoFilter, setWhoFilter] = useState<string | null>(null);
+  const [frameworkFilter, setFrameworkFilter] = useState<string | null>(null);
+
+  // Unique speakers and frameworks for filter chips
+  const speakers = useMemo(() => [...new Set(items.map(i => i.who).filter(Boolean) as string[])].sort(), [items]);
+  const frameworks = useMemo(() => [...new Set(items.map(i => i.framework).filter(Boolean) as string[])].sort(), [items]);
+
+  const filteredItems = useMemo(() => {
+    let filtered = items;
+    if (whoFilter) filtered = filtered.filter(i => i.who === whoFilter);
+    if (frameworkFilter) filtered = filtered.filter(i => i.framework === frameworkFilter);
+    return filtered;
+  }, [items, whoFilter, frameworkFilter]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, KnowledgeItem[]>();
-    for (const item of items) {
+    for (const item of filteredItems) {
       const key = item.sub_chapter || 'general';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(item);
@@ -52,7 +65,7 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
       const activeB = b[1].filter(i => i.active).length;
       return activeB - activeA;
     });
-  }, [items]);
+  }, [filteredItems]);
 
   if (!chapter) return null;
 
@@ -128,6 +141,40 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
             <div className="mt-1 flex items-center gap-1.5 text-[10px] text-primary">
               <CheckCircle2 className="h-3 w-3" />
               <span>Dave will use {activeCount} active items when you practice this chapter</span>
+            </div>
+          )}
+          {/* Speaker / Framework filter chips */}
+          {(speakers.length > 1 || frameworks.length > 1) && (
+            <div className="mt-2 flex gap-1.5 flex-wrap">
+              {speakers.length > 1 && speakers.map(s => (
+                <Badge
+                  key={`who-${s}`}
+                  variant={whoFilter === s ? 'default' : 'outline'}
+                  className="cursor-pointer text-[10px] h-5"
+                  onClick={() => setWhoFilter(whoFilter === s ? null : s)}
+                >
+                  {s}
+                </Badge>
+              ))}
+              {frameworks.length > 1 && frameworks.map(f => (
+                <Badge
+                  key={`fw-${f}`}
+                  variant={frameworkFilter === f ? 'default' : 'outline'}
+                  className="cursor-pointer text-[10px] h-5"
+                  onClick={() => setFrameworkFilter(frameworkFilter === f ? null : f)}
+                >
+                  {f}
+                </Badge>
+              ))}
+              {(whoFilter || frameworkFilter) && (
+                <Badge
+                  variant="secondary"
+                  className="cursor-pointer text-[10px] h-5"
+                  onClick={() => { setWhoFilter(null); setFrameworkFilter(null); }}
+                >
+                  Clear filters
+                </Badge>
+              )}
             </div>
           )}
         </SheetHeader>
