@@ -88,7 +88,7 @@ function FrameworkBadgeInline({ framework }: { framework: string }) {
   );
 }
 
-function PlaybookSectionBlock({ section, defaultOpen }: { section: PlaybookSection; defaultOpen?: boolean }) {
+function PlaybookSectionBlock({ section, stageId, defaultOpen }: { section: PlaybookSection; stageId: string; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const framework = section.framework;
   const fwColors = framework ? getFrameworkColorClasses(framework) : null;
@@ -100,17 +100,18 @@ function PlaybookSectionBlock({ section, defaultOpen }: { section: PlaybookSecti
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className={cn(
-        'flex items-center gap-2 w-full py-2 hover:bg-accent/30 rounded px-2 transition-colors',
+        'group/section flex items-center gap-2 w-full py-2 hover:bg-accent/30 rounded px-2 transition-colors',
         fwColors && `border-l-2 ${fwColors.border}`
       )}>
         {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
         {framework && <FrameworkBadgeInline framework={framework} />}
         <span className="text-sm font-medium text-foreground">{displayTitle}</span>
+        <SectionFeedback stageId={stageId} framework={framework} sectionHeading={displayTitle} />
         <Badge variant="secondary" className="text-[9px] ml-auto">{section.items.length}</Badge>
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-4 space-y-1 pb-2">
         {section.items.map((item, i) => (
-          <PlaybookItemRow key={i} item={item} />
+          <PlaybookItemRow key={i} item={item} stageId={stageId} framework={framework} sectionHeading={displayTitle} />
         ))}
       </CollapsibleContent>
     </Collapsible>
