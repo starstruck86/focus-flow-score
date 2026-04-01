@@ -2083,8 +2083,11 @@ export type Database = {
           created_at: string
           example_usage: string | null
           framework: string | null
+          how_to_execute: string | null
           id: string
           knowledge_type: string
+          macro_situation: string | null
+          micro_strategy: string | null
           product_area: string | null
           source_char_range: Json | null
           source_doctrine_id: string | null
@@ -2100,6 +2103,7 @@ export type Database = {
           updated_at: string
           user_edited: boolean
           user_id: string
+          what_this_unlocks: string | null
           when_not_to_use: string | null
           when_to_use: string | null
           who: string | null
@@ -2115,8 +2119,11 @@ export type Database = {
           created_at?: string
           example_usage?: string | null
           framework?: string | null
+          how_to_execute?: string | null
           id?: string
           knowledge_type?: string
+          macro_situation?: string | null
+          micro_strategy?: string | null
           product_area?: string | null
           source_char_range?: Json | null
           source_doctrine_id?: string | null
@@ -2132,6 +2139,7 @@ export type Database = {
           updated_at?: string
           user_edited?: boolean
           user_id: string
+          what_this_unlocks?: string | null
           when_not_to_use?: string | null
           when_to_use?: string | null
           who?: string | null
@@ -2147,8 +2155,11 @@ export type Database = {
           created_at?: string
           example_usage?: string | null
           framework?: string | null
+          how_to_execute?: string | null
           id?: string
           knowledge_type?: string
+          macro_situation?: string | null
+          micro_strategy?: string | null
           product_area?: string | null
           source_char_range?: Json | null
           source_doctrine_id?: string | null
@@ -2164,6 +2175,7 @@ export type Database = {
           updated_at?: string
           user_edited?: boolean
           user_id?: string
+          what_this_unlocks?: string | null
           when_not_to_use?: string | null
           when_to_use?: string | null
           who?: string | null
