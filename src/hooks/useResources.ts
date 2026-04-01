@@ -287,13 +287,14 @@ export function useDeleteResource() {
       await deleteResourceWithCleanup(id);
     },
     onSuccess: () => {
-      const { getDeleteInvalidationKeys } = require('@/lib/resourceDelete');
-      for (const key of getDeleteInvalidationKeys()) {
-        qc.invalidateQueries({ queryKey: key });
-      }
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      qc.invalidateQueries({ queryKey: ['all-resources'] });
+      qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+      qc.invalidateQueries({ queryKey: ['incoming-queue'] });
+      qc.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
       toast.success('Resource deleted');
     },
-    onError: () => toast.error('Failed to delete resource'),
+    onError: (err: Error) => toast.error(`Delete failed: ${err.message}`),
   });
 }
 
@@ -305,17 +306,18 @@ export function useBulkDeleteResources() {
       return bulkDeleteResources(ids);
     },
     onSuccess: (result) => {
-      const { getDeleteInvalidationKeys } = require('@/lib/resourceDelete');
-      for (const key of getDeleteInvalidationKeys()) {
-        qc.invalidateQueries({ queryKey: key });
-      }
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      qc.invalidateQueries({ queryKey: ['all-resources'] });
+      qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+      qc.invalidateQueries({ queryKey: ['incoming-queue'] });
+      qc.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
       if (result.errors.length > 0) {
-        toast.error(`Deleted ${result.deleted}, ${result.errors.length} failed`);
+        toast.error(`Deleted ${result.deleted}, ${result.errors.length} failed: ${result.errors[0]}`);
       } else {
         toast.success(`Deleted ${result.deleted} resources`);
       }
     },
-    onError: () => toast.error('Bulk delete failed'),
+    onError: (err: Error) => toast.error(`Bulk delete failed: ${err.message}`),
   });
 }
 
