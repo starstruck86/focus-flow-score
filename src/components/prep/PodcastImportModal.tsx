@@ -358,6 +358,8 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
               onGenerateAllKIs={queue.generateAllKIs}
               onApproveTranscript={queue.approveTranscript}
               onApproveAllTranscripts={queue.approveAllTranscripts}
+              onRejectTranscript={queue.rejectTranscript}
+              onReprocessTranscript={queue.reprocessTranscript}
               generatingKIs={queue.generatingKIs}
               onClear={() => {
                 queue.clearDone();

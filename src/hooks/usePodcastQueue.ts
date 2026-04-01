@@ -317,5 +317,7 @@ export function usePodcastQueue() {
     generateAllKIs,
     approveTranscript,
     approveAllTranscripts,
+    rejectTranscript,
+    reprocessTranscript,
   };
 }
