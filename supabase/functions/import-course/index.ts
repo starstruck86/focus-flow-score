@@ -452,9 +452,11 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
   const postBodyClasses = classNames.filter(c => /post|lesson|content|body/i.test(c) && !/nav|header|sidebar|menu/i.test(c));
   debug.push(`Post-related classes: ${postBodyClasses.slice(0, 5).join(', ')}`);
   
-  // Try to extract from Kajabi's known content containers (greedy match within the container)
+  // Try to extract from Kajabi's known content containers
   const contentPatterns = [
-    // Kajabi post body — use greedy match since we've already stripped comments/footer
+    // Kajabi content-wrap is the main lesson content area
+    /class="[^"]*content-wrap[^"]*"[^>]*>([\s\S]+)/i,
+    // Kajabi post body
     /class="[^"]*(?:kjb-html-content)[^"]*"[^>]*>([\s\S]+)/i,
     /class="[^"]*(?:post__body|post-body)[^"]*"[^>]*>([\s\S]+)/i,
     /class="[^"]*(?:product-post__body|lesson-content|course-content)[^"]*"[^>]*>([\s\S]+)/i,
@@ -465,7 +467,7 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     const m = cleanedHtml.match(pattern);
     if (m && m[1].length > content.length) {
       content = m[1];
-      debug.push(`Matched pattern: ${pattern.source.substring(0, 50)}`);
+      debug.push(`Matched pattern: ${pattern.source.substring(0, 40)}`);
     }
   }
   
@@ -484,6 +486,11 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
       .replace(/<nav[\s\S]*?<\/nav>/gi, '');
     debug.push(`Last resort: using full body (${content.length} chars)`);
   }
+  
+  // Post-extraction: remove sidebar/playlist content
+  content = content
+    .replace(/<div[^>]*class="[^"]*(?:playlist|sidebar|navigation|breadcrumb)[^"]*"[\s\S]*?<\/div>/gi, '')
+    .replace(/<div[^>]*class="[^"]*(?:mark-complete|next-lesson|prev-lesson)[^"]*"[\s\S]*?<\/div>/gi, '');
   
   // Clean HTML to text
   content = content
