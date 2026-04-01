@@ -413,6 +413,8 @@ export function extractKnowledgeHeuristic(
         active: autoActivate,
         user_edited: false,
         tags: structuredTags,
+        who: tactic.who || null,
+        framework: tactic.framework || null,
       });
     }
   }
