@@ -1,3 +1,9 @@
+/**
+ * process-podcast-queue
+ * ---------------------
+ * Processes one podcast_import_queue item through the full pipeline:
+ * Claim → Dedup → Resolve → Transcribe → Validate → Preprocess → Save → KI Extract
+ */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -8,6 +14,63 @@ const corsHeaders = {
 
 const MAX_ATTEMPTS = 3;
 
+// ── Content validation patterns ──
+const HTML_PATTERNS = /<(div|meta|style|script|span|link|head|body|html|nav|footer|header|iframe)\b/i;
+const CSS_PATTERNS = /(::after|::before|font-family:|display:\s*(?:flex|block|grid|none)|@media\s|{color:|background-color:)/i;
+const BOT_PATTERNS = /(recaptcha|captcha|install.app|sign.in.to|cookie.consent|create.an.account|subscribe.to.continue|verify.you.are.human|access.denied|403.forbidden|404.not.found|page.not.found)/i;
+
+// ── Platform detection ──
+function detectPlatform(url: string): string {
+  const u = url.toLowerCase();
+  if (u.includes("spotify.com") || u.includes("open.spotify")) return "spotify";
+  if (u.includes("apple.com/podcast") || u.includes("podcasts.apple")) return "apple";
+  if (u.includes("youtube.com") || u.includes("youtu.be")) return "youtube";
+  if (u.includes("anchor.fm") || u.includes("podcasters.spotify")) return "anchor";
+  if (u.includes("buzzsprout.com")) return "buzzsprout";
+  if (u.includes("libsyn.com")) return "libsyn";
+  if (u.includes("podbean.com")) return "podbean";
+  if (u.includes("transistor.fm")) return "transistor";
+  if (u.includes("simplecast.com")) return "simplecast";
+  if (u.endsWith(".mp3") || u.endsWith(".m4a") || u.endsWith(".wav")) return "direct_audio";
+  if (u.includes("/feed") || u.includes("rss") || u.includes(".xml")) return "rss_direct";
+  return "unknown";
+}
+
+// ── Content validation ──
+function validateContent(content: string): { valid: boolean; reason: string | null; details: Record<string, any> } {
+  const details: Record<string, any> = { length: content.length };
+
+  if (content.length < 200) {
+    return { valid: false, reason: "content_too_short", details: { ...details, min_required: 200 } };
+  }
+
+  if (HTML_PATTERNS.test(content)) {
+    const htmlMatches = content.match(/<[a-z][^>]*>/gi) || [];
+    details.html_tag_count = htmlMatches.length;
+    if (htmlMatches.length > 5) {
+      return { valid: false, reason: "content_invalid_html", details };
+    }
+  }
+
+  if (CSS_PATTERNS.test(content)) {
+    return { valid: false, reason: "content_invalid_css", details };
+  }
+
+  if (BOT_PATTERNS.test(content)) {
+    return { valid: false, reason: "content_bot_or_login_wall", details };
+  }
+
+  // Check content density — if mostly short lines, probably UI fragments
+  const lines = content.split("\n").filter(l => l.trim().length > 0);
+  const avgLineLen = content.length / Math.max(lines.length, 1);
+  if (lines.length > 20 && avgLineLen < 15) {
+    details.avg_line_length = avgLineLen;
+    return { valid: false, reason: "content_ui_fragments", details };
+  }
+
+  return { valid: true, reason: null, details };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -15,62 +78,41 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    // ── Claim one queued item atomically ──
-    const { data: item, error: claimError } = await supabase.rpc(
-      "claim_podcast_queue_item"
-    );
+    // ── Step 1: Claim one queued item ──
+    const { data: candidates } = await supabase
+      .from("podcast_import_queue")
+      .select("*")
+      .eq("status", "queued")
+      .order("created_at", { ascending: true })
+      .limit(1);
 
-    // If no RPC, fall back to a direct query approach
-    let queueItem: any = item;
-
-    if (claimError || !item) {
-      // Direct claim: find oldest queued, mark processing
-      const { data: candidates } = await supabase
-        .from("podcast_import_queue")
-        .select("*")
-        .eq("status", "queued")
-        .order("created_at", { ascending: true })
-        .limit(1);
-
-      if (!candidates?.length) {
-        return new Response(
-          JSON.stringify({ message: "No queued items", processed: 0 }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      queueItem = candidates[0];
-
-      // Mark as processing
-      const { error: updateErr } = await supabase
-        .from("podcast_import_queue")
-        .update({ status: "processing", updated_at: new Date().toISOString() })
-        .eq("id", queueItem.id)
-        .eq("status", "queued"); // optimistic lock
-
-      if (updateErr) {
-        return new Response(
-          JSON.stringify({ message: "Failed to claim item", error: updateErr.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+    if (!candidates?.length) {
+      return json({ message: "No queued items", processed: 0 });
     }
 
-    if (!queueItem) {
-      return new Response(
-        JSON.stringify({ message: "No queued items", processed: 0 }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const queueItem = candidates[0];
+
+    const { error: claimErr } = await supabase
+      .from("podcast_import_queue")
+      .update({
+        status: "processing",
+        updated_at: now(),
+        platform: detectPlatform(queueItem.episode_url),
+        transcript_status: "resolving_link",
+      })
+      .eq("id", queueItem.id)
+      .eq("status", "queued");
+
+    if (claimErr) {
+      return json({ message: "Failed to claim item", error: claimErr.message }, 500);
     }
 
-    console.log(`Processing queue item: ${queueItem.id} - ${queueItem.episode_title}`);
+    console.log(`Processing: ${queueItem.id} — ${queueItem.episode_title}`);
 
-    // ── Step 1: Dedup check ──
+    // ── Step 2: Dedup check ──
     const { data: existing } = await supabase
       .from("resources")
       .select("id")
@@ -79,101 +121,192 @@ Deno.serve(async (req) => {
       .limit(1);
 
     if (existing?.length) {
-      // Already imported - mark complete with existing resource
-      await supabase
-        .from("podcast_import_queue")
-        .update({
-          status: "complete",
-          resource_id: existing[0].id,
-          processed_at: new Date().toISOString(),
-          error_message: "Already imported (dedup)",
-        })
-        .eq("id", queueItem.id);
-
-      return new Response(
-        JSON.stringify({ processed: 1, result: "skipped_duplicate", resource_id: existing[0].id }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      await updateQueueItem(supabase, queueItem.id, {
+        status: "complete",
+        resource_id: existing[0].id,
+        processed_at: now(),
+        transcript_status: "skipped_duplicate",
+        error_message: "Already imported (dedup)",
+      });
+      return json({ processed: 1, result: "skipped_duplicate", resource_id: existing[0].id });
     }
 
-    // ── Step 2: Classify via existing edge function ──
-    let classification: any;
+    // ── Step 3: Resolve podcast episode ──
+    let resolveResult: any;
     try {
-      const classifyResp = await fetch(`${supabaseUrl}/functions/v1/classify-resource`, {
+      const resolveResp = await fetch(`${supabaseUrl}/functions/v1/resolve-podcast-episode`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${anonKey}`,
+          Authorization: `Bearer ${serviceRoleKey}`,
         },
-        body: JSON.stringify({ url: queueItem.episode_url }),
+        body: JSON.stringify({
+          url: queueItem.episode_url,
+          user_id: queueItem.user_id,
+        }),
       });
 
-      if (!classifyResp.ok) {
-        const errText = await classifyResp.text();
-        throw new Error(`Classification HTTP ${classifyResp.status}: ${errText}`);
+      if (!resolveResp.ok) {
+        const errText = await resolveResp.text();
+        throw new Error(`HTTP ${resolveResp.status}: ${errText}`);
       }
 
-      classification = await classifyResp.json();
-      if (classification.error) throw new Error(classification.error);
+      resolveResult = await resolveResp.json();
     } catch (err) {
-      await handleFailure(supabase, queueItem, `Classification failed: ${err.message}`);
-      return new Response(
-        JSON.stringify({ processed: 1, result: "failed", error: err.message }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      await handleFailure(supabase, queueItem, `Resolution failed: ${err.message}`, "audio_unresolvable");
+      return json({ processed: 1, result: "failed", error: err.message });
     }
 
-    // Use episode title if classification returns generic title
-    if (!classification.title || classification.title === "Untitled") {
-      classification.title = queueItem.episode_title || queueItem.episode_url;
+    // Check if we got a transcript directly from resolution
+    const hasTranscriptFromResolve = resolveResult?.transcript && resolveResult.transcript.length > 200;
+    const hasAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url;
+
+    if (!hasTranscriptFromResolve && !hasAudioUrl) {
+      await handleFailure(supabase, queueItem, "No transcript or audio URL found", "transcript_unavailable_from_link");
+      return json({ processed: 1, result: "failed", error: "No transcript or audio" });
     }
 
-    // ── Step 3: Create resource ──
+    // ── Step 4: Transcribe if needed ──
+    let transcriptText = hasTranscriptFromResolve ? resolveResult.transcript : "";
+
+    if (!hasTranscriptFromResolve && hasAudioUrl) {
+      await updateQueueItem(supabase, queueItem.id, {
+        transcript_status: "audio_resolved",
+      });
+
+      try {
+        await updateQueueItem(supabase, queueItem.id, {
+          transcript_status: "transcribing",
+        });
+
+        const audioUrl = resolveResult.audio_url || resolveResult.resolved_audio_url;
+        const transcribeResp = await fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({
+            audio_url: audioUrl,
+            user_id: queueItem.user_id,
+          }),
+        });
+
+        if (!transcribeResp.ok) {
+          const errText = await transcribeResp.text();
+          throw new Error(`HTTP ${transcribeResp.status}: ${errText}`);
+        }
+
+        const transcribeResult = await transcribeResp.json();
+        transcriptText = transcribeResult?.transcript || transcribeResult?.text || "";
+      } catch (err) {
+        await handleFailure(supabase, queueItem, `Transcription failed: ${err.message}`, "transcript_unavailable_from_link");
+        return json({ processed: 1, result: "failed", error: err.message });
+      }
+    }
+
+    // ── Step 5: Validate transcript content ──
+    const validation = validateContent(transcriptText);
+    await updateQueueItem(supabase, queueItem.id, {
+      content_validation: validation.details,
+    });
+
+    if (!validation.valid) {
+      // Content invalid — terminal failure, no retry
+      await supabase
+        .from("podcast_import_queue")
+        .update({
+          status: "failed",
+          transcript_status: "transcript_failed",
+          failure_type: validation.reason,
+          error_message: `Content validation failed: ${validation.reason}`,
+          processed_at: now(),
+          content_validation: validation.details,
+        })
+        .eq("id", queueItem.id);
+
+      return json({ processed: 1, result: "content_invalid", reason: validation.reason });
+    }
+
+    await updateQueueItem(supabase, queueItem.id, {
+      transcript_status: "transcript_ready",
+    });
+
+    // ── Step 6: Preprocess transcript into structured markdown ──
+    let structuredContent = transcriptText;
+    try {
+      const preprocessResp = await fetch(`${supabaseUrl}/functions/v1/preprocess-transcript`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({
+          transcript: transcriptText,
+          episode_title: queueItem.episode_title,
+          episode_guest: queueItem.episode_guest,
+          show_name: queueItem.show_author,
+        }),
+      });
+
+      if (preprocessResp.ok) {
+        const preprocessResult = await preprocessResp.json();
+        if (preprocessResult.structured_transcript && preprocessResult.structured_transcript.length > 200) {
+          structuredContent = preprocessResult.structured_transcript;
+          console.log(`Preprocessed: ${transcriptText.length} → ${structuredContent.length} chars, ${preprocessResult.section_count} sections`);
+        } else {
+          console.warn("Preprocessing returned insufficient content, using raw transcript");
+        }
+      } else {
+        console.warn(`Preprocessing failed (${preprocessResp.status}), using raw transcript`);
+      }
+    } catch (err) {
+      console.warn(`Preprocessing error: ${err.message}, using raw transcript`);
+    }
+
+    // ── Step 7: Create resource ──
     let resourceId: string;
     try {
-      // Find or create folder
+      // Find or create folder for podcasts
       let folderId: string | null = null;
-      if (classification.top_folder) {
-        const { data: folders } = await supabase
+      const folderName = "Podcasts";
+      const { data: folders } = await supabase
+        .from("resource_folders")
+        .select("id")
+        .eq("user_id", queueItem.user_id)
+        .is("parent_id", null)
+        .ilike("name", folderName)
+        .limit(1);
+
+      folderId = folders?.[0]?.id || null;
+      if (!folderId) {
+        const { data: newF } = await supabase
           .from("resource_folders")
+          .insert({ name: folderName, user_id: queueItem.user_id })
           .select("id")
-          .eq("user_id", queueItem.user_id)
-          .is("parent_id", null)
-          .ilike("name", classification.top_folder)
-          .limit(1);
-        folderId = folders?.[0]?.id || null;
-        if (!folderId) {
-          const { data: newF } = await supabase
-            .from("resource_folders")
-            .insert({ name: classification.top_folder, user_id: queueItem.user_id })
-            .select("id")
-            .single();
-          folderId = newF?.id || null;
-        }
+          .single();
+        folderId = newF?.id || null;
       }
 
-      const contentToStore = classification.scraped_content?.length > 50
-        ? classification.scraped_content
-        : `[External Link: ${queueItem.episode_url}]`;
-      const contentStatus = contentToStore.startsWith("[External Link:") ? "placeholder" : "enriched";
-
-      const description = classification.description
-        ? `${classification.description}\n\n---\nSource: podcast · Ingested ${new Date().toISOString().split("T")[0]}`
-        : `Source: podcast · Ingested ${new Date().toISOString().split("T")[0]}`;
+      const description = [
+        queueItem.episode_guest ? `Guest: ${queueItem.episode_guest}` : null,
+        queueItem.show_author ? `Show: ${queueItem.show_author}` : null,
+        `Source: podcast · Ingested ${new Date().toISOString().split("T")[0]}`,
+      ].filter(Boolean).join("\n");
 
       const insertPayload: Record<string, any> = {
         user_id: queueItem.user_id,
-        title: classification.title,
+        title: queueItem.episode_title || queueItem.episode_url,
         description,
-        resource_type: classification.resource_type || "transcript",
-        tags: classification.tags || [],
+        resource_type: "transcript",
+        tags: ["podcast", detectPlatform(queueItem.episode_url)].filter(t => t !== "unknown"),
         folder_id: folderId,
         file_url: queueItem.episode_url,
-        content: contentToStore,
-        content_status: contentStatus,
+        content: structuredContent,
+        content_status: "enriched", // Already processed — skip enrich-resource-content
+        content_length: structuredContent.length,
       };
 
-      // Add source registry + metadata
       if (queueItem.source_registry_id) {
         insertPayload.source_registry_id = queueItem.source_registry_id;
       }
@@ -195,78 +328,97 @@ Deno.serve(async (req) => {
       if (insertErr) throw new Error(`Insert failed: ${insertErr.message}`);
       resourceId = resource.id;
     } catch (err) {
-      await handleFailure(supabase, queueItem, `Save failed: ${err.message}`);
-      return new Response(
-        JSON.stringify({ processed: 1, result: "failed", error: err.message }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      await handleFailure(supabase, queueItem, `Save failed: ${err.message}`, "extraction_blocked");
+      return json({ processed: 1, result: "failed", error: err.message });
     }
 
-    // ── Step 4: Enrich via existing edge function ──
+    // ── Step 8: Mark resource complete ──
+    await updateQueueItem(supabase, queueItem.id, {
+      status: "complete",
+      resource_id: resourceId,
+      processed_at: now(),
+    });
+
+    // ── Step 9: Auto-trigger KI extraction ──
+    let kiCount = 0;
     try {
-      const enrichResp = await fetch(`${supabaseUrl}/functions/v1/enrich-resource-content`, {
+      await updateQueueItem(supabase, queueItem.id, { ki_status: "extracting" });
+
+      const actionizeResp = await fetch(`${supabaseUrl}/functions/v1/batch-actionize`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${serviceRoleKey}`,
         },
         body: JSON.stringify({
+          batchSize: 1,
           resource_id: resourceId,
-          force: true,
           user_id: queueItem.user_id,
         }),
       });
 
-      if (!enrichResp.ok) {
-        const errText = await enrichResp.text();
-        console.warn(`Enrichment HTTP ${enrichResp.status}: ${errText}`);
-        // Resource is saved, enrichment can be retried later — mark complete with note
+      if (actionizeResp.ok) {
+        const actionizeResult = await actionizeResp.json();
+        kiCount = actionizeResult.knowledge_created || 0;
+        await updateQueueItem(supabase, queueItem.id, {
+          ki_status: kiCount > 0 ? "extracted" : "extracted",
+          ki_count: kiCount,
+        });
+        console.log(`KI extraction: ${kiCount} items created for resource ${resourceId}`);
+      } else {
+        const errText = await actionizeResp.text();
+        console.warn(`KI extraction failed (${actionizeResp.status}): ${errText}`);
+        await updateQueueItem(supabase, queueItem.id, {
+          ki_status: "ki_failed",
+          error_message: `Resource saved but KI extraction failed: ${errText.slice(0, 200)}`,
+        });
       }
-
-      // Even if enrichment fails, the resource exists — mark complete
-      await supabase
-        .from("podcast_import_queue")
-        .update({
-          status: "complete",
-          resource_id: resourceId,
-          processed_at: new Date().toISOString(),
-        })
-        .eq("id", queueItem.id);
-
-      return new Response(
-        JSON.stringify({ processed: 1, result: "complete", resource_id: resourceId }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
     } catch (err) {
-      // Resource saved but enrichment crashed — still mark complete since resource exists
-      console.error(`Enrichment error (resource ${resourceId} saved):`, err);
-      await supabase
-        .from("podcast_import_queue")
-        .update({
-          status: "complete",
-          resource_id: resourceId,
-          processed_at: new Date().toISOString(),
-          error_message: `Saved but enrichment failed: ${err.message}`,
-        })
-        .eq("id", queueItem.id);
-
-      return new Response(
-        JSON.stringify({ processed: 1, result: "complete_partial", resource_id: resourceId }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      console.warn(`KI extraction error: ${err.message}`);
+      await updateQueueItem(supabase, queueItem.id, {
+        ki_status: "ki_failed",
+      });
     }
+
+    return json({
+      processed: 1,
+      result: "complete",
+      resource_id: resourceId,
+      ki_count: kiCount,
+    });
   } catch (err) {
     console.error("process-podcast-queue fatal error:", err);
-    return new Response(
-      JSON.stringify({ error: err.message || "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return json({ error: err.message || "Internal error" }, 500);
   }
 });
 
-async function handleFailure(supabase: any, item: any, errorMessage: string) {
+// ── Helpers ──
+
+function now() {
+  return new Date().toISOString();
+}
+
+function json(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+async function updateQueueItem(supabase: any, id: string, fields: Record<string, any>) {
+  await supabase
+    .from("podcast_import_queue")
+    .update({ ...fields, updated_at: now() })
+    .eq("id", id);
+}
+
+async function handleFailure(supabase: any, item: any, errorMessage: string, failureType?: string) {
   const newAttempts = (item.attempts || 0) + 1;
-  const newStatus = newAttempts >= MAX_ATTEMPTS ? "failed" : "queued";
+
+  // Terminal failure types — never retry
+  const terminalTypes = ["content_invalid", "content_invalid_html", "content_invalid_css", "content_bot_or_login_wall", "content_ui_fragments"];
+  const isTerminal = failureType && terminalTypes.includes(failureType);
+  const newStatus = isTerminal || newAttempts >= MAX_ATTEMPTS ? "failed" : "queued";
 
   await supabase
     .from("podcast_import_queue")
@@ -274,7 +426,10 @@ async function handleFailure(supabase: any, item: any, errorMessage: string) {
       status: newStatus,
       attempts: newAttempts,
       error_message: errorMessage,
-      ...(newStatus === "failed" ? { processed_at: new Date().toISOString() } : {}),
+      failure_type: failureType || null,
+      transcript_status: newStatus === "failed" ? "transcript_failed" : "pending",
+      ...(newStatus === "failed" ? { processed_at: now() } : {}),
+      updated_at: now(),
     })
     .eq("id", item.id);
 
