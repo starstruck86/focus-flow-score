@@ -128,7 +128,8 @@ ${linkedKIs.map(ki => `- ${ki.title}: ${ki.tactic_summary || "N/A"}`).join("\n")
     const kiContext = allKIs
       .map(ki => {
         const source = resourceMap.get(ki.source_resource_id);
-        return `- [KI:${ki.id.slice(0, 8)}] ${ki.title} (from: ${source?.title || "Unknown"})
+        const attribution = [ki.framework, ki.who].filter(Boolean).join(' — ');
+        return `- [KI:${ki.id.slice(0, 8)}] ${ki.title}${attribution ? ` [${attribution}]` : ''} (from: ${source?.title || "Unknown"})
   Summary: ${ki.tactic_summary || "N/A"}
   Why: ${ki.why_it_matters || "N/A"}
   When: ${ki.when_to_use || "N/A"}

@@ -704,6 +704,8 @@ Deno.serve(async (req) => {
                     active: validation.passed, user_edited: false,
                     applies_to_contexts: ['dave', 'roleplay', 'prep', 'playbooks'],
                     tags: [...(resource.tags || []), item.knowledge_type || 'skill', item.chapter || 'messaging'],
+                    who: item.who || null,
+                    framework: item.framework || null,
                     // Segment provenance for knowledge items
                     source_segment_index: tacSegment.index,
                     source_char_range: tacSegment.charRange,
