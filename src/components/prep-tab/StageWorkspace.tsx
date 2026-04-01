@@ -287,7 +287,10 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
       {/* Keystone & Supporting Resources */}
       <StageResourcesSection stageId={stage.id} stageLabel={stage.label} />
 
-      {/* Stage Playbook */}
+      {/* Framework-Driven Sections (Sales Operating System) */}
+      <FrameworkSectionsPanel stageId={stage.id} stageLabel={stage.label} />
+
+      {/* Stage Playbook (generated) */}
       <StagePlaybookSection stageId={stage.id} stageLabel={stage.label} />
 
       {/* 5. Execution */}
