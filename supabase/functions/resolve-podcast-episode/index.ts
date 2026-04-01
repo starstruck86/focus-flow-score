@@ -334,7 +334,25 @@ async function resolveApplePodcastEpisode(url: string, showId: string, episodeId
 // ── Anchor.fm ──────────────────────────────────────────────
 
 function isAnchorUrl(url: string): boolean {
-  return /anchor\.fm/i.test(url);
+  return /anchor\.fm/i.test(url) || /podcasters\.spotify\.com/i.test(url);
+}
+
+/**
+ * Anchor "play" URLs embed the actual audio file URL in the path:
+ * anchor.fm/s/{showId}/podcast/play/{episodeId}/https%3A%2F%2Fd3ctxlq1ktw2nl.cloudfront.net%2F...mp3
+ */
+function extractEmbeddedAudioUrl(url: string): string | null {
+  // Match encoded URL after /play/{id}/
+  const playMatch = url.match(/\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+\.(?:mp3|m4a|ogg|wav))/i);
+  if (playMatch) {
+    try {
+      return decodeURIComponent(playMatch[1]);
+    } catch { return null; }
+  }
+  // Also check for direct audio file URLs
+  const directMatch = url.match(/(https?:\/\/[^\s]+\.(?:mp3|m4a|ogg|wav))$/i);
+  if (directMatch) return directMatch[1];
+  return null;
 }
 
 async function resolveAnchorEpisode(url: string): Promise<ResolveResult> {
