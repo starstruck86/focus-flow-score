@@ -1,0 +1,1 @@
+UPDATE podcast_import_queue SET status = 'queued', attempts = 0, error_message = NULL, failure_type = NULL, transcript_status = 'pending' WHERE id = '3911996e-7eea-4a32-9e37-8ba86a9af17e';

@@ -191,7 +191,15 @@ Deno.serve(async (req) => {
         return json({ processed: 1, result: "skipped_duplicate", resource_id: existing[0].id });
       }
 
-      // ── Step 3: Resolve podcast episode ──
+      // ── Step 3: Check for embedded audio URL in the episode URL ──
+      // Anchor play URLs embed the direct audio file: anchor.fm/.../play/{id}/https%3A%2F%2F...mp3
+      let embeddedAudioUrl: string | null = null;
+      const playMatch = queueItem.episode_url.match(/\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+\.(?:mp3|m4a|ogg|wav))/i);
+      if (playMatch) {
+        try { embeddedAudioUrl = decodeURIComponent(playMatch[1]); } catch { /* ignore */ }
+      }
+
+      // ── Step 3b: Resolve podcast episode ──
       let resolveResult: any;
       try {
         const resolveResp = await fetch(`${supabaseUrl}/functions/v1/resolve-podcast-episode`, {
@@ -213,13 +221,19 @@ Deno.serve(async (req) => {
 
         resolveResult = await resolveResp.json();
       } catch (err) {
-        await handleFailure(supabase, queueItem, `Resolution failed: ${err.message}`, "audio_unresolvable");
-        return json({ processed: 1, result: "failed", error: err.message });
+        // If resolver fails but we have embedded audio, continue
+        if (embeddedAudioUrl) {
+          console.log(`Resolver failed but embedded audio found: ${embeddedAudioUrl}`);
+          resolveResult = { resolution: { audioEnclosureUrl: embeddedAudioUrl } };
+        } else {
+          await handleFailure(supabase, queueItem, `Resolution failed: ${err.message}`, "audio_unresolvable");
+          return json({ processed: 1, result: "failed", error: err.message });
+        }
       }
 
       const hasTranscriptFromResolve = resolveResult?.transcript && resolveResult.transcript.length > 200;
       const hasAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
-        resolveResult?.resolution?.audioEnclosureUrl;
+        resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl;
 
       // ── Persist resolved metadata on the queue item ──
       const resolvedMeta: Record<string, any> = {};
@@ -266,7 +280,7 @@ Deno.serve(async (req) => {
             transcript_status: "transcribing",
           });
 
-          const audioUrl = resolveResult.audio_url || resolveResult.resolved_audio_url;
+          const audioUrl = resolveResult.audio_url || resolveResult.resolved_audio_url || resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl;
           const transcribeResp = await fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
             method: "POST",
             headers: {
