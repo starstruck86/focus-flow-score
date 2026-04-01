@@ -47,7 +47,7 @@ export const STAGE_FRAMEWORK_MAP: Record<string, StageFrameworkRole[]> = {
       sections: [
         { heading: 'Business Overview', description: 'Key business context and industry positioning' },
         { heading: 'Digital / Lifecycle Signals', description: 'Tech stack, marketing maturity, digital presence' },
-        { heading: 'Challenger Hypothesis', description: 'Insight-led hypothesis about what they're missing or getting wrong' },
+        { heading: 'Challenger Hypothesis', description: 'Insight-led hypothesis about what they are missing or getting wrong' },
       ],
       color: 'violet',
     },
