@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
     // Also fetch KIs that match stage context
     const { data: stageKIs } = await admin
       .from("knowledge_items")
-      .select("id, title, knowledge_type, chapter, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, confidence_score, source_resource_id, tags")
+      .select("id, title, knowledge_type, chapter, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, confidence_score, source_resource_id, tags, who, framework")
       .eq("user_id", user.id)
       .eq("active", true)
       .contains("applies_to_contexts", [stage_id])
