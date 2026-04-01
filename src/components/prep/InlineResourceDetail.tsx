@@ -294,11 +294,11 @@ function KnowledgeTab({ resourceId }: { resourceId: string }) {
       <div className="p-4 space-y-2">
         {items.map(ki => (
           <div key={ki.id} className={cn(
-            'rounded-lg border p-3 space-y-1.5',
+            'rounded-lg border p-3 space-y-2',
             ki.active ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border bg-muted/20',
           )}>
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-xs font-semibold text-foreground flex-1 min-w-0 truncate">{ki.title}</p>
+              <p className="text-xs font-semibold text-foreground flex-1 min-w-0">{ki.title}</p>
               <Badge variant={ki.active ? 'default' : 'secondary'} className="text-[8px] h-4 px-1.5">
                 {ki.active ? 'Active' : ki.status}
               </Badge>
@@ -309,7 +309,26 @@ function KnowledgeTab({ resourceId }: { resourceId: string }) {
               )}
             </div>
             {ki.tactic_summary && (
-              <p className="text-[11px] text-muted-foreground leading-relaxed">{ki.tactic_summary}</p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed border-l-2 border-primary/20 pl-2">{ki.tactic_summary}</p>
+            )}
+            {/* Structured play fields */}
+            {ki.macro_situation && (
+              <div className="text-[10px] space-y-0.5">
+                <span className="font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Situation</span>
+                <p className="text-muted-foreground leading-relaxed">{ki.macro_situation}</p>
+              </div>
+            )}
+            {ki.how_to_execute && (
+              <div className="text-[10px] space-y-0.5">
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">How to Execute</span>
+                <p className="text-muted-foreground leading-relaxed">{ki.how_to_execute}</p>
+              </div>
+            )}
+            {ki.example_usage && (
+              <div className="text-[10px] space-y-0.5">
+                <span className="font-semibold text-primary uppercase tracking-wide">Example</span>
+                <p className="text-muted-foreground leading-relaxed italic">{ki.example_usage}</p>
+              </div>
             )}
             <div className="flex items-center gap-1.5 flex-wrap">
               {ki.framework && ki.who && (
@@ -320,9 +339,6 @@ function KnowledgeTab({ resourceId }: { resourceId: string }) {
               {ki.chapter && (
                 <Badge variant="outline" className="text-[8px] h-4 px-1">{ki.chapter}</Badge>
               )}
-              {(ki.applies_to_contexts ?? []).slice(0, 2).map(ctx => (
-                <Badge key={ctx} variant="outline" className="text-[8px] h-4 px-1">{ctx}</Badge>
-              ))}
             </div>
           </div>
         ))}
