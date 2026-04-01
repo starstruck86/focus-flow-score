@@ -35,7 +35,12 @@ export interface KnowledgeItem {
   updated_at: string;
 }
 
-export type KnowledgeItemInsert = Omit<KnowledgeItem, 'id' | 'created_at' | 'updated_at'>;
+export type KnowledgeItemInsert = Omit<KnowledgeItem, 'id' | 'created_at' | 'updated_at' | 'macro_situation' | 'micro_strategy' | 'how_to_execute' | 'what_this_unlocks'> & {
+  macro_situation?: string | null;
+  micro_strategy?: string | null;
+  how_to_execute?: string | null;
+  what_this_unlocks?: string | null;
+};
 
 const TABLE = 'knowledge_items' as any;
 
