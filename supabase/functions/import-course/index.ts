@@ -533,6 +533,25 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   
+  // Remove common nav/UI noise from the text output
+  content = content
+    .replace(/^[\s\S]*?(?=(?:Introduction|Chapter|Module|Lesson|Section)\b)/i, '') // Skip to first heading-like word
+    .replace(/\b(?:Store|My Library|Search|Settings|Logout|Log Out|Sign Out)\b/g, '')
+    .replace(/Mark As Complete/gi, '')
+    .replace(/Great Job! Keep Going!/gi, '')
+    .replace(/Next Lesson/gi, '')
+    .replace(/Next Section/gi, '')
+    .replace(/Play Now/gi, '')
+    .replace(/Will Begin In \d+ Seconds/gi, '')
+    .replace(/Cancel/g, '')
+    .replace(/Module \d+ of \d+/gi, '')
+    .replace(/\d+ Modules/gi, '')
+    .replace(/^\s*(?:Back|Next|Previous)\s*$/gm, '')
+    .replace(/^\s*\|\s*$/gm, '')
+    .replace(/^\s*\d+\s*$/gm, '') // Standalone numbers (playlist indices)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  
   // Prepend video embed references so they're captured in the resource
   if (videoEmbeds.length > 0) {
     content = videoEmbeds.join('\n') + '\n\n' + content;
