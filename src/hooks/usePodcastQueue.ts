@@ -107,11 +107,12 @@ export function usePodcastQueue() {
 
   // ── Stats ──
   const stats: QueueStats = useMemo(() => {
-    const s = { total: items.length, queued: 0, processing: 0, complete: 0, failed: 0, skipped: 0, totalKIs: 0, readyForKI: 0 };
+    const s = { total: items.length, queued: 0, processing: 0, complete: 0, failed: 0, skipped: 0, totalKIs: 0, readyForKI: 0, awaitingApproval: 0 };
     items.forEach(i => {
-      if (i.status in s) s[i.status as keyof Omit<QueueStats, 'total' | 'totalKIs' | 'readyForKI'>]++;
+      if (i.status in s) s[i.status as keyof Omit<QueueStats, 'total' | 'totalKIs' | 'readyForKI' | 'awaitingApproval'>]++;
       s.totalKIs += i.ki_count || 0;
       if (i.ki_status === 'ready_for_review' && i.resource_id) s.readyForKI++;
+      if (i.ki_status === 'awaiting_approval' && i.resource_id) s.awaitingApproval++;
     });
     return s;
   }, [items]);
