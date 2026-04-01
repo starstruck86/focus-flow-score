@@ -53,6 +53,8 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
     chapter: '',
     sub_chapter: '',
     knowledge_type: 'skill' as string,
+    who: '',
+    framework: '',
   });
 
   useEffect(() => {
@@ -67,6 +69,8 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
         chapter: item.chapter,
         sub_chapter: item.sub_chapter || '',
         knowledge_type: item.knowledge_type,
+        who: item.who || '',
+        framework: item.framework || '',
       });
     }
   }, [item]);
