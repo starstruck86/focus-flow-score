@@ -495,7 +495,7 @@ Deno.serve(async (req) => {
       };
 
       try {
-        // STEP 0: Content check
+        // STEP 0: Content check — length + quality validation
         if (!content || contentLen < 50) {
           diag.terminal_state = 'content_missing';
           diag.failure_reasons = ['missing_content'];
@@ -504,6 +504,30 @@ Deno.serve(async (req) => {
           diag.human_review_required = true;
           results.content_missing++;
           results.failure_breakdown['missing_content'] = (results.failure_breakdown['missing_content'] || 0) + 1;
+          diagnosisRows.push(diag);
+          results.diagnoses.push({ ...diag, title: resource.title });
+          results.total_processed++;
+          continue;
+        }
+
+        // STEP 0b: Reject HTML/CSS/bot content
+        const htmlPattern = /<(div|meta|style|script|span|link|head|body|html|nav|footer|header|iframe)\b/i;
+        const cssPattern = /(::after|::before|font-family:|display:\s*(?:flex|block|grid|none)|@media\s|{color:|background-color:)/i;
+        const botPattern = /(recaptcha|captcha|install.app|sign.in.to|cookie.consent|create.an.account|subscribe.to.continue|verify.you.are.human|access.denied|403.forbidden)/i;
+        const htmlTagCount = (content.match(/<[a-z][^>]*>/gi) || []).length;
+
+        if (htmlTagCount > 5 || cssPattern.test(content) || botPattern.test(content)) {
+          const failReason = htmlTagCount > 5 ? 'content_invalid_html'
+            : cssPattern.test(content) ? 'content_invalid_css'
+            : 'content_bot_or_login_wall';
+          diag.terminal_state = 'content_missing';
+          diag.failure_reasons = [failReason];
+          diag.recommended_fix = 'Content appears to be scraped HTML/CSS or a login wall, not readable text. Re-enrich from the original source or provide a clean transcript.';
+          diag.priority = 'low';
+          diag.retryable = false;
+          diag.human_review_required = true;
+          results.content_missing++;
+          results.failure_breakdown[failReason] = (results.failure_breakdown[failReason] || 0) + 1;
           diagnosisRows.push(diag);
           results.diagnoses.push({ ...diag, title: resource.title });
           results.total_processed++;
