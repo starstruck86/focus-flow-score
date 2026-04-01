@@ -133,14 +133,14 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
             });
             if (txData?.success && txData.transcript) {
               // Update the resource with the transcript appended
-              const { supabase } = await import('@/integrations/supabase/client');
+            const { supabase } = await import('@/integrations/supabase/client');
               const { data: existing } = await supabase
                 .from('resources')
-                .select('scraped_content')
+                .select('content')
                 .eq('id', result.id)
                 .single();
-              const updated = (existing?.scraped_content || '') + '\n\n--- Video Transcript ---\n\n' + txData.transcript;
-              await supabase.from('resources').update({ scraped_content: updated }).eq('id', result.id);
+              const updated = (existing?.content || '') + '\n\n--- Video Transcript ---\n\n' + txData.transcript;
+              await supabase.from('resources').update({ content: updated } as any).eq('id', result.id);
               console.log(`Transcribed video for ${lesson.title}: ${txData.transcript.length} chars`);
             }
           } catch (txErr) {
