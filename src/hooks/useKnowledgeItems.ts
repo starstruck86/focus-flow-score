@@ -35,13 +35,15 @@ export type KnowledgeItemInsert = Omit<KnowledgeItem, 'id' | 'created_at' | 'upd
 
 const TABLE = 'knowledge_items' as any;
 
-export function useKnowledgeItems(chapter?: string) {
+export function useKnowledgeItems(chapter?: string, filters?: { who?: string; framework?: string }) {
   const { user } = useAuth();
   return useQuery({
-    queryKey: ['knowledge-items', user?.id, chapter],
+    queryKey: ['knowledge-items', user?.id, chapter, filters?.who, filters?.framework],
     queryFn: async () => {
       let q = supabase.from(TABLE).select('*').order('confidence_score', { ascending: false });
       if (chapter) q = q.eq('chapter', chapter);
+      if (filters?.who) q = q.eq('who', filters.who);
+      if (filters?.framework) q = q.eq('framework', filters.framework);
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as unknown as KnowledgeItem[];
