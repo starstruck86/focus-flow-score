@@ -43,6 +43,26 @@ function detectPlatform(url: string): string {
   return "unknown";
 }
 
+// ── Host platform detection (where podcast is actually hosted) ──
+function detectHostPlatform(url: string): string | null {
+  if (!url) return null;
+  const u = url.toLowerCase();
+  if (u.includes("anchor.fm") || u.includes("podcasters.spotify")) return "anchor";
+  if (u.includes("buzzsprout.com")) return "buzzsprout";
+  if (u.includes("libsyn.com")) return "libsyn";
+  if (u.includes("podbean.com")) return "podbean";
+  if (u.includes("transistor.fm")) return "transistor";
+  if (u.includes("simplecast.com")) return "simplecast";
+  if (u.includes("megaphone.fm")) return "megaphone";
+  if (u.includes("spreaker.com")) return "spreaker";
+  if (u.includes("soundcloud.com")) return "soundcloud";
+  if (u.includes("captivate.fm")) return "captivate";
+  if (u.includes("blubrry.com")) return "blubrry";
+  if (u.includes("acast.com")) return "acast";
+  if (u.includes("omny.fm") || u.includes("omnystudio")) return "omny";
+  return null;
+}
+
 // ── Content validation ──
 function validateContent(content: string): { valid: boolean; reason: string | null; details: Record<string, any> } {
   const details: Record<string, any> = { length: content.length };
@@ -124,13 +144,16 @@ Deno.serve(async (req) => {
 
     const queueItem = candidates[0];
     const isReprocessStructure = queueItem.transcript_status === "transcript_ready" && queueItem.raw_transcript;
+    const detectedPlatform = detectPlatform(queueItem.episode_url);
 
     const { error: claimErr } = await supabase
       .from("podcast_import_queue")
       .update({
         status: "processing",
         updated_at: now(),
-        platform: detectPlatform(queueItem.episode_url),
+        platform: detectedPlatform,
+        // Preserve original URL on first processing
+        original_episode_url: queueItem.original_episode_url || queueItem.episode_url,
         transcript_status: isReprocessStructure ? "transcript_ready" : "resolving_link",
       })
       .eq("id", queueItem.id)
@@ -195,7 +218,35 @@ Deno.serve(async (req) => {
       }
 
       const hasTranscriptFromResolve = resolveResult?.transcript && resolveResult.transcript.length > 200;
-      const hasAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url;
+      const hasAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
+        resolveResult?.resolution?.audioEnclosureUrl;
+
+      // ── Persist resolved metadata on the queue item ──
+      const resolvedMeta: Record<string, any> = {};
+      if (resolveResult?.metadata) {
+        const m = resolveResult.metadata;
+        if (m.title && !queueItem.episode_title) resolvedMeta.episode_title = m.title;
+        if (m.showName) resolvedMeta.show_title = m.showName;
+        if (m.description) resolvedMeta.episode_description = m.description?.slice(0, 5000);
+        if (m.artworkUrl) resolvedMeta.artwork_url = m.artworkUrl;
+        if (m.publishDate && !queueItem.episode_published) resolvedMeta.episode_published = m.publishDate;
+      }
+      if (resolveResult?.resolution) {
+        const r = resolveResult.resolution;
+        if (r.canonicalPageUrl) resolvedMeta.resolved_url = r.canonicalPageUrl;
+        if (r.audioEnclosureUrl) resolvedMeta.audio_url = r.audioEnclosureUrl;
+      }
+      // Detect host platform from resolved/audio URL
+      const resolvedAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
+        resolveResult?.resolution?.audioEnclosureUrl || '';
+      const hostPlatform = detectHostPlatform(resolvedAudioUrl || resolveResult?.resolution?.rssFeedUrl || '');
+      if (hostPlatform) resolvedMeta.host_platform = hostPlatform;
+      resolvedMeta.resolution_method = hasTranscriptFromResolve ? 'transcript_found' : (hasAudioUrl ? 'transcribed' : 'unresolved');
+      resolvedMeta.metadata_status = (resolvedMeta.show_title || resolvedMeta.episode_description) ? 'resolved' : 'partial';
+
+      if (Object.keys(resolvedMeta).length > 0) {
+        await updateQueueItem(supabase, queueItem.id, resolvedMeta);
+      }
 
       if (!hasTranscriptFromResolve && !hasAudioUrl) {
         await handleFailure(supabase, queueItem, "No transcript or audio URL found", "transcript_unavailable_from_link");
@@ -388,17 +439,30 @@ Deno.serve(async (req) => {
           `Source: podcast · Ingested ${new Date().toISOString().split("T")[0]}`,
         ].filter(Boolean).join("\n");
 
+        const detectedPlatformTag = detectPlatform(queueItem.episode_url);
         const insertPayload: Record<string, any> = {
           user_id: queueItem.user_id,
           title: queueItem.episode_title || queueItem.episode_url,
           description,
           resource_type: "transcript",
-          tags: ["podcast", detectPlatform(queueItem.episode_url)].filter(t => t !== "unknown"),
+          tags: ["podcast", detectedPlatformTag].filter(t => t !== "unknown"),
           folder_id: folderId,
           file_url: queueItem.episode_url,
           content: structuredContent,
           content_status: "enriched",
           content_length: structuredContent.length,
+          enrichment_status: "deep_enriched",
+          // Source identity preservation
+          original_url: queueItem.original_episode_url || queueItem.episode_url,
+          audio_url: queueItem.audio_url || null,
+          host_platform: queueItem.host_platform || null,
+          show_title: queueItem.show_title || queueItem.show_author || null,
+          episode_description: queueItem.episode_description?.slice(0, 5000) || null,
+          artwork_url: queueItem.artwork_url || null,
+          transcript_status: "transcript_structured",
+          metadata_status: queueItem.metadata_status || "pending",
+          resolution_method: queueItem.resolution_method || "transcribed",
+          content_classification: "audio",
         };
 
         if (queueItem.source_registry_id) {

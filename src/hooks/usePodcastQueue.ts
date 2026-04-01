@@ -30,6 +30,16 @@ export interface QueueItem {
   review_reason: string | null;
   raw_transcript: string | null;
   structured_transcript: string | null;
+  // Source identity fields
+  original_episode_url: string | null;
+  resolved_url: string | null;
+  audio_url: string | null;
+  host_platform: string | null;
+  episode_description: string | null;
+  artwork_url: string | null;
+  show_title: string | null;
+  resolution_method: string | null;
+  metadata_status: string | null;
 }
 
 export interface QueueStats {
@@ -87,7 +97,7 @@ export function usePodcastQueue() {
     if (!user) return;
     const { data } = await supabase
       .from('podcast_import_queue')
-      .select('id, episode_url, episode_title, status, error_message, resource_id, attempts, processed_at, platform, transcript_status, failure_type, content_validation, ki_status, ki_count, transcript_preview, transcript_length, transcript_section_count, review_reason, raw_transcript, structured_transcript')
+      .select('id, episode_url, episode_title, status, error_message, resource_id, attempts, processed_at, platform, transcript_status, failure_type, content_validation, ki_status, ki_count, transcript_preview, transcript_length, transcript_section_count, review_reason, raw_transcript, structured_transcript, original_episode_url, resolved_url, audio_url, host_platform, episode_description, artwork_url, show_title, resolution_method, metadata_status')
       .eq('user_id', user.id)
       .in('status', ['queued', 'processing', 'complete', 'failed', 'skipped'])
       .order('created_at', { ascending: true });
