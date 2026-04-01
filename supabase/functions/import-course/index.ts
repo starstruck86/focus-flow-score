@@ -433,56 +433,56 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
   debug.push(`Video embeds found: ${videoEmbeds.length}`);
   
   // Strip comments sections before content extraction
+  // Kajabi uses data-controller="comments" or similar patterns
   let cleanedHtml = html
+    .replace(/<[^>]*data-controller="[^"]*comment[^"]*"[^>]*>[\s\S]*$/gi, '')
     .replace(/<section[^>]*(?:comments|discussion)[^>]*>[\s\S]*?<\/section>/gi, '')
-    .replace(/<div[^>]*(?:id|class)="[^"]*(?:comments|comment-section|disqus|discussion)[^"]*"[^>]*>[\s\S]*?<\/div>\s*(?:<\/div>\s*)*$/gi, '')
-    .replace(/<div[^>]*class="[^"]*(?:kjb-comments|post-comments|comment-list|comments-container)[^"]*"[\s\S]*$/gi, '');
+    .replace(/<div[^>]*(?:id|class)="[^"]*(?:comments|comment-section|disqus|discussion|kjb-comments|post-comments)[^"]*"[^>]*>[\s\S]*$/gi, '');
   
-  // Extract content from multiple possible Kajabi containers
+  // Also strip footer sections  
+  cleanedHtml = cleanedHtml
+    .replace(/<footer[\s\S]*$/gi, '')
+    .replace(/<div[^>]*class="[^"]*(?:coach-section|about-coach|instructor-bio|customer-portal)[^"]*"[\s\S]*$/gi, '');
+  
+  // Extract content — try Kajabi-specific post body first
   let content = '';
+  
+  // Look for the actual lesson body content by scanning for class names
+  const classNames = [...cleanedHtml.matchAll(/class="([^"]+)"/gi)].map(m => m[1]);
+  const postBodyClasses = classNames.filter(c => /post|lesson|content|body/i.test(c) && !/nav|header|sidebar|menu/i.test(c));
+  debug.push(`Post-related classes: ${postBodyClasses.slice(0, 5).join(', ')}`);
+  
+  // Try to extract from Kajabi's known content containers (greedy match within the container)
   const contentPatterns = [
-    // Kajabi-specific patterns
-    /class="[^"]*(?:kjb-html-content|post__body|post-body)[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-    /class="[^"]*(?:product-post__body|lesson-content|course-content)[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-    // Data attribute patterns Kajabi uses
-    /data-post-body[^>]*>([\s\S]*?)<\/div>/i,
-    // Broader containers
-    /<main[^>]*>([\s\S]*?)<\/main>/i,
-    /<article[^>]*>([\s\S]*?)<\/article>/i,
+    // Kajabi post body — use greedy match since we've already stripped comments/footer
+    /class="[^"]*(?:kjb-html-content)[^"]*"[^>]*>([\s\S]+)/i,
+    /class="[^"]*(?:post__body|post-body)[^"]*"[^>]*>([\s\S]+)/i,
+    /class="[^"]*(?:product-post__body|lesson-content|course-content)[^"]*"[^>]*>([\s\S]+)/i,
+    /data-post-body[^>]*>([\s\S]+)/i,
   ];
   
   for (const pattern of contentPatterns) {
     const m = cleanedHtml.match(pattern);
     if (m && m[1].length > content.length) {
       content = m[1];
+      debug.push(`Matched pattern: ${pattern.source.substring(0, 50)}`);
     }
   }
   
-  // If still no content, try to find the post container by looking at the page structure
-  if (!content) {
-    // Kajabi wraps lesson content in a specific section — try extracting between known markers
-    const postStart = cleanedHtml.indexOf('class="post__body"') || 
-                      cleanedHtml.indexOf('class="product-post"') ||
-                      cleanedHtml.indexOf('data-controller="post"');
-    if (postStart > -1) {
-      // Grab a large chunk from the post area
-      const chunk = cleanedHtml.substring(postStart, postStart + 20000);
-      content = chunk;
-      debug.push(`Fallback: extracted from post marker at ${postStart}`);
-    }
-  }
-  
-  // Last resort: grab everything between the video embed area and comments/footer
+  // Fallback: use main or article
   if (!content || content.length < 50) {
-    // Find the main content area by removing nav, header, footer, comments
-    let bodyContent = cleanedHtml
+    const mainMatch = cleanedHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+    if (mainMatch) content = mainMatch[1];
+  }
+  
+  // Last resort: strip nav/header from body
+  if (!content || content.length < 50) {
+    content = cleanedHtml
       .replace(/[\s\S]*?<body[^>]*>/i, '')
       .replace(/<\/body>[\s\S]*/i, '')
       .replace(/<header[\s\S]*?<\/header>/gi, '')
-      .replace(/<footer[\s\S]*?<\/footer>/gi, '')
       .replace(/<nav[\s\S]*?<\/nav>/gi, '');
-    content = bodyContent;
-    debug.push(`Last resort: using full body (${bodyContent.length} chars)`);
+    debug.push(`Last resort: using full body (${content.length} chars)`);
   }
   
   // Clean HTML to text
