@@ -255,7 +255,27 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
                 </div>
               )}
 
-              {/* Edit-only: metadata fields */}
+              {/* Source Attribution */}
+              {(item.source_excerpt || item.source_title || item.source_resource_id) && (
+                <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs font-semibold uppercase tracking-wide">Source Attribution</span>
+                  </div>
+                  {(item as any).source_title && (
+                    <p className="text-[11px] text-foreground font-medium">{(item as any).source_title}</p>
+                  )}
+                  {(item as any).source_location && (
+                    <p className="text-[10px] text-muted-foreground">📍 {(item as any).source_location}</p>
+                  )}
+                  {item.source_excerpt && (
+                    <blockquote className="text-[11px] text-muted-foreground leading-relaxed border-l-2 border-primary/30 pl-2 italic">
+                      "{item.source_excerpt}"
+                    </blockquote>
+                  )}
+                </div>
+              )}
+
               {editing && (
                 <>
                   <Separator />
