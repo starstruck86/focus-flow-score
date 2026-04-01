@@ -1,0 +1,1 @@
+ALTER TABLE public.knowledge_items ADD COLUMN IF NOT EXISTS who text, ADD COLUMN IF NOT EXISTS framework text;

@@ -2082,6 +2082,7 @@ export type Database = {
           confidence_score: number
           created_at: string
           example_usage: string | null
+          framework: string | null
           id: string
           knowledge_type: string
           product_area: string | null
@@ -2101,6 +2102,7 @@ export type Database = {
           user_id: string
           when_not_to_use: string | null
           when_to_use: string | null
+          who: string | null
           why_it_matters: string | null
         }
         Insert: {
@@ -2112,6 +2114,7 @@ export type Database = {
           confidence_score?: number
           created_at?: string
           example_usage?: string | null
+          framework?: string | null
           id?: string
           knowledge_type?: string
           product_area?: string | null
@@ -2131,6 +2134,7 @@ export type Database = {
           user_id: string
           when_not_to_use?: string | null
           when_to_use?: string | null
+          who?: string | null
           why_it_matters?: string | null
         }
         Update: {
@@ -2142,6 +2146,7 @@ export type Database = {
           confidence_score?: number
           created_at?: string
           example_usage?: string | null
+          framework?: string | null
           id?: string
           knowledge_type?: string
           product_area?: string | null
@@ -2161,6 +2166,7 @@ export type Database = {
           user_id?: string
           when_not_to_use?: string | null
           when_to_use?: string | null
+          who?: string | null
           why_it_matters?: string | null
         }
         Relationships: []
