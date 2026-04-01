@@ -563,6 +563,9 @@ export function ResourceManager() {
             <DropdownMenuItem onClick={() => setShowWebpageImport(true)}>
               <Globe className="h-3.5 w-3.5 mr-2" /> Import from Webpage
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowCourseImport(true)}>
+              <BookOpen className="h-3.5 w-3.5 mr-2" /> Import Course
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
