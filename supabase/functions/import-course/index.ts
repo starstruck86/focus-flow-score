@@ -233,7 +233,10 @@ function parseCurriculum(html: string, baseOrigin: string): LessonInfo[] {
     const rawText = match[2];
     const linkText = rawText.replace(/<[^>]+>/g, '').trim();
     
-    if (!href || !linkText || linkText.length < 3 || linkText.length > 300) continue;
+    // Clean title: take only first line, trim descriptions
+    const cleanTitle = linkText.split('\n')[0].trim();
+    if (!href || !cleanTitle || cleanTitle.length < 3 || cleanTitle.length > 300) continue;
+    const linkTextClean = cleanTitle;
     if (href === '#' || href === '/') continue;
     if (/\/(login|signup|password|checkout|cart)/.test(href)) continue;
     if (/\.(css|js|png|jpg|svg|ico|woff)/.test(href)) continue;

@@ -1228,6 +1228,7 @@ export function ResourceManager() {
       <PlaylistImportModal open={showPlaylistImport} onOpenChange={setShowPlaylistImport} />
       <PodcastImportModal open={showPodcastImport} onOpenChange={setShowPodcastImport} />
       <WebpageImportModal open={showWebpageImport} onOpenChange={setShowWebpageImport} />
+      <CourseImportModal open={showCourseImport} onOpenChange={setShowCourseImport} />
       <AIGenerateDialog
         open={showAIGenerate}
         onOpenChange={(open) => { setShowAIGenerate(open); if (!open) { setGenerateSourceId(null); setGenerateInitialType(undefined); } }}
