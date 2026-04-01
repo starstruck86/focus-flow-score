@@ -2687,6 +2687,48 @@ export type Database = {
         }
         Relationships: []
       }
+      playbook_feedback: {
+        Row: {
+          created_at: string
+          feedback_type: string
+          framework: string | null
+          id: string
+          ki_title: string | null
+          metadata: Json | null
+          section_heading: string | null
+          stage_id: string
+          target_id: string | null
+          target_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          feedback_type: string
+          framework?: string | null
+          id?: string
+          ki_title?: string | null
+          metadata?: Json | null
+          section_heading?: string | null
+          stage_id: string
+          target_id?: string | null
+          target_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          feedback_type?: string
+          framework?: string | null
+          id?: string
+          ki_title?: string | null
+          metadata?: Json | null
+          section_heading?: string | null
+          stage_id?: string
+          target_id?: string | null
+          target_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       playbook_usage_events: {
         Row: {
           context_account_id: string | null
