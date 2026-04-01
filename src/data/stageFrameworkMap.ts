@@ -91,7 +91,7 @@ export const STAGE_FRAMEWORK_MAP: Record<string, StageFrameworkRole[]> = {
       who: 'Dixon',
       role: 'Blind spots & reframes',
       sections: [
-        { heading: 'Blind Spots', description: 'What the prospect likely doesn't know or is wrong about' },
+        { heading: 'Blind Spots', description: 'What the prospect likely does not know or is wrong about' },
         { heading: 'Reframe Ideas', description: 'How to shift their thinking toward your solution' },
         { heading: 'Insight Hooks', description: 'Data points or stories that create constructive tension' },
       ],
