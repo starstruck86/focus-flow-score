@@ -185,6 +185,28 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
                 />
               </div>
 
+              {/* Attribution */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Who (Author / Thought Leader)</Label>
+                  <Input
+                    value={form.who}
+                    onChange={e => setForm(f => ({ ...f, who: e.target.value }))}
+                    placeholder="e.g. Keenan, Chris Voss"
+                    className="text-xs"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Framework</Label>
+                  <Input
+                    value={form.framework}
+                    onChange={e => setForm(f => ({ ...f, framework: e.target.value }))}
+                    placeholder="e.g. GAP Selling, MEDDICC"
+                    className="text-xs"
+                  />
+                </div>
+              </div>
+
               <Separator />
 
               {/* Tactic summary */}
