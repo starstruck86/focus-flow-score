@@ -131,6 +131,7 @@ export function ResourceManager() {
   const [showPlaylistImport, setShowPlaylistImport] = useState(false);
   const [showPodcastImport, setShowPodcastImport] = useState(false);
   const [showWebpageImport, setShowWebpageImport] = useState(false);
+  const [showCourseImport, setShowCourseImport] = useState(false);
 
   // AI Discover states
   const [showDiscover, setShowDiscover] = useState(false);
