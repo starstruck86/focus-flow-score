@@ -235,7 +235,7 @@ export interface BatchJobResult {
 }
 
 export async function runBatchExtraction(config: BatchJobConfig): Promise<BatchJobResult> {
-  const { scope, userId, filterSource, filterTag, maxResources = 100, onProgress, signal } = config;
+  const { scope, userId, filterSource, filterTag, maxResources = 100, onProgress, onResourceComplete, signal } = config;
 
   // Create job record
   const { data: job } = await (supabase as any).from('extraction_pipeline_jobs').insert({
