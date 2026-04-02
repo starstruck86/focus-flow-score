@@ -34,11 +34,13 @@ export interface KnowledgeItem {
   tags: string[];
   who: string | null;
   framework: string | null;
+  review_status: 'unreviewed' | 'approved' | 'needs_rework' | 'archived';
   created_at: string;
   updated_at: string;
 }
 
-export type KnowledgeItemInsert = Omit<KnowledgeItem, 'id' | 'created_at' | 'updated_at' | 'macro_situation' | 'micro_strategy' | 'how_to_execute' | 'what_this_unlocks' | 'source_title' | 'source_location' | 'source_excerpt'> & {
+export type KnowledgeItemInsert = Omit<KnowledgeItem, 'id' | 'created_at' | 'updated_at' | 'review_status' | 'macro_situation' | 'micro_strategy' | 'how_to_execute' | 'what_this_unlocks' | 'source_title' | 'source_location' | 'source_excerpt'> & {
+  review_status?: 'unreviewed' | 'approved' | 'needs_rework' | 'archived';
   macro_situation?: string | null;
   micro_strategy?: string | null;
   how_to_execute?: string | null;

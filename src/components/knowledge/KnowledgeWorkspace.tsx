@@ -1,12 +1,12 @@
 /**
  * Knowledge Workspace — merges Learn + Library into one place.
  * 
- * 4 internal sub-tabs: Overview, Resources, Knowledge Items, Audit
+ * 5 internal sub-tabs: Overview, Resources, Knowledge Items, Review, Audit
  */
 
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BarChart3, FileText, Brain, Shield } from 'lucide-react';
+import { BarChart3, FileText, Brain, Shield, ClipboardCheck } from 'lucide-react';
 
 // Sub-tab content
 import { KnowledgeOverview } from './KnowledgeOverview';
@@ -14,6 +14,8 @@ import { ResourceManager } from '@/components/prep/ResourceManager';
 import { PlaybookEngine } from '@/components/prep/PlaybookEngine';
 import { ResourceReadinessSheet } from '@/components/prep/ResourceReadinessSheet';
 import { ResourceUpsideQueue } from './ResourceUpsideQueue';
+import { LowYieldReviewQueue } from './LowYieldReviewQueue';
+import { DuplicateReviewQueue } from './DuplicateReviewQueue';
 
 export function KnowledgeWorkspace() {
   const [subTab, setSubTab] = useState('overview');
@@ -22,7 +24,7 @@ export function KnowledgeWorkspace() {
   return (
     <div className="space-y-3">
       <Tabs value={subTab} onValueChange={setSubTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview" className="text-xs gap-1">
             <BarChart3 className="h-3 w-3" />
             Overview
@@ -34,6 +36,10 @@ export function KnowledgeWorkspace() {
           <TabsTrigger value="items" className="text-xs gap-1">
             <Brain className="h-3 w-3" />
             Knowledge Items
+          </TabsTrigger>
+          <TabsTrigger value="review" className="text-xs gap-1">
+            <ClipboardCheck className="h-3 w-3" />
+            Review
           </TabsTrigger>
           <TabsTrigger value="audit" className="text-xs gap-1">
             <Shield className="h-3 w-3" />
@@ -55,6 +61,13 @@ export function KnowledgeWorkspace() {
 
         <TabsContent value="items" className="mt-3">
           <PlaybookEngine />
+        </TabsContent>
+
+        <TabsContent value="review" className="mt-3">
+          <div className="space-y-4">
+            <LowYieldReviewQueue />
+            <DuplicateReviewQueue />
+          </div>
         </TabsContent>
 
         <TabsContent value="audit" className="mt-3">
