@@ -298,6 +298,33 @@ export function useAddUrlResource() {
     }) => {
       if (!user) throw new Error('Not authenticated');
 
+      // === DEDUP: check for existing resource with same file_url ===
+      const { data: existingRows } = await supabase
+        .from('resources')
+        .select('id')
+        .eq('file_url', url)
+        .limit(1);
+
+      if (existingRows && existingRows.length > 0) {
+        const existingId = existingRows[0].id;
+        const contentToUpdate = classification.scraped_content && classification.scraped_content.length > 50
+          ? classification.scraped_content
+          : undefined;
+        const updatePayload: Record<string, any> = {
+          title: classification.title,
+          description: classification.description,
+          resource_type: classification.resource_type,
+          tags: classification.tags,
+          updated_at: new Date().toISOString(),
+        };
+        if (contentToUpdate) {
+          updatePayload.content = contentToUpdate;
+          updatePayload.content_status = 'enriched';
+        }
+        await supabase.from('resources').update(updatePayload as any).eq('id', existingId);
+        return { id: existingId, ...updatePayload } as any;
+      }
+
       let finalFolderId = folderId;
       if (!finalFolderId && classification.top_folder) {
         finalFolderId = await resolveFolderHierarchy(
@@ -307,7 +334,6 @@ export function useAddUrlResource() {
         );
       }
 
-      // Use scraped content if available, otherwise placeholder
       const contentToStore = classification.scraped_content && classification.scraped_content.length > 50
         ? classification.scraped_content
         : `[External Link: ${url}]`;
