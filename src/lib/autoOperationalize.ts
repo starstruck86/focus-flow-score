@@ -265,7 +265,7 @@ export async function autoOperationalizeResource(
 
     // For transcript/podcast/audio, skip heuristic and go straight to LLM extraction
     // Heuristic sentence-splitting doesn't work well with conversational markdown content
-    let finalExtracted: typeof extracted = [];
+    let finalExtracted: KnowledgeItemInsert[] = [];
     if (isTranscriptType) {
       log.info('Transcript resource — using LLM extraction directly', { resourceId, resourceType: r.resource_type });
       try {
