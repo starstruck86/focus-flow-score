@@ -24,10 +24,23 @@ export function useExtractionPipeline() {
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Track last invalidation time to throttle query refreshes
+  const lastInvalidateRef = useRef(0);
+
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
     qc.invalidateQueries({ queryKey: ['resources'] });
+    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    lastInvalidateRef.current = Date.now();
   }, [qc]);
+
+  // Throttled invalidation for per-resource updates (every 5 seconds max)
+  const throttledInvalidate = useCallback(() => {
+    const now = Date.now();
+    if (now - lastInvalidateRef.current > 5000) {
+      invalidate();
+    }
+  }, [invalidate]);
 
   const loadStats = useCallback(async () => {
     if (!user) return;
@@ -60,10 +73,16 @@ export function useExtractionPipeline() {
         maxResources: options?.max ?? 100,
         signal: controller.signal,
         onProgress: (current, total, title) => setProgress({ current, total, title }),
+        onResourceComplete: (_resourceId, _outcome, index, total) => {
+          // Throttled invalidation so UI shows per-resource progress
+          throttledInvalidate();
+          // Update progress count
+          setProgress({ current: index + 1, total, title: `${index + 1}/${total} completed` });
+        },
       });
 
       setLastResult(result);
-      invalidate();
+      invalidate(); // Final full invalidation
 
       if (result.succeeded > 0) {
         toast.success(`Extracted ${result.succeeded} of ${result.total} resources`);

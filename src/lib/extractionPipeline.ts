@@ -221,6 +221,8 @@ export interface BatchJobConfig {
   filterTag?: string;
   maxResources?: number;
   onProgress?: (processed: number, total: number, currentTitle: string) => void;
+  /** Called after each resource finishes (success, fail, or skip) — use for incremental UI updates */
+  onResourceComplete?: (resourceId: string, outcome: 'success' | 'failed' | 'skipped', index: number, total: number) => void;
   signal?: AbortSignal;
 }
 
@@ -235,7 +237,7 @@ export interface BatchJobResult {
 }
 
 export async function runBatchExtraction(config: BatchJobConfig): Promise<BatchJobResult> {
-  const { scope, userId, filterSource, filterTag, maxResources = 100, onProgress, signal } = config;
+  const { scope, userId, filterSource, filterTag, maxResources = 100, onProgress, onResourceComplete, signal } = config;
 
   // Create job record
   const { data: job } = await (supabase as any).from('extraction_pipeline_jobs').insert({
@@ -356,6 +358,7 @@ export async function runBatchExtraction(config: BatchJobConfig): Promise<BatchJ
           block_terminal: false,
         }).eq('id', r.id);
         results.push({ resourceId: r.id, title: r.title, outcome: 'success', reason: `${result.knowledgeExtracted} extracted, ${result.knowledgeActivated} activated` });
+        onResourceComplete?.(r.id, 'success', i, scored.length);
       } else if (result.needsReview) {
         skipped++;
         await (supabase as any).from('resources').update({
@@ -364,9 +367,11 @@ export async function runBatchExtraction(config: BatchJobConfig): Promise<BatchJ
           block_last_attempt_at: new Date().toISOString(),
         }).eq('id', r.id);
         results.push({ resourceId: r.id, title: r.title, outcome: 'skipped', reason: result.reason });
+        onResourceComplete?.(r.id, 'skipped', i, scored.length);
       } else {
         failed++;
         results.push({ resourceId: r.id, title: r.title, outcome: 'failed', reason: result.reason });
+        onResourceComplete?.(r.id, 'failed', i, scored.length);
       }
     } catch (err: any) {
       failed++;
@@ -375,18 +380,17 @@ export async function runBatchExtraction(config: BatchJobConfig): Promise<BatchJ
         block_last_attempt_at: new Date().toISOString(),
       }).eq('id', r.id);
       results.push({ resourceId: r.id, title: r.title, outcome: 'failed', reason: err.message });
+      onResourceComplete?.(r.id, 'failed', i, scored.length);
     }
 
-    // Update job progress
-    if (i % 5 === 0 || i === scored.length - 1) {
-      await (supabase as any).from('extraction_pipeline_jobs').update({
-        processed_count: i + 1,
-        success_count: succeeded,
-        failed_count: failed,
-        skipped_count: skipped,
-        updated_at: new Date().toISOString(),
-      }).eq('id', jobId);
-    }
+    // Update job progress — save every resource so progress persists if window closes
+    await (supabase as any).from('extraction_pipeline_jobs').update({
+      processed_count: i + 1,
+      success_count: succeeded,
+      failed_count: failed,
+      skipped_count: skipped,
+      updated_at: new Date().toISOString(),
+    }).eq('id', jobId);
   }
 
   // Finalize job
