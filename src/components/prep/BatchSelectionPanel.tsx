@@ -149,6 +149,24 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
     return map;
   }, [resources]);
 
+  // Throttled query invalidation (every 5s) for live UI updates during batch runs
+  const throttledInvalidate = useCallback(() => {
+    const now = Date.now();
+    if (now - lastInvalidateRef.current > 5000) {
+      queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+      queryClient.invalidateQueries({ queryKey: ['resources'] });
+      queryClient.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+      lastInvalidateRef.current = now;
+    }
+  }, [queryClient]);
+
+  const fullInvalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+    queryClient.invalidateQueries({ queryKey: ['resources'] });
+    queryClient.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    lastInvalidateRef.current = Date.now();
+  }, [queryClient]);
+
   const runAction = useCallback(async (action: BatchAction) => {
     const selected = resources.filter(r => selectedIds.has(r.id));
     if (selected.length === 0) {
@@ -191,24 +209,34 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
             return hasActiveJobInDB(resourceId);
           },
           onProgress: (p) => setProgress({ ...p }),
+          onResourceComplete: (job) => {
+            // Persist each resource immediately to DB
+            if (batchRunId) {
+              persistSingleJobRecord(batchRunId, job);
+            }
+            // Throttled UI refresh so resource rows show live state
+            throttledInvalidate();
+          },
         },
         cfg,
         controller.signal,
       );
 
-      // Persist results
+      // Finalize batch run with final counters
       if (batchRunId) {
+        await updateBatchRunProgress(batchRunId, result.succeeded, result.failed, result.skipped);
         await finalizeBatchRun(batchRunId, result);
-        await persistJobRecords(batchRunId, result.jobs);
       }
 
+      // Final full invalidation
+      fullInvalidate();
       onComplete?.();
     } catch (err: any) {
       toast.error(`Batch failed: ${err?.message}`);
     } finally {
       abortRef.current = null;
     }
-  }, [selectedIds, resources, onComplete, sourceTypeLookup]);
+  }, [selectedIds, resources, onComplete, sourceTypeLookup, throttledInvalidate, fullInvalidate]);
 
   const cancelBatch = useCallback(() => {
     abortRef.current?.abort();
