@@ -1,0 +1,1 @@
+UPDATE resources SET enrichment_version = 2, validation_version = 2 WHERE resource_type IN ('podcast','audio','transcript') AND enrichment_version < 2 AND content IS NOT NULL AND LENGTH(content) > 100;

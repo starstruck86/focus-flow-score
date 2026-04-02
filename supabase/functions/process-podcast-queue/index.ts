@@ -466,6 +466,8 @@ Deno.serve(async (req) => {
           content_status: "enriched",
           content_length: structuredContent.length,
           enrichment_status: "deep_enriched",
+          enrichment_version: 2,
+          validation_version: 2,
           // Source identity preservation
           original_url: queueItem.original_episode_url || queueItem.episode_url,
           audio_url: queueItem.audio_url || null,
