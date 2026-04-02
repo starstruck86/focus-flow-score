@@ -10,10 +10,10 @@ import type {
   PaymentTerms 
 } from '@/types';
 
-// Default quota configuration (FY26 2H - July 1 to Dec 31, 2026)
+// Default quota configuration (FY26 - July 1 2025 to June 30 2026)
 export const DEFAULT_QUOTA_CONFIG: QuotaConfig = {
-  fiscalYearStart: '2026-07-01',
-  fiscalYearEnd: '2026-12-31',
+  fiscalYearStart: '2025-07-01',
+  fiscalYearEnd: '2026-06-30',
   newArrQuota: 500000,
   renewalArrQuota: 822542,
   newArrAcr: 0.0773, // 7.73%
