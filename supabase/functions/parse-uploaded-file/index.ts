@@ -12,7 +12,8 @@ const corsHeaders = {
 // Quality thresholds
 const MIN_CHARS_SUCCESS = 100;
 const MIN_LETTERS = 30;
-const PAGES_PER_CHUNK = 50;
+const PAGES_PER_CHUNK = 20;
+const MIN_PAGES_PER_CHUNK = 1;
 const BASE64_CHUNK_SIZE = 0x8000;
 
 // ── MIME / extension mapping ──────────────────────────────
@@ -26,27 +27,16 @@ function categoriseFile(storagePath: string, mimeType?: string): { category: Fil
 }
 
 // ── Split PDF into chunks of N pages ──────────────────────
-async function splitPdfIntoChunks(pdfBytes: Uint8Array, pagesPerChunk: number): Promise<Uint8Array[]> {
-  const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-  const totalPages = srcDoc.getPageCount();
+async function createPdfChunk(srcDoc: PDFDocument, startPage: number, endPage: number): Promise<Uint8Array> {
+  const chunkDoc = await PDFDocument.create();
+  const pageIndexes = Array.from({ length: endPage - startPage }, (_, i) => startPage + i);
+  const pages = await chunkDoc.copyPages(srcDoc, pageIndexes);
 
-  if (totalPages <= pagesPerChunk) {
-    return [pdfBytes]; // No splitting needed
+  for (const page of pages) {
+    chunkDoc.addPage(page);
   }
 
-  const chunks: Uint8Array[] = [];
-  for (let start = 0; start < totalPages; start += pagesPerChunk) {
-    const end = Math.min(start + pagesPerChunk, totalPages);
-    const chunkDoc = await PDFDocument.create();
-    const pages = await chunkDoc.copyPages(srcDoc, Array.from({ length: end - start }, (_, i) => start + i));
-    for (const page of pages) {
-      chunkDoc.addPage(page);
-    }
-    const chunkBytes = await chunkDoc.save();
-    chunks.push(chunkBytes);
-  }
-
-  return chunks;
+  return chunkDoc.save();
 }
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {
@@ -127,6 +117,51 @@ async function extractChunkViaVision(
 
   const result = await resp.json();
   return extractTextFromAiResponse(result);
+}
+
+function normalizeErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function shouldRetryWithSmallerChunk(error: unknown): boolean {
+  const message = normalizeErrorMessage(error).toLowerCase();
+  return ["500", "413", "429", "timeout", "too large", "memory", "limit"].some((token) => message.includes(token));
+}
+
+async function extractPdfRangeViaVision(params: {
+  srcDoc: PDFDocument;
+  apiKey: string;
+  startPage: number;
+  endPage: number;
+  diagnostics: Record<string, unknown>;
+}): Promise<string> {
+  const { srcDoc, apiKey, startPage, endPage, diagnostics } = params;
+  const pageCount = endPage - startPage;
+  const label = `pages ${startPage + 1}-${endPage}`;
+  const chunkBytes = await createPdfChunk(srcDoc, startPage, endPage);
+
+  try {
+    console.log(`[parse-uploaded-file] Extracting ${label} (${pageCount} page${pageCount === 1 ? "" : "s"})...`);
+    return await extractChunkViaVision(chunkBytes, apiKey, label);
+  } catch (error) {
+    const message = normalizeErrorMessage(error);
+    const failures = Array.isArray(diagnostics.vision_failures) ? diagnostics.vision_failures as string[] : [];
+    failures.push(`${label}: ${message}`);
+    diagnostics.vision_failures = failures.slice(-10);
+
+    if (pageCount <= MIN_PAGES_PER_CHUNK || !shouldRetryWithSmallerChunk(error)) {
+      throw error;
+    }
+
+    const mid = startPage + Math.ceil(pageCount / 2);
+    console.log(`[parse-uploaded-file] Retrying ${label} as smaller ranges`);
+
+    const left = await extractPdfRangeViaVision({ srcDoc, apiKey, startPage, endPage: mid, diagnostics });
+    const right = await extractPdfRangeViaVision({ srcDoc, apiKey, startPage: mid, endPage, diagnostics });
+
+    return [left, right].filter(Boolean).join("\n\n");
+  }
 }
 
 // ── Quality check ─────────────────────────────────────────
@@ -246,19 +281,24 @@ Deno.serve(async (req) => {
         parserUsed = "basic_pdf_stream";
       } else {
         try {
-          // Split PDF into chunks for reliable full-document extraction
-          const chunks = await splitPdfIntoChunks(fileBytes, PAGES_PER_CHUNK);
-          const totalChunks = chunks.length;
-          diagnostics.total_pages_estimated = totalChunks * PAGES_PER_CHUNK; // approximate
+          const srcDoc = await PDFDocument.load(fileBytes, { ignoreEncryption: true });
+          const totalPages = srcDoc.getPageCount();
+          const totalChunks = Math.ceil(totalPages / PAGES_PER_CHUNK);
+          diagnostics.total_pages = totalPages;
           diagnostics.chunks_used = totalChunks;
 
           console.log(`[parse-uploaded-file] Processing ${totalChunks} chunk(s) for resource ${resource_id}`);
 
           const chunkTexts: string[] = [];
-          for (let i = 0; i < totalChunks; i++) {
-            const label = `chunk ${i + 1}/${totalChunks}`;
-            console.log(`[parse-uploaded-file] Extracting ${label}...`);
-            const text = await extractChunkViaVision(chunks[i], lovableApiKey, label);
+          for (let startPage = 0; startPage < totalPages; startPage += PAGES_PER_CHUNK) {
+            const endPage = Math.min(startPage + PAGES_PER_CHUNK, totalPages);
+            const text = await extractPdfRangeViaVision({
+              srcDoc,
+              apiKey: lovableApiKey,
+              startPage,
+              endPage,
+              diagnostics,
+            });
             if (text) chunkTexts.push(text);
           }
 
