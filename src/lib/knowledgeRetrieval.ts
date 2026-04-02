@@ -89,6 +89,9 @@ export async function getDaveKnowledgeContext(opts?: {
       let line = `• ${item.title}`;
       if (item.tactic_summary) line += `: ${item.tactic_summary}`;
       if (item.competitor_name) line += ` [vs ${item.competitor_name}]`;
+      // Include attribution for coaching authority
+      const attribution = [(item as any).framework, (item as any).who].filter(Boolean);
+      if (attribution.length) line += ` [${attribution.join(' — ')}]`;
       return line;
     });
     sections.push(`**${label}**\n${bullets.join('\n')}`);
