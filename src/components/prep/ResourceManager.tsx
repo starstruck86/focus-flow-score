@@ -889,6 +889,7 @@ export function ResourceManager() {
                       queryClient.invalidateQueries({ queryKey: ['resources'] });
                       queryClient.invalidateQueries({ queryKey: ['incoming-queue'] });
                       queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+                      queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
 
                       if (result.error) {
                         console.error('[Enrich] Edge function error:', result.error);

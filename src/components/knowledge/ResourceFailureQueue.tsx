@@ -257,6 +257,7 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
   const invalidateAll = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['resources'] });
     qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    qc.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
   }, [qc]);
 
   const handleMarkReference = useCallback(async (resourceId: string) => {
