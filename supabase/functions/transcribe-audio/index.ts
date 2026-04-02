@@ -268,6 +268,8 @@ serve(async (req) => {
             enrichment_status: "enriched",
             enriched_at: new Date().toISOString(),
             content_length: totalWords,
+            enrichment_version: 2,
+            validation_version: 2,
           }).eq("id", resource_id).eq("user_id", user.id);
         }
       }
