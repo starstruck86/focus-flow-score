@@ -172,12 +172,14 @@ function ExtractedContentTab({ resource }: { resource: Resource }) {
     },
   });
 
-  const content = fullContent?.content || r.content || '';
-  const contentLength = fullContent?.content_length || r.content_length || content.length;
-  const extractionMethod = fullContent?.extraction_method || r.extraction_method;
-  const qualityTier = fullContent?.last_quality_tier || r.last_quality_tier;
-  const qualityScore = fullContent?.last_quality_score || r.last_quality_score;
-  const failureReason = fullContent?.failure_reason || r.failure_reason;
+  const content = fullContent?.content ?? r.content ?? '';
+  const contentLength = fullContent?.content_length ?? r.content_length ?? content.length;
+  const extractionMethod = fullContent?.extraction_method ?? r.extraction_method;
+  const qualityTier = fullContent?.last_quality_tier ?? r.last_quality_tier;
+  const qualityScore = fullContent?.last_quality_score ?? r.last_quality_score;
+  const failureReason = fullContent?.failure_reason ?? r.failure_reason;
+  const hasMeaningfulContent = Math.max(contentLength, content.trim().length) >= 1000;
+  const shouldShowFailureReason = Boolean(failureReason) && !hasMeaningfulContent;
 
   const handleCopy = async () => {
     try {
@@ -200,7 +202,7 @@ function ExtractedContentTab({ resource }: { resource: Resource }) {
     return (
       <div className="p-4">
         <EmptyState message="No extracted content" />
-        {failureReason && (
+        {shouldShowFailureReason && (
           <div className="mt-2 flex items-start gap-2 text-xs text-destructive">
             <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
             <span>{failureReason}</span>
@@ -238,7 +240,7 @@ function ExtractedContentTab({ resource }: { resource: Resource }) {
           </Button>
         </div>
       </div>
-      {failureReason && (
+      {shouldShowFailureReason && (
         <div className="flex items-start gap-2 text-xs text-destructive bg-destructive/5 rounded-md p-2">
           <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
           <span>{failureReason}</span>
