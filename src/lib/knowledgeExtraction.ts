@@ -492,12 +492,14 @@ export async function extractKnowledgeLLMFallback(
   try {
     log.info('Running LLM fallback extraction', { resourceId: source.resourceId, title: source.title });
 
+    const isTranscriptResource = ['transcript', 'podcast', 'audio'].includes(source.resourceType);
+    const contentCap = isTranscriptResource ? 60000 : 15000;
+
     const result = await trackedInvoke<{ items?: any[] }>('extract-tactics', {
       body: {
         resourceId: source.resourceId,
         title: source.title,
-        // Transcript resources get a higher content cap (60K) to match batch-actionize
-        content: source.content?.slice(0, isTranscript ? 60000 : 15000),
+        content: source.content?.slice(0, contentCap),
         description: source.description,
         tags: source.tags,
         resourceType: source.resourceType,
