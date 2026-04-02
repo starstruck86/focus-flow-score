@@ -504,6 +504,8 @@ export async function extractKnowledgeLLMFallback(
         tags: source.tags,
         resourceType: source.resourceType,
       },
+      // Transcripts can be large and need more time for multi-chunk extraction
+      timeoutMs: isTranscriptResource ? 120_000 : 60_000,
     });
 
     if (result?.data?.items && Array.isArray(result.data.items)) {
