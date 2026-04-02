@@ -75,6 +75,7 @@ function KIRow({ ki }: { ki: KnowledgeItem }) {
 export function LowYieldReviewQueue() {
   const allLowYield = useLowYieldResources();
   const bulkReview = useBulkSetReviewStatus();
+  const { reExtract, getStatus } = useReExtractResource();
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [showReviewed, setShowReviewed] = useState(false);
 
@@ -99,10 +100,6 @@ export function LowYieldReviewQueue() {
   const handleArchiveResource = (kis: KnowledgeItem[]) => {
     const ids = kis.map(k => k.id);
     bulkReview.mutate({ ids, status: 'archived' });
-  };
-
-  const handleReExtract = () => {
-    toast.info('Re-extraction queued — use the Audit tab to trigger pipeline');
   };
 
   if (allLowYield.length === 0) {
