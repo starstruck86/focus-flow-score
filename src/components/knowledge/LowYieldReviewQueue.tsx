@@ -1,19 +1,27 @@
 /**
  * Low-yield review queue — resources with only 1–2 active KIs.
+ * Defaults to showing only unreviewed items. Toggle to show all.
+ * Resource-level actions: Keep As-Is, Re-Extract, Archive/Deprioritize.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
   ChevronDown, ChevronRight, CheckCircle2, Archive, RotateCcw, AlertTriangle,
+  ThumbsUp, RefreshCw, FolderMinus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useLowYieldResources, useSetReviewStatus, type ReviewStatus } from '@/hooks/useKnowledgeReview';
+import {
+  useLowYieldResources, useSetReviewStatus, useBulkSetReviewStatus,
+  type ReviewStatus,
+} from '@/hooks/useKnowledgeReview';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
+import { toast } from 'sonner';
 
 function ReviewBadge({ status }: { status: ReviewStatus }) {
   const map: Record<ReviewStatus, { label: string; cls: string }> = {
@@ -64,8 +72,17 @@ function KIRow({ ki }: { ki: KnowledgeItem }) {
 }
 
 export function LowYieldReviewQueue() {
-  const lowYield = useLowYieldResources();
+  const allLowYield = useLowYieldResources();
+  const bulkReview = useBulkSetReviewStatus();
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const [showReviewed, setShowReviewed] = useState(false);
+
+  const lowYield = useMemo(() => {
+    if (showReviewed) return allLowYield;
+    return allLowYield.filter(r => r.unreviewedCount > 0);
+  }, [allLowYield, showReviewed]);
+
+  const totalUnreviewed = allLowYield.reduce((s, r) => s + r.unreviewedCount, 0);
 
   const toggle = (id: string) => setOpenIds(prev => {
     const next = new Set(prev);
@@ -73,7 +90,21 @@ export function LowYieldReviewQueue() {
     return next;
   });
 
-  if (lowYield.length === 0) {
+  const handleKeepAsIs = (kis: KnowledgeItem[]) => {
+    const ids = kis.map(k => k.id);
+    bulkReview.mutate({ ids, status: 'approved' });
+  };
+
+  const handleArchiveResource = (kis: KnowledgeItem[]) => {
+    const ids = kis.map(k => k.id);
+    bulkReview.mutate({ ids, status: 'archived' });
+  };
+
+  const handleReExtract = () => {
+    toast.info('Re-extraction queued — use the Audit tab to trigger pipeline');
+  };
+
+  if (allLowYield.length === 0) {
     return (
       <Card>
         <CardContent className="p-6 text-center">
@@ -87,15 +118,26 @@ export function LowYieldReviewQueue() {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
-          Low-Yield Resources
-          <Badge variant="secondary" className="text-[10px]">{lowYield.length}</Badge>
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            Low-Yield Resources
+            <Badge variant="secondary" className="text-[10px]">
+              {totalUnreviewed} unreviewed
+            </Badge>
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-muted-foreground">Show reviewed</span>
+            <Switch checked={showReviewed} onCheckedChange={setShowReviewed} className="scale-75" />
+          </div>
+        </div>
         <p className="text-[11px] text-muted-foreground">Resources with only 1–2 active Knowledge Items</p>
       </CardHeader>
       <CardContent className="space-y-2">
-        {lowYield.map(({ resource, kis }) => {
+        {lowYield.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center py-4">All low-yield resources reviewed. Toggle "Show reviewed" to see them.</p>
+        )}
+        {lowYield.map(({ resource, kis, unreviewedCount }) => {
           const isOpen = openIds.has(resource.id);
           return (
             <Collapsible key={resource.id} open={isOpen} onOpenChange={() => toggle(resource.id)}>
@@ -103,8 +145,26 @@ export function LowYieldReviewQueue() {
                 {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
                 <span className="text-xs font-medium text-foreground flex-1 truncate">{resource.title}</span>
                 <Badge variant="outline" className="text-[10px]">{kis.length} KI{kis.length !== 1 ? 's' : ''}</Badge>
+                {unreviewedCount > 0 && (
+                  <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground">{unreviewedCount} unreviewed</Badge>
+                )}
               </CollapsibleTrigger>
               <CollapsibleContent className="pl-6 space-y-1.5 pt-1 pb-2">
+                {/* Resource-level actions */}
+                <div className="flex gap-1.5 pb-1.5 border-b border-border mb-1.5">
+                  <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]"
+                    onClick={() => handleKeepAsIs(kis)}>
+                    <ThumbsUp className="h-3 w-3 mr-1" /> Keep As-Is
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]"
+                    onClick={handleReExtract}>
+                    <RefreshCw className="h-3 w-3 mr-1" /> Re-Extract
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]"
+                    onClick={() => handleArchiveResource(kis)}>
+                    <FolderMinus className="h-3 w-3 mr-1" /> Archive / Deprioritize
+                  </Button>
+                </div>
                 {kis.map(ki => <KIRow key={ki.id} ki={ki} />)}
               </CollapsibleContent>
             </Collapsible>

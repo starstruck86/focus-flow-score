@@ -15,6 +15,7 @@ const TABLE = 'knowledge_items' as any;
 export interface LowYieldResource {
   resource: Resource;
   kis: KnowledgeItem[];
+  unreviewedCount: number;
 }
 
 export function useLowYieldResources() {
@@ -37,11 +38,15 @@ export function useLowYieldResources() {
     for (const [rid, kis] of byResource) {
       if (kis.length <= 2) {
         const resource = resourceMap.get(rid);
-        if (resource) result.push({ resource, kis });
+        if (resource) {
+          const unreviewedCount = kis.filter(k => (k as any).review_status === 'unreviewed' || !(k as any).review_status).length;
+          result.push({ resource, kis, unreviewedCount });
+        }
       }
     }
 
-    return result.sort((a, b) => a.kis.length - b.kis.length);
+    // Sort: most unreviewed first, then fewest KIs
+    return result.sort((a, b) => b.unreviewedCount - a.unreviewedCount || a.kis.length - b.kis.length);
   }, [items, resources]);
 }
 
@@ -53,6 +58,8 @@ export interface DuplicatePair {
   similarity: number;
   resourceNameA: string;
   resourceNameB: string;
+  sameResource: boolean;
+  overlappingWords: string[];
 }
 
 function wordSet(text: string): Set<string> {
@@ -89,10 +96,14 @@ export function useDuplicateKIs() {
         const bWords = wordSet(`${b.title} ${b.tactic_summary || ''}`);
         const sim = jaccardSimilarity(aWords, bWords);
         if (sim > 0.5) {
+          const overlapping: string[] = [];
+          for (const w of aWords) if (bWords.has(w)) overlapping.push(w);
           pairs.push({
             a, b, similarity: sim,
             resourceNameA: resourceMap.get(a.source_resource_id || '') || 'Unknown',
             resourceNameB: resourceMap.get(b.source_resource_id || '') || 'Unknown',
+            sameResource: !!(a.source_resource_id && a.source_resource_id === b.source_resource_id),
+            overlappingWords: overlapping.slice(0, 8),
           });
         }
       }
@@ -117,6 +128,25 @@ export function useSetReviewStatus() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['knowledge-items'] }),
+  });
+}
+
+export function useBulkSetReviewStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ids, status }: { ids: string[]; status: ReviewStatus }) => {
+      for (const id of ids) {
+        const { error } = await supabase
+          .from(TABLE)
+          .update({ review_status: status, updated_at: new Date().toISOString() } as any)
+          .eq('id', id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: (_, { ids, status }) => {
+      qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+      toast.success(`${ids.length} KI${ids.length > 1 ? 's' : ''} marked ${status.replace('_', ' ')}`);
+    },
   });
 }
 
