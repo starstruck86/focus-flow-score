@@ -152,6 +152,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
     // Always reset transient session on close — prevents stale completed state on reopen
     store.reset();
     queryClient.invalidateQueries({ queryKey: ['resources'] });
+    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
     onOpenChange(false);
   }, [store, queryClient, onOpenChange]);
 
