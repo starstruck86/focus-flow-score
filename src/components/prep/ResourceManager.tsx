@@ -775,6 +775,7 @@ export function ResourceManager() {
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
                     queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
                     console.log('[Extract] Result:', {
                       resourceId: resource.id,
                       title: resource.title,
