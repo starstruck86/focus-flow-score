@@ -662,9 +662,22 @@ export function ResourceLibraryTable({
                               <p className="text-[9px] text-destructive/80">
                                 {getBlockedLabel(lc.blocked)}
                               </p>
-                              <span className="text-[9px] text-primary/80 font-medium">
+                              <button
+                                className="text-[9px] text-primary/80 font-medium hover:text-primary hover:underline transition-colors"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  const actionMap: Record<string, string> = {
+                                    no_extraction: 'extract',
+                                    no_activation: 'activate',
+                                    missing_contexts: 'repair_contexts',
+                                    empty_content: 're_enrich',
+                                  };
+                                  const action = actionMap[lc.blocked] || 'extract';
+                                  onAction(action, resource);
+                                }}
+                              >
                                 → {getNextBestAction(lc.blocked)}
-                              </span>
+                              </button>
                             </div>
                           )}
                           {drift.hasDrift && (
