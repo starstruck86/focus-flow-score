@@ -84,6 +84,7 @@ export function useExtractionPipeline() {
 
       setLastResult(result);
       invalidate(); // Final full invalidation
+      await loadStats(); // Refresh dashboard stats
 
       if (result.succeeded > 0) {
         toast.success(`Extracted ${result.succeeded} of ${result.total} resources`);
