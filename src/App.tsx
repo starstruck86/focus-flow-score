@@ -35,6 +35,7 @@ const Diagnostics = lazy(() => import("./pages/Diagnostics"));
 const Cockpit = lazy(() => import("./pages/Cockpit"));
 const EnrichmentVerification = lazy(() => import("./pages/EnrichmentVerification"));
 const ExecuteWorkspace = lazy(() => import("./pages/ExecuteWorkspace"));
+const BulkExtractRunner = lazy(() => import("./pages/BulkExtractRunner"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
