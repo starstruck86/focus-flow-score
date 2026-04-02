@@ -178,10 +178,6 @@ export async function runEnrichmentOnly(resourceId: string): Promise<MethodResul
     } catch { /* LLM failed */ }
   }
 
-  // Heuristic fallback only for non-audio document types (audio/podcast heuristic produces garbage fragments)
-  const isAudioType = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
-    (r.resource_type ?? '').toLowerCase()
-  );
   if (items.length === 0 && !isAudioType) {
     items = extractKnowledgeHeuristic(source);
   }
