@@ -137,11 +137,22 @@ export function LowYieldReviewQueue() {
         )}
         {lowYield.map(({ resource, kis, unreviewedCount }) => {
           const isOpen = openIds.has(resource.id);
+          const extractStatus = getStatus(resource.id);
+          const isExtracting = extractStatus === 'running';
           return (
             <Collapsible key={resource.id} open={isOpen} onOpenChange={() => toggle(resource.id)}>
               <CollapsibleTrigger className="flex items-center gap-2 w-full text-left p-2 rounded-md hover:bg-muted/50 transition-colors">
                 {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
                 <span className="text-xs font-medium text-foreground flex-1 truncate">{resource.title}</span>
+                {extractStatus === 'running' && (
+                  <Badge variant="outline" className="text-[10px] bg-accent text-accent-foreground"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Extracting…</Badge>
+                )}
+                {extractStatus === 'succeeded' && (
+                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary"><CheckCircle2 className="h-3 w-3 mr-1" />Done</Badge>
+                )}
+                {extractStatus === 'failed' && (
+                  <Badge variant="outline" className="text-[10px] bg-destructive/10 text-destructive"><XCircle className="h-3 w-3 mr-1" />Failed</Badge>
+                )}
                 <Badge variant="outline" className="text-[10px]">{kis.length} KI{kis.length !== 1 ? 's' : ''}</Badge>
                 {unreviewedCount > 0 && (
                   <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground">{unreviewedCount} unreviewed</Badge>
@@ -155,8 +166,11 @@ export function LowYieldReviewQueue() {
                     <ThumbsUp className="h-3 w-3 mr-1" /> Keep As-Is
                   </Button>
                   <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]"
-                    onClick={handleReExtract}>
-                    <RefreshCw className="h-3 w-3 mr-1" /> Re-Extract
+                    disabled={isExtracting}
+                    onClick={() => reExtract(resource.id, resource.title)}>
+                    {isExtracting
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Extracting…</>
+                      : <><RefreshCw className="h-3 w-3 mr-1" /> Re-Extract</>}
                   </Button>
                   <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]"
                     onClick={() => handleArchiveResource(kis)}>
