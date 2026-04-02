@@ -24,10 +24,23 @@ export function useExtractionPipeline() {
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Track last invalidation time to throttle query refreshes
+  const lastInvalidateRef = useRef(0);
+
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
     qc.invalidateQueries({ queryKey: ['resources'] });
+    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    lastInvalidateRef.current = Date.now();
   }, [qc]);
+
+  // Throttled invalidation for per-resource updates (every 5 seconds max)
+  const throttledInvalidate = useCallback(() => {
+    const now = Date.now();
+    if (now - lastInvalidateRef.current > 5000) {
+      invalidate();
+    }
+  }, [invalidate]);
 
   const loadStats = useCallback(async () => {
     if (!user) return;
