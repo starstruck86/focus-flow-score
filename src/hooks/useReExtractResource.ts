@@ -1,10 +1,11 @@
 /**
  * Hook to trigger single-resource KI re-extraction via the stabilized edge function.
- * Tracks per-resource status (idle/running/succeeded/failed).
+ * Persists status to the resources table so it survives refresh/navigation.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAllResources } from '@/hooks/useResources';
 import { toast } from 'sonner';
 
 export type ReExtractStatus = 'idle' | 'running' | 'succeeded' | 'failed';
@@ -15,21 +16,40 @@ export interface ReExtractResult {
   error?: string;
 }
 
+const TABLE = 'resources' as any;
+
 export function useReExtractResource() {
   const qc = useQueryClient();
-  const [statusMap, setStatusMap] = useState<Record<string, ReExtractStatus>>({});
+  const { data: resources = [] } = useAllResources();
+  // Local overrides while a request is in-flight (before DB roundtrip)
+  const [localOverrides, setLocalOverrides] = useState<Record<string, ReExtractStatus>>({});
   const [resultMap, setResultMap] = useState<Record<string, ReExtractResult>>({});
 
   const getStatus = useCallback((resourceId: string): ReExtractStatus => {
-    return statusMap[resourceId] || 'idle';
-  }, [statusMap]);
+    // Prefer local in-flight override, then fall back to persisted DB value
+    if (localOverrides[resourceId]) return localOverrides[resourceId];
+    const res = resources.find(r => r.id === resourceId);
+    return ((res as any)?.re_extract_status as ReExtractStatus) || 'idle';
+  }, [localOverrides, resources]);
 
   const getResult = useCallback((resourceId: string): ReExtractResult | undefined => {
     return resultMap[resourceId];
   }, [resultMap]);
 
+  const persistStatus = async (resourceId: string, status: ReExtractStatus) => {
+    await supabase
+      .from(TABLE)
+      .update({
+        re_extract_status: status,
+        re_extract_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq('id', resourceId);
+  };
+
   const reExtract = useCallback(async (resourceId: string, resourceTitle: string) => {
-    setStatusMap(prev => ({ ...prev, [resourceId]: 'running' }));
+    setLocalOverrides(prev => ({ ...prev, [resourceId]: 'running' }));
+    await persistStatus(resourceId, 'running');
 
     try {
       const { data, error } = await supabase.functions.invoke('batch-extract-kis', {
@@ -45,17 +65,18 @@ export function useReExtractResource() {
       };
 
       setResultMap(prev => ({ ...prev, [resourceId]: result }));
-      setStatusMap(prev => ({ ...prev, [resourceId]: 'succeeded' }));
+      setLocalOverrides(prev => ({ ...prev, [resourceId]: 'succeeded' }));
+      await persistStatus(resourceId, 'succeeded');
 
       toast.success(`Re-extracted "${resourceTitle}": ${result.kis} KIs`);
 
-      // Refresh data
       qc.invalidateQueries({ queryKey: ['knowledge-items'] });
       qc.invalidateQueries({ queryKey: ['resources'] });
     } catch (err: any) {
       const result: ReExtractResult = { kis: 0, preservedUserEdited: 0, error: err.message };
       setResultMap(prev => ({ ...prev, [resourceId]: result }));
-      setStatusMap(prev => ({ ...prev, [resourceId]: 'failed' }));
+      setLocalOverrides(prev => ({ ...prev, [resourceId]: 'failed' }));
+      await persistStatus(resourceId, 'failed');
       toast.error(`Re-extract failed for "${resourceTitle}": ${err.message}`);
     }
   }, [qc]);
