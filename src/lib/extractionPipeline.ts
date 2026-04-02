@@ -221,6 +221,8 @@ export interface BatchJobConfig {
   filterTag?: string;
   maxResources?: number;
   onProgress?: (processed: number, total: number, currentTitle: string) => void;
+  /** Called after each resource finishes (success, fail, or skip) — use for incremental UI updates */
+  onResourceComplete?: (resourceId: string, outcome: 'success' | 'failed' | 'skipped', index: number, total: number) => void;
   signal?: AbortSignal;
 }
 
