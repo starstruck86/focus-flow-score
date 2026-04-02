@@ -775,6 +775,7 @@ export function ResourceManager() {
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
                     queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
                     console.log('[Extract] Result:', {
                       resourceId: resource.id,
                       title: resource.title,
@@ -821,6 +822,7 @@ export function ResourceManager() {
                       queryClient.invalidateQueries({ queryKey: ['resources'] });
                       queryClient.invalidateQueries({ queryKey: ['all-resources'] });
                       queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                      queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
                     } else {
                       const reason = result.diagnostics?.result as string || 'unknown';
                       const reasonLabels: Record<string, string> = {
@@ -887,6 +889,7 @@ export function ResourceManager() {
                       queryClient.invalidateQueries({ queryKey: ['resources'] });
                       queryClient.invalidateQueries({ queryKey: ['incoming-queue'] });
                       queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+                      queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
 
                       if (result.error) {
                         console.error('[Enrich] Edge function error:', result.error);
