@@ -309,6 +309,9 @@ export function useRunPipeline() {
 
           setResult({ ...totalResult! });
 
+          // Invalidate queries after each iteration so UI reflects incremental progress
+          invalidateAll();
+
           if (data.remaining === 0 || data.total_processed === 0) {
             totalResult!.converged = true;
             await supabase.from('pipeline_runs' as any).update({
