@@ -1,6 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PDFDocument } from "https://esm.sh/pdf-lib@1.17.1";
 
+const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -11,6 +13,7 @@ const corsHeaders = {
 const MIN_CHARS_SUCCESS = 100;
 const MIN_LETTERS = 30;
 const PAGES_PER_CHUNK = 50;
+const BASE64_CHUNK_SIZE = 0x8000;
 
 // ── MIME / extension mapping ──────────────────────────────
 type FileCategory = "pdf" | "text" | "unsupported";
@@ -46,15 +49,57 @@ async function splitPdfIntoChunks(pdfBytes: Uint8Array, pagesPerChunk: number): 
   return chunks;
 }
 
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = "";
+
+  for (let i = 0; i < bytes.length; i += BASE64_CHUNK_SIZE) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + BASE64_CHUNK_SIZE));
+  }
+
+  return btoa(binary);
+}
+
+function extractTextFromAiResponse(result: any): string {
+  const content = result?.choices?.[0]?.message?.content;
+
+  if (typeof content === "string") {
+    return content.trim();
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (typeof part?.text === "string") return part.text;
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+
+  return "";
+}
+
+function extractBasicPdfStreams(fileBytes: Uint8Array): string {
+  const rawText = new TextDecoder("utf-8", { fatal: false }).decode(fileBytes);
+  const streams = rawText.match(/stream\r?\n([\s\S]*?)\r?\nendstream/g) || [];
+
+  return streams
+    .map((stream) => stream.replace(/stream\r?\n/, "").replace(/\r?\nendstream/, ""))
+    .join("\n")
+    .trim();
+}
+
 // ── Extract text from a single PDF chunk via Gemini Vision ──
 async function extractChunkViaVision(
   chunkBytes: Uint8Array,
   apiKey: string,
   chunkLabel: string,
 ): Promise<string> {
-  const base64 = btoa(String.fromCharCode(...chunkBytes));
+  const base64 = uint8ArrayToBase64(chunkBytes);
 
-  const resp = await fetch("https://ai.lovable.dev/api/chat", {
+  const resp = await fetch(AI_GATEWAY_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -70,6 +115,7 @@ async function extractChunkViaVision(
         ],
       }],
       temperature: 0.1,
+      max_tokens: 12000,
     }),
   });
 
@@ -80,7 +126,7 @@ async function extractChunkViaVision(
   }
 
   const result = await resp.json();
-  return result?.choices?.[0]?.message?.content || "";
+  return extractTextFromAiResponse(result);
 }
 
 // ── Quality check ─────────────────────────────────────────
@@ -190,12 +236,13 @@ Deno.serve(async (req) => {
       extractedText = new TextDecoder().decode(fileBytes);
       parserUsed = "text_decoder";
     } else if (category === "pdf") {
+      const basicPdfText = extractBasicPdfStreams(fileBytes);
+      diagnostics.basic_pdf_stream_length = basicPdfText.length;
+
       const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
       if (!lovableApiKey) {
         // Fallback: basic stream extraction
-        const rawText = new TextDecoder("utf-8", { fatal: false }).decode(fileBytes);
-        const streams = rawText.match(/stream\r?\n([\s\S]*?)\r?\nendstream/g) || [];
-        extractedText = streams.map(s => s.replace(/stream\r?\n/, "").replace(/\r?\nendstream/, "")).join("\n");
+        extractedText = basicPdfText;
         parserUsed = "basic_pdf_stream";
       } else {
         try {
@@ -218,8 +265,15 @@ Deno.serve(async (req) => {
           extractedText = chunkTexts.join("\n\n");
           parserUsed = totalChunks > 1 ? `gemini_vision_pdf_chunked_${totalChunks}` : "gemini_vision_pdf";
           ocrAttempted = true;
+
+          if (!extractedText.trim() && basicPdfText) {
+            extractedText = basicPdfText;
+            parserUsed = "basic_pdf_stream_fallback";
+          }
         } catch (visionErr) {
           console.error("[parse-uploaded-file] Vision extraction error:", visionErr);
+          diagnostics.vision_error = visionErr instanceof Error ? visionErr.message : String(visionErr);
+          extractedText = basicPdfText;
           parserUsed = "vision_exception";
         }
       }
