@@ -327,6 +327,8 @@ Deno.serve(async (req) => {
     const token = authHeader.replace('Bearer ', '');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
+    console.log(`[extract-tactics] Auth check: token length=${token.length}, SRK length=${serviceRoleKey?.length ?? 0}, match=${token === serviceRoleKey}`);
+    
     // Allow service-role key for server-side batch operations
     const isServiceRole = token === serviceRoleKey;
     
