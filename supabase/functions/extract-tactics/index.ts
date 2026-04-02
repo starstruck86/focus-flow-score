@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-trace-id',
 };
 
-const SYSTEM_PROMPT = `You are an elite sales execution coach. Extract TACTICAL PLAYS from content.
+const BASE_SYSTEM_PROMPT = `You are an elite sales execution coach. Extract TACTICAL PLAYS from content.
 
 A Knowledge Item is a PLAY — a structured, situational, reusable tactical entry that tells a rep exactly when, why, and how to execute. Every play must be FULLY ATTRIBUTED to its source.
 
@@ -42,30 +42,88 @@ QUALITY GATES — REJECT any item that:
 - Has no clear source attribution
 - Could apply to any situation (not situational enough)
 
-Return 2-4 high-quality tactical plays as a JSON array. Fewer is better — quality over quantity.
+Return high-quality tactical plays as a JSON array. Quality over quantity.
 Only return the JSON array, no markdown fences.`;
 
-const CHUNK_SIZE = 8000;
-const CHUNK_OVERLAP = 500;
+const TRANSCRIPT_ADDENDUM = `
+
+TRANSCRIPT-SPECIFIC INSTRUCTIONS:
+You are extracting from a podcast/interview transcript. The guest is sharing hard-won tactical knowledge. Your job is to find the SPECIFIC TECHNIQUES, FRAMEWORKS, and ACTIONABLE METHODS they describe — not summaries of conversation topics.
+
+GOOD plays from transcripts:
+- A specific discovery question technique the guest describes with examples
+- A concrete negotiation move with exact phrasing they recommend
+- A step-by-step framework they walk through in detail
+
+BAD plays from transcripts (REJECT these):
+- "The guest discussed the importance of discovery" — this is a topic summary, not a play
+- Vague advice like "build rapport with buyers" without specific how-to
+- Anything where the source_excerpt is just a speaker transition or filler
+
+For each section of transcript, ask: "Could a sales rep USE this in their next call?" If the answer is vague, skip it.
+Extract 4-8 plays from the full transcript. Prioritize DEPTH over breadth — fewer, richer plays.`;
+
+const DOCUMENT_ITEM_TARGET = '2-4';
+const TRANSCRIPT_ITEM_TARGET = '4-8';
+
+// Chunking config — transcripts use MUCH larger chunks aligned to section headings
+const DOC_CHUNK_SIZE = 8000;
+const DOC_CHUNK_OVERLAP = 500;
+const TRANSCRIPT_CHUNK_SIZE = 25000; // ~15 min of transcript per chunk
+const TRANSCRIPT_CHUNK_OVERLAP = 1500;
 const MAX_KIS_PER_RESOURCE = 15;
-const SINGLE_PASS_THRESHOLD = 12000;
-const PRIMARY_MAX_TOKENS = 12000;
-const RETRY_MAX_TOKENS = 12000;
+const DOC_SINGLE_PASS_THRESHOLD = 12000;
+const TRANSCRIPT_SINGLE_PASS_THRESHOLD = 30000; // Single-pass for episodes < ~20 min
+const MAX_TOKENS = 16384;
 
-/** Split content into overlapping chunks on paragraph boundaries */
-function chunkContent(content: string): string[] {
-  if (content.length <= SINGLE_PASS_THRESHOLD) return [content];
+function isTranscriptType(resourceType?: string): boolean {
+  return ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
+    (resourceType || '').toLowerCase()
+  );
+}
 
+/** Split transcript content on ## section headings for natural boundaries */
+function chunkTranscriptBySections(content: string, maxChunk: number, overlap: number): string[] {
+  // Split on markdown section headings
+  const sections = content.split(/(?=^## )/m);
+  const chunks: string[] = [];
+  let current = '';
+
+  for (const section of sections) {
+    if (!section.trim()) continue;
+
+    if (current.length + section.length > maxChunk && current.length > 2000) {
+      chunks.push(current);
+      // Overlap: include the tail of the previous chunk
+      const overlapText = current.slice(-overlap);
+      current = overlapText + '\n\n' + section;
+    } else {
+      current += (current ? '\n\n' : '') + section;
+    }
+  }
+  if (current.trim().length > 500) {
+    chunks.push(current);
+  }
+
+  // If section-based splitting produced only 1 chunk or no sections found, fall back to paragraph splitting
+  if (chunks.length <= 1 && content.length > maxChunk) {
+    return chunkByParagraphs(content, maxChunk, overlap);
+  }
+
+  return chunks.length > 0 ? chunks : [content];
+}
+
+/** Fallback paragraph-based chunking for non-sectioned content */
+function chunkByParagraphs(content: string, maxChunk: number, overlap: number): string[] {
   const paragraphs = content.split(/\n\n+/).filter(p => p.trim().length > 20);
   const chunks: string[] = [];
   let current = '';
   let overlapBuffer = '';
 
   for (const para of paragraphs) {
-    if (current.length + para.length > CHUNK_SIZE && current.length > 0) {
+    if (current.length + para.length > maxChunk && current.length > 0) {
       chunks.push(current);
-      // Start next chunk with overlap from end of current
-      overlapBuffer = current.slice(-CHUNK_OVERLAP);
+      overlapBuffer = current.slice(-overlap);
       current = overlapBuffer + '\n\n' + para;
     } else {
       current += (current ? '\n\n' : '') + para;
@@ -76,6 +134,16 @@ function chunkContent(content: string): string[] {
   }
 
   return chunks;
+}
+
+/** Route to the right chunking strategy */
+function chunkContent(content: string, isTranscript: boolean): string[] {
+  if (isTranscript) {
+    if (content.length <= TRANSCRIPT_SINGLE_PASS_THRESHOLD) return [content];
+    return chunkTranscriptBySections(content, TRANSCRIPT_CHUNK_SIZE, TRANSCRIPT_CHUNK_OVERLAP);
+  }
+  if (content.length <= DOC_SINGLE_PASS_THRESHOLD) return [content];
+  return chunkByParagraphs(content, DOC_CHUNK_SIZE, DOC_CHUNK_OVERLAP);
 }
 
 async function requestExtraction(
@@ -102,9 +170,7 @@ async function requestExtraction(
   });
 
   if (!res.ok) {
-    const status = res.status;
-    // On 429 retry once after 2s
-    if (status === 429) {
+    if (res.status === 429) {
       await new Promise(r => setTimeout(r, 2000));
       const retry = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
@@ -125,7 +191,7 @@ async function requestExtraction(
       if (!retry.ok) throw new Error(`AI error after retry: ${retry.status}`);
       return retry.json();
     }
-    throw new Error(`AI error: ${status}`);
+    throw new Error(`AI error: ${res.status}`);
   }
 
   return res.json();
@@ -156,21 +222,21 @@ function isTruncatedResponse(result: any): boolean {
   return finishReason === 'length' || finishReason === 'MAX_TOKENS';
 }
 
-/** Call AI gateway for a single chunk */
 async function extractFromChunk(
   apiKey: string,
   systemPrompt: string,
   userPrompt: string,
 ): Promise<any[]> {
-  const primaryResult = await requestExtraction(apiKey, systemPrompt, userPrompt, PRIMARY_MAX_TOKENS);
+  const primaryResult = await requestExtraction(apiKey, systemPrompt, userPrompt, MAX_TOKENS);
   let items = parseAiResponse(primaryResult);
 
   if (items.length > 0 && !isTruncatedResponse(primaryResult)) {
     return items;
   }
 
+  // Retry with reduced output request
   const retryPrompt = `${userPrompt}\n\nIMPORTANT: Return exactly 2 tactical plays maximum. Keep every field complete but concise, and output valid JSON only.`;
-  const retryResult = await requestExtraction(apiKey, systemPrompt, retryPrompt, RETRY_MAX_TOKENS);
+  const retryResult = await requestExtraction(apiKey, systemPrompt, retryPrompt, MAX_TOKENS);
   const retryItems = parseAiResponse(retryResult);
 
   if (retryItems.length > 0) {
@@ -191,12 +257,10 @@ function deduplicateItems(items: any[]): any[] {
     let isDupe = false;
     for (let i = 0; i < result.length; i++) {
       const existingWords = words(result[i].title || '');
-      // Check containment or >60% word overlap
       const intersection = [...itemWords].filter(w => existingWords.has(w));
       const overlapRatio = intersection.length / Math.min(itemWords.size, existingWords.size);
       if (overlapRatio > 0.6 || normalize(item.title).includes(normalize(result[i].title)) || normalize(result[i].title).includes(normalize(item.title))) {
         isDupe = true;
-        // Keep the one with longer source_excerpt
         if ((item.source_excerpt?.length || 0) > (result[i].source_excerpt?.length || 0)) {
           result[i] = item;
         }
@@ -208,8 +272,8 @@ function deduplicateItems(items: any[]): any[] {
   return result;
 }
 
-/** Validate a single extracted item */
-function validateItem(item: any): boolean {
+/** Validate a single extracted item — stricter for transcripts */
+function validateItem(item: any, isTranscript: boolean): boolean {
   const MIN_FIELD_LEN = 40;
   const HTML_PATTERN = /<[a-z][\s\S]*>/i;
 
@@ -229,6 +293,20 @@ function validateItem(item: any): boolean {
 
   const allText = [item.title, item.tactic_summary, item.macro_situation, item.how_to_execute, example].join(' ');
   if (HTML_PATTERN.test(allText)) return false;
+
+  // Transcript-specific: title must be verb-led, not a sentence fragment
+  if (isTranscript) {
+    const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|de-escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|expose|surface|extract|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|invert|plant|seed|earn|secure|protect|defend|block|pre-empt|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|slow|speed|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i;
+    if (!verbLedPattern.test(item.title.trim())) {
+      return false;
+    }
+    // Reject if tactic_summary starts the same as title (copy-paste fragment)
+    if (item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 25))) {
+      return false;
+    }
+    // Reject if how_to_execute is too short for a transcript-derived play
+    if (item.how_to_execute.length < 80) return false;
+  }
 
   return true;
 }
@@ -274,14 +352,20 @@ Deno.serve(async (req) => {
       });
     }
 
+    const isTranscript = isTranscriptType(resourceType);
+    const systemPrompt = isTranscript
+      ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM
+      : BASE_SYSTEM_PROMPT;
+    const itemTarget = isTranscript ? TRANSCRIPT_ITEM_TARGET : DOCUMENT_ITEM_TARGET;
+
     // ── Chunked extraction ──
-    const chunks = chunkContent(content);
+    const chunks = chunkContent(content, isTranscript);
     const totalChunks = chunks.length;
     let processedChunks = 0;
     let failedChunks = 0;
     const allItems: any[] = [];
 
-    console.log(`[extract-tactics] Content: ${content.length} chars → ${totalChunks} chunk(s)`);
+    console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} mode | Content: ${content.length} chars → ${totalChunks} chunk(s)`);
 
     for (let i = 0; i < chunks.length; i++) {
       const chunkLabel = totalChunks > 1 ? `Chunk ${i + 1} of ${totalChunks}` : '';
@@ -289,13 +373,17 @@ Deno.serve(async (req) => {
         ? `~${Math.round((i / totalChunks) * 100)}% through the content`
         : '';
 
+      // Extract section headings present in this chunk for context
+      const sectionHeadings = (chunks[i].match(/^## .+$/gm) || []).map(h => h.replace('## ', '')).join(', ');
+
       const userPrompt = `Extract structured tactical plays from this ${resourceType || 'document'}:
 
 Title: ${title}
 ${description ? `Description: ${description}` : ''}
 Tags: ${(tags || []).join(', ')}
 ${chunkLabel ? `\nPosition: ${chunkLabel} (${approxPosition})` : ''}
-${totalChunks > 1 ? `\nIMPORTANT: Extract 2-4 plays from THIS section only. Do not repeat plays from other sections.` : ''}
+${sectionHeadings ? `\nSections covered: ${sectionHeadings}` : ''}
+${totalChunks > 1 ? `\nIMPORTANT: Extract ${itemTarget} plays from THIS section only. Do not repeat plays from other sections.` : `\nExtract ${itemTarget} plays total. Quality over quantity.`}
 
 Content:
 ${chunks[i]}
@@ -303,8 +391,7 @@ ${chunks[i]}
 Remember: every play MUST include source_excerpt (verbatim quote), source_location, framework, and who. No play without attribution.`;
 
       try {
-        const chunkItems = await extractFromChunk(LOVABLE_API_KEY, SYSTEM_PROMPT, userPrompt);
-        // Tag items with chunk position
+        const chunkItems = await extractFromChunk(LOVABLE_API_KEY, systemPrompt, userPrompt);
         for (const item of chunkItems) {
           if (totalChunks > 1 && item.source_location) {
             item.source_location = `${chunkLabel} — ${item.source_location}`;
@@ -322,9 +409,9 @@ Remember: every play MUST include source_excerpt (verbatim quote), source_locati
     // Deduplicate across chunks
     const deduped = deduplicateItems(allItems);
 
-    // Validate and normalize
+    // Validate and normalize — using transcript-aware validation
     const validated = deduped
-      .filter(validateItem)
+      .filter(item => validateItem(item, isTranscript))
       .slice(0, MAX_KIS_PER_RESOURCE)
       .map((item: any) => ({
         ...item,
@@ -335,7 +422,7 @@ Remember: every play MUST include source_excerpt (verbatim quote), source_locati
         source_title: title,
       }));
 
-    console.log(`[extract-tactics] Final: ${validated.length} validated items from ${processedChunks}/${totalChunks} chunks`);
+    console.log(`[extract-tactics] Final: ${validated.length} validated from ${allItems.length} raw, ${processedChunks}/${totalChunks} chunks`);
 
     return new Response(JSON.stringify({
       items: validated,
