@@ -150,7 +150,7 @@ async function fetchAllKnowledgeItems(): Promise<KIRecord[]> {
 
     if (error) throw error;
 
-    const batch = (data ?? []) as KIRecord[];
+    const batch = ((data ?? []) as unknown) as KIRecord[];
     rows.push(...batch);
 
     if (batch.length < PAGE_SIZE) break;
