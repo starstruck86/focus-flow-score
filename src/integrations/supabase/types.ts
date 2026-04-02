@@ -3830,6 +3830,8 @@ export type Database = {
           original_url: string | null
           pipeline_queue: string | null
           platform_status: string | null
+          re_extract_at: string | null
+          re_extract_status: string
           recovery_attempt_count: number | null
           recovery_queue_bucket: string | null
           recovery_reason: string | null
@@ -3909,6 +3911,8 @@ export type Database = {
           original_url?: string | null
           pipeline_queue?: string | null
           platform_status?: string | null
+          re_extract_at?: string | null
+          re_extract_status?: string
           recovery_attempt_count?: number | null
           recovery_queue_bucket?: string | null
           recovery_reason?: string | null
@@ -3988,6 +3992,8 @@ export type Database = {
           original_url?: string | null
           pipeline_queue?: string | null
           platform_status?: string | null
+          re_extract_at?: string | null
+          re_extract_status?: string
           recovery_attempt_count?: number | null
           recovery_queue_bucket?: string | null
           recovery_reason?: string | null

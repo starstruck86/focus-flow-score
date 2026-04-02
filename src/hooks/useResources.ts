@@ -68,6 +68,8 @@ export type Resource = {
   access_type?: string | null;
   content_classification?: string | null;
   extraction_method?: string | null;
+  re_extract_status?: string;
+  re_extract_at?: string | null;
 };
 
 export type ResourceVersion = {
