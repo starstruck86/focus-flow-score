@@ -188,6 +188,20 @@ export async function autoOperationalizeResource(
            t.dimension === 'competitor' || t.dimension === 'product';
   });
 
+  // For transcript/podcast/audio resources with sales content, ensure baseline tags
+  const isTranscriptType = ['transcript', 'podcast', 'audio'].includes(r.resource_type ?? '');
+  if (isTranscriptType) {
+    const hasSalesContent = /sales|selling|prospect|buyer|deal|pipeline|objection|discovery|demo|close|negotiat|cold call|outbound/i.test(text);
+    const hasSkillTag = [...existingTags, ...newTags.map(t => `${t.dimension}:${t.value}`)].some(t => t.startsWith('skill:'));
+    const hasContextTag = [...existingTags, ...newTags.map(t => `${t.dimension}:${t.value}`)].some(t => t.startsWith('context:'));
+    if (hasSalesContent && !hasSkillTag) {
+      newTags.push({ dimension: 'skill', value: 'sales', confidence: 0.7, source: 'inferred' } as any);
+    }
+    if (!hasContextTag) {
+      newTags.push({ dimension: 'context', value: 'coaching', confidence: 0.6, source: 'inferred' } as any);
+    }
+  }
+
   if (newTags.length > 0) {
     const merged = mergeTags(existingTags, newTags);
     await supabase.from('resources').update({
