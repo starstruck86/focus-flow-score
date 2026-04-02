@@ -266,6 +266,21 @@ export async function autoOperationalizeResource(
     // Always prefer LLM extraction — produces structured KIs with framework, attribution, etc.
     // Heuristic sentence-splitting produces low-quality transcript fragments for all resource types.
     let finalExtracted: any[] = [];
+
+    // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
+    // (indicated by ## section headings). Raw transcripts produce garbage KIs.
+    const isAudioType = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
+      (r.resource_type ?? '').toLowerCase()
+    );
+    const headingCount = isAudioType ? (contentForExtraction.match(/^## /gm)?.length ?? 0) : 999;
+    const transcriptReady = !isAudioType || headingCount >= 2;
+
+    if (!transcriptReady) {
+      log.warn('Skipping extraction: transcript not preprocessed', { resourceId, headingCount });
+      needsReview = true;
+      reason = 'Transcript needs preprocessing before KI extraction (no ## section headings found)';
+      return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason);
+    }
     
     if (contentForExtraction.length >= 100) {
       log.info('Running LLM extraction', { resourceId, resourceType: r.resource_type });
@@ -277,10 +292,6 @@ export async function autoOperationalizeResource(
       }
     }
 
-    // Heuristic fallback only for non-audio/podcast types — heuristic produces garbage fragments from transcripts
-    const isAudioType = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
-      (r.resource_type ?? '').toLowerCase()
-    );
     if (finalExtracted.length === 0 && !isAudioType) {
       finalExtracted = extractKnowledgeHeuristic(source);
       log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length });

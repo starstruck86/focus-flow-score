@@ -492,14 +492,31 @@ export async function extractKnowledgeLLMFallback(
   try {
     log.info('Running LLM fallback extraction', { resourceId: source.resourceId, title: source.title });
 
-    const isTranscriptResource = ['transcript', 'podcast', 'audio'].includes(source.resourceType);
-    const contentCap = isTranscriptResource ? 60000 : 15000;
+    const isTranscriptResource = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
+      (source.resourceType || '').toLowerCase()
+    );
 
+    // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
+    // (indicated by ## section headings). Raw transcripts produce garbage KIs.
+    if (isTranscriptResource) {
+      const headingCount = (source.content || '').match(/^## /gm)?.length ?? 0;
+      if (headingCount < 2) {
+        log.warn('Blocked KI extraction: transcript not preprocessed (missing ## headings)', {
+          resourceId: source.resourceId,
+          headingCount,
+          contentLength: source.content?.length ?? 0,
+        });
+        return [];
+      }
+    }
+
+    // No client-side content cap — server-side extract-tactics handles chunking
+    // for arbitrarily long transcripts via section-aware splitting
     const result = await trackedInvoke<{ items?: any[] }>('extract-tactics', {
       body: {
         resourceId: source.resourceId,
         title: source.title,
-        content: source.content?.slice(0, contentCap),
+        content: source.content,
         description: source.description,
         tags: source.tags,
         resourceType: source.resourceType,
