@@ -111,7 +111,7 @@ export function classifyKnowledgeItem(item: any, allItems: any[]): ClassifiedIte
     return { ...base, classification: 'protected', reason: 'User-edited — will not auto-modify' };
   }
 
-  // Archive: duplicates
+  // Archive: exact duplicates from same resource
   if (isDuplicate(item, allItems)) {
     return { ...base, classification: 'archive_or_delete', reason: 'Duplicate of another item from same resource' };
   }
@@ -121,17 +121,7 @@ export function classifyKnowledgeItem(item: any, allItems: any[]): ClassifiedIte
   const hasContexts = Array.isArray(item.applies_to_contexts) && item.applies_to_contexts.length > 0;
   const conf = item.confidence_score ?? 0;
 
-  // Keep as-is: already active and well-structured
-  if (item.active && hasChapter && summary.length >= 20 && hasContexts && isActionable(item)) {
-    return { ...base, classification: 'keep_as_is', reason: 'Active, structured, and actionable' };
-  }
-
-  // Activate now: meets all criteria but inactive
-  if (!item.active && conf >= 0.55 && hasChapter && summary.length >= 20 && hasContexts && isActionable(item) && !isWeakItem(item)) {
-    return { ...base, classification: 'activate_now', reason: `Meets activation criteria (conf=${(conf * 100).toFixed(0)}%) but inactive` };
-  }
-
-  // Weak/summary-like: rewrite from source if possible
+  // Truly weak: summary-like document descriptions, not tactics
   if (isWeakItem(item)) {
     if (item.source_resource_id) {
       return { ...base, classification: 'rewrite_from_source', reason: 'Summary-like — needs re-extraction from source resource' };
@@ -139,17 +129,24 @@ export function classifyKnowledgeItem(item: any, allItems: any[]): ClassifiedIte
     return { ...base, classification: 'archive_or_delete', reason: 'Weak/summary-like and no source resource to re-extract from' };
   }
 
-  // Low confidence and not actionable
-  if (conf < 0.3 && !isActionable(item)) {
-    if (item.source_resource_id) {
-      return { ...base, classification: 'rewrite_from_source', reason: 'Low confidence and not actionable — re-extract from source' };
-    }
-    return { ...base, classification: 'archive_or_delete', reason: 'Low confidence, not actionable, no source' };
+  // Very low confidence AND very short summary — archive
+  if (conf < 0.2 && summary.length < 20) {
+    return { ...base, classification: 'archive_or_delete', reason: 'Very low confidence with minimal content' };
   }
 
-  // Missing required fields but has source
-  if ((!item.when_to_use && !item.example_usage) && item.source_resource_id) {
-    return { ...base, classification: 'rewrite_from_source', reason: 'Missing when_to_use and example_usage — re-extract' };
+  // Keep as-is: already active and has reasonable content
+  if (item.active && summary.length >= 15) {
+    return { ...base, classification: 'keep_as_is', reason: 'Active with substantive content' };
+  }
+
+  // Activate now: meets reasonable criteria but inactive
+  if (!item.active && conf >= 0.45 && summary.length >= 15 && !isWeakItem(item)) {
+    return { ...base, classification: 'activate_now', reason: `Meets activation criteria (conf=${(conf * 100).toFixed(0)}%) but inactive` };
+  }
+
+  // Low confidence with source — rewrite opportunity
+  if (conf < 0.3 && item.source_resource_id) {
+    return { ...base, classification: 'rewrite_from_source', reason: 'Low confidence — re-extract from source' };
   }
 
   // Default: keep as-is if nothing else matches
