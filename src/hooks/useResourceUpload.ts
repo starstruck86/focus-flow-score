@@ -298,15 +298,35 @@ export function useAddUrlResource() {
     }) => {
       if (!user) throw new Error('Not authenticated');
 
-      // === DEDUP: check for existing resource with same file_url ===
-      const { data: existingRows } = await supabase
+      const normalizeResourceUrl = (input: string) => {
+        const trimmed = input.trim();
+        if (!trimmed) return '';
+
+        const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+        try {
+          const parsed = new URL(withProtocol);
+          ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'msclkid', 'ref', 'source']
+            .forEach((param) => parsed.searchParams.delete(param));
+          return parsed.toString();
+        } catch {
+          return withProtocol;
+        }
+      };
+
+      const normalizedUrl = normalizeResourceUrl(url);
+      const candidateUrls = Array.from(new Set([url, normalizedUrl].map((value) => value.trim()).filter(Boolean)));
+
+      const { data: existingRows, error: existingError } = await supabase
         .from('resources')
-        .select('id')
-        .eq('file_url', url)
-        .limit(1);
+        .select('id, file_url, created_at, content_status')
+        .eq('user_id', user.id)
+        .in('file_url', candidateUrls)
+        .order('created_at', { ascending: true });
+      if (existingError) throw existingError;
 
       if (existingRows && existingRows.length > 0) {
-        const existingId = existingRows[0].id;
+        const canonical = existingRows[0];
         const contentToUpdate = classification.scraped_content && classification.scraped_content.length > 50
           ? classification.scraped_content
           : undefined;
@@ -317,12 +337,36 @@ export function useAddUrlResource() {
           tags: classification.tags,
           updated_at: new Date().toISOString(),
         };
-        if (contentToUpdate) {
-          updatePayload.content = contentToUpdate;
-          updatePayload.content_status = 'enriched';
+
+        if (normalizedUrl && canonical.file_url !== normalizedUrl) {
+          updatePayload.file_url = normalizedUrl;
         }
-        await supabase.from('resources').update(updatePayload as any).eq('id', existingId);
-        return { id: existingId, ...updatePayload } as any;
+
+        const preserveTranscriptContent = canonical.content_status === 'transcript';
+        if (contentToUpdate && !preserveTranscriptContent) {
+          updatePayload.content = contentToUpdate;
+          if (!canonical.content_status || canonical.content_status === 'placeholder' || canonical.content_status === 'enriched') {
+            updatePayload.content_status = 'enriched';
+          }
+        }
+
+        await supabase.from('resources').update(updatePayload as any).eq('id', canonical.id);
+
+        if (existingRows.length > 1) {
+          console.warn('[ResourceDedup] Multiple resources matched URL, reusing oldest canonical row', {
+            canonicalId: canonical.id,
+            duplicateIds: existingRows.slice(1).map((row) => row.id),
+            url,
+            normalizedUrl,
+          });
+        }
+
+        return {
+          id: canonical.id,
+          file_url: updatePayload.file_url ?? canonical.file_url,
+          content_status: updatePayload.content_status ?? canonical.content_status,
+          ...updatePayload,
+        } as any;
       }
 
       let finalFolderId = folderId;
@@ -334,9 +378,10 @@ export function useAddUrlResource() {
         );
       }
 
+      const storedUrl = normalizedUrl || url;
       const contentToStore = classification.scraped_content && classification.scraped_content.length > 50
         ? classification.scraped_content
-        : `[External Link: ${url}]`;
+        : `[External Link: ${storedUrl}]`;
       const contentStatus = contentToStore.startsWith('[External Link:') ? 'placeholder' : 'enriched';
 
       const { data: resource, error } = await supabase
@@ -348,7 +393,7 @@ export function useAddUrlResource() {
           resource_type: classification.resource_type,
           tags: classification.tags,
           folder_id: finalFolderId,
-          file_url: url,
+          file_url: storedUrl,
           content: contentToStore,
           content_status: contentStatus,
         } as any)
@@ -365,7 +410,6 @@ export function useAddUrlResource() {
         change_summary: 'Initial link',
       });
 
-      // Fire-and-forget background deep enrich if still placeholder
       if (contentStatus === 'placeholder') {
         invokeEnrichResource<any>({ resource_id: resource.id }).catch(() => {});
       }
@@ -376,7 +420,6 @@ export function useAddUrlResource() {
       qc.invalidateQueries({ queryKey: ['resources'] });
       qc.invalidateQueries({ queryKey: ['resource-folders'] });
       toast.success('Link added and classified');
-      // Fire-and-forget auto-operationalization for URL resources with content
       if (data?.id) {
         autoOperationalizeResource(data.id).then(result => {
           qc.invalidateQueries({ queryKey: ['knowledge-items'] });
