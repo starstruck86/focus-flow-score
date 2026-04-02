@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/collapsible';
 import {
   ChevronDown, ChevronRight, CheckCircle2, Archive, RotateCcw, AlertTriangle,
-  ThumbsUp, RefreshCw, FolderMinus,
+  ThumbsUp, RefreshCw, FolderMinus, Loader2, XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -21,6 +21,7 @@ import {
   type ReviewStatus,
 } from '@/hooks/useKnowledgeReview';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
+import { useReExtractResource } from '@/hooks/useReExtractResource';
 import { toast } from 'sonner';
 
 function ReviewBadge({ status }: { status: ReviewStatus }) {
@@ -74,6 +75,7 @@ function KIRow({ ki }: { ki: KnowledgeItem }) {
 export function LowYieldReviewQueue() {
   const allLowYield = useLowYieldResources();
   const bulkReview = useBulkSetReviewStatus();
+  const { reExtract, getStatus } = useReExtractResource();
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [showReviewed, setShowReviewed] = useState(false);
 
@@ -98,10 +100,6 @@ export function LowYieldReviewQueue() {
   const handleArchiveResource = (kis: KnowledgeItem[]) => {
     const ids = kis.map(k => k.id);
     bulkReview.mutate({ ids, status: 'archived' });
-  };
-
-  const handleReExtract = () => {
-    toast.info('Re-extraction queued — use the Audit tab to trigger pipeline');
   };
 
   if (allLowYield.length === 0) {
@@ -139,11 +137,22 @@ export function LowYieldReviewQueue() {
         )}
         {lowYield.map(({ resource, kis, unreviewedCount }) => {
           const isOpen = openIds.has(resource.id);
+          const extractStatus = getStatus(resource.id);
+          const isExtracting = extractStatus === 'running';
           return (
             <Collapsible key={resource.id} open={isOpen} onOpenChange={() => toggle(resource.id)}>
               <CollapsibleTrigger className="flex items-center gap-2 w-full text-left p-2 rounded-md hover:bg-muted/50 transition-colors">
                 {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
                 <span className="text-xs font-medium text-foreground flex-1 truncate">{resource.title}</span>
+                {extractStatus === 'running' && (
+                  <Badge variant="outline" className="text-[10px] bg-accent text-accent-foreground"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Extracting…</Badge>
+                )}
+                {extractStatus === 'succeeded' && (
+                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary"><CheckCircle2 className="h-3 w-3 mr-1" />Done</Badge>
+                )}
+                {extractStatus === 'failed' && (
+                  <Badge variant="outline" className="text-[10px] bg-destructive/10 text-destructive"><XCircle className="h-3 w-3 mr-1" />Failed</Badge>
+                )}
                 <Badge variant="outline" className="text-[10px]">{kis.length} KI{kis.length !== 1 ? 's' : ''}</Badge>
                 {unreviewedCount > 0 && (
                   <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground">{unreviewedCount} unreviewed</Badge>
@@ -157,8 +166,11 @@ export function LowYieldReviewQueue() {
                     <ThumbsUp className="h-3 w-3 mr-1" /> Keep As-Is
                   </Button>
                   <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]"
-                    onClick={handleReExtract}>
-                    <RefreshCw className="h-3 w-3 mr-1" /> Re-Extract
+                    disabled={isExtracting}
+                    onClick={() => reExtract(resource.id, resource.title)}>
+                    {isExtracting
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Extracting…</>
+                      : <><RefreshCw className="h-3 w-3 mr-1" /> Re-Extract</>}
                   </Button>
                   <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]"
                     onClick={() => handleArchiveResource(kis)}>
