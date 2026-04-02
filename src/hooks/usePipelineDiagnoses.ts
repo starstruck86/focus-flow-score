@@ -151,6 +151,7 @@ export function useRunPipeline() {
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
     qc.invalidateQueries({ queryKey: ['resources'] });
     qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    qc.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
   }, [qc]);
 
   /** Retry a single resource (standard mode) */

@@ -156,6 +156,7 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
       queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
       queryClient.invalidateQueries({ queryKey: ['resources'] });
       queryClient.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+      queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
       lastInvalidateRef.current = now;
     }
   }, [queryClient]);
@@ -164,6 +165,7 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
     queryClient.invalidateQueries({ queryKey: ['resources'] });
     queryClient.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
     lastInvalidateRef.current = Date.now();
   }, [queryClient]);
 

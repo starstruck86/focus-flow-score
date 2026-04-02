@@ -31,6 +31,7 @@ export function useExtractionPipeline() {
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
     qc.invalidateQueries({ queryKey: ['resources'] });
     qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    qc.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
     lastInvalidateRef.current = Date.now();
   }, [qc]);
 
@@ -83,6 +84,7 @@ export function useExtractionPipeline() {
 
       setLastResult(result);
       invalidate(); // Final full invalidation
+      await loadStats(); // Refresh dashboard stats
 
       if (result.succeeded > 0) {
         toast.success(`Extracted ${result.succeeded} of ${result.total} resources`);

@@ -99,6 +99,7 @@ export function useStartPipeline() {
         queryClient.invalidateQueries({ queryKey: ['resource-jobs', resourceId] });
         queryClient.invalidateQueries({ queryKey: ['resources'] });
         queryClient.invalidateQueries({ queryKey: ['resource-digests'] });
+        queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
         if (result.success) {
           toast.success('Resource processing completed');
         } else {

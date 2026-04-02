@@ -24,6 +24,7 @@ export function useAutoOperationalize() {
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
     qc.invalidateQueries({ queryKey: ['resources'] });
+    qc.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
   }, [qc]);
 
   const operationalize = useCallback(async (resourceId: string, showToast = true): Promise<AutoOperationalizeResult> => {
