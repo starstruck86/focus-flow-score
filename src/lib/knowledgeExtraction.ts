@@ -606,8 +606,14 @@ export async function extractKnowledgeAI(
     }
   }
 
-  const heuristicItems = extractKnowledgeHeuristic(source, existingItems);
-  if (heuristicItems.length > 0) return heuristicItems;
+  // Heuristic fallback only for non-audio types — audio/podcast heuristic produces garbage
+  const isAudioType = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
+    source.resourceType.toLowerCase()
+  );
+  if (!isAudioType) {
+    const heuristicItems = extractKnowledgeHeuristic(source, existingItems);
+    if (heuristicItems.length > 0) return heuristicItems;
+  }
 
   log.warn('Both LLM and heuristic extraction returned 0 items', {
     resourceId: source.resourceId,
