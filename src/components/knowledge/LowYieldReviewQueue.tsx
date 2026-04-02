@@ -21,6 +21,7 @@ import {
   type ReviewStatus,
 } from '@/hooks/useKnowledgeReview';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
+import { useReExtractResource } from '@/hooks/useReExtractResource';
 import { toast } from 'sonner';
 
 function ReviewBadge({ status }: { status: ReviewStatus }) {
