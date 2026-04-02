@@ -281,11 +281,6 @@ export async function autoOperationalizeResource(
     if (finalExtracted.length === 0) {
       finalExtracted = extractKnowledgeHeuristic(source);
       log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length });
-          }
-        } catch (err: any) {
-          log.warn('LLM fallback failed', { resourceId, error: err?.message || err });
-        }
-      }
     }
 
     if (finalExtracted.length > 0) {
