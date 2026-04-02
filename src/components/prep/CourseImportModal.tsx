@@ -226,47 +226,19 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       setImportProgress({ done: i, total: toImport.length, current: `Saving: ${lesson.title}` });
 
       try {
-        // Look for existing resource with same user + lesson URL
-        const { data: existingResources, error: dedupErr } = await supabase
-          .from('resources')
-          .select('id')
-          .eq('file_url', lesson.url)
-          .limit(1);
-        
-        console.log('[CourseImport] Dedup check for', lesson.url, '→ found:', existingResources?.length, 'error:', dedupErr?.message);
-
-        let resourceId: string | null = null;
-
-        if (existingResources && existingResources.length > 0) {
-          // Reuse existing resource — update its content
-          resourceId = existingResources[0].id;
-          const updatePayload: Record<string, any> = {
-            updated_at: new Date().toISOString(),
-          };
-          if (lessonData?.success && lessonData.content && lessonData.content.length > 50) {
-            updatePayload.content = lessonData.content;
-            updatePayload.content_status = 'enriched';
-          }
-          updatePayload.title = lesson.title;
-          updatePayload.resource_type = lesson.type === 'video' ? 'video' : 'article';
-          await supabase.from('resources').update(updatePayload as any).eq('id', resourceId);
-        } else {
-          // No existing resource — classify and create new
-          const classification = await classify.mutateAsync({ url: lesson.url });
-          if (classification.title === 'Untitled' || classification.title.length < 3) {
-            classification.title = lesson.title;
-          }
-          if (lessonData?.success && lessonData.content && lessonData.content.length > 50) {
-            classification.scraped_content = lessonData.content;
-          }
-          classification.resource_type = lesson.type === 'video' ? 'video' : 'article';
-          classification.tags = [...(classification.tags || []), 'course', courseTitle].filter(Boolean);
-
-          const result = await addUrl.mutateAsync({ url: lesson.url, classification });
-          resourceId = result?.id || null;
+        const classification = await classify.mutateAsync({ url: lesson.url });
+        if (classification.title === 'Untitled' || classification.title.length < 3) {
+          classification.title = lesson.title;
         }
+        if (lessonData?.success && lessonData.content && lessonData.content.length > 50) {
+          classification.scraped_content = lessonData.content;
+        }
+        classification.resource_type = lesson.type === 'video' ? 'video' : 'article';
+        classification.tags = Array.from(new Set([...(classification.tags || []), 'course', courseTitle].filter(Boolean)));
 
-        // Write lineage
+        const resource = await addUrl.mutateAsync({ url: lesson.url, classification });
+        const resourceId = resource?.id || null;
+
         await writeLineageRow({
           resourceId,
           lesson,
@@ -278,8 +250,9 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
         successCount++;
 
-        // === TRANSCRIBE (if video with media_url) ===
-        if (lessonData?.media_url && resourceId) {
+        const shouldTranscribe = Boolean(lessonData?.media_url && resourceId && resource?.content_status !== 'transcript');
+
+        if (shouldTranscribe) {
           updateLessonResult(i, { status: 'transcribing' });
           setImportProgress({ done: i, total: toImport.length, current: `${lesson.title} (transcribing video...)` });
           try {
@@ -293,7 +266,11 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                 .select('content')
                 .eq('id', resourceId)
                 .single();
-              const updated = (existing?.content || '') + '\n\n--- Video Transcript ---\n\n' + txData.transcript;
+              const existingContent = existing?.content || '';
+              const transcriptMarker = '\n\n--- Video Transcript ---\n\n';
+              const updated = existingContent.includes(transcriptMarker)
+                ? existingContent
+                : existingContent + transcriptMarker + txData.transcript;
               await supabase.from('resources').update({ content: updated } as any).eq('id', resourceId);
               await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete', transcript_text: txData.transcript });
               console.log(`Transcribed video for ${lesson.title}: ${txData.transcript.length} chars`);
@@ -304,6 +281,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
             console.warn(`Video transcription failed for ${lesson.title}:`, txErr);
             await updateLineageRow(lesson.url, { transcript_status: 'transcript_failed' });
           }
+        } else if (lessonData?.media_url && resourceId) {
+          await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete' });
         }
 
         updateLessonResult(i, { status: 'complete', resourceId: resourceId || undefined });
