@@ -822,6 +822,7 @@ export function ResourceManager() {
                       queryClient.invalidateQueries({ queryKey: ['resources'] });
                       queryClient.invalidateQueries({ queryKey: ['all-resources'] });
                       queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                      queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
                     } else {
                       const reason = result.diagnostics?.result as string || 'unknown';
                       const reasonLabels: Record<string, string> = {
