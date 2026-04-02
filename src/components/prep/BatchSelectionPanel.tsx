@@ -29,9 +29,11 @@ import { dispatchExtractionMethod, runEnrichmentOnly } from '@/lib/extractionMet
 import { normalizeSourceType } from '@/lib/sourceTypeNormalizer';
 import {
   createBatchRun, finalizeBatchRun, persistJobRecords,
+  persistSingleJobRecord, updateBatchRunProgress,
   hasActiveJobInDB, loadBatchRunHistory, computeBatchMetrics,
   type BatchRunRecord,
 } from '@/lib/batchRunPersistence';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -73,6 +75,7 @@ type FilterMode = 'all' | 'failed' | 'needs_extraction' | 'awaiting_transcriptio
 // ── Component ──────────────────────────────────────────────
 
 export function BatchSelectionPanel({ resources, onComplete }: Props) {
+  const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<BatchProgress | null>(null);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
@@ -80,6 +83,7 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
   const [showMetrics, setShowMetrics] = useState(false);
   const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof computeBatchMetrics>> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const lastInvalidateRef = useRef(0);
 
   // Load metrics on mount
   useEffect(() => {
@@ -145,6 +149,24 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
     return map;
   }, [resources]);
 
+  // Throttled query invalidation (every 5s) for live UI updates during batch runs
+  const throttledInvalidate = useCallback(() => {
+    const now = Date.now();
+    if (now - lastInvalidateRef.current > 5000) {
+      queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+      queryClient.invalidateQueries({ queryKey: ['resources'] });
+      queryClient.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+      lastInvalidateRef.current = now;
+    }
+  }, [queryClient]);
+
+  const fullInvalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+    queryClient.invalidateQueries({ queryKey: ['resources'] });
+    queryClient.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
+    lastInvalidateRef.current = Date.now();
+  }, [queryClient]);
+
   const runAction = useCallback(async (action: BatchAction) => {
     const selected = resources.filter(r => selectedIds.has(r.id));
     if (selected.length === 0) {
@@ -187,24 +209,34 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
             return hasActiveJobInDB(resourceId);
           },
           onProgress: (p) => setProgress({ ...p }),
+          onResourceComplete: (job) => {
+            // Persist each resource immediately to DB
+            if (batchRunId) {
+              persistSingleJobRecord(batchRunId, job);
+            }
+            // Throttled UI refresh so resource rows show live state
+            throttledInvalidate();
+          },
         },
         cfg,
         controller.signal,
       );
 
-      // Persist results
+      // Finalize batch run with final counters
       if (batchRunId) {
+        await updateBatchRunProgress(batchRunId, result.succeeded, result.failed, result.skipped);
         await finalizeBatchRun(batchRunId, result);
-        await persistJobRecords(batchRunId, result.jobs);
       }
 
+      // Final full invalidation
+      fullInvalidate();
       onComplete?.();
     } catch (err: any) {
       toast.error(`Batch failed: ${err?.message}`);
     } finally {
       abortRef.current = null;
     }
-  }, [selectedIds, resources, onComplete, sourceTypeLookup]);
+  }, [selectedIds, resources, onComplete, sourceTypeLookup, throttledInvalidate, fullInvalidate]);
 
   const cancelBatch = useCallback(() => {
     abortRef.current?.abort();

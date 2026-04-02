@@ -82,6 +82,64 @@ export async function finalizeBatchRun(
 }
 
 /**
+ * Incrementally update batch run counters after each resource completes.
+ * This ensures progress is persisted even if the window is closed mid-run.
+ */
+export async function updateBatchRunProgress(
+  batchRunId: string,
+  succeeded: number,
+  failed: number,
+  skipped: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from('batch_runs' as any)
+    .update({
+      succeeded,
+      failed,
+      skipped,
+    } as any)
+    .eq('id', batchRunId);
+
+  if (error) {
+    log.error('Failed to update batch run progress', { error: error.message });
+  }
+}
+
+/**
+ * Persist a single job record immediately when a resource completes.
+ */
+export async function persistSingleJobRecord(
+  batchRunId: string,
+  job: ResourceJobState,
+): Promise<void> {
+  const successAttempt = job.attempts.find(a => a.success);
+  const lastAttempt = job.attempts[job.attempts.length - 1];
+  const methodUsed = successAttempt?.method ?? lastAttempt?.method ?? null;
+  const contentLen = successAttempt?.extractedContentLength ?? lastAttempt?.extractedContentLength ?? null;
+
+  const { error } = await supabase
+    .from('batch_run_jobs' as any)
+    .insert({
+      batch_run_id: batchRunId,
+      resource_id: job.resourceId,
+      resource_title: job.title,
+      source_type: job.sourceType ?? 'unknown',
+      final_status: job.status,
+      failure_reason: job.failureReason ?? null,
+      attempts: JSON.stringify(job.attempts),
+      method_used: methodUsed,
+      content_length_extracted: contentLen,
+      quality_passed: job.status === 'complete' ? true : job.status === 'failed' ? false : null,
+      started_at: job.attempts[0]?.startedAt ?? null,
+      ended_at: job.attempts[job.attempts.length - 1]?.endedAt ?? null,
+    } as any);
+
+  if (error) {
+    log.error('Failed to persist single job record', { error: error.message, resourceId: job.resourceId });
+  }
+}
+
+/**
  * Persist all job records for a completed batch.
  */
 export async function persistJobRecords(

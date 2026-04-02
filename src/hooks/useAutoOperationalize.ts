@@ -10,7 +10,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   autoOperationalizeResource,
-  autoOperationalizeBatch,
   summarizeBatchResults,
   type AutoOperationalizeResult,
   type BatchSummary,
@@ -55,10 +54,15 @@ export function useAutoOperationalize() {
   const operationalizeBatch = useCallback(async (resourceIds: string[]): Promise<BatchSummary> => {
     setIsRunning(true);
     try {
-      const results = await autoOperationalizeBatch(resourceIds);
+      const results: AutoOperationalizeResult[] = [];
+      for (const resourceId of resourceIds) {
+        const result = await autoOperationalizeResource(resourceId);
+        results.push(result);
+        // Invalidate after each resource so UI shows live state
+        invalidate();
+      }
       const summary = summarizeBatchResults(results);
       setLastBatchSummary(summary);
-      invalidate();
 
       if (summary.operationalized > 0) {
         toast.success(`${summary.operationalized} resource(s) operationalized, ${summary.totalKnowledgeActivated} items activated`);
