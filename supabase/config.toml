@@ -116,3 +116,6 @@ verify_jwt = false
 
 [functions.extract-tactics]
 verify_jwt = false
+
+[functions.batch-extract-kis]
+verify_jwt = false
