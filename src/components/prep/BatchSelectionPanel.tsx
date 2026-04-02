@@ -75,6 +75,7 @@ type FilterMode = 'all' | 'failed' | 'needs_extraction' | 'awaiting_transcriptio
 // ── Component ──────────────────────────────────────────────
 
 export function BatchSelectionPanel({ resources, onComplete }: Props) {
+  const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<BatchProgress | null>(null);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
@@ -82,6 +83,7 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
   const [showMetrics, setShowMetrics] = useState(false);
   const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof computeBatchMetrics>> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const lastInvalidateRef = useRef(0);
 
   // Load metrics on mount
   useEffect(() => {
