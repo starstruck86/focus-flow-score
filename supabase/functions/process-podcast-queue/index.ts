@@ -507,15 +507,19 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Step 8: Mark complete — awaiting user approval ──
+    // ── Step 8: Mark complete — auto-approve if guardrails pass ──
+    const passesGuardrails = structuredContent.length >= 1000 && sectionCount >= 3;
+    const kiStatus = passesGuardrails ? "ready_for_review" : "awaiting_approval";
+    console.log(`Completion: ki_status=${kiStatus} (len=${structuredContent.length}, sections=${sectionCount}, passesGuardrails=${passesGuardrails})`);
+
     await updateQueueItem(supabase, queueItem.id, {
       status: "complete",
       resource_id: resourceId,
       processed_at: now(),
-      ki_status: "awaiting_approval",
+      ki_status: kiStatus,
       failure_type: null,
       error_message: null,
-      review_reason: null,
+      review_reason: passesGuardrails ? null : "Did not pass auto-approval guardrails",
     });
 
     return json({
