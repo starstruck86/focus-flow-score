@@ -16,6 +16,36 @@ export interface ReExtractResult {
   error?: string;
 }
 
+/** Returns a status that accounts for staleness — if resource was updated after re_extract_at, treat succeeded as stale */
+export function deriveReExtractStatus(resource: any): { status: ReExtractStatus; stale: boolean; at: string | null } {
+  const raw = (resource?.re_extract_status as ReExtractStatus) || 'idle';
+  const at = resource?.re_extract_at || null;
+  if (raw === 'idle' || raw === 'running') return { status: raw, stale: false, at };
+  // Check staleness: if resource updated_at is materially after re_extract_at
+  if (at && resource?.updated_at) {
+    const reExtractTime = new Date(at).getTime();
+    const updatedTime = new Date(resource.updated_at).getTime();
+    // 60s grace window to avoid self-triggered update noise
+    if (updatedTime > reExtractTime + 60_000) {
+      return { status: raw, stale: true, at };
+    }
+  }
+  return { status: raw, stale: false, at };
+}
+
+/** Human-readable relative time */
+export function formatRelativeTime(isoDate: string | null): string {
+  if (!isoDate) return '';
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
 const TABLE = 'resources' as any;
 
 export function useReExtractResource() {

@@ -21,7 +21,7 @@ import {
   type ReviewStatus,
 } from '@/hooks/useKnowledgeReview';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
-import { useReExtractResource } from '@/hooks/useReExtractResource';
+import { useReExtractResource, deriveReExtractStatus, formatRelativeTime } from '@/hooks/useReExtractResource';
 import { toast } from 'sonner';
 
 function ReviewBadge({ status }: { status: ReviewStatus }) {
@@ -137,21 +137,31 @@ export function LowYieldReviewQueue() {
         )}
         {lowYield.map(({ resource, kis, unreviewedCount }) => {
           const isOpen = openIds.has(resource.id);
-          const extractStatus = getStatus(resource.id);
-          const isExtracting = extractStatus === 'running';
+          const { status: extractStatus, stale, at: extractAt } = deriveReExtractStatus(resource);
+          const localStatus = getStatus(resource.id);
+          const effectiveStatus = localStatus !== 'idle' ? localStatus : extractStatus;
+          const isExtracting = effectiveStatus === 'running';
+          const timeLabel = formatRelativeTime(extractAt);
           return (
             <Collapsible key={resource.id} open={isOpen} onOpenChange={() => toggle(resource.id)}>
               <CollapsibleTrigger className="flex items-center gap-2 w-full text-left p-2 rounded-md hover:bg-muted/50 transition-colors">
                 {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
                 <span className="text-xs font-medium text-foreground flex-1 truncate">{resource.title}</span>
-                {extractStatus === 'running' && (
+                {effectiveStatus === 'running' && (
                   <Badge variant="outline" className="text-[10px] bg-accent text-accent-foreground"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Extracting…</Badge>
                 )}
-                {extractStatus === 'succeeded' && (
-                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary"><CheckCircle2 className="h-3 w-3 mr-1" />Done</Badge>
+                {effectiveStatus === 'succeeded' && (
+                  <Badge variant="outline" className={cn("text-[10px]", stale ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary")}>
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    {stale ? 'Stale' : 'Done'}
+                    {timeLabel && <span className="ml-1 opacity-70">{timeLabel}</span>}
+                  </Badge>
                 )}
-                {extractStatus === 'failed' && (
-                  <Badge variant="outline" className="text-[10px] bg-destructive/10 text-destructive"><XCircle className="h-3 w-3 mr-1" />Failed</Badge>
+                {effectiveStatus === 'failed' && (
+                  <Badge variant="outline" className="text-[10px] bg-destructive/10 text-destructive">
+                    <XCircle className="h-3 w-3 mr-1" />Failed
+                    {timeLabel && <span className="ml-1 opacity-70">{timeLabel}</span>}
+                  </Badge>
                 )}
                 <Badge variant="outline" className="text-[10px]">{kis.length} KI{kis.length !== 1 ? 's' : ''}</Badge>
                 {unreviewedCount > 0 && (
