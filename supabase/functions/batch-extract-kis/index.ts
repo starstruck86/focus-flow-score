@@ -255,6 +255,16 @@ function deduplicateItems(items: any[]): any[] {
 
 async function extractFromResource(apiKey: string, r: any): Promise<any[]> {
   const rawItems = await callAI(apiKey, r.content, r.title, r.tags || []);
-  const validated = rawItems.filter(validateItem);
+  console.log(`[batch-extract] ${r.title}: ${rawItems.length} raw items from AI`);
+  if (rawItems.length > 0) {
+    console.log(`[batch-extract] Sample title: "${rawItems[0].title}"`);
+    console.log(`[batch-extract] Sample fields: tactic_summary=${rawItems[0].tactic_summary?.length || 0}, how_to_execute=${rawItems[0].how_to_execute?.length || 0}, when_to_use=${rawItems[0].when_to_use?.length || 0}, example=${(rawItems[0].example_usage || rawItems[0].example || '').length}, framework=${rawItems[0].framework}, who=${rawItems[0].who}`);
+  }
+  const validated = rawItems.filter((item: any) => {
+    const ok = validateItem(item);
+    if (!ok) console.log(`[batch-extract] REJECTED: "${(item.title || '').slice(0, 50)}" - verb check: ${/^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|adapt|adjust|escalate|simplify|clarify|articulate|illustrate|connect|uncover|reveal|expose|surface|extract|capture|name|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|plant|seed|earn|secure|protect|defend|block|pre-empt|anticipate|signal|commit|lock|tie|bundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|slow|speed|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i.test((item.title || '').trim())}`);
+    return ok;
+  });
+  console.log(`[batch-extract] ${r.title}: ${validated.length} validated`);
   return deduplicateItems(validated).slice(0, 15);
 }
