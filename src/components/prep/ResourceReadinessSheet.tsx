@@ -384,7 +384,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         });
         setKiBackfillProgress(null);
         setKiBackfillReport(report);
-        toast.success(`KI remediation: ${report.activated} activated, ${report.rewritten} rewritten (${report.new_items_created} new), ${report.archived} archived`);
+        toast.success(`KI remediation: ${report.activated} activated, ${report.rewritten} rewritten (${report.new_items_created} new), ${report.archived} archived${report.retained_for_review > 0 ? `, ${report.retained_for_review} held for review` : ''}`);
       }
     } catch {
       toast.error('Action failed');
@@ -702,6 +702,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           <span>Rewritten:</span><span className="font-medium text-amber-600">{kiBackfillReport.rewritten}</span>
                           <span>New items created:</span><span className="font-medium text-primary">{kiBackfillReport.new_items_created}</span>
                           <span>Archived:</span><span className="font-medium text-destructive">{kiBackfillReport.archived}</span>
+                          {kiBackfillReport.retained_for_review > 0 && (<><span>Held for review:</span><span className="font-medium text-amber-600">{kiBackfillReport.retained_for_review}</span></>)}
                           <span>Protected:</span><span className="font-medium text-foreground">{kiBackfillReport.protected_skipped}</span>
                           {kiBackfillReport.errors > 0 && (<><span>Errors:</span><span className="font-medium text-destructive">{kiBackfillReport.errors}</span></>)}
                         </div>

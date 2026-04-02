@@ -49,6 +49,8 @@ const CHUNK_SIZE = 8000;
 const CHUNK_OVERLAP = 500;
 const MAX_KIS_PER_RESOURCE = 15;
 const SINGLE_PASS_THRESHOLD = 12000;
+const PRIMARY_MAX_TOKENS = 12000;
+const RETRY_MAX_TOKENS = 12000;
 
 /** Split content into overlapping chunks on paragraph boundaries */
 function chunkContent(content: string): string[] {
@@ -76,12 +78,12 @@ function chunkContent(content: string): string[] {
   return chunks;
 }
 
-/** Call AI gateway for a single chunk */
-async function extractFromChunk(
+async function requestExtraction(
   apiKey: string,
   systemPrompt: string,
   userPrompt: string,
-): Promise<any[]> {
+  maxTokens: number,
+): Promise<any> {
   const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -94,7 +96,7 @@ async function extractFromChunk(
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      max_tokens: 6000,
+      max_tokens: maxTokens,
       temperature: 0.2,
     }),
   });
@@ -116,29 +118,66 @@ async function extractFromChunk(
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
           ],
-          max_tokens: 6000,
+          max_tokens: maxTokens,
           temperature: 0.2,
         }),
       });
       if (!retry.ok) throw new Error(`AI error after retry: ${retry.status}`);
-      const retryResult = await retry.json();
-      return parseAiResponse(retryResult);
+      return retry.json();
     }
     throw new Error(`AI error: ${status}`);
   }
 
-  const result = await res.json();
-  return parseAiResponse(result);
+  return res.json();
 }
 
 function parseAiResponse(result: any): any[] {
-  const raw = result.choices?.[0]?.message?.content || '[]';
+  const raw = result?.choices?.[0]?.message?.content || '[]';
+  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
   try {
-    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     return JSON.parse(cleaned);
   } catch {
+    const start = cleaned.indexOf('[');
+    const end = cleaned.lastIndexOf(']');
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, end + 1));
+      } catch {
+        return [];
+      }
+    }
     return [];
   }
+}
+
+function isTruncatedResponse(result: any): boolean {
+  const finishReason = result?.choices?.[0]?.finish_reason || result?.choices?.[0]?.finishReason || null;
+  return finishReason === 'length' || finishReason === 'MAX_TOKENS';
+}
+
+/** Call AI gateway for a single chunk */
+async function extractFromChunk(
+  apiKey: string,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<any[]> {
+  const primaryResult = await requestExtraction(apiKey, systemPrompt, userPrompt, PRIMARY_MAX_TOKENS);
+  let items = parseAiResponse(primaryResult);
+
+  if (items.length > 0 && !isTruncatedResponse(primaryResult)) {
+    return items;
+  }
+
+  const retryPrompt = `${userPrompt}\n\nIMPORTANT: Return exactly 2 tactical plays maximum. Keep every field complete but concise, and output valid JSON only.`;
+  const retryResult = await requestExtraction(apiKey, systemPrompt, retryPrompt, RETRY_MAX_TOKENS);
+  const retryItems = parseAiResponse(retryResult);
+
+  if (retryItems.length > 0) {
+    items = retryItems;
+  }
+
+  return items;
 }
 
 /** Deduplicate by title similarity */
