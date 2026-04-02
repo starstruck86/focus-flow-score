@@ -161,6 +161,17 @@ export async function runEnrichmentOnly(resourceId: string): Promise<MethodResul
   // Heuristic only runs as last resort (it produces low-quality sentence fragments)
   let items: any[] = [];
 
+  // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
+  const isAudioType = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
+    (r.resource_type ?? '').toLowerCase()
+  );
+  if (isAudioType) {
+    const headingCount = (r.content || '').match(/^## /gm)?.length ?? 0;
+    if (headingCount < 2) {
+      return { success: false, error: 'Transcript needs preprocessing before KI extraction (no ## section headings found)' };
+    }
+  }
+
   if ((r.content?.length ?? 0) >= 100) {
     try {
       items = await extractKnowledgeLLMFallback(source);
