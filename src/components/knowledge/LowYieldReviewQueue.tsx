@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/collapsible';
 import {
   ChevronDown, ChevronRight, CheckCircle2, Archive, RotateCcw, AlertTriangle,
-  ThumbsUp, RefreshCw, FolderMinus,
+  ThumbsUp, RefreshCw, FolderMinus, Loader2, XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
