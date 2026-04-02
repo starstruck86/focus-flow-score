@@ -2166,6 +2166,7 @@ export type Database = {
           macro_situation: string | null
           micro_strategy: string | null
           product_area: string | null
+          review_status: string
           source_char_range: Json | null
           source_doctrine_id: string | null
           source_excerpt: string | null
@@ -2204,6 +2205,7 @@ export type Database = {
           macro_situation?: string | null
           micro_strategy?: string | null
           product_area?: string | null
+          review_status?: string
           source_char_range?: Json | null
           source_doctrine_id?: string | null
           source_excerpt?: string | null
@@ -2242,6 +2244,7 @@ export type Database = {
           macro_situation?: string | null
           micro_strategy?: string | null
           product_area?: string | null
+          review_status?: string
           source_char_range?: Json | null
           source_doctrine_id?: string | null
           source_excerpt?: string | null
