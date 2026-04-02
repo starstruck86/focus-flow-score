@@ -496,7 +496,8 @@ export async function extractKnowledgeLLMFallback(
       body: {
         resourceId: source.resourceId,
         title: source.title,
-        content: source.content?.slice(0, 15000),
+        // Transcript resources get a higher content cap (60K) to match batch-actionize
+        content: source.content?.slice(0, isTranscript ? 60000 : 15000),
         description: source.description,
         tags: source.tags,
         resourceType: source.resourceType,
