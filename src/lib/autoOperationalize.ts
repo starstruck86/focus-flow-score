@@ -263,41 +263,24 @@ export async function autoOperationalizeResource(
       resourceType: r.resource_type ?? 'document',
     };
 
-    // For transcript/podcast/audio, skip heuristic and go straight to LLM extraction
-    // Heuristic sentence-splitting doesn't work well with conversational markdown content
+    // Always prefer LLM extraction — produces structured KIs with framework, attribution, etc.
+    // Heuristic sentence-splitting produces low-quality transcript fragments for all resource types.
     let finalExtracted: any[] = [];
-    if (isTranscriptType) {
-      log.info('Transcript resource — using LLM extraction directly', { resourceId, resourceType: r.resource_type });
+    
+    if (contentForExtraction.length >= 100) {
+      log.info('Running LLM extraction', { resourceId, resourceType: r.resource_type });
       try {
         finalExtracted = await extractKnowledgeLLMFallback(source);
-        log.info('LLM extraction for transcript', { resourceId, count: finalExtracted.length });
+        log.info('LLM extraction result', { resourceId, count: finalExtracted.length });
       } catch (err: any) {
-        log.warn('LLM extraction failed for transcript', { resourceId, error: err?.message || err });
+        log.warn('LLM extraction failed', { resourceId, error: err?.message || err });
       }
-      // Fall back to heuristic only if LLM produced nothing
-      if (finalExtracted.length === 0) {
-        finalExtracted = extractKnowledgeHeuristic(source);
-        log.info('Heuristic fallback for transcript', { resourceId, count: finalExtracted.length });
-      }
-    } else {
-      const extracted = extractKnowledgeHeuristic(source);
-      log.info('Extraction result', {
-        resourceId, hasExistingKI, extracted: extracted.length,
-        contentPassed: contentForExtraction.length,
-        activatable: extracted.filter(e => (e.confidence_score ?? 0) >= AUTO_ACTIVATE_CONFIDENCE).length,
-      });
+    }
 
-      // LLM fallback if heuristic returned 0 items
-      finalExtracted = extracted;
-      if (extracted.length === 0 && contentForExtraction.length >= 100) {
-        log.info('Heuristic returned 0, running LLM fallback', { resourceId });
-        try {
-          const llmItems = await extractKnowledgeLLMFallback(source);
-          if (llmItems.length > 0) {
-            finalExtracted = llmItems;
-            log.info('LLM fallback produced items', { resourceId, count: llmItems.length });
-          } else {
-            log.warn('LLM fallback also returned 0 items', { resourceId });
+    // Heuristic fallback only if LLM produced nothing
+    if (finalExtracted.length === 0) {
+      finalExtracted = extractKnowledgeHeuristic(source);
+      log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length });
           }
         } catch (err: any) {
           log.warn('LLM fallback failed', { resourceId, error: err?.message || err });

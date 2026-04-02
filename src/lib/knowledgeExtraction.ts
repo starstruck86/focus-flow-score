@@ -587,15 +587,20 @@ export async function extractKnowledgeAI(
   source: ExtractionSource,
   existingItems: Array<{ title: string; tactic_summary?: string | null }> = []
 ): Promise<KnowledgeItemInsert[]> {
+  // Always prefer LLM — heuristic produces low-quality sentence fragments
+  if ((source.content?.length ?? 0) >= 100) {
+    try {
+      const llmItems = await extractKnowledgeLLMFallback(source, existingItems);
+      if (llmItems.length > 0) return llmItems;
+    } catch {
+      // LLM failed, fall through to heuristic
+    }
+  }
+
   const heuristicItems = extractKnowledgeHeuristic(source, existingItems);
   if (heuristicItems.length > 0) return heuristicItems;
 
-  if ((source.content?.length ?? 0) >= 100) {
-    const llmItems = await extractKnowledgeLLMFallback(source, existingItems);
-    if (llmItems.length > 0) return llmItems;
-  }
-
-  log.warn('Both heuristic and LLM extraction returned 0 items', {
+  log.warn('Both LLM and heuristic extraction returned 0 items', {
     resourceId: source.resourceId,
     contentLength: source.content?.length ?? 0,
   });
