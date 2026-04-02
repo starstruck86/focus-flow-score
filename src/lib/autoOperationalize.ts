@@ -277,8 +277,11 @@ export async function autoOperationalizeResource(
       }
     }
 
-    // Heuristic fallback only if LLM produced nothing
-    if (finalExtracted.length === 0) {
+    // Heuristic fallback only for non-audio/podcast types — heuristic produces garbage fragments from transcripts
+    const isAudioType = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
+      (r.resource_type ?? '').toLowerCase()
+    );
+    if (finalExtracted.length === 0 && !isAudioType) {
       finalExtracted = extractKnowledgeHeuristic(source);
       log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length });
     }
