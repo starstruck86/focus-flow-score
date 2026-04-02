@@ -492,15 +492,20 @@ export async function extractKnowledgeLLMFallback(
   try {
     log.info('Running LLM fallback extraction', { resourceId: source.resourceId, title: source.title });
 
+    const isTranscriptResource = ['transcript', 'podcast', 'audio'].includes(source.resourceType);
+    const contentCap = isTranscriptResource ? 60000 : 15000;
+
     const result = await trackedInvoke<{ items?: any[] }>('extract-tactics', {
       body: {
         resourceId: source.resourceId,
         title: source.title,
-        content: source.content?.slice(0, 15000),
+        content: source.content?.slice(0, contentCap),
         description: source.description,
         tags: source.tags,
         resourceType: source.resourceType,
       },
+      // Transcripts can be large and need more time for multi-chunk extraction
+      timeoutMs: isTranscriptResource ? 120_000 : 60_000,
     });
 
     if (result?.data?.items && Array.isArray(result.data.items)) {

@@ -188,6 +188,20 @@ export async function autoOperationalizeResource(
            t.dimension === 'competitor' || t.dimension === 'product';
   });
 
+  // For transcript/podcast/audio resources with sales content, ensure baseline tags
+  const isTranscriptType = ['transcript', 'podcast', 'audio'].includes(r.resource_type ?? '');
+  if (isTranscriptType) {
+    const hasSalesContent = /sales|selling|prospect|buyer|deal|pipeline|objection|discovery|demo|close|negotiat|cold call|outbound/i.test(text);
+    const hasSkillTag = [...existingTags, ...newTags.map(t => `${t.dimension}:${t.value}`)].some(t => t.startsWith('skill:'));
+    const hasContextTag = [...existingTags, ...newTags.map(t => `${t.dimension}:${t.value}`)].some(t => t.startsWith('context:'));
+    if (hasSalesContent && !hasSkillTag) {
+      newTags.push({ dimension: 'skill', value: 'sales', confidence: 0.7, source: 'inferred' } as any);
+    }
+    if (!hasContextTag) {
+      newTags.push({ dimension: 'context', value: 'coaching', confidence: 0.6, source: 'inferred' } as any);
+    }
+  }
+
   if (newTags.length > 0) {
     const merged = mergeTags(existingTags, newTags);
     await supabase.from('resources').update({
@@ -249,27 +263,45 @@ export async function autoOperationalizeResource(
       resourceType: r.resource_type ?? 'document',
     };
 
-    const extracted = extractKnowledgeHeuristic(source);
-    log.info('Extraction result', {
-      resourceId, hasExistingKI, extracted: extracted.length,
-      contentPassed: contentForExtraction.length,
-      activatable: extracted.filter(e => (e.confidence_score ?? 0) >= AUTO_ACTIVATE_CONFIDENCE).length,
-    });
-
-    // LLM fallback if heuristic returned 0 items
-    let finalExtracted = extracted;
-    if (extracted.length === 0 && contentForExtraction.length >= 100) {
-      log.info('Heuristic returned 0, running LLM fallback', { resourceId });
+    // For transcript/podcast/audio, skip heuristic and go straight to LLM extraction
+    // Heuristic sentence-splitting doesn't work well with conversational markdown content
+    let finalExtracted: any[] = [];
+    if (isTranscriptType) {
+      log.info('Transcript resource — using LLM extraction directly', { resourceId, resourceType: r.resource_type });
       try {
-        const llmItems = await extractKnowledgeLLMFallback(source);
-        if (llmItems.length > 0) {
-          finalExtracted = llmItems;
-          log.info('LLM fallback produced items', { resourceId, count: llmItems.length });
-        } else {
-          log.warn('LLM fallback also returned 0 items', { resourceId });
+        finalExtracted = await extractKnowledgeLLMFallback(source);
+        log.info('LLM extraction for transcript', { resourceId, count: finalExtracted.length });
+      } catch (err: any) {
+        log.warn('LLM extraction failed for transcript', { resourceId, error: err?.message || err });
+      }
+      // Fall back to heuristic only if LLM produced nothing
+      if (finalExtracted.length === 0) {
+        finalExtracted = extractKnowledgeHeuristic(source);
+        log.info('Heuristic fallback for transcript', { resourceId, count: finalExtracted.length });
+      }
+    } else {
+      const extracted = extractKnowledgeHeuristic(source);
+      log.info('Extraction result', {
+        resourceId, hasExistingKI, extracted: extracted.length,
+        contentPassed: contentForExtraction.length,
+        activatable: extracted.filter(e => (e.confidence_score ?? 0) >= AUTO_ACTIVATE_CONFIDENCE).length,
+      });
+
+      // LLM fallback if heuristic returned 0 items
+      finalExtracted = extracted;
+      if (extracted.length === 0 && contentForExtraction.length >= 100) {
+        log.info('Heuristic returned 0, running LLM fallback', { resourceId });
+        try {
+          const llmItems = await extractKnowledgeLLMFallback(source);
+          if (llmItems.length > 0) {
+            finalExtracted = llmItems;
+            log.info('LLM fallback produced items', { resourceId, count: llmItems.length });
+          } else {
+            log.warn('LLM fallback also returned 0 items', { resourceId });
+          }
+        } catch (err: any) {
+          log.warn('LLM fallback failed', { resourceId, error: err?.message || err });
         }
-      } catch (err) {
-        log.warn('LLM fallback failed', { resourceId, error: err });
       }
     }
 

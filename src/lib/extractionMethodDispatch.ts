@@ -157,11 +157,24 @@ export async function runEnrichmentOnly(resourceId: string): Promise<MethodResul
     resourceType: r.resource_type ?? 'document',
   };
 
-  let items = extractKnowledgeHeuristic(source);
-  if (items.length === 0 && (r.content?.length ?? 0) >= 100) {
+  // For transcript/podcast/audio, go straight to LLM extraction
+  const isTranscriptType = ['transcript', 'podcast', 'audio'].includes(r.resource_type ?? '');
+  let items: any[] = [];
+
+  if (isTranscriptType) {
     try {
       items = await extractKnowledgeLLMFallback(source);
-    } catch { /* fallback failed */ }
+    } catch { /* LLM failed */ }
+    if (items.length === 0) {
+      items = extractKnowledgeHeuristic(source);
+    }
+  } else {
+    items = extractKnowledgeHeuristic(source);
+    if (items.length === 0 && (r.content?.length ?? 0) >= 100) {
+      try {
+        items = await extractKnowledgeLLMFallback(source);
+      } catch { /* fallback failed */ }
+    }
   }
 
   if (items.length > 0) {
