@@ -62,27 +62,34 @@ Deno.serve(async (req) => {
       ? `Context: ${contextParts.join(" | ")}\n\n`
       : "";
 
-    // For very long transcripts, process in chunks then combine
-    const MAX_CHUNK = 50000; // ~50K chars per AI call
+    // For long transcripts, process in safe chunks and recursively split again
+    // if the model reports token-limit truncation.
+    const MAX_CHUNK = 20000;
+    const CHUNK_OVERLAP = 1500;
     let structuredOutput: string;
 
     if (transcript.length <= MAX_CHUNK) {
-      structuredOutput = await processChunk(
+      structuredOutput = await processTranscriptSegment(
         LOVABLE_API_KEY,
-        `${contextLine}Raw transcript:\n\n${transcript}`
+        transcript,
+        contextLine,
       );
     } else {
-      // Split into overlapping chunks at paragraph boundaries
-      const chunks = splitTranscript(transcript, MAX_CHUNK, 2000);
+      const chunks = splitTranscript(transcript, MAX_CHUNK, CHUNK_OVERLAP);
       const processedChunks: string[] = [];
 
+      console.log(`[preprocess-transcript] Processing long transcript in ${chunks.length} chunks (${transcript.length} chars)`);
+
       for (let i = 0; i < chunks.length; i++) {
-        const chunkContext = `${contextLine}This is part ${i + 1} of ${chunks.length} of a longer transcript.\n\nRaw transcript (part ${i + 1}):\n\n${chunks[i]}`;
-        const result = await processChunk(LOVABLE_API_KEY, chunkContext);
+        const result = await processTranscriptSegment(
+          LOVABLE_API_KEY,
+          chunks[i],
+          contextLine,
+          { partIndex: i, totalParts: chunks.length },
+        );
         processedChunks.push(result);
       }
 
-      // Combine chunks, dedup any overlapping section headings
       structuredOutput = mergeChunks(processedChunks);
     }
 
@@ -108,7 +115,67 @@ Deno.serve(async (req) => {
   }
 });
 
-async function processChunk(apiKey: string, userContent: string): Promise<string> {
+async function processTranscriptSegment(
+  apiKey: string,
+  transcriptChunk: string,
+  contextLine: string,
+  options: { partIndex?: number; totalParts?: number; depth?: number; path?: string } = {},
+): Promise<string> {
+  const { partIndex, totalParts, depth = 0 } = options;
+  const path = options.path || (typeof partIndex === "number" && totalParts ? `${partIndex + 1}/${totalParts}` : "1/1");
+  const userContent = buildChunkPrompt(contextLine, transcriptChunk, partIndex, totalParts, depth);
+  const result = await processChunk(apiKey, userContent);
+
+  if (!result.truncated) {
+    return result.content;
+  }
+
+  const MIN_CHUNK = 6000;
+  const MAX_RECURSION_DEPTH = 3;
+
+  if (transcriptChunk.length <= MIN_CHUNK || depth >= MAX_RECURSION_DEPTH) {
+    console.warn(`[preprocess-transcript] Returning truncated output at path ${path} after reaching fallback limit`);
+    return result.content;
+  }
+
+  const subChunkSize = Math.max(MIN_CHUNK, Math.ceil(transcriptChunk.length / 2));
+  const subChunks = splitTranscript(transcriptChunk, subChunkSize, Math.min(1000, Math.floor(subChunkSize / 5)));
+
+  if (subChunks.length <= 1) {
+    return result.content;
+  }
+
+  console.warn(`[preprocess-transcript] Retrying truncated segment at path ${path} with ${subChunks.length} smaller chunks`);
+
+  const subResults: string[] = [];
+  for (let i = 0; i < subChunks.length; i++) {
+    subResults.push(await processTranscriptSegment(apiKey, subChunks[i], contextLine, {
+      partIndex: i,
+      totalParts: subChunks.length,
+      depth: depth + 1,
+      path: `${path}.${i + 1}`,
+    }));
+  }
+
+  return mergeChunks(subResults);
+}
+
+function buildChunkPrompt(
+  contextLine: string,
+  transcriptChunk: string,
+  partIndex?: number,
+  totalParts?: number,
+  depth = 0,
+): string {
+  if (typeof partIndex === "number" && totalParts && totalParts > 1) {
+    const splitNote = depth > 0 ? " This part was split further to avoid truncation; preserve full content for this sub-part only." : "";
+    return `${contextLine}This is part ${partIndex + 1} of ${totalParts} of a longer transcript.${splitNote}\n\nRaw transcript (part ${partIndex + 1}):\n\n${transcriptChunk}`;
+  }
+
+  return `${contextLine}Raw transcript:\n\n${transcriptChunk}`;
+}
+
+async function processChunk(apiKey: string, userContent: string): Promise<{ content: string; truncated: boolean; finishReason: string | null }> {
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -121,7 +188,7 @@ async function processChunk(apiKey: string, userContent: string): Promise<string
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userContent },
       ],
-      max_tokens: 16384,
+      max_tokens: 24576,
     }),
   });
 
@@ -132,16 +199,21 @@ async function processChunk(apiKey: string, userContent: string): Promise<string
 
   const data = await response.json();
   const choice = data.choices?.[0];
-  const finishReason = choice?.finish_reason;
-  if (finishReason === "length" || finishReason === "MAX_TOKENS") {
-    console.warn(`[preprocess-transcript] Output truncated (finish_reason: ${finishReason}). Content length: ${(choice?.message?.content || "").length}`);
+  const finishReason = choice?.finish_reason || choice?.finishReason || null;
+  const content = choice?.message?.content || "";
+  const truncated = finishReason === "length" || finishReason === "MAX_TOKENS";
+
+  if (truncated) {
+    console.warn(`[preprocess-transcript] Output truncated (finish_reason: ${finishReason}). Content length: ${content.length}`);
   }
-  return choice?.message?.content || "";
+
+  return { content, truncated, finishReason };
 }
 
 function splitTranscript(text: string, maxChunk: number, overlap: number): string[] {
   const chunks: string[] = [];
   let start = 0;
+  const safeOverlap = Math.max(0, Math.min(overlap, Math.floor(maxChunk / 3)));
 
   while (start < text.length) {
     let end = Math.min(start + maxChunk, text.length);
@@ -159,9 +231,19 @@ function splitTranscript(text: string, maxChunk: number, overlap: number): strin
       }
     }
 
-    chunks.push(text.slice(start, end));
-    start = end - overlap;
-    if (start >= text.length) break;
+    const chunk = text.slice(start, end);
+    if (chunk) chunks.push(chunk);
+
+    if (end >= text.length) {
+      break;
+    }
+
+    const nextStart = Math.max(end - safeOverlap, start + 1);
+    if (nextStart <= start) {
+      break;
+    }
+
+    start = nextStart;
   }
 
   return chunks;
