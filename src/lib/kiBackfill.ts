@@ -62,20 +62,14 @@ function isWeakItem(item: { title: string; tactic_summary: string | null; when_t
   const summary = (item.tactic_summary ?? '').trim();
   const title = item.title.trim();
 
-  // No tactic summary at all
-  if (!summary || summary.length < 15) return true;
+  // No tactic summary at all — truly empty
+  if (!summary || summary.length < 10) return true;
 
-  // Sounds like a document summary
-  if (SUMMARY_PATTERNS.some(p => p.test(summary) || p.test(title))) return true;
+  // Sounds like a document summary (only check summary, not title)
+  if (SUMMARY_PATTERNS.some(p => p.test(summary))) return true;
 
-  // Sounds like a concept, not a tactic
-  if (CONCEPT_PATTERNS.some(p => p.test(summary) || p.test(title))) return true;
-
-  // Missing both trigger timing and example
-  if (!item.when_to_use && !item.example_usage) return true;
-
-  // Title is just the resource title with chapter appended (generic pattern)
-  if (/\s—\s(cold calling|discovery|objection handling|negotiation|competitors|messaging|closing|expansion|personas|stakeholder navigation)$/i.test(title)) {
+  // Title is just a generic chapter heading with no substance in summary
+  if (/\s—\s(cold calling|discovery|objection handling|negotiation|competitors|messaging|closing|expansion|personas|stakeholder navigation)$/i.test(title) && summary.length < 30) {
     return true;
   }
 
