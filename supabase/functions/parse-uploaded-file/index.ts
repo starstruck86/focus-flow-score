@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { PDFDocument } from "https://esm.sh/pdf-lib@1.17.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,6 +10,7 @@ const corsHeaders = {
 // Quality thresholds
 const MIN_CHARS_SUCCESS = 100;
 const MIN_LETTERS = 30;
+const PAGES_PER_CHUNK = 50;
 
 // ── MIME / extension mapping ──────────────────────────────
 type FileCategory = "pdf" | "text" | "unsupported";
@@ -17,40 +19,68 @@ function categoriseFile(storagePath: string, mimeType?: string): { category: Fil
   const ext = storagePath.split(".").pop()?.toLowerCase() || "";
   if (ext === "pdf" || mimeType === "application/pdf") return { category: "pdf", ext };
   if (["txt", "md", "csv", "json", "xml", "html", "htm", "log", "rtf"].includes(ext)) return { category: "text", ext };
-  // DOCX / PPTX would need specialised parsing — flag as unsupported for now
-  // (browser-side JS can't parse these reliably; future: add server-side parser)
   return { category: "unsupported", ext };
 }
 
-// ── PDF text extraction via Gemini Vision ─────────────────
-async function extractPdfViaVision(pdfBytes: Uint8Array, apiKey: string): Promise<{ text: string; method: string }> {
-  const base64 = btoa(String.fromCharCode(...pdfBytes));
+// ── Split PDF into chunks of N pages ──────────────────────
+async function splitPdfIntoChunks(pdfBytes: Uint8Array, pagesPerChunk: number): Promise<Uint8Array[]> {
+  const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  const totalPages = srcDoc.getPageCount();
 
-  const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: "Extract ALL text from this document. Preserve headings, bullet points, and paragraph structure. Output plain text only — no markdown formatting, no commentary." },
-            { inline_data: { mime_type: "application/pdf", data: base64 } },
-          ],
-        }],
-        generationConfig: { temperature: 0.1 },
-      }),
+  if (totalPages <= pagesPerChunk) {
+    return [pdfBytes]; // No splitting needed
+  }
+
+  const chunks: Uint8Array[] = [];
+  for (let start = 0; start < totalPages; start += pagesPerChunk) {
+    const end = Math.min(start + pagesPerChunk, totalPages);
+    const chunkDoc = await PDFDocument.create();
+    const pages = await chunkDoc.copyPages(srcDoc, Array.from({ length: end - start }, (_, i) => start + i));
+    for (const page of pages) {
+      chunkDoc.addPage(page);
+    }
+    const chunkBytes = await chunkDoc.save();
+    chunks.push(chunkBytes);
+  }
+
+  return chunks;
+}
+
+// ── Extract text from a single PDF chunk via Gemini Vision ──
+async function extractChunkViaVision(
+  chunkBytes: Uint8Array,
+  apiKey: string,
+  chunkLabel: string,
+): Promise<string> {
+  const base64 = btoa(String.fromCharCode(...chunkBytes));
+
+  const resp = await fetch("https://ai.lovable.dev/api/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
     },
-  );
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [{
+        role: "user",
+        content: [
+          { type: "text", text: "Extract ALL text from this PDF document. Preserve headings, bullet points, numbered lists, and paragraph structure. Output plain text only — no markdown formatting, no commentary, no summaries. Just the raw text content." },
+          { type: "file", data: base64, mime_type: "application/pdf" },
+        ],
+      }],
+      temperature: 0.1,
+    }),
+  });
 
   if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Gemini Vision API error ${resp.status}: ${err.slice(0, 300)}`);
+    const errText = await resp.text();
+    console.error(`[parse-uploaded-file] Vision API error for ${chunkLabel}:`, errText.slice(0, 300));
+    throw new Error(`Vision API error for ${chunkLabel}: ${resp.status}`);
   }
 
   const result = await resp.json();
-  const text = result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  return { text, method: "gemini_vision_ocr" };
+  return result?.choices?.[0]?.message?.content || "";
 }
 
 // ── Quality check ─────────────────────────────────────────
@@ -61,7 +91,6 @@ function checkQuality(text: string): { passed: boolean; reason?: string; charCou
   if (charCount < MIN_CHARS_SUCCESS) return { passed: false, reason: "extracted_text_too_short", charCount, letterCount };
   if (letterCount < MIN_LETTERS) return { passed: false, reason: "insufficient_letter_content", charCount, letterCount };
 
-  // Check for junk patterns
   const junkRatio = (text.match(/[^\x20-\x7E\n\r\t]/g) || []).length / charCount;
   if (junkRatio > 0.4) return { passed: false, reason: "corrupted_or_binary_content", charCount, letterCount };
 
@@ -120,7 +149,6 @@ Deno.serve(async (req) => {
     diagnostics.file_category = category;
 
     if (category === "unsupported") {
-      // Update resource with specific quarantine reason
       await supabase.from("resources").update({
         failure_reason: `Unsupported file type: .${ext}. Only PDF and text files are currently supported for parsing.`,
         enrichment_status: "failed",
@@ -162,47 +190,34 @@ Deno.serve(async (req) => {
       extractedText = new TextDecoder().decode(fileBytes);
       parserUsed = "text_decoder";
     } else if (category === "pdf") {
-      // Use Gemini Vision for PDF extraction (handles both native text and scanned PDFs)
       const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
       if (!lovableApiKey) {
-        // Fallback: try basic text extraction from PDF bytes
+        // Fallback: basic stream extraction
         const rawText = new TextDecoder("utf-8", { fatal: false }).decode(fileBytes);
-        // Try to extract text between stream markers (very basic)
         const streams = rawText.match(/stream\r?\n([\s\S]*?)\r?\nendstream/g) || [];
         extractedText = streams.map(s => s.replace(/stream\r?\n/, "").replace(/\r?\nendstream/, "")).join("\n");
         parserUsed = "basic_pdf_stream";
       } else {
         try {
-          // Use Gemini Vision via Lovable AI proxy for PDF parsing
-          const visionResp = await fetch("https://ai.lovable.dev/api/chat", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${lovableApiKey}`,
-            },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
-              messages: [{
-                role: "user",
-                content: [
-                  { type: "text", text: "Extract ALL text from this PDF document. Preserve headings, bullet points, numbered lists, and paragraph structure. Output plain text only — no markdown formatting, no commentary, no summaries. Just the raw text content." },
-                  { type: "file", data: btoa(String.fromCharCode(...fileBytes)), mime_type: "application/pdf" },
-                ],
-              }],
-              temperature: 0.1,
-            }),
-          });
+          // Split PDF into chunks for reliable full-document extraction
+          const chunks = await splitPdfIntoChunks(fileBytes, PAGES_PER_CHUNK);
+          const totalChunks = chunks.length;
+          diagnostics.total_pages_estimated = totalChunks * PAGES_PER_CHUNK; // approximate
+          diagnostics.chunks_used = totalChunks;
 
-          if (visionResp.ok) {
-            const visionResult = await visionResp.json();
-            extractedText = visionResult?.choices?.[0]?.message?.content || "";
-            parserUsed = "gemini_vision_pdf";
-            ocrAttempted = true; // Vision handles both native and scanned
-          } else {
-            const errText = await visionResp.text();
-            console.error("[parse-uploaded-file] Vision API error:", errText.slice(0, 300));
-            parserUsed = "vision_failed";
+          console.log(`[parse-uploaded-file] Processing ${totalChunks} chunk(s) for resource ${resource_id}`);
+
+          const chunkTexts: string[] = [];
+          for (let i = 0; i < totalChunks; i++) {
+            const label = `chunk ${i + 1}/${totalChunks}`;
+            console.log(`[parse-uploaded-file] Extracting ${label}...`);
+            const text = await extractChunkViaVision(chunks[i], lovableApiKey, label);
+            if (text) chunkTexts.push(text);
           }
+
+          extractedText = chunkTexts.join("\n\n");
+          parserUsed = totalChunks > 1 ? `gemini_vision_pdf_chunked_${totalChunks}` : "gemini_vision_pdf";
+          ocrAttempted = true;
         } catch (visionErr) {
           console.error("[parse-uploaded-file] Vision extraction error:", visionErr);
           parserUsed = "vision_exception";
@@ -232,7 +247,6 @@ Deno.serve(async (req) => {
 
       diagnostics.result = "quality_gate_failed";
 
-      // Log the attempt
       await supabase.from("enrichment_attempts").insert({
         resource_id,
         user_id: resource.user_id,
@@ -252,12 +266,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 6. Success — update resource
-    const trimmedContent = extractedText.slice(0, 60000); // Cap content
-
+    // 6. Success — update resource (no content cap for full-document extraction)
     await supabase.from("resources").update({
-      content: trimmedContent,
-      content_length: trimmedContent.length,
+      content: extractedText,
+      content_length: extractedText.length,
       enrichment_status: "deep_enriched",
       failure_reason: null,
       content_status: "content",
@@ -271,17 +283,17 @@ Deno.serve(async (req) => {
       strategy: parserUsed,
       result: "success",
       content_found: true,
-      content_length_extracted: trimmedContent.length,
+      content_length_extracted: extractedText.length,
       started_at: diagnostics.started_at as string,
       completed_at: new Date().toISOString(),
     });
 
     diagnostics.result = "success";
-    diagnostics.content_length = trimmedContent.length;
+    diagnostics.content_length = extractedText.length;
 
     return new Response(JSON.stringify({
       success: true,
-      content_length: trimmedContent.length,
+      content_length: extractedText.length,
       parser_used: parserUsed,
       ocr_attempted: ocrAttempted,
       diagnostics,
