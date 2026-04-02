@@ -29,9 +29,11 @@ import { dispatchExtractionMethod, runEnrichmentOnly } from '@/lib/extractionMet
 import { normalizeSourceType } from '@/lib/sourceTypeNormalizer';
 import {
   createBatchRun, finalizeBatchRun, persistJobRecords,
+  persistSingleJobRecord, updateBatchRunProgress,
   hasActiveJobInDB, loadBatchRunHistory, computeBatchMetrics,
   type BatchRunRecord,
 } from '@/lib/batchRunPersistence';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
