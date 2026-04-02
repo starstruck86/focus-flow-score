@@ -175,6 +175,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const handleImport = useCallback(async () => {
     const toImport = lessons.filter((_, i) => selected.has(i));
     if (toImport.length === 0) return;
+    console.log('[CourseImport][v2] handleImport started, lessons:', toImport.length);
     setImporting(true);
     setImportProgress({ done: 0, total: toImport.length, current: '' });
     setLessonResults(toImport.map((_, i) => ({ lessonIndex: i, status: 'queued' as const })));
@@ -182,6 +183,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     let successCount = 0;
     for (let i = 0; i < toImport.length; i++) {
       const lesson = toImport[i];
+      console.log('[CourseImport][v2] Processing lesson', i, lesson.url);
 
       // === FETCH LESSON ===
       updateLessonResult(i, { status: 'fetching_lesson' });
