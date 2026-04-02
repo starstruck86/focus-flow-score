@@ -34,6 +34,7 @@ export interface KnowledgeItem {
   tags: string[];
   who: string | null;
   framework: string | null;
+  review_status: 'unreviewed' | 'approved' | 'needs_rework' | 'archived';
   created_at: string;
   updated_at: string;
 }
