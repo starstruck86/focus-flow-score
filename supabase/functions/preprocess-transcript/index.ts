@@ -121,6 +121,7 @@ async function processChunk(apiKey: string, userContent: string): Promise<string
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userContent },
       ],
+      max_tokens: 16384,
     }),
   });
 
@@ -130,7 +131,12 @@ async function processChunk(apiKey: string, userContent: string): Promise<string
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
+  const choice = data.choices?.[0];
+  const finishReason = choice?.finish_reason;
+  if (finishReason === "length" || finishReason === "MAX_TOKENS") {
+    console.warn(`[preprocess-transcript] Output truncated (finish_reason: ${finishReason}). Content length: ${(choice?.message?.content || "").length}`);
+  }
+  return choice?.message?.content || "";
 }
 
 function splitTranscript(text: string, maxChunk: number, overlap: number): string[] {
