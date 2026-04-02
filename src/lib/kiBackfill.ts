@@ -68,6 +68,11 @@ function isWeakItem(item: { title: string; tactic_summary: string | null; when_t
   // Sounds like a document summary (only check summary, not title)
   if (SUMMARY_PATTERNS.some(p => p.test(summary))) return true;
 
+  // Transcript fragment: title and summary are the same text (heuristic extractor artifact)
+  if (summary.toLowerCase().startsWith(title.toLowerCase().slice(0, 30)) && !item.when_to_use && !item.example_usage) {
+    return true;
+  }
+
   // Title is just a generic chapter heading with no substance in summary
   if (/\s—\s(cold calling|discovery|objection handling|negotiation|competitors|messaging|closing|expansion|personas|stakeholder navigation)$/i.test(title) && summary.length < 30) {
     return true;

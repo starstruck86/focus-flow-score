@@ -513,7 +513,16 @@ export async function extractKnowledgeLLMFallback(
       for (const item of result.data.items) {
         if (!item.tactic_summary || item.tactic_summary.length < 20) continue;
         if (!item.when_to_use || item.when_to_use.length < 10) continue;
-        if (!item.title) continue;
+        if (!item.title || item.title.length < 5) continue;
+
+        // Structural quality gate: reject transcript fragments posing as KIs
+        // A proper KI title should be an action phrase, not a sentence fragment
+        const titleLooksLikeSentence = item.title.length > 60 && !/^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize)/i.test(item.title);
+        const summaryIsSameAsTitle = item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 30));
+        if (titleLooksLikeSentence && summaryIsSameAsTitle) {
+          log.info('Rejected transcript-fragment KI', { title: item.title.slice(0, 50) });
+          continue;
+        }
 
         // Trust validation
         const trust = validateTrust(
@@ -587,15 +596,20 @@ export async function extractKnowledgeAI(
   source: ExtractionSource,
   existingItems: Array<{ title: string; tactic_summary?: string | null }> = []
 ): Promise<KnowledgeItemInsert[]> {
+  // Always prefer LLM — heuristic produces low-quality sentence fragments
+  if ((source.content?.length ?? 0) >= 100) {
+    try {
+      const llmItems = await extractKnowledgeLLMFallback(source, existingItems);
+      if (llmItems.length > 0) return llmItems;
+    } catch {
+      // LLM failed, fall through to heuristic
+    }
+  }
+
   const heuristicItems = extractKnowledgeHeuristic(source, existingItems);
   if (heuristicItems.length > 0) return heuristicItems;
 
-  if ((source.content?.length ?? 0) >= 100) {
-    const llmItems = await extractKnowledgeLLMFallback(source, existingItems);
-    if (llmItems.length > 0) return llmItems;
-  }
-
-  log.warn('Both heuristic and LLM extraction returned 0 items', {
+  log.warn('Both LLM and heuristic extraction returned 0 items', {
     resourceId: source.resourceId,
     contentLength: source.content?.length ?? 0,
   });
