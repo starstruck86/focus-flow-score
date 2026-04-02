@@ -1,5 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PDFDocument } from "https://esm.sh/pdf-lib@1.17.1";
+import { Buffer } from "node:buffer";
+import pdfParse from "npm:pdf-parse@1.1.1/lib/pdf-parse.js";
 
 const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
@@ -12,6 +14,8 @@ const corsHeaders = {
 // Quality thresholds
 const MIN_CHARS_SUCCESS = 100;
 const MIN_LETTERS = 30;
+const NATIVE_PDF_MIN_CHARS = 500;
+const NATIVE_PDF_MIN_LETTERS = 100;
 const PAGES_PER_CHUNK = 20;
 const MIN_PAGES_PER_CHUNK = 1;
 const BASE64_CHUNK_SIZE = 0x8000;
@@ -79,6 +83,16 @@ function extractBasicPdfStreams(fileBytes: Uint8Array): string {
     .map((stream) => stream.replace(/stream\r?\n/, "").replace(/\r?\nendstream/, ""))
     .join("\n")
     .trim();
+}
+
+function passesNativePdfQuality(text: string): boolean {
+  const quality = checkQuality(text);
+  return quality.passed && quality.charCount >= NATIVE_PDF_MIN_CHARS && quality.letterCount >= NATIVE_PDF_MIN_LETTERS;
+}
+
+async function extractPdfTextNatively(fileBytes: Uint8Array): Promise<string> {
+  const result = await pdfParse(Buffer.from(fileBytes));
+  return (result?.text || "").trim();
 }
 
 // ── Extract text from a single PDF chunk via Gemini Vision ──
@@ -274,12 +288,26 @@ Deno.serve(async (req) => {
       const basicPdfText = extractBasicPdfStreams(fileBytes);
       diagnostics.basic_pdf_stream_length = basicPdfText.length;
 
+      let nativePdfText = "";
+      try {
+        nativePdfText = await extractPdfTextNatively(fileBytes);
+        diagnostics.native_pdf_length = nativePdfText.length;
+        diagnostics.native_pdf_quality_passed = passesNativePdfQuality(nativePdfText);
+      } catch (nativeErr) {
+        diagnostics.native_pdf_error = nativeErr instanceof Error ? nativeErr.message : String(nativeErr);
+      }
+
+      if (passesNativePdfQuality(nativePdfText)) {
+        extractedText = nativePdfText;
+        parserUsed = "native_pdf_parse";
+      }
+
       const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-      if (!lovableApiKey) {
+      if (!extractedText && !lovableApiKey) {
         // Fallback: basic stream extraction
         extractedText = basicPdfText;
         parserUsed = "basic_pdf_stream";
-      } else {
+      } else if (!extractedText) {
         try {
           const srcDoc = await PDFDocument.load(fileBytes, { ignoreEncryption: true });
           const totalPages = srcDoc.getPageCount();
