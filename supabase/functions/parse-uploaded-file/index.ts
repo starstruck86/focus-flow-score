@@ -395,6 +395,8 @@ Deno.serve(async (req) => {
       enrichment_status: "deep_enriched",
       failure_reason: null,
       content_status: "content",
+      enrichment_version: 2,
+      validation_version: 2,
     }).eq("id", resource_id);
 
     // Log successful attempt
