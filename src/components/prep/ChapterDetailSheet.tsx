@@ -267,6 +267,7 @@ function KnowledgeCard({ item, onSelect, onApproveActivate, onActivate, onDeacti
           <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
             <FrameworkBadge who={item.who} framework={item.framework} />
+            <AttributionProvenanceBadge activationMetadata={item.activation_metadata} />
           </div>
           {item.tactic_summary && (
             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.tactic_summary}</p>
