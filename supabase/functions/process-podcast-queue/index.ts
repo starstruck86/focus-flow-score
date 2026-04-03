@@ -485,19 +485,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Claim up to CONCURRENCY items ──
-    const { data: candidates } = await supabase
-      .from("podcast_import_queue")
-      .select("*")
-      .eq("status", "queued")
-      .order("created_at", { ascending: true })
-      .limit(CONCURRENCY);
+    // ── Atomically claim items with global concurrency guard ──
+    const { data: candidates, error: claimErr } = await supabase
+      .rpc("claim_podcast_queue_items", { p_max_items: CONCURRENCY, p_max_processing: CONCURRENCY });
 
-    if (!candidates?.length) {
-      return json({ message: "No queued items", processed: 0 });
+    if (claimErr) {
+      console.error("Claim RPC error:", claimErr);
+      return json({ error: "Failed to claim items" }, 500);
     }
 
-    console.log(`Claimed ${candidates.length} items for processing`);
+    if (!candidates?.length) {
+      return json({ message: "No queued items (or concurrency cap reached)", processed: 0 });
+    }
+
+    console.log(`Atomically claimed ${candidates.length} items for processing`);
 
     // ── Process all items concurrently ──
     const results = await Promise.allSettled(
