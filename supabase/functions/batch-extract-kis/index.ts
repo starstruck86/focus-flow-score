@@ -255,8 +255,9 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
   pLog.initial_stage2_raw_count = rawItems.length;
 
   // ── Stage 2 Recovery: only for long content where expansion significantly underperformed ──
+  // Skip recovery for short lessons to stay within edge function timeout (2 AI calls max)
   const coverageRatio = candidates.length > 0 ? rawItems.length / candidates.length : 1;
-  const shouldRecover = candidates.length >= 20 && coverageRatio < 0.6 && rawItems.length >= 3;
+  const shouldRecover = !isShortLesson && candidates.length >= 20 && coverageRatio < 0.6 && rawItems.length >= 3;
 
   if (shouldRecover) {
     console.log(`[lesson-pipeline] Stage 2 RECOVERY triggered | coverage=${(coverageRatio * 100).toFixed(0)}% (${rawItems.length}/${candidates.length})`);
