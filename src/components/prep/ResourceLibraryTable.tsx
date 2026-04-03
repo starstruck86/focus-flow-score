@@ -663,27 +663,62 @@ export function ResourceLibraryTable({
                               </span>
                             )}
                           </div>
-                          {/* Inline extraction progress */}
+                          {/* Inline extraction progress: live → durable fallback */}
                           {(() => {
                             const ep = extractionResources[resource.id];
-                            if (!ep) return null;
-                            const pct = ep.status === 'queued' ? 0 : ep.status === 'extracting' ? 50 : 100;
-                            return (
-                              <div className="flex items-center gap-2 mt-1">
-                                {ep.status === 'extracting' && <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />}
-                                {ep.status === 'done' && <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />}
-                                {ep.status === 'failed' && <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />}
-                                <Progress value={pct} className="h-1.5 flex-1 max-w-[120px]" />
-                                <span className="text-[9px] text-muted-foreground shrink-0">
-                                  {ep.status === 'queued' ? 'Queued' :
-                                   ep.status === 'extracting' ? 'Extracting…' :
-                                   ep.status === 'done' ? `Done${ep.kiExtracted ? ` · ${ep.kiExtracted} KI` : ''}` :
-                                   'Failed'}
-                                </span>
-                              </div>
-                            );
+                            // Live state takes precedence
+                            if (ep) {
+                              const pct = ep.status === 'queued' ? 0 : ep.status === 'extracting' ? 50 : 100;
+                              return (
+                                <div className="flex items-center gap-2 mt-1">
+                                  {ep.status === 'extracting' && <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />}
+                                  {ep.status === 'done' && <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />}
+                                  {ep.status === 'failed' && <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />}
+                                  <Progress value={pct} className="h-1.5 flex-1 max-w-[120px]" />
+                                  <span className="text-[9px] text-muted-foreground shrink-0">
+                                    {ep.status === 'queued' ? 'Queued' :
+                                     ep.status === 'extracting' ? 'Extracting…' :
+                                     ep.status === 'done' ? `Done${ep.kiExtracted ? ` · ${ep.kiExtracted} KI` : ''}` :
+                                     'Failed'}
+                                  </span>
+                                </div>
+                              );
+                            }
+                            // Durable fallback from backend
+                            const { status: durableStatus, stale, at } = deriveReExtractStatus(resource);
+                            if (durableStatus === 'idle') return null;
+                            const timeLabel = formatRelativeTime(at);
+                            if (durableStatus === 'running') {
+                              return (
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />
+                                  <span className="text-[9px] text-muted-foreground">Extracting…{timeLabel && ` · started ${timeLabel}`}</span>
+                                </div>
+                              );
+                            }
+                            if (durableStatus === 'succeeded') {
+                              return (
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />
+                                  <span className={cn('text-[9px]', stale ? 'text-muted-foreground/60 line-through' : 'text-muted-foreground')}>
+                                    Extracted{timeLabel && ` · ${timeLabel}`}
+                                  </span>
+                                  {stale && <span className="text-[9px] text-muted-foreground/60">(stale)</span>}
+                                </div>
+                              );
+                            }
+                            if (durableStatus === 'failed') {
+                              return (
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />
+                                  <span className="text-[9px] text-destructive/80">
+                                    Extraction failed{timeLabel && ` · ${timeLabel}`}
+                                  </span>
+                                </div>
+                              );
+                            }
+                            return null;
                           })()}
-                          {lc && lc.blocked !== 'none' && (
                             <div className="flex items-center gap-2 mt-0.5">
                               <p className="text-[9px] text-destructive/80">
                                 {getBlockedLabel(lc.blocked)}
