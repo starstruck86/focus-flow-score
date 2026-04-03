@@ -1018,8 +1018,8 @@ export function ResourceLibraryTable({
                     </tr>
                     {/* Expanded lifecycle detail panel */}
                     {expandedId === resource.id && (
-                      <tr>
-                        <td colSpan={12} className="p-0">
+                      <tr className="bg-card">
+                        <td colSpan={12} className="p-0 relative z-10 bg-card">
                           <InlineResourceDetail
                             resource={resource}
                             onClose={() => setExpandedId(null)}

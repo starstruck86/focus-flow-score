@@ -48,6 +48,54 @@ const STATUS_ICONS: Record<string, typeof CheckCircle2> = {
   failed: XCircle,
 };
 
+const VIDEO_TRANSCRIPT_MARKER = '\n\n--- Video Transcript ---\n\n';
+
+function normalizeComparableText(input: string) {
+  return input
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stripTranscriptMarker(content: string) {
+  return content.split(VIDEO_TRANSCRIPT_MARKER)[0].trim();
+}
+
+function looksLikeDuplicateTranscript(baseContent: string, transcript: string) {
+  const normalizedBase = normalizeComparableText(baseContent);
+  const normalizedTranscript = normalizeComparableText(transcript);
+
+  if (!normalizedBase || !normalizedTranscript) return false;
+  if (normalizedBase === normalizedTranscript) return true;
+  if (normalizedBase.includes(normalizedTranscript)) return true;
+
+  const transcriptPrefix = normalizedTranscript.slice(0, Math.min(300, normalizedTranscript.length));
+  return transcriptPrefix.length > 80 && normalizedBase.includes(transcriptPrefix);
+}
+
+function pickLessonBody(candidates: Array<string | null | undefined>, transcript: string) {
+  const cleanedCandidates = candidates
+    .map(candidate => stripTranscriptMarker(candidate || ''))
+    .filter(Boolean);
+
+  const distinctCandidates = cleanedCandidates.filter(candidate => !looksLikeDuplicateTranscript(candidate, transcript));
+  const pool = distinctCandidates.length > 0 ? distinctCandidates : cleanedCandidates;
+
+  return pool.sort((a, b) => b.length - a.length)[0] || '';
+}
+
+function buildMergedLessonContent(baseContent: string, transcript: string) {
+  const cleanedBase = stripTranscriptMarker(baseContent);
+  const cleanedTranscript = transcript.trim();
+
+  if (!cleanedBase) return cleanedTranscript;
+  if (!cleanedTranscript) return cleanedBase;
+  if (looksLikeDuplicateTranscript(cleanedBase, cleanedTranscript)) return cleanedBase;
+
+  return `${cleanedBase}${VIDEO_TRANSCRIPT_MARKER}${cleanedTranscript}`;
+}
+
 export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps) {
   const [url, setUrl] = useState('');
   const [fetching, setFetching] = useState(false);
@@ -251,7 +299,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
         successCount++;
 
-        const shouldTranscribe = Boolean(lessonData?.media_url && resourceId && resource?.content_status !== 'transcript');
+        const shouldTranscribe = Boolean(lessonData?.media_url && resourceId);
 
         if (shouldTranscribe) {
           updateLessonResult(i, { status: 'transcribing' });
@@ -259,21 +307,22 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           try {
             const { data: existingBeforeTx } = await supabase
               .from('resources')
-              .select('content')
+              .select('content, content_status')
               .eq('id', resourceId)
               .single();
-            const preservedLessonContent = existingBeforeTx?.content || lessonData?.content || '';
 
             const { data: txData } = await trackedInvoke<any>('transcribe-audio', {
               body: { audio_url: lessonData.media_url },
               timeoutMs: 120_000,
             });
             if (txData?.success && txData.transcript) {
-              const transcriptMarker = '\n\n--- Video Transcript ---\n\n';
-              const baseContent = preservedLessonContent.includes(transcriptMarker)
-                ? preservedLessonContent.split(transcriptMarker)[0].trimEnd()
-                : preservedLessonContent.trimEnd();
-              const updated = `${baseContent}${transcriptMarker}${txData.transcript}`;
+              const transcript = txData.transcript.trim();
+              const baseContent = pickLessonBody([
+                lessonData?.content,
+                existingBeforeTx?.content,
+              ], transcript);
+              const updated = buildMergedLessonContent(baseContent, transcript);
+
               await supabase.from('resources').update({
                 content: updated,
                 content_length: updated.length,

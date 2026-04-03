@@ -384,7 +384,7 @@ export function InlineResourceDetail({ resource, onClose, onAction }: Props) {
   return (
     <div
       ref={containerRef}
-      className="bg-card border-b-2 border-primary/20 animate-fade-in"
+      className="relative z-10 isolate bg-card border-b-2 border-primary/20 animate-fade-in"
     >
       <MetadataHeader resource={resource} onClose={onClose} onAction={onAction} />
       <Tabs defaultValue="source" className="w-full">
