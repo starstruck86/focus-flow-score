@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import type { Task, TaskStatus } from '@/types';
 import { STATUS_ORDER, STATUS_META } from './constants';
 import { TaskCard } from './TaskCard';
+import { SHELL } from '@/lib/layout';
 
 interface TaskKanbanBoardProps {
   tasks: Task[];

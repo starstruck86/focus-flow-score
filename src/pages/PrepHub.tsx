@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Crosshair, Brain, Download } from 'lucide-react';
+import { SHELL } from '@/lib/layout';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { PodcastQueueIndicator } from '@/components/prep/PodcastQueueIndicator';
 
