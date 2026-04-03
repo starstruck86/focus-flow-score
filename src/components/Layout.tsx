@@ -30,6 +30,7 @@ import { useVoiceReminders } from '@/hooks/useVoiceReminders';
 import { useWakeWord } from '@/hooks/useWakeWord';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/BottomNav';
+import { TW_PAGE_BOTTOM_PAD, TW_FAB_BOTTOM } from '@/lib/layout';
 
 
 
@@ -318,7 +319,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       <Breadcrumbs />
-      <main data-testid="main-content" className="flex-1 overflow-x-hidden overflow-y-auto pb-[calc(8.5rem+env(safe-area-inset-bottom))]">
+      <main data-testid="main-content" className={`flex-1 overflow-x-hidden overflow-y-auto ${TW_PAGE_BOTTOM_PAD}`}>
         {children}
       </main>
 
@@ -335,7 +336,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
       )}
       {daveDrift && !daveOpen && (
-        <div className="fixed right-4 bottom-[calc(8.5rem+env(safe-area-inset-bottom))] z-50">
+        <div className={`fixed right-4 ${TW_FAB_BOTTOM} z-50`}>
           <button
             onClick={() => toast.error(
               `Dave is unavailable: deployment version mismatch (${daveDrift.expected} vs ${daveDrift.actual}). Redeploy dave functions to fix.`,
