@@ -588,21 +588,72 @@ export async function extractKnowledgeLLMFallback(
           framework: item.framework || null,
         };
 
-        // Auto-detect attribution from content if LLM left it generic/empty
-        if (!ki.who || ki.who === 'Unknown' || !ki.framework || ki.framework === 'General') {
-          const searchText = [
-            source.title,
-            source.description,
-            item.tactic_summary,
-            item.source_excerpt,
-            item.title,
-          ].filter(Boolean).join(' ');
+        // Conservative auto-attribution with provenance tracking
+        const WEAK_WHO = ['', 'unknown', 'host', 'speaker', 'host of podcast'];
+        const WEAK_FRAMEWORK = ['', 'general', 'unknown'];
+        const whoIsWeak = !ki.who || WEAK_WHO.includes((ki.who || '').toLowerCase().trim());
+        const frameworkIsWeak = !ki.framework || WEAK_FRAMEWORK.includes((ki.framework || '').toLowerCase().trim());
 
-          const detected = detectFramework(searchText);
-          if (detected) {
-            if (!ki.who || ki.who === 'Unknown') ki.who = detected.who;
-            if (!ki.framework || ki.framework === 'General') ki.framework = detected.framework;
+        if (whoIsWeak || frameworkIsWeak) {
+          // Try strong-signal sources in priority order
+          const strongSources: { label: string; text: string }[] = [
+            { label: 'resource_title', text: source.title || '' },
+            { label: 'resource_description', text: source.description || '' },
+            { label: 'source_excerpt', text: item.source_excerpt || '' },
+            { label: 'tactic_summary', text: item.tactic_summary || '' },
+          ];
+
+          let detected: ReturnType<typeof detectFramework> = null;
+          let signalSource = '';
+
+          for (const src of strongSources) {
+            if (!src.text) continue;
+            const match = detectFramework(src.text);
+            if (match) {
+              detected = match;
+              signalSource = src.label;
+              break;
+            }
           }
+
+          if (detected) {
+            const oldWho = ki.who;
+            const oldFramework = ki.framework;
+            let changed = false;
+
+            if (whoIsWeak) {
+              ki.who = detected.who;
+              changed = true;
+            }
+            if (frameworkIsWeak) {
+              ki.framework = detected.framework;
+              changed = true;
+            }
+
+            if (changed) {
+              const provenance = whoIsWeak && frameworkIsWeak ? 'framework_library_fill'
+                : 'framework_library_override';
+
+              log.info('Attribution auto-corrected', {
+                title: ki.title,
+                oldWho,
+                newWho: ki.who,
+                oldFramework,
+                newFramework: ki.framework,
+                provenance,
+                signalSource,
+                reason: `LLM returned weak values (who="${oldWho}", framework="${oldFramework}"), detected from ${signalSource}`,
+              });
+            }
+          }
+        } else {
+          // LLM returned specific values — preserve them
+          log.debug('Attribution preserved from LLM', {
+            title: ki.title,
+            who: ki.who,
+            framework: ki.framework,
+            provenance: 'llm',
+          });
         }
 
         rawItems.push(ki);
