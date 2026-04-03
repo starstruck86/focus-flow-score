@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { useExtractionProgress } from '@/store/useExtractionProgress';
+import { useResourceJobProgress } from '@/store/useResourceJobProgress';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
