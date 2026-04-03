@@ -3,22 +3,24 @@
  * Tabs: Source | Extracted Content | Knowledge
  */
 import { useState, useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Eye, ExternalLink, FileText, Code, Copy, Check,
-  Loader2, AlertTriangle, CheckCircle2, ChevronUp, X,
+  Loader2, AlertTriangle, CheckCircle2, ChevronUp, X, Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import { deriveProcessingState } from '@/lib/processingState';
 import { getResourceOrigin } from '@/lib/resourceEligibility';
+import { decodeHTMLEntities } from '@/lib/stringUtils';
 import type { Resource } from '@/hooks/useResources';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
 
