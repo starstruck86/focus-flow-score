@@ -96,7 +96,7 @@ const DOC_CHUNK_SIZE = 8000;
 const DOC_CHUNK_OVERLAP = 500;
 const TRANSCRIPT_CHUNK_SIZE = 25000; // ~15 min of transcript per chunk
 const TRANSCRIPT_CHUNK_OVERLAP = 1500;
-const MAX_KIS_PER_RESOURCE = 20;
+// No hard cap — quality gates are the only filter. Every validated play is kept.
 const DOC_SINGLE_PASS_THRESHOLD = 12000;
 const TRANSCRIPT_SINGLE_PASS_THRESHOLD = 30000; // Single-pass for episodes < ~20 min
 const MAX_TOKENS = 16384;
