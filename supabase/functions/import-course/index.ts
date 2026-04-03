@@ -685,6 +685,25 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
       }
     }
   }
+
+  // Also try to find standalone paragraphs near the lesson heading that aren't in our content yet
+  // These are intro paragraphs that sit between the heading and the main body div
+  const h2Matches = [...cleanedHtml.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
+  for (const h2 of h2Matches) {
+    // Look for <p> tags after this h2 but before the next heading or div container
+    const afterH2 = cleanedHtml.substring(h2.index! + h2[0].length);
+    const nextSectionIdx = afterH2.search(/<(?:h[1-3]|div[^>]*class="[^"]*(?:kjb-html|post__|section__|content-wrap))/i);
+    const betweenSlice = nextSectionIdx > 0 ? afterH2.substring(0, nextSectionIdx) : afterH2.substring(0, 2000);
+    const paragraphs = [...betweenSlice.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)];
+    for (const p of paragraphs) {
+      const pText = p[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      if (pText.length > 40 && !content.includes(pText.substring(0, Math.min(60, pText.length)))) {
+        introText += pText + '\n\n';
+        debug.push(`Intro paragraph captured: ${pText.substring(0, 60)}... (${pText.length} chars)`);
+      }
+    }
+  }
+
   if (introText) {
     // Insert intro after video embeds but before main content
     const embedEnd = content.lastIndexOf(']\n\n');
