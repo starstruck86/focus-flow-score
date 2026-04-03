@@ -101,39 +101,21 @@ Deno.serve(async (req) => {
 
     console.log(`[extract] Starting: "${resource.title}" (${resource.content.length} chars)`);
 
-    // ── 2. Run extraction via the shared lesson-aware extractor ──
+    // ── 2. Run AI extraction (direct, no chained edge function) ──
+    const decodedContent = decodeHTMLEntities(resource.content);
+    const isLesson = isStructuredLesson(decodedContent);
     let rawItems: any[];
     let rawResponse: string | null = null;
     try {
-      const extractorRes = await fetch(`${supabaseUrl}/functions/v1/extract-tactics`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'x-batch-key': serviceRoleKey,
-        },
-        body: JSON.stringify({
-          resourceId: resource.id,
-          title: resource.title,
-          content: decodeHTMLEntities(resource.content),
-          description: resource.description,
-          tags: resource.tags || [],
-          resourceType: resource.resource_type,
-        }),
-      });
-
-      const extractorJson = await extractorRes.json();
-      if (!extractorRes.ok) {
-        throw new Error(extractorJson?.error || `Shared extractor returned ${extractorRes.status}`);
+      if (isLesson) {
+        const result = await extractLessonDirect(LOVABLE_API_KEY, decodedContent, resource.title, resource.description, resource.tags || []);
+        rawItems = result.items;
+        rawResponse = JSON.stringify({ lesson_pipeline: result.pipelineLog });
+      } else {
+        const result = await callAIDirect(LOVABLE_API_KEY, decodedContent, resource.title, resource.tags || [], resource.resource_type);
+        rawItems = result.items;
+        rawResponse = result.rawContent;
       }
-
-      rawItems = Array.isArray(extractorJson?.items) ? extractorJson.items : [];
-      rawResponse = JSON.stringify({
-        items: rawItems.length,
-        chunks_total: extractorJson?.chunks_total ?? null,
-        chunks_processed: extractorJson?.chunks_processed ?? null,
-        chunks_failed: extractorJson?.chunks_failed ?? null,
-      });
       log.rawAiResponse = rawResponse;
     } catch (aiErr: any) {
       log.outcome = 'ai_error';
@@ -461,7 +443,7 @@ function hasSubstance(value: string | undefined | null, minChars: number): boole
  * 
  * Threshold: composite > 0.55 = duplicate
  */
-function compositeDedup(items: any[]): any[] {
+function compositeDedup(items: any[], isLesson = false): any[] {
   const result: any[] = [];
   const fingerprints = new Set<string>();
 
@@ -475,7 +457,150 @@ function compositeDedup(items: any[]): any[] {
     let isDupe = false;
     for (const existing of result) {
       const score = compositeSimilarity(item, existing);
-      if (score > 0.55) {
+      if (score > (isLesson ? 0.75 : 0.55)) {
+
+// ═══════════════════════════════════════════
+// Direct AI Calling (no chained edge functions)
+// ═══════════════════════════════════════════
+
+const BASE_SYSTEM_PROMPT = `You are an elite sales execution coach. Extract TACTICAL PLAYS from content.
+
+A Knowledge Item is a PLAY — a structured, situational, reusable tactical entry that tells a rep exactly when, why, and how to execute.
+
+EVERY knowledge item MUST include ALL of these fields:
+1. "title" — action title (e.g. "Reframe the budget objection using cost-of-inaction")
+2. "framework" — methodology. REQUIRED.
+3. "who" — thought leader or author. REQUIRED.
+4. "source_excerpt" — EXACT quote from content. Min 2 sentences. REQUIRED.
+5. "source_location" — where in content this was found. REQUIRED.
+6. "macro_situation" — WHEN does this play apply? 2-4 sentences.
+7. "micro_strategy" — WHAT are you doing? 2-3 sentences.
+8. "why_it_matters" — WHY does this work? 2-3 sentences.
+9. "how_to_execute" — HOW step by step. 3-5 concrete steps.
+10. "what_this_unlocks" — OUTCOME. 2-3 sentences.
+11. "when_to_use" — trigger conditions (2-3 sentences)
+12. "when_not_to_use" — boundaries (2-3 sentences)
+13. "example_usage" — realistic talk track. Min 3-4 sentences.
+14. "tactic_summary" — concise 2-3 sentence summary
+15. "chapter" — one of: cold_calling|discovery|objection_handling|negotiation|competitors|personas|messaging|closing|stakeholder_navigation|expansion|demo|follow_up
+16. "knowledge_type" — skill|product|competitive
+
+Return ONLY a JSON array. Quality over quantity, but do not under-extract.`;
+
+const LESSON_ENUMERATE_SYSTEM = `You are an expert training content analyst. Create an exhaustive inventory of every distinct teachable concept in this lesson.
+
+For each concept, return a JSON object with:
+- "candidate_title": short descriptive title (3-10 words)
+- "concept_type": one of "framework", "technique", "rule", "signal", "method", "model", "tool", "heuristic", "tier", "criteria"
+- "source_hint": a short quote or reference from the content (1-2 sentences)
+- "section": which part of the lesson
+
+Be EXHAUSTIVE. List every distinct framework, scoring criteria, research technique, signal, decision rule, tiering system, metric, or heuristic. Return ONLY a JSON array.`;
+
+const LESSON_EXPAND_ADDENDUM = `
+
+STRUCTURED LESSON INSTRUCTIONS:
+Extract EVERY distinct tactic, framework, or actionable technique. Each concept is its OWN play.
+Titles may describe the concept naturally — they do NOT need to start with a verb.
+Look for named frameworks, scoring models, research techniques, prioritization criteria, signal detection methods, rules of thumb, tiering systems, and specific tools or workflows.`;
+
+async function aiRequest(apiKey: string, system: string, user: string, maxTokens = 16384): Promise<any> {
+  const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash',
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      max_tokens: maxTokens,
+      temperature: 0.2,
+    }),
+  });
+  if (res.status === 429) {
+    await new Promise(r => setTimeout(r, 3000));
+    const retry = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        max_tokens: maxTokens,
+        temperature: 0.2,
+      }),
+    });
+    if (!retry.ok) throw new Error(`AI error after retry: ${retry.status}`);
+    return retry.json();
+  }
+  if (!res.ok) throw new Error(`AI returned ${res.status}`);
+  return res.json();
+}
+
+function parseAiJson(result: any): any[] {
+  const raw = result?.choices?.[0]?.message?.content || '[]';
+  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  try { return JSON.parse(cleaned); } catch {}
+  const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
+  if (s !== -1 && e > s) { try { return JSON.parse(cleaned.slice(s, e + 1)); } catch {} }
+  return [];
+}
+
+async function callAIDirect(apiKey: string, content: string, title: string, tags: string[], resourceType?: string): Promise<{ items: any[]; rawContent: string }> {
+  const userPrompt = `Extract tactical plays from this content:\n\nTitle: ${title}\nTags: ${(tags || []).join(', ') || 'none'}\n\nContent:\n${content}\n\nReturn ONLY a JSON array of plays.`;
+  const result = await aiRequest(apiKey, BASE_SYSTEM_PROMPT, userPrompt);
+  return { items: parseAiJson(result), rawContent: result?.choices?.[0]?.message?.content || '' };
+}
+
+async function extractLessonDirect(
+  apiKey: string, content: string, title: string, description: string | null, tags: string[]
+): Promise<{ items: any[]; pipelineLog: any }> {
+  const pLog: any = { stage1: 0, stage2: 0, recovery: 0, final: 0 };
+
+  console.log(`[extract] LESSON 2-STAGE | ${content.length} chars`);
+
+  // Stage 1: Enumerate
+  const enumPrompt = `Analyze this lesson and list every distinct teachable concept:\n\nTitle: ${title}\n${description ? `Description: ${description}` : ''}\n\nContent:\n${content}\n\nList EVERY distinct concept. Do NOT merge adjacent concepts.`;
+  let candidates: any[] = [];
+  try {
+    candidates = parseAiJson(await aiRequest(apiKey, LESSON_ENUMERATE_SYSTEM, enumPrompt, 4096));
+    pLog.stage1 = candidates.length;
+    console.log(`[extract] Stage 1: ${candidates.length} candidates`);
+  } catch (err: any) { console.error('[extract] Stage 1 failed:', err?.message); }
+
+  // Stage 2: Expand
+  const candidateList = candidates.length > 0
+    ? candidates.map((c: any, i: number) => `${i + 1}. ${c.candidate_title || 'Untitled'} [${c.concept_type || 'technique'}]`).join('\n')
+    : '';
+  const expandPrompt = `Extract tactical plays from this training lesson.\n\nTitle: ${title}\nTags: ${tags.join(', ')}\n${candidateList ? `\nYou MUST produce a play for EACH of these ${candidates.length} concepts:\n${candidateList}\n` : ''}\nContent:\n${content}\n\nReturn ONLY a JSON array. One play per concept. Do not merge or skip any.`;
+
+  let rawItems: any[] = [];
+  try {
+    rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, expandPrompt));
+    pLog.stage2 = rawItems.length;
+    console.log(`[extract] Stage 2: ${rawItems.length} raw items`);
+  } catch (err: any) { console.error('[extract] Stage 2 failed:', err?.message); }
+
+  // Stage 3: Recovery for missed candidates
+  if (candidates.length > 0 && rawItems.length < candidates.length) {
+    const titles = rawItems.map((it: any) => (it.title || '').toLowerCase());
+    const missed = candidates.filter((c: any) => {
+      const ct = (c.candidate_title || '').toLowerCase();
+      return !titles.some((t: string) => t.includes(ct.slice(0, 15)) || ct.includes(t.slice(0, 15)));
+    });
+    if (missed.length > 0 && missed.length <= 12) {
+      console.log(`[extract] Recovery: ${missed.length} missed candidates`);
+      const missedList = missed.map((c: any, i: number) => `${i + 1}. ${c.candidate_title} [${c.concept_type}]`).join('\n');
+      try {
+        const recoveryItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM,
+          `These concepts were missed. Extract a play for EACH:\n\n${missedList}\n\nTitle: ${title}\nContent:\n${content}\n\nReturn ONLY a JSON array.`));
+        rawItems.push(...recoveryItems);
+        pLog.recovery = recoveryItems.length;
+        console.log(`[extract] Recovery: ${recoveryItems.length} added`);
+      } catch (err: any) { console.error('[extract] Recovery failed:', err?.message); }
+    }
+  }
+
+  pLog.final = rawItems.length;
+  return { items: rawItems, pipelineLog: pLog };
+}
         console.log(`[extract] DEDUP: "${(item.title || '').slice(0, 40)}" ≈ "${(existing.title || '').slice(0, 40)}" (score: ${score.toFixed(2)})`);
         isDupe = true;
         break;

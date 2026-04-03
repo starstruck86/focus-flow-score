@@ -77,12 +77,38 @@ Look for:
 - Signal detection methods (competitor usage, headcount growth, relevant problems)
 - Territory management strategies
 - Account scoring/tiering approaches
+- Rules of thumb or heuristics the instructor shares
+- Prioritization tiers, categories, or decision trees
+- Research methods or data sources the instructor recommends
+- Specific tools, platforms, or workflows mentioned
 
-Extract 8-15 plays from the full lesson. Each distinct technique or method is its own play.`;
+Each distinct technique, method, signal, or rule is its OWN separate play. If the lesson teaches 12 things, return 12 plays.
+Titles may describe the technique naturally — they do NOT need to start with a verb.`;
+
+// ── Lesson Stage-1: Exhaustive enumeration prompt ──
+const LESSON_ENUMERATE_SYSTEM = `You are an expert training content analyst. Your job is to create an exhaustive inventory of every distinct teachable concept in a structured lesson.
+
+For each concept, return a JSON object with:
+- "candidate_title": a short descriptive title (3-10 words)
+- "concept_type": one of "framework", "technique", "rule", "signal", "method", "model", "tool", "heuristic", "tier", "criteria"
+- "source_hint": a short quote or paragraph reference from the content (1-2 sentences)
+- "section": which part of the lesson this comes from
+
+Be EXHAUSTIVE. Include every distinct:
+- Named frameworks or models
+- Scoring criteria or prioritization rules  
+- Research techniques or data-gathering methods
+- Signal detection approaches
+- Decision rules or heuristics
+- Tools or platform-specific workflows
+- Tiering systems or categorization schemes
+- Specific metrics or thresholds mentioned
+
+Return ONLY a JSON array. No markdown fences. If the lesson contains 15 concepts, list all 15. Do NOT summarize or merge adjacent concepts.`;
 
 const DOCUMENT_ITEM_TARGET = '2-4';
 const TRANSCRIPT_ITEM_TARGET = '4-8';
-const LESSON_ITEM_TARGET = '8-15';
+const LESSON_ITEM_TARGET = '8-20';
 
 const LESSON_TRANSCRIPT_MARKER = '--- Video Transcript ---';
 
@@ -271,20 +297,34 @@ async function extractFromChunk(
   return items;
 }
 
-/** Deduplicate by title similarity */
-function deduplicateItems(items: any[]): any[] {
+/** Deduplicate by title similarity — conservative for lessons */
+function deduplicateItems(items: any[], isLesson = false): any[] {
   const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
   const words = (s: string) => new Set(normalize(s).split(/\s+/).filter(w => w.length > 2));
+  // Lessons use a much higher dedup threshold to avoid merging adjacent tactics
+  const OVERLAP_THRESHOLD = isLesson ? 0.85 : 0.6;
 
   const result: any[] = [];
   for (const item of items) {
     const itemWords = words(item.title || '');
+    const itemSummaryWords = words(item.tactic_summary || '');
     let isDupe = false;
     for (let i = 0; i < result.length; i++) {
       const existingWords = words(result[i].title || '');
       const intersection = [...itemWords].filter(w => existingWords.has(w));
       const overlapRatio = intersection.length / Math.min(itemWords.size, existingWords.size);
-      if (overlapRatio > 0.6 || normalize(item.title).includes(normalize(result[i].title)) || normalize(result[i].title).includes(normalize(item.title))) {
+      // For lessons, also check tactic_summary overlap to catch semantically identical items
+      const existingSummaryWords = words(result[i].tactic_summary || '');
+      const summaryIntersection = [...itemSummaryWords].filter(w => existingSummaryWords.has(w));
+      const summaryOverlap = itemSummaryWords.size > 0 && existingSummaryWords.size > 0
+        ? summaryIntersection.length / Math.min(itemSummaryWords.size, existingSummaryWords.size)
+        : 0;
+
+      const titleMatch = overlapRatio > OVERLAP_THRESHOLD;
+      const substringMatch = !isLesson && (normalize(item.title).includes(normalize(result[i].title)) || normalize(result[i].title).includes(normalize(item.title)));
+      const compositeDupe = isLesson && overlapRatio > 0.7 && summaryOverlap > 0.7;
+
+      if (titleMatch || substringMatch || compositeDupe) {
         isDupe = true;
         if ((item.source_excerpt?.length || 0) > (result[i].source_excerpt?.length || 0)) {
           result[i] = item;
@@ -302,24 +342,30 @@ function validateItem(item: any, isTranscript: boolean, isLesson: boolean): bool
   const MIN_FIELD_LEN = 40;
   const HTML_PATTERN = /<[a-z][\s\S]*>/i;
 
-  if (!item.framework || item.framework.trim() === '') return false;
-  if (!item.who || item.who.trim() === '') return false;
-  if (!item.source_excerpt || item.source_excerpt.length < 20) return false;
-  if (!item.source_location || item.source_location.trim() === '') return false;
   if (!item.title) return false;
-  if (!item.tactic_summary || item.tactic_summary.length < 30) return false;
-  if (!item.when_to_use || item.when_to_use.length < 20) return false;
+  if (!item.tactic_summary || item.tactic_summary.length < 15) return false;
 
   const example = item.example_usage || item.example || '';
 
   // Structured lessons get relaxed validation — the content is curated, not raw
   if (isLesson) {
-    if (!item.how_to_execute || item.how_to_execute.length < 30) return false;
-    if (example.length < 20) return false;
+    // Minimal gates for lesson content: title + summary + at least some how-to or source
+    if (!item.how_to_execute && !item.source_excerpt) return false;
     const allText = [item.title, item.tactic_summary, item.how_to_execute, example].join(' ');
     if (HTML_PATTERN.test(allText)) return false;
+    // Accept defaults for attribution fields — lesson author is known from resource metadata
+    if (!item.framework) item.framework = 'General';
+    if (!item.who) item.who = 'Unknown';
+    if (!item.source_location) item.source_location = 'Lesson content';
     return true;
   }
+
+  // Non-lesson: stricter validation
+  if (!item.framework || item.framework.trim() === '') return false;
+  if (!item.who || item.who.trim() === '') return false;
+  if (!item.source_excerpt || item.source_excerpt.length < 20) return false;
+  if (!item.source_location || item.source_location.trim() === '') return false;
+  if (!item.when_to_use || item.when_to_use.length < 20) return false;
 
   if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return false;
   if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return false;
@@ -396,29 +442,38 @@ Deno.serve(async (req) => {
 
     const isTranscript = isTranscriptType(resourceType);
     const isLesson = isStructuredLesson(content);
-    const systemPrompt = isLesson
-      ? BASE_SYSTEM_PROMPT + LESSON_ADDENDUM
-      : isTranscript
-        ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM
-        : BASE_SYSTEM_PROMPT;
     const itemTarget = isLesson ? LESSON_ITEM_TARGET : isTranscript ? TRANSCRIPT_ITEM_TARGET : DOCUMENT_ITEM_TARGET;
 
-    // ── Chunked extraction ──
+    // ══════════════════════════════════════════════════
+    // LESSON MODE: 2-stage pipeline
+    // ══════════════════════════════════════════════════
+    if (isLesson) {
+      const result = await extractLessonTwoStage(LOVABLE_API_KEY, content, title, description, tags, resourceType);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ══════════════════════════════════════════════════
+    // STANDARD MODE: chunked extraction for docs/transcripts
+    // ══════════════════════════════════════════════════
+    const systemPrompt = isTranscript
+      ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM
+      : BASE_SYSTEM_PROMPT;
+
     const chunks = chunkContent(content, isTranscript);
     const totalChunks = chunks.length;
     let processedChunks = 0;
     let failedChunks = 0;
     const allItems: any[] = [];
 
-    console.log(`[extract-tactics] ${isLesson ? 'LESSON' : isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} mode | Content: ${content.length} chars → ${totalChunks} chunk(s)`);
+    console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} mode | Content: ${content.length} chars → ${totalChunks} chunk(s)`);
 
     for (let i = 0; i < chunks.length; i++) {
       const chunkLabel = totalChunks > 1 ? `Chunk ${i + 1} of ${totalChunks}` : '';
       const approxPosition = totalChunks > 1
         ? `~${Math.round((i / totalChunks) * 100)}% through the content`
         : '';
-
-      // Extract section headings present in this chunk for context
       const sectionHeadings = (chunks[i].match(/^## .+$/gm) || []).map(h => h.replace('## ', '')).join(', ');
 
       const userPrompt = `Extract structured tactical plays from this ${resourceType || 'document'}:
@@ -428,7 +483,7 @@ ${description ? `Description: ${description}` : ''}
 Tags: ${(tags || []).join(', ')}
 ${chunkLabel ? `\nPosition: ${chunkLabel} (${approxPosition})` : ''}
 ${sectionHeadings ? `\nSections covered: ${sectionHeadings}` : ''}
-${totalChunks > 1 ? `\nIMPORTANT: Extract ${itemTarget} plays from THIS section only. Do not repeat plays from other sections. If the content warrants more, extract more — do not artificially limit.` : `\nExtract at least ${itemTarget} plays. If the content contains more distinct tactics, extract them all. Quality over quantity, but do not under-extract.`}
+${totalChunks > 1 ? `\nIMPORTANT: Extract ${itemTarget} plays from THIS section only. Do not repeat plays from other sections.` : `\nExtract at least ${itemTarget} plays. If the content contains more distinct tactics, extract them all.`}
 
 Content:
 ${chunks[i]}
@@ -451,12 +506,11 @@ Remember: every play MUST include source_excerpt (verbatim quote), source_locati
       }
     }
 
-    // Deduplicate across chunks
-    const deduped = deduplicateItems(allItems);
+    const deduped = deduplicateItems(allItems, false);
 
     // Validate and normalize — using transcript-aware validation
     const validated = deduped
-      .filter(item => validateItem(item, isTranscript, isLesson))
+      .filter(item => validateItem(item, isTranscript, false))
       .map((item: any) => ({
         ...item,
         tactic_summary: item.tactic_summary,
@@ -483,3 +537,180 @@ Remember: every play MUST include source_excerpt (verbatim quote), source_locati
     });
   }
 });
+
+// ══════════════════════════════════════════════════════
+// LESSON 2-STAGE PIPELINE
+// ══════════════════════════════════════════════════════
+
+async function extractLessonTwoStage(
+  apiKey: string,
+  content: string,
+  title: string,
+  description: string | undefined,
+  tags: string[],
+  resourceType: string | undefined,
+): Promise<{ items: any[]; chunks_total: number; chunks_processed: number; chunks_failed: number; lesson_pipeline: any }> {
+  const pipelineLog: any = { stage1_candidates: 0, stage2_raw: 0, stage2_validated: 0, recovery_found: 0, recovery_added: 0, final: 0 };
+
+  console.log(`[extract-tactics] LESSON 2-STAGE mode | Content: ${content.length} chars`);
+
+  // ── STAGE 1: Exhaustive enumeration ──
+  const enumeratePrompt = `Analyze this structured training lesson and create an exhaustive inventory of every distinct teachable concept, technique, framework, rule, signal, method, or heuristic.
+
+Title: ${title}
+${description ? `Description: ${description}` : ''}
+
+Content:
+${content}
+
+List EVERY distinct concept. If the lesson teaches 15 things, return 15 items. Do NOT merge related concepts — each gets its own entry.`;
+
+  let candidates: any[] = [];
+  try {
+    const enumResult = await requestExtraction(apiKey, LESSON_ENUMERATE_SYSTEM, enumeratePrompt, 4096);
+    candidates = parseAiResponse(enumResult);
+    pipelineLog.stage1_candidates = candidates.length;
+    console.log(`[extract-tactics] Stage 1 enumeration: ${candidates.length} candidates`);
+  } catch (err) {
+    console.error('[extract-tactics] Stage 1 enumeration failed:', err);
+  }
+
+  // ── STAGE 2: Full KI expansion ──
+  const candidateList = candidates.length > 0
+    ? candidates.map((c: any, i: number) => `${i + 1}. ${c.candidate_title || c.title || 'Untitled'} [${c.concept_type || 'technique'}] — ${c.source_hint || ''}`).join('\n')
+    : '(No enumeration available — extract everything you can find)';
+
+  const stage2System = BASE_SYSTEM_PROMPT + LESSON_ADDENDUM;
+  const stage2Prompt = `Extract structured tactical plays from this training lesson.
+
+Title: ${title}
+${description ? `Description: ${description}` : ''}
+Tags: ${(tags || []).join(', ')}
+
+${candidates.length > 0 ? `The following ${candidates.length} distinct concepts were identified in this lesson. You MUST produce a full KI play for EACH one:\n\n${candidateList}\n\n` : ''}
+Content:
+${content}
+
+CRITICAL: Produce one complete play per concept listed above. Do not merge concepts. Do not skip any. If you find additional concepts not in the list, include those too.
+Titles may describe the concept naturally — they do NOT need to start with a verb.`;
+
+  let rawItems: any[] = [];
+  try {
+    const stage2Result = await requestExtraction(apiKey, stage2System, stage2Prompt, MAX_TOKENS);
+    rawItems = parseAiResponse(stage2Result);
+
+    // If truncated, try a second pass for remaining candidates
+    if (isTruncatedResponse(stage2Result) && candidates.length > rawItems.length) {
+      console.log(`[extract-tactics] Stage 2 truncated at ${rawItems.length} items, retrying remaining`);
+      const producedTitles = rawItems.map((it: any) => (it.title || '').toLowerCase());
+      const missed = candidates.filter((c: any) => {
+        const ct = (c.candidate_title || '').toLowerCase();
+        return !producedTitles.some((pt: string) => pt.includes(ct.slice(0, 20)) || ct.includes(pt.slice(0, 20)));
+      });
+
+      if (missed.length > 0) {
+        const missedList = missed.map((c: any, i: number) => `${i + 1}. ${c.candidate_title} [${c.concept_type}] — ${c.source_hint || ''}`).join('\n');
+        const continuationPrompt = `Continue extracting plays from this lesson. These ${missed.length} concepts were NOT covered in the previous pass:\n\n${missedList}\n\nContent:\n${content}\n\nProduce one complete play per concept. Return ONLY a JSON array.`;
+        const contResult = await requestExtraction(apiKey, stage2System, continuationPrompt, MAX_TOKENS);
+        const contItems = parseAiResponse(contResult);
+        rawItems.push(...contItems);
+        console.log(`[extract-tactics] Continuation pass: ${contItems.length} additional items`);
+      }
+    }
+
+    pipelineLog.stage2_raw = rawItems.length;
+    console.log(`[extract-tactics] Stage 2 extraction: ${rawItems.length} raw items`);
+  } catch (err) {
+    console.error('[extract-tactics] Stage 2 extraction failed:', err);
+  }
+
+  // ── Validate with lesson-aware rules ──
+  const deduped = deduplicateItems(rawItems, true);
+  const validated = deduped
+    .filter(item => validateItem(item, false, true))
+    .map((item: any) => ({
+      ...item,
+      tactic_summary: item.tactic_summary,
+      example_usage: item.example_usage || item.example,
+      why_it_matters: item.why_it_matters || item.why_this_works || item.micro_strategy,
+      what_this_unlocks: item.what_this_unlocks || null,
+      source_title: title,
+    }));
+
+  pipelineLog.stage2_validated = validated.length;
+
+  // ── STAGE 3: Missed-tactics recovery ──
+  if (candidates.length > 0 && validated.length < candidates.length) {
+    const producedTitles = validated.map((v: any) => (v.title || '').toLowerCase());
+    const producedSummaries = validated.map((v: any) => (v.tactic_summary || '').toLowerCase());
+    const missed = candidates.filter((c: any) => {
+      const ct = (c.candidate_title || '').toLowerCase();
+      const titleCovered = producedTitles.some((pt: string) => {
+        const ctWords = ct.split(/\s+/).filter((w: string) => w.length > 2);
+        const overlap = ctWords.filter((w: string) => pt.includes(w));
+        return overlap.length >= Math.min(3, ctWords.length * 0.5);
+      });
+      const summaryCovered = producedSummaries.some((ps: string) => {
+        const words = ct.split(/\s+/).filter((w: string) => w.length > 3);
+        const hits = words.filter((w: string) => ps.includes(w));
+        return hits.length >= Math.min(2, words.length * 0.4);
+      });
+      return !titleCovered && !summaryCovered;
+    });
+
+    pipelineLog.recovery_found = missed.length;
+
+    if (missed.length > 0 && missed.length <= 10) {
+      console.log(`[extract-tactics] Recovery: ${missed.length} candidates not covered, re-extracting`);
+      const missedList = missed.map((c: any, i: number) => `${i + 1}. ${c.candidate_title} [${c.concept_type}] — ${c.source_hint || ''}`).join('\n');
+      const recoveryPrompt = `These ${missed.length} concepts from the lesson were missed in the initial extraction. Extract a full play for EACH one:
+
+${missedList}
+
+Title: ${title}
+Content:
+${content}
+
+Return ONLY a JSON array. One play per concept.`;
+
+      try {
+        const recoveryResult = await requestExtraction(apiKey, stage2System, recoveryPrompt, MAX_TOKENS);
+        const recoveryItems = parseAiResponse(recoveryResult);
+        const recoveryValidated = recoveryItems
+          .filter(item => validateItem(item, false, true))
+          .map((item: any) => ({
+            ...item,
+            tactic_summary: item.tactic_summary,
+            example_usage: item.example_usage || item.example,
+            why_it_matters: item.why_it_matters || item.why_this_works || item.micro_strategy,
+            what_this_unlocks: item.what_this_unlocks || null,
+            source_title: title,
+          }));
+
+        // Dedup recovery items against already-validated set
+        const combined = [...validated, ...recoveryValidated];
+        const finalDeduped = deduplicateItems(combined, true);
+        const added = finalDeduped.length - validated.length;
+        pipelineLog.recovery_added = added;
+
+        if (added > 0) {
+          console.log(`[extract-tactics] Recovery added ${added} new items`);
+          validated.push(...finalDeduped.slice(validated.length));
+        }
+      } catch (err) {
+        console.error('[extract-tactics] Recovery pass failed:', err);
+      }
+    }
+  }
+
+  pipelineLog.final = validated.length;
+  console.log(`[extract-tactics] LESSON FINAL: ${validated.length} items (from ${candidates.length} candidates, ${rawItems.length} raw)`);
+
+  return {
+    items: validated,
+    chunks_total: 1,
+    chunks_processed: 1,
+    chunks_failed: 0,
+    lesson_pipeline: pipelineLog,
+  };
+}
