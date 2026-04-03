@@ -190,29 +190,60 @@ List EVERY distinct concept. If the lesson teaches 15 things, return 15 items. D
     console.error('[lesson-pipeline] Stage 1 FAILED:', err?.message);
   }
 
-  // ── Stage 2: Full KI expansion ──
-  const candidateList = candidates.length > 0
-    ? candidates.map((c: any, i: number) => `${i + 1}. ${c.candidate_title || 'Untitled'} [${c.concept_type || 'technique'}] — ${c.source_hint || ''}`).join('\n')
-    : '(No enumeration available — extract everything you can find)';
+  // ── Stage 2: Full KI expansion (batched to avoid truncation) ──
+  const BATCH_SIZE = 8;
+  let rawItems: any[] = [];
 
-  const expandPrompt = `Extract tactical plays from this training lesson.
+  if (candidates.length === 0) {
+    // Fallback: single extraction pass without enumeration
+    const fallbackPrompt = `Extract tactical plays from this training lesson.\n\nTitle: ${title}\nTags: ${(tags || []).join(', ')}\n\nContent:\n${content}\n\nReturn ONLY a JSON array.`;
+    try {
+      rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, fallbackPrompt));
+      console.log(`[lesson-pipeline] Stage 2 fallback: ${rawItems.length} items`);
+    } catch (err: any) {
+      console.error('[lesson-pipeline] Stage 2 fallback FAILED:', err?.message);
+    }
+  } else {
+    // Process candidates in batches
+    const batches: any[][] = [];
+    for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+      batches.push(candidates.slice(i, i + BATCH_SIZE));
+    }
+    console.log(`[lesson-pipeline] Stage 2: ${candidates.length} candidates in ${batches.length} batch(es)`);
+
+    for (let b = 0; b < batches.length; b++) {
+      const batch = batches[b];
+      const batchList = batch.map((c: any, i: number) => `${i + 1}. ${c.candidate_title || 'Untitled'} [${c.concept_type || 'technique'}] — ${c.source_hint || ''}`).join('\n');
+      const batchPrompt = `Extract tactical plays from this training lesson.
 
 Title: ${title}
 Tags: ${(tags || []).join(', ')}
-${candidates.length > 0 ? `\nYou MUST produce a play for EACH of these ${candidates.length} concepts:\n${candidateList}\n` : ''}
+
+You MUST produce a play for EACH of these ${batch.length} concepts:
+${batchList}
+
 Content:
 ${content}
 
-Return ONLY a JSON array. One play per concept. Do not merge or skip any.`;
+Return ONLY a JSON array with exactly ${batch.length} plays. One play per concept. Do not merge or skip any.`;
 
-  let rawItems: any[] = [];
-  try {
-    rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, expandPrompt));
-    pLog.stage2Raw = rawItems.length;
-    console.log(`[lesson-pipeline] Stage 2: ${rawItems.length} raw items from AI`);
-  } catch (err: any) {
-    console.error('[lesson-pipeline] Stage 2 FAILED:', err?.message);
+      try {
+        const batchItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, batchPrompt));
+        rawItems.push(...batchItems);
+        console.log(`[lesson-pipeline] Stage 2 batch ${b + 1}/${batches.length}: ${batchItems.length} items`);
+      } catch (err: any) {
+        console.error(`[lesson-pipeline] Stage 2 batch ${b + 1} FAILED:`, err?.message);
+      }
+
+      // Brief pause between batches to avoid rate limits
+      if (b < batches.length - 1) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
   }
+
+  pLog.stage2Raw = rawItems.length;
+  console.log(`[lesson-pipeline] Stage 2 total: ${rawItems.length} raw items`);
 
   // ── Stage 3: Recovery for missed candidates ──
   if (candidates.length > 0 && rawItems.length < candidates.length) {
