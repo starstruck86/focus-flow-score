@@ -656,14 +656,79 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/^\s*(?:Back|Next|Previous|Cancel)\s*$/gm, '')
     .replace(/^\s*\|\s*$/gm, '')
     .replace(/^\s*\d+\s*$/gm, '') // Standalone numbers (playlist indices)
-    // Remove lines that are just short repeated nav-like items (sidebar lesson titles leaking in)
-    .replace(/^\s{4,}.*$/gm, '') // Lines with 4+ leading spaces are likely indented markup leftovers
+    // Remove lines that are only whitespace/noise with deep indent but keep real content
+    .replace(/^\s{6,}\S{0,5}\s*$/gm, '') // Lines with 6+ leading spaces and ≤5 non-space chars
+    .replace(/^\s*AI\s+\w[\w\s]{2,40}\s*$/gm, '') // Strip Kajabi "AI [Feature Name]" sidebar labels
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+  // Deduplicate consecutive lines (nav breadcrumbs often repeat the lesson title)
+  const lines = content.split('\n');
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const key = line.trim().toLowerCase();
+    if (!key || key.length > 80 || !seen.has(key)) {
+      deduped.push(line);
+      if (key && key.length <= 80) seen.add(key);
+    }
+  }
+  content = deduped.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  // Trim leading whitespace from all lines (leftover from HTML indentation)
+  content = content.split('\n').map(l => l.trimStart()).join('\n');
   
   // Prepend video embed references so they're captured in the resource
   if (videoEmbeds.length > 0) {
     content = videoEmbeds.join('\n') + '\n\n' + content;
+  }
+
+  // Try to capture lesson intro/header text that may sit above the main content div
+  // Kajabi often has a section__heading or post heading with intro paragraphs
+  const introPatterns = [
+    /class="[^"]*(?:section__heading|post__heading|lesson-heading|post-heading)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
+    /class="[^"]*(?:section__description|post__description|lesson-intro)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
+    // Kajabi panel heading / media body (common in course pages)
+    /class="[^"]*(?:panel__heading|media-body)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
+  ];
+  let introText = '';
+  for (const ip of introPatterns) {
+    const im = cleanedHtml.match(ip);
+    if (im && im[1]) {
+      const cleaned = im[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      debug.push(`Intro candidate: ${cleaned.substring(0, 80)}... (${cleaned.length} chars)`);
+      if (cleaned.length > 20 && !content.includes(cleaned.substring(0, Math.min(80, cleaned.length)))) {
+        introText += cleaned + '\n\n';
+      }
+    }
+  }
+
+  // Also try to find standalone paragraphs near the lesson heading that aren't in our content yet
+  // These are intro paragraphs that sit between the heading and the main body div
+  const h2Matches = [...cleanedHtml.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
+  for (const h2 of h2Matches) {
+    // Look for <p> tags after this h2 but before the next heading or div container
+    const afterH2 = cleanedHtml.substring(h2.index! + h2[0].length);
+    const nextSectionIdx = afterH2.search(/<(?:h[1-3]|div[^>]*class="[^"]*(?:kjb-html|post__|section__|content-wrap))/i);
+    const betweenSlice = nextSectionIdx > 0 ? afterH2.substring(0, nextSectionIdx) : afterH2.substring(0, 2000);
+    const paragraphs = [...betweenSlice.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)];
+    for (const p of paragraphs) {
+      const pText = p[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      if (pText.length > 40 && !content.includes(pText.substring(0, Math.min(60, pText.length)))) {
+        introText += pText + '\n\n';
+        debug.push(`Intro paragraph captured: ${pText.substring(0, 60)}... (${pText.length} chars)`);
+      }
+    }
+  }
+
+  if (introText) {
+    // Insert intro after video embeds but before main content
+    const embedEnd = content.lastIndexOf(']\n\n');
+    if (embedEnd > 0) {
+      content = content.substring(0, embedEnd + 3) + introText + content.substring(embedEnd + 3);
+    } else {
+      content = introText + content;
+    }
+    debug.push(`Intro text prepended: ${introText.length} chars`);
   }
   
   // Resolve Wistia video media URLs for transcription

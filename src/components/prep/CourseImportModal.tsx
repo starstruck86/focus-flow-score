@@ -275,9 +275,13 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
       try {
         const classification = await classify.mutateAsync({ url: lesson.url });
-        if (classification.title === 'Untitled' || classification.title.length < 3) {
-          classification.title = lesson.title;
-        }
+        // Always prefer curriculum-discovered title with course context
+        const lessonTitle = (lessonData?.title && lessonData.title.length > 3 && !/on-demand|sales introverts/i.test(lessonData.title))
+          ? lessonData.title
+          : lesson.title;
+        classification.title = courseTitle && lessonTitle
+          ? `${courseTitle} > ${lessonTitle}`
+          : lessonTitle || classification.title || 'Untitled Lesson';
         if (lessonData?.success && lessonData.content && lessonData.content.length > 50) {
           classification.scraped_content = lessonData.content;
         }

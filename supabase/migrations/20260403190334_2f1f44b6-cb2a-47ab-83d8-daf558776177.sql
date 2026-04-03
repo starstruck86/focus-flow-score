@@ -1,0 +1,1 @@
+UPDATE resources SET content_length = LENGTH(content) WHERE id = '3d5cfab0-9cfa-4c8b-b554-a49131e73f75';
