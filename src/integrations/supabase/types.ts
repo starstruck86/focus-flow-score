@@ -2154,6 +2154,7 @@ export type Database = {
           activation_metadata: Json | null
           active: boolean
           applies_to_contexts: string[]
+          challenger_type: string | null
           chapter: string
           competitor_name: string | null
           confidence_score: number
@@ -2193,6 +2194,7 @@ export type Database = {
           activation_metadata?: Json | null
           active?: boolean
           applies_to_contexts?: string[]
+          challenger_type?: string | null
           chapter: string
           competitor_name?: string | null
           confidence_score?: number
@@ -2232,6 +2234,7 @@ export type Database = {
           activation_metadata?: Json | null
           active?: boolean
           applies_to_contexts?: string[]
+          challenger_type?: string | null
           chapter?: string
           competitor_name?: string | null
           confidence_score?: number

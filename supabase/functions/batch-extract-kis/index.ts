@@ -245,6 +245,70 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
 }
 
 // ═══════════════════════════════════════════
+// Challenger classification (deterministic heuristic)
+// Runs AFTER normalization, BEFORE insert. One label per KI.
+// ═══════════════════════════════════════════
+
+// Challenger signals — carefully scoped to avoid false positives on generic sales content.
+// "take_control" requires DRIVING action, not just mentioning scoring/priority concepts.
+const TAKE_CONTROL_SIGNALS = /\b(close.?the|commit.?to|lock.?in|secure.?the|push.?for|drive.?urgency|accelerate.?the|create.?urgency|deadline|status.?quo|constructive.?tension|challenge.?the.?buyer|confront|insist.?on|demand.?a|next.?step|action.?item|contract|sign.?off|get.?agreement|cost.?of.?inaction|force.?a.?decision|overcome.?inertia)\b/i;
+const TAILOR_SIGNALS = /\b(persona|stakeholder|role-specific|industry.?specific|segment|vertical|adapt.?message|customize|tailor|adjust.?framing|reframe.?for|position.?for|align.?to.?their|depending.?on.?the|varies.?by|buyer.?type|audience|executive|champion|end.?user|economic.?buyer|technical.?buyer|C.?suite)\b/i;
+const TEACH_SIGNALS = /\b(insight|reframe|framework|model|score|criteria|method|signal|heuristic|tier|research|principle|rule.?of|mental.?model|data.?point|benchmark|metric|diagnos|assess|evaluat|classif|categoriz|prioritiz|gap|inefficien|overlooked|missed|blind.?spot|counter.?intuitive)\b/i;
+
+function classifyChallengerType(item: any): 'teach' | 'tailor' | 'take_control' {
+  const blob = [item.title, item.tactic_summary, item.how_to_execute].filter(Boolean).join(' ');
+  // Check take_control first (most specific — requires action-driving language)
+  if (TAKE_CONTROL_SIGNALS.test(blob)) return 'take_control';
+  // Then tailor (persona/context adaptation)
+  if (TAILOR_SIGNALS.test(blob)) return 'tailor';
+  // Default: teach (most common for lesson content — frameworks, insights, models)
+  return 'teach';
+}
+
+// ═══════════════════════════════════════════
+// Pipeline guardrail metrics (observability only — never gates)
+// ═══════════════════════════════════════════
+
+interface GuardrailMetrics {
+  stage1_candidate_count: number;
+  stage2_raw_count: number;
+  validated_count: number;
+  deduped_count: number;
+  stage2_coverage_ratio: number;
+  validation_pass_rate: number;
+  dedup_loss_rate: number;
+  flags: {
+    enum_regression: boolean;
+    expansion_regression: boolean;
+    validation_regression: boolean;
+    dedup_regression: boolean;
+  };
+  challenger_distribution: Record<string, number>;
+}
+
+function computeGuardrails(s1: number, s2: number, val: number, ded: number): GuardrailMetrics {
+  const coverage = s1 > 0 ? s2 / s1 : 1;
+  const passRate = s2 > 0 ? val / s2 : 1;
+  const dedupLoss = val > 0 ? (val - ded) / val : 0;
+  return {
+    stage1_candidate_count: s1,
+    stage2_raw_count: s2,
+    validated_count: val,
+    deduped_count: ded,
+    stage2_coverage_ratio: Math.round(coverage * 100) / 100,
+    validation_pass_rate: Math.round(passRate * 100) / 100,
+    dedup_loss_rate: Math.round(dedupLoss * 100) / 100,
+    flags: {
+      enum_regression: s1 < 20,
+      expansion_regression: coverage < 0.6,
+      validation_regression: passRate < 0.7,
+      dedup_regression: dedupLoss > 0.2,
+    },
+    challenger_distribution: {},
+  };
+}
+
+// ═══════════════════════════════════════════
 // Normalization
 // ═══════════════════════════════════════════
 
@@ -593,6 +657,45 @@ Deno.serve(async (req) => {
       log.lessonPipeline.dedupedFinal = deduped.length;
     }
 
+    // ── 5b. Challenger classification ──
+    const challengerDist: Record<string, number> = { teach: 0, tailor: 0, take_control: 0 };
+    for (const item of deduped) {
+      const cType = classifyChallengerType(item);
+      item._challenger_type = cType;
+      challengerDist[cType] = (challengerDist[cType] || 0) + 1;
+    }
+    console.log(`[extract] Challenger distribution: ${JSON.stringify(challengerDist)}`);
+
+    // ── 5c. Lesson pipeline guardrails (observability only) ──
+    if (isLesson && log.lessonPipeline) {
+      const gm = computeGuardrails(
+        log.lessonPipeline.stage1 || 0,
+        log.lessonPipeline.stage2Raw || 0,
+        validated.length,
+        deduped.length,
+      );
+      gm.challenger_distribution = challengerDist;
+      log.lessonPipeline.guardrails = gm;
+
+      const triggered = Object.entries(gm.flags).filter(([, v]) => v).map(([k]) => k);
+      console.log(`[lesson-guardrails] metrics=${JSON.stringify({
+        stage1: gm.stage1_candidate_count,
+        stage2: gm.stage2_raw_count,
+        validated: gm.validated_count,
+        deduped: gm.deduped_count,
+        coverage_ratio: gm.stage2_coverage_ratio,
+        validation_rate: gm.validation_pass_rate,
+        dedup_loss: gm.dedup_loss_rate,
+        flags: gm.flags,
+        challenger_distribution: challengerDist,
+      })}`);
+      if (triggered.length > 0) {
+        console.warn(`[lesson-guardrails] ⚠️ TRIGGERED: ${triggered.join(', ')}`);
+      } else {
+        console.log(`[lesson-guardrails] ✅ All guardrails passed`);
+      }
+    }
+
     // ── 6. Quality threshold gate ──
     if (deduped.length < 1) {
       log.outcome = 'below_threshold';
@@ -654,6 +757,7 @@ Deno.serve(async (req) => {
       user_edited: false,
       applies_to_contexts: item.applies_to_contexts || ['all'],
       tags: item.tags || [],
+      challenger_type: item._challenger_type || 'teach',
     }));
 
     const { error: insertError } = await supabase.from('knowledge_items').insert(rows);
