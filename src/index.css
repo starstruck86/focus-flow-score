@@ -4,6 +4,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Scrollbar-hiding utility for horizontal tab rows */
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Quota Compass - WHOOP-inspired dark design system */
 
 @layer base {
