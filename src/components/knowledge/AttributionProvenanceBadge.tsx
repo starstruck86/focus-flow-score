@@ -16,8 +16,8 @@ export interface AttributionProvenance {
 
 const SOURCE_LABELS: Record<string, string> = {
   llm: 'LLM',
-  framework_library_fill: 'Library (fill)',
-  framework_library_override: 'Library (override)',
+  framework_library_fill: 'Library fill',
+  framework_library_override: 'Library override',
 };
 
 const SIGNAL_LABELS: Record<string, string> = {
