@@ -681,7 +681,7 @@ export function ResourceLibraryTable({
                                 </span>
                               </div>
                             );
-                          })()}
+                          {lc && lc.blocked !== 'none' && (
                             <div className="flex items-center gap-2 mt-0.5">
                               <p className="text-[9px] text-destructive/80">
                                 {getBlockedLabel(lc.blocked)}
