@@ -654,6 +654,45 @@ Deno.serve(async (req) => {
       log.lessonPipeline.dedupedFinal = deduped.length;
     }
 
+    // ── 5b. Challenger classification ──
+    const challengerDist: Record<string, number> = { teach: 0, tailor: 0, take_control: 0 };
+    for (const item of deduped) {
+      const cType = classifyChallengerType(item);
+      item._challenger_type = cType;
+      challengerDist[cType] = (challengerDist[cType] || 0) + 1;
+    }
+    console.log(`[extract] Challenger distribution: ${JSON.stringify(challengerDist)}`);
+
+    // ── 5c. Lesson pipeline guardrails (observability only) ──
+    if (isLesson && log.lessonPipeline) {
+      const gm = computeGuardrails(
+        log.lessonPipeline.stage1 || 0,
+        log.lessonPipeline.stage2Raw || 0,
+        validated.length,
+        deduped.length,
+      );
+      gm.challenger_distribution = challengerDist;
+      log.lessonPipeline.guardrails = gm;
+
+      const triggered = Object.entries(gm.flags).filter(([, v]) => v).map(([k]) => k);
+      console.log(`[lesson-guardrails] metrics=${JSON.stringify({
+        stage1: gm.stage1_candidate_count,
+        stage2: gm.stage2_raw_count,
+        validated: gm.validated_count,
+        deduped: gm.deduped_count,
+        coverage_ratio: gm.stage2_coverage_ratio,
+        validation_rate: gm.validation_pass_rate,
+        dedup_loss: gm.dedup_loss_rate,
+        flags: gm.flags,
+        challenger_distribution: challengerDist,
+      })}`);
+      if (triggered.length > 0) {
+        console.warn(`[lesson-guardrails] ⚠️ TRIGGERED: ${triggered.join(', ')}`);
+      } else {
+        console.log(`[lesson-guardrails] ✅ All guardrails passed`);
+      }
+    }
+
     // ── 6. Quality threshold gate ──
     if (deduped.length < 1) {
       log.outcome = 'below_threshold';
@@ -715,6 +754,7 @@ Deno.serve(async (req) => {
       user_edited: false,
       applies_to_contexts: item.applies_to_contexts || ['all'],
       tags: item.tags || [],
+      challenger_type: item._challenger_type || 'teach',
     }));
 
     const { error: insertError } = await supabase.from('knowledge_items').insert(rows);
