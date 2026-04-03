@@ -428,7 +428,7 @@ ${description ? `Description: ${description}` : ''}
 Tags: ${(tags || []).join(', ')}
 ${chunkLabel ? `\nPosition: ${chunkLabel} (${approxPosition})` : ''}
 ${sectionHeadings ? `\nSections covered: ${sectionHeadings}` : ''}
-${totalChunks > 1 ? `\nIMPORTANT: Extract ${itemTarget} plays from THIS section only. Do not repeat plays from other sections.` : `\nExtract ${itemTarget} plays total. Quality over quantity.`}
+${totalChunks > 1 ? `\nIMPORTANT: Extract ${itemTarget} plays from THIS section only. Do not repeat plays from other sections. If the content warrants more, extract more — do not artificially limit.` : `\nExtract at least ${itemTarget} plays. If the content contains more distinct tactics, extract them all. Quality over quantity, but do not under-extract.`}
 
 Content:
 ${chunks[i]}
