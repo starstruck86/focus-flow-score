@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { useExtractionProgress } from '@/store/useExtractionProgress';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
@@ -937,22 +938,28 @@ export function ResourceManager() {
                   break;
                 case 'bulk_autoOp':
                 case 'bulk_autoOp_filtered': {
-                  // Batch extraction pipeline for selected or filtered resources
                   const ids = Array.from(selectedResourceIds);
                   if (ids.length === 0) {
                     toast.info('No resources selected');
                     break;
                   }
-                  toast.info(`Extracting knowledge from ${ids.length} resource(s)...`);
+                  const progressStore = useExtractionProgress.getState();
+                  progressStore.startBatch(ids);
                   try {
                     const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
-                    const results = await autoOperationalizeBatch(ids, (processed, total, title) => {
-                      if (processed % 5 === 0 || processed === total) {
-                        toast.loading(`Extracting ${processed}/${total}: ${title}`, { id: 'bulk-extract-progress' });
+                    const results = await autoOperationalizeBatch(ids, undefined, (resourceId, phase, result) => {
+                      const store = useExtractionProgress.getState();
+                      if (phase === 'start') {
+                        store.markExtracting(resourceId, result?.resourceTitle);
+                      } else if (phase === 'done') {
+                        if (result && result.success) {
+                          store.markDone(resourceId, result.knowledgeExtracted);
+                        } else {
+                          store.markFailed(resourceId);
+                        }
                       }
                     });
-                    toast.dismiss('bulk-extract-progress');
-                    // Invalidate all relevant queries
+                    useExtractionProgress.getState().endBatch();
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
                     queryClient.invalidateQueries({ queryKey: ['all-resources'] });
@@ -964,9 +971,8 @@ export function ResourceManager() {
                     const needsReview = results.filter(r => r.needsReview);
 
                     if (succeeded.length > 0) {
-                      const previewItems = succeeded.slice(0, 3).map(r => r.resourceTitle).join(', ');
                       toast.success(`Extracted ${totalKI} knowledge items from ${succeeded.length} resources`, {
-                        description: `${totalActivated} auto-activated · ${needsReview.length} need review\n${previewItems}`,
+                        description: `${totalActivated} auto-activated · ${needsReview.length} need review`,
                         duration: 8000,
                       });
                     } else {
@@ -976,7 +982,7 @@ export function ResourceManager() {
                     }
                     setSelectedResourceIds(new Set());
                   } catch (error: any) {
-                    toast.dismiss('bulk-extract-progress');
+                    useExtractionProgress.getState().endBatch();
                     toast.error('Batch extraction failed', { description: error?.message });
                   }
                   break;

@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Sparkles, Wrench, Tag } from 'lucide-react';
+import { Sparkles, Wrench, Tag, Loader2 as Loader2Icon } from 'lucide-react';
+import { useExtractionProgress, type ExtractionResourceStatus } from '@/store/useExtractionProgress';
+import { Progress } from '@/components/ui/progress';
 import { PRIMARY_ACTIONS } from '@/components/prep/QueueActionBar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -290,6 +292,9 @@ export function ResourceLibraryTable({
   const { summary: lifecycle } = useCanonicalLifecycle();
   const { data: inUseData } = useInUseResources();
   const inUseIds = inUseData?.inUseResourceIds ?? new Set<string>();
+  const extractionResources = useExtractionProgress(s => s.resources);
+  const batchActive = useExtractionProgress(s => s.batchActive);
+  const batchPct = useExtractionProgress(s => Math.round((s.batchProcessed / Math.max(s.batchTotal, 1)) * 100));
 
   // Build a quick lookup for canonical status per resource
   const lifecycleMap = useMemo(() => {
@@ -657,6 +662,26 @@ export function ResourceLibraryTable({
                               </span>
                             )}
                           </div>
+                          {/* Inline extraction progress */}
+                          {(() => {
+                            const ep = extractionResources[resource.id];
+                            if (!ep) return null;
+                            const pct = ep.status === 'queued' ? 0 : ep.status === 'extracting' ? 50 : 100;
+                            return (
+                              <div className="flex items-center gap-2 mt-1">
+                                {ep.status === 'extracting' && <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />}
+                                {ep.status === 'done' && <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />}
+                                {ep.status === 'failed' && <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />}
+                                <Progress value={pct} className="h-1.5 flex-1 max-w-[120px]" />
+                                <span className="text-[9px] text-muted-foreground shrink-0">
+                                  {ep.status === 'queued' ? 'Queued' :
+                                   ep.status === 'extracting' ? 'Extracting…' :
+                                   ep.status === 'done' ? `Done${ep.kiExtracted ? ` · ${ep.kiExtracted} KI` : ''}` :
+                                   'Failed'}
+                                </span>
+                              </div>
+                            );
+                          })()}
                           {lc && lc.blocked !== 'none' && (
                             <div className="flex items-center gap-2 mt-0.5">
                               <p className="text-[9px] text-destructive/80">
