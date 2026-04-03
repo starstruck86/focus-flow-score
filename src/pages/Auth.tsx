@@ -44,7 +44,7 @@ export default function Auth() {
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
-        <h1 className="text-2xl font-bold text-foreground font-display">Quota Compass</h1>
+        <h1 className="text-2xl font-bold text-foreground font-display">Quota CoPilot</h1>
         <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
         <p className="text-sm text-muted-foreground">Loading...</p>
       </div>
@@ -55,7 +55,7 @@ export default function Auth() {
     <div data-testid="auth-page" className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-display">Quota Compass</CardTitle>
+          <CardTitle className="text-2xl font-display">Quota CoPilot</CardTitle>
           <CardDescription>Sign in to access your dashboard</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

@@ -1,4 +1,4 @@
-// Quota Compass Global State
+// Quota CoPilot Global State
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { 

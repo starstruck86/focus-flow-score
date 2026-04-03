@@ -24,26 +24,28 @@ export function KnowledgeWorkspace() {
   return (
     <div className="space-y-3">
       <Tabs value={subTab} onValueChange={setSubTab}>
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview" className="text-xs gap-1">
+        <TabsList className="flex w-full overflow-x-auto">
+          <TabsTrigger value="overview" className="text-xs gap-1 flex-shrink-0">
             <BarChart3 className="h-3 w-3" />
-            Overview
+            <span className="hidden sm:inline">Overview</span>
+            <span className="sm:hidden">Overview</span>
           </TabsTrigger>
-          <TabsTrigger value="resources" className="text-xs gap-1">
+          <TabsTrigger value="resources" className="text-xs gap-1 flex-shrink-0">
             <FileText className="h-3 w-3" />
-            Resources
+            <span>Resources</span>
           </TabsTrigger>
-          <TabsTrigger value="items" className="text-xs gap-1">
+          <TabsTrigger value="items" className="text-xs gap-1 flex-shrink-0">
             <Brain className="h-3 w-3" />
-            Knowledge Items
+            <span className="hidden sm:inline">Knowledge Items</span>
+            <span className="sm:hidden">Items</span>
           </TabsTrigger>
-          <TabsTrigger value="review" className="text-xs gap-1">
+          <TabsTrigger value="review" className="text-xs gap-1 flex-shrink-0">
             <ClipboardCheck className="h-3 w-3" />
-            Review
+            <span>Review</span>
           </TabsTrigger>
-          <TabsTrigger value="audit" className="text-xs gap-1">
+          <TabsTrigger value="audit" className="text-xs gap-1 flex-shrink-0">
             <Shield className="h-3 w-3" />
-            Audit
+            <span>Audit</span>
           </TabsTrigger>
         </TabsList>
 

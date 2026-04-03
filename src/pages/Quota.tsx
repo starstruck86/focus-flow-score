@@ -297,7 +297,7 @@ export default function Quota() {
   }, [summary, ledgerEntries, config, weeklyRateNeeded, strategicOpen, paceToQuota, performanceRollups, rollupsLoading, performanceTargets, combinedAttainment, opportunities, renewals]);
   return (
     <Layout>
-      <div data-testid="quota-page" className="p-6 lg:p-8">
+      <div data-testid="quota-page" className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
