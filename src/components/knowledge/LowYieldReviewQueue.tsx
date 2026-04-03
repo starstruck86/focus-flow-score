@@ -22,6 +22,7 @@ import {
 } from '@/hooks/useKnowledgeReview';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
 import { useReExtractResource, deriveReExtractStatus, formatRelativeTime } from '@/hooks/useReExtractResource';
+import { AttributionProvenanceBadge } from './AttributionProvenanceBadge';
 import { toast } from 'sonner';
 
 function ReviewBadge({ status }: { status: ReviewStatus }) {
