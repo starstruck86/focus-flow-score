@@ -16,8 +16,8 @@ export interface AttributionProvenance {
 
 const SOURCE_LABELS: Record<string, string> = {
   llm: 'LLM',
-  framework_library_fill: 'Library (fill)',
-  framework_library_override: 'Library (override)',
+  framework_library_fill: 'Library fill',
+  framework_library_override: 'Library override',
 };
 
 const SIGNAL_LABELS: Record<string, string> = {
@@ -54,9 +54,9 @@ export function AttributionProvenanceBadge({ activationMetadata, className }: Pr
   const isAllLlm = prov.who_source === 'llm' && prov.framework_source === 'llm';
 
   const lines: string[] = [];
-  if (prov.who_source) lines.push(`Who: ${sourceLabel(prov.who_source)}`);
-  if (prov.framework_source) lines.push(`Framework: ${sourceLabel(prov.framework_source)}`);
-  if (prov.signal_source) lines.push(`Signal: ${signalLabel(prov.signal_source)}`);
+  if (prov.who_source) lines.push(`Who source: ${sourceLabel(prov.who_source)}`);
+  if (prov.framework_source) lines.push(`Framework source: ${sourceLabel(prov.framework_source)}`);
+  if (prov.signal_source) lines.push(`Detection signal: ${signalLabel(prov.signal_source)}`);
 
   return (
     <TooltipProvider>
@@ -73,7 +73,7 @@ export function AttributionProvenanceBadge({ activationMetadata, className }: Pr
             )}
           >
             <Fingerprint className="h-2.5 w-2.5" />
-            {isAllLlm ? 'LLM' : 'Library'}
+            {isAllLlm ? 'LLM' : 'Library-assisted'}
           </Badge>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-[10px] max-w-[200px]">
@@ -97,13 +97,13 @@ export function AttributionProvenanceDetail({ activationMetadata }: { activation
       <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Attribution Provenance</p>
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
         {prov.who_source && (
-          <span>Who: <span className="text-foreground font-medium">{sourceLabel(prov.who_source)}</span></span>
+          <span>Who source: <span className="text-foreground font-medium">{sourceLabel(prov.who_source)}</span></span>
         )}
         {prov.framework_source && (
-          <span>Framework: <span className="text-foreground font-medium">{sourceLabel(prov.framework_source)}</span></span>
+          <span>Framework source: <span className="text-foreground font-medium">{sourceLabel(prov.framework_source)}</span></span>
         )}
         {prov.signal_source && (
-          <span>Signal: <span className="text-foreground font-medium">{signalLabel(prov.signal_source)}</span></span>
+          <span>Detection signal: <span className="text-foreground font-medium">{signalLabel(prov.signal_source)}</span></span>
         )}
       </div>
     </div>
