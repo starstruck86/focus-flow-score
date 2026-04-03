@@ -109,9 +109,13 @@ function isTranscriptType(resourceType?: string): boolean {
   );
 }
 
-function isStructuredLesson(content: string): boolean {
+function isStructuredLesson(content: string, title?: string, resourceType?: string): boolean {
+  // Has transcript marker at expected position
   const markerIndex = content.indexOf(LESSON_TRANSCRIPT_MARKER);
-  return markerIndex > 500;
+  if (markerIndex > 500) return true;
+  // Course lesson pattern: "Course Name > Lesson Name" with video type
+  if (title && / > /.test(title) && (resourceType || '').toLowerCase() === 'video') return true;
+  return false;
 }
 
 function decodeHTMLEntities(text: string): string {
@@ -665,7 +669,8 @@ Deno.serve(async (req) => {
 
     // ── 2. Run AI extraction (direct inline — no chained edge functions) ──
     const decodedContent = decodeHTMLEntities(resource.content);
-    const isLesson = isStructuredLesson(decodedContent);
+    const decodedTitle = decodeHTMLEntities(resource.title);
+    const isLesson = isStructuredLesson(decodedContent, decodedTitle, resource.resource_type);
     let rawItems: any[];
     let rawResponse: string | null = null;
 

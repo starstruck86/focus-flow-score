@@ -276,11 +276,18 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       try {
         const classification = await classify.mutateAsync({ url: lesson.url });
         // Always prefer curriculum-discovered title with course context
-        const lessonTitle = (lessonData?.title && lessonData.title.length > 3 && !/on-demand|sales introverts/i.test(lessonData.title))
+        const decodeEntities = (s: string) => s
+          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+          .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+          .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+        const rawLessonTitle = (lessonData?.title && lessonData.title.length > 3 && !/on-demand|sales introverts/i.test(lessonData.title))
           ? lessonData.title
           : lesson.title;
-        classification.title = courseTitle && lessonTitle
-          ? `${courseTitle} > ${lessonTitle}`
+        const lessonTitle = decodeEntities(rawLessonTitle || '');
+        const cleanCourseTitle = decodeEntities(courseTitle || '');
+        classification.title = cleanCourseTitle && lessonTitle
+          ? `${cleanCourseTitle} > ${lessonTitle}`
           : lessonTitle || classification.title || 'Untitled Lesson';
         if (lessonData?.success && lessonData.content && lessonData.content.length > 50) {
           classification.scraped_content = lessonData.content;

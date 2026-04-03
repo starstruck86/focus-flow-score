@@ -48,6 +48,7 @@ import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audi
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
 import { InlineResourceDetail } from './InlineResourceDetail';
+import { decodeHTMLEntities } from '@/lib/stringUtils';
 
 // ── Types ──────────────────────────────────────────────────
 type SortKey = 'title' | 'resource_type' | 'enrichment_status' | 'last_quality_tier' | 'last_quality_score' | 'created_at' | 'enriched_at' | 'enrichment_version' | 'subtype';
@@ -634,8 +635,20 @@ export function ResourceLibraryTable({
                       </td>
                       <td className="px-3 align-middle">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{resource.title}</p>
+                          {(() => {
+                            const decoded = decodeHTMLEntities(resource.title);
+                            const separatorIdx = decoded.indexOf(' > ');
+                            const parentName = separatorIdx > 0 ? decoded.slice(0, separatorIdx) : null;
+                            const childName = separatorIdx > 0 ? decoded.slice(separatorIdx + 3) : decoded;
+                            return (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {parentName && (
+                                  <span className="text-[9px] text-muted-foreground truncate max-w-[120px]">{parentName} ›</span>
+                                )}
+                                <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{childName}</p>
+                              </div>
+                            );
+                          })()}
                             {lc && (
                               <Badge variant="outline" className={cn(
                                 'text-[8px] h-4 px-1 shrink-0',
