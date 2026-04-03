@@ -35,6 +35,7 @@ export interface KnowledgeItem {
   who: string | null;
   framework: string | null;
   review_status: 'unreviewed' | 'approved' | 'needs_rework' | 'archived';
+  activation_metadata: Record<string, any> | null;
   created_at: string;
   updated_at: string;
 }
