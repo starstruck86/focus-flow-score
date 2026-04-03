@@ -462,14 +462,16 @@ Deno.serve(async (req) => {
     }
 
     const isTranscript = isTranscriptType(resourceType);
-    const isLesson = isStructuredLesson(content);
+    const isLesson = isStructuredLesson(content, title, resourceType);
     const itemTarget = isLesson ? LESSON_ITEM_TARGET : isTranscript ? TRANSCRIPT_ITEM_TARGET : DOCUMENT_ITEM_TARGET;
 
     // ══════════════════════════════════════════════════
     // LESSON MODE: 2-stage pipeline
     // ══════════════════════════════════════════════════
     if (isLesson) {
-      const result = await extractLessonTwoStage(LOVABLE_API_KEY, content, title, description, tags, resourceType);
+      const cleanedContent = prepareLessonContent(content, title);
+      console.log(`[extract-tactics] LESSON detected: "${title}" | original=${content.length} cleaned=${cleanedContent.length} chars`);
+      const result = await extractLessonTwoStage(LOVABLE_API_KEY, cleanedContent, title, description, tags, resourceType);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
