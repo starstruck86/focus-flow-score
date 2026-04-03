@@ -2970,6 +2970,7 @@ export type Database = {
           artwork_url: string | null
           attempts: number
           audio_url: string | null
+          batch_id: string | null
           content_validation: Json | null
           created_at: string
           episode_description: string | null
@@ -2986,6 +2987,7 @@ export type Database = {
           ki_status: string | null
           metadata_status: string | null
           original_episode_url: string | null
+          pipeline_stage: string | null
           platform: string | null
           processed_at: string | null
           raw_transcript: string | null
@@ -3009,6 +3011,7 @@ export type Database = {
           artwork_url?: string | null
           attempts?: number
           audio_url?: string | null
+          batch_id?: string | null
           content_validation?: Json | null
           created_at?: string
           episode_description?: string | null
@@ -3025,6 +3028,7 @@ export type Database = {
           ki_status?: string | null
           metadata_status?: string | null
           original_episode_url?: string | null
+          pipeline_stage?: string | null
           platform?: string | null
           processed_at?: string | null
           raw_transcript?: string | null
@@ -3048,6 +3052,7 @@ export type Database = {
           artwork_url?: string | null
           attempts?: number
           audio_url?: string | null
+          batch_id?: string | null
           content_validation?: Json | null
           created_at?: string
           episode_description?: string | null
@@ -3064,6 +3069,7 @@ export type Database = {
           ki_status?: string | null
           metadata_status?: string | null
           original_episode_url?: string | null
+          pipeline_stage?: string | null
           platform?: string | null
           processed_at?: string | null
           raw_transcript?: string | null
@@ -3084,6 +3090,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "podcast_import_queue_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batch_runs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "podcast_import_queue_source_registry_id_fkey"
             columns: ["source_registry_id"]
