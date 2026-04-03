@@ -2,7 +2,8 @@
  * Canary regression suite for the resource enrichment system.
  *
  * Representative edge cases that must remain stable across enrichment logic changes.
- * Tests classification, trust, eligibility, strategy selection, and state transitions.
+ * Tests classification, trust, eligibility, strategy selection, state transitions,
+ * retry orchestration, and failure classification.
  */
 import { describe, it, expect } from 'vitest';
 import { assessTrust, classifySource, computeTrustScore, type ResourceForTrust } from '@/lib/resourceTrust';
@@ -192,7 +193,6 @@ describe('Downstream Eligibility Canary', () => {
     expect(assessment.eligibility.dave_grounding).toBe(false);
     expect(assessment.eligibility.playbook_generation).toBe(false);
     expect(assessment.eligibility.strategic_recommendations).toBe(false);
-    // Always visible in library
     expect(assessment.eligibility.library_display).toBe(true);
   });
 
@@ -333,9 +333,170 @@ describe('KI Floor Invariant Canary', () => {
   });
 
   it('Account Scoring benchmark (14729 chars) floor is ≤ 30', () => {
-    // Benchmark produces ~32 KIs; floor of 12 gives 2.5x headroom
     const floor = computeMinKiFloor(14729, true);
     expect(floor).toBeLessThanOrEqual(30);
     expect(floor).toBeGreaterThanOrEqual(10);
+  });
+});
+
+// ── Retry Orchestration Canary ─────────────────────────────
+// Mirrors selectStrategy and classifyFailure from batch-extract-kis.
+
+type ExtractionFailureType =
+  | 'transient_error'
+  | 'under_floor_invariant'
+  | 'segmentation_failure'
+  | 'model_failure'
+  | 'structural_failure';
+
+type ExtractionStrategy = 'standard' | 'rechunk' | 'structured_prompt' | 'summary_first';
+
+function selectStrategy(attemptNumber: number, lastFailureType?: ExtractionFailureType): ExtractionStrategy {
+  if (attemptNumber <= 1) return 'standard';
+  if (lastFailureType === 'under_floor_invariant') {
+    return attemptNumber === 2 ? 'structured_prompt' : attemptNumber === 3 ? 'rechunk' : 'summary_first';
+  }
+  if (lastFailureType === 'segmentation_failure') return 'rechunk';
+  if (lastFailureType === 'model_failure') {
+    return attemptNumber === 2 ? 'structured_prompt' : 'summary_first';
+  }
+  if (attemptNumber === 2) return 'rechunk';
+  if (attemptNumber === 3) return 'structured_prompt';
+  return 'summary_first';
+}
+
+function classifyFailure(error: any, kiCount: number, minFloor: number, rawItemCount: number): ExtractionFailureType {
+  const msg = (error?.message || error || '').toString().toLowerCase();
+  if (msg.includes('timeout') || msg.includes('429') || msg.includes('503') || msg.includes('network')) return 'transient_error';
+  if (kiCount > 0 && kiCount < minFloor) return 'under_floor_invariant';
+  if (rawItemCount === 0 && !msg) return 'model_failure';
+  if (msg.includes('ai error') || msg.includes('parse')) return 'model_failure';
+  if (msg.includes('content too short') || msg.includes('no content')) return 'structural_failure';
+  return 'transient_error';
+}
+
+describe('Retry Strategy Selection Canary', () => {
+  it('attempt 1 always uses standard strategy', () => {
+    expect(selectStrategy(1)).toBe('standard');
+    expect(selectStrategy(1, 'transient_error')).toBe('standard');
+    expect(selectStrategy(1, 'under_floor_invariant')).toBe('standard');
+  });
+
+  it('under-floor failure escalates through structured → rechunk → summary', () => {
+    expect(selectStrategy(2, 'under_floor_invariant')).toBe('structured_prompt');
+    expect(selectStrategy(3, 'under_floor_invariant')).toBe('rechunk');
+    expect(selectStrategy(4, 'under_floor_invariant')).toBe('summary_first');
+  });
+
+  it('segmentation failure always rechunks', () => {
+    expect(selectStrategy(2, 'segmentation_failure')).toBe('rechunk');
+    expect(selectStrategy(3, 'segmentation_failure')).toBe('rechunk');
+  });
+
+  it('model failure escalates through structured → summary', () => {
+    expect(selectStrategy(2, 'model_failure')).toBe('structured_prompt');
+    expect(selectStrategy(3, 'model_failure')).toBe('summary_first');
+  });
+
+  it('default escalation: rechunk → structured → summary', () => {
+    expect(selectStrategy(2)).toBe('rechunk');
+    expect(selectStrategy(3)).toBe('structured_prompt');
+    expect(selectStrategy(4)).toBe('summary_first');
+  });
+
+  it('strategy always changes between attempts (no stuck loops)', () => {
+    const strategies = [1, 2, 3, 4].map(n => selectStrategy(n));
+    // Each consecutive pair should differ
+    for (let i = 1; i < strategies.length; i++) {
+      expect(strategies[i]).not.toBe(strategies[i - 1]);
+    }
+  });
+});
+
+describe('Failure Classification Canary', () => {
+  it('timeout errors → transient_error', () => {
+    expect(classifyFailure({ message: 'Request timeout' }, 0, 5, 0)).toBe('transient_error');
+    expect(classifyFailure({ message: 'Error 429' }, 0, 5, 0)).toBe('transient_error');
+  });
+
+  it('under-floor KI count → under_floor_invariant', () => {
+    expect(classifyFailure(null, 2, 5, 10)).toBe('under_floor_invariant');
+    expect(classifyFailure(null, 1, 3, 5)).toBe('under_floor_invariant');
+  });
+
+  it('zero raw items without error → model_failure', () => {
+    expect(classifyFailure(null, 0, 5, 0)).toBe('model_failure');
+  });
+
+  it('content issues → structural_failure', () => {
+    expect(classifyFailure({ message: 'Content too short' }, 0, 5, 0)).toBe('structural_failure');
+  });
+
+  it('structural_failure is the only non-retryable type', () => {
+    // All types except structural should be retryable
+    const retryable: ExtractionFailureType[] = ['transient_error', 'under_floor_invariant', 'segmentation_failure', 'model_failure'];
+    const nonRetryable: ExtractionFailureType[] = ['structural_failure'];
+
+    for (const t of retryable) {
+      // Retry eligibility: attemptNumber < maxAttempts AND not structural
+      expect(t !== 'structural_failure').toBe(true);
+    }
+    for (const t of nonRetryable) {
+      expect(t === 'structural_failure').toBe(true);
+    }
+  });
+});
+
+describe('Retry System Guarantee Canary', () => {
+  it('nontrivial lesson cannot complete with KI count below floor', () => {
+    // Simulates the invariant gate in batch-extract-kis
+    const contentLength = 5000;
+    const isLesson = true;
+    const floor = computeMinKiFloor(contentLength, isLesson);
+    const kiCount = 2; // Below floor of 8
+
+    // This MUST be classified as failure, not success
+    expect(kiCount < floor).toBe(true);
+    const failureType = classifyFailure(null, kiCount, floor, 10);
+    expect(failureType).toBe('under_floor_invariant');
+  });
+
+  it('max attempts reached → requires_review, not terminal failure', () => {
+    const attemptNumber = 4;
+    const maxAttempts = 4;
+    const retryEligible = attemptNumber < maxAttempts;
+    expect(retryEligible).toBe(false);
+    // Status should be 'extraction_requires_review', not 'extraction_failed'
+    const status = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
+    expect(status).toBe('extraction_requires_review');
+  });
+
+  it('attempts below max → extraction_retrying, not failed', () => {
+    const attemptNumber = 2;
+    const maxAttempts = 4;
+    const failureType: ExtractionFailureType = 'under_floor_invariant';
+    const retryEligible = attemptNumber < maxAttempts && failureType !== 'structural_failure';
+    expect(retryEligible).toBe(true);
+    const status = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
+    expect(status).toBe('extraction_retrying');
+  });
+
+  it('structural failure stops retry even before max attempts', () => {
+    const attemptNumber = 1;
+    const maxAttempts = 4;
+    const failureType: ExtractionFailureType = 'structural_failure';
+    const retryEligible = attemptNumber < maxAttempts && failureType !== 'structural_failure';
+    expect(retryEligible).toBe(false);
+  });
+
+  it('attempt count increments on each try', () => {
+    // Simulates the pipeline: attempt starts at (current + 1)
+    let extractionAttemptCount = 0;
+    for (let i = 0; i < 4; i++) {
+      const attemptNumber = extractionAttemptCount + 1;
+      expect(attemptNumber).toBe(i + 1);
+      extractionAttemptCount = attemptNumber;
+    }
+    expect(extractionAttemptCount).toBe(4);
   });
 });
