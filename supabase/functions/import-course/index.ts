@@ -63,6 +63,14 @@ function createCookieJar(): CookieJar {
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
+function stripTranscriptSections(html: string) {
+  return html
+    .replace(/<div[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+    .replace(/<section[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>[\s\S]*?<\/section>/gi, '')
+    .replace(/<aside[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>[\s\S]*?<\/aside>/gi, '')
+    .replace(/<details[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>[\s\S]*?<\/details>/gi, '');
+}
+
 /**
  * Resolve a Wistia video ID to its smallest MP4 URL via the public embed API.
  */
@@ -525,6 +533,7 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/<aside[\s\S]*?<\/aside>/gi, '')
     .replace(/<nav[\s\S]*?<\/nav>/gi, '')
     .replace(/<div[^>]*class="[^"]*(?:navigation|breadcrumb|mark-complete|next-lesson|prev-lesson|lesson-nav|post-nav)[^"]*"[\s\S]*?<\/div>/gi, '');
+  cleanedHtml = stripTranscriptSections(cleanedHtml);
   
   // Extract content — try Kajabi-specific post body first
   let content = '';
@@ -550,9 +559,10 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
   
   for (const pattern of contentPatterns) {
     const m = cleanedHtml.match(pattern);
-    if (m && m[1].length > content.length) {
+    if (m && m[1] && m[1].trim().length > 50) {
       content = m[1];
       debug.push(`Matched pattern: ${pattern.source.substring(0, 40)}`);
+      break;
     }
   }
   
