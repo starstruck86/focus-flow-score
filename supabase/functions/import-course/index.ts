@@ -665,6 +665,33 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
   if (videoEmbeds.length > 0) {
     content = videoEmbeds.join('\n') + '\n\n' + content;
   }
+
+  // Try to capture lesson intro/header text that may sit above the main content div
+  // Kajabi often has a section__heading or post heading with intro paragraphs
+  const introPatterns = [
+    /class="[^"]*(?:section__heading|post__heading|lesson-heading|post-heading)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
+    /class="[^"]*(?:section__description|post__description|lesson-intro)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
+  ];
+  let introText = '';
+  for (const ip of introPatterns) {
+    const im = cleanedHtml.match(ip);
+    if (im && im[1]) {
+      const cleaned = im[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      if (cleaned.length > 20 && !content.includes(cleaned.substring(0, 80))) {
+        introText += cleaned + '\n\n';
+      }
+    }
+  }
+  if (introText) {
+    // Insert intro after video embeds but before main content
+    const embedEnd = content.lastIndexOf(']\n\n');
+    if (embedEnd > 0) {
+      content = content.substring(0, embedEnd + 3) + introText + content.substring(embedEnd + 3);
+    } else {
+      content = introText + content;
+    }
+    debug.push(`Intro text prepended: ${introText.length} chars`);
+  }
   
   // Resolve Wistia video media URLs for transcription
   let mediaUrl = '';
