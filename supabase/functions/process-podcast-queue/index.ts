@@ -275,10 +275,13 @@ Deno.serve(async (req) => {
 
         resolveResult = await resolveResp.json();
       } catch (err) {
-        // If resolver fails but we have embedded audio, continue
+        // If resolver fails but we have embedded audio or the URL itself is direct audio, continue
         if (embeddedAudioUrl) {
           console.log(`Resolver failed but embedded audio found: ${embeddedAudioUrl}`);
           resolveResult = { resolution: { audioEnclosureUrl: embeddedAudioUrl } };
+        } else if (isDirectAudioUrl(queueItem.episode_url)) {
+          console.log(`Resolver failed but URL is direct audio: ${queueItem.episode_url}`);
+          resolveResult = { resolution: { audioEnclosureUrl: queueItem.episode_url } };
         } else {
           await handleFailure(supabase, queueItem, `Resolution failed: ${err.message}`, "audio_unresolvable");
           return json({ processed: 1, result: "failed", error: err.message });
