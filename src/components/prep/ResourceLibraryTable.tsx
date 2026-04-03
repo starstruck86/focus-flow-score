@@ -635,8 +635,20 @@ export function ResourceLibraryTable({
                       </td>
                       <td className="px-3 align-middle">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{resource.title}</p>
+                          {(() => {
+                            const decoded = decodeHTMLEntities(resource.title);
+                            const separatorIdx = decoded.indexOf(' > ');
+                            const parentName = separatorIdx > 0 ? decoded.slice(0, separatorIdx) : null;
+                            const childName = separatorIdx > 0 ? decoded.slice(separatorIdx + 3) : decoded;
+                            return (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {parentName && (
+                                  <span className="text-[9px] text-muted-foreground truncate max-w-[120px]">{parentName} ›</span>
+                                )}
+                                <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{childName}</p>
+                              </div>
+                            );
+                          })()}
                             {lc && (
                               <Badge variant="outline" className={cn(
                                 'text-[8px] h-4 px-1 shrink-0',
