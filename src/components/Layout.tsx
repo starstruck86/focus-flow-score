@@ -319,7 +319,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       <Breadcrumbs />
-      <main data-testid="main-content" className={`flex-1 overflow-x-hidden overflow-y-auto ${TW_PAGE_BOTTOM_PAD}`}>
+      <main data-testid="main-content" className={`flex-1 overflow-x-hidden overflow-y-auto ${SHELL.main.bottomPad}`}>
         {children}
       </main>
 
