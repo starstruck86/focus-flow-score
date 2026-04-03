@@ -343,7 +343,7 @@ Deno.serve(async (req) => {
             transcript_status: "transcribing",
           });
 
-          const audioUrl = resolveResult.audio_url || resolveResult.resolved_audio_url || resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl;
+          const audioUrl = resolveResult.audio_url || resolveResult.resolved_audio_url || resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl || directAudioFallback;
           const transcribeResp = await fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
             method: "POST",
             headers: {
