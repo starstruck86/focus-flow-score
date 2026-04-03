@@ -31,8 +31,8 @@ export default defineConfig(({ mode }) => ({
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },
       manifest: {
-        name: "Quota Compass",
-        short_name: "QuotaCompass",
+        name: "Quota CoPilot",
+        short_name: "QuotaCoPilot",
         description: "Sales performance tracker — track dials, pipeline, and Power Hours from anywhere.",
         theme_color: "#0f1419",
         background_color: "#0f1419",
