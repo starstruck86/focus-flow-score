@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { TW_FAB_BOTTOM } from '@/lib/layout';
+import { SHELL } from '@/lib/layout';
 import { 
   useTodayJournalEntry,
 } from '@/hooks/useDailyJournal';
@@ -276,8 +276,8 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   
   // Position FAB above the 2-row bottom nav using shared layout tokens
   const positionClasses = position === 'bottom-right' 
-    ? `right-4 ${TW_FAB_BOTTOM}` 
-    : `left-4 ${TW_FAB_BOTTOM}`;
+    ? `right-4 ${SHELL.fab.bottom}` 
+    : `left-4 ${SHELL.fab.bottom}`;
   
   const menuAlignment = position === 'bottom-right' ? 'items-end' : 'items-start';
   

@@ -30,7 +30,7 @@ import { useVoiceReminders } from '@/hooks/useVoiceReminders';
 import { useWakeWord } from '@/hooks/useWakeWord';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/BottomNav';
-import { TW_PAGE_BOTTOM_PAD, TW_FAB_BOTTOM } from '@/lib/layout';
+import { SHELL } from '@/lib/layout';
 
 
 
@@ -280,7 +280,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [getDaveSession, invalidateDaveCache]);
 
   return (
-    <div data-testid="app-layout" className="min-h-screen bg-background flex flex-col w-full pt-[env(safe-area-inset-top)]">
+    <div data-testid="app-layout" className={`min-h-screen bg-background flex flex-col w-full ${SHELL.top.safeArea}`}>
       <header
         data-testid="app-header"
         className="flex items-center gap-2 px-3 py-2 border-b sticky top-0 z-40 bg-background/95 backdrop-blur-md"
@@ -319,7 +319,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       <Breadcrumbs />
-      <main data-testid="main-content" className={`flex-1 overflow-x-hidden overflow-y-auto ${TW_PAGE_BOTTOM_PAD}`}>
+      <main data-testid="main-content" className={`flex-1 overflow-x-hidden overflow-y-auto ${SHELL.main.bottomPad}`}>
         {children}
       </main>
 
@@ -336,7 +336,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
       )}
       {daveDrift && !daveOpen && (
-        <div className={`fixed right-4 ${TW_FAB_BOTTOM} z-50`}>
+        <div className={`fixed right-4 ${SHELL.fab.bottom} z-50`}>
           <button
             onClick={() => toast.error(
               `Dave is unavailable: deployment version mismatch (${daveDrift.expected} vs ${daveDrift.actual}). Redeploy dave functions to fix.`,

@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart3, FileText, Brain, Shield, ClipboardCheck } from 'lucide-react';
+import { SHELL } from '@/lib/layout';
 
 // Sub-tab content
 import { KnowledgeOverview } from './KnowledgeOverview';
@@ -24,25 +25,25 @@ export function KnowledgeWorkspace() {
   return (
     <div className="space-y-3">
       <Tabs value={subTab} onValueChange={setSubTab}>
-        <TabsList className="flex w-full overflow-x-auto gap-0.5 p-1">
-          <TabsTrigger value="overview" className="text-xs gap-1 flex-shrink-0 px-2.5">
+        <TabsList className={SHELL.tabs.list}>
+          <TabsTrigger value="overview" className={SHELL.tabs.triggerWithIcon}>
             <BarChart3 className="h-3 w-3" />
             Overview
           </TabsTrigger>
-          <TabsTrigger value="resources" className="text-xs gap-1 flex-shrink-0 px-2.5">
+          <TabsTrigger value="resources" className={SHELL.tabs.triggerWithIcon}>
             <FileText className="h-3 w-3" />
             Resources
           </TabsTrigger>
-          <TabsTrigger value="items" className="text-xs gap-1 flex-shrink-0 px-2.5">
+          <TabsTrigger value="items" className={SHELL.tabs.triggerWithIcon}>
             <Brain className="h-3 w-3" />
             <span className="hidden sm:inline">Knowledge Items</span>
             <span className="sm:hidden">Items</span>
           </TabsTrigger>
-          <TabsTrigger value="review" className="text-xs gap-1 flex-shrink-0 px-2.5">
+          <TabsTrigger value="review" className={SHELL.tabs.triggerWithIcon}>
             <ClipboardCheck className="h-3 w-3" />
             Review
           </TabsTrigger>
-          <TabsTrigger value="audit" className="text-xs gap-1 flex-shrink-0 px-2.5">
+          <TabsTrigger value="audit" className={SHELL.tabs.triggerWithIcon}>
             <Shield className="h-3 w-3" />
             Audit
           </TabsTrigger>

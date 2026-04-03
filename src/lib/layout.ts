@@ -1,59 +1,130 @@
 /**
- * App-Shell Layout Tokens
- * 
- * Single source of truth for all spacing/sizing constants that keep
- * fixed, sticky, and floating UI clear of the bottom navigation and
- * safe-area insets.
- * 
- * Usage in Tailwind classes:
- *   - Import the CSS custom-property names and use via `var(--…)`.
- *   - Or use the TW_* string constants directly in className templates.
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║  APP-SHELL LAYOUT CONTRACT                                          ║
+ * ║  Single source of truth for all shell spacing, clearance, and       ║
+ * ║  safe-area handling in the Quota CoPilot app.                       ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
  *
- * Usage in inline styles:
- *   - Import PX_* numeric constants for runtime calculations.
+ * SHELL INVARIANTS (must always hold):
+ * 1. No fixed/floating UI overlaps the bottom nav.
+ * 2. No scrollable content is hidden behind fixed UI.
+ * 3. Horizontal tab rows scroll instead of compressing on narrow screens.
+ * 4. All interactive controls meet the 44px minimum tap target.
+ * 5. Sticky headers and bottom nav don't create unpredictable
+ *    usable-height loss — viewport calcs use the same constants.
+ * 6. New pages follow this contract without one-off spacing fixes.
+ *
+ * HOW TO USE:
+ * ─────────────────────────────────────────────────────────────────────
+ * In Tailwind classes:
+ *   import { SHELL } from '@/lib/layout';
+ *   <main className={SHELL.main.bottomPad}>…</main>
+ *   <button className={`fixed ${SHELL.fab.bottom} right-4`}>…</button>
+ *
+ * In CSS / inline styles:
+ *   Use the CSS custom properties defined in index.css:
+ *   var(--shell-nav-height), var(--shell-fab-clearance), etc.
+ *
+ * In JS runtime calculations:
+ *   import { PX } from '@/lib/layout';
+ *   const availableHeight = windowHeight - PX.HEADER - PX.BOTTOM_NAV;
  */
 
-// ── Physical sizes (pixels) ──────────────────────────────────────────
-/** Height of each nav row in the two-row bottom nav */
-export const PX_NAV_ROW_HEIGHT = 48; // h-12 = 3rem = 48px
-/** Separator between nav rows */
-export const PX_NAV_SEPARATOR = 1;
-/** Vertical padding below the second row */
-export const PX_NAV_BOTTOM_PAD = 4;
-/** Total bottom nav chrome height WITHOUT safe-area */
-export const PX_BOTTOM_NAV = PX_NAV_ROW_HEIGHT * 2 + PX_NAV_SEPARATOR + PX_NAV_BOTTOM_PAD; // 101px
-/** Gap between FABs and the top of the nav bar */
-export const PX_FAB_GAP = 12;
-/** Clearance for floating actions above the nav */
-export const PX_FAB_CLEARANCE = PX_BOTTOM_NAV + PX_FAB_GAP; // 113px
-/** Sticky header height (compact) */
-export const PX_HEADER_HEIGHT = 48;
+// ═══════════════════════════════════════════════════════════════════════
+// PIXEL CONSTANTS — physical sizes, no safe-area
+// ═══════════════════════════════════════════════════════════════════════
 
-// ── Tailwind-ready class fragments ──────────────────────────────────
-// These use CSS calc() with env() so they respond to device safe-area.
+export const PX = {
+  /** Height of one nav row (h-12 = 3rem = 48px) */
+  NAV_ROW: 48,
+  /** Separator line between the two nav rows */
+  NAV_SEPARATOR: 1,
+  /** Bottom padding inside the nav container */
+  NAV_PAD: 4,
+  /** Total bottom nav height = 2×48 + 1 + 4 = 101px (excl. safe-area) */
+  get BOTTOM_NAV() { return this.NAV_ROW * 2 + this.NAV_SEPARATOR + this.NAV_PAD; }, // 101
+  /** Gap between FABs and the top edge of the nav */
+  FAB_GAP: 12,
+  /** Total FAB clearance = nav + gap = 113px (excl. safe-area) */
+  get FAB_CLEARANCE() { return this.BOTTOM_NAV + this.FAB_GAP; }, // 113
+  /** Compact sticky header height */
+  HEADER: 48,
+  /** Minimum mobile tap target (WCAG / Apple HIG) */
+  TAP_TARGET: 44,
+} as const;
 
-/** Bottom padding for <main> content so it never hides behind nav */
-export const TW_PAGE_BOTTOM_PAD = 'pb-[calc(6.5rem+env(safe-area-inset-bottom))]';
+// Keep legacy named exports for backward compat during migration
+export const PX_NAV_ROW_HEIGHT = PX.NAV_ROW;
+export const PX_NAV_SEPARATOR = PX.NAV_SEPARATOR;
+export const PX_NAV_BOTTOM_PAD = PX.NAV_PAD;
+export const PX_BOTTOM_NAV = 101; // PX.BOTTOM_NAV
+export const PX_FAB_GAP = PX.FAB_GAP;
+export const PX_FAB_CLEARANCE = 113; // PX.FAB_CLEARANCE
+export const PX_HEADER_HEIGHT = PX.HEADER;
 
-/** Bottom offset for floating action buttons */
-export const TW_FAB_BOTTOM = 'bottom-[calc(7rem+env(safe-area-inset-bottom))]';
-
-/** Bottom offset for the BackToToday button (slightly below FABs) */
-export const TW_BACK_BOTTOM = 'bottom-[calc(6.75rem+env(safe-area-inset-bottom))]';
-
-// ── CSS custom properties (set once on :root via index.css) ─────────
-// --app-nav-height: total bottom nav height excl. safe-area
-// --app-fab-clearance: nav + gap
-// These are defined in index.css and consumed by the TW classes above.
-
-// ── Tab / segmented-control standards ───────────────────────────────
-/** 
- * Reusable Tailwind classes for scrollable tab rows on mobile.
- * Apply to <TabsList> to get consistent behavior.
- */
-export const TW_TABS_LIST = 'flex w-full overflow-x-auto gap-1 p-1 scrollbar-none';
+// ═══════════════════════════════════════════════════════════════════════
+// TAILWIND CLASS FRAGMENTS — use in className strings
+// ═══════════════════════════════════════════════════════════════════════
+// All bottom offsets use CSS calc() + env(safe-area-inset-bottom) so
+// they adapt to notched devices automatically.
 
 /**
- * Reusable Tailwind classes for each <TabsTrigger> in a scrollable row.
+ * Structured shell tokens organized by concern.
+ * Preferred API — use SHELL.main.bottomPad, SHELL.fab.bottom, etc.
  */
-export const TW_TAB_TRIGGER = 'flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]';
+export const SHELL = {
+  /** Main scrollable content area */
+  main: {
+    /** Bottom padding to clear the bottom nav + safe-area */
+    bottomPad: 'pb-[calc(var(--shell-nav-height)*1px+env(safe-area-inset-bottom))]',
+  },
+  /** Floating action buttons */
+  fab: {
+    /** Bottom offset to sit above nav + gap + safe-area */
+    bottom: 'bottom-[calc(var(--shell-fab-clearance)*1px+env(safe-area-inset-bottom))]',
+  },
+  /** Secondary floating controls (e.g. BackToToday) */
+  secondaryFab: {
+    /** Slightly lower than primary FABs */
+    bottom: 'bottom-[calc((var(--shell-fab-clearance)-4)*1px+env(safe-area-inset-bottom))]',
+  },
+  /** Top safe-area handling */
+  top: {
+    /** Padding for the app root to respect notch/dynamic-island */
+    safeArea: 'pt-[env(safe-area-inset-top)]',
+  },
+  /** Sticky header */
+  header: {
+    /** Height class for the compact header */
+    height: 'h-12',
+    /** Offset for content below a sticky header */
+    offset: 'top-12',
+  },
+  /** Tab rows / segmented controls */
+  tabs: {
+    /** TabsList: horizontal scroll, no visible scrollbar */
+    list: 'flex w-full overflow-x-auto gap-1 p-1 scrollbar-none',
+    /** TabsTrigger: non-shrinkable, minimum tap target */
+    trigger: 'flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]',
+    /** TabsTrigger with icon: adds icon gap */
+    triggerWithIcon: 'flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px] gap-1',
+  },
+  /** Viewport-height calculations for boards/tables */
+  viewport: {
+    /**
+     * Returns a max-height calc string for a scrollable container
+     * that accounts for header, nav, and a custom top offset.
+     * @param topOffsetRem - additional space consumed above (e.g. page title + tabs)
+     */
+    maxHeight: (topOffsetRem: number = 12) =>
+      `max-h-[calc(100vh-${topOffsetRem}rem-var(--shell-nav-height)*1px-env(safe-area-inset-bottom))]`,
+  },
+} as const;
+
+// ── Legacy flat exports (used by already-migrated components) ──────
+// These will be removed once Stage 2 migration is complete.
+export const TW_PAGE_BOTTOM_PAD = SHELL.main.bottomPad;
+export const TW_FAB_BOTTOM = SHELL.fab.bottom;
+export const TW_BACK_BOTTOM = SHELL.secondaryFab.bottom;
+export const TW_TABS_LIST = SHELL.tabs.list;
+export const TW_TAB_TRIGGER = SHELL.tabs.trigger;

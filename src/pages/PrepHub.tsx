@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Crosshair, Brain, Download } from 'lucide-react';
+import { SHELL } from '@/lib/layout';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { PodcastQueueIndicator } from '@/components/prep/PodcastQueueIndicator';
 
@@ -39,16 +40,16 @@ export default function PrepHub() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="prep" className="text-xs gap-1">
+          <TabsList className={SHELL.tabs.list}>
+            <TabsTrigger value="prep" className={SHELL.tabs.triggerWithIcon}>
               <Crosshair className="h-3.5 w-3.5" />
               Prep
             </TabsTrigger>
-            <TabsTrigger value="knowledge" className="text-xs gap-1">
+            <TabsTrigger value="knowledge" className={SHELL.tabs.triggerWithIcon}>
               <Brain className="h-3.5 w-3.5" />
               Knowledge
             </TabsTrigger>
-            <TabsTrigger value="ingest" className="text-xs gap-1">
+            <TabsTrigger value="ingest" className={SHELL.tabs.triggerWithIcon}>
               <Download className="h-3.5 w-3.5" />
               Ingest
             </TabsTrigger>

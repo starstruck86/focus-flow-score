@@ -20,6 +20,7 @@ import {
   Upload, Plus, ChevronDown, ChevronUp, Wand2, Swords, Shield, BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SHELL } from '@/lib/layout';
 import { useCallTranscripts, useSaveTranscript } from '@/hooks/useCallTranscripts';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -1121,22 +1122,22 @@ export default function Coach() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="w-full overflow-x-auto flex gap-0.5 p-1">
-            <TabsTrigger value="simulate" className="gap-1 flex-shrink-0 px-2.5">
+          <TabsList className={SHELL.tabs.list}>
+            <TabsTrigger value="simulate" className={`${SHELL.tabs.triggerWithIcon}`}>
               <Swords className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Simulate</span><span className="sm:hidden">Sim</span>
             </TabsTrigger>
-            <TabsTrigger value="drills" className="gap-1 flex-shrink-0 px-2.5">
+            <TabsTrigger value="drills" className={`${SHELL.tabs.triggerWithIcon}`}>
               <Shield className="h-3.5 w-3.5" /> Drills
             </TabsTrigger>
-            <TabsTrigger value="scorecard" className="flex-shrink-0 px-2.5">Scorecard</TabsTrigger>
-            <TabsTrigger value="history" className="flex-shrink-0 px-2.5">History</TabsTrigger>
-            <TabsTrigger value="trends" className="flex-shrink-0 px-2.5">Trends</TabsTrigger>
+            <TabsTrigger value="scorecard" className={SHELL.tabs.trigger}>Scorecard</TabsTrigger>
+            <TabsTrigger value="history" className={SHELL.tabs.trigger}>History</TabsTrigger>
+            <TabsTrigger value="trends" className={SHELL.tabs.trigger}>Trends</TabsTrigger>
             {isSystemOSEnabled() && (
               <>
-                <TabsTrigger value="weekly-review" className="text-[10px] flex-shrink-0 px-2">Review</TabsTrigger>
-                <TabsTrigger value="skill-lab" className="text-[10px] flex-shrink-0 px-2">Skills</TabsTrigger>
-                <TabsTrigger value="patterns" className="text-[10px] flex-shrink-0 px-2">Patterns</TabsTrigger>
-                <TabsTrigger value="audit" className="text-[10px] flex-shrink-0 px-2">Audit</TabsTrigger>
+                <TabsTrigger value="weekly-review" className={SHELL.tabs.trigger}>Review</TabsTrigger>
+                <TabsTrigger value="skill-lab" className={SHELL.tabs.trigger}>Skills</TabsTrigger>
+                <TabsTrigger value="patterns" className={SHELL.tabs.trigger}>Patterns</TabsTrigger>
+                <TabsTrigger value="audit" className={SHELL.tabs.trigger}>Audit</TabsTrigger>
               </>
             )}
           </TabsList>

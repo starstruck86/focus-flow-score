@@ -1,6 +1,6 @@
 import { Mic, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { TW_FAB_BOTTOM } from '@/lib/layout';
+import { SHELL } from '@/lib/layout';
 
 interface Props {
   onTap: () => void;
@@ -25,7 +25,7 @@ export function DaveMicFAB({ onTap, isLoading, isActive }: Props) {
       className={cn(
         'fixed z-50 flex items-center justify-center rounded-full shadow-lg',
         'h-14 w-14',
-        `right-4 ${TW_FAB_BOTTOM}`,
+        `right-4 ${SHELL.fab.bottom}`,
         'transition-colors duration-150',
         isLoading
           ? 'bg-muted text-muted-foreground cursor-wait'
