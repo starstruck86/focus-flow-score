@@ -529,13 +529,18 @@ export async function extractKnowledgeLLMFallback(
 
     // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
     // (indicated by ## section headings). Raw transcripts produce garbage KIs.
-    if (isTranscriptResource) {
-      const headingCount = (source.content || '').match(/^## /gm)?.length ?? 0;
+    // Exception: course lesson videos have structured written content (detected by
+    // the --- Video Transcript --- marker or substantial non-transcript body).
+    const contentStr = source.content || '';
+    const hasLessonBody = contentStr.includes('--- Video Transcript ---') && 
+      contentStr.indexOf('--- Video Transcript ---') > 500;
+    if (isTranscriptResource && !hasLessonBody) {
+      const headingCount = contentStr.match(/^## /gm)?.length ?? 0;
       if (headingCount < 2) {
         log.warn('Blocked KI extraction: transcript not preprocessed (missing ## headings)', {
           resourceId: source.resourceId,
           headingCount,
-          contentLength: source.content?.length ?? 0,
+          contentLength: contentStr.length,
         });
         return [];
       }
