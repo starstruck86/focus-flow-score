@@ -41,6 +41,7 @@ function KISide({ ki, resourceName }: { ki: KnowledgeItem; resourceName: string 
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[9px] text-muted-foreground">{attributionLabel(ki)}</span>
         <span className={cn('text-[9px]', exc.cls)}>{exc.label}</span>
+        <AttributionProvenanceBadge activationMetadata={ki.activation_metadata} />
       </div>
       <div className="pt-1">
         <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-destructive"

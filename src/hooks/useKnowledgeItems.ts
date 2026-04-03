@@ -49,6 +49,7 @@ export type KnowledgeItemInsert = Omit<KnowledgeItem, 'id' | 'created_at' | 'upd
   source_title?: string | null;
   source_location?: string | null;
   source_excerpt?: string | null;
+  activation_metadata?: Record<string, any> | null;
 };
 
 const TABLE = 'knowledge_items' as any;
