@@ -434,8 +434,24 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
   const html = await resp.text();
   debug.push(`Lesson page: ${resp.status}, ${html.length} chars`);
   
-  const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const title = titleMatch?.[1]?.replace(/<[^>]+>/g, '').trim() || 'Untitled Lesson';
+  // Try multiple title sources: h1 first, then og:title, then <title> (least specific)
+  const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  const ogMatch = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]+)"/i) ||
+                  html.match(/<meta[^>]*content="([^"]+)"[^>]*property="og:title"/i);
+  const titleTagMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  
+  let title = '';
+  if (h1Match) {
+    title = h1Match[1].replace(/<[^>]+>/g, '').trim();
+  }
+  // If h1 is generic (site name), prefer og:title
+  if (!title || title.length < 3 || /on-demand|sales introverts|training/i.test(title)) {
+    title = ogMatch?.[1]?.trim() || title;
+  }
+  // Last resort: <title> tag, but strip site name suffix
+  if (!title || title.length < 3) {
+    title = titleTagMatch?.[1]?.replace(/<[^>]+>/g, '').replace(/\s*[\|–—-]\s*.+$/, '').trim() || 'Untitled Lesson';
+  }
   
   let type = 'text';
   if (/wistia|vimeo|youtube|video-player/i.test(html)) type = 'video';
