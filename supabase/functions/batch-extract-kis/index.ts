@@ -669,7 +669,8 @@ Deno.serve(async (req) => {
 
     // ── 2. Run AI extraction (direct inline — no chained edge functions) ──
     const decodedContent = decodeHTMLEntities(resource.content);
-    const isLesson = isStructuredLesson(decodedContent);
+    const decodedTitle = decodeHTMLEntities(resource.title);
+    const isLesson = isStructuredLesson(decodedContent, decodedTitle, resource.resource_type);
     let rawItems: any[];
     let rawResponse: string | null = null;
 
