@@ -173,6 +173,7 @@ export function ResourceManager() {
   const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions(resources.length > 0);
   const { data: audioJobsMap } = useAudioJobsMap();
   const queryClient = useQueryClient();
+  const now = () => new Date().toISOString();
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
@@ -770,8 +771,28 @@ export function ResourceManager() {
                   // Run extraction pipeline (knowledge extraction from content-backed resources)
                   toast.loading('Extracting knowledge...', { id: 'extract-single' });
                   try {
+                    await supabase.from('resources' as any).update({
+                      active_job_type: 'extract',
+                      active_job_status: 'running',
+                      active_job_started_at: now(),
+                      active_job_updated_at: now(),
+                      active_job_finished_at: null,
+                      active_job_result_summary: null,
+                      active_job_error: null,
+                    } as any).eq('id', resource.id);
+
                     const { autoOperationalizeResource } = await import('@/lib/autoOperationalize');
                     const result = await autoOperationalizeResource(resource.id);
+
+                    await supabase.from('resources' as any).update({
+                      active_job_type: 'extract',
+                      active_job_status: 'succeeded',
+                      active_job_updated_at: now(),
+                      active_job_finished_at: now(),
+                      active_job_result_summary: `${result.knowledgeExtracted} KI extracted`,
+                      active_job_error: null,
+                    } as any).eq('id', resource.id);
+
                     toast.dismiss('extract-single');
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
@@ -797,9 +818,67 @@ export function ResourceManager() {
                       });
                     }
                   } catch (error: any) {
+                    await supabase.from('resources' as any).update({
+                      active_job_type: 'extract',
+                      active_job_status: 'failed',
+                      active_job_updated_at: now(),
+                      active_job_finished_at: now(),
+                      active_job_result_summary: null,
+                      active_job_error: error?.message ?? 'Extraction failed',
+                    } as any).eq('id', resource.id);
+
                     toast.dismiss('extract-single');
                     console.error('[Extract] Failed:', error);
                     toast.error('Extraction failed', { description: error?.message });
+                  }
+                  break;
+                }
+                case 'activate':
+                case 'repair_contexts': {
+                  const toastId = action === 'activate' ? 'activate-single' : 'repair-contexts-single';
+                  toast.loading(action === 'activate' ? 'Activating knowledge…' : 'Repairing contexts…', { id: toastId });
+                  try {
+                    await supabase.from('resources' as any).update({
+                      active_job_type: 'extract',
+                      active_job_status: 'running',
+                      active_job_started_at: now(),
+                      active_job_updated_at: now(),
+                      active_job_finished_at: null,
+                      active_job_result_summary: null,
+                      active_job_error: null,
+                    } as any).eq('id', resource.id);
+
+                    const { autoOperationalizeResource } = await import('@/lib/autoOperationalize');
+                    const result = await autoOperationalizeResource(resource.id);
+
+                    await supabase.from('resources' as any).update({
+                      active_job_type: 'extract',
+                      active_job_status: 'succeeded',
+                      active_job_updated_at: now(),
+                      active_job_finished_at: now(),
+                      active_job_result_summary: `${result.knowledgeActivated} KI activated`,
+                      active_job_error: null,
+                    } as any).eq('id', resource.id);
+
+                    toast.dismiss(toastId);
+                    queryClient.invalidateQueries({ queryKey: ['resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+                    if (result.operationalized) toast.success('Resource is now complete');
+                    else toast.success(action === 'activate' ? 'Activation finished' : 'Context repair finished');
+                  } catch (error: any) {
+                    await supabase.from('resources' as any).update({
+                      active_job_type: 'extract',
+                      active_job_status: 'failed',
+                      active_job_updated_at: now(),
+                      active_job_finished_at: now(),
+                      active_job_result_summary: null,
+                      active_job_error: error?.message ?? 'Operationalization failed',
+                    } as any).eq('id', resource.id);
+
+                    toast.dismiss(toastId);
+                    toast.error(action === 'activate' ? 'Activation failed' : 'Context repair failed', { description: error?.message });
                   }
                   break;
                 }
@@ -938,7 +1017,9 @@ export function ResourceManager() {
                   break;
                 case 'bulk_autoOp':
                 case 'bulk_autoOp_filtered': {
-                  const ids = Array.from(selectedResourceIds);
+                  const ids = filteredResources
+                    .filter((r) => selectedResourceIds.has(r.id))
+                    .map((r) => r.id);
                   if (ids.length === 0) {
                     toast.info('No resources selected');
                     break;

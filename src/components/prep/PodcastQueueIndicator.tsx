@@ -7,40 +7,21 @@ import { Loader2, CheckCircle2, Podcast, Brain } from 'lucide-react';
  * Only renders when there are active or recently-completed queue items.
  */
 export function PodcastQueueIndicator() {
-  const { stats, isActive, isDone } = usePodcastQueue();
+  const { stats, isActive } = usePodcastQueue();
 
-  if (stats.total === 0) return null;
+  if (stats.total === 0 || !isActive) return null;
 
-  if (isActive) {
-    const done = stats.complete + stats.failed + stats.skipped;
-    return (
-      <Badge variant="outline" className="text-[10px] gap-1.5 animate-pulse">
-        <Loader2 className="h-3 w-3 animate-spin text-primary" />
-        <Podcast className="h-3 w-3" />
-        Importing: {done}/{stats.total}
-        {stats.totalKIs > 0 && (
-          <span className="flex items-center gap-0.5 ml-1">
-            · <Brain className="h-2.5 w-2.5 text-green-500" /> {stats.totalKIs}
-          </span>
-        )}
-      </Badge>
-    );
-  }
-
-  if (isDone) {
-    return (
-      <Badge variant="outline" className="text-[10px] gap-1.5">
-        <CheckCircle2 className="h-3 w-3 text-primary" />
-        <Podcast className="h-3 w-3" />
-        {stats.complete} imported{stats.failed > 0 ? `, ${stats.failed} failed` : ''}
-        {stats.totalKIs > 0 && (
-          <span className="flex items-center gap-0.5 ml-1">
-            · <Brain className="h-2.5 w-2.5 text-green-500" /> {stats.totalKIs} KIs
-          </span>
-        )}
-      </Badge>
-    );
-  }
-
-  return null;
+  const done = stats.complete + stats.failed + stats.skipped;
+  return (
+    <Badge variant="outline" className="text-[10px] gap-1.5 animate-pulse">
+      <Loader2 className="h-3 w-3 animate-spin text-primary" />
+      <Podcast className="h-3 w-3" />
+      Importing: {done}/{stats.total}
+      {stats.totalKIs > 0 && (
+        <span className="flex items-center gap-0.5 ml-1">
+          · <Brain className="h-2.5 w-2.5 text-green-500" /> {stats.totalKIs}
+        </span>
+      )}
+    </Badge>
+  );
 }
