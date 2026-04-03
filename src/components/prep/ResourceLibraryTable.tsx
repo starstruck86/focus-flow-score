@@ -646,35 +646,34 @@ export function ResourceLibraryTable({
                                   <span className="text-[9px] text-muted-foreground truncate max-w-[120px]">{parentName} ›</span>
                                 )}
                                 <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{childName}</p>
+                                {lc && (
+                                  <Badge variant="outline" className={cn(
+                                    'text-[8px] h-4 px-1 shrink-0',
+                                    lc.stage === 'operationalized' ? 'border-emerald-500/40 text-emerald-600' :
+                                    lc.blocked !== 'none' ? 'border-destructive/40 text-destructive' :
+                                    'border-border text-muted-foreground'
+                                  )}>
+                                    {lc.stage === 'operationalized' ? '✓ Ready' :
+                                     lc.stage === 'activated' ? 'Activated' :
+                                     lc.stage === 'knowledge_extracted' ? 'Extracted' :
+                                     lc.stage === 'tagged' ? 'Tagged' :
+                                     lc.stage === 'content_ready' ? 'Content' :
+                                     'Uploaded'}
+                                  </Badge>
+                                )}
+                                {inUseIds.has(resource.id) && (
+                                  <Badge variant="outline" className="text-[8px] h-4 px-1 shrink-0 border-blue-500/40 text-blue-600">
+                                    In Use
+                                  </Badge>
+                                )}
+                                {lc && lc.kiCount > 0 && (
+                                  <span className="text-[8px] text-muted-foreground shrink-0">
+                                    {lc.activeKi}/{lc.kiCount} KI
+                                  </span>
+                                )}
                               </div>
                             );
                           })()}
-                            {lc && (
-                              <Badge variant="outline" className={cn(
-                                'text-[8px] h-4 px-1 shrink-0',
-                                lc.stage === 'operationalized' ? 'border-emerald-500/40 text-emerald-600' :
-                                lc.blocked !== 'none' ? 'border-destructive/40 text-destructive' :
-                                'border-border text-muted-foreground'
-                              )}>
-                                {lc.stage === 'operationalized' ? '✓ Ready' :
-                                 lc.stage === 'activated' ? 'Activated' :
-                                 lc.stage === 'knowledge_extracted' ? 'Extracted' :
-                                 lc.stage === 'tagged' ? 'Tagged' :
-                                 lc.stage === 'content_ready' ? 'Content' :
-                                 'Uploaded'}
-                              </Badge>
-                            )}
-                            {inUseIds.has(resource.id) && (
-                              <Badge variant="outline" className="text-[8px] h-4 px-1 shrink-0 border-blue-500/40 text-blue-600">
-                                In Use
-                              </Badge>
-                            )}
-                            {lc && lc.kiCount > 0 && (
-                              <span className="text-[8px] text-muted-foreground shrink-0">
-                                {lc.activeKi}/{lc.kiCount} KI
-                              </span>
-                            )}
-                          </div>
                           {/* Inline job progress: live Zustand → durable backend fallback */}
                           {(() => {
                             const liveJob = liveJobResources[resource.id];
