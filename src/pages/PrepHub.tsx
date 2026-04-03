@@ -31,6 +31,7 @@ export default function PrepHub() {
             <h1 className="text-xl font-bold text-foreground">Sales Brain OS</h1>
             <p className="text-xs text-muted-foreground">Prep · Knowledge · Ingest</p>
           </div>
+
           <div className="flex items-center gap-2">
             <PodcastQueueIndicator />
             <VoiceCommandButton />
