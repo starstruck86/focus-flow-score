@@ -13,6 +13,7 @@ import { trackedInvoke } from '@/lib/trackedInvoke';
 import { createLogger } from '@/lib/logger';
 import { inferTags, mergeTags } from '@/lib/resourceTags';
 import { validateTrust, deduplicateKnowledgeItems, type TrustValidation } from '@/lib/trustValidation';
+import { detectFramework } from '@/data/frameworkLibrary';
 
 const log = createLogger('KnowledgeExtraction');
 
