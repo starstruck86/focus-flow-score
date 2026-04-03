@@ -502,23 +502,32 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/<footer[\s\S]*$/gi, '')
     .replace(/<div[^>]*class="[^"]*(?:coach-section|about-coach|instructor-bio|customer-portal)[^"]*"[\s\S]*$/gi, '');
   
+  // Strip sidebar/playlist/navigation sections BEFORE content extraction
+  // These are Kajabi course nav elements that leak into content-wrap
+  cleanedHtml = cleanedHtml
+    .replace(/<div[^>]*class="[^"]*(?:playlist|sidebar|subcategory|category-list|course-sidebar|post-sidebar|kjb-sidebar|product-sidebar|section-list)[^"]*"[\s\S]*?<\/div>\s*<\/div>/gi, '')
+    .replace(/<aside[\s\S]*?<\/aside>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<div[^>]*class="[^"]*(?:navigation|breadcrumb|mark-complete|next-lesson|prev-lesson|lesson-nav|post-nav)[^"]*"[\s\S]*?<\/div>/gi, '');
+  
   // Extract content — try Kajabi-specific post body first
   let content = '';
   
   // Look for the actual lesson body content by scanning for class names
   const classNames = [...cleanedHtml.matchAll(/class="([^"]+)"/gi)].map(m => m[1]);
-  const postBodyClasses = classNames.filter(c => /post|lesson|content|body/i.test(c) && !/nav|header|sidebar|menu/i.test(c));
+  const postBodyClasses = classNames.filter(c => /post|lesson|content|body/i.test(c) && !/nav|header|sidebar|menu|playlist|category/i.test(c));
   debug.push(`Post-related classes: ${postBodyClasses.slice(0, 5).join(', ')}`);
   
   // Try to extract from Kajabi's known content containers
+  // Order matters: most specific first, broadest last
   const contentPatterns = [
-    // Kajabi content-wrap is the main lesson content area
+    // Kajabi post body (most specific — actual lesson text)
+    /class="[^"]*(?:kjb-html-content)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
+    /class="[^"]*(?:post__body|post-body)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
+    /class="[^"]*(?:product-post__body|lesson-content|course-content)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
+    /data-post-body[^>]*>([\s\S]+?)<\/div>/i,
+    // Kajabi content-wrap (broader — may include sidebar, use as fallback)
     /class="[^"]*content-wrap[^"]*"[^>]*>([\s\S]+)/i,
-    // Kajabi post body
-    /class="[^"]*(?:kjb-html-content)[^"]*"[^>]*>([\s\S]+)/i,
-    /class="[^"]*(?:post__body|post-body)[^"]*"[^>]*>([\s\S]+)/i,
-    /class="[^"]*(?:product-post__body|lesson-content|course-content)[^"]*"[^>]*>([\s\S]+)/i,
-    /data-post-body[^>]*>([\s\S]+)/i,
   ];
   
   for (const pattern of contentPatterns) {
@@ -545,10 +554,11 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     debug.push(`Last resort: using full body (${content.length} chars)`);
   }
   
-  // Post-extraction: remove sidebar/playlist content
+  // Post-extraction: remove any remaining sidebar/playlist content
   content = content
-    .replace(/<div[^>]*class="[^"]*(?:playlist|sidebar|navigation|breadcrumb)[^"]*"[\s\S]*?<\/div>/gi, '')
-    .replace(/<div[^>]*class="[^"]*(?:mark-complete|next-lesson|prev-lesson)[^"]*"[\s\S]*?<\/div>/gi, '');
+    .replace(/<div[^>]*class="[^"]*(?:playlist|sidebar|navigation|breadcrumb|subcategory|category-list)[^"]*"[\s\S]*?<\/div>/gi, '')
+    .replace(/<div[^>]*class="[^"]*(?:mark-complete|next-lesson|prev-lesson)[^"]*"[\s\S]*?<\/div>/gi, '')
+    .replace(/<aside[\s\S]*?<\/aside>/gi, '');
   
   // Clean HTML to text
   content = content
@@ -560,19 +570,36 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:p|div|li|h[1-6])>/gi, '\n')
     .replace(/<(?:li)>/gi, '• ')
-    .replace(/<[^>]+>/g, '')
+    .replace(/<[^>]+>/g, '');
+  
+  // Decode ALL HTML entities properly (comprehensive list)
+  content = content
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&rsquo;/g, '\u2019')
+    .replace(/&lsquo;/g, '\u2018')
+    .replace(/&rdquo;/g, '\u201D')
+    .replace(/&ldquo;/g, '\u201C')
+    .replace(/&mdash;/g, '\u2014')
+    .replace(/&ndash;/g, '\u2013')
+    .replace(/&hellip;/g, '\u2026')
+    .replace(/&trade;/g, '\u2122')
+    .replace(/&copy;/g, '\u00A9')
+    .replace(/&reg;/g, '\u00AE')
+    .replace(/&bull;/g, '\u2022')
+    .replace(/&rarr;/g, '\u2192')
+    .replace(/&larr;/g, '\u2190')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   
   // Remove common nav/UI noise from the text output
   content = content
-    .replace(/^[\s\S]*?(?=(?:Introduction|Chapter|Module|Lesson|Section)\b)/i, '') // Skip to first heading-like word
     .replace(/\b(?:Store|My Library|Search|Settings|Logout|Log Out|Sign Out)\b/g, '')
     .replace(/Mark As Complete/gi, '')
     .replace(/Great Job! Keep Going!/gi, '')
@@ -580,10 +607,9 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/Next Section/gi, '')
     .replace(/Play Now/gi, '')
     .replace(/Will Begin In \d+ Seconds/gi, '')
-    .replace(/Cancel/g, '')
     .replace(/Module \d+ of \d+/gi, '')
     .replace(/\d+ Modules/gi, '')
-    .replace(/^\s*(?:Back|Next|Previous)\s*$/gm, '')
+    .replace(/^\s*(?:Back|Next|Previous|Cancel)\s*$/gm, '')
     .replace(/^\s*\|\s*$/gm, '')
     .replace(/^\s*\d+\s*$/gm, '') // Standalone numbers (playlist indices)
     .replace(/\n{3,}/g, '\n\n')
