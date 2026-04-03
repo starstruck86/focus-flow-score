@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart3, FileText, Brain, Shield, ClipboardCheck } from 'lucide-react';
+import { SHELL } from '@/lib/layout';
 
 // Sub-tab content
 import { KnowledgeOverview } from './KnowledgeOverview';
