@@ -947,16 +947,27 @@ export function ResourceManager() {
                   progressStore.startBatch(ids);
                   try {
                     const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
-                    const results = await autoOperationalizeBatch(ids, undefined, (resourceId, phase, result) => {
+                    const results = await autoOperationalizeBatch(ids, undefined, async (resourceId, phase, result) => {
                       const store = useExtractionProgress.getState();
                       if (phase === 'start') {
                         store.markExtracting(resourceId, result?.resourceTitle);
+                        // Persist durable 'running' status
+                        supabase.from('resources' as any).update({
+                          re_extract_status: 'running',
+                          re_extract_at: new Date().toISOString(),
+                        } as any).eq('id', resourceId).then(() => {});
                       } else if (phase === 'done') {
+                        const durableStatus = (result && result.success) ? 'succeeded' : 'failed';
                         if (result && result.success) {
                           store.markDone(resourceId, result.knowledgeExtracted);
                         } else {
                           store.markFailed(resourceId);
                         }
+                        // Persist durable outcome
+                        supabase.from('resources' as any).update({
+                          re_extract_status: durableStatus,
+                          re_extract_at: new Date().toISOString(),
+                        } as any).eq('id', resourceId).then(() => {});
                       }
                     });
                     useExtractionProgress.getState().endBatch();
