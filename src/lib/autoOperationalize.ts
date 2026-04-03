@@ -441,6 +441,7 @@ export async function autoOperationalizeResource(
 export async function autoOperationalizeBatch(
   resourceIds: string[],
   onProgress?: (processed: number, total: number, currentTitle: string) => void,
+  onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: AutoOperationalizeResult) => void,
 ): Promise<AutoOperationalizeResult[]> {
   log.info('Batch auto-operationalize starting', { totalIds: resourceIds.length });
 
@@ -460,9 +461,11 @@ export async function autoOperationalizeBatch(
   };
 
   for (let i = 0; i < resourceIds.length; i++) {
+    onResourcePhase?.(resourceIds[i], 'start');
     const result = await autoOperationalizeResource(resourceIds[i]);
     results.push(result);
     outcomeCounts[result.outcome]++;
+    onResourcePhase?.(resourceIds[i], 'done', result);
     onProgress?.(i + 1, resourceIds.length, result.resourceTitle || 'Untitled');
   }
 
