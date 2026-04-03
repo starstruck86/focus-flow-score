@@ -773,11 +773,22 @@ Deno.serve(async (req) => {
 
     // ── 6. Quality threshold gate ──
     if (deduped.length < 1) {
-      log.outcome = 'below_threshold';
-      await saveExtractionLog(supabase, log);
-      await updateExtractionStatus(supabase, resourceId, 'extraction_empty');
+      log.outcome = isDryRun ? 'benchmark_below_threshold' : 'below_threshold';
+      if (!isDryRun) {
+        await saveExtractionLog(supabase, log);
+        await updateExtractionStatus(supabase, resourceId, 'extraction_empty');
+      }
       console.log(`[extract] ⚠️ "${resource.title}": 0 items — preserving existing KIs`);
-      return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold', log });
+      return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold', log, benchmarkMode: isDryRun });
+    }
+
+    // ── BENCHMARK MODE: skip all DB mutations, return metrics only ──
+    if (isDryRun) {
+      log.insertedCount = 0;
+      log.dedupedCount = deduped.length;
+      log.outcome = 'benchmark_success';
+      console.log(`[extract] 🔬 BENCHMARK COMPLETE "${resource.title}": ${deduped.length} KIs would be inserted (dry run — no DB writes)`);
+      return respond({ resourceId, title: resource.title, kis: deduped.length, preservedUserEdited: 0, log, benchmarkMode: true });
     }
 
     // ── 6b. Protect user-edited KIs ──
