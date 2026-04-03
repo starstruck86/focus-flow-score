@@ -938,25 +938,16 @@ export function ResourceManager() {
                   break;
                 case 'bulk_autoOp':
                 case 'bulk_autoOp_filtered': {
-                  // Batch extraction pipeline for selected or filtered resources
                   const ids = Array.from(selectedResourceIds);
                   if (ids.length === 0) {
                     toast.info('No resources selected');
                     break;
                   }
-                  const progress = useExtractionProgress.getState();
-                  progress.startBatch(ids);
+                  const progressStore = useExtractionProgress.getState();
+                  progressStore.startBatch(ids);
                   try {
                     const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
-                    const results = await autoOperationalizeBatch(ids, (processed, total, title) => {
-                      const store = useExtractionProgress.getState();
-                      // Mark previous resource done
-                      if (processed > 1) {
-                        const prevId = ids[processed - 2];
-                        const prevResult = results_so_far[prevResult_idx];
-                        // handled below via per-resource tracking
-                      }
-                    }, (resourceId, phase, result) => {
+                    const results = await autoOperationalizeBatch(ids, undefined, (resourceId, phase, result) => {
                       const store = useExtractionProgress.getState();
                       if (phase === 'start') {
                         store.markExtracting(resourceId, result?.resourceTitle);
@@ -969,7 +960,6 @@ export function ResourceManager() {
                       }
                     });
                     useExtractionProgress.getState().endBatch();
-                    // Invalidate all relevant queries
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
                     queryClient.invalidateQueries({ queryKey: ['all-resources'] });
