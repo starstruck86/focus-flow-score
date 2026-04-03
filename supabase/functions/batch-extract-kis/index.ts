@@ -779,7 +779,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── 6. Quality threshold gate ──
+    // ── 6. Quality threshold gate + post-extraction invariant ──
+    // Hard invariant: nontrivial content must produce a minimum number of KIs
+    // proportional to content length. This prevents silent 0-KI completions.
+    const minKiFloor = computeMinKiFloor(resource.content.length, isLesson);
+
     if (deduped.length < 1) {
       log.outcome = isDryRun ? 'benchmark_below_threshold' : 'below_threshold';
       if (!isDryRun) {
@@ -788,6 +792,19 @@ Deno.serve(async (req) => {
       }
       console.log(`[extract] ⚠️ "${resource.title}": 0 items — preserving existing KIs`);
       return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold', log, benchmarkMode: isDryRun });
+    }
+
+    // Hard invariant: if yield is below the content-proportional floor, treat as failure
+    if (deduped.length < minKiFloor) {
+      const invariantMsg = `KI yield invariant violated: got ${deduped.length} KIs but floor is ${minKiFloor} for ${resource.content.length} chars (lesson=${isLesson})`;
+      console.error(`[extract] 🚨 INVARIANT FAIL "${resource.title}": ${invariantMsg}`);
+      log.outcome = isDryRun ? 'benchmark_invariant_fail' : 'invariant_fail';
+      log.error = invariantMsg;
+      if (!isDryRun) {
+        await saveExtractionLog(supabase, log);
+        await updateExtractionStatus(supabase, resourceId, 'extraction_failed');
+      }
+      return respond({ resourceId, title: resource.title, kis: 0, error: invariantMsg, log, benchmarkMode: isDryRun });
     }
 
     // ── BENCHMARK MODE: skip all DB mutations, return metrics only ──
