@@ -17,6 +17,17 @@ import { detectFramework } from '@/data/frameworkLibrary';
 
 const log = createLogger('KnowledgeExtraction');
 
+/** Decode common HTML entities that survive scraping */
+function decodeHTMLEntities(text: string): string {
+  return text
+    .replace(/&ldquo;/g, '\u201C').replace(/&rdquo;/g, '\u201D')
+    .replace(/&lsquo;/g, '\u2018').replace(/&rsquo;/g, '\u2019')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ').replace(/&mdash;/g, '\u2014').replace(/&ndash;/g, '\u2013')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
 export interface ExtractionSource {
   resourceId: string;
   userId: string;
