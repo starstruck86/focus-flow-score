@@ -292,6 +292,9 @@ export function ResourceLibraryTable({
   const { summary: lifecycle } = useCanonicalLifecycle();
   const { data: inUseData } = useInUseResources();
   const inUseIds = inUseData?.inUseResourceIds ?? new Set<string>();
+  const extractionResources = useExtractionProgress(s => s.resources);
+  const batchActive = useExtractionProgress(s => s.batchActive);
+  const batchPct = useExtractionProgress(s => Math.round((s.batchProcessed / Math.max(s.batchTotal, 1)) * 100));
 
   // Build a quick lookup for canonical status per resource
   const lifecycleMap = useMemo(() => {
