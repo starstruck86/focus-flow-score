@@ -248,12 +248,14 @@ export function deduplicateKnowledgeItems(
   const allExisting = [...existingItems];
 
   for (const item of newItems) {
-    const newContent = `${item.tactic_summary || ''} ${(item as any).when_to_use || ''} ${(item as any).example_usage || ''}`;
+    // Compare only tactic_summary to catch cross-chapter duplicates
+    // (where when_to_use / example_usage differ but the core tactic is identical)
+    const newContent = (item.tactic_summary || '').trim();
     let maxSim = 0;
     let mostSimilarTitle = '';
 
     for (const existing of allExisting) {
-      const existingContent = `${existing.tactic_summary || ''}`;
+      const existingContent = (existing.tactic_summary || '').trim();
       const sim = computeSimilarity(newContent, existingContent);
       if (sim > maxSim) {
         maxSim = sim;
