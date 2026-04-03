@@ -572,7 +572,7 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
         continue;
       }
       content = m[1];
-      debug.push(`Matched pattern: ${pattern.source.substring(0, 40)}`);
+      debug.push(`Matched pattern: ${pattern.source.substring(0, 40)}, raw=${m[1].length}, text=${stripped.length}`);
       break;
     }
   }
