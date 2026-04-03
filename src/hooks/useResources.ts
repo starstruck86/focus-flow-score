@@ -70,6 +70,14 @@ export type Resource = {
   extraction_method?: string | null;
   re_extract_status?: string;
   re_extract_at?: string | null;
+  // Generic active job tracking
+  active_job_type?: string | null;
+  active_job_status?: string | null;
+  active_job_started_at?: string | null;
+  active_job_updated_at?: string | null;
+  active_job_finished_at?: string | null;
+  active_job_result_summary?: string | null;
+  active_job_error?: string | null;
 };
 
 export type ResourceVersion = {

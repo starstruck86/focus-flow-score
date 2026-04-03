@@ -3774,6 +3774,13 @@ export type Database = {
         Row: {
           access_type: string | null
           account_id: string | null
+          active_job_error: string | null
+          active_job_finished_at: string | null
+          active_job_result_summary: string | null
+          active_job_started_at: string | null
+          active_job_status: string | null
+          active_job_type: string | null
+          active_job_updated_at: string | null
           advanced_extraction_attempts: number | null
           advanced_extraction_status: string | null
           artwork_url: string | null
@@ -3855,6 +3862,13 @@ export type Database = {
         Insert: {
           access_type?: string | null
           account_id?: string | null
+          active_job_error?: string | null
+          active_job_finished_at?: string | null
+          active_job_result_summary?: string | null
+          active_job_started_at?: string | null
+          active_job_status?: string | null
+          active_job_type?: string | null
+          active_job_updated_at?: string | null
           advanced_extraction_attempts?: number | null
           advanced_extraction_status?: string | null
           artwork_url?: string | null
@@ -3936,6 +3950,13 @@ export type Database = {
         Update: {
           access_type?: string | null
           account_id?: string | null
+          active_job_error?: string | null
+          active_job_finished_at?: string | null
+          active_job_result_summary?: string | null
+          active_job_started_at?: string | null
+          active_job_status?: string | null
+          active_job_type?: string | null
+          active_job_updated_at?: string | null
           advanced_extraction_attempts?: number | null
           advanced_extraction_status?: string | null
           artwork_url?: string | null

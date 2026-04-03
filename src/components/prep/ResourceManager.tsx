@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { useExtractionProgress } from '@/store/useExtractionProgress';
+import { useResourceJobProgress } from '@/store/useResourceJobProgress';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
@@ -943,34 +943,43 @@ export function ResourceManager() {
                     toast.info('No resources selected');
                     break;
                   }
-                  const progressStore = useExtractionProgress.getState();
-                  progressStore.startBatch(ids);
+                  const progressStore = useResourceJobProgress.getState();
+                  progressStore.startBatch(ids, 'extract');
                   try {
                     const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
+                    const now = () => new Date().toISOString();
                     const results = await autoOperationalizeBatch(ids, undefined, async (resourceId, phase, result) => {
-                      const store = useExtractionProgress.getState();
+                      const store = useResourceJobProgress.getState();
                       if (phase === 'start') {
-                        store.markExtracting(resourceId, result?.resourceTitle);
-                        // Persist durable 'running' status
+                        store.markRunning(resourceId, result?.resourceTitle);
+                        // Persist durable generic job status
                         supabase.from('resources' as any).update({
-                          re_extract_status: 'running',
-                          re_extract_at: new Date().toISOString(),
+                          active_job_type: 'extract',
+                          active_job_status: 'running',
+                          active_job_started_at: now(),
+                          active_job_updated_at: now(),
+                          active_job_finished_at: null,
+                          active_job_result_summary: null,
+                          active_job_error: null,
                         } as any).eq('id', resourceId).then(() => {});
                       } else if (phase === 'done') {
-                        const durableStatus = (result && result.success) ? 'succeeded' : 'failed';
-                        if (result && result.success) {
-                          store.markDone(resourceId, result.knowledgeExtracted);
+                        const succeeded = result && result.success;
+                        if (succeeded) {
+                          store.markDone(resourceId, `${result.knowledgeExtracted} KI`);
                         } else {
-                          store.markFailed(resourceId);
+                          store.markFailed(resourceId, result?.reason);
                         }
                         // Persist durable outcome
                         supabase.from('resources' as any).update({
-                          re_extract_status: durableStatus,
-                          re_extract_at: new Date().toISOString(),
+                          active_job_status: succeeded ? 'succeeded' : 'failed',
+                          active_job_updated_at: now(),
+                          active_job_finished_at: now(),
+                          active_job_result_summary: succeeded ? `${result!.knowledgeExtracted} KI extracted` : null,
+                          active_job_error: succeeded ? null : (result?.reason ?? 'Unknown error'),
                         } as any).eq('id', resourceId).then(() => {});
                       }
                     });
-                    useExtractionProgress.getState().endBatch();
+                    useResourceJobProgress.getState().endBatch();
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
                     queryClient.invalidateQueries({ queryKey: ['all-resources'] });
@@ -993,7 +1002,7 @@ export function ResourceManager() {
                     }
                     setSelectedResourceIds(new Set());
                   } catch (error: any) {
-                    useExtractionProgress.getState().endBatch();
+                    useResourceJobProgress.getState().endBatch();
                     toast.error('Batch extraction failed', { description: error?.message });
                   }
                   break;
