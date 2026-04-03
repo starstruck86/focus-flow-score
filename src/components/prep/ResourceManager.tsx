@@ -944,15 +944,31 @@ export function ResourceManager() {
                     toast.info('No resources selected');
                     break;
                   }
-                  toast.info(`Extracting knowledge from ${ids.length} resource(s)...`);
+                  const progress = useExtractionProgress.getState();
+                  progress.startBatch(ids);
                   try {
                     const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
                     const results = await autoOperationalizeBatch(ids, (processed, total, title) => {
-                      if (processed % 5 === 0 || processed === total) {
-                        toast.loading(`Extracting ${processed}/${total}: ${title}`, { id: 'bulk-extract-progress' });
+                      const store = useExtractionProgress.getState();
+                      // Mark previous resource done
+                      if (processed > 1) {
+                        const prevId = ids[processed - 2];
+                        const prevResult = results_so_far[prevResult_idx];
+                        // handled below via per-resource tracking
+                      }
+                    }, (resourceId, phase, result) => {
+                      const store = useExtractionProgress.getState();
+                      if (phase === 'start') {
+                        store.markExtracting(resourceId, result?.resourceTitle);
+                      } else if (phase === 'done') {
+                        if (result && result.success) {
+                          store.markDone(resourceId, result.knowledgeExtracted);
+                        } else {
+                          store.markFailed(resourceId);
+                        }
                       }
                     });
-                    toast.dismiss('bulk-extract-progress');
+                    useExtractionProgress.getState().endBatch();
                     // Invalidate all relevant queries
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
@@ -965,9 +981,8 @@ export function ResourceManager() {
                     const needsReview = results.filter(r => r.needsReview);
 
                     if (succeeded.length > 0) {
-                      const previewItems = succeeded.slice(0, 3).map(r => r.resourceTitle).join(', ');
                       toast.success(`Extracted ${totalKI} knowledge items from ${succeeded.length} resources`, {
-                        description: `${totalActivated} auto-activated · ${needsReview.length} need review\n${previewItems}`,
+                        description: `${totalActivated} auto-activated · ${needsReview.length} need review`,
                         duration: 8000,
                       });
                     } else {
@@ -977,7 +992,7 @@ export function ResourceManager() {
                     }
                     setSelectedResourceIds(new Set());
                   } catch (error: any) {
-                    toast.dismiss('bulk-extract-progress');
+                    useExtractionProgress.getState().endBatch();
                     toast.error('Batch extraction failed', { description: error?.message });
                   }
                   break;
