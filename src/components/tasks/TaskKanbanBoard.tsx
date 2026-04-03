@@ -88,7 +88,7 @@ export function TaskKanbanBoard({ tasks, selectedIds, onToggleSelect }: TaskKanb
   }, [tasks, updateTask]);
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2 snap-x snap-mandatory min-h-[400px]">
+    <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2 snap-x snap-mandatory min-h-[300px]">
       {COLUMN_STATUSES.map(status => {
         const meta = STATUS_META[status];
         const colTasks = columns[status];
