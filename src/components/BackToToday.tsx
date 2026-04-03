@@ -17,7 +17,7 @@ export function BackToToday() {
         <Button
           variant="outline"
           size="icon"
-          className={`fixed ${TW_BACK_BOTTOM} left-3 z-40 h-8 w-8 rounded-full shadow-lg bg-card/95 backdrop-blur-sm border-primary/20 hover:border-primary/40`}
+          className={`fixed ${SHELL.secondaryFab.bottom} left-3 z-40 h-8 w-8 rounded-full shadow-lg bg-card/95 backdrop-blur-sm border-primary/20 hover:border-primary/40`}
           onClick={() => navigate('/')}
         >
           <LayoutDashboard className="h-3.5 w-3.5 text-primary" />
