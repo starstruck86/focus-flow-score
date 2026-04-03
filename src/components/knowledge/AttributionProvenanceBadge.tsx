@@ -54,9 +54,9 @@ export function AttributionProvenanceBadge({ activationMetadata, className }: Pr
   const isAllLlm = prov.who_source === 'llm' && prov.framework_source === 'llm';
 
   const lines: string[] = [];
-  if (prov.who_source) lines.push(`Who: ${sourceLabel(prov.who_source)}`);
-  if (prov.framework_source) lines.push(`Framework: ${sourceLabel(prov.framework_source)}`);
-  if (prov.signal_source) lines.push(`Signal: ${signalLabel(prov.signal_source)}`);
+  if (prov.who_source) lines.push(`Who source: ${sourceLabel(prov.who_source)}`);
+  if (prov.framework_source) lines.push(`Framework source: ${sourceLabel(prov.framework_source)}`);
+  if (prov.signal_source) lines.push(`Detection signal: ${signalLabel(prov.signal_source)}`);
 
   return (
     <TooltipProvider>
