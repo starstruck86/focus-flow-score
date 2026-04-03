@@ -20,6 +20,7 @@ const corsHeaders = {
 };
 
 const MAX_ATTEMPTS = 3;
+const CIRCUIT_BREAKER_THRESHOLD = 10; // Pause after N consecutive same-error failures
 
 // ── Content validation patterns ──
 const HTML_PATTERNS = /<(div|meta|style|script|span|link|head|body|html|nav|footer|header|iframe)\b/i;
