@@ -1224,10 +1224,10 @@ export default function WeeklyOutreach() {
         
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'accounts' | 'sourcing')} className="space-y-4">
-          <TabsList className="grid w-full max-w-sm grid-cols-3">
-            <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
-            <TabsTrigger value="accounts">Accounts</TabsTrigger>
-            <TabsTrigger value="sourcing">Sourcing</TabsTrigger>
+          <TabsList className="flex w-full overflow-x-auto gap-1 p-1 scrollbar-none max-w-sm">
+            <TabsTrigger value="opportunities" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Opportunities</TabsTrigger>
+            <TabsTrigger value="accounts" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Accounts</TabsTrigger>
+            <TabsTrigger value="sourcing" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Sourcing</TabsTrigger>
           </TabsList>
 
           {/* Opportunities Tab */}
