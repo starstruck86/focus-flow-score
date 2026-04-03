@@ -671,6 +671,8 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
   const introPatterns = [
     /class="[^"]*(?:section__heading|post__heading|lesson-heading|post-heading)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
     /class="[^"]*(?:section__description|post__description|lesson-intro)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
+    // Kajabi panel heading / media body (common in course pages)
+    /class="[^"]*(?:panel__heading|media-body)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
   ];
   let introText = '';
   for (const ip of introPatterns) {
