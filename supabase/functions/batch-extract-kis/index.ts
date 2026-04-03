@@ -189,14 +189,46 @@ async function extractLessonDirect(
     contentLength: content.length, stage1: 0, stage2Raw: 0, stage2Validated: 0,
     recoveryFound: 0, recoveryAdded: 0, dedupedFinal: 0,
     validationRejects: {} as Record<string, number>,
-    // New recovery observability fields
     initial_stage2_raw_count: 0, recovery_triggered: false,
     recovery_missing_candidate_count: 0, recovery_raw_count: 0, post_recovery_raw_count: 0,
   };
 
   console.log(`[lesson-pipeline] START | "${title}" | ${content.length} chars`);
 
-  // ── Stage 1: Exhaustive enumeration (unchanged) ──
+  // For shorter lessons (< 8K chars), skip enumeration and do a single focused pass
+  // to avoid timeout from 3 sequential AI calls
+  const useSimplifiedPipeline = content.length < 8000;
+
+  if (useSimplifiedPipeline) {
+    console.log(`[lesson-pipeline] SIMPLIFIED PATH (${content.length} chars < 8K threshold)`);
+    const directPrompt = `Extract EVERY distinct tactical play from this training lesson. Each concept, framework, technique, rule, or method is its OWN play.
+
+Title: ${title}
+${description ? `Description: ${description}` : ''}
+Tags: ${(tags || []).join(', ')}
+
+Content:
+${content}
+
+Be EXHAUSTIVE — if the lesson teaches 10 things, return 10 plays. Do NOT merge related concepts.
+Return ONLY a JSON array. Each play needs ALL fields: title, framework, who, source_excerpt, source_location, macro_situation, micro_strategy, why_it_matters, how_to_execute, what_this_unlocks, when_to_use, when_not_to_use, example_usage, tactic_summary, chapter, knowledge_type.`;
+
+    try {
+      const items = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, directPrompt, 24576));
+      pLog.stage2Raw = items.length;
+      pLog.initial_stage2_raw_count = items.length;
+      pLog.post_recovery_raw_count = items.length;
+      console.log(`[lesson-pipeline] Simplified: ${items.length} raw items`);
+      return { items, pipelineLog: pLog };
+    } catch (err: any) {
+      console.error('[lesson-pipeline] Simplified extraction FAILED:', err?.message);
+      return { items: [], pipelineLog: pLog };
+    }
+  }
+
+  // ── Full 2-stage pipeline for longer content ──
+
+  // ── Stage 1: Exhaustive enumeration ──
   const enumPrompt = `Analyze this structured training lesson and create an exhaustive inventory of every distinct teachable concept, technique, framework, rule, signal, method, or heuristic.
 
 Title: ${title}
@@ -234,7 +266,7 @@ ${content}
 Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute, when_to_use, source_excerpt, chapter, knowledge_type. Keep each play concise but complete.`;
 
   try {
-    rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, expandPrompt, 32768));
+    rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, expandPrompt, 24576));
     pLog.stage2Raw = rawItems.length;
     console.log(`[lesson-pipeline] Stage 2: ${rawItems.length} raw items from single pass`);
   } catch (err: any) {
@@ -242,7 +274,7 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
     // Fallback: try without candidate list
     try {
       const fallbackPrompt = `Extract every tactical play from this training lesson.\n\nTitle: ${title}\nTags: ${(tags || []).join(', ')}\n\nContent:\n${content}\n\nReturn ONLY a JSON array. Keep each play concise.`;
-      rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, fallbackPrompt, 32768));
+      rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, fallbackPrompt, 24576));
       pLog.stage2Raw = rawItems.length;
       console.log(`[lesson-pipeline] Stage 2 fallback: ${rawItems.length} items`);
     } catch (err2: any) {
@@ -252,9 +284,9 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
 
   pLog.initial_stage2_raw_count = rawItems.length;
 
-  // ── Stage 2 Recovery: if expansion underperformed, recover missing candidates ──
+  // ── Stage 2 Recovery: only for long content where expansion significantly underperformed ──
   const coverageRatio = candidates.length > 0 ? rawItems.length / candidates.length : 1;
-  const shouldRecover = candidates.length >= 20 && coverageRatio < 0.75;
+  const shouldRecover = candidates.length >= 20 && coverageRatio < 0.6 && rawItems.length >= 3;
 
   if (shouldRecover) {
     console.log(`[lesson-pipeline] Stage 2 RECOVERY triggered | coverage=${(coverageRatio * 100).toFixed(0)}% (${rawItems.length}/${candidates.length})`);
@@ -265,13 +297,12 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
     const missingCandidates = candidates.filter((c: any) => {
       const cFp = normalizeFingerprint(c.candidate_title || '');
       if (!cFp) return false;
-      // Check if any expanded item title has significant word overlap
       return !expandedTitlesLower.some((eFp: string) => {
         const cWords = new Set(cFp.split(/\s+/).filter((w: string) => w.length > 2));
         const eWords = new Set(eFp.split(/\s+/).filter((w: string) => w.length > 2));
-        if (cWords.size === 0) return true; // skip empty
+        if (cWords.size === 0) return true;
         const overlap = [...cWords].filter((w: string) => eWords.has(w)).length;
-        return overlap / cWords.size > 0.5; // >50% word overlap = covered
+        return overlap / cWords.size > 0.5;
       });
     });
 
@@ -310,7 +341,6 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
 
   pLog.post_recovery_raw_count = rawItems.length;
   pLog.stage2Raw = rawItems.length;
-  // Derived recovery effectiveness fields
   const recoveryLift = rawItems.length - pLog.initial_stage2_raw_count;
   pLog.recovery_lift = recoveryLift;
   pLog.recovery_effective = recoveryLift > 0;
