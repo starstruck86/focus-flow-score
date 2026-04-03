@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { useKnowledgeItems, useUpdateKnowledgeItem, type KnowledgeItem } from '@/hooks/useKnowledgeItems';
 import { toast } from 'sonner';
 import { FrameworkBadge } from '@/components/knowledge/FrameworkBadge';
+import { AttributionProvenanceBadge } from '@/components/knowledge/AttributionProvenanceBadge';
 
 const CHAPTER_LABELS: Record<string, string> = {
   cold_calling: 'Cold Calling',
