@@ -73,7 +73,7 @@ export function AttributionProvenanceBadge({ activationMetadata, className }: Pr
             )}
           >
             <Fingerprint className="h-2.5 w-2.5" />
-            {isAllLlm ? 'LLM' : 'Library'}
+            {isAllLlm ? 'LLM' : 'Library-assisted'}
           </Badge>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-[10px] max-w-[200px]">
