@@ -24,28 +24,27 @@ export function KnowledgeWorkspace() {
   return (
     <div className="space-y-3">
       <Tabs value={subTab} onValueChange={setSubTab}>
-        <TabsList className="flex w-full overflow-x-auto">
-          <TabsTrigger value="overview" className="text-xs gap-1 flex-shrink-0">
+        <TabsList className="flex w-full overflow-x-auto gap-0.5 p-1">
+          <TabsTrigger value="overview" className="text-xs gap-1 flex-shrink-0 px-2.5">
             <BarChart3 className="h-3 w-3" />
-            <span className="hidden sm:inline">Overview</span>
-            <span className="sm:hidden">Overview</span>
+            Overview
           </TabsTrigger>
-          <TabsTrigger value="resources" className="text-xs gap-1 flex-shrink-0">
+          <TabsTrigger value="resources" className="text-xs gap-1 flex-shrink-0 px-2.5">
             <FileText className="h-3 w-3" />
-            <span>Resources</span>
+            Resources
           </TabsTrigger>
-          <TabsTrigger value="items" className="text-xs gap-1 flex-shrink-0">
+          <TabsTrigger value="items" className="text-xs gap-1 flex-shrink-0 px-2.5">
             <Brain className="h-3 w-3" />
             <span className="hidden sm:inline">Knowledge Items</span>
             <span className="sm:hidden">Items</span>
           </TabsTrigger>
-          <TabsTrigger value="review" className="text-xs gap-1 flex-shrink-0">
+          <TabsTrigger value="review" className="text-xs gap-1 flex-shrink-0 px-2.5">
             <ClipboardCheck className="h-3 w-3" />
-            <span>Review</span>
+            Review
           </TabsTrigger>
-          <TabsTrigger value="audit" className="text-xs gap-1 flex-shrink-0">
+          <TabsTrigger value="audit" className="text-xs gap-1 flex-shrink-0 px-2.5">
             <Shield className="h-3 w-3" />
-            <span>Audit</span>
+            Audit
           </TabsTrigger>
         </TabsList>
 
