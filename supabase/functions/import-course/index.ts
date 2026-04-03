@@ -560,6 +560,12 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
   for (const pattern of contentPatterns) {
     const m = cleanedHtml.match(pattern);
     if (m && m[1] && m[1].trim().length > 50) {
+      // Skip matches that are basically just video embed references with no real lesson text
+      const stripped = m[1].replace(/<[^>]+>/g, '').replace(/\[(?:Wistia|Vimeo|YouTube|SproutVideo|Video|Kajabi)[^\]]*\]/gi, '').trim();
+      if (stripped.length < 50) {
+        debug.push(`Skipped pattern (video-embed-only): ${pattern.source.substring(0, 40)}`);
+        continue;
+      }
       content = m[1];
       debug.push(`Matched pattern: ${pattern.source.substring(0, 40)}`);
       break;
