@@ -586,7 +586,26 @@ export async function extractKnowledgeLLMFallback(
           tags: [...source.tags, item.knowledge_type || 'skill', item.chapter || 'messaging'],
           who: item.who || null,
           framework: item.framework || null,
-        });
+        };
+
+        // Auto-detect attribution from content if LLM left it generic/empty
+        if (!ki.who || ki.who === 'Unknown' || !ki.framework || ki.framework === 'General') {
+          const searchText = [
+            source.title,
+            source.description,
+            item.tactic_summary,
+            item.source_excerpt,
+            item.title,
+          ].filter(Boolean).join(' ');
+
+          const detected = detectFramework(searchText);
+          if (detected) {
+            if (!ki.who || ki.who === 'Unknown') ki.who = detected.who;
+            if (!ki.framework || ki.framework === 'General') ki.framework = detected.framework;
+          }
+        }
+
+        rawItems.push(ki);
       }
 
       // Deduplicate
