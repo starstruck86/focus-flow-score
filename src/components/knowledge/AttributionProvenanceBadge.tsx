@@ -97,13 +97,13 @@ export function AttributionProvenanceDetail({ activationMetadata }: { activation
       <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Attribution Provenance</p>
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
         {prov.who_source && (
-          <span>Who: <span className="text-foreground font-medium">{sourceLabel(prov.who_source)}</span></span>
+          <span>Who source: <span className="text-foreground font-medium">{sourceLabel(prov.who_source)}</span></span>
         )}
         {prov.framework_source && (
-          <span>Framework: <span className="text-foreground font-medium">{sourceLabel(prov.framework_source)}</span></span>
+          <span>Framework source: <span className="text-foreground font-medium">{sourceLabel(prov.framework_source)}</span></span>
         )}
         {prov.signal_source && (
-          <span>Signal: <span className="text-foreground font-medium">{signalLabel(prov.signal_source)}</span></span>
+          <span>Detection signal: <span className="text-foreground font-medium">{signalLabel(prov.signal_source)}</span></span>
         )}
       </div>
     </div>
