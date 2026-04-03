@@ -115,21 +115,12 @@ async function processItem(
   const isReprocessStructure = queueItem.transcript_status === "transcript_ready" && queueItem.raw_transcript;
   const detectedPlatform = detectPlatform(queueItem.episode_url);
 
-  // ── Claim ──
-  const { error: claimErr } = await supabase
-    .from("podcast_import_queue")
-    .update({
-      status: "processing",
-      pipeline_stage: isReprocessStructure ? "preprocessing" : "resolving",
-      platform: detectedPlatform,
-      original_episode_url: queueItem.original_episode_url || queueItem.episode_url,
-      transcript_status: isReprocessStructure ? "transcript_ready" : "resolving_link",
-      updated_at: now(),
-    })
-    .eq("id", queueItem.id)
-    .eq("status", "queued");
-
-  if (claimErr) throw new Error(`Failed to claim: ${claimErr.message}`);
+  // ── Post-claim init (already claimed atomically via RPC) ──
+  await updateQueueItem(supabase, queueItem.id, {
+    platform: detectedPlatform,
+    original_episode_url: queueItem.original_episode_url || queueItem.episode_url,
+    transcript_status: isReprocessStructure ? "transcript_ready" : "resolving_link",
+  });
 
   console.log(`[${queueItem.id}] Processing: ${queueItem.episode_title}${isReprocessStructure ? " (reprocess)" : ""}`);
 
