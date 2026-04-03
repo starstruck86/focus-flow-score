@@ -674,6 +674,8 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     }
   }
   content = deduped.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  // Trim leading whitespace from all lines (leftover from HTML indentation)
+  content = content.split('\n').map(l => l.trimStart()).join('\n');
   
   // Prepend video embed references so they're captured in the resource
   if (videoEmbeds.length > 0) {
