@@ -289,8 +289,10 @@ Deno.serve(async (req) => {
       }
 
       const hasTranscriptFromResolve = resolveResult?.transcript && resolveResult.transcript.length > 200;
+      // Fall back to the episode URL itself if it's a direct audio link
+      const directAudioFallback = isDirectAudioUrl(queueItem.episode_url) ? queueItem.episode_url : null;
       const hasAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
-        resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl;
+        resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl || directAudioFallback;
 
       // ── Persist resolved metadata on the queue item ──
       const resolvedMeta: Record<string, any> = {};
@@ -307,9 +309,13 @@ Deno.serve(async (req) => {
         if (r.canonicalPageUrl) resolvedMeta.resolved_url = r.canonicalPageUrl;
         if (r.audioEnclosureUrl) resolvedMeta.audio_url = r.audioEnclosureUrl;
       }
+      // If we're using the direct audio fallback, persist it
+      if (!resolvedMeta.audio_url && directAudioFallback) {
+        resolvedMeta.audio_url = directAudioFallback;
+      }
       // Detect host platform from resolved/audio URL
       const resolvedAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
-        resolveResult?.resolution?.audioEnclosureUrl || '';
+        resolveResult?.resolution?.audioEnclosureUrl || directAudioFallback || '';
       const hostPlatform = detectHostPlatform(resolvedAudioUrl || resolveResult?.resolution?.rssFeedUrl || '');
       if (hostPlatform) resolvedMeta.host_platform = hostPlatform;
       resolvedMeta.resolution_method = hasTranscriptFromResolve ? 'transcript_found' : (hasAudioUrl ? 'transcribed' : 'unresolved');
