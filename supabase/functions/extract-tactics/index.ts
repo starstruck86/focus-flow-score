@@ -112,9 +112,30 @@ const LESSON_ITEM_TARGET = '8-20';
 
 const LESSON_TRANSCRIPT_MARKER = '--- Video Transcript ---';
 
-function isStructuredLesson(content: string): boolean {
+function isStructuredLesson(content: string, title?: string, resourceType?: string): boolean {
+  // Method 1: has transcript marker at a reasonable position
   const markerIndex = content.indexOf(LESSON_TRANSCRIPT_MARKER);
-  return markerIndex > 500;
+  if (markerIndex > 500) return true;
+  // Method 2: title matches "Course > Lesson" pattern AND is a video/lesson type with enough content
+  const hasCourseTitle = (title || '').includes('>');
+  const isVideoType = ['video', 'lesson'].includes((resourceType || '').toLowerCase());
+  if (hasCourseTitle && isVideoType && content.length >= 500) return true;
+  return false;
+}
+
+/** Clean lesson content: trim neighboring lesson titles that pollute the start */
+function prepareLessonContent(content: string, title?: string): string {
+  if (!title || !title.includes('>')) return content;
+  const lessonName = title.split('>').pop()?.trim();
+  if (!lessonName || lessonName.length < 3) return content;
+  
+  // Find where the actual lesson title appears in the content
+  const idx = content.toLowerCase().indexOf(lessonName.toLowerCase());
+  if (idx > 0 && idx < 2000) {
+    // Trim everything before the lesson title (navigation noise from neighboring lessons)
+    return content.slice(idx).trim();
+  }
+  return content;
 }
 
 // Chunking config — transcripts use MUCH larger chunks aligned to section headings
