@@ -305,8 +305,13 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
   }
 
   pLog.post_recovery_raw_count = rawItems.length;
-  pLog.stage2Raw = rawItems.length; // Update to reflect final count
-  console.log(`[lesson-pipeline] Stage 2 total: ${rawItems.length} raw items (initial=${pLog.initial_stage2_raw_count}, recovery=${pLog.recovery_raw_count || 0})`);
+  pLog.stage2Raw = rawItems.length;
+  // Derived recovery effectiveness fields
+  const recoveryLift = rawItems.length - pLog.initial_stage2_raw_count;
+  pLog.recovery_lift = recoveryLift;
+  pLog.recovery_effective = recoveryLift > 0;
+  pLog.recovery_material = recoveryLift >= 5;
+  console.log(`[lesson-pipeline] Stage 2 total: ${rawItems.length} raw items (initial=${pLog.initial_stage2_raw_count}, recovery=${pLog.recovery_raw_count || 0}, lift=${recoveryLift}, effective=${recoveryLift > 0}, material=${recoveryLift >= 5})`);
 
   return { items: rawItems, pipelineLog: pLog };
 }
