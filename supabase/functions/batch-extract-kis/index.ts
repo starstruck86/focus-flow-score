@@ -1,3 +1,18 @@
+/**
+ * batch-extract-kis — single-resource KI extraction endpoint.
+ *
+ * ARCHITECTURE NOTE: Lesson extraction runs INLINE in this function.
+ * It does NOT chain to the `extract-tactics` edge function because:
+ *   1. Chained edge-function calls caused timeout cascades (each has its own wall-clock limit).
+ *   2. Lessons need different prompting (2-stage enumerate→expand), relaxed validation
+ *      (no verb-led titles, shorter field requirements), and conservative dedup (0.75 threshold).
+ *   3. Keeping lesson logic inline gives full control over timing and avoids double-hop latency.
+ *
+ * Non-lesson content uses a direct AI call (callAIDirect) — also inline, no chaining.
+ *
+ * Benchmark: Account Scoring lesson (14,729 chars) → ~35 candidates → ~36 raw → ~32 KIs inserted.
+ * If this drops materially below ~30, treat as a regression.
+ */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ═══════════════════════════════════════════
@@ -157,7 +172,10 @@ async function callAIDirect(apiKey: string, content: string, title: string, tags
 }
 
 // ═══════════════════════════════════════════
-// LESSON 2-STAGE PIPELINE (inline, no chaining)
+// LESSON 2-STAGE PIPELINE (inline — never chains to extract-tactics)
+// Why inline: chained edge-function calls hit timeout cascades; lessons need
+// custom prompting, relaxed validation, and conservative dedup that differ
+// from the generic extract-tactics path.
 // ═══════════════════════════════════════════
 
 async function extractLessonDirect(
@@ -181,11 +199,6 @@ List EVERY distinct concept. If the lesson teaches 15 things, return 15 items. D
   let candidates: any[] = [];
   try {
     candidates = parseAiJson(await aiRequest(apiKey, LESSON_ENUMERATE_SYSTEM, enumPrompt, 4096));
-    // Cap at 20 to keep within edge function timeout
-    if (candidates.length > 20) {
-      console.log(`[lesson-pipeline] Stage 1: ${candidates.length} candidates, capping to 20`);
-      candidates = candidates.slice(0, 20);
-    }
     pLog.stage1 = candidates.length;
     console.log(`[lesson-pipeline] Stage 1: ${candidates.length} candidates enumerated`);
   } catch (err: any) {
@@ -362,6 +375,8 @@ function hasSubstance(value: string | undefined | null, minChars: number): boole
 function compositeDedup(items: any[], isLesson = false): any[] {
   const result: any[] = [];
   const fingerprints = new Set<string>();
+  // Lessons use 0.75 (conservative) to avoid merging adjacent distinct tactics.
+  // Non-lessons use 0.55 (aggressive) for tighter dedup.
   const threshold = isLesson ? 0.75 : 0.55;
 
   for (const item of items) {
