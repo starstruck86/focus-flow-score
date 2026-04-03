@@ -181,11 +181,18 @@ async function callAIDirect(apiKey: string, content: string, title: string, tags
 async function extractLessonDirect(
   apiKey: string, content: string, title: string, description: string | null, tags: string[]
 ): Promise<{ items: any[]; pipelineLog: any }> {
-  const pLog: any = { contentLength: content.length, stage1: 0, stage2Raw: 0, stage2Validated: 0, recoveryFound: 0, recoveryAdded: 0, dedupedFinal: 0, validationRejects: {} as Record<string, number> };
+  const pLog: any = {
+    contentLength: content.length, stage1: 0, stage2Raw: 0, stage2Validated: 0,
+    recoveryFound: 0, recoveryAdded: 0, dedupedFinal: 0,
+    validationRejects: {} as Record<string, number>,
+    // New recovery observability fields
+    initial_stage2_raw_count: 0, recovery_triggered: false,
+    recovery_missing_candidate_count: 0, recovery_raw_count: 0, post_recovery_raw_count: 0,
+  };
 
   console.log(`[lesson-pipeline] START | "${title}" | ${content.length} chars`);
 
-  // ── Stage 1: Exhaustive enumeration ──
+  // ── Stage 1: Exhaustive enumeration (unchanged) ──
   const enumPrompt = `Analyze this structured training lesson and create an exhaustive inventory of every distinct teachable concept, technique, framework, rule, signal, method, or heuristic.
 
 Title: ${title}
@@ -239,7 +246,67 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
     }
   }
 
-  console.log(`[lesson-pipeline] Stage 2 total: ${rawItems.length} raw items`);
+  pLog.initial_stage2_raw_count = rawItems.length;
+
+  // ── Stage 2 Recovery: if expansion underperformed, recover missing candidates ──
+  const coverageRatio = candidates.length > 0 ? rawItems.length / candidates.length : 1;
+  const shouldRecover = candidates.length >= 20 && coverageRatio < 0.75;
+
+  if (shouldRecover) {
+    console.log(`[lesson-pipeline] Stage 2 RECOVERY triggered | coverage=${(coverageRatio * 100).toFixed(0)}% (${rawItems.length}/${candidates.length})`);
+    pLog.recovery_triggered = true;
+
+    // Find missing candidates via fuzzy title matching
+    const expandedTitlesLower = rawItems.map((item: any) => normalizeFingerprint(item.title || ''));
+    const missingCandidates = candidates.filter((c: any) => {
+      const cFp = normalizeFingerprint(c.candidate_title || '');
+      if (!cFp) return false;
+      // Check if any expanded item title has significant word overlap
+      return !expandedTitlesLower.some((eFp: string) => {
+        const cWords = new Set(cFp.split(/\s+/).filter((w: string) => w.length > 2));
+        const eWords = new Set(eFp.split(/\s+/).filter((w: string) => w.length > 2));
+        if (cWords.size === 0) return true; // skip empty
+        const overlap = [...cWords].filter((w: string) => eWords.has(w)).length;
+        return overlap / cWords.size > 0.5; // >50% word overlap = covered
+      });
+    });
+
+    pLog.recovery_missing_candidate_count = missingCandidates.length;
+    console.log(`[lesson-pipeline] Recovery: ${missingCandidates.length} missing candidates identified`);
+
+    if (missingCandidates.length > 0) {
+      const missingList = missingCandidates
+        .map((c: any, i: number) => `${i + 1}. ${c.candidate_title || 'Untitled'} [${c.concept_type || 'technique'}]${c.source_hint ? ' — ' + c.source_hint : ''}`)
+        .join('\n');
+
+      const recoveryPrompt = `Extract tactical plays for these SPECIFIC concepts from the lesson below. Each concept MUST become its own play.
+
+CONCEPTS TO EXTRACT (${missingCandidates.length} items):
+${missingList}
+
+Title: ${title}
+Content:
+${content}
+
+Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute, when_to_use, source_excerpt, chapter, knowledge_type. Keep concise.`;
+
+      try {
+        const recoveryItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, recoveryPrompt, 16384));
+        pLog.recovery_raw_count = recoveryItems.length;
+        console.log(`[lesson-pipeline] Recovery pass: ${recoveryItems.length} items recovered`);
+        rawItems = [...rawItems, ...recoveryItems];
+      } catch (err: any) {
+        console.error('[lesson-pipeline] Recovery pass FAILED:', err?.message);
+        pLog.recovery_raw_count = 0;
+      }
+    }
+  } else {
+    console.log(`[lesson-pipeline] No recovery needed | coverage=${(coverageRatio * 100).toFixed(0)}% (${rawItems.length}/${candidates.length})`);
+  }
+
+  pLog.post_recovery_raw_count = rawItems.length;
+  pLog.stage2Raw = rawItems.length; // Update to reflect final count
+  console.log(`[lesson-pipeline] Stage 2 total: ${rawItems.length} raw items (initial=${pLog.initial_stage2_raw_count}, recovery=${pLog.recovery_raw_count || 0})`);
 
   return { items: rawItems, pipelineLog: pLog };
 }
