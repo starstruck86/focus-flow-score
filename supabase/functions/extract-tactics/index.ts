@@ -63,15 +63,40 @@ BAD plays from transcripts (REJECT these):
 For each section of transcript, ask: "Could a sales rep USE this in their next call?" If the answer is vague, skip it.
 Extract 4-8 plays from the full transcript. Prioritize DEPTH over breadth — fewer, richer plays.`;
 
+const LESSON_ADDENDUM = `
+
+STRUCTURED LESSON INSTRUCTIONS:
+You are extracting from a structured training lesson that includes both written content and a video transcript. This is high-quality, curated educational content — it contains MORE tactical density than a typical podcast.
+
+Extract EVERY distinct tactic, framework, or actionable technique covered in the lesson. This content is deliberately structured to teach multiple concepts. DO NOT under-extract.
+
+Look for:
+- Named frameworks or scoring models (e.g. "Use Case and Budget" framework)
+- Specific research techniques with concrete steps
+- Prioritization criteria with examples
+- Signal detection methods (competitor usage, headcount growth, relevant problems)
+- Territory management strategies
+- Account scoring/tiering approaches
+
+Extract 8-15 plays from the full lesson. Each distinct technique or method is its own play.`;
+
 const DOCUMENT_ITEM_TARGET = '2-4';
 const TRANSCRIPT_ITEM_TARGET = '4-8';
+const LESSON_ITEM_TARGET = '8-15';
+
+const LESSON_TRANSCRIPT_MARKER = '--- Video Transcript ---';
+
+function isStructuredLesson(content: string): boolean {
+  const markerIndex = content.indexOf(LESSON_TRANSCRIPT_MARKER);
+  return markerIndex > 500;
+}
 
 // Chunking config — transcripts use MUCH larger chunks aligned to section headings
 const DOC_CHUNK_SIZE = 8000;
 const DOC_CHUNK_OVERLAP = 500;
 const TRANSCRIPT_CHUNK_SIZE = 25000; // ~15 min of transcript per chunk
 const TRANSCRIPT_CHUNK_OVERLAP = 1500;
-const MAX_KIS_PER_RESOURCE = 15;
+const MAX_KIS_PER_RESOURCE = 20;
 const DOC_SINGLE_PASS_THRESHOLD = 12000;
 const TRANSCRIPT_SINGLE_PASS_THRESHOLD = 30000; // Single-pass for episodes < ~20 min
 const MAX_TOKENS = 16384;
