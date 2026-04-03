@@ -346,10 +346,12 @@ async function processItem(
         `Source: podcast · Ingested ${new Date().toISOString().split("T")[0]}`,
       ].filter(Boolean).join("\n");
 
+      // Merge resolved metadata over stale queueItem values
+      const merged = { ...queueItem, ...resolvedMeta };
       const detectedPlatformTag = detectPlatform(queueItem.episode_url);
       const insertPayload: Record<string, any> = {
         user_id: queueItem.user_id,
-        title: queueItem.episode_title || queueItem.episode_url,
+        title: merged.episode_title || queueItem.episode_url,
         description,
         resource_type: "transcript",
         tags: ["podcast", detectedPlatformTag].filter(t => t !== "unknown"),
@@ -361,15 +363,15 @@ async function processItem(
         enrichment_status: "deep_enriched",
         enrichment_version: 2,
         validation_version: 2,
-        original_url: queueItem.original_episode_url || queueItem.episode_url,
-        audio_url: queueItem.audio_url || null,
-        host_platform: queueItem.host_platform || null,
-        show_title: queueItem.show_title || queueItem.show_author || null,
-        episode_description: queueItem.episode_description?.slice(0, 5000) || null,
-        artwork_url: queueItem.artwork_url || null,
+        original_url: merged.original_episode_url || queueItem.episode_url,
+        audio_url: merged.audio_url || null,
+        host_platform: merged.host_platform || null,
+        show_title: merged.show_title || queueItem.show_author || null,
+        episode_description: merged.episode_description?.slice(0, 5000) || null,
+        artwork_url: merged.artwork_url || null,
         transcript_status: "transcript_structured",
-        metadata_status: queueItem.metadata_status || "pending",
-        resolution_method: queueItem.resolution_method || "transcribed",
+        metadata_status: merged.metadata_status || "pending",
+        resolution_method: merged.resolution_method || "transcribed",
         content_classification: "audio",
       };
 
