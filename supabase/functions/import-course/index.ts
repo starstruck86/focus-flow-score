@@ -568,7 +568,12 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
         .replace(/\s+/g, ' ')
         .trim();
       if (stripped.length < 50) {
-        debug.push(`Skipped pattern (text too short: ${stripped.length} chars): ${pattern.source.substring(0, 40)}`);
+        debug.push(`Skipped pattern (text<50: ${stripped.length}): ${pattern.source.substring(0, 40)}`);
+        continue;
+      }
+      // For video pages, require more substantial text — short noise like "Account Scoring" isn't a real lesson body
+      if (type === 'video' && stripped.length < 200) {
+        debug.push(`Skipped pattern (video page, text<200: ${stripped.length}): ${pattern.source.substring(0, 40)}`);
         continue;
       }
       content = m[1];
