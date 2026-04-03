@@ -555,6 +555,7 @@ export async function extractKnowledgeLLMFallback(
     const { isTranscriptResource, headingCount, hasLessonBody, transcriptReady } = getTranscriptPreparationState(
       contentStr,
       source.resourceType,
+      source.title,
     );
 
     // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
