@@ -35,11 +35,12 @@ export interface KnowledgeItem {
   who: string | null;
   framework: string | null;
   review_status: 'unreviewed' | 'approved' | 'needs_rework' | 'archived';
+  activation_metadata: Record<string, any> | null;
   created_at: string;
   updated_at: string;
 }
 
-export type KnowledgeItemInsert = Omit<KnowledgeItem, 'id' | 'created_at' | 'updated_at' | 'review_status' | 'macro_situation' | 'micro_strategy' | 'how_to_execute' | 'what_this_unlocks' | 'source_title' | 'source_location' | 'source_excerpt'> & {
+export type KnowledgeItemInsert = Omit<KnowledgeItem, 'id' | 'created_at' | 'updated_at' | 'review_status' | 'macro_situation' | 'micro_strategy' | 'how_to_execute' | 'what_this_unlocks' | 'source_title' | 'source_location' | 'source_excerpt' | 'activation_metadata'> & {
   review_status?: 'unreviewed' | 'approved' | 'needs_rework' | 'archived';
   macro_situation?: string | null;
   micro_strategy?: string | null;
@@ -48,6 +49,7 @@ export type KnowledgeItemInsert = Omit<KnowledgeItem, 'id' | 'created_at' | 'upd
   source_title?: string | null;
   source_location?: string | null;
   source_excerpt?: string | null;
+  activation_metadata?: Record<string, any> | null;
 };
 
 const TABLE = 'knowledge_items' as any;

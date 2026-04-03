@@ -594,6 +594,12 @@ export async function extractKnowledgeLLMFallback(
         const whoIsWeak = !ki.who || WEAK_WHO.includes((ki.who || '').toLowerCase().trim());
         const frameworkIsWeak = !ki.framework || WEAK_FRAMEWORK.includes((ki.framework || '').toLowerCase().trim());
 
+        // Attribution provenance metadata (persisted in activation_metadata)
+        const attributionProvenance: Record<string, string> = {
+          who_source: 'llm',
+          framework_source: 'llm',
+        };
+
         if (whoIsWeak || frameworkIsWeak) {
           // Try strong-signal sources in priority order
           const strongSources: { label: string; text: string }[] = [
@@ -623,24 +629,26 @@ export async function extractKnowledgeLLMFallback(
 
             if (whoIsWeak) {
               ki.who = detected.who;
+              attributionProvenance.who_source = whoIsWeak && !oldWho ? 'framework_library_fill' : 'framework_library_override';
+              attributionProvenance.signal_source = signalSource;
               changed = true;
             }
             if (frameworkIsWeak) {
               ki.framework = detected.framework;
+              attributionProvenance.framework_source = frameworkIsWeak && !oldFramework ? 'framework_library_fill' : 'framework_library_override';
+              attributionProvenance.signal_source = signalSource;
               changed = true;
             }
 
             if (changed) {
-              const provenance = whoIsWeak && frameworkIsWeak ? 'framework_library_fill'
-                : 'framework_library_override';
-
               log.info('Attribution auto-corrected', {
                 title: ki.title,
                 oldWho,
                 newWho: ki.who,
                 oldFramework,
                 newFramework: ki.framework,
-                provenance,
+                who_source: attributionProvenance.who_source,
+                framework_source: attributionProvenance.framework_source,
                 signalSource,
                 reason: `LLM returned weak values (who="${oldWho}", framework="${oldFramework}"), detected from ${signalSource}`,
               });
@@ -655,6 +663,12 @@ export async function extractKnowledgeLLMFallback(
             provenance: 'llm',
           });
         }
+
+        // Merge attribution provenance into activation_metadata
+        (ki as any).activation_metadata = {
+          ...((ki as any).activation_metadata || {}),
+          attribution: attributionProvenance,
+        };
 
         rawItems.push(ki);
       }

@@ -22,6 +22,7 @@ import {
 } from '@/hooks/useKnowledgeReview';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
 import { useReExtractResource, deriveReExtractStatus, formatRelativeTime } from '@/hooks/useReExtractResource';
+import { AttributionProvenanceBadge } from './AttributionProvenanceBadge';
 import { toast } from 'sonner';
 
 function ReviewBadge({ status }: { status: ReviewStatus }) {
@@ -44,7 +45,10 @@ function KIRow({ ki }: { ki: KnowledgeItem }) {
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium text-foreground truncate">{ki.title}</p>
-          {ki.who && <p className="text-[10px] text-muted-foreground">{ki.framework ? `${ki.framework} — ${ki.who}` : ki.who}</p>}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {ki.who && <span className="text-[10px] text-muted-foreground">{ki.framework ? `${ki.framework} — ${ki.who}` : ki.who}</span>}
+            <AttributionProvenanceBadge activationMetadata={ki.activation_metadata} />
+          </div>
         </div>
         <ReviewBadge status={status} />
       </div>

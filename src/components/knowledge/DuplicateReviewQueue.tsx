@@ -11,6 +11,7 @@ import { CheckCircle2, Copy, XCircle, FileText, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDuplicateKIs, useDeactivateKI, type DuplicatePair } from '@/hooks/useKnowledgeReview';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
+import { AttributionProvenanceBadge } from './AttributionProvenanceBadge';
 
 function excerptStrength(ki: KnowledgeItem): { label: string; cls: string } {
   const len = (ki.source_excerpt || '').length;
@@ -41,6 +42,7 @@ function KISide({ ki, resourceName }: { ki: KnowledgeItem; resourceName: string 
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[9px] text-muted-foreground">{attributionLabel(ki)}</span>
         <span className={cn('text-[9px]', exc.cls)}>{exc.label}</span>
+        <AttributionProvenanceBadge activationMetadata={ki.activation_metadata} />
       </div>
       <div className="pt-1">
         <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-destructive"
