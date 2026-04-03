@@ -20,6 +20,7 @@ const corsHeaders = {
 };
 
 const MAX_ATTEMPTS = 3;
+const CIRCUIT_BREAKER_THRESHOLD = 10; // Pause after N consecutive same-error failures
 
 // ── Content validation patterns ──
 const HTML_PATTERNS = /<(div|meta|style|script|span|link|head|body|html|nav|footer|header|iframe)\b/i;
@@ -38,9 +39,23 @@ function detectPlatform(url: string): string {
   if (u.includes("podbean.com")) return "podbean";
   if (u.includes("transistor.fm")) return "transistor";
   if (u.includes("simplecast.com")) return "simplecast";
+  // Direct audio CDNs and redirectors
+  if (u.includes("pdst.fm") || u.includes("megaphone.fm") || u.includes("traffic.megaphone")) return "direct_audio";
   if (u.endsWith(".mp3") || u.endsWith(".m4a") || u.endsWith(".wav")) return "direct_audio";
+  if (u.match(/\.(mp3|m4a|ogg|wav)(\?|$)/)) return "direct_audio";
   if (u.includes("/feed") || u.includes("rss") || u.includes(".xml")) return "rss_direct";
   return "unknown";
+}
+
+// ── Detect if a URL is itself a direct audio URL ──
+function isDirectAudioUrl(url: string): boolean {
+  const u = url.toLowerCase();
+  return !!(
+    u.includes("pdst.fm") ||
+    u.includes("megaphone.fm") ||
+    u.includes("traffic.megaphone") ||
+    u.match(/\.(mp3|m4a|ogg|wav)(\?|$)/)
+  );
 }
 
 // ── Host platform detection (where podcast is actually hosted) ──
@@ -130,6 +145,45 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
+    // ── Circuit breaker: check recent consecutive failures ──
+    const { data: recentFailed } = await supabase
+      .from("podcast_import_queue")
+      .select("failure_type")
+      .eq("status", "failed")
+      .order("processed_at", { ascending: false })
+      .limit(CIRCUIT_BREAKER_THRESHOLD);
+
+    if (recentFailed && recentFailed.length >= CIRCUIT_BREAKER_THRESHOLD) {
+      const sameError = recentFailed.every((r: any) => r.failure_type === recentFailed[0].failure_type);
+      if (sameError) {
+        // Check if there are ANY successes after these failures
+        const { count: successAfter } = await supabase
+          .from("podcast_import_queue")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "complete")
+          .gt("processed_at", recentFailed[recentFailed.length - 1].processed_at || "1970-01-01");
+
+        if (!successAfter || successAfter === 0) {
+          // All remaining queued items get paused with a clear message
+          const failureReason = recentFailed[0].failure_type;
+          console.error(`CIRCUIT BREAKER: ${CIRCUIT_BREAKER_THRESHOLD} consecutive failures with "${failureReason}". Pausing queue.`);
+
+          await supabase
+            .from("podcast_import_queue")
+            .update({
+              status: "failed",
+              error_message: `Circuit breaker: ${CIRCUIT_BREAKER_THRESHOLD}+ consecutive "${failureReason}" failures. Queue paused — review source URLs.`,
+              failure_type: "circuit_breaker",
+              processed_at: now(),
+              updated_at: now(),
+            })
+            .eq("status", "queued");
+
+          return json({ message: "Circuit breaker triggered", failure_type: failureReason, paused_remaining: true });
+        }
+      }
+    }
+
     // ── Step 1: Claim one queued item ──
     const { data: candidates } = await supabase
       .from("podcast_import_queue")
@@ -221,10 +275,13 @@ Deno.serve(async (req) => {
 
         resolveResult = await resolveResp.json();
       } catch (err) {
-        // If resolver fails but we have embedded audio, continue
+        // If resolver fails but we have embedded audio or the URL itself is direct audio, continue
         if (embeddedAudioUrl) {
           console.log(`Resolver failed but embedded audio found: ${embeddedAudioUrl}`);
           resolveResult = { resolution: { audioEnclosureUrl: embeddedAudioUrl } };
+        } else if (isDirectAudioUrl(queueItem.episode_url)) {
+          console.log(`Resolver failed but URL is direct audio: ${queueItem.episode_url}`);
+          resolveResult = { resolution: { audioEnclosureUrl: queueItem.episode_url } };
         } else {
           await handleFailure(supabase, queueItem, `Resolution failed: ${err.message}`, "audio_unresolvable");
           return json({ processed: 1, result: "failed", error: err.message });
@@ -232,8 +289,10 @@ Deno.serve(async (req) => {
       }
 
       const hasTranscriptFromResolve = resolveResult?.transcript && resolveResult.transcript.length > 200;
+      // Fall back to the episode URL itself if it's a direct audio link
+      const directAudioFallback = isDirectAudioUrl(queueItem.episode_url) ? queueItem.episode_url : null;
       const hasAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
-        resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl;
+        resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl || directAudioFallback;
 
       // ── Persist resolved metadata on the queue item ──
       const resolvedMeta: Record<string, any> = {};
@@ -250,9 +309,13 @@ Deno.serve(async (req) => {
         if (r.canonicalPageUrl) resolvedMeta.resolved_url = r.canonicalPageUrl;
         if (r.audioEnclosureUrl) resolvedMeta.audio_url = r.audioEnclosureUrl;
       }
+      // If we're using the direct audio fallback, persist it
+      if (!resolvedMeta.audio_url && directAudioFallback) {
+        resolvedMeta.audio_url = directAudioFallback;
+      }
       // Detect host platform from resolved/audio URL
       const resolvedAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
-        resolveResult?.resolution?.audioEnclosureUrl || '';
+        resolveResult?.resolution?.audioEnclosureUrl || directAudioFallback || '';
       const hostPlatform = detectHostPlatform(resolvedAudioUrl || resolveResult?.resolution?.rssFeedUrl || '');
       if (hostPlatform) resolvedMeta.host_platform = hostPlatform;
       resolvedMeta.resolution_method = hasTranscriptFromResolve ? 'transcript_found' : (hasAudioUrl ? 'transcribed' : 'unresolved');
@@ -280,7 +343,7 @@ Deno.serve(async (req) => {
             transcript_status: "transcribing",
           });
 
-          const audioUrl = resolveResult.audio_url || resolveResult.resolved_audio_url || resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl;
+          const audioUrl = resolveResult.audio_url || resolveResult.resolved_audio_url || resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl || directAudioFallback;
           const transcribeResp = await fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
             method: "POST",
             headers: {

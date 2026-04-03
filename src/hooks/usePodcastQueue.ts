@@ -81,7 +81,9 @@ function detectPlatform(url: string): string {
   if (u.includes("anchor.fm") || u.includes("podcasters.spotify")) return "anchor";
   if (u.includes("buzzsprout.com")) return "buzzsprout";
   if (u.includes("libsyn.com")) return "libsyn";
+  if (u.includes("pdst.fm") || u.includes("megaphone.fm") || u.includes("traffic.megaphone")) return "direct_audio";
   if (u.endsWith(".mp3") || u.endsWith(".m4a") || u.endsWith(".wav")) return "direct_audio";
+  if (u.match(/\.(mp3|m4a|ogg|wav)(\?|$)/)) return "direct_audio";
   if (u.includes("/feed") || u.includes("rss") || u.includes(".xml")) return "rss_direct";
   return "unknown";
 }
