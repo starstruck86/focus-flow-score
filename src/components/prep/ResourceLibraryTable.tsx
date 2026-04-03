@@ -662,7 +662,26 @@ export function ResourceLibraryTable({
                               </span>
                             )}
                           </div>
-                          {lc && lc.blocked !== 'none' && (
+                          {/* Inline extraction progress */}
+                          {(() => {
+                            const ep = extractionResources[resource.id];
+                            if (!ep) return null;
+                            const pct = ep.status === 'queued' ? 0 : ep.status === 'extracting' ? 50 : 100;
+                            return (
+                              <div className="flex items-center gap-2 mt-1">
+                                {ep.status === 'extracting' && <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />}
+                                {ep.status === 'done' && <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />}
+                                {ep.status === 'failed' && <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />}
+                                <Progress value={pct} className="h-1.5 flex-1 max-w-[120px]" />
+                                <span className="text-[9px] text-muted-foreground shrink-0">
+                                  {ep.status === 'queued' ? 'Queued' :
+                                   ep.status === 'extracting' ? 'Extracting…' :
+                                   ep.status === 'done' ? `Done${ep.kiExtracted ? ` · ${ep.kiExtracted} KI` : ''}` :
+                                   'Failed'}
+                                </span>
+                              </div>
+                            );
+                          })()}
                             <div className="flex items-center gap-2 mt-0.5">
                               <p className="text-[9px] text-destructive/80">
                                 {getBlockedLabel(lc.blocked)}
