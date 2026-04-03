@@ -47,7 +47,6 @@ import { useInUseResources } from '@/hooks/useInUseResources';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
-import type { Resource } from '@/hooks/useResources';
 import { InlineResourceDetail } from './InlineResourceDetail';
 
 // ── Types ──────────────────────────────────────────────────
