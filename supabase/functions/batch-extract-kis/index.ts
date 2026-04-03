@@ -199,11 +199,6 @@ List EVERY distinct concept. If the lesson teaches 15 things, return 15 items. D
   let candidates: any[] = [];
   try {
     candidates = parseAiJson(await aiRequest(apiKey, LESSON_ENUMERATE_SYSTEM, enumPrompt, 4096));
-    // Cap at 20 to keep within edge function timeout
-    if (candidates.length > 20) {
-      console.log(`[lesson-pipeline] Stage 1: ${candidates.length} candidates, capping to 20`);
-      candidates = candidates.slice(0, 20);
-    }
     pLog.stage1 = candidates.length;
     console.log(`[lesson-pipeline] Stage 1: ${candidates.length} candidates enumerated`);
   } catch (err: any) {
