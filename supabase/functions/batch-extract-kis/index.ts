@@ -101,19 +101,39 @@ Deno.serve(async (req) => {
 
     console.log(`[extract] Starting: "${resource.title}" (${resource.content.length} chars)`);
 
-    // ── 2. Run AI extraction ──
+    // ── 2. Run extraction via the shared lesson-aware extractor ──
     let rawItems: any[];
     let rawResponse: string | null = null;
     try {
-      const aiResult = await callAI(
-        LOVABLE_API_KEY,
-        decodeHTMLEntities(resource.content),
-        resource.title,
-        resource.tags || [],
-        resource.resource_type,
-      );
-      rawItems = aiResult.items;
-      rawResponse = aiResult.rawContent;
+      const extractorRes = await fetch(`${supabaseUrl}/functions/v1/extract-tactics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'x-batch-key': serviceRoleKey,
+        },
+        body: JSON.stringify({
+          resourceId: resource.id,
+          title: resource.title,
+          content: decodeHTMLEntities(resource.content),
+          description: resource.description,
+          tags: resource.tags || [],
+          resourceType: resource.resource_type,
+        }),
+      });
+
+      const extractorJson = await extractorRes.json();
+      if (!extractorRes.ok) {
+        throw new Error(extractorJson?.error || `Shared extractor returned ${extractorRes.status}`);
+      }
+
+      rawItems = Array.isArray(extractorJson?.items) ? extractorJson.items : [];
+      rawResponse = JSON.stringify({
+        items: rawItems.length,
+        chunks_total: extractorJson?.chunks_total ?? null,
+        chunks_processed: extractorJson?.chunks_processed ?? null,
+        chunks_failed: extractorJson?.chunks_failed ?? null,
+      });
       log.rawAiResponse = rawResponse;
     } catch (aiErr: any) {
       log.outcome = 'ai_error';
@@ -501,134 +521,3 @@ function wordOverlap(a: string, b: string): number {
   return intersection / Math.min(aw.size, bw.size);
 }
 
-// ═══════════════════════════════════════════
-// AI Call
-// ═══════════════════════════════════════════
-
-const BASE_SYSTEM_PROMPT = `You are an elite sales execution coach. Extract TACTICAL PLAYS from content.
-
-A Knowledge Item is a PLAY — a structured, situational, reusable tactical entry that tells a rep exactly when, why, and how to execute.
-
-EVERY knowledge item MUST include ALL of these fields:
-1. "title" — verb-led action title (e.g. "Reframe the budget objection using cost-of-inaction")
-2. "framework" — methodology (GAP Selling, Challenger Sale, MEDDPICC, Command of the Message, SPIN Selling, or "General"). REQUIRED.
-3. "who" — thought leader or author. REQUIRED.
-4. "source_excerpt" — EXACT quote from content. Min 2 sentences. REQUIRED.
-5. "source_location" — where in content this was found. REQUIRED.
-6. "macro_situation" — WHEN does this play apply? 2-4 sentences.
-7. "micro_strategy" — WHAT are you doing? 2-3 sentences.
-8. "why_it_matters" — WHY does this work? 2-3 sentences.
-9. "how_to_execute" — HOW step by step. Return as an ARRAY of 3-5 strings, each a concrete step with exact phrasing.
-10. "what_this_unlocks" — OUTCOME. 2-3 sentences.
-11. "when_to_use" — trigger conditions (2-3 sentences)
-12. "when_not_to_use" — boundaries (2-3 sentences)
-13. "example_usage" — realistic talk track. Min 3-4 sentences.
-14. "tactic_summary" — concise 2-3 sentence summary
-15. "chapter" — one of: cold_calling|discovery|objection_handling|negotiation|competitors|personas|messaging|closing|stakeholder_navigation|expansion|demo|follow_up
-16. "knowledge_type" — skill|product|competitive
-
-QUALITY GATES — REJECT any item that:
-- Has fields shorter than 2 sentences (except title, chapter, knowledge_type, how_to_execute steps)
-- Is generic advice without specific phrasing
-- Describes what to think rather than what to DO
-
-Return ONLY a JSON array. Quality over quantity, but do not under-extract.`;
-
-const TRANSCRIPT_ADDENDUM = `
-
-TRANSCRIPT-SPECIFIC INSTRUCTIONS:
-You are extracting from a podcast/interview transcript. Find the SPECIFIC TECHNIQUES, FRAMEWORKS, and ACTIONABLE METHODS — not summaries of topics.
-
-Extract 4-8 plays from the full transcript. Prioritize depth over breadth.`;
-
-const LESSON_ADDENDUM = `
-
-STRUCTURED LESSON INSTRUCTIONS:
-You are extracting from a structured training lesson that includes both written content and a video transcript.
-
-Extract EVERY distinct tactic, framework, or actionable technique covered in the lesson. Do NOT under-extract.
-
-Look for:
-- Named frameworks or scoring models
-- Specific research techniques with concrete steps
-- Prioritization criteria with examples
-- Signal detection methods
-- Territory management strategies
-- Account scoring/tiering approaches
-
-Extract at least 8-15 plays when the lesson supports them, and if the content contains more distinct high-quality tactics, extract them all.`;
-
-async function callAI(apiKey: string, content: string, title: string, tags: string[], resourceType?: string): Promise<{ items: any[]; rawContent: string }> {
-  const isTranscript = isTranscriptType(resourceType);
-  const isLesson = isStructuredLesson(content);
-  const systemPrompt = isLesson
-    ? BASE_SYSTEM_PROMPT + LESSON_ADDENDUM
-    : isTranscript
-      ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM
-      : BASE_SYSTEM_PROMPT;
-
-  const userPrompt = `Extract tactical plays from this content:
-
-Title: ${title}
-Tags: ${(tags || []).join(', ') || 'none'}
-
-Content:
- ${content}
-
-Return ONLY a JSON array of plays. ${isLesson ? 'Extract every distinct high-quality tactic and assign the single best-fit chapter per tactic.' : 'Do not repeat equivalent tactics.'}`;
-
-  const body = JSON.stringify({
-    model: 'google/gemini-2.5-flash',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-    max_tokens: 16384,
-    temperature: 0.2,
-  });
-
-  const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
-
-  let res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', { method: 'POST', headers, body });
-
-  if (res.status === 429) {
-    console.log('[extract] Rate limited, waiting 5s...');
-    await new Promise(r => setTimeout(r, 5000));
-    res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', { method: 'POST', headers, body });
-  }
-
-  if (!res.ok) {
-    const errorBody = await res.text();
-    console.error(`[extract] AI error response: ${errorBody.slice(0, 500)}`);
-    throw new Error(`AI returned ${res.status}`);
-  }
-
-  const result = await res.json();
-  const rawContent = result?.choices?.[0]?.message?.content || '';
-  const items = parseJsonResponse(rawContent);
-
-  return { items, rawContent };
-}
-
-function parseJsonResponse(raw: string): any[] {
-  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  try {
-    const parsed = JSON.parse(cleaned);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    // Attempt to find JSON array in the response
-    const s = cleaned.indexOf('[');
-    const e = cleaned.lastIndexOf(']');
-    if (s !== -1 && e > s) {
-      try {
-        const parsed = JSON.parse(cleaned.slice(s, e + 1));
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        console.error(`[extract] Failed to parse AI JSON. First 200 chars: ${cleaned.slice(0, 200)}`);
-        return [];
-      }
-    }
-    console.error(`[extract] No JSON array found in AI response. First 200 chars: ${cleaned.slice(0, 200)}`);
-    return [];
-  }
-}
