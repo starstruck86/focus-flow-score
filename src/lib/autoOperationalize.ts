@@ -13,7 +13,12 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { inferTags, mergeTags, type StructuredTag } from './resourceTags';
-import { extractKnowledgeHeuristic, extractKnowledgeLLMFallback, type ExtractionSource } from './knowledgeExtraction';
+import {
+  extractKnowledgeHeuristic,
+  extractKnowledgeLLMFallback,
+  getTranscriptPreparationState,
+  type ExtractionSource,
+} from './knowledgeExtraction';
 import { createLogger } from '@/lib/logger';
 import {
   isEligibleForExtraction,
@@ -269,14 +274,13 @@ export async function autoOperationalizeResource(
 
     // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
     // (indicated by ## section headings). Raw transcripts produce garbage KIs.
-    const isAudioType = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
-      (r.resource_type ?? '').toLowerCase()
+    const { isTranscriptResource: isAudioType, headingCount, hasLessonBody, transcriptReady } = getTranscriptPreparationState(
+      contentForExtraction,
+      r.resource_type,
     );
-    const headingCount = isAudioType ? (contentForExtraction.match(/^## /gm)?.length ?? 0) : 999;
-    const transcriptReady = !isAudioType || headingCount >= 2;
 
     if (!transcriptReady) {
-      log.warn('Skipping extraction: transcript not preprocessed', { resourceId, headingCount });
+      log.warn('Skipping extraction: transcript not preprocessed', { resourceId, headingCount, hasLessonBody });
       needsReview = true;
       reason = 'Transcript needs preprocessing before KI extraction (no ## section headings found)';
       return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason);

@@ -47,6 +47,26 @@ export interface ExtractionLog {
   used_llm_fallback: boolean;
 }
 
+const TRANSCRIPT_LIKE_RESOURCE_TYPES = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'] as const;
+const LESSON_TRANSCRIPT_MARKER = '--- Video Transcript ---';
+
+export function getTranscriptPreparationState(content: string | null | undefined, resourceType: string | null | undefined) {
+  const normalizedContent = content || '';
+  const normalizedType = (resourceType || '').toLowerCase();
+  const isTranscriptResource = TRANSCRIPT_LIKE_RESOURCE_TYPES.includes(normalizedType as typeof TRANSCRIPT_LIKE_RESOURCE_TYPES[number]);
+  const headingCount = isTranscriptResource ? (normalizedContent.match(/^## /gm)?.length ?? 0) : 0;
+  const transcriptMarkerIndex = normalizedContent.indexOf(LESSON_TRANSCRIPT_MARKER);
+  const hasLessonBody = transcriptMarkerIndex > 500;
+  const transcriptReady = !isTranscriptResource || hasLessonBody || headingCount >= 2;
+
+  return {
+    isTranscriptResource,
+    headingCount,
+    hasLessonBody,
+    transcriptReady,
+  };
+}
+
 const CHAPTER_SIGNALS: Array<{
   chapter: string;
   subChapters: string[];
@@ -523,27 +543,24 @@ export async function extractKnowledgeLLMFallback(
   try {
     log.info('Running LLM fallback extraction', { resourceId: source.resourceId, title: source.title });
 
-    const isTranscriptResource = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
-      (source.resourceType || '').toLowerCase()
+    const contentStr = source.content || '';
+    const { isTranscriptResource, headingCount, hasLessonBody, transcriptReady } = getTranscriptPreparationState(
+      contentStr,
+      source.resourceType,
     );
 
     // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
     // (indicated by ## section headings). Raw transcripts produce garbage KIs.
-    // Exception: course lesson videos have structured written content (detected by
-    // the --- Video Transcript --- marker or substantial non-transcript body).
-    const contentStr = source.content || '';
-    const hasLessonBody = contentStr.includes('--- Video Transcript ---') && 
-      contentStr.indexOf('--- Video Transcript ---') > 500;
-    if (isTranscriptResource && !hasLessonBody) {
-      const headingCount = contentStr.match(/^## /gm)?.length ?? 0;
-      if (headingCount < 2) {
-        log.warn('Blocked KI extraction: transcript not preprocessed (missing ## headings)', {
-          resourceId: source.resourceId,
-          headingCount,
-          contentLength: contentStr.length,
-        });
-        return [];
-      }
+    // Exception: course lesson videos with a substantial lesson body before the
+    // transcript marker are valid extraction sources as-is.
+    if (isTranscriptResource && !transcriptReady) {
+      log.warn('Blocked KI extraction: transcript not preprocessed (missing ## headings)', {
+        resourceId: source.resourceId,
+        headingCount,
+        hasLessonBody,
+        contentLength: contentStr.length,
+      });
+      return [];
     }
 
     // No client-side content cap — server-side extract-tactics handles chunking
