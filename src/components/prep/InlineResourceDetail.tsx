@@ -96,10 +96,10 @@ function SourceTab({ resource }: { resource: Resource }) {
   // For web URLs, show cleaned content from the resource itself
   if (isPdf && fileUrl) {
     return (
-      <div className="p-4">
+      <div className="p-4 h-[70vh] min-h-0">
         <iframe
           src={fileUrl}
-          className="w-full h-[500px] rounded-lg border border-border"
+          className="w-full h-full rounded-lg border border-border"
           title="PDF preview"
         />
       </div>
@@ -108,7 +108,7 @@ function SourceTab({ resource }: { resource: Resource }) {
 
   if (isWeb) {
     return (
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3 h-[70vh] min-h-0 flex flex-col">
         <div className="flex items-center gap-2">
           <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
           <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate">
@@ -127,7 +127,7 @@ function SourceTab({ resource }: { resource: Resource }) {
   // Audio/video: show transcript
   if (hasTranscript) {
     return (
-      <div className="p-4">
+      <div className="p-4 h-[70vh] min-h-0">
         <ContentBlock content={r.content} label="Transcript" />
       </div>
     );
@@ -213,7 +213,7 @@ function ExtractedContentTab({ resource }: { resource: Resource }) {
   }
 
   return (
-    <div className="p-4 space-y-3">
+    <div className="p-4 space-y-3 h-[70vh] min-h-0 flex flex-col">
       {/* Stats bar */}
       <div className="flex items-center gap-2 flex-wrap">
         <Badge variant="outline" className="text-[9px]">{contentLength.toLocaleString()} chars</Badge>
@@ -246,7 +246,7 @@ function ExtractedContentTab({ resource }: { resource: Resource }) {
           <span>{failureReason}</span>
         </div>
       )}
-      <ScrollArea className="max-h-[400px]">
+      <ScrollArea className="flex-1 min-h-0 rounded-md border border-border/60 p-3">
         <pre className={cn(
           'whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground',
           showRaw ? 'font-mono text-[11px]' : 'font-sans',
@@ -292,8 +292,8 @@ function KnowledgeTab({ resourceId }: { resourceId: string }) {
   }
 
   return (
-    <ScrollArea className="max-h-[400px]">
-      <div className="p-4 space-y-2">
+    <ScrollArea className="h-[70vh] min-h-0">
+      <div className="p-4 space-y-2 pr-3">
         {items.map(ki => (
           <div key={ki.id} className={cn(
             'rounded-lg border p-3 space-y-2',
@@ -354,7 +354,7 @@ function ContentBlock({ content, label }: { content: string; label: string }) {
   return (
     <div className="space-y-1.5">
       <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
-      <ScrollArea className="max-h-[400px]">
+      <ScrollArea className="h-full min-h-0 rounded-md border border-border/60 p-3">
         <pre className="whitespace-pre-wrap break-words text-xs font-sans leading-relaxed text-foreground">
           {content}
         </pre>

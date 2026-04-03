@@ -233,7 +233,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         if (lessonData?.success && lessonData.content && lessonData.content.length > 50) {
           classification.scraped_content = lessonData.content;
         }
-        classification.resource_type = lesson.type === 'video' ? 'video' : 'article';
+        const isVideoLesson = lesson.type === 'video' || lessonData?.type === 'video' || Boolean(lessonData?.media_url);
+        classification.resource_type = isVideoLesson ? 'video' : 'article';
         classification.tags = Array.from(new Set([...(classification.tags || []), 'course', courseTitle].filter(Boolean)));
 
         const resource = await addUrl.mutateAsync({ url: lesson.url, classification });
@@ -256,22 +257,29 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           updateLessonResult(i, { status: 'transcribing' });
           setImportProgress({ done: i, total: toImport.length, current: `${lesson.title} (transcribing video...)` });
           try {
+            const { data: existingBeforeTx } = await supabase
+              .from('resources')
+              .select('content')
+              .eq('id', resourceId)
+              .single();
+            const preservedLessonContent = existingBeforeTx?.content || lessonData?.content || '';
+
             const { data: txData } = await trackedInvoke<any>('transcribe-audio', {
-              body: { audio_url: lessonData.media_url, resource_id: resourceId },
+              body: { audio_url: lessonData.media_url },
               timeoutMs: 120_000,
             });
             if (txData?.success && txData.transcript) {
-              const { data: existing } = await supabase
-                .from('resources')
-                .select('content')
-                .eq('id', resourceId)
-                .single();
-              const existingContent = existing?.content || '';
               const transcriptMarker = '\n\n--- Video Transcript ---\n\n';
-              const updated = existingContent.includes(transcriptMarker)
-                ? existingContent
-                : existingContent + transcriptMarker + txData.transcript;
-              await supabase.from('resources').update({ content: updated } as any).eq('id', resourceId);
+              const baseContent = preservedLessonContent.includes(transcriptMarker)
+                ? preservedLessonContent.split(transcriptMarker)[0].trimEnd()
+                : preservedLessonContent.trimEnd();
+              const updated = `${baseContent}${transcriptMarker}${txData.transcript}`;
+              await supabase.from('resources').update({
+                content: updated,
+                content_length: updated.length,
+                content_status: 'transcript',
+                enrichment_status: 'enriched',
+              } as any).eq('id', resourceId);
               await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete', transcript_text: txData.transcript });
               console.log(`Transcribed video for ${lesson.title}: ${txData.transcript.length} chars`);
             } else {
