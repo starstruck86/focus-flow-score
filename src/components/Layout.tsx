@@ -285,12 +285,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         className="flex items-center gap-2 px-3 py-2 border-b sticky top-0 z-40 bg-background/95 backdrop-blur-md"
         style={headerAccentStyle}
       >
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           <Compass className="h-5 w-5" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
-          <span className="font-display text-sm font-bold hidden sm:inline">Quota CoPilot</span>
+          <span className="font-display text-sm font-bold hidden lg:inline">Quota CoPilot</span>
           <SaveIndicator />
         </div>
-        <GlobalSearch className="flex-1 min-w-0" />
+        <GlobalSearch className="flex-1 min-w-0 max-w-xs sm:max-w-sm lg:max-w-md" />
         <div className="flex items-center gap-1.5 shrink-0">
           <BostonClock />
           <TerritoryCopilot />
