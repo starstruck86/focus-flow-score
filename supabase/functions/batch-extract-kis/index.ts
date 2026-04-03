@@ -1,11 +1,92 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// ═══════════════════════════════════════════
+// Constants
+// ═══════════════════════════════════════════
+
 const LESSON_TRANSCRIPT_MARKER = '--- Video Transcript ---';
 const VALID_CHAPTERS = new Set([
   'cold_calling', 'discovery', 'objection_handling', 'negotiation', 'competitors',
   'personas', 'messaging', 'closing', 'stakeholder_navigation', 'expansion', 'demo', 'follow_up',
 ]);
 const VALID_TYPES = new Set(['skill', 'product', 'competitive']);
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const BASE_SYSTEM_PROMPT = `You are an elite sales execution coach. Extract TACTICAL PLAYS from content.
+
+A Knowledge Item is a PLAY — a structured, situational, reusable tactical entry that tells a rep exactly when, why, and how to execute.
+
+EVERY knowledge item MUST include ALL of these fields:
+1. "title" — action title (e.g. "Reframe the budget objection using cost-of-inaction")
+2. "framework" — methodology. REQUIRED.
+3. "who" — thought leader or author. REQUIRED.
+4. "source_excerpt" — EXACT quote from content. Min 2 sentences. REQUIRED.
+5. "source_location" — where in content this was found. REQUIRED.
+6. "macro_situation" — WHEN does this play apply? 2-4 sentences.
+7. "micro_strategy" — WHAT are you doing? 2-3 sentences.
+8. "why_it_matters" — WHY does this work? 2-3 sentences.
+9. "how_to_execute" — HOW step by step. 3-5 concrete steps.
+10. "what_this_unlocks" — OUTCOME. 2-3 sentences.
+11. "when_to_use" — trigger conditions (2-3 sentences)
+12. "when_not_to_use" — boundaries (2-3 sentences)
+13. "example_usage" — realistic talk track. Min 3-4 sentences.
+14. "tactic_summary" — concise 2-3 sentence summary
+15. "chapter" — one of: cold_calling|discovery|objection_handling|negotiation|competitors|personas|messaging|closing|stakeholder_navigation|expansion|demo|follow_up
+16. "knowledge_type" — skill|product|competitive
+
+Return ONLY a JSON array. Quality over quantity, but do not under-extract.`;
+
+const LESSON_EXPAND_ADDENDUM = `
+
+STRUCTURED LESSON INSTRUCTIONS:
+Extract EVERY distinct tactic, framework, or actionable technique. Each concept is its OWN play.
+Titles may describe the concept naturally — they do NOT need to start with a verb.
+Look for named frameworks, scoring models, research techniques, prioritization criteria, signal detection methods, rules of thumb, tiering systems, and specific tools or workflows.`;
+
+const LESSON_ENUMERATE_SYSTEM = `You are an expert training content analyst. Create an exhaustive inventory of every distinct teachable concept in this lesson.
+
+For each concept, return a JSON object with:
+- "candidate_title": short descriptive title (3-10 words)
+- "concept_type": one of "framework", "technique", "rule", "signal", "method", "model", "tool", "heuristic", "tier", "criteria"
+- "source_hint": a short quote or reference from the content (1-2 sentences)
+- "section": which part of the lesson
+
+Be EXHAUSTIVE. List every distinct framework, scoring criteria, research technique, signal, decision rule, tiering system, metric, or heuristic. Return ONLY a JSON array.`;
+
+// ═══════════════════════════════════════════
+// Types
+// ═══════════════════════════════════════════
+
+interface ExtractionLog {
+  resourceId: string;
+  title: string;
+  contentLength: number;
+  rawItemCount: number;
+  normalizedCount: number;
+  validatedCount: number;
+  dedupedCount: number;
+  insertedCount: number;
+  rejections: { title: string; reasons: string[] }[];
+  rawAiResponse: string | null;
+  preservedUserEdited: number;
+  outcome: string;
+  error?: string;
+  lessonPipeline?: any;
+}
+
+// ═══════════════════════════════════════════
+// Utility helpers (all ABOVE Deno.serve)
+// ═══════════════════════════════════════════
+
+function respond(data: Record<string, any>, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
 
 function isTranscriptType(resourceType?: string): boolean {
   return ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
@@ -28,25 +109,352 @@ function decodeHTMLEntities(text: string): string {
     .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// ═══════════════════════════════════════════
+// AI gateway helpers
+// ═══════════════════════════════════════════
 
-/**
- * Single-resource KI extraction endpoint.
- * Accepts: { resourceId: string }
- *
- * Safe extraction flow:
- *   1. Fetch resource
- *   2. Run AI extraction
- *   3. Normalize all fields (arrays, bullets, numbered steps)
- *   4. Validate each item (substance checks, not just char counts)
- *   5. Composite dedup (title + summary + excerpt + framework/who)
- *   6. Only if new set passes quality threshold → replace prior KIs
- *      (preserving user-edited KIs always)
- *   7. Otherwise preserve existing KIs and mark failure
- */
+async function aiRequest(apiKey: string, system: string, user: string, maxTokens = 16384): Promise<any> {
+  const body = JSON.stringify({
+    model: 'google/gemini-2.5-flash',
+    messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+    max_tokens: maxTokens,
+    temperature: 0.2,
+  });
+  const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+
+  const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST', headers, body,
+  });
+  if (res.status === 429) {
+    await new Promise(r => setTimeout(r, 3000));
+    const retry = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST', headers, body,
+    });
+    if (!retry.ok) throw new Error(`AI error after retry: ${retry.status}`);
+    return retry.json();
+  }
+  if (!res.ok) throw new Error(`AI returned ${res.status}`);
+  return res.json();
+}
+
+function parseAiJson(result: any): any[] {
+  const raw = result?.choices?.[0]?.message?.content || '[]';
+  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  try { return JSON.parse(cleaned); } catch { /* fall through */ }
+  const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
+  if (s !== -1 && e > s) { try { return JSON.parse(cleaned.slice(s, e + 1)); } catch { /* fall through */ } }
+  return [];
+}
+
+// ═══════════════════════════════════════════
+// Non-lesson AI extraction (direct call)
+// ═══════════════════════════════════════════
+
+async function callAIDirect(apiKey: string, content: string, title: string, tags: string[], _resourceType?: string): Promise<{ items: any[]; rawContent: string }> {
+  const userPrompt = `Extract tactical plays from this content:\n\nTitle: ${title}\nTags: ${(tags || []).join(', ') || 'none'}\n\nContent:\n${content}\n\nReturn ONLY a JSON array of plays.`;
+  const result = await aiRequest(apiKey, BASE_SYSTEM_PROMPT, userPrompt);
+  return { items: parseAiJson(result), rawContent: result?.choices?.[0]?.message?.content || '' };
+}
+
+// ═══════════════════════════════════════════
+// LESSON 2-STAGE PIPELINE (inline, no chaining)
+// ═══════════════════════════════════════════
+
+async function extractLessonDirect(
+  apiKey: string, content: string, title: string, description: string | null, tags: string[]
+): Promise<{ items: any[]; pipelineLog: any }> {
+  const pLog: any = { contentLength: content.length, stage1: 0, stage2Raw: 0, stage2Validated: 0, recoveryFound: 0, recoveryAdded: 0, dedupedFinal: 0, validationRejects: {} as Record<string, number> };
+
+  console.log(`[lesson-pipeline] START | "${title}" | ${content.length} chars`);
+
+  // ── Stage 1: Exhaustive enumeration ──
+  const enumPrompt = `Analyze this structured training lesson and create an exhaustive inventory of every distinct teachable concept, technique, framework, rule, signal, method, or heuristic.
+
+Title: ${title}
+${description ? `Description: ${description}` : ''}
+
+Content:
+${content}
+
+List EVERY distinct concept. If the lesson teaches 15 things, return 15 items. Do NOT merge related concepts — each gets its own entry.`;
+
+  let candidates: any[] = [];
+  try {
+    candidates = parseAiJson(await aiRequest(apiKey, LESSON_ENUMERATE_SYSTEM, enumPrompt, 4096));
+    // Cap at 20 to keep within edge function timeout
+    if (candidates.length > 20) {
+      console.log(`[lesson-pipeline] Stage 1: ${candidates.length} candidates, capping to 20`);
+      candidates = candidates.slice(0, 20);
+    }
+    pLog.stage1 = candidates.length;
+    console.log(`[lesson-pipeline] Stage 1: ${candidates.length} candidates enumerated`);
+  } catch (err: any) {
+    console.error('[lesson-pipeline] Stage 1 FAILED:', err?.message);
+  }
+
+  // ── Stage 2: Single-pass full KI expansion with candidate guidance ──
+  let rawItems: any[] = [];
+
+  const candidateList = candidates.length > 0
+    ? candidates.map((c: any, i: number) => `${i + 1}. ${c.candidate_title || 'Untitled'} [${c.concept_type || 'technique'}]`).join('\n')
+    : '';
+
+  const expandPrompt = `Extract tactical plays from this training lesson.
+
+Title: ${title}
+Tags: ${(tags || []).join(', ')}
+${candidateList ? `\nThe following ${candidates.length} concepts were identified. Extract a play for as many as you can:\n${candidateList}\n` : ''}
+Content:
+${content}
+
+Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute, when_to_use, source_excerpt, chapter, knowledge_type. Keep each play concise but complete.`;
+
+  try {
+    rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, expandPrompt, 32768));
+    pLog.stage2Raw = rawItems.length;
+    console.log(`[lesson-pipeline] Stage 2: ${rawItems.length} raw items from single pass`);
+  } catch (err: any) {
+    console.error('[lesson-pipeline] Stage 2 FAILED:', err?.message);
+    // Fallback: try without candidate list
+    try {
+      const fallbackPrompt = `Extract every tactical play from this training lesson.\n\nTitle: ${title}\nTags: ${(tags || []).join(', ')}\n\nContent:\n${content}\n\nReturn ONLY a JSON array. Keep each play concise.`;
+      rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, fallbackPrompt, 32768));
+      pLog.stage2Raw = rawItems.length;
+      console.log(`[lesson-pipeline] Stage 2 fallback: ${rawItems.length} items`);
+    } catch (err2: any) {
+      console.error('[lesson-pipeline] Stage 2 fallback FAILED:', err2?.message);
+    }
+  }
+
+  console.log(`[lesson-pipeline] Stage 2 total: ${rawItems.length} raw items`);
+
+  return { items: rawItems, pipelineLog: pLog };
+}
+
+// ═══════════════════════════════════════════
+// Normalization
+// ═══════════════════════════════════════════
+
+function normalizeItem(raw: any): any {
+  const chapter = normalizeString(raw.chapter, 'messaging').toLowerCase().replace(/[\s-]+/g, '_');
+  const knowledgeType = normalizeString(raw.knowledge_type, 'skill').toLowerCase();
+
+  return {
+    title: normalizeString(raw.title),
+    framework: normalizeString(raw.framework, 'General'),
+    who: normalizeString(raw.who, 'Unknown'),
+    source_excerpt: normalizeString(raw.source_excerpt),
+    source_location: normalizeString(raw.source_location, 'Lesson content'),
+    macro_situation: normalizeString(raw.macro_situation),
+    micro_strategy: normalizeString(raw.micro_strategy),
+    why_it_matters: normalizeString(raw.why_it_matters),
+    how_to_execute: normalizeStructuredField(raw.how_to_execute),
+    what_this_unlocks: normalizeString(raw.what_this_unlocks),
+    when_to_use: normalizeString(raw.when_to_use),
+    when_not_to_use: normalizeString(raw.when_not_to_use),
+    example_usage: normalizeString(raw.example_usage || raw.example),
+    tactic_summary: normalizeString(raw.tactic_summary),
+    chapter: VALID_CHAPTERS.has(chapter) ? chapter : 'messaging',
+    knowledge_type: VALID_TYPES.has(knowledgeType) ? knowledgeType : 'skill',
+    sub_chapter: normalizeString(raw.sub_chapter) || null,
+    applies_to_contexts: normalizeArray(raw.applies_to_contexts, ['all']),
+    tags: normalizeArray(raw.tags, []),
+  };
+}
+
+function normalizeString(v: any, fallback = ''): string {
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (Array.isArray(v)) return v.map((x: any) => normalizeString(x)).filter(Boolean).join('\n');
+  if (v && typeof v === 'object') return JSON.stringify(v);
+  return fallback;
+}
+
+function normalizeStructuredField(v: any): string {
+  if (typeof v === 'string') return v.trim();
+  if (Array.isArray(v)) {
+    return v.map((item: any, i: number) => {
+      if (typeof item === 'string') return `${i + 1}. ${item.trim()}`;
+      if (item && typeof item === 'object') {
+        const text = item.step || item.action || item.description || item.text || JSON.stringify(item);
+        const detail = item.detail || item.explanation || '';
+        return `${i + 1}. ${normalizeString(text)}${detail ? ' — ' + normalizeString(detail) : ''}`;
+      }
+      return `${i + 1}. ${String(item)}`;
+    }).join('\n');
+  }
+  if (v && typeof v === 'object') return JSON.stringify(v);
+  return '';
+}
+
+function normalizeArray(v: any, fallback: string[]): string[] {
+  if (Array.isArray(v)) {
+    const filtered = v.filter((x: any) => typeof x === 'string' && x.trim().length > 0).map((x: string) => x.trim());
+    return filtered.length > 0 ? filtered : fallback;
+  }
+  return fallback;
+}
+
+// ═══════════════════════════════════════════
+// Validation
+// ═══════════════════════════════════════════
+
+function validateItem(item: any, isLesson: boolean): string[] {
+  const reasons: string[] = [];
+  const title = (item.title || '').trim();
+  const summary = (item.tactic_summary || '').trim();
+
+  if (!title || title.length < 5) reasons.push('title too short');
+
+  // Lessons: no verb-led requirement. Non-lessons: enforce verb-led.
+  if (!isLesson) {
+    const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|surface|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|seed|earn|secure|protect|defend|block|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i;
+    if (!verbLedPattern.test(title)) reasons.push('title not actionable');
+  }
+
+  if (!hasSubstance(summary, isLesson ? 10 : 20)) reasons.push('tactic_summary lacks substance');
+
+  if (isLesson) {
+    // Relaxed lesson validation: need title + summary + some content
+    if (!item.how_to_execute && !item.source_excerpt) reasons.push('no how_to_execute or source_excerpt');
+    // Accept defaults for attribution
+    if (!item.framework) item.framework = 'General';
+    if (!item.who) item.who = 'Unknown';
+    if (!item.source_location) item.source_location = 'Lesson content';
+  } else {
+    // Strict non-lesson validation
+    if (!hasSubstance(item.how_to_execute, 20)) reasons.push('how_to_execute lacks substance');
+    if (!hasSubstance(item.when_to_use, 15)) reasons.push('when_to_use lacks substance');
+    if (!hasSubstance(item.source_excerpt, 20)) reasons.push('source_excerpt too short');
+    if (!hasSubstance(item.macro_situation, 10)) reasons.push('macro_situation too short');
+    if (!item.framework || item.framework === '') reasons.push('framework missing');
+    if (!item.who || item.who === '') reasons.push('who missing');
+  }
+
+  // Anti-junk for all
+  if (title && summary && summary.toLowerCase().startsWith(title.toLowerCase().slice(0, 30))) {
+    reasons.push('title duplicates start of summary');
+  }
+
+  const HTML_PATTERN = /<[a-z][\s\S]*>/i;
+  const allText = [title, summary, item.how_to_execute, item.example_usage].join(' ');
+  if (HTML_PATTERN.test(allText)) reasons.push('html artifacts');
+
+  if (/&(?:ldquo|rdquo|lsquo|rsquo|amp|nbsp|mdash|ndash);|&#\d+;|&#x[0-9a-f]+;/i.test(`${title} ${summary} ${item.example_usage || ''}`)) {
+    reasons.push('html entities remain');
+  }
+
+  return reasons;
+}
+
+function hasSubstance(value: string | undefined | null, minChars: number): boolean {
+  if (!value || typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (trimmed.length < minChars) return false;
+  const wordCount = trimmed.split(/\s+/).filter(w => w.length > 1).length;
+  return wordCount >= 3;
+}
+
+// ═══════════════════════════════════════════
+// Composite Deduplication
+// ═══════════════════════════════════════════
+
+function compositeDedup(items: any[], isLesson = false): any[] {
+  const result: any[] = [];
+  const fingerprints = new Set<string>();
+  const threshold = isLesson ? 0.75 : 0.55;
+
+  for (const item of items) {
+    const fingerprint = normalizeFingerprint(item.tactic_summary || item.title || '');
+    if (fingerprint && fingerprints.has(fingerprint)) {
+      console.log(`[extract] DEDUP-FINGERPRINT: "${(item.title || '').slice(0, 40)}"`);
+      continue;
+    }
+
+    let isDupe = false;
+    for (const existing of result) {
+      const score = compositeSimilarity(item, existing);
+      if (score > threshold) {
+        console.log(`[extract] DEDUP: "${(item.title || '').slice(0, 40)}" ≈ "${(existing.title || '').slice(0, 40)}" (score: ${score.toFixed(2)})`);
+        isDupe = true;
+        break;
+      }
+    }
+    if (!isDupe) {
+      result.push(item);
+      if (fingerprint) fingerprints.add(fingerprint);
+    }
+  }
+
+  return result;
+}
+
+function normalizeFingerprint(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/&(?:ldquo|rdquo|lsquo|rsquo|amp|nbsp|mdash|ndash);/g, ' ')
+    .replace(/&#\d+;|&#x[0-9a-f]+;/gi, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length > 2)
+    .join(' ')
+    .trim();
+}
+
+function compositeSimilarity(a: any, b: any): number {
+  const titleOverlap = wordOverlap(a.title || '', b.title || '');
+  const summaryOverlap = wordOverlap(a.tactic_summary || '', b.tactic_summary || '');
+  const excerptOverlap = wordOverlap(a.source_excerpt || '', b.source_excerpt || '');
+  const metaMatch = (a.framework === b.framework && a.who === b.who) ? 1.0 : 0.0;
+  return (titleOverlap * 0.35) + (summaryOverlap * 0.30) + (excerptOverlap * 0.20) + (metaMatch * 0.15);
+}
+
+function wordOverlap(a: string, b: string): number {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  const toWords = (s: string) => new Set(norm(s).split(/\s+/).filter(w => w.length > 2));
+  const aw = toWords(a);
+  const bw = toWords(b);
+  if (aw.size === 0 || bw.size === 0) return 0;
+  const intersection = [...aw].filter(w => bw.has(w)).length;
+  return intersection / Math.min(aw.size, bw.size);
+}
+
+// ═══════════════════════════════════════════
+// DB helpers
+// ═══════════════════════════════════════════
+
+async function updateExtractionStatus(supabase: any, resourceId: string, status: string) {
+  const { error } = await supabase
+    .from('resources')
+    .update({ enrichment_status: status, updated_at: new Date().toISOString() })
+    .eq('id', resourceId);
+  if (error) console.error(`[extract] Status update failed: ${error.message}`);
+}
+
+async function saveExtractionLog(supabase: any, log: ExtractionLog) {
+  const storable = {
+    ...log,
+    rawAiResponse: log.rawAiResponse ? log.rawAiResponse.slice(0, 5000) : null,
+  };
+  console.log(`[extract-log] ${JSON.stringify({
+    resourceId: storable.resourceId,
+    outcome: storable.outcome,
+    raw: storable.rawItemCount,
+    normalized: storable.normalizedCount,
+    validated: storable.validatedCount,
+    deduped: storable.dedupedCount,
+    inserted: storable.insertedCount,
+    preservedEdited: storable.preservedUserEdited,
+    rejections: storable.rejections.length,
+    lessonPipeline: storable.lessonPipeline || null,
+    error: storable.error || null,
+  })}`);
+}
+
+// ═══════════════════════════════════════════
+// Deno.serve — main handler
+// ═══════════════════════════════════════════
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -101,17 +509,21 @@ Deno.serve(async (req) => {
 
     console.log(`[extract] Starting: "${resource.title}" (${resource.content.length} chars)`);
 
-    // ── 2. Run AI extraction (direct, no chained edge function) ──
+    // ── 2. Run AI extraction (direct inline — no chained edge functions) ──
     const decodedContent = decodeHTMLEntities(resource.content);
     const isLesson = isStructuredLesson(decodedContent);
     let rawItems: any[];
     let rawResponse: string | null = null;
+
     try {
       if (isLesson) {
+        console.log(`[extract] LESSON PATH — using inline 2-stage pipeline`);
         const result = await extractLessonDirect(LOVABLE_API_KEY, decodedContent, resource.title, resource.description, resource.tags || []);
         rawItems = result.items;
         rawResponse = JSON.stringify({ lesson_pipeline: result.pipelineLog });
+        log.lessonPipeline = result.pipelineLog;
       } else {
+        console.log(`[extract] STANDARD PATH — direct AI call`);
         const result = await callAIDirect(LOVABLE_API_KEY, decodedContent, resource.title, resource.tags || [], resource.resource_type);
         rawItems = result.items;
         rawResponse = result.rawContent;
@@ -132,12 +544,14 @@ Deno.serve(async (req) => {
     const normalized = rawItems.map(normalizeItem);
     log.normalizedCount = normalized.length;
 
-    // ── 4. Validate ──
+    // ── 4. Validate (lesson-aware) ──
     const validated: any[] = [];
+    const rejectReasons: Record<string, number> = {};
     for (const item of normalized) {
-      const reasons = validateItem(item);
+      const reasons = validateItem(item, isLesson);
       if (reasons.length > 0) {
         log.rejections.push({ title: (item.title || '').slice(0, 60), reasons });
+        for (const r of reasons) { rejectReasons[r] = (rejectReasons[r] || 0) + 1; }
         console.log(`[extract] REJECTED "${(item.title || '').slice(0, 50)}": ${reasons.join('; ')}`);
       } else {
         validated.push(item);
@@ -145,19 +559,32 @@ Deno.serve(async (req) => {
     }
     log.validatedCount = validated.length;
 
-    // ── 5. Composite dedup ──
-    const deduped = compositeDedup(validated);
+    if (isLesson && log.lessonPipeline) {
+      log.lessonPipeline.validatedCount = validated.length;
+      log.lessonPipeline.validationRejects = rejectReasons;
+    }
+
+    console.log(`[extract] "${resource.title}": ${validated.length} validated from ${normalized.length} normalized`);
+    if (Object.keys(rejectReasons).length > 0) {
+      console.log(`[extract] Rejection reasons: ${JSON.stringify(rejectReasons)}`);
+    }
+
+    // ── 5. Composite dedup (conservative for lessons) ──
+    const deduped = compositeDedup(validated, isLesson);
     log.dedupedCount = deduped.length;
-    console.log(`[extract] "${resource.title}": ${deduped.length} after validation+dedup (from ${rawItems.length} raw)`);
+    console.log(`[extract] "${resource.title}": ${deduped.length} after dedup (from ${validated.length} validated)`);
+
+    if (isLesson && log.lessonPipeline) {
+      log.lessonPipeline.dedupedFinal = deduped.length;
+    }
 
     // ── 6. Quality threshold gate ──
-    const MIN_ITEMS = 1;
-    if (deduped.length < MIN_ITEMS) {
+    if (deduped.length < 1) {
       log.outcome = 'below_threshold';
       await saveExtractionLog(supabase, log);
       await updateExtractionStatus(supabase, resourceId, 'extraction_empty');
-      console.log(`[extract] ⚠️ "${resource.title}": ${deduped.length} items below threshold — preserving existing KIs`);
-      return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold — existing KIs preserved', log });
+      console.log(`[extract] ⚠️ "${resource.title}": 0 items — preserving existing KIs`);
+      return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold', log });
     }
 
     // ── 6b. Protect user-edited KIs ──
@@ -170,10 +597,6 @@ Deno.serve(async (req) => {
     const userEditedCount = userEditedKIs?.length || 0;
     log.preservedUserEdited = userEditedCount;
 
-    if (userEditedCount > 0) {
-      console.log(`[extract] Preserving ${userEditedCount} user-edited KIs for "${resource.title}"`);
-    }
-
     // ── 6c. Delete ONLY non-user-edited KIs (safe replace) ──
     const { error: deleteError } = await supabase
       .from('knowledge_items')
@@ -182,7 +605,6 @@ Deno.serve(async (req) => {
       .eq('user_edited', false);
 
     if (deleteError) {
-      console.error(`[extract] Failed to clear old KIs: ${deleteError.message}`);
       log.outcome = 'delete_failed';
       log.error = deleteError.message;
       await saveExtractionLog(supabase, log);
@@ -241,408 +663,3 @@ Deno.serve(async (req) => {
     return respond({ error: error?.message || 'Failed' }, 500);
   }
 });
-
-// ═══════════════════════════════════════════
-// Types
-// ═══════════════════════════════════════════
-
-interface ExtractionLog {
-  resourceId: string;
-  title: string;
-  contentLength: number;
-  rawItemCount: number;
-  normalizedCount: number;
-  validatedCount: number;
-  dedupedCount: number;
-  insertedCount: number;
-  rejections: { title: string; reasons: string[] }[];
-  rawAiResponse: string | null;
-  preservedUserEdited: number;
-  outcome: string;
-  error?: string;
-}
-
-// ═══════════════════════════════════════════
-// Helpers
-// ═══════════════════════════════════════════
-
-function respond(data: Record<string, any>, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
-}
-
-async function updateExtractionStatus(supabase: any, resourceId: string, status: string) {
-  const { error } = await supabase
-    .from('resources')
-    .update({ enrichment_status: status, updated_at: new Date().toISOString() })
-    .eq('id', resourceId);
-  if (error) console.error(`[extract] Status update failed: ${error.message}`);
-}
-
-async function saveExtractionLog(supabase: any, log: ExtractionLog) {
-  // Truncate raw AI response for storage (keep first 5000 chars for debugging)
-  const storable = {
-    ...log,
-    rawAiResponse: log.rawAiResponse ? log.rawAiResponse.slice(0, 5000) : null,
-  };
-  console.log(`[extract-log] ${JSON.stringify({
-    resourceId: storable.resourceId,
-    outcome: storable.outcome,
-    raw: storable.rawItemCount,
-    normalized: storable.normalizedCount,
-    validated: storable.validatedCount,
-    deduped: storable.dedupedCount,
-    inserted: storable.insertedCount,
-    preservedEdited: storable.preservedUserEdited,
-    rejections: storable.rejections.length,
-    error: storable.error || null,
-  })}`);
-}
-
-// ═══════════════════════════════════════════
-// Normalization
-// ═══════════════════════════════════════════
-
-/**
- * Normalizes a raw AI output item into a consistent shape.
- * Handles: arrays → joined text, numbered steps → preserved, bullets → preserved,
- * objects → JSON string, numbers → string.
- */
-function normalizeItem(raw: any): any {
-  const chapter = normalizeString(raw.chapter, 'messaging').toLowerCase().replace(/[\s-]+/g, '_');
-  const knowledgeType = normalizeString(raw.knowledge_type, 'skill').toLowerCase();
-
-  return {
-    title: normalizeString(raw.title),
-    framework: normalizeString(raw.framework, 'General'),
-    who: normalizeString(raw.who, 'Unknown'),
-    source_excerpt: normalizeString(raw.source_excerpt),
-    source_location: normalizeString(raw.source_location),
-    macro_situation: normalizeString(raw.macro_situation),
-    micro_strategy: normalizeString(raw.micro_strategy),
-    why_it_matters: normalizeString(raw.why_it_matters),
-    how_to_execute: normalizeStructuredField(raw.how_to_execute),
-    what_this_unlocks: normalizeString(raw.what_this_unlocks),
-    when_to_use: normalizeString(raw.when_to_use),
-    when_not_to_use: normalizeString(raw.when_not_to_use),
-    example_usage: normalizeString(raw.example_usage || raw.example),
-    tactic_summary: normalizeString(raw.tactic_summary),
-    chapter: VALID_CHAPTERS.has(chapter) ? chapter : 'messaging',
-    knowledge_type: VALID_TYPES.has(knowledgeType) ? knowledgeType : 'skill',
-    sub_chapter: normalizeString(raw.sub_chapter) || null,
-    applies_to_contexts: normalizeArray(raw.applies_to_contexts, ['all']),
-    tags: normalizeArray(raw.tags, []),
-  };
-}
-
-/** Convert any value to a trimmed string. Arrays joined by newlines, objects JSON-stringified. */
-function normalizeString(v: any, fallback = ''): string {
-  if (typeof v === 'string') return v.trim();
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  if (Array.isArray(v)) return v.map((x: any) => normalizeString(x)).filter(Boolean).join('\n');
-  if (v && typeof v === 'object') return JSON.stringify(v);
-  return fallback;
-}
-
-/** 
- * Normalize structured fields like how_to_execute that commonly come as:
- * - numbered steps: "1. Do X\n2. Do Y"
- * - arrays of strings: ["Step 1", "Step 2"]
- * - arrays of objects: [{step: "...", detail: "..."}]
- * - bullet lists: "- Do X\n- Do Y"
- */
-function normalizeStructuredField(v: any): string {
-  if (typeof v === 'string') return v.trim();
-  if (Array.isArray(v)) {
-    return v.map((item: any, i: number) => {
-      if (typeof item === 'string') return `${i + 1}. ${item.trim()}`;
-      if (item && typeof item === 'object') {
-        // Handle {step: "...", detail: "..."} or {action: "..."} shapes
-        const text = item.step || item.action || item.description || item.text || JSON.stringify(item);
-        const detail = item.detail || item.explanation || '';
-        return `${i + 1}. ${normalizeString(text)}${detail ? ' — ' + normalizeString(detail) : ''}`;
-      }
-      return `${i + 1}. ${String(item)}`;
-    }).join('\n');
-  }
-  if (v && typeof v === 'object') return JSON.stringify(v);
-  return '';
-}
-
-function normalizeArray(v: any, fallback: string[]): string[] {
-  if (Array.isArray(v)) {
-    const filtered = v.filter((x: any) => typeof x === 'string' && x.trim().length > 0).map((x: string) => x.trim());
-    return filtered.length > 0 ? filtered : fallback;
-  }
-  return fallback;
-}
-
-// ═══════════════════════════════════════════
-// Validation
-// ═══════════════════════════════════════════
-
-/**
- * Validates a normalized item. Returns array of rejection reasons (empty = pass).
- * Checks for substance, not just character count.
- */
-function validateItem(item: any): string[] {
-  const reasons: string[] = [];
-  const title = (item.title || '').trim();
-  const summary = (item.tactic_summary || '').trim();
-
-  // Title: must exist, min length, should start with a verb-like word
-  if (!title || title.length < 5) reasons.push('title too short');
-
-  const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|surface|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|seed|earn|secure|protect|defend|block|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i;
-  if (!verbLedPattern.test(title)) reasons.push('title not actionable');
-
-  // Core fields: check for meaningful content (not just length)
-  if (!hasSubstance(summary, 20)) reasons.push('tactic_summary lacks substance');
-  if (!hasSubstance(item.how_to_execute, 20)) reasons.push('how_to_execute lacks substance');
-  if (!hasSubstance(item.when_to_use, 15)) reasons.push('when_to_use lacks substance');
-  if (!hasSubstance(item.source_excerpt, 20)) reasons.push('source_excerpt too short');
-  if (!hasSubstance(item.macro_situation, 10)) reasons.push('macro_situation too short');
-
-  // Required attribution fields
-  if (!item.framework || item.framework === '') reasons.push('framework missing');
-  if (!item.who || item.who === '') reasons.push('who missing');
-
-  // Anti-junk: title should not be a copy of tactic_summary
-  if (title && summary && summary.toLowerCase().startsWith(title.toLowerCase().slice(0, 30))) {
-    reasons.push('title duplicates start of summary');
-  }
-
-  if (/&(?:ldquo|rdquo|lsquo|rsquo|amp|nbsp|mdash|ndash);|&#\d+;|&#x[0-9a-f]+;/i.test(`${title} ${summary} ${item.example_usage || ''}`)) {
-    reasons.push('html entities remain');
-  }
-
-  return reasons;
-}
-
-/** Check that a field has meaningful content: min char count AND min word count */
-function hasSubstance(value: string | undefined | null, minChars: number): boolean {
-  if (!value || typeof value !== 'string') return false;
-  const trimmed = value.trim();
-  if (trimmed.length < minChars) return false;
-  // Must have at least 3 words to be considered substantive
-  const wordCount = trimmed.split(/\s+/).filter(w => w.length > 1).length;
-  return wordCount >= 3;
-}
-
-// ═══════════════════════════════════════════
-// Composite Deduplication
-// ═══════════════════════════════════════════
-
-/**
- * Deduplicates using a composite signal:
- * - title word overlap (weight: 0.35)
- * - tactic_summary word overlap (weight: 0.30)
- * - source_excerpt word overlap (weight: 0.20)
- * - framework+who exact match bonus (weight: 0.15)
- * 
- * Threshold: composite > 0.55 = duplicate
- */
-function compositeDedup(items: any[], isLesson = false): any[] {
-  const result: any[] = [];
-  const fingerprints = new Set<string>();
-
-  for (const item of items) {
-    const fingerprint = normalizeFingerprint(item.tactic_summary || item.title || '');
-    if (fingerprint && fingerprints.has(fingerprint)) {
-      console.log(`[extract] DEDUP-FINGERPRINT: "${(item.title || '').slice(0, 40)}"`);
-      continue;
-    }
-
-    let isDupe = false;
-    for (const existing of result) {
-      const score = compositeSimilarity(item, existing);
-      if (score > (isLesson ? 0.75 : 0.55)) {
-
-// ═══════════════════════════════════════════
-// Direct AI Calling (no chained edge functions)
-// ═══════════════════════════════════════════
-
-const BASE_SYSTEM_PROMPT = `You are an elite sales execution coach. Extract TACTICAL PLAYS from content.
-
-A Knowledge Item is a PLAY — a structured, situational, reusable tactical entry that tells a rep exactly when, why, and how to execute.
-
-EVERY knowledge item MUST include ALL of these fields:
-1. "title" — action title (e.g. "Reframe the budget objection using cost-of-inaction")
-2. "framework" — methodology. REQUIRED.
-3. "who" — thought leader or author. REQUIRED.
-4. "source_excerpt" — EXACT quote from content. Min 2 sentences. REQUIRED.
-5. "source_location" — where in content this was found. REQUIRED.
-6. "macro_situation" — WHEN does this play apply? 2-4 sentences.
-7. "micro_strategy" — WHAT are you doing? 2-3 sentences.
-8. "why_it_matters" — WHY does this work? 2-3 sentences.
-9. "how_to_execute" — HOW step by step. 3-5 concrete steps.
-10. "what_this_unlocks" — OUTCOME. 2-3 sentences.
-11. "when_to_use" — trigger conditions (2-3 sentences)
-12. "when_not_to_use" — boundaries (2-3 sentences)
-13. "example_usage" — realistic talk track. Min 3-4 sentences.
-14. "tactic_summary" — concise 2-3 sentence summary
-15. "chapter" — one of: cold_calling|discovery|objection_handling|negotiation|competitors|personas|messaging|closing|stakeholder_navigation|expansion|demo|follow_up
-16. "knowledge_type" — skill|product|competitive
-
-Return ONLY a JSON array. Quality over quantity, but do not under-extract.`;
-
-const LESSON_ENUMERATE_SYSTEM = `You are an expert training content analyst. Create an exhaustive inventory of every distinct teachable concept in this lesson.
-
-For each concept, return a JSON object with:
-- "candidate_title": short descriptive title (3-10 words)
-- "concept_type": one of "framework", "technique", "rule", "signal", "method", "model", "tool", "heuristic", "tier", "criteria"
-- "source_hint": a short quote or reference from the content (1-2 sentences)
-- "section": which part of the lesson
-
-Be EXHAUSTIVE. List every distinct framework, scoring criteria, research technique, signal, decision rule, tiering system, metric, or heuristic. Return ONLY a JSON array.`;
-
-const LESSON_EXPAND_ADDENDUM = `
-
-STRUCTURED LESSON INSTRUCTIONS:
-Extract EVERY distinct tactic, framework, or actionable technique. Each concept is its OWN play.
-Titles may describe the concept naturally — they do NOT need to start with a verb.
-Look for named frameworks, scoring models, research techniques, prioritization criteria, signal detection methods, rules of thumb, tiering systems, and specific tools or workflows.`;
-
-async function aiRequest(apiKey: string, system: string, user: string, maxTokens = 16384): Promise<any> {
-  const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
-      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-      max_tokens: maxTokens,
-      temperature: 0.2,
-    }),
-  });
-  if (res.status === 429) {
-    await new Promise(r => setTimeout(r, 3000));
-    const retry = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-        max_tokens: maxTokens,
-        temperature: 0.2,
-      }),
-    });
-    if (!retry.ok) throw new Error(`AI error after retry: ${retry.status}`);
-    return retry.json();
-  }
-  if (!res.ok) throw new Error(`AI returned ${res.status}`);
-  return res.json();
-}
-
-function parseAiJson(result: any): any[] {
-  const raw = result?.choices?.[0]?.message?.content || '[]';
-  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  try { return JSON.parse(cleaned); } catch {}
-  const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
-  if (s !== -1 && e > s) { try { return JSON.parse(cleaned.slice(s, e + 1)); } catch {} }
-  return [];
-}
-
-async function callAIDirect(apiKey: string, content: string, title: string, tags: string[], resourceType?: string): Promise<{ items: any[]; rawContent: string }> {
-  const userPrompt = `Extract tactical plays from this content:\n\nTitle: ${title}\nTags: ${(tags || []).join(', ') || 'none'}\n\nContent:\n${content}\n\nReturn ONLY a JSON array of plays.`;
-  const result = await aiRequest(apiKey, BASE_SYSTEM_PROMPT, userPrompt);
-  return { items: parseAiJson(result), rawContent: result?.choices?.[0]?.message?.content || '' };
-}
-
-async function extractLessonDirect(
-  apiKey: string, content: string, title: string, description: string | null, tags: string[]
-): Promise<{ items: any[]; pipelineLog: any }> {
-  const pLog: any = { stage1: 0, stage2: 0, recovery: 0, final: 0 };
-
-  console.log(`[extract] LESSON 2-STAGE | ${content.length} chars`);
-
-  // Stage 1: Enumerate
-  const enumPrompt = `Analyze this lesson and list every distinct teachable concept:\n\nTitle: ${title}\n${description ? `Description: ${description}` : ''}\n\nContent:\n${content}\n\nList EVERY distinct concept. Do NOT merge adjacent concepts.`;
-  let candidates: any[] = [];
-  try {
-    candidates = parseAiJson(await aiRequest(apiKey, LESSON_ENUMERATE_SYSTEM, enumPrompt, 4096));
-    pLog.stage1 = candidates.length;
-    console.log(`[extract] Stage 1: ${candidates.length} candidates`);
-  } catch (err: any) { console.error('[extract] Stage 1 failed:', err?.message); }
-
-  // Stage 2: Expand
-  const candidateList = candidates.length > 0
-    ? candidates.map((c: any, i: number) => `${i + 1}. ${c.candidate_title || 'Untitled'} [${c.concept_type || 'technique'}]`).join('\n')
-    : '';
-  const expandPrompt = `Extract tactical plays from this training lesson.\n\nTitle: ${title}\nTags: ${tags.join(', ')}\n${candidateList ? `\nYou MUST produce a play for EACH of these ${candidates.length} concepts:\n${candidateList}\n` : ''}\nContent:\n${content}\n\nReturn ONLY a JSON array. One play per concept. Do not merge or skip any.`;
-
-  let rawItems: any[] = [];
-  try {
-    rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, expandPrompt));
-    pLog.stage2 = rawItems.length;
-    console.log(`[extract] Stage 2: ${rawItems.length} raw items`);
-  } catch (err: any) { console.error('[extract] Stage 2 failed:', err?.message); }
-
-  // Stage 3: Recovery for missed candidates
-  if (candidates.length > 0 && rawItems.length < candidates.length) {
-    const titles = rawItems.map((it: any) => (it.title || '').toLowerCase());
-    const missed = candidates.filter((c: any) => {
-      const ct = (c.candidate_title || '').toLowerCase();
-      return !titles.some((t: string) => t.includes(ct.slice(0, 15)) || ct.includes(t.slice(0, 15)));
-    });
-    if (missed.length > 0 && missed.length <= 12) {
-      console.log(`[extract] Recovery: ${missed.length} missed candidates`);
-      const missedList = missed.map((c: any, i: number) => `${i + 1}. ${c.candidate_title} [${c.concept_type}]`).join('\n');
-      try {
-        const recoveryItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM,
-          `These concepts were missed. Extract a play for EACH:\n\n${missedList}\n\nTitle: ${title}\nContent:\n${content}\n\nReturn ONLY a JSON array.`));
-        rawItems.push(...recoveryItems);
-        pLog.recovery = recoveryItems.length;
-        console.log(`[extract] Recovery: ${recoveryItems.length} added`);
-      } catch (err: any) { console.error('[extract] Recovery failed:', err?.message); }
-    }
-  }
-
-  pLog.final = rawItems.length;
-  return { items: rawItems, pipelineLog: pLog };
-}
-        console.log(`[extract] DEDUP: "${(item.title || '').slice(0, 40)}" ≈ "${(existing.title || '').slice(0, 40)}" (score: ${score.toFixed(2)})`);
-        isDupe = true;
-        break;
-      }
-    }
-    if (!isDupe) {
-      result.push(item);
-      if (fingerprint) fingerprints.add(fingerprint);
-    }
-  }
-
-  return result;
-}
-
-function normalizeFingerprint(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/&(?:ldquo|rdquo|lsquo|rsquo|amp|nbsp|mdash|ndash);/g, ' ')
-    .replace(/&#\d+;|&#x[0-9a-f]+;/gi, ' ')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(word => word.length > 2)
-    .join(' ')
-    .trim();
-}
-
-function compositeSimilarity(a: any, b: any): number {
-  const titleOverlap = wordOverlap(a.title || '', b.title || '');
-  const summaryOverlap = wordOverlap(a.tactic_summary || '', b.tactic_summary || '');
-  const excerptOverlap = wordOverlap(a.source_excerpt || '', b.source_excerpt || '');
-  const metaMatch = (a.framework === b.framework && a.who === b.who) ? 1.0 : 0.0;
-
-  return (titleOverlap * 0.35) + (summaryOverlap * 0.30) + (excerptOverlap * 0.20) + (metaMatch * 0.15);
-}
-
-function wordOverlap(a: string, b: string): number {
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-  const toWords = (s: string) => new Set(norm(s).split(/\s+/).filter(w => w.length > 2));
-  const aw = toWords(a);
-  const bw = toWords(b);
-  if (aw.size === 0 || bw.size === 0) return 0;
-  const intersection = [...aw].filter(w => bw.has(w)).length;
-  return intersection / Math.min(aw.size, bw.size);
-}
-
