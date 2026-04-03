@@ -5130,6 +5130,56 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_podcast_queue_items: {
+        Args: { p_max_items?: number; p_max_processing?: number }
+        Returns: {
+          artwork_url: string | null
+          attempts: number
+          audio_url: string | null
+          batch_id: string | null
+          content_validation: Json | null
+          created_at: string
+          episode_description: string | null
+          episode_duration: string | null
+          episode_guest: string | null
+          episode_published: string | null
+          episode_title: string
+          episode_url: string
+          error_message: string | null
+          failure_type: string | null
+          host_platform: string | null
+          id: string
+          ki_count: number | null
+          ki_status: string | null
+          metadata_status: string | null
+          original_episode_url: string | null
+          pipeline_stage: string | null
+          platform: string | null
+          processed_at: string | null
+          raw_transcript: string | null
+          resolution_method: string | null
+          resolved_url: string | null
+          resource_id: string | null
+          review_reason: string | null
+          show_author: string | null
+          show_title: string | null
+          source_registry_id: string | null
+          status: string
+          structured_transcript: string | null
+          transcript_length: number | null
+          transcript_preview: string | null
+          transcript_section_count: number | null
+          transcript_status: string | null
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "podcast_import_queue"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       is_approved_user: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {

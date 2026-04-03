@@ -114,22 +114,15 @@ async function processItem(
 ): Promise<{ result: string; resource_id?: string; ki_count?: number; error?: string }> {
   const isReprocessStructure = queueItem.transcript_status === "transcript_ready" && queueItem.raw_transcript;
   const detectedPlatform = detectPlatform(queueItem.episode_url);
+  // Mutable resolved metadata — populated during resolve step, used for resource creation
+  const resolvedMeta: Record<string, any> = {};
 
-  // ── Claim ──
-  const { error: claimErr } = await supabase
-    .from("podcast_import_queue")
-    .update({
-      status: "processing",
-      pipeline_stage: isReprocessStructure ? "preprocessing" : "resolving",
-      platform: detectedPlatform,
-      original_episode_url: queueItem.original_episode_url || queueItem.episode_url,
-      transcript_status: isReprocessStructure ? "transcript_ready" : "resolving_link",
-      updated_at: now(),
-    })
-    .eq("id", queueItem.id)
-    .eq("status", "queued");
-
-  if (claimErr) throw new Error(`Failed to claim: ${claimErr.message}`);
+  // ── Post-claim init (already claimed atomically via RPC) ──
+  await updateQueueItem(supabase, queueItem.id, {
+    platform: detectedPlatform,
+    original_episode_url: queueItem.original_episode_url || queueItem.episode_url,
+    transcript_status: isReprocessStructure ? "transcript_ready" : "resolving_link",
+  });
 
   console.log(`[${queueItem.id}] Processing: ${queueItem.episode_title}${isReprocessStructure ? " (reprocess)" : ""}`);
 
@@ -193,8 +186,7 @@ async function processItem(
     const hasAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
       resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl || directAudioFallback;
 
-    // Persist resolved metadata
-    const resolvedMeta: Record<string, any> = {};
+    // Persist resolved metadata (populates the hoisted resolvedMeta object)
     if (resolveResult?.metadata) {
       const m = resolveResult.metadata;
       if (m.title && !queueItem.episode_title) resolvedMeta.episode_title = m.title;
@@ -354,10 +346,12 @@ async function processItem(
         `Source: podcast · Ingested ${new Date().toISOString().split("T")[0]}`,
       ].filter(Boolean).join("\n");
 
+      // Merge resolved metadata over stale queueItem values
+      const merged = { ...queueItem, ...resolvedMeta };
       const detectedPlatformTag = detectPlatform(queueItem.episode_url);
       const insertPayload: Record<string, any> = {
         user_id: queueItem.user_id,
-        title: queueItem.episode_title || queueItem.episode_url,
+        title: merged.episode_title || queueItem.episode_url,
         description,
         resource_type: "transcript",
         tags: ["podcast", detectedPlatformTag].filter(t => t !== "unknown"),
@@ -369,15 +363,15 @@ async function processItem(
         enrichment_status: "deep_enriched",
         enrichment_version: 2,
         validation_version: 2,
-        original_url: queueItem.original_episode_url || queueItem.episode_url,
-        audio_url: queueItem.audio_url || null,
-        host_platform: queueItem.host_platform || null,
-        show_title: queueItem.show_title || queueItem.show_author || null,
-        episode_description: queueItem.episode_description?.slice(0, 5000) || null,
-        artwork_url: queueItem.artwork_url || null,
+        original_url: merged.original_episode_url || queueItem.episode_url,
+        audio_url: merged.audio_url || null,
+        host_platform: merged.host_platform || null,
+        show_title: merged.show_title || queueItem.show_author || null,
+        episode_description: merged.episode_description?.slice(0, 5000) || null,
+        artwork_url: merged.artwork_url || null,
         transcript_status: "transcript_structured",
-        metadata_status: queueItem.metadata_status || "pending",
-        resolution_method: queueItem.resolution_method || "transcribed",
+        metadata_status: merged.metadata_status || "pending",
+        resolution_method: merged.resolution_method || "transcribed",
         content_classification: "audio",
       };
 
@@ -491,19 +485,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Claim up to CONCURRENCY items ──
-    const { data: candidates } = await supabase
-      .from("podcast_import_queue")
-      .select("*")
-      .eq("status", "queued")
-      .order("created_at", { ascending: true })
-      .limit(CONCURRENCY);
+    // ── Atomically claim items with global concurrency guard ──
+    const { data: candidates, error: claimErr } = await supabase
+      .rpc("claim_podcast_queue_items", { p_max_items: CONCURRENCY, p_max_processing: CONCURRENCY });
 
-    if (!candidates?.length) {
-      return json({ message: "No queued items", processed: 0 });
+    if (claimErr) {
+      console.error("Claim RPC error:", claimErr);
+      return json({ error: "Failed to claim items" }, 500);
     }
 
-    console.log(`Claimed ${candidates.length} items for processing`);
+    if (!candidates?.length) {
+      return json({ message: "No queued items (or concurrency cap reached)", processed: 0 });
+    }
+
+    console.log(`Atomically claimed ${candidates.length} items for processing`);
 
     // ── Process all items concurrently ──
     const results = await Promise.allSettled(
