@@ -377,6 +377,8 @@ function hasSubstance(value: string | undefined | null, minChars: number): boole
 function compositeDedup(items: any[], isLesson = false): any[] {
   const result: any[] = [];
   const fingerprints = new Set<string>();
+  // Lessons use 0.75 (conservative) to avoid merging adjacent distinct tactics.
+  // Non-lessons use 0.55 (aggressive) for tighter dedup.
   const threshold = isLesson ? 0.75 : 0.55;
 
   for (const item of items) {
