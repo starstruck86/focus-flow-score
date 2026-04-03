@@ -245,6 +245,67 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
 }
 
 // ═══════════════════════════════════════════
+// Challenger classification (deterministic heuristic)
+// Runs AFTER normalization, BEFORE insert. One label per KI.
+// ═══════════════════════════════════════════
+
+const TAKE_CONTROL_SIGNALS = /\b(close|commit|lock|secure|push|drive|accelerate|urgency|deadline|timeline|budget|decision|status.?quo|tension|challenge|confront|insist|force|demand|pressure|next.?step|action.?item|contract|sign|agree|escalat|compet|risk.?of|cost.?of.?inaction|lose|pain|consequence)\b/i;
+const TAILOR_SIGNALS = /\b(persona|stakeholder|role|industry|segment|vertical|size|context|adapt|customize|tailor|adjust|reframe.?for|position.?for|align.?to|specific|depending.?on|varies.?by|buyer.?type|audience|executive|champion|end.?user|economic.?buyer|technical.?buyer|department|C.?suite|VP|director)\b/i;
+
+function classifyChallengerType(item: any): 'teach' | 'tailor' | 'take_control' {
+  const blob = [item.title, item.tactic_summary, item.how_to_execute].filter(Boolean).join(' ');
+  // Check take_control first (most specific)
+  if (TAKE_CONTROL_SIGNALS.test(blob)) return 'take_control';
+  // Then tailor
+  if (TAILOR_SIGNALS.test(blob)) return 'tailor';
+  // Default: teach (introduces insight, reframes, exposes gaps)
+  return 'teach';
+}
+
+// ═══════════════════════════════════════════
+// Pipeline guardrail metrics (observability only — never gates)
+// ═══════════════════════════════════════════
+
+interface GuardrailMetrics {
+  stage1_candidate_count: number;
+  stage2_raw_count: number;
+  validated_count: number;
+  deduped_count: number;
+  stage2_coverage_ratio: number;
+  validation_pass_rate: number;
+  dedup_loss_rate: number;
+  flags: {
+    enum_regression: boolean;
+    expansion_regression: boolean;
+    validation_regression: boolean;
+    dedup_regression: boolean;
+  };
+  challenger_distribution: Record<string, number>;
+}
+
+function computeGuardrails(s1: number, s2: number, val: number, ded: number): GuardrailMetrics {
+  const coverage = s1 > 0 ? s2 / s1 : 1;
+  const passRate = s2 > 0 ? val / s2 : 1;
+  const dedupLoss = val > 0 ? (val - ded) / val : 0;
+  return {
+    stage1_candidate_count: s1,
+    stage2_raw_count: s2,
+    validated_count: val,
+    deduped_count: ded,
+    stage2_coverage_ratio: Math.round(coverage * 100) / 100,
+    validation_pass_rate: Math.round(passRate * 100) / 100,
+    dedup_loss_rate: Math.round(dedupLoss * 100) / 100,
+    flags: {
+      enum_regression: s1 < 20,
+      expansion_regression: coverage < 0.6,
+      validation_regression: passRate < 0.7,
+      dedup_regression: dedupLoss > 0.2,
+    },
+    challenger_distribution: {},
+  };
+}
+
+// ═══════════════════════════════════════════
 // Normalization
 // ═══════════════════════════════════════════
 
