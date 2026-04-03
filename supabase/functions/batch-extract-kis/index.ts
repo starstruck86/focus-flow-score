@@ -1,5 +1,33 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const LESSON_TRANSCRIPT_MARKER = '--- Video Transcript ---';
+const VALID_CHAPTERS = new Set([
+  'cold_calling', 'discovery', 'objection_handling', 'negotiation', 'competitors',
+  'personas', 'messaging', 'closing', 'stakeholder_navigation', 'expansion', 'demo', 'follow_up',
+]);
+const VALID_TYPES = new Set(['skill', 'product', 'competitive']);
+
+function isTranscriptType(resourceType?: string): boolean {
+  return ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
+    (resourceType || '').toLowerCase(),
+  );
+}
+
+function isStructuredLesson(content: string): boolean {
+  const markerIndex = content.indexOf(LESSON_TRANSCRIPT_MARKER);
+  return markerIndex > 500;
+}
+
+function decodeHTMLEntities(text: string): string {
+  return text
+    .replace(/&ldquo;/g, '\u201C').replace(/&rdquo;/g, '\u201D')
+    .replace(/&lsquo;/g, '\u2018').replace(/&rsquo;/g, '\u2019')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ').replace(/&mdash;/g, '\u2014').replace(/&ndash;/g, '\u2013')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -73,13 +101,39 @@ Deno.serve(async (req) => {
 
     console.log(`[extract] Starting: "${resource.title}" (${resource.content.length} chars)`);
 
-    // ── 2. Run AI extraction ──
+    // ── 2. Run extraction via the shared lesson-aware extractor ──
     let rawItems: any[];
     let rawResponse: string | null = null;
     try {
-      const aiResult = await callAI(LOVABLE_API_KEY, resource.content, resource.title, resource.tags || []);
-      rawItems = aiResult.items;
-      rawResponse = aiResult.rawContent;
+      const extractorRes = await fetch(`${supabaseUrl}/functions/v1/extract-tactics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'x-batch-key': serviceRoleKey,
+        },
+        body: JSON.stringify({
+          resourceId: resource.id,
+          title: resource.title,
+          content: decodeHTMLEntities(resource.content),
+          description: resource.description,
+          tags: resource.tags || [],
+          resourceType: resource.resource_type,
+        }),
+      });
+
+      const extractorJson = await extractorRes.json();
+      if (!extractorRes.ok) {
+        throw new Error(extractorJson?.error || `Shared extractor returned ${extractorRes.status}`);
+      }
+
+      rawItems = Array.isArray(extractorJson?.items) ? extractorJson.items : [];
+      rawResponse = JSON.stringify({
+        items: rawItems.length,
+        chunks_total: extractorJson?.chunks_total ?? null,
+        chunks_processed: extractorJson?.chunks_processed ?? null,
+        chunks_failed: extractorJson?.chunks_failed ?? null,
+      });
       log.rawAiResponse = rawResponse;
     } catch (aiErr: any) {
       log.outcome = 'ai_error';
@@ -110,7 +164,7 @@ Deno.serve(async (req) => {
     log.validatedCount = validated.length;
 
     // ── 5. Composite dedup ──
-    const deduped = compositeDedup(validated).slice(0, 15);
+    const deduped = compositeDedup(validated);
     log.dedupedCount = deduped.length;
     console.log(`[extract] "${resource.title}": ${deduped.length} after validation+dedup (from ${rawItems.length} raw)`);
 
@@ -268,12 +322,6 @@ async function saveExtractionLog(supabase: any, log: ExtractionLog) {
 // Normalization
 // ═══════════════════════════════════════════
 
-const VALID_CHAPTERS = new Set([
-  'cold_calling', 'discovery', 'objection_handling', 'negotiation', 'competitors',
-  'personas', 'messaging', 'closing', 'stakeholder_navigation', 'expansion', 'demo', 'follow_up',
-]);
-const VALID_TYPES = new Set(['skill', 'product', 'competitive']);
-
 /**
  * Normalizes a raw AI output item into a consistent shape.
  * Handles: arrays → joined text, numbered steps → preserved, bullets → preserved,
@@ -358,12 +406,17 @@ function normalizeArray(v: any, fallback: string[]): string[] {
  */
 function validateItem(item: any): string[] {
   const reasons: string[] = [];
+  const title = (item.title || '').trim();
+  const summary = (item.tactic_summary || '').trim();
 
   // Title: must exist, min length, should start with a verb-like word
-  if (!item.title || item.title.length < 5) reasons.push('title too short');
+  if (!title || title.length < 5) reasons.push('title too short');
+
+  const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|surface|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|seed|earn|secure|protect|defend|block|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i;
+  if (!verbLedPattern.test(title)) reasons.push('title not actionable');
 
   // Core fields: check for meaningful content (not just length)
-  if (!hasSubstance(item.tactic_summary, 20)) reasons.push('tactic_summary lacks substance');
+  if (!hasSubstance(summary, 20)) reasons.push('tactic_summary lacks substance');
   if (!hasSubstance(item.how_to_execute, 20)) reasons.push('how_to_execute lacks substance');
   if (!hasSubstance(item.when_to_use, 15)) reasons.push('when_to_use lacks substance');
   if (!hasSubstance(item.source_excerpt, 20)) reasons.push('source_excerpt too short');
@@ -374,9 +427,12 @@ function validateItem(item: any): string[] {
   if (!item.who || item.who === '') reasons.push('who missing');
 
   // Anti-junk: title should not be a copy of tactic_summary
-  if (item.title && item.tactic_summary &&
-      item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 30))) {
+  if (title && summary && summary.toLowerCase().startsWith(title.toLowerCase().slice(0, 30))) {
     reasons.push('title duplicates start of summary');
+  }
+
+  if (/&(?:ldquo|rdquo|lsquo|rsquo|amp|nbsp|mdash|ndash);|&#\d+;|&#x[0-9a-f]+;/i.test(`${title} ${summary} ${item.example_usage || ''}`)) {
+    reasons.push('html entities remain');
   }
 
   return reasons;
@@ -407,8 +463,15 @@ function hasSubstance(value: string | undefined | null, minChars: number): boole
  */
 function compositeDedup(items: any[]): any[] {
   const result: any[] = [];
+  const fingerprints = new Set<string>();
 
   for (const item of items) {
+    const fingerprint = normalizeFingerprint(item.tactic_summary || item.title || '');
+    if (fingerprint && fingerprints.has(fingerprint)) {
+      console.log(`[extract] DEDUP-FINGERPRINT: "${(item.title || '').slice(0, 40)}"`);
+      continue;
+    }
+
     let isDupe = false;
     for (const existing of result) {
       const score = compositeSimilarity(item, existing);
@@ -418,10 +481,25 @@ function compositeDedup(items: any[]): any[] {
         break;
       }
     }
-    if (!isDupe) result.push(item);
+    if (!isDupe) {
+      result.push(item);
+      if (fingerprint) fingerprints.add(fingerprint);
+    }
   }
 
   return result;
+}
+
+function normalizeFingerprint(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/&(?:ldquo|rdquo|lsquo|rsquo|amp|nbsp|mdash|ndash);/g, ' ')
+    .replace(/&#\d+;|&#x[0-9a-f]+;/gi, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length > 2)
+    .join(' ')
+    .trim();
 }
 
 function compositeSimilarity(a: any, b: any): number {
@@ -443,102 +521,3 @@ function wordOverlap(a: string, b: string): number {
   return intersection / Math.min(aw.size, bw.size);
 }
 
-// ═══════════════════════════════════════════
-// AI Call
-// ═══════════════════════════════════════════
-
-const SYSTEM_PROMPT = `You are an elite sales execution coach. Extract TACTICAL PLAYS from content.
-
-A Knowledge Item is a PLAY — a structured, situational, reusable tactical entry that tells a rep exactly when, why, and how to execute.
-
-EVERY knowledge item MUST include ALL of these fields:
-1. "title" — verb-led action title (e.g. "Reframe the budget objection using cost-of-inaction")
-2. "framework" — methodology (GAP Selling, Challenger Sale, MEDDPICC, Command of the Message, SPIN Selling, or "General"). REQUIRED.
-3. "who" — thought leader or author. REQUIRED.
-4. "source_excerpt" — EXACT quote from content. Min 2 sentences. REQUIRED.
-5. "source_location" — where in content this was found. REQUIRED.
-6. "macro_situation" — WHEN does this play apply? 2-4 sentences.
-7. "micro_strategy" — WHAT are you doing? 2-3 sentences.
-8. "why_it_matters" — WHY does this work? 2-3 sentences.
-9. "how_to_execute" — HOW step by step. Return as an ARRAY of 3-5 strings, each a concrete step with exact phrasing.
-10. "what_this_unlocks" — OUTCOME. 2-3 sentences.
-11. "when_to_use" — trigger conditions (2-3 sentences)
-12. "when_not_to_use" — boundaries (2-3 sentences)
-13. "example_usage" — realistic talk track. Min 3-4 sentences.
-14. "tactic_summary" — concise 2-3 sentence summary
-15. "chapter" — one of: cold_calling|discovery|objection_handling|negotiation|competitors|personas|messaging|closing|stakeholder_navigation|expansion|demo|follow_up
-16. "knowledge_type" — skill|product|competitive
-
-QUALITY GATES — REJECT any item that:
-- Has fields shorter than 2 sentences (except title, chapter, knowledge_type, how_to_execute steps)
-- Is generic advice without specific phrasing
-- Describes what to think rather than what to DO
-
-Return ONLY a JSON array. Extract 4-8 plays. Quality over quantity.`;
-
-async function callAI(apiKey: string, content: string, title: string, tags: string[]): Promise<{ items: any[]; rawContent: string }> {
-  const userPrompt = `Extract tactical plays from this content:
-
-Title: ${title}
-Tags: ${(tags || []).join(', ') || 'none'}
-
-Content:
-${content.slice(0, 30000)}
-
-Return ONLY a JSON array of plays.`;
-
-  const body = JSON.stringify({
-    model: 'google/gemini-2.5-flash',
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ],
-    max_tokens: 16384,
-    temperature: 0.2,
-  });
-
-  const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
-
-  let res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', { method: 'POST', headers, body });
-
-  if (res.status === 429) {
-    console.log('[extract] Rate limited, waiting 5s...');
-    await new Promise(r => setTimeout(r, 5000));
-    res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', { method: 'POST', headers, body });
-  }
-
-  if (!res.ok) {
-    const errorBody = await res.text();
-    console.error(`[extract] AI error response: ${errorBody.slice(0, 500)}`);
-    throw new Error(`AI returned ${res.status}`);
-  }
-
-  const result = await res.json();
-  const rawContent = result?.choices?.[0]?.message?.content || '';
-  const items = parseJsonResponse(rawContent);
-
-  return { items, rawContent };
-}
-
-function parseJsonResponse(raw: string): any[] {
-  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  try {
-    const parsed = JSON.parse(cleaned);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    // Attempt to find JSON array in the response
-    const s = cleaned.indexOf('[');
-    const e = cleaned.lastIndexOf(']');
-    if (s !== -1 && e > s) {
-      try {
-        const parsed = JSON.parse(cleaned.slice(s, e + 1));
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        console.error(`[extract] Failed to parse AI JSON. First 200 chars: ${cleaned.slice(0, 200)}`);
-        return [];
-      }
-    }
-    console.error(`[extract] No JSON array found in AI response. First 200 chars: ${cleaned.slice(0, 200)}`);
-    return [];
-  }
-}
