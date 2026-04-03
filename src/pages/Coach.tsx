@@ -1121,22 +1121,22 @@ export default function Coach() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className={cn("w-full", isSystemOSEnabled() ? "grid grid-cols-9" : "grid grid-cols-5")}>
-            <TabsTrigger value="simulate" className="gap-1">
-              <Swords className="h-3.5 w-3.5" /> Simulate
+          <TabsList className={cn("w-full overflow-x-auto flex", isSystemOSEnabled() ? "" : "")}>
+            <TabsTrigger value="simulate" className="gap-1 flex-shrink-0">
+              <Swords className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Simulate</span><span className="sm:hidden">Sim</span>
             </TabsTrigger>
-            <TabsTrigger value="drills" className="gap-1">
+            <TabsTrigger value="drills" className="gap-1 flex-shrink-0">
               <Shield className="h-3.5 w-3.5" /> Drills
             </TabsTrigger>
-            <TabsTrigger value="scorecard">Scorecard</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
-            <TabsTrigger value="trends">Trends</TabsTrigger>
+            <TabsTrigger value="scorecard" className="flex-shrink-0">Scorecard</TabsTrigger>
+            <TabsTrigger value="history" className="flex-shrink-0">History</TabsTrigger>
+            <TabsTrigger value="trends" className="flex-shrink-0">Trends</TabsTrigger>
             {isSystemOSEnabled() && (
               <>
-                <TabsTrigger value="weekly-review" className="text-[10px]">Review</TabsTrigger>
-                <TabsTrigger value="skill-lab" className="text-[10px]">Skill Lab</TabsTrigger>
-                <TabsTrigger value="patterns" className="text-[10px]">Patterns</TabsTrigger>
-                <TabsTrigger value="audit" className="text-[10px]">Audit</TabsTrigger>
+                <TabsTrigger value="weekly-review" className="text-[10px] flex-shrink-0">Review</TabsTrigger>
+                <TabsTrigger value="skill-lab" className="text-[10px] flex-shrink-0">Skills</TabsTrigger>
+                <TabsTrigger value="patterns" className="text-[10px] flex-shrink-0">Patterns</TabsTrigger>
+                <TabsTrigger value="audit" className="text-[10px] flex-shrink-0">Audit</TabsTrigger>
               </>
             )}
           </TabsList>
