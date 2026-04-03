@@ -656,7 +656,8 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/^\s*(?:Back|Next|Previous|Cancel)\s*$/gm, '')
     .replace(/^\s*\|\s*$/gm, '')
     .replace(/^\s*\d+\s*$/gm, '') // Standalone numbers (playlist indices)
-    // Remove lines that are just short repeated nav-like items (sidebar lesson titles leaking in)
+    // Remove lines that are only whitespace/noise with deep indent but keep real content
+    .replace(/^\s{6,}\S{0,5}\s*$/gm, '') // Lines with 6+ leading spaces and ≤5 non-space chars
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   
