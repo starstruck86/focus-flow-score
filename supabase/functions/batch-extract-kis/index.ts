@@ -189,14 +189,16 @@ async function extractLessonDirect(
     contentLength: content.length, stage1: 0, stage2Raw: 0, stage2Validated: 0,
     recoveryFound: 0, recoveryAdded: 0, dedupedFinal: 0,
     validationRejects: {} as Record<string, number>,
-    // New recovery observability fields
     initial_stage2_raw_count: 0, recovery_triggered: false,
     recovery_missing_candidate_count: 0, recovery_raw_count: 0, post_recovery_raw_count: 0,
   };
 
   console.log(`[lesson-pipeline] START | "${title}" | ${content.length} chars`);
 
-  // ── Stage 1: Exhaustive enumeration (unchanged) ──
+  // Short lessons skip recovery (only 2 AI calls instead of 3) to avoid edge function timeout
+  const isShortLesson = content.length < 8000;
+
+  // ── Stage 1: Exhaustive enumeration ──
   const enumPrompt = `Analyze this structured training lesson and create an exhaustive inventory of every distinct teachable concept, technique, framework, rule, signal, method, or heuristic.
 
 Title: ${title}
@@ -217,24 +219,26 @@ List EVERY distinct concept. If the lesson teaches 15 things, return 15 items. D
   }
 
   // ── Stage 2: Single-pass full KI expansion with candidate guidance ──
+  // Cap candidates at 18 to prevent response truncation (JSON too large for token limit)
   let rawItems: any[] = [];
+  const cappedCandidates = candidates.slice(0, 18);
 
-  const candidateList = candidates.length > 0
-    ? candidates.map((c: any, i: number) => `${i + 1}. ${c.candidate_title || 'Untitled'} [${c.concept_type || 'technique'}]`).join('\n')
+  const candidateList = cappedCandidates.length > 0
+    ? cappedCandidates.map((c: any, i: number) => `${i + 1}. ${c.candidate_title || 'Untitled'} [${c.concept_type || 'technique'}]`).join('\n')
     : '';
 
   const expandPrompt = `Extract tactical plays from this training lesson.
 
 Title: ${title}
 Tags: ${(tags || []).join(', ')}
-${candidateList ? `\nThe following ${candidates.length} concepts were identified. Extract a play for as many as you can:\n${candidateList}\n` : ''}
+${candidateList ? `\nThe following ${cappedCandidates.length} concepts were identified. Extract a play for EACH one:\n${candidateList}\n` : ''}
 Content:
 ${content}
 
-Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute, when_to_use, source_excerpt, chapter, knowledge_type. Keep each play concise but complete.`;
+Return ONLY a JSON array. Each play needs: title, framework, who, source_excerpt, source_location, tactic_summary, how_to_execute, when_to_use, when_not_to_use, example_usage, macro_situation, micro_strategy, why_it_matters, what_this_unlocks, chapter, knowledge_type. Be concise per field but extract ALL plays.`;
 
   try {
-    rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, expandPrompt, 32768));
+    rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, expandPrompt, 16384));
     pLog.stage2Raw = rawItems.length;
     console.log(`[lesson-pipeline] Stage 2: ${rawItems.length} raw items from single pass`);
   } catch (err: any) {
@@ -242,7 +246,7 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
     // Fallback: try without candidate list
     try {
       const fallbackPrompt = `Extract every tactical play from this training lesson.\n\nTitle: ${title}\nTags: ${(tags || []).join(', ')}\n\nContent:\n${content}\n\nReturn ONLY a JSON array. Keep each play concise.`;
-      rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, fallbackPrompt, 32768));
+      rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, fallbackPrompt, 24576));
       pLog.stage2Raw = rawItems.length;
       console.log(`[lesson-pipeline] Stage 2 fallback: ${rawItems.length} items`);
     } catch (err2: any) {
@@ -252,9 +256,10 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
 
   pLog.initial_stage2_raw_count = rawItems.length;
 
-  // ── Stage 2 Recovery: if expansion underperformed, recover missing candidates ──
+  // ── Stage 2 Recovery: only for long content where expansion significantly underperformed ──
+  // Skip recovery for short lessons to stay within edge function timeout (2 AI calls max)
   const coverageRatio = candidates.length > 0 ? rawItems.length / candidates.length : 1;
-  const shouldRecover = candidates.length >= 20 && coverageRatio < 0.75;
+  const shouldRecover = !isShortLesson && candidates.length >= 20 && coverageRatio < 0.6 && rawItems.length >= 3;
 
   if (shouldRecover) {
     console.log(`[lesson-pipeline] Stage 2 RECOVERY triggered | coverage=${(coverageRatio * 100).toFixed(0)}% (${rawItems.length}/${candidates.length})`);
@@ -265,13 +270,12 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
     const missingCandidates = candidates.filter((c: any) => {
       const cFp = normalizeFingerprint(c.candidate_title || '');
       if (!cFp) return false;
-      // Check if any expanded item title has significant word overlap
       return !expandedTitlesLower.some((eFp: string) => {
         const cWords = new Set(cFp.split(/\s+/).filter((w: string) => w.length > 2));
         const eWords = new Set(eFp.split(/\s+/).filter((w: string) => w.length > 2));
-        if (cWords.size === 0) return true; // skip empty
+        if (cWords.size === 0) return true;
         const overlap = [...cWords].filter((w: string) => eWords.has(w)).length;
-        return overlap / cWords.size > 0.5; // >50% word overlap = covered
+        return overlap / cWords.size > 0.5;
       });
     });
 
@@ -310,7 +314,6 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
 
   pLog.post_recovery_raw_count = rawItems.length;
   pLog.stage2Raw = rawItems.length;
-  // Derived recovery effectiveness fields
   const recoveryLift = rawItems.length - pLog.initial_stage2_raw_count;
   pLog.recovery_lift = recoveryLift;
   pLog.recovery_effective = recoveryLift > 0;
