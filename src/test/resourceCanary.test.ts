@@ -286,3 +286,56 @@ describe('Explainability Canary', () => {
     }
   });
 });
+
+// ── Post-Extraction KI Floor Invariant ────────────────────
+// Mirror of the computeMinKiFloor logic in batch-extract-kis.
+// If the edge function changes its floors, these tests must be updated in lockstep.
+function computeMinKiFloor(contentLength: number, isLesson: boolean): number {
+  if (contentLength < 500) return 0;
+  if (isLesson) {
+    if (contentLength < 2000) return 3;
+    if (contentLength < 5000) return 5;
+    if (contentLength < 10000) return 8;
+    return 12;
+  }
+  if (contentLength < 2000) return 1;
+  if (contentLength < 5000) return 2;
+  return 3;
+}
+
+describe('KI Floor Invariant Canary', () => {
+  it('lessons < 500 chars have floor 0 (too short)', () => {
+    expect(computeMinKiFloor(300, true)).toBe(0);
+  });
+
+  it('short lessons (500-2000 chars) require ≥ 3 KIs', () => {
+    expect(computeMinKiFloor(800, true)).toBe(3);
+    expect(computeMinKiFloor(1999, true)).toBe(3);
+  });
+
+  it('medium lessons (2000-5000 chars) require ≥ 5 KIs', () => {
+    expect(computeMinKiFloor(3500, true)).toBe(5);
+  });
+
+  it('substantial lessons (5000-10000 chars) require ≥ 8 KIs', () => {
+    expect(computeMinKiFloor(7000, true)).toBe(8);
+  });
+
+  it('large lessons (10000+ chars) require ≥ 12 KIs', () => {
+    expect(computeMinKiFloor(14729, true)).toBe(12);
+    expect(computeMinKiFloor(50000, true)).toBe(12);
+  });
+
+  it('non-lesson content has more conservative floors', () => {
+    expect(computeMinKiFloor(1000, false)).toBe(1);
+    expect(computeMinKiFloor(3000, false)).toBe(2);
+    expect(computeMinKiFloor(8000, false)).toBe(3);
+  });
+
+  it('Account Scoring benchmark (14729 chars) floor is ≤ 30', () => {
+    // Benchmark produces ~32 KIs; floor of 12 gives 2.5x headroom
+    const floor = computeMinKiFloor(14729, true);
+    expect(floor).toBeLessThanOrEqual(30);
+    expect(floor).toBeGreaterThanOrEqual(10);
+  });
+});

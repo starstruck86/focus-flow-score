@@ -578,6 +578,43 @@ function wordOverlap(a: string, b: string): number {
 }
 
 // ═══════════════════════════════════════════
+// Post-extraction invariant: minimum KI floor
+// ═══════════════════════════════════════════
+
+/**
+ * Computes the minimum acceptable KI count based on content length.
+ * This is the HARD GUARANTEE that prevents silent 0-KI or too-few-KI completions.
+ *
+ * For lessons (structured educational content):
+ *   < 500 chars  → 0 (too short to extract from, allowed to skip)
+ *   500-2000     → 3  (short lesson, at least a few concepts)
+ *   2000-5000    → 5  (medium lesson)
+ *   5000-10000   → 8  (substantial lesson)
+ *   10000+       → 12 (large lesson, benchmark shows ~30+ is normal)
+ *
+ * For non-lesson content (articles, podcasts, etc.):
+ *   < 500 chars  → 0
+ *   500-2000     → 1
+ *   2000-5000    → 2
+ *   5000+        → 3
+ */
+function computeMinKiFloor(contentLength: number, isLesson: boolean): number {
+  if (contentLength < 500) return 0;
+
+  if (isLesson) {
+    if (contentLength < 2000) return 3;
+    if (contentLength < 5000) return 5;
+    if (contentLength < 10000) return 8;
+    return 12;
+  }
+
+  // Non-lesson: more conservative floors
+  if (contentLength < 2000) return 1;
+  if (contentLength < 5000) return 2;
+  return 3;
+}
+
+// ═══════════════════════════════════════════
 // DB helpers
 // ═══════════════════════════════════════════
 
@@ -779,7 +816,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── 6. Quality threshold gate ──
+    // ── 6. Quality threshold gate + post-extraction invariant ──
+    // Hard invariant: nontrivial content must produce a minimum number of KIs
+    // proportional to content length. This prevents silent 0-KI completions.
+    const minKiFloor = computeMinKiFloor(resource.content.length, isLesson);
+
     if (deduped.length < 1) {
       log.outcome = isDryRun ? 'benchmark_below_threshold' : 'below_threshold';
       if (!isDryRun) {
@@ -788,6 +829,19 @@ Deno.serve(async (req) => {
       }
       console.log(`[extract] ⚠️ "${resource.title}": 0 items — preserving existing KIs`);
       return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold', log, benchmarkMode: isDryRun });
+    }
+
+    // Hard invariant: if yield is below the content-proportional floor, treat as failure
+    if (deduped.length < minKiFloor) {
+      const invariantMsg = `KI yield invariant violated: got ${deduped.length} KIs but floor is ${minKiFloor} for ${resource.content.length} chars (lesson=${isLesson})`;
+      console.error(`[extract] 🚨 INVARIANT FAIL "${resource.title}": ${invariantMsg}`);
+      log.outcome = isDryRun ? 'benchmark_invariant_fail' : 'invariant_fail';
+      log.error = invariantMsg;
+      if (!isDryRun) {
+        await saveExtractionLog(supabase, log);
+        await updateExtractionStatus(supabase, resourceId, 'extraction_failed');
+      }
+      return respond({ resourceId, title: resource.title, kis: 0, error: invariantMsg, log, benchmarkMode: isDryRun });
     }
 
     // ── BENCHMARK MODE: skip all DB mutations, return metrics only ──
