@@ -45,6 +45,7 @@ import { useCanonicalLifecycle, type BlockedReason } from '@/hooks/useCanonicalL
 import { useInUseResources } from '@/hooks/useInUseResources';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
+import { deriveReExtractStatus, formatRelativeTime } from '@/hooks/useReExtractResource';
 import type { Resource } from '@/hooks/useResources';
 import { InlineResourceDetail } from './InlineResourceDetail';
 
