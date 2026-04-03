@@ -335,7 +335,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
       )}
       {daveDrift && !daveOpen && (
-        <div className="fixed right-4 bottom-[calc(7.5rem+env(safe-area-inset-bottom))] z-50">
+        <div className="fixed right-4 bottom-[calc(8.5rem+env(safe-area-inset-bottom))] z-50">
           <button
             onClick={() => toast.error(
               `Dave is unavailable: deployment version mismatch (${daveDrift.expected} vs ${daveDrift.actual}). Redeploy dave functions to fix.`,
