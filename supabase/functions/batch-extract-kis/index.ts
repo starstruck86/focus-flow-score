@@ -612,11 +612,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { resourceId } = await req.json();
+    const { resourceId, benchmarkMode } = await req.json();
+    const isDryRun = benchmarkMode === true;
 
     if (!resourceId || typeof resourceId !== 'string') {
       return respond({ error: 'resourceId (string) required' }, 400);
     }
+
+    if (isDryRun) console.log(`[extract] 🔬 BENCHMARK MODE — no DB writes`);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
