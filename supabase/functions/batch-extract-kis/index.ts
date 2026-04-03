@@ -249,16 +249,19 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
 // Runs AFTER normalization, BEFORE insert. One label per KI.
 // ═══════════════════════════════════════════
 
-const TAKE_CONTROL_SIGNALS = /\b(close|commit|lock|secure|push|drive|accelerate|urgency|deadline|timeline|budget|decision|status.?quo|tension|challenge|confront|insist|force|demand|pressure|next.?step|action.?item|contract|sign|agree|escalat|compet|risk.?of|cost.?of.?inaction|lose|pain|consequence)\b/i;
-const TAILOR_SIGNALS = /\b(persona|stakeholder|role|industry|segment|vertical|size|context|adapt|customize|tailor|adjust|reframe.?for|position.?for|align.?to|specific|depending.?on|varies.?by|buyer.?type|audience|executive|champion|end.?user|economic.?buyer|technical.?buyer|department|C.?suite|VP|director)\b/i;
+// Challenger signals — carefully scoped to avoid false positives on generic sales content.
+// "take_control" requires DRIVING action, not just mentioning scoring/priority concepts.
+const TAKE_CONTROL_SIGNALS = /\b(close.?the|commit.?to|lock.?in|secure.?the|push.?for|drive.?urgency|accelerate.?the|create.?urgency|deadline|status.?quo|constructive.?tension|challenge.?the.?buyer|confront|insist.?on|demand.?a|next.?step|action.?item|contract|sign.?off|get.?agreement|cost.?of.?inaction|force.?a.?decision|overcome.?inertia)\b/i;
+const TAILOR_SIGNALS = /\b(persona|stakeholder|role-specific|industry.?specific|segment|vertical|adapt.?message|customize|tailor|adjust.?framing|reframe.?for|position.?for|align.?to.?their|depending.?on.?the|varies.?by|buyer.?type|audience|executive|champion|end.?user|economic.?buyer|technical.?buyer|C.?suite)\b/i;
+const TEACH_SIGNALS = /\b(insight|reframe|framework|model|score|criteria|method|signal|heuristic|tier|research|principle|rule.?of|mental.?model|data.?point|benchmark|metric|diagnos|assess|evaluat|classif|categoriz|prioritiz|gap|inefficien|overlooked|missed|blind.?spot|counter.?intuitive)\b/i;
 
 function classifyChallengerType(item: any): 'teach' | 'tailor' | 'take_control' {
   const blob = [item.title, item.tactic_summary, item.how_to_execute].filter(Boolean).join(' ');
-  // Check take_control first (most specific)
+  // Check take_control first (most specific — requires action-driving language)
   if (TAKE_CONTROL_SIGNALS.test(blob)) return 'take_control';
-  // Then tailor
+  // Then tailor (persona/context adaptation)
   if (TAILOR_SIGNALS.test(blob)) return 'tailor';
-  // Default: teach (introduces insight, reframes, exposes gaps)
+  // Default: teach (most common for lesson content — frameworks, insights, models)
   return 'teach';
 }
 
