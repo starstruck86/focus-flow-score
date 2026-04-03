@@ -63,15 +63,40 @@ BAD plays from transcripts (REJECT these):
 For each section of transcript, ask: "Could a sales rep USE this in their next call?" If the answer is vague, skip it.
 Extract 4-8 plays from the full transcript. Prioritize DEPTH over breadth — fewer, richer plays.`;
 
+const LESSON_ADDENDUM = `
+
+STRUCTURED LESSON INSTRUCTIONS:
+You are extracting from a structured training lesson that includes both written content and a video transcript. This is high-quality, curated educational content — it contains MORE tactical density than a typical podcast.
+
+Extract EVERY distinct tactic, framework, or actionable technique covered in the lesson. This content is deliberately structured to teach multiple concepts. DO NOT under-extract.
+
+Look for:
+- Named frameworks or scoring models (e.g. "Use Case and Budget" framework)
+- Specific research techniques with concrete steps
+- Prioritization criteria with examples
+- Signal detection methods (competitor usage, headcount growth, relevant problems)
+- Territory management strategies
+- Account scoring/tiering approaches
+
+Extract 8-15 plays from the full lesson. Each distinct technique or method is its own play.`;
+
 const DOCUMENT_ITEM_TARGET = '2-4';
 const TRANSCRIPT_ITEM_TARGET = '4-8';
+const LESSON_ITEM_TARGET = '8-15';
+
+const LESSON_TRANSCRIPT_MARKER = '--- Video Transcript ---';
+
+function isStructuredLesson(content: string): boolean {
+  const markerIndex = content.indexOf(LESSON_TRANSCRIPT_MARKER);
+  return markerIndex > 500;
+}
 
 // Chunking config — transcripts use MUCH larger chunks aligned to section headings
 const DOC_CHUNK_SIZE = 8000;
 const DOC_CHUNK_OVERLAP = 500;
 const TRANSCRIPT_CHUNK_SIZE = 25000; // ~15 min of transcript per chunk
 const TRANSCRIPT_CHUNK_OVERLAP = 1500;
-const MAX_KIS_PER_RESOURCE = 15;
+const MAX_KIS_PER_RESOURCE = 20;
 const DOC_SINGLE_PASS_THRESHOLD = 12000;
 const TRANSCRIPT_SINGLE_PASS_THRESHOLD = 30000; // Single-pass for episodes < ~20 min
 const MAX_TOKENS = 16384;
@@ -272,8 +297,8 @@ function deduplicateItems(items: any[]): any[] {
   return result;
 }
 
-/** Validate a single extracted item — stricter for transcripts */
-function validateItem(item: any, isTranscript: boolean): boolean {
+/** Validate a single extracted item — stricter for raw transcripts, relaxed for structured lessons */
+function validateItem(item: any, isTranscript: boolean, isLesson: boolean): boolean {
   const MIN_FIELD_LEN = 40;
   const HTML_PATTERN = /<[a-z][\s\S]*>/i;
 
@@ -283,12 +308,22 @@ function validateItem(item: any, isTranscript: boolean): boolean {
   if (!item.source_location || item.source_location.trim() === '') return false;
   if (!item.title) return false;
   if (!item.tactic_summary || item.tactic_summary.length < 30) return false;
-  if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return false;
-  if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return false;
-  if (!item.how_to_execute || item.how_to_execute.length < MIN_FIELD_LEN) return false;
   if (!item.when_to_use || item.when_to_use.length < 20) return false;
 
   const example = item.example_usage || item.example || '';
+
+  // Structured lessons get relaxed validation — the content is curated, not raw
+  if (isLesson) {
+    if (!item.how_to_execute || item.how_to_execute.length < 30) return false;
+    if (example.length < 20) return false;
+    const allText = [item.title, item.tactic_summary, item.how_to_execute, example].join(' ');
+    if (HTML_PATTERN.test(allText)) return false;
+    return true;
+  }
+
+  if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return false;
+  if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return false;
+  if (!item.how_to_execute || item.how_to_execute.length < MIN_FIELD_LEN) return false;
   if (example.length < 30) return false;
 
   const allText = [item.title, item.tactic_summary, item.macro_situation, item.how_to_execute, example].join(' ');
@@ -300,11 +335,9 @@ function validateItem(item: any, isTranscript: boolean): boolean {
     if (!verbLedPattern.test(item.title.trim())) {
       return false;
     }
-    // Reject if tactic_summary starts the same as title (copy-paste fragment)
     if (item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 25))) {
       return false;
     }
-    // Reject if how_to_execute is too short for a transcript-derived play
     if (item.how_to_execute.length < 80) return false;
   }
 
@@ -362,10 +395,13 @@ Deno.serve(async (req) => {
     }
 
     const isTranscript = isTranscriptType(resourceType);
-    const systemPrompt = isTranscript
-      ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM
-      : BASE_SYSTEM_PROMPT;
-    const itemTarget = isTranscript ? TRANSCRIPT_ITEM_TARGET : DOCUMENT_ITEM_TARGET;
+    const isLesson = isStructuredLesson(content);
+    const systemPrompt = isLesson
+      ? BASE_SYSTEM_PROMPT + LESSON_ADDENDUM
+      : isTranscript
+        ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM
+        : BASE_SYSTEM_PROMPT;
+    const itemTarget = isLesson ? LESSON_ITEM_TARGET : isTranscript ? TRANSCRIPT_ITEM_TARGET : DOCUMENT_ITEM_TARGET;
 
     // ── Chunked extraction ──
     const chunks = chunkContent(content, isTranscript);
@@ -374,7 +410,7 @@ Deno.serve(async (req) => {
     let failedChunks = 0;
     const allItems: any[] = [];
 
-    console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} mode | Content: ${content.length} chars → ${totalChunks} chunk(s)`);
+    console.log(`[extract-tactics] ${isLesson ? 'LESSON' : isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} mode | Content: ${content.length} chars → ${totalChunks} chunk(s)`);
 
     for (let i = 0; i < chunks.length; i++) {
       const chunkLabel = totalChunks > 1 ? `Chunk ${i + 1} of ${totalChunks}` : '';
@@ -420,7 +456,7 @@ Remember: every play MUST include source_excerpt (verbatim quote), source_locati
 
     // Validate and normalize — using transcript-aware validation
     const validated = deduped
-      .filter(item => validateItem(item, isTranscript))
+      .filter(item => validateItem(item, isTranscript, isLesson))
       .slice(0, MAX_KIS_PER_RESOURCE)
       .map((item: any) => ({
         ...item,
