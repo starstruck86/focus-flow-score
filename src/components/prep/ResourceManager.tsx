@@ -979,7 +979,7 @@ export function ResourceManager() {
                         } as any).eq('id', resourceId).then(() => {});
                       }
                     });
-                    useExtractionProgress.getState().endBatch();
+                    useResourceJobProgress.getState().endBatch();
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
                     queryClient.invalidateQueries({ queryKey: ['all-resources'] });
