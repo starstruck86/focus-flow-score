@@ -280,7 +280,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [getDaveSession, invalidateDaveCache]);
 
   return (
-    <div data-testid="app-layout" className="min-h-screen bg-background flex flex-col w-full pt-[env(safe-area-inset-top)]">
+    <div data-testid="app-layout" className={`min-h-screen bg-background flex flex-col w-full ${SHELL.top.safeArea}`}>
       <header
         data-testid="app-header"
         className="flex items-center gap-2 px-3 py-2 border-b sticky top-0 z-40 bg-background/95 backdrop-blur-md"
