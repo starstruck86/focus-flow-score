@@ -284,6 +284,7 @@ describe('Explainability Canary', () => {
     if (assessment.trustStatus === 'quarantined') {
       expect(assessment.quarantineReasons.length).toBeGreaterThan(0);
     }
+  });
 });
 
 // ── Post-Extraction KI Floor Invariant ────────────────────
