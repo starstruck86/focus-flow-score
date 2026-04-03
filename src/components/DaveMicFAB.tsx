@@ -1,6 +1,6 @@
 import { Mic, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { TW_FAB_BOTTOM } from '@/lib/layout';
+import { SHELL } from '@/lib/layout';
 
 interface Props {
   onTap: () => void;

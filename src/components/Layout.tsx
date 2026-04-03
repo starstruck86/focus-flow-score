@@ -30,7 +30,7 @@ import { useVoiceReminders } from '@/hooks/useVoiceReminders';
 import { useWakeWord } from '@/hooks/useWakeWord';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/BottomNav';
-import { TW_PAGE_BOTTOM_PAD, TW_FAB_BOTTOM } from '@/lib/layout';
+import { SHELL } from '@/lib/layout';
 
 
 
