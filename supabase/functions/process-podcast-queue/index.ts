@@ -145,6 +145,45 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
+    // ── Circuit breaker: check recent consecutive failures ──
+    const { data: recentFailed } = await supabase
+      .from("podcast_import_queue")
+      .select("failure_type")
+      .eq("status", "failed")
+      .order("processed_at", { ascending: false })
+      .limit(CIRCUIT_BREAKER_THRESHOLD);
+
+    if (recentFailed && recentFailed.length >= CIRCUIT_BREAKER_THRESHOLD) {
+      const sameError = recentFailed.every((r: any) => r.failure_type === recentFailed[0].failure_type);
+      if (sameError) {
+        // Check if there are ANY successes after these failures
+        const { count: successAfter } = await supabase
+          .from("podcast_import_queue")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "complete")
+          .gt("processed_at", recentFailed[recentFailed.length - 1].processed_at || "1970-01-01");
+
+        if (!successAfter || successAfter === 0) {
+          // All remaining queued items get paused with a clear message
+          const failureReason = recentFailed[0].failure_type;
+          console.error(`CIRCUIT BREAKER: ${CIRCUIT_BREAKER_THRESHOLD} consecutive failures with "${failureReason}". Pausing queue.`);
+
+          await supabase
+            .from("podcast_import_queue")
+            .update({
+              status: "failed",
+              error_message: `Circuit breaker: ${CIRCUIT_BREAKER_THRESHOLD}+ consecutive "${failureReason}" failures. Queue paused — review source URLs.`,
+              failure_type: "circuit_breaker",
+              processed_at: now(),
+              updated_at: now(),
+            })
+            .eq("status", "queued");
+
+          return json({ message: "Circuit breaker triggered", failure_type: failureReason, paused_remaining: true });
+        }
+      }
+    }
+
     // ── Step 1: Claim one queued item ──
     const { data: candidates } = await supabase
       .from("podcast_import_queue")
