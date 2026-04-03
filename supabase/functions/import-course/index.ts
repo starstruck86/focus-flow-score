@@ -658,8 +658,7 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/^\s*\d+\s*$/gm, '') // Standalone numbers (playlist indices)
     // Remove lines that are only whitespace/noise with deep indent but keep real content
     .replace(/^\s{6,}\S{0,5}\s*$/gm, '') // Lines with 6+ leading spaces and ≤5 non-space chars
-    .replace(/^AI\s+/gm, '') // Strip "AI " prefix from Kajabi nav breadcrumbs
-    .replace(/^\s*AI\s+Account\s+Scoring\s*$/gmi, '') // Kajabi sidebar "AI Account Scoring" label
+    .replace(/^\s*AI\s+\w[\w\s]{2,40}\s*$/gm, '') // Strip Kajabi "AI [Feature Name]" sidebar labels
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
