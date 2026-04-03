@@ -20,6 +20,17 @@
 @layer base {
   /* Light mode */
   :root {
+    /* ── App-Shell Layout Contract (CSS custom properties) ──
+     * These must stay in sync with src/lib/layout.ts PX constants.
+     * They power all calc()-based Tailwind classes in SHELL.*.
+     * Bottom nav: 2×48px rows + 1px separator + 4px pad = 101px
+     * FAB clearance: 101 + 12px gap = 113px
+     */
+    --shell-nav-height: 101;
+    --shell-fab-clearance: 113;
+    --shell-header-height: 48;
+    --shell-tap-target: 44;
+
     --background: 0 0% 98%;
     --foreground: 220 20% 10%;
 
