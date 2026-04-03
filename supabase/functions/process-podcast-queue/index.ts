@@ -114,6 +114,8 @@ async function processItem(
 ): Promise<{ result: string; resource_id?: string; ki_count?: number; error?: string }> {
   const isReprocessStructure = queueItem.transcript_status === "transcript_ready" && queueItem.raw_transcript;
   const detectedPlatform = detectPlatform(queueItem.episode_url);
+  // Mutable resolved metadata — populated during resolve step, used for resource creation
+  const resolvedMeta: Record<string, any> = {};
 
   // ── Post-claim init (already claimed atomically via RPC) ──
   await updateQueueItem(supabase, queueItem.id, {
