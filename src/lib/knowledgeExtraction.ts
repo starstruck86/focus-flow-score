@@ -17,6 +17,17 @@ import { detectFramework } from '@/data/frameworkLibrary';
 
 const log = createLogger('KnowledgeExtraction');
 
+/** Decode common HTML entities that survive scraping */
+function decodeHTMLEntities(text: string): string {
+  return text
+    .replace(/&ldquo;/g, '\u201C').replace(/&rdquo;/g, '\u201D')
+    .replace(/&lsquo;/g, '\u2018').replace(/&rsquo;/g, '\u2019')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ').replace(/&mdash;/g, '\u2014').replace(/&ndash;/g, '\u2013')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
 export interface ExtractionSource {
   resourceId: string;
   userId: string;
@@ -335,7 +346,7 @@ export function extractKnowledgeHeuristic(
   existingItems: Array<{ title: string; tactic_summary?: string | null }> = []
 ): KnowledgeItemInsert[] {
   const { resourceId, userId, title, content, description, tags } = source;
-  const text = [title, description, content].filter(Boolean).join('\n');
+  const text = decodeHTMLEntities([title, description, content].filter(Boolean).join('\n'));
   const rawItems: KnowledgeItemInsert[] = [];
   const rejectedReasons: string[] = [];
 
@@ -346,10 +357,25 @@ export function extractKnowledgeHeuristic(
   const isProductKnowledge = PRODUCT_PATTERNS.some(p => p.test(text));
   const lower = text.toLowerCase();
 
+  // Collect all chapter matches with their match strength
+  const chapterMatches: Array<{ signal: typeof CHAPTER_SIGNALS[0]; matchCount: number }> = [];
   for (const signal of CHAPTER_SIGNALS) {
     const matches = signal.patterns.filter(p => p.test(lower));
-    if (matches.length === 0) continue;
+    if (matches.length > 0) {
+      chapterMatches.push({ signal, matchCount: matches.length });
+    }
+  }
 
+  // Pick the BEST chapter (most pattern matches) to avoid cross-chapter duplication.
+  // Only fall back to multiple chapters if they have equal match strength.
+  chapterMatches.sort((a, b) => b.matchCount - a.matchCount);
+  const bestMatchCount = chapterMatches[0]?.matchCount ?? 0;
+  const topChapters = chapterMatches.filter(c => c.matchCount === bestMatchCount);
+
+  // Track tactic_summary fingerprints to prevent cross-chapter duplication
+  const seenTacticSummaries = new Set<string>();
+
+  for (const { signal } of topChapters) {
     const knowledgeType = competitor ? 'competitive' : isProductKnowledge ? 'product' : signal.knowledgeType;
     const tactics = extractTacticsFromText(text, signal);
 
@@ -359,6 +385,10 @@ export function extractKnowledgeHeuristic(
     }
 
     for (const tactic of tactics) {
+      // Skip if we already produced a KI with the same tactic_summary
+      const summaryFingerprint = tactic.tactic_summary.toLowerCase().trim();
+      if (seenTacticSummaries.has(summaryFingerprint)) continue;
+      seenTacticSummaries.add(summaryFingerprint);
       const baseTags = [...tags, knowledgeType, tactic.chapter];
       const inferred = inferTags(text);
       const structuredTags = mergeTags(baseTags, inferred);
