@@ -277,6 +277,7 @@ export async function autoOperationalizeResource(
     const { isTranscriptResource: isAudioType, headingCount, hasLessonBody, transcriptReady } = getTranscriptPreparationState(
       contentForExtraction,
       r.resource_type,
+      r.title,
     );
 
     if (!transcriptReady) {

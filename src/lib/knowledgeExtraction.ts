@@ -50,20 +50,28 @@ export interface ExtractionLog {
 const TRANSCRIPT_LIKE_RESOURCE_TYPES = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'] as const;
 const LESSON_TRANSCRIPT_MARKER = '--- Video Transcript ---';
 
-export function getTranscriptPreparationState(content: string | null | undefined, resourceType: string | null | undefined) {
+export function getTranscriptPreparationState(content: string | null | undefined, resourceType: string | null | undefined, title?: string | null) {
   const normalizedContent = content || '';
   const normalizedType = (resourceType || '').toLowerCase();
   const isTranscriptResource = TRANSCRIPT_LIKE_RESOURCE_TYPES.includes(normalizedType as typeof TRANSCRIPT_LIKE_RESOURCE_TYPES[number]);
   const headingCount = isTranscriptResource ? (normalizedContent.match(/^## /gm)?.length ?? 0) : 0;
   const transcriptMarkerIndex = normalizedContent.indexOf(LESSON_TRANSCRIPT_MARKER);
   const hasLessonBody = transcriptMarkerIndex > 500;
-  const transcriptReady = !isTranscriptResource || hasLessonBody || headingCount >= 2;
+
+  // Structured course lessons use "Course Name > Lesson Name" format.
+  // These contain rich lesson text that doesn't need ## headings or transcript markers.
+  const isStructuredCourseLesson = !!(title && /\s>\s/.test(title));
+  const hasSufficientContent = normalizedContent.length >= 500;
+  const courseReady = isStructuredCourseLesson && hasSufficientContent;
+
+  const transcriptReady = !isTranscriptResource || hasLessonBody || headingCount >= 2 || courseReady;
 
   return {
     isTranscriptResource,
     headingCount,
     hasLessonBody,
     transcriptReady,
+    isStructuredCourseLesson,
   };
 }
 
@@ -547,6 +555,7 @@ export async function extractKnowledgeLLMFallback(
     const { isTranscriptResource, headingCount, hasLessonBody, transcriptReady } = getTranscriptPreparationState(
       contentStr,
       source.resourceType,
+      source.title,
     );
 
     // Pre-extraction gate: audio/transcript resources MUST have been preprocessed

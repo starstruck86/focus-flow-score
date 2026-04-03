@@ -167,7 +167,7 @@ export async function runEnrichmentOnly(resourceId: string): Promise<MethodResul
   let items: any[] = [];
 
   // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
-  const { isTranscriptResource: isAudioType, transcriptReady } = getTranscriptPreparationState(r.content, r.resource_type);
+  const { isTranscriptResource: isAudioType, transcriptReady } = getTranscriptPreparationState(r.content, r.resource_type, r.title);
   if (isAudioType && !transcriptReady) {
     return { success: false, error: 'Transcript needs preprocessing before KI extraction (no ## section headings found)' };
   }
