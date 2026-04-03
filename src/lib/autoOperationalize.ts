@@ -193,8 +193,8 @@ export async function autoOperationalizeResource(
            t.dimension === 'competitor' || t.dimension === 'product';
   });
 
-  // For transcript/podcast/audio resources with sales content, ensure baseline tags
-  const isTranscriptType = ['transcript', 'podcast', 'audio'].includes(r.resource_type ?? '');
+  // For transcript/podcast/audio/video resources with sales content, ensure baseline tags
+  const isTranscriptType = ['transcript', 'podcast', 'audio', 'video'].includes(r.resource_type ?? '');
   if (isTranscriptType) {
     const hasSalesContent = /sales|selling|prospect|buyer|deal|pipeline|objection|discovery|demo|close|negotiat|cold call|outbound/i.test(text);
     const hasSkillTag = [...existingTags, ...newTags.map(t => `${t.dimension}:${t.value}`)].some(t => t.startsWith('skill:'));
