@@ -646,12 +646,13 @@ Titles may describe the concept naturally — they do NOT need to start with a v
     const missed = candidates.filter((c: any) => {
       const ct = (c.candidate_title || '').toLowerCase();
       const titleCovered = producedTitles.some((pt: string) => {
-        const overlap = [...new Set(ct.split(/\s+/).filter(w => w.length > 2))].filter(w => pt.includes(w));
-        return overlap.length >= Math.min(3, ct.split(/\s+/).filter(w => w.length > 2).length * 0.5);
+        const ctWords = ct.split(/\s+/).filter((w: string) => w.length > 2);
+        const overlap = ctWords.filter((w: string) => pt.includes(w));
+        return overlap.length >= Math.min(3, ctWords.length * 0.5);
       });
       const summaryCovered = producedSummaries.some((ps: string) => {
-        const words = ct.split(/\s+/).filter(w => w.length > 3);
-        const hits = words.filter(w => ps.includes(w));
+        const words = ct.split(/\s+/).filter((w: string) => w.length > 3);
+        const hits = words.filter((w: string) => ps.includes(w));
         return hits.length >= Math.min(2, words.length * 0.4);
       });
       return !titleCovered && !summaryCovered;
