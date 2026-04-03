@@ -186,8 +186,7 @@ async function processItem(
     const hasAudioUrl = resolveResult?.audio_url || resolveResult?.resolved_audio_url ||
       resolveResult?.resolution?.audioEnclosureUrl || embeddedAudioUrl || directAudioFallback;
 
-    // Persist resolved metadata
-    const resolvedMeta: Record<string, any> = {};
+    // Persist resolved metadata (populates the hoisted resolvedMeta object)
     if (resolveResult?.metadata) {
       const m = resolveResult.metadata;
       if (m.title && !queueItem.episode_title) resolvedMeta.episode_title = m.title;
