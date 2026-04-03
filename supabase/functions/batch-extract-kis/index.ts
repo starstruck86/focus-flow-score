@@ -1,3 +1,18 @@
+/**
+ * batch-extract-kis — single-resource KI extraction endpoint.
+ *
+ * ARCHITECTURE NOTE: Lesson extraction runs INLINE in this function.
+ * It does NOT chain to the `extract-tactics` edge function because:
+ *   1. Chained edge-function calls caused timeout cascades (each has its own wall-clock limit).
+ *   2. Lessons need different prompting (2-stage enumerate→expand), relaxed validation
+ *      (no verb-led titles, shorter field requirements), and conservative dedup (0.75 threshold).
+ *   3. Keeping lesson logic inline gives full control over timing and avoids double-hop latency.
+ *
+ * Non-lesson content uses a direct AI call (callAIDirect) — also inline, no chaining.
+ *
+ * Benchmark: Account Scoring lesson (14,729 chars) → ~35 candidates → ~36 raw → ~32 KIs inserted.
+ * If this drops materially below ~30, treat as a regression.
+ */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ═══════════════════════════════════════════
