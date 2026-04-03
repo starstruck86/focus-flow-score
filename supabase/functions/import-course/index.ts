@@ -657,7 +657,6 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     .replace(/^\s*\|\s*$/gm, '')
     .replace(/^\s*\d+\s*$/gm, '') // Standalone numbers (playlist indices)
     // Remove lines that are just short repeated nav-like items (sidebar lesson titles leaking in)
-    .replace(/^\s{4,}.*$/gm, '') // Lines with 4+ leading spaces are likely indented markup leftovers
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   
