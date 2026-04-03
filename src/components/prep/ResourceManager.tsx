@@ -1002,7 +1002,7 @@ export function ResourceManager() {
                     }
                     setSelectedResourceIds(new Set());
                   } catch (error: any) {
-                    useExtractionProgress.getState().endBatch();
+                    useResourceJobProgress.getState().endBatch();
                     toast.error('Batch extraction failed', { description: error?.message });
                   }
                   break;

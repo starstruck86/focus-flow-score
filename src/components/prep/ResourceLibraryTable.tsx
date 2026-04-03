@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Sparkles, Wrench, Tag, Loader2 as Loader2Icon } from 'lucide-react';
-import { useExtractionProgress, type ExtractionResourceStatus } from '@/store/useExtractionProgress';
+import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import { Progress } from '@/components/ui/progress';
+import { formatRelativeTime } from '@/hooks/useReExtractResource';
 import { PRIMARY_ACTIONS } from '@/components/prep/QueueActionBar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
