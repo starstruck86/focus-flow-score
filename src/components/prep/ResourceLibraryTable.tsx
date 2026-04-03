@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Sparkles, Wrench, Tag } from 'lucide-react';
+import { Sparkles, Wrench, Tag, Loader2 as Loader2Icon } from 'lucide-react';
+import { useExtractionProgress, type ExtractionResourceStatus } from '@/store/useExtractionProgress';
+import { Progress } from '@/components/ui/progress';
 import { PRIMARY_ACTIONS } from '@/components/prep/QueueActionBar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
