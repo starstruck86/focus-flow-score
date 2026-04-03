@@ -560,8 +560,24 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
   for (const pattern of contentPatterns) {
     const m = cleanedHtml.match(pattern);
     if (m && m[1] && m[1].trim().length > 50) {
+      // Skip matches that are basically just video embed references with no real lesson text
+      const stripped = m[1]
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (stripped.length < 50) {
+        debug.push(`Skipped pattern (text<50: ${stripped.length}): ${pattern.source.substring(0, 40)}`);
+        continue;
+      }
+      // For video pages, require more substantial text — short noise like "Account Scoring" isn't a real lesson body
+      if (type === 'video' && stripped.length < 200) {
+        debug.push(`Skipped pattern (video page, text<200: ${stripped.length}): ${pattern.source.substring(0, 40)}`);
+        continue;
+      }
       content = m[1];
-      debug.push(`Matched pattern: ${pattern.source.substring(0, 40)}`);
+      debug.push(`Matched pattern: ${pattern.source.substring(0, 40)}, raw=${m[1].length}, text=${stripped.length}`);
       break;
     }
   }
