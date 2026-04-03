@@ -1,4 +1,4 @@
-// Quota Compass Type Definitions
+// Quota CoPilot Type Definitions
 
 export type FocusMode = 'new-logo' | 'expansion' | 'balanced';
 export type DistractionLevel = 'low' | 'medium' | 'high';

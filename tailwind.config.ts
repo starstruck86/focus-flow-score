@@ -51,7 +51,7 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Quota Compass Metric Colors
+        // Quota CoPilot Metric Colors
         strain: {
           DEFAULT: "hsl(var(--strain))",
           glow: "hsl(var(--strain-glow))",

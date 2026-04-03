@@ -1,4 +1,4 @@
-// Commission Calculation Engine for Quota Compass
+// Commission Calculation Engine for Quota CoPilot
 // Based on Acoustic FY26 Incentive Plan
 
 import type { 

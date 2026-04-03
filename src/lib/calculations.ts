@@ -1,4 +1,4 @@
-// Quota Compass - All scoring calculations
+// Quota CoPilot - All scoring calculations
 import type { 
   DailyRawInputs, 
   DailyActivityInputs, 
