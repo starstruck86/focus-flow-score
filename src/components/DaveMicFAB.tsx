@@ -24,7 +24,7 @@ export function DaveMicFAB({ onTap, isLoading, isActive }: Props) {
       className={cn(
         'fixed z-50 flex items-center justify-center rounded-full shadow-lg',
         'h-14 w-14',
-        'right-4 bottom-[calc(7.5rem+env(safe-area-inset-bottom))]',
+        'right-4 bottom-[calc(8.5rem+env(safe-area-inset-bottom))]',
         'transition-colors duration-150',
         isLoading
           ? 'bg-muted text-muted-foreground cursor-wait'

@@ -146,7 +146,7 @@ export function GlobalSearch({ className }: { className?: string }) {
             value={query}
             onChange={e => handleChange(e.target.value)}
             onFocus={() => { if (results.length > 0) setOpen(true); }}
-            placeholder="Search accounts, deals, contacts, tasks…   /"
+            placeholder="Search…"
             className="w-full h-9 rounded-lg border border-border bg-muted/40 pl-9 pr-9 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring focus:bg-background transition-colors"
           />
         </div>
