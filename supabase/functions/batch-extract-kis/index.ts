@@ -578,6 +578,43 @@ function wordOverlap(a: string, b: string): number {
 }
 
 // ═══════════════════════════════════════════
+// Post-extraction invariant: minimum KI floor
+// ═══════════════════════════════════════════
+
+/**
+ * Computes the minimum acceptable KI count based on content length.
+ * This is the HARD GUARANTEE that prevents silent 0-KI or too-few-KI completions.
+ *
+ * For lessons (structured educational content):
+ *   < 500 chars  → 0 (too short to extract from, allowed to skip)
+ *   500-2000     → 3  (short lesson, at least a few concepts)
+ *   2000-5000    → 5  (medium lesson)
+ *   5000-10000   → 8  (substantial lesson)
+ *   10000+       → 12 (large lesson, benchmark shows ~30+ is normal)
+ *
+ * For non-lesson content (articles, podcasts, etc.):
+ *   < 500 chars  → 0
+ *   500-2000     → 1
+ *   2000-5000    → 2
+ *   5000+        → 3
+ */
+function computeMinKiFloor(contentLength: number, isLesson: boolean): number {
+  if (contentLength < 500) return 0;
+
+  if (isLesson) {
+    if (contentLength < 2000) return 3;
+    if (contentLength < 5000) return 5;
+    if (contentLength < 10000) return 8;
+    return 12;
+  }
+
+  // Non-lesson: more conservative floors
+  if (contentLength < 2000) return 1;
+  if (contentLength < 5000) return 2;
+  return 3;
+}
+
+// ═══════════════════════════════════════════
 // DB helpers
 // ═══════════════════════════════════════════
 
