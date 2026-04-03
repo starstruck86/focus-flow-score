@@ -457,7 +457,6 @@ Remember: every play MUST include source_excerpt (verbatim quote), source_locati
     // Validate and normalize — using transcript-aware validation
     const validated = deduped
       .filter(item => validateItem(item, isTranscript, isLesson))
-      .slice(0, MAX_KIS_PER_RESOURCE)
       .map((item: any) => ({
         ...item,
         tactic_summary: item.tactic_summary,
