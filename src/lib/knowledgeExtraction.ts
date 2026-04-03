@@ -556,7 +556,7 @@ export async function extractKnowledgeLLMFallback(
 
         const autoActivate = trust.passed && trust.overall >= 0.4;
 
-        rawItems.push({
+        const ki: KnowledgeItemInsert = {
           user_id: source.userId,
           source_resource_id: source.resourceId,
           source_doctrine_id: null,
