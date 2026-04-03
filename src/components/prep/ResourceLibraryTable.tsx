@@ -662,47 +662,58 @@ export function ResourceLibraryTable({
                               </span>
                             )}
                           </div>
-                          {/* Inline extraction progress: live → durable fallback */}
+                          {/* Inline job progress: live Zustand → durable backend fallback */}
                           {(() => {
-                            const ep = extractionResources[resource.id];
-                            // Live state takes precedence
-                            if (ep) {
-                              const pct = ep.status === 'queued' ? 0 : ep.status === 'extracting' ? 50 : 100;
+                            const liveJob = liveJobResources[resource.id];
+                            // 1. Live state takes precedence
+                            if (liveJob) {
+                              const pct = liveJob.status === 'queued' ? 0 : liveJob.status === 'running' ? 50 : 100;
+                              const label = liveJob.status === 'queued' ? 'Queued'
+                                : liveJob.status === 'running' ? getJobLabel(liveJob.jobType, 'running')
+                                : liveJob.status === 'done' ? `${getJobLabel(liveJob.jobType, 'done')}${liveJob.resultSummary ? ` · ${liveJob.resultSummary}` : ''}`
+                                : getJobLabel(liveJob.jobType, 'failed');
                               return (
                                 <div className="flex items-center gap-2 mt-1">
-                                  {ep.status === 'extracting' && <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />}
-                                  {ep.status === 'done' && <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />}
-                                  {ep.status === 'failed' && <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />}
+                                  {liveJob.status === 'running' && <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />}
+                                  {liveJob.status === 'done' && <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />}
+                                  {liveJob.status === 'failed' && <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />}
                                   <Progress value={pct} className="h-1.5 flex-1 max-w-[120px]" />
-                                  <span className="text-[9px] text-muted-foreground shrink-0">
-                                    {ep.status === 'queued' ? 'Queued' :
-                                     ep.status === 'extracting' ? 'Extracting…' :
-                                     ep.status === 'done' ? `Done${ep.kiExtracted ? ` · ${ep.kiExtracted} KI` : ''}` :
-                                     'Failed'}
-                                  </span>
+                                  <span className="text-[9px] text-muted-foreground shrink-0">{label}</span>
                                 </div>
                               );
                             }
-                            // Durable fallback from backend
-                            const { status: durableStatus, stale, at } = deriveReExtractStatus(resource);
-                            if (durableStatus === 'idle') return null;
-                            const timeLabel = formatRelativeTime(at);
-                            if (durableStatus === 'running') {
+                            // 2. Durable fallback from active_job_* fields
+                            const durableStatus = (resource as any).active_job_status;
+                            const durableType = (resource as any).active_job_type;
+                            if (!durableStatus || durableStatus === 'idle') return null;
+                            const finishedAt = (resource as any).active_job_finished_at;
+                            const updatedAt = (resource as any).active_job_updated_at;
+                            const timeLabel = formatRelativeTime(finishedAt || updatedAt);
+                            const stale = isJobStale(updatedAt, durableStatus);
+
+                            if (durableStatus === 'running' || durableStatus === 'queued') {
                               return (
                                 <div className="flex items-center gap-2 mt-1">
-                                  <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />
-                                  <span className="text-[9px] text-muted-foreground">Extracting…{timeLabel && ` · started ${timeLabel}`}</span>
+                                  {stale
+                                    ? <AlertTriangle className="h-3 w-3 text-muted-foreground shrink-0" />
+                                    : <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />}
+                                  <span className={cn('text-[9px]', stale ? 'text-muted-foreground/60' : 'text-muted-foreground')}>
+                                    {stale ? 'Interrupted' : getJobLabel(durableType || 'extract', 'running')}
+                                    {timeLabel && ` · started ${timeLabel}`}
+                                  </span>
                                 </div>
                               );
                             }
                             if (durableStatus === 'succeeded') {
+                              const summary = (resource as any).active_job_result_summary;
                               return (
                                 <div className="flex items-center gap-1.5 mt-1">
                                   <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />
-                                  <span className={cn('text-[9px]', stale ? 'text-muted-foreground/60 line-through' : 'text-muted-foreground')}>
-                                    Extracted{timeLabel && ` · ${timeLabel}`}
+                                  <span className="text-[9px] text-muted-foreground">
+                                    {getJobLabel(durableType || 'extract', 'done')}
+                                    {summary && ` · ${summary}`}
+                                    {timeLabel && ` · ${timeLabel}`}
                                   </span>
-                                  {stale && <span className="text-[9px] text-muted-foreground/60">(stale)</span>}
                                 </div>
                               );
                             }
@@ -711,7 +722,8 @@ export function ResourceLibraryTable({
                                 <div className="flex items-center gap-1.5 mt-1">
                                   <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />
                                   <span className="text-[9px] text-destructive/80">
-                                    Extraction failed{timeLabel && ` · ${timeLabel}`}
+                                    {getJobLabel(durableType || 'extract', 'failed')}
+                                    {timeLabel && ` · ${timeLabel}`}
                                   </span>
                                 </div>
                               );
