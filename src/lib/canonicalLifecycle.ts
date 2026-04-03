@@ -105,6 +105,34 @@ export interface LifecycleSummary {
 
 const MIN_CONTENT_LENGTH = 200;
 const ENRICHED_STATUSES = ['enriched', 'deep_enriched', 'verified'];
+const QUERY_PAGE_SIZE = 1000;
+
+async function fetchKnowledgeItemsForResources(resourceIds: string[]) {
+  if (resourceIds.length === 0) return [] as any[];
+
+  const rows: any[] = [];
+
+  for (let from = 0; ; from += QUERY_PAGE_SIZE) {
+    const to = from + QUERY_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('knowledge_items' as any)
+      .select('source_resource_id, active, applies_to_contexts')
+      .in('source_resource_id', resourceIds)
+      .range(from, to);
+
+    if (error) {
+      log.error('Knowledge item lifecycle query failed', { error, from, to, resourceCount: resourceIds.length });
+      break;
+    }
+
+    const page = (data ?? []) as any[];
+    rows.push(...page);
+
+    if (page.length < QUERY_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
 
 // ── Core: derive canonical stage ───────────────────────────
 
@@ -195,9 +223,8 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
     return emptySummary();
   }
 
-  const { data: kiRows } = await supabase
-    .from('knowledge_items' as any)
-    .select('source_resource_id, active, applies_to_contexts');
+  const resourceIds = (resources as any[]).map((r) => r.id).filter(Boolean);
+  const kiRows = await fetchKnowledgeItemsForResources(resourceIds);
 
   // Build KI map
   const kiMap = new Map<string, { total: number; active: number; activeWithContexts: number }>();
