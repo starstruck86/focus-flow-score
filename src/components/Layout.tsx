@@ -287,7 +287,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       >
         <div className="flex items-center gap-1.5 shrink-0">
           <Compass className="h-5 w-5" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
-          <span className="font-display text-sm font-bold hidden sm:inline">Quota Compass</span>
+          <span className="font-display text-sm font-bold hidden sm:inline">Quota CoPilot</span>
           <SaveIndicator />
         </div>
         <GlobalSearch className="flex-1 min-w-0" />
