@@ -679,7 +679,8 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     const im = cleanedHtml.match(ip);
     if (im && im[1]) {
       const cleaned = im[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-      if (cleaned.length > 20 && !content.includes(cleaned.substring(0, 80))) {
+      debug.push(`Intro candidate: ${cleaned.substring(0, 80)}... (${cleaned.length} chars)`);
+      if (cleaned.length > 20 && !content.includes(cleaned.substring(0, Math.min(80, cleaned.length)))) {
         introText += cleaned + '\n\n';
       }
     }
