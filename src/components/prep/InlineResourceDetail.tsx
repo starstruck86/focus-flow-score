@@ -32,9 +32,37 @@ interface Props {
 
 // ── Metadata Header ────────────────────────────────────────
 function MetadataHeader({ resource, onClose, onAction }: Props) {
+  const qc = useQueryClient();
   const { summary } = useCanonicalLifecycle();
   const status = summary?.resources.find(r => r.resource_id === resource.id);
   const ps = deriveProcessingState(resource);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(resource.title);
+  const [saving, setSaving] = useState(false);
+
+  const displayTitle = decodeHTMLEntities(resource.title);
+
+  const handleSaveTitle = async () => {
+    if (!editTitle.trim() || editTitle.trim() === resource.title) {
+      setIsEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('resources')
+        .update({ title: editTitle.trim(), updated_at: new Date().toISOString() } as any)
+        .eq('id', resource.id);
+      if (error) throw error;
+      toast.success('Title updated');
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      setIsEditing(false);
+    } catch (err: any) {
+      toast.error(`Failed to update title: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const blockedLabel = status?.blocked_reason && status.blocked_reason !== 'none'
     ? status.blocked_reason.replace(/_/g, ' ')
@@ -51,7 +79,33 @@ function MetadataHeader({ resource, onClose, onAction }: Props) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-3 bg-muted/30 border-b border-border">
       <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-        <h3 className="text-sm font-semibold text-foreground truncate max-w-[300px]">{resource.title}</h3>
+        {isEditing ? (
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <Input
+              value={editTitle}
+              onChange={e => setEditTitle(e.target.value)}
+              className="h-7 text-sm font-semibold max-w-[300px]"
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleSaveTitle();
+                if (e.key === 'Escape') { setIsEditing(false); setEditTitle(resource.title); }
+              }}
+            />
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleSaveTitle} disabled={saving}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setIsEditing(false); setEditTitle(resource.title); }}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <>
+            <h3 className="text-sm font-semibold text-foreground truncate max-w-[300px]">{displayTitle}</h3>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-50 hover:opacity-100" onClick={() => setIsEditing(true)} title="Edit title">
+              <Pencil className="h-3 w-3" />
+            </Button>
+          </>
+        )}
         <Badge variant="outline" className="text-[9px] shrink-0">{ps.label}</Badge>
         <Badge variant="outline" className="text-[9px] shrink-0 capitalize">{resource.resource_type}</Badge>
         {resource.updated_at && (
