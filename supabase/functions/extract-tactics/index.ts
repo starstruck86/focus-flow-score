@@ -297,8 +297,8 @@ function deduplicateItems(items: any[]): any[] {
   return result;
 }
 
-/** Validate a single extracted item — stricter for transcripts */
-function validateItem(item: any, isTranscript: boolean): boolean {
+/** Validate a single extracted item — stricter for raw transcripts, relaxed for structured lessons */
+function validateItem(item: any, isTranscript: boolean, isLesson: boolean): boolean {
   const MIN_FIELD_LEN = 40;
   const HTML_PATTERN = /<[a-z][\s\S]*>/i;
 
@@ -308,12 +308,22 @@ function validateItem(item: any, isTranscript: boolean): boolean {
   if (!item.source_location || item.source_location.trim() === '') return false;
   if (!item.title) return false;
   if (!item.tactic_summary || item.tactic_summary.length < 30) return false;
-  if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return false;
-  if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return false;
-  if (!item.how_to_execute || item.how_to_execute.length < MIN_FIELD_LEN) return false;
   if (!item.when_to_use || item.when_to_use.length < 20) return false;
 
   const example = item.example_usage || item.example || '';
+
+  // Structured lessons get relaxed validation — the content is curated, not raw
+  if (isLesson) {
+    if (!item.how_to_execute || item.how_to_execute.length < 30) return false;
+    if (example.length < 20) return false;
+    const allText = [item.title, item.tactic_summary, item.how_to_execute, example].join(' ');
+    if (HTML_PATTERN.test(allText)) return false;
+    return true;
+  }
+
+  if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return false;
+  if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return false;
+  if (!item.how_to_execute || item.how_to_execute.length < MIN_FIELD_LEN) return false;
   if (example.length < 30) return false;
 
   const allText = [item.title, item.tactic_summary, item.macro_situation, item.how_to_execute, example].join(' ');
@@ -325,11 +335,9 @@ function validateItem(item: any, isTranscript: boolean): boolean {
     if (!verbLedPattern.test(item.title.trim())) {
       return false;
     }
-    // Reject if tactic_summary starts the same as title (copy-paste fragment)
     if (item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 25))) {
       return false;
     }
-    // Reject if how_to_execute is too short for a transcript-derived play
     if (item.how_to_execute.length < 80) return false;
   }
 
