@@ -11,6 +11,7 @@ import { CheckCircle2, Copy, XCircle, FileText, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDuplicateKIs, useDeactivateKI, type DuplicatePair } from '@/hooks/useKnowledgeReview';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
+import { AttributionProvenanceBadge } from './AttributionProvenanceBadge';
 
 function excerptStrength(ki: KnowledgeItem): { label: string; cls: string } {
   const len = (ki.source_excerpt || '').length;
