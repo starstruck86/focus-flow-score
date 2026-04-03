@@ -39,9 +39,23 @@ function detectPlatform(url: string): string {
   if (u.includes("podbean.com")) return "podbean";
   if (u.includes("transistor.fm")) return "transistor";
   if (u.includes("simplecast.com")) return "simplecast";
+  // Direct audio CDNs and redirectors
+  if (u.includes("pdst.fm") || u.includes("megaphone.fm") || u.includes("traffic.megaphone")) return "direct_audio";
   if (u.endsWith(".mp3") || u.endsWith(".m4a") || u.endsWith(".wav")) return "direct_audio";
+  if (u.match(/\.(mp3|m4a|ogg|wav)(\?|$)/)) return "direct_audio";
   if (u.includes("/feed") || u.includes("rss") || u.includes(".xml")) return "rss_direct";
   return "unknown";
+}
+
+// ── Detect if a URL is itself a direct audio URL ──
+function isDirectAudioUrl(url: string): boolean {
+  const u = url.toLowerCase();
+  return !!(
+    u.includes("pdst.fm") ||
+    u.includes("megaphone.fm") ||
+    u.includes("traffic.megaphone") ||
+    u.match(/\.(mp3|m4a|ogg|wav)(\?|$)/)
+  );
 }
 
 // ── Host platform detection (where podcast is actually hosted) ──
