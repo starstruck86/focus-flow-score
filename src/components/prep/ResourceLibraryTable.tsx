@@ -48,6 +48,7 @@ import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audi
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
 import { InlineResourceDetail } from './InlineResourceDetail';
+import { decodeHTMLEntities } from '@/lib/stringUtils';
 
 // ── Types ──────────────────────────────────────────────────
 type SortKey = 'title' | 'resource_type' | 'enrichment_status' | 'last_quality_tier' | 'last_quality_score' | 'created_at' | 'enriched_at' | 'enrichment_version' | 'subtype';
