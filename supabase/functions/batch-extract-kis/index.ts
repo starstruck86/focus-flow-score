@@ -172,7 +172,10 @@ async function callAIDirect(apiKey: string, content: string, title: string, tags
 }
 
 // ═══════════════════════════════════════════
-// LESSON 2-STAGE PIPELINE (inline, no chaining)
+// LESSON 2-STAGE PIPELINE (inline — never chains to extract-tactics)
+// Why inline: chained edge-function calls hit timeout cascades; lessons need
+// custom prompting, relaxed validation, and conservative dedup that differ
+// from the generic extract-tactics path.
 // ═══════════════════════════════════════════
 
 async function extractLessonDirect(
