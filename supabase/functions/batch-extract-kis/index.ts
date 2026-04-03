@@ -219,24 +219,26 @@ List EVERY distinct concept. If the lesson teaches 15 things, return 15 items. D
   }
 
   // ── Stage 2: Single-pass full KI expansion with candidate guidance ──
+  // Cap candidates at 18 to prevent response truncation (JSON too large for token limit)
   let rawItems: any[] = [];
+  const cappedCandidates = candidates.slice(0, 18);
 
-  const candidateList = candidates.length > 0
-    ? candidates.map((c: any, i: number) => `${i + 1}. ${c.candidate_title || 'Untitled'} [${c.concept_type || 'technique'}]`).join('\n')
+  const candidateList = cappedCandidates.length > 0
+    ? cappedCandidates.map((c: any, i: number) => `${i + 1}. ${c.candidate_title || 'Untitled'} [${c.concept_type || 'technique'}]`).join('\n')
     : '';
 
   const expandPrompt = `Extract tactical plays from this training lesson.
 
 Title: ${title}
 Tags: ${(tags || []).join(', ')}
-${candidateList ? `\nThe following ${candidates.length} concepts were identified. Extract a play for as many as you can:\n${candidateList}\n` : ''}
+${candidateList ? `\nThe following ${cappedCandidates.length} concepts were identified. Extract a play for EACH one:\n${candidateList}\n` : ''}
 Content:
 ${content}
 
-Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute, when_to_use, source_excerpt, chapter, knowledge_type. Keep each play concise but complete.`;
+Return ONLY a JSON array. Each play needs: title, framework, who, source_excerpt, source_location, tactic_summary, how_to_execute, when_to_use, when_not_to_use, example_usage, macro_situation, micro_strategy, why_it_matters, what_this_unlocks, chapter, knowledge_type. Be concise per field but extract ALL plays.`;
 
   try {
-    rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, expandPrompt, 24576));
+    rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, expandPrompt, 16384));
     pLog.stage2Raw = rawItems.length;
     console.log(`[lesson-pipeline] Stage 2: ${rawItems.length} raw items from single pass`);
   } catch (err: any) {
