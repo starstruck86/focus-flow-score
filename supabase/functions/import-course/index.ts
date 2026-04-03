@@ -542,6 +542,8 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise
     /class="[^"]*(?:post__body|post-body)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
     /class="[^"]*(?:product-post__body|lesson-content|course-content)[^"]*"[^>]*>([\s\S]+?)<\/div>/i,
     /data-post-body[^>]*>([\s\S]+?)<\/div>/i,
+    // Kajabi section body (contains intro + body, better than content-wrap)
+    /class="[^"]*section__body[^"]*"[^>]*>([\s\S]+?)<\/div>\s*<\/div>\s*<\/div>/i,
     // Kajabi content-wrap (broader — may include sidebar, use as fallback)
     /class="[^"]*content-wrap[^"]*"[^>]*>([\s\S]+)/i,
   ];
