@@ -438,11 +438,10 @@ describe('Failure Classification Canary', () => {
     const nonRetryable: ExtractionFailureType[] = ['structural_failure'];
 
     for (const t of retryable) {
-      // Retry eligibility: attemptNumber < maxAttempts AND not structural
-      expect(t !== 'structural_failure').toBe(true);
+      expect((t as string) !== 'structural_failure').toBe(true);
     }
     for (const t of nonRetryable) {
-      expect(t === 'structural_failure').toBe(true);
+      expect((t as string) === 'structural_failure').toBe(true);
     }
   });
 });
