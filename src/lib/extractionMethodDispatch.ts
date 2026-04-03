@@ -13,7 +13,12 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
-import { extractKnowledgeHeuristic, extractKnowledgeLLMFallback, type ExtractionSource } from '@/lib/knowledgeExtraction';
+import {
+  extractKnowledgeHeuristic,
+  extractKnowledgeLLMFallback,
+  getTranscriptPreparationState,
+  type ExtractionSource,
+} from '@/lib/knowledgeExtraction';
 import { createLogger } from '@/lib/logger';
 import type { CanonicalSourceType } from '@/lib/sourceTypeNormalizer';
 
@@ -162,14 +167,9 @@ export async function runEnrichmentOnly(resourceId: string): Promise<MethodResul
   let items: any[] = [];
 
   // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
-  const isAudioType = ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
-    (r.resource_type ?? '').toLowerCase()
-  );
-  if (isAudioType) {
-    const headingCount = (r.content || '').match(/^## /gm)?.length ?? 0;
-    if (headingCount < 2) {
-      return { success: false, error: 'Transcript needs preprocessing before KI extraction (no ## section headings found)' };
-    }
+  const { isTranscriptResource: isAudioType, transcriptReady } = getTranscriptPreparationState(r.content, r.resource_type);
+  if (isAudioType && !transcriptReady) {
+    return { success: false, error: 'Transcript needs preprocessing before KI extraction (no ## section headings found)' };
   }
 
   if ((r.content?.length ?? 0) >= 100) {
