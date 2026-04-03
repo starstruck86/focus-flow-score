@@ -193,7 +193,7 @@ export async function runLessonBenchmark(
     // Run extraction (this calls the production pipeline — read-only eval via the response)
     try {
       const { data, error } = await supabase.functions.invoke('batch-extract-kis', {
-        body: { resourceId },
+        body: { resourceId, benchmarkMode: true },
       });
 
       if (error) {
