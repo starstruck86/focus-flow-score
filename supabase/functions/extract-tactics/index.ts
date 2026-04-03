@@ -395,10 +395,13 @@ Deno.serve(async (req) => {
     }
 
     const isTranscript = isTranscriptType(resourceType);
-    const systemPrompt = isTranscript
-      ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM
-      : BASE_SYSTEM_PROMPT;
-    const itemTarget = isTranscript ? TRANSCRIPT_ITEM_TARGET : DOCUMENT_ITEM_TARGET;
+    const isLesson = isStructuredLesson(content);
+    const systemPrompt = isLesson
+      ? BASE_SYSTEM_PROMPT + LESSON_ADDENDUM
+      : isTranscript
+        ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM
+        : BASE_SYSTEM_PROMPT;
+    const itemTarget = isLesson ? LESSON_ITEM_TARGET : isTranscript ? TRANSCRIPT_ITEM_TARGET : DOCUMENT_ITEM_TARGET;
 
     // ── Chunked extraction ──
     const chunks = chunkContent(content, isTranscript);
@@ -407,7 +410,7 @@ Deno.serve(async (req) => {
     let failedChunks = 0;
     const allItems: any[] = [];
 
-    console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} mode | Content: ${content.length} chars → ${totalChunks} chunk(s)`);
+    console.log(`[extract-tactics] ${isLesson ? 'LESSON' : isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} mode | Content: ${content.length} chars → ${totalChunks} chunk(s)`);
 
     for (let i = 0; i < chunks.length; i++) {
       const chunkLabel = totalChunks > 1 ? `Chunk ${i + 1} of ${totalChunks}` : '';
