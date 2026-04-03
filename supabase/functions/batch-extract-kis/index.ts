@@ -195,38 +195,8 @@ async function extractLessonDirect(
 
   console.log(`[lesson-pipeline] START | "${title}" | ${content.length} chars`);
 
-  // For shorter lessons (< 8K chars), skip enumeration and do a single focused pass
-  // to avoid timeout from 3 sequential AI calls
-  const useSimplifiedPipeline = content.length < 8000;
-
-  if (useSimplifiedPipeline) {
-    console.log(`[lesson-pipeline] SIMPLIFIED PATH (${content.length} chars < 8K threshold)`);
-    const directPrompt = `Extract EVERY distinct tactical play from this training lesson. Each concept, framework, technique, rule, or method is its OWN play.
-
-Title: ${title}
-${description ? `Description: ${description}` : ''}
-Tags: ${(tags || []).join(', ')}
-
-Content:
-${content}
-
-Be EXHAUSTIVE — if the lesson teaches 10 things, return 10 plays. Do NOT merge related concepts.
-Return ONLY a JSON array. Each play needs ALL fields: title, framework, who, source_excerpt, source_location, macro_situation, micro_strategy, why_it_matters, how_to_execute, what_this_unlocks, when_to_use, when_not_to_use, example_usage, tactic_summary, chapter, knowledge_type.`;
-
-    try {
-      const items = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, directPrompt, 24576));
-      pLog.stage2Raw = items.length;
-      pLog.initial_stage2_raw_count = items.length;
-      pLog.post_recovery_raw_count = items.length;
-      console.log(`[lesson-pipeline] Simplified: ${items.length} raw items`);
-      return { items, pipelineLog: pLog };
-    } catch (err: any) {
-      console.error('[lesson-pipeline] Simplified extraction FAILED:', err?.message);
-      return { items: [], pipelineLog: pLog };
-    }
-  }
-
-  // ── Full 2-stage pipeline for longer content ──
+  // Short lessons skip recovery (only 2 AI calls instead of 3) to avoid edge function timeout
+  const isShortLesson = content.length < 8000;
 
   // ── Stage 1: Exhaustive enumeration ──
   const enumPrompt = `Analyze this structured training lesson and create an exhaustive inventory of every distinct teachable concept, technique, framework, rule, signal, method, or heuristic.
