@@ -298,9 +298,15 @@ export async function autoOperationalizeResource(
       }
     }
 
-    if (finalExtracted.length === 0 && !isAudioType) {
+    // HARDENED: Allow heuristic fallback for structured course lessons even when
+    // resource_type is video/audio. These contain lesson text (not raw transcripts),
+    // so heuristic sentence-splitting produces valid KIs.
+    const { isStructuredCourseLesson: isStructuredForFallback } = getTranscriptPreparationState(
+      contentForExtraction, r.resource_type, r.title,
+    );
+    if (finalExtracted.length === 0 && (!isAudioType || isStructuredForFallback)) {
       finalExtracted = extractKnowledgeHeuristic(source);
-      log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length });
+      log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length, isStructuredForFallback });
     }
 
     if (finalExtracted.length > 0) {
