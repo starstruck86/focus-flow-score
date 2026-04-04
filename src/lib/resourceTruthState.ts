@@ -79,7 +79,7 @@ function blocker(type: BlockerType, detail: string): Blocker {
 
 // ── Truth State ───────────────────────────────────────────
 
-export type TruthState = 'ready' | 'processing' | 'blocked' | 'stalled' | 'qa_required' | 'quarantined';
+export type TruthState = 'ready' | 'processing' | 'blocked' | 'stalled' | 'qa_required' | 'quarantined' | 'reference_only';
 
 export interface ResourceTruth {
   truth_state: TruthState;
