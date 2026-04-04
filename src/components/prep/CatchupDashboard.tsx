@@ -74,10 +74,10 @@ function computeRunQuality(
   return 'healthy';
 }
 
-const QUALITY_DISPLAY: Record<RunQuality, { label: string; color: string; bg: string }> = {
-  healthy: { label: 'Healthy', color: 'text-emerald-700', bg: 'bg-emerald-500/10' },
-  watch: { label: 'Watch', color: 'text-amber-700', bg: 'bg-amber-500/10' },
-  risk: { label: 'Risk', color: 'text-destructive', bg: 'bg-destructive/10' },
+const QUALITY_DISPLAY: Record<RunQuality, { icon: string; label: string; color: string; bg: string; border: string }> = {
+  healthy: { icon: '●', label: 'Healthy', color: 'text-emerald-700', bg: 'bg-emerald-500/15', border: 'border-emerald-500/25' },
+  watch: { icon: '◐', label: 'Watch', color: 'text-amber-700', bg: 'bg-amber-500/15', border: 'border-amber-500/25' },
+  risk: { icon: '▲', label: 'Risk', color: 'text-destructive', bg: 'bg-destructive/15', border: 'border-destructive/25' },
 };
 
 // ── Status header config ───────────────────────────────────
@@ -88,74 +88,52 @@ function getStatusHeader(
   const totalRes = snapshot?.total_resources || 0;
   const needsAction = snapshot?.needs_action || 0;
 
-  if (status === 'scanning') {
-    return { dot: 'bg-primary animate-pulse', title: 'SCANNING LIBRARY', sub: 'Classifying resources against current standards…' };
-  }
-  if (status === 'scanned' && mode === 'dry_run') {
-    return { dot: 'bg-blue-500', title: 'DRY RUN COMPLETE', sub: `${totalRes} resources scanned · ${needsAction} need action` };
-  }
-  if (status === 'scanned') {
-    return { dot: 'bg-amber-500', title: 'READY TO EXECUTE', sub: `${needsAction} resources queued for processing` };
-  }
+  if (status === 'scanning') return { dot: 'bg-primary animate-pulse', title: 'SCANNING LIBRARY', sub: 'Classifying resources against current standards…', activeLine: null };
+  if (status === 'scanned' && mode === 'dry_run') return { dot: 'bg-blue-500', title: 'DRY RUN COMPLETE', sub: `${totalRes} resources scanned · ${needsAction} need action`, activeLine: null };
+  if (status === 'scanned') return { dot: 'bg-amber-500', title: 'READY TO EXECUTE', sub: `${needsAction} resources queued for processing`, activeLine: null };
   if (status === 'running' && currentPhase) {
     const phaseLabel = PHASE_CONFIG[currentPhase].label.toUpperCase();
-    return { dot: 'bg-primary animate-pulse', title: `RUNNING — ${phaseLabel}`, sub: `Processing ${totalProcessed}/${totalItems} items` };
+    return { dot: 'bg-primary animate-pulse', title: `RUNNING — ${phaseLabel}`, sub: `${totalProcessed}/${totalItems} items processed`, activeLine: `Currently processing: ${PHASE_CONFIG[currentPhase].label}` };
   }
-  if (status === 'completed') {
-    return { dot: 'bg-emerald-500', title: 'CATCH-UP COMPLETE', sub: `${totalProcessed} items processed across selected phases` };
-  }
-  if (status === 'cancelled') {
-    return { dot: 'bg-muted-foreground', title: 'RUN CANCELLED', sub: `${totalProcessed} items were processed before cancellation` };
-  }
-  return { dot: 'bg-muted-foreground', title: 'RECONCILIATION', sub: '' };
+  if (status === 'completed') return { dot: 'bg-emerald-500', title: 'CATCH-UP COMPLETE', sub: `${totalProcessed} items processed across selected phases`, activeLine: null };
+  if (status === 'cancelled') return { dot: 'bg-muted-foreground', title: 'RUN CANCELLED', sub: `${totalProcessed} items processed before cancellation`, activeLine: null };
+  return { dot: 'bg-muted-foreground', title: 'RECONCILIATION', sub: '', activeLine: null };
 }
 
-// ── Next action recommendation ─────────────────────────────
+// ── Next action — directive tone ───────────────────────────
 function getNextAction(
-  status: string, mode: CatchupMode, lastStep: string, snapshot: any,
-): { label: string; buttonLabel?: string; buttonAction?: 'execute' | 'reset' } | null {
-  if (status === 'scanned' && mode === 'dry_run') {
-    return { label: 'Review buckets below, then switch to Safe Auto-Fix and run enrichment only.', buttonLabel: 'Run Preview', buttonAction: 'execute' };
-  }
-  if (status === 'scanned' && mode === 'safe_auto_fix') {
-    return { label: 'Start with enrichment only. Do not enable extraction until enrichment is validated.', buttonAction: 'execute' };
-  }
-  if (status === 'scanned' && mode === 'force_reprocess') {
-    return { label: 'Only use after safe_auto_fix has been validated. Consider enrichment-only first.', buttonAction: 'execute' };
-  }
-  if (status === 'completed' && lastStep === 'dry_run') {
-    return { label: 'Close this run. Switch to Safe Auto-Fix and run enrichment phase only.', buttonLabel: 'Start New Run', buttonAction: 'reset' };
-  }
-  if (status === 'completed' && lastStep === 'enrichment') {
-    return { label: 'Validate enriched resources in the control center. Then run a new dry run and enable extraction.', buttonLabel: 'Start New Run', buttonAction: 'reset' };
-  }
-  if (status === 'completed' && lastStep === 'extraction') {
-    return { label: 'Validate KI outputs and readiness changes. Then enable activation + QA surfacing.', buttonLabel: 'Start New Run', buttonAction: 'reset' };
-  }
-  if (status === 'completed' && lastStep === 'full') {
-    return { label: 'Review QA-surfaced items. Verify the control center reflects updated state.', buttonLabel: 'Done', buttonAction: 'reset' };
-  }
-  if (status === 'cancelled') {
-    return { label: 'Run was cancelled. Start a new dry run to re-assess.', buttonLabel: 'Start New Run', buttonAction: 'reset' };
-  }
+  status: string, mode: CatchupMode, lastStep: string,
+): { label: string; bold: string; buttonLabel?: string; buttonAction?: 'execute' | 'reset' } | null {
+  if (status === 'scanned' && mode === 'dry_run')
+    return { bold: 'Review bucket breakdown', label: 'then switch to Safe Auto-Fix and run enrichment only', buttonLabel: 'Run Preview', buttonAction: 'execute' };
+  if (status === 'scanned' && mode === 'safe_auto_fix')
+    return { bold: 'Run enrichment only', label: '— do not enable extraction until enrichment is validated', buttonAction: 'execute' };
+  if (status === 'scanned' && mode === 'force_reprocess')
+    return { bold: 'Validate with safe_auto_fix first', label: '— force reprocess should only follow a clean validation pass', buttonAction: 'execute' };
+  if (status === 'completed' && lastStep === 'dry_run')
+    return { bold: 'Switch to Safe Auto-Fix', label: 'and run enrichment phase only', buttonLabel: 'New Run', buttonAction: 'reset' };
+  if (status === 'completed' && lastStep === 'enrichment')
+    return { bold: 'Validate enriched resources', label: 'before enabling extraction in a new run', buttonLabel: 'New Run', buttonAction: 'reset' };
+  if (status === 'completed' && lastStep === 'extraction')
+    return { bold: 'Validate KI outputs and readiness', label: 'then enable activation + QA surfacing', buttonLabel: 'New Run', buttonAction: 'reset' };
+  if (status === 'completed' && lastStep === 'full')
+    return { bold: 'Review QA-surfaced items', label: 'and verify control center reflects updated state', buttonLabel: 'Done', buttonAction: 'reset' };
+  if (status === 'cancelled')
+    return { bold: 'Start a new dry run', label: 'to re-assess library state', buttonLabel: 'New Run', buttonAction: 'reset' };
   return null;
 }
 
 // ── Phase warnings ─────────────────────────────────────────
 function getPhaseWarnings(selected: CatchupPhase[], lastStep: string, mode: CatchupMode): { title: string; desc: string } | null {
   const idx = stepIndex(lastStep);
-  if (mode === 'force_reprocess' && lastStep === 'none') {
+  if (mode === 'force_reprocess' && lastStep === 'none')
     return { title: 'Force Reprocess without prior validation', desc: 'Data may be overwritten. Run safe_auto_fix first to validate.' };
-  }
-  if (selected.includes('extract') && idx < 1) {
-    return { title: 'Extraction before enrichment validation', desc: 'This may produce poor KI outputs or mask upstream issues. Run enrichment-only first.' };
-  }
-  if (selected.includes('activate') && idx < 2) {
+  if (selected.includes('extract') && idx < 1)
+    return { title: 'Extraction before enrichment validation', desc: 'May produce poor KI outputs or mask upstream issues. Run enrichment-only first.' };
+  if (selected.includes('activate') && idx < 2)
     return { title: 'Activation before extraction validation', desc: 'Activation without validated KIs may not meaningfully improve readiness.' };
-  }
-  if (selected.includes('surface_to_qa') && idx < 2) {
-    return { title: 'QA surfacing selected early', desc: 'Consider completing enrichment and extraction before surfacing QA items.' };
-  }
+  if (selected.includes('surface_to_qa') && idx < 2)
+    return { title: 'QA surfacing selected early', desc: 'Complete enrichment and extraction before surfacing QA items.' };
   return null;
 }
 
@@ -179,29 +157,26 @@ export function CatchupDashboard() {
   if (status === 'idle') {
     return (
       <Card className="border-dashed">
-        <CardContent className="py-5 px-4 space-y-4">
+        <CardContent className="py-4 px-4 space-y-3">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-sm font-bold">Library Reconciliation</h3>
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Evaluate every resource against current enrichment, extraction, and readiness standards.
-            Follow the staged rollout below.
+          <p className="text-xs text-muted-foreground">
+            Evaluate every resource against current standards. Follow the staged rollout:
           </p>
-          {/* Idle roadmap */}
           <div className="flex items-center gap-0.5 text-[10px]">
             {ROLLOUT_STEPS.map((step, i) => (
               <React.Fragment key={step.key}>
-                <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50 text-muted-foreground">
-                  <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-muted text-[9px] font-bold">{i + 1}</span>
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground">
+                  <span className="inline-flex items-center justify-center h-3.5 w-3.5 rounded-full bg-muted text-[8px] font-bold">{i + 1}</span>
                   {step.label}
                 </span>
-                {i < ROLLOUT_STEPS.length - 1 && <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />}
+                {i < ROLLOUT_STEPS.length - 1 && <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/30 shrink-0" />}
               </React.Fragment>
             ))}
           </div>
-          {/* Launch */}
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2">
             <Select value={selectedMode} onValueChange={v => setSelectedMode(v as CatchupMode)}>
               <SelectTrigger className="h-8 w-[150px] text-xs">
                 <SelectValue />
@@ -222,27 +197,27 @@ export function CatchupDashboard() {
     );
   }
 
-  // ── Scanning state ────────────────────────────────────────
+  // ── Scanning ──────────────────────────────────────────────
   if (status === 'scanning') {
     return (
       <Card>
-        <CardContent className="py-8 text-center space-y-2">
-          <Loader2 className="h-7 w-7 animate-spin mx-auto text-primary" />
-          <p className="text-sm font-semibold">Scanning Library…</p>
+        <CardContent className="py-6 text-center space-y-1.5">
+          <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+          <p className="text-sm font-bold">Scanning Library…</p>
           <p className="text-xs text-muted-foreground">Classifying every resource against current standards</p>
         </CardContent>
       </Card>
     );
   }
 
-  // ── Error state ───────────────────────────────────────────
+  // ── Error ─────────────────────────────────────────────────
   if (status === 'error') {
     return (
       <Card className="border-destructive/30">
-        <CardContent className="py-4 px-4">
+        <CardContent className="py-3 px-4">
           <div className="flex items-center gap-2">
             <XCircle className="h-4 w-4 text-destructive shrink-0" />
-            <p className="text-sm text-destructive flex-1">{error}</p>
+            <p className="text-xs text-destructive flex-1">{error}</p>
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={reset}>Dismiss</Button>
           </div>
         </CardContent>
@@ -250,7 +225,7 @@ export function CatchupDashboard() {
     );
   }
 
-  // ── Active states (scanned / running / completed / cancelled) ──
+  // ── Active states ─────────────────────────────────────────
   const isRunning = status === 'running';
   const isDone = status === 'completed' || status === 'cancelled';
   const isScanned = status === 'scanned';
@@ -268,38 +243,55 @@ export function CatchupDashboard() {
   const phaseWarning = (isScanned && mode !== 'dry_run') ? getPhaseWarnings(selectedPhases, lastCompletedStep, mode) : null;
   const runQuality = (isRunning || isDone) ? computeRunQuality(phaseResults, snapshot, phaseWarning?.title || null) : null;
   const statusHeader = getStatusHeader(status, mode, currentPhase, snapshot, totalProcessed, totalItems);
-  const nextAction = getNextAction(status, mode, lastCompletedStep, snapshot);
+  const nextAction = getNextAction(status, mode, lastCompletedStep);
 
-  // What Changed summary
   const totalSucceeded = Object.values(phaseResults).reduce((s, p) => s + p.succeeded, 0);
   const totalFailed = Object.values(phaseResults).reduce((s, p) => s + p.failed, 0);
-  const totalQa = Object.values(phaseResults).reduce((s, p) => s + p.qa_flagged, 0);
+
+  // Top 3 buckets for collapsed view
+  const topBuckets = snapshot ? Object.entries(snapshot.buckets)
+    .filter(([, c]) => (c as number) > 0)
+    .sort(([, a], [, b]) => (b as number) - (a as number))
+    .slice(0, 3) : [];
+  const allBuckets = snapshot ? Object.entries(snapshot.buckets).filter(([, c]) => (c as number) > 0) : [];
+  const topIssues = snapshot ? Object.entries(snapshot.issue_breakdown)
+    .sort(([, a], [, b]) => (b as number) - (a as number))
+    .slice(0, 3) : [];
+  const allIssues = snapshot ? Object.entries(snapshot.issue_breakdown).sort(([, a], [, b]) => (b as number) - (a as number)) : [];
 
   return (
-    <Card className="overflow-hidden">
-      {/* ── 1. STATUS HEADER ─────────────────────────────────── */}
+    <Card className="overflow-hidden shadow-sm">
+      {/* ═══ 1. STATUS HEADER ═══════════════════════════════════ */}
       <div className={cn(
-        'px-4 py-3 border-b',
-        isRunning && 'bg-primary/5',
-        isDone && status === 'completed' && 'bg-emerald-500/5',
+        'px-4 py-3 border-b transition-colors',
+        isRunning && 'bg-primary/8 border-primary/15',
+        isDone && status === 'completed' && 'bg-emerald-500/8 border-emerald-500/15',
         isDone && status === 'cancelled' && 'bg-muted/50',
-        isScanned && mode === 'dry_run' && 'bg-blue-500/5',
-        isScanned && mode !== 'dry_run' && 'bg-amber-500/5',
+        isScanned && mode === 'dry_run' && 'bg-blue-500/8 border-blue-500/15',
+        isScanned && mode !== 'dry_run' && 'bg-amber-500/8 border-amber-500/15',
       )}>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', statusHeader.dot)} />
+            <div className={cn('h-3 w-3 rounded-full shrink-0 shadow-sm', statusHeader.dot)} />
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-xs font-bold tracking-wide uppercase">{statusHeader.title}</h3>
+                <h3 className="text-sm font-extrabold tracking-wide uppercase leading-tight">{statusHeader.title}</h3>
                 <Badge variant="outline" className="text-[9px] h-4">{MODE_LABELS[mode].label}</Badge>
                 {runQuality && (
-                  <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', QUALITY_DISPLAY[runQuality].bg, QUALITY_DISPLAY[runQuality].color)}>
-                    {runQuality === 'healthy' ? '●' : runQuality === 'watch' ? '◐' : '▲'} {QUALITY_DISPLAY[runQuality].label}
+                  <span className={cn(
+                    'text-[10px] font-bold px-2 py-0.5 rounded-full border',
+                    QUALITY_DISPLAY[runQuality].bg,
+                    QUALITY_DISPLAY[runQuality].color,
+                    QUALITY_DISPLAY[runQuality].border,
+                  )}>
+                    {QUALITY_DISPLAY[runQuality].icon} {QUALITY_DISPLAY[runQuality].label}
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{statusHeader.sub}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{statusHeader.sub}</p>
+              {statusHeader.activeLine && (
+                <p className="text-[11px] text-primary font-semibold mt-0.5">{statusHeader.activeLine}</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -315,17 +307,16 @@ export function CatchupDashboard() {
             )}
           </div>
         </div>
-        {/* Global progress bar during run */}
         {isRunning && (
           <div className="mt-2">
-            <Progress value={globalProgress} className="h-1.5" />
-            <p className="text-[10px] text-muted-foreground mt-0.5 text-right">{globalProgress}%</p>
+            <Progress value={globalProgress} className="h-1.5 transition-all duration-500" />
+            <p className="text-[9px] text-muted-foreground mt-0.5 text-right font-mono">{globalProgress}%</p>
           </div>
         )}
       </div>
 
-      <CardContent className="py-3 px-4 space-y-3">
-        {/* ── 2. ROLLOUT STEP BAR ──────────────────────────────── */}
+      <CardContent className="py-2.5 px-4 space-y-2.5">
+        {/* ═══ 2. ROLLOUT STEP BAR ══════════════════════════════ */}
         <div className="flex items-center gap-0.5 text-[10px]">
           {ROLLOUT_STEPS.map((step, i) => {
             const completed = i <= currentStepIdx;
@@ -337,40 +328,43 @@ export function CatchupDashboard() {
             return (
               <React.Fragment key={step.key}>
                 <span className={cn(
-                  'flex items-center gap-1 px-2 py-1 rounded-md transition-colors',
-                  completed && 'bg-emerald-500/10 text-emerald-700 font-semibold',
-                  active && 'bg-primary/10 text-primary font-semibold',
-                  !completed && !active && 'text-muted-foreground bg-muted/30',
+                  'flex items-center gap-1 px-1.5 py-0.5 rounded transition-all duration-300',
+                  completed && 'bg-emerald-500/12 text-emerald-700 font-semibold',
+                  active && 'bg-primary/12 text-primary font-semibold',
+                  !completed && !active && 'text-muted-foreground/60 bg-muted/20',
                 )}>
                   {active ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : completed ? (
                     <CheckCircle2 className="h-3 w-3" />
                   ) : (
-                    <Circle className="h-3 w-3 opacity-40" />
+                    <Circle className="h-3 w-3 opacity-30" />
                   )}
                   {step.label}
                 </span>
-                {i < ROLLOUT_STEPS.length - 1 && <ChevronRight className="h-3 w-3 text-muted-foreground/30 shrink-0" />}
+                {i < ROLLOUT_STEPS.length - 1 && <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/25 shrink-0" />}
               </React.Fragment>
             );
           })}
         </div>
 
-        {/* ── 3. PRIMARY ACTION BAR ────────────────────────────── */}
+        {/* ═══ 3. PRIMARY ACTION BAR ════════════════════════════ */}
         {nextAction && (
-          <div className="flex items-center gap-2 p-2.5 rounded-md bg-muted/40 border border-border/50">
-            <ArrowRight className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span className="text-xs flex-1">{nextAction.label}</span>
+          <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/15">
+            <ArrowRight className="h-4 w-4 text-primary shrink-0" />
+            <p className="text-xs flex-1 leading-snug">
+              <span className="font-bold">{nextAction.bold}</span>{' '}
+              <span className="text-muted-foreground">{nextAction.label}</span>
+            </p>
             {nextAction.buttonAction === 'execute' && isScanned && (
               <Button
                 size="sm"
-                className="h-7 text-xs gap-1 shrink-0"
+                className="h-7 text-xs gap-1 shrink-0 shadow-sm"
                 onClick={() => executePhases()}
                 disabled={selectedPhases.length === 0}
               >
                 <Play className="h-3 w-3" />
-                {mode === 'dry_run' ? 'Preview' : `Run ${selectedPhases.length} Phase${selectedPhases.length !== 1 ? 's' : ''}`}
+                {mode === 'dry_run' ? 'Preview' : `Run ${selectedPhases.length}`}
               </Button>
             )}
             {nextAction.buttonAction === 'reset' && isDone && (
@@ -381,45 +375,44 @@ export function CatchupDashboard() {
           </div>
         )}
 
-        {/* ── PHASE SAFETY WARNING ─────────────────────────────── */}
+        {/* ═══ PHASE SAFETY WARNING ═════════════════════════════ */}
         {phaseWarning && (
-          <div className="flex items-start gap-2 p-2.5 rounded-md bg-destructive/10 border border-destructive/20">
+          <div className="flex items-start gap-2 p-2.5 rounded-md bg-destructive/12 border border-destructive/25 shadow-sm">
             <ShieldAlert className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-bold text-destructive">{phaseWarning.title}</p>
-              <p className="text-[11px] text-destructive/80 mt-0.5">{phaseWarning.desc}</p>
+              <p className="text-xs font-extrabold text-destructive">{phaseWarning.title}</p>
+              <p className="text-[11px] text-destructive/80 mt-0.5 leading-snug">{phaseWarning.desc}</p>
             </div>
           </div>
         )}
 
-        {/* ── 4. TRUST / PROGRESS METRICS ──────────────────────── */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-            <span className="font-medium text-foreground">{healthPct}%</span> healthy
+        {/* ═══ 4. TRUST / PROGRESS METRICS ══════════════════════ */}
+        <div className="flex flex-wrap gap-2 text-[10px]">
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/8 text-emerald-700 font-medium">
+            <CheckCircle2 className="h-3 w-3" /> {healthPct}% healthy
           </span>
           {(snapshot?.needs_action || 0) > 0 && (
-            <span>{snapshot.needs_action} need action</span>
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/8 text-amber-700">
+              {snapshot.needs_action} need action
+            </span>
           )}
           {(snapshot?.qa_flagged || 0) > 0 && (
-            <span>{snapshot.qa_flagged} QA flagged</span>
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/8 text-purple-700">
+              {snapshot.qa_flagged} QA
+            </span>
           )}
           {backfilled > 0 && (
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
               <RotateCcw className="h-2.5 w-2.5" /> {backfilled} repaired
             </span>
           )}
-          {Object.keys(snapshot?.issue_breakdown || {}).length > 0 && (
-            <span>{Object.keys(snapshot.issue_breakdown).length} issue types</span>
-          )}
         </div>
 
-        {/* ── 5. PHASE EXECUTION VIEW ──────────────────────────── */}
-        {/* Phase selection (scanned + not dry_run) */}
+        {/* ═══ 5. PHASE EXECUTION VIEW ══════════════════════════ */}
         {isScanned && mode !== 'dry_run' && (
-          <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Select Phases</p>
-            <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Select Phases</p>
+            <div className="grid grid-cols-2 gap-1.5">
               {(['enrich', 'extract', 'activate', 'surface_to_qa'] as CatchupPhase[]).map(phase => {
                 const pc = PHASE_CONFIG[phase];
                 const Icon = pc.icon;
@@ -433,14 +426,14 @@ export function CatchupDashboard() {
                   <label
                     key={phase}
                     className={cn(
-                      'flex items-center gap-2 px-2.5 py-2 rounded-md border cursor-pointer transition-colors text-xs',
-                      checked ? 'border-primary/30 bg-primary/5' : 'border-border/50 bg-background hover:bg-muted/30',
+                      'flex items-center gap-1.5 px-2 py-1.5 rounded-md border cursor-pointer transition-all duration-200 text-xs',
+                      checked ? 'border-primary/30 bg-primary/5 shadow-sm' : 'border-border/40 hover:bg-muted/30',
                     )}
                   >
-                    <Checkbox checked={checked} onCheckedChange={() => togglePhase(phase)} />
-                    <Icon className={cn('h-3.5 w-3.5 shrink-0', pc.color)} />
+                    <Checkbox checked={checked} onCheckedChange={() => togglePhase(phase)} className="h-3.5 w-3.5" />
+                    <Icon className={cn('h-3 w-3 shrink-0', pc.color)} />
                     <span className="flex-1 font-medium">{pc.label}</span>
-                    <span className="font-mono text-muted-foreground">{count}</span>
+                    <span className="font-mono text-muted-foreground text-[10px]">{count}</span>
                   </label>
                 );
               })}
@@ -448,10 +441,9 @@ export function CatchupDashboard() {
           </div>
         )}
 
-        {/* Phase progress (running / done) */}
         {(isRunning || isDone) && (
-          <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Phase Progress</p>
+          <div className="space-y-1">
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Phase Progress</p>
             {(['enrich', 'extract', 'activate', 'surface_to_qa'] as CatchupPhase[]).map(phase => {
               const pr = phaseResults[phase];
               const pc = PHASE_CONFIG[phase];
@@ -461,11 +453,11 @@ export function CatchupDashboard() {
               const wasSkipped = pr.status === 'skipped';
               return (
                 <div key={phase} className={cn(
-                  'flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors',
-                  isActive && 'bg-primary/5 border border-primary/20',
-                  wasSkipped && 'opacity-35',
+                  'flex items-center gap-1.5 px-2 py-1 rounded transition-all duration-300',
+                  isActive && 'bg-primary/6 ring-1 ring-primary/20',
+                  wasSkipped && 'opacity-30',
                 )}>
-                  <div className="w-24 text-xs flex items-center gap-1.5 shrink-0">
+                  <div className="w-[88px] text-[11px] flex items-center gap-1 shrink-0">
                     {isActive ? (
                       <Loader2 className={cn('h-3 w-3 animate-spin', pc.color)} />
                     ) : pr.status === 'complete' ? (
@@ -473,13 +465,13 @@ export function CatchupDashboard() {
                     ) : wasSkipped ? (
                       <span className="text-[10px]">—</span>
                     ) : (
-                      <Circle className="h-3 w-3 opacity-30" />
+                      <Circle className="h-3 w-3 opacity-25" />
                     )}
                     <span className={cn('font-medium', isActive && 'text-primary')}>{pc.label}</span>
                   </div>
-                  <Progress value={wasSkipped ? 0 : phasePct} className="h-1.5 flex-1" />
-                  <span className="text-[10px] font-mono w-20 text-right text-muted-foreground shrink-0">
-                    {wasSkipped ? 'skipped' : pr.status === 'pending' ? '—' : `${pr.succeeded} ok${pr.failed > 0 ? ` · ${pr.failed}✗` : ''}`}
+                  <Progress value={wasSkipped ? 0 : phasePct} className="h-1 flex-1 transition-all duration-500" />
+                  <span className="text-[9px] font-mono w-16 text-right text-muted-foreground shrink-0">
+                    {wasSkipped ? 'skip' : pr.status === 'pending' ? '—' : `${pr.succeeded}ok${pr.failed > 0 ? ` ${pr.failed}✗` : ''}`}
                   </span>
                 </div>
               );
@@ -487,72 +479,57 @@ export function CatchupDashboard() {
           </div>
         )}
 
-        {/* ── WHAT CHANGED (completion summary) ────────────────── */}
+        {/* ═══ 6. WHAT CHANGED ══════════════════════════════════ */}
         {isDone && status === 'completed' && totalSucceeded > 0 && (
-          <div className="p-2.5 rounded-md bg-emerald-500/5 border border-emerald-500/15 space-y-1">
-            <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider">What Changed</p>
-            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
-              {phaseResults.enrich.succeeded > 0 && (
-                <span className="text-emerald-700">+{phaseResults.enrich.succeeded} enriched</span>
-              )}
-              {phaseResults.extract.succeeded > 0 && (
-                <span className="text-emerald-700">+{phaseResults.extract.succeeded} extracted</span>
-              )}
-              {phaseResults.activate.succeeded > 0 && (
-                <span className="text-emerald-700">+{phaseResults.activate.succeeded} activated</span>
-              )}
-              {phaseResults.surface_to_qa.qa_flagged > 0 && (
-                <span className="text-purple-700">+{phaseResults.surface_to_qa.qa_flagged} surfaced to QA</span>
-              )}
-              {backfilled > 0 && (
-                <span className="text-muted-foreground">+{backfilled} content_length repaired</span>
-              )}
-              {totalFailed > 0 && (
-                <span className="text-destructive">{totalFailed} failed</span>
-              )}
+          <div className="p-2 rounded-md bg-emerald-500/6 border border-emerald-500/15">
+            <p className="text-[9px] font-bold text-emerald-700 uppercase tracking-widest mb-1">What Changed</p>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+              {phaseResults.enrich.succeeded > 0 && <span className="text-emerald-700 font-medium">+{phaseResults.enrich.succeeded} enriched</span>}
+              {phaseResults.extract.succeeded > 0 && <span className="text-emerald-700 font-medium">+{phaseResults.extract.succeeded} extracted</span>}
+              {phaseResults.activate.succeeded > 0 && <span className="text-emerald-700 font-medium">+{phaseResults.activate.succeeded} activated</span>}
+              {phaseResults.surface_to_qa.qa_flagged > 0 && <span className="text-purple-700 font-medium">+{phaseResults.surface_to_qa.qa_flagged} QA surfaced</span>}
+              {backfilled > 0 && <span className="text-muted-foreground">+{backfilled} repaired</span>}
+              {totalFailed > 0 && <span className="text-destructive font-medium">{totalFailed} failed</span>}
             </div>
           </div>
         )}
 
-        {/* ── 6. EXPANDABLE DETAILS ────────────────────────────── */}
-        {snapshot && (
+        {/* ═══ 7. EXPANDABLE DETAILS ════════════════════════════ */}
+        {snapshot && (topBuckets.length > 0 || topIssues.length > 0) && (
           <details className="text-xs group">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground text-[10px] font-medium uppercase tracking-wider">
-              Bucket & Issue Details
+            <summary className="cursor-pointer text-[9px] font-bold text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors select-none">
+              Details
             </summary>
-            <div className="mt-2 space-y-3">
-              {/* Bucket breakdown */}
-              <div className="grid grid-cols-2 gap-1.5">
-                {Object.entries(snapshot.buckets).map(([bucket, count]) => {
-                  const config = BUCKET_CONFIG[bucket] || { label: bucket, icon: FileText, color: 'text-muted-foreground' };
-                  const Icon = config.icon;
-                  return (
-                    <div key={bucket} className="flex items-center gap-1.5 px-2 py-1 rounded bg-muted/30">
-                      <Icon className={cn('h-3 w-3 shrink-0', config.color)} />
-                      <span className="truncate flex-1">{config.label}</span>
-                      <span className="font-mono font-medium">{count as number}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Issue breakdown */}
-              {Object.keys(snapshot.issue_breakdown).length > 0 && (
-                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
-                  {Object.entries(snapshot.issue_breakdown)
-                    .sort(([, a], [, b]) => (b as number) - (a as number))
-                    .map(([issue, count]) => (
-                      <div key={issue} className="flex justify-between">
-                        <span className="text-muted-foreground truncate">{issue.replace(/_/g, ' ')}</span>
-                        <span className="font-mono ml-2">{count as number}</span>
+            <div className="mt-1.5 space-y-2">
+              {allBuckets.length > 0 && (
+                <div className="grid grid-cols-2 gap-1">
+                  {allBuckets.map(([bucket, count]) => {
+                    const config = BUCKET_CONFIG[bucket] || { label: bucket, icon: FileText, color: 'text-muted-foreground' };
+                    const Icon = config.icon;
+                    return (
+                      <div key={bucket} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/20 text-[10px]">
+                        <Icon className={cn('h-2.5 w-2.5 shrink-0', config.color)} />
+                        <span className="truncate flex-1">{config.label}</span>
+                        <span className="font-mono">{count as number}</span>
                       </div>
-                    ))}
+                    );
+                  })}
+                </div>
+              )}
+              {allIssues.length > 0 && (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0 text-[10px]">
+                  {allIssues.map(([issue, count]) => (
+                    <div key={issue} className="flex justify-between py-0.5">
+                      <span className="text-muted-foreground truncate">{issue.replace(/_/g, ' ')}</span>
+                      <span className="font-mono ml-1">{count as number}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           </details>
         )}
 
-        {/* Error */}
         {error && (
           <div className="flex items-center gap-1.5 text-xs text-destructive p-2 rounded-md bg-destructive/5">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
