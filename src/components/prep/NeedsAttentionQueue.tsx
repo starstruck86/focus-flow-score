@@ -56,14 +56,15 @@ const BLOCKER_PRIORITY: Record<BlockerType, number> = {
   needs_enrichment: 4,
   needs_extraction: 5,
   needs_activation: 6,
-  missing_context: 7,
-  route_low_confidence: 8,
-  route_manual_assist: 9,
-  qa_required: 10,
-  stale_version: 11,
-  downstream_ineligible: 12,
-  audit_mismatch: 13,
-  unknown_processing_state: 14,
+  needs_auth: 7,
+  missing_context: 8,
+  route_low_confidence: 9,
+  route_manual_assist: 10,
+  qa_required: 11,
+  stale_version: 12,
+  downstream_ineligible: 13,
+  audit_mismatch: 14,
+  unknown_processing_state: 15,
 };
 
 const BLOCKER_ICON: Partial<Record<BlockerType, React.ElementType>> = {

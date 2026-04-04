@@ -155,7 +155,7 @@ export function deriveResourceTruth(
   // ── Auth-gated resources — manual only ───────────────────
   const enrichStatusRaw = enrichStatus as string;
   if (enrichStatusRaw === 'needs_auth' && !isActivelyProcessing) {
-    blockers.push(blocker('route_manual_assist', `Auth-gated content — ${rAny.failure_reason || 'login required'}`));
+    blockers.push(blocker('needs_auth', `Auth-gated content — ${rAny.failure_reason || 'login required'}`));
   }
 
   // ── Enrichment blockers ─────────────────────────────────
