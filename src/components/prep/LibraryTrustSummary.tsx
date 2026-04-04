@@ -51,7 +51,7 @@ function getStatusInfo(r: LibraryReadiness): { label: string; reason: string } {
   return { label: 'System Not Ready', reason: 'Unknown blockers remain.' };
 }
 
-export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap }: Props) {
+export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onFixAllAuto }: Props) {
   const readiness = useMemo<LibraryReadiness>(() => {
     const truths = resources.map(r => {
       const lc = lifecycleMap.get(r.id);
