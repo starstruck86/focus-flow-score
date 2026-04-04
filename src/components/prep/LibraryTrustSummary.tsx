@@ -52,12 +52,19 @@ function getStatusInfo(r: LibraryReadiness): { label: string; reason: string } {
 }
 
 export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onFixAllAuto }: Props) {
-  const readiness = useMemo<LibraryReadiness>(() => {
+  const { readiness, autoFixableIds } = useMemo(() => {
     const truths = resources.map(r => {
       const lc = lifecycleMap.get(r.id);
       return deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
     });
-    return deriveLibraryReadiness(truths);
+    const rd = deriveLibraryReadiness(truths);
+    const ids: string[] = [];
+    truths.forEach((t, i) => {
+      if (t.all_blockers.some(b => b.fixability === 'auto_fixable' || b.fixability === 'semi_auto_fixable')) {
+        ids.push(resources[i].id);
+      }
+    });
+    return { readiness: rd, autoFixableIds: ids };
   }, [resources, lifecycleMap, audioJobsMap]);
 
   if (readiness.total_resources === 0) return null;
