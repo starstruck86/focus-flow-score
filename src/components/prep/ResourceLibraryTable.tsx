@@ -80,8 +80,6 @@ interface ResourceLibraryTableProps {
   fixAllProgressMessage?: string | null;
   /** Is fix-all currently running? */
   isFixAllRunning?: boolean;
-  /** External filter override (e.g. from NeedsAttentionQueue) */
-  externalHealthFilter?: string | null;
 }
 
 // ── Health filter type ─────────────────────────────────────
@@ -220,7 +218,6 @@ export function ResourceLibraryTable({
   lastFixResult,
   fixAllProgressMessage,
   isFixAllRunning,
-  externalHealthFilter,
 }: ResourceLibraryTableProps) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
@@ -236,18 +233,6 @@ export function ResourceLibraryTable({
   const liveJobResources = useResourceJobProgress(s => s.resources);
   const batchActive = useResourceJobProgress(s => s.batchActive);
   const isMobile = useIsMobile();
-
-  // Sync external filter from parent (e.g. NeedsAttentionQueue clicks)
-  // Use a counter-based approach so clicking the same filter type twice still works
-  const prevExternalFilter = useRef<string | null>(null);
-  const externalFilterVersion = useRef(0);
-  useEffect(() => {
-    if (externalHealthFilter) {
-      // Always apply — even if same filter, the parent re-triggered it intentionally
-      setHealthFilter(externalHealthFilter as HealthFilter);
-      prevExternalFilter.current = externalHealthFilter;
-    }
-  }, [externalHealthFilter]);
 
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
