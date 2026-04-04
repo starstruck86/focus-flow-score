@@ -962,7 +962,7 @@ function normalizeArray(v: any, fallback: string[]): string[] {
 // Validation
 // ═══════════════════════════════════════════
 
-function validateItem(item: any, isLesson: boolean, isDenseContent = false): string[] {
+function validateItem(item: any, isLesson: boolean, isDenseContent = false, contentLength = 0): string[] {
   const reasons: string[] = [];
   const title = (item.title || '').trim();
   const summary = (item.tactic_summary || '').trim();
@@ -970,9 +970,22 @@ function validateItem(item: any, isLesson: boolean, isDenseContent = false): str
   if (!title || title.length < 5) reasons.push('title too short');
 
   // Verb-led requirement: skip for lessons AND dense teaching content
+  // For long narrative transcripts (>10k), allow descriptive/takeaway-style titles
+  const isLongNarrative = !isLesson && !isDenseContent && contentLength > 10000;
   if (!isLesson && !isDenseContent) {
     const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|surface|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|seed|earn|secure|protect|defend|block|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i;
-    if (!verbLedPattern.test(title)) reasons.push('title not actionable');
+    if (!verbLedPattern.test(title)) {
+      if (isLongNarrative) {
+        // For long narratives, allow descriptive titles if they have substance
+        const descriptivePattern = /\b(the|how|why|what|when|key|critical|important|essential|effective|strategic|tactical|approach|method|technique|framework|principle|strategy|insight|lesson|takeaway|pattern|signal|rule|model)\b/i;
+        if (!descriptivePattern.test(title)) {
+          reasons.push('title not actionable');
+        }
+        // else: long narrative relaxation applied — descriptive title accepted
+      } else {
+        reasons.push('title not actionable');
+      }
+    }
   }
 
   if (!hasSubstance(summary, isLesson ? 10 : 20)) reasons.push('tactic_summary lacks substance');
@@ -1136,7 +1149,8 @@ async function updateExtractionStatus(supabase: any, resourceId: string, status:
   let finalStatus = status;
 
   // ── Guard: protect existing successful extraction from degradation ──
-  if (['extraction_requires_review', 'extraction_failed'].includes(status)) {
+  // Covers ALL failure/retry transitions including extraction_retrying
+  if (['extraction_requires_review', 'extraction_failed', 'extraction_retrying'].includes(status)) {
     const { hasKIs, count } = await hasExistingValidKIs(supabase, resourceId, 1);
     if (hasKIs) {
       console.log(`[extract] 🛡️ Protecting existing extraction: ${count} valid KIs found for "${resourceId}" — keeping 'extracted' instead of '${status}'`);
@@ -1401,7 +1415,7 @@ Deno.serve(async (req) => {
     const validated: any[] = [];
     const rejectReasons: Record<string, number> = {};
     for (const item of normalized) {
-      const reasons = validateItem(item, isLesson, isDenseContent);
+      const reasons = validateItem(item, isLesson, isDenseContent, resource.content.length);
       if (reasons.length > 0) {
         log.rejections.push({ title: (item.title || '').slice(0, 60), reasons });
         for (const r of reasons) { rejectReasons[r] = (rejectReasons[r] || 0) + 1; }
@@ -1424,9 +1438,24 @@ Deno.serve(async (req) => {
     }
 
     // ── 5. Composite dedup (conservative for lessons) ──
-    const deduped = compositeDedup(validated, isLesson);
+    let deduped = compositeDedup(validated, isLesson);
     log.dedupedCount = deduped.length;
     console.log(`[extract] "${resource.title}": ${deduped.length} after dedup (from ${validated.length} validated)`);
+
+    // ── 5a. Lesson KI ceiling: prevent over-extraction ──
+    if (isLesson) {
+      const lessonCeiling = Math.max(computeMinKiFloor(resource.content.length, isLesson, densitySignals), Math.floor(resource.content.length / 500));
+      if (deduped.length > lessonCeiling) {
+        console.log(`[extract-ceiling] 🔒 LESSON CEILING APPLIED: "${resource.title}" | content=${resource.content.length} chars | raw=${deduped.length} → capped=${lessonCeiling} | floor=${computeMinKiFloor(resource.content.length, isLesson, densitySignals)} | ceiling=${lessonCeiling}`);
+        // Keep strongest/most distinct KIs — those with longer summaries and excerpts tend to be more substantive
+        deduped = deduped
+          .map(item => ({ ...item, _quality: (item.tactic_summary?.length || 0) + (item.source_excerpt?.length || 0) + (item.how_to_execute?.length || 0) }))
+          .sort((a, b) => b._quality - a._quality)
+          .slice(0, lessonCeiling)
+          .map(({ _quality, ...item }) => item);
+        log.dedupedCount = deduped.length;
+      }
+    }
 
     if (isLesson && log.lessonPipeline) {
       log.lessonPipeline.dedupedFinal = deduped.length;
