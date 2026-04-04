@@ -499,6 +499,44 @@ function isStructuredLesson(content: string, title?: string, resourceType?: stri
   return false;
 }
 
+/**
+ * Detect dense teaching content that should receive relaxed validation
+ * even if it doesn't qualify as a structured lesson.
+ * Signals: enumerated titles, numbered sections, multiple takeaways/components.
+ */
+function isDenseTeachingContent(content: string, title: string): boolean {
+  const lower = content.toLowerCase();
+  const titleLower = title.toLowerCase();
+
+  // Title signals: "N takeaways", "N components", "N rules", etc.
+  const enumeratedTitle = /\b(\d{2,}|[5-9])\s+(takeaway|component|rule|principle|lesson|tip|step|key|thing|habit|trait|strategy|tactic|technique|mistake|way|secret|sign|signal|method|insight|idea|framework)/i.test(title);
+
+  // Content density: many numbered sections or headers
+  const numberedSections = (content.match(/^#{1,3}\s/gm) || []).length;
+  const numberedLists = (content.match(/^\s*\d+[.)]\s/gm) || []).length;
+
+  // Strong signal: title explicitly enumerates
+  if (enumeratedTitle) return true;
+
+  // Moderate signal: heavily structured content (7+ sections or 10+ numbered items)
+  if (numberedSections >= 7 || numberedLists >= 10) return true;
+
+  // Pattern: "critical components", "key takeaways", etc. in title
+  if (/\b(critical|key|essential|important|top|best|worst|biggest)\s+(component|takeaway|lesson|principle|rule|tip|step|factor|element|habit|mistake)/i.test(titleLower)) return true;
+
+  return false;
+}
+
+/** Compute content density score for floor boosting */
+function computeDensitySignals(content: string, title: string): { enumeratedCount: number; sectionCount: number; isDense: boolean } {
+  // Extract the number from titles like "17 Takeaways..."
+  const titleMatch = title.match(/\b(\d+)\s+(takeaway|component|rule|principle|lesson|tip|step|key|thing|habit|trait|strategy|tactic|technique|mistake|way|secret|sign|signal|method|insight|idea|framework)/i);
+  const enumeratedCount = titleMatch ? parseInt(titleMatch[1], 10) : 0;
+  const sectionCount = (content.match(/^#{1,3}\s/gm) || []).length;
+  const isDense = enumeratedCount >= 5 || sectionCount >= 7;
+  return { enumeratedCount, sectionCount, isDense };
+}
+
 function decodeHTMLEntities(text: string): string {
   return text
     .replace(/&ldquo;/g, '\u201C').replace(/&rdquo;/g, '\u201D')
