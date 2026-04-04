@@ -299,8 +299,13 @@ async function fixNeedsActivation(
 // ── Status Normalization ──────────────────────────────────
 
 /**
- * Normalize resources stuck in 'extraction_retrying' or with 'failed' job status
- * but that actually have KIs. Clear their stale status markers.
+ * Normalize resources with stale status markers.
+ * 
+ * Covers three classes of stale state:
+ * 1. extraction_retrying + existing KIs → set enrichment_status to 'extracted'
+ * 2. active_job_status = 'failed' + existing KIs → clear failed job marker
+ * 3. active_job_status = 'failed' + deep_enriched/enriched status → clear stale job marker
+ *    (the failed marker prevents the resource from being seen as ready)
  */
 async function normalizeStaleStatuses(
   resourceIds: string[],
@@ -311,6 +316,7 @@ async function normalizeStaleStatuses(
 
   if (resourceIds.length === 0) return result;
 
+  // Fetch KI counts for all candidate resources
   const { data: kiCounts } = await supabase
     .from('knowledge_items' as any)
     .select('source_resource_id')
@@ -318,34 +324,69 @@ async function normalizeStaleStatuses(
 
   const resourcesWithKIs = new Set((kiCounts ?? []).map((r: any) => r.source_resource_id));
 
+  // Also fetch current resource state to identify stale failed markers
+  const { data: resourceStates } = await supabase
+    .from('resources' as any)
+    .select('id, enrichment_status, active_job_status, active_job_error')
+    .in('id', resourceIds);
+
+  const stateMap = new Map<string, any>();
+  for (const r of (resourceStates ?? []) as any[]) {
+    stateMap.set(r.id, r);
+  }
+
   for (const id of resourceIds) {
-    if (!resourcesWithKIs.has(id)) continue;
+    const state = stateMap.get(id);
+    if (!state) continue;
+
+    const hasKIs = resourcesWithKIs.has(id);
+    const isFailedJob = state.active_job_status === 'failed';
+    const isRetrying = state.enrichment_status === 'extraction_retrying';
+    
+    // Determine if this resource needs normalization
+    const needsNormalization = 
+      (hasKIs && isRetrying) ||      // extraction_retrying but has KIs
+      (hasKIs && isFailedJob) ||      // failed job but has KIs — stale marker
+      (isFailedJob && ['deep_enriched', 'enriched', 'extracted', 'verified'].includes(state.enrichment_status)); // failed job on otherwise healthy status
+
+    if (!needsNormalization) continue;
+
     result.attempted++;
-    
-    callbacks?.onItemStart?.(id, 'normalize_status', `Normalizing status for ${id.slice(0, 8)}…`);
-    onProgress?.(`Normalizing status for ${id.slice(0, 8)}…`);
-    
-    const cleared = await clearFailedJobStatus(id);
-    if (cleared) {
+    callbacks?.onItemStart?.(id, 'normalize_status', `Normalizing stale status: ${id.slice(0, 8)}…`);
+    onProgress?.(`Normalizing stale status: ${id.slice(0, 8)}…`);
+
+    try {
+      const update: Record<string, any> = {};
+
+      // Clear stale failed job marker
+      if (isFailedJob) {
+        update.active_job_status = hasKIs ? 'succeeded' : null;
+        update.active_job_error = null;
+        update.active_job_finished_at = new Date().toISOString();
+      }
+
+      // Fix extraction_retrying → extracted when KIs exist
+      if (isRetrying && hasKIs) {
+        update.enrichment_status = 'extracted';
+      }
+
       const { error } = await supabase
         .from('resources' as any)
-        .update({
-          enrichment_status: 'extracted',
-        } as any)
-        .eq('id', id)
-        .in('enrichment_status', ['extraction_retrying']);
-      
+        .update(update as any)
+        .eq('id', id);
+
       if (!error) {
         result.succeeded++;
+        log.info('Normalized stale status', { id, hadKIs: hasKIs, wasRetrying: isRetrying, wasFailed: isFailedJob });
         callbacks?.onItemDone?.(id, 'normalize_status');
       } else {
         result.failed++;
-        result.errors.push(`${id}: status update failed`);
+        result.errors.push(`${id}: normalization update failed — ${error.message}`);
         callbacks?.onItemFailed?.(id, 'normalize_status');
       }
-    } else {
+    } catch (err: any) {
       result.failed++;
-      result.errors.push(`${id}: clear failed`);
+      result.errors.push(`${id}: ${err.message}`);
       callbacks?.onItemFailed?.(id, 'normalize_status');
     }
   }

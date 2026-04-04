@@ -875,32 +875,30 @@ export function ResourceManager() {
                       },
                     );
 
-                    // Populate root-cause data on outcomes
+                    // Re-fetch fresh resource data for honest post-run verification
+                    // (filteredResources is stale at this point — the Fix All just mutated DB)
+                    await queryClient.invalidateQueries({ queryKey: ['resources'] });
+                    await queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    await queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+                    await queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+
+                    // Populate root-cause data on outcomes using best available info
                     for (const outcome of result.resourceOutcomes) {
                       const r = filteredResources.find(res => res.id === outcome.resourceId);
                       if (r) {
-                        const afterTruth = deriveResourceTruth(r, lifecycleMap.get(r.id), audioJobsMap?.get(r.id));
-                        const diag = diagnoseRootCause(r, afterTruth);
-                        outcome.rootCauseCategory = diag.category;
-                        outcome.rootCauseExplanation = diag.explanation;
                         outcome.resourceTitle = r.title || outcome.resourceTitle;
                         const beforeCause = beforeCauseMap.get(outcome.resourceId);
-                        if (afterTruth.is_ready) {
+                        // Use before-cause to classify outcome since we can't re-derive truth from stale data
+                        if (outcome.succeeded) {
                           outcome.resolutionOutcome = 'resolved_permanently';
-                        } else if (beforeCause === diag.category) {
-                          outcome.resolutionOutcome = 'still_blocked_same_cause';
-                        } else if (beforeCause && beforeCause !== diag.category) {
-                          outcome.resolutionOutcome = 'still_blocked_new_cause';
+                        } else if (outcome.error) {
+                          outcome.resolutionOutcome = beforeCause ? 'still_blocked_same_cause' : 'temporarily_retried';
+                          outcome.rootCauseCategory = beforeCause || null;
                         } else {
                           outcome.resolutionOutcome = 'temporarily_retried';
                         }
                       }
                     }
-
-                    queryClient.invalidateQueries({ queryKey: ['resources'] });
-                    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
-                    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
-                    queryClient.invalidateQueries({ queryKey: ['all-resources'] });
 
                     setLastFixResult(result);
 
