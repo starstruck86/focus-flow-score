@@ -58,19 +58,23 @@ function getStatusInfo(r: LibraryReadiness): { label: string; reason: string } {
 }
 
 export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onFixAllAuto, onFilterChange, onRefresh, isRefreshing, lastFixResult }: Props) {
-  const { readiness, autoFixableIds } = useMemo(() => {
+  const { readiness, autoFixableIds, blockerBreakdown } = useMemo(() => {
     const truths = resources.map(r => {
       const lc = lifecycleMap.get(r.id);
       return deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
     });
     const rd = deriveLibraryReadiness(truths);
     const ids: string[] = [];
+    const breakdown: Record<string, number> = {};
     truths.forEach((t, i) => {
       if (t.all_blockers.some(b => b.fixability === 'auto_fixable' || b.fixability === 'semi_auto_fixable')) {
         ids.push(resources[i].id);
       }
+      if (t.primary_blocker) {
+        breakdown[t.primary_blocker.type] = (breakdown[t.primary_blocker.type] ?? 0) + 1;
+      }
     });
-    return { readiness: rd, autoFixableIds: ids };
+    return { readiness: rd, autoFixableIds: ids, blockerBreakdown: breakdown };
   }, [resources, lifecycleMap, audioJobsMap]);
 
   if (readiness.total_resources === 0) return null;
