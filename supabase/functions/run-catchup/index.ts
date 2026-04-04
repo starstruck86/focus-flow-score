@@ -302,17 +302,18 @@ Deno.serve(async (req) => {
     for (const item of items) {
       try {
         const resource = resourceMap.get(item.resource_id);
-        const route = resource ? deriveRoute(resource) : { pipeline: "enrich_then_extract" as Pipeline, extraction_method: "standard" as ExtractionMethod, primary_asset: "url" as AssetKind, confidence: "low" as RouteConfidence, has_override: false };
+        const route = resource ? deriveRoute(resource) : { pipeline: "enrich_then_extract" as Pipeline, extraction_method: "standard" as ExtractionMethod, primary_asset: "url" as AssetKind, confidence: "low" as RouteConfidence, has_override: false, reason: ["No resource data — fallback route"] };
+        const routeReasonSummary = route.reason.slice(0, 3).join("; ");
 
         // Confidence-based execution gating: low confidence → QA, not execution
         if (route.confidence === "low" && run.mode !== "dry_run") {
-          console.log(`[route-gated] resource=${item.resource_id} confidence=low → routed to QA`);
+          console.log(`[route-gated] resource=${item.resource_id} confidence=low reason="${routeReasonSummary}" → routed to QA`);
           await supabase
             .from("library_reconciliation_items")
             .update({
               processed: true,
               qa_flagged: true,
-              qa_reason: "Low routing confidence — requires manual review",
+              qa_reason: `Low routing confidence: ${routeReasonSummary}`,
               phase_outcomes: {
                 phase,
                 processed_at: new Date().toISOString(),
@@ -321,6 +322,8 @@ Deno.serve(async (req) => {
                 route_extraction_method: route.extraction_method,
                 route_primary_asset: route.primary_asset,
                 route_confidence: route.confidence,
+                route_has_override: route.has_override,
+                route_reason_summary: routeReasonSummary,
               },
             })
             .eq("id", item.id);
