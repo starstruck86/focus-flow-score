@@ -40,13 +40,19 @@ interface Props {
 
 export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilterChange, activeFilter }: Props) {
   const counts = useMemo<HealthCounts>(() => {
-    const c = { total: resources.length, ready: 0, improving: 0, blocked: 0 };
+    const c: HealthCounts = { total: resources.length, ready: 0, processing: 0, blocked: 0, stalled: 0, qa_required: 0 };
     for (const r of resources) {
       const lc = lifecycleMap.get(r.id);
-      const { readiness } = deriveReadiness(lc, r, audioJobsMap?.get(r.id));
-      if (readiness === 'ready') c.ready++;
-      else if (readiness === 'improving') c.improving++;
-      else c.blocked++;
+      const truth = deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
+      switch (truth.truth_state) {
+        case 'ready': c.ready++; break;
+        case 'processing': c.processing++; break;
+        case 'stalled': c.stalled++; break;
+        case 'qa_required': c.qa_required++; break;
+        case 'quarantined':
+        case 'blocked':
+        default: c.blocked++; break;
+      }
     }
     return c;
   }, [resources, lifecycleMap, audioJobsMap]);
