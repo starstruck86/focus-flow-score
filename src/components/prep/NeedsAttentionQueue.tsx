@@ -129,7 +129,7 @@ function getActionForBlocker(b: Blocker): { label: string; key: string } {
   }
 }
 
-export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onAction, onInspect }: Props) {
+export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onAction, onBulkAction, onInspect }: Props) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     new Set(['contradictory_state', 'stalled_extraction', 'stalled_enrichment', 'missing_content', 'needs_extraction'])
   );
