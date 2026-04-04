@@ -22,6 +22,7 @@ import { isNotionZipResource, splitNotionImport } from '@/lib/notionZipSplitter'
 import { isNotionSourceArchive, isNotionDirectImport, getImportGroupId, deleteImportGroupChildren, deleteJunkNotionChildren } from '@/lib/notionDirectImporter';
 import { isFixEligible, fixResourceStateFromContent, fixNotionResourcesWithContent, FIX_RESOURCE_INVALIDATION_KEYS } from '@/lib/fixResourceState';
 import { deriveProcessingState } from '@/lib/processingState';
+import { deriveResourceTruth } from '@/lib/resourceTruthState';
 import type { Resource } from '@/hooks/useResources';
 
 const RESOLUTION_LABELS: Record<string, string> = {
