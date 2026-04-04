@@ -12,6 +12,13 @@
  *
  * Benchmark: Account Scoring lesson (14,729 chars) → ~35 candidates → ~36 raw → ~32 KIs inserted.
  * If this drops materially below ~30, treat as a regression.
+ *
+ * RETRY ORCHESTRATION:
+ *   Attempt 1: Standard extraction
+ *   Attempt 2: Re-chunk with smaller segments + different boundaries
+ *   Attempt 3: Alternate prompt strategy (more structured/explicit)
+ *   Attempt 4: Fallback — generate summary first, extract KIs from summary
+ *   After max attempts: marked 'extraction_requires_review', not terminal 'failed'
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -30,6 +37,99 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// ═══════════════════════════════════════════
+// Failure Classification
+// ═══════════════════════════════════════════
+
+type ExtractionFailureType =
+  | 'transient_error'        // timeout, network, model hiccup
+  | 'under_floor_invariant'  // KI count below threshold
+  | 'segmentation_failure'   // bad chunking / parsing
+  | 'model_failure'          // empty or malformed response
+  | 'structural_failure';    // bad content / ingestion issue
+
+function classifyFailure(error: any, kiCount: number, minFloor: number, rawItemCount: number): ExtractionFailureType {
+  const msg = (error?.message || error || '').toString().toLowerCase();
+
+  // Network/timeout/rate-limit → transient
+  if (msg.includes('timeout') || msg.includes('429') || msg.includes('503') || msg.includes('network') || msg.includes('econnrefused')) {
+    return 'transient_error';
+  }
+
+  // Got items but below floor → under_floor
+  if (kiCount > 0 && kiCount < minFloor) {
+    return 'under_floor_invariant';
+  }
+
+  // AI returned nothing or unparseable → model_failure
+  if (rawItemCount === 0 && !msg) {
+    return 'model_failure';
+  }
+
+  // AI error message suggests bad response
+  if (msg.includes('ai error') || msg.includes('ai returned') || msg.includes('parse')) {
+    return 'model_failure';
+  }
+
+  // Content too short or structurally broken
+  if (msg.includes('content too short') || msg.includes('no content')) {
+    return 'structural_failure';
+  }
+
+  // Default: transient (optimistic — allows retry)
+  return 'transient_error';
+}
+
+// Strategy selection based on attempt number and failure type
+type ExtractionStrategy = 'standard' | 'rechunk' | 'structured_prompt' | 'summary_first';
+
+function selectStrategy(attemptNumber: number, lastFailureType?: ExtractionFailureType): ExtractionStrategy {
+  if (attemptNumber <= 1) return 'standard';
+
+  // Failure-aware strategy selection
+  if (lastFailureType === 'under_floor_invariant') {
+    // Under-floor → try more structured prompt, then summary
+    return attemptNumber === 2 ? 'structured_prompt' : attemptNumber === 3 ? 'rechunk' : 'summary_first';
+  }
+  if (lastFailureType === 'segmentation_failure') {
+    return 'rechunk';
+  }
+  if (lastFailureType === 'model_failure') {
+    return attemptNumber === 2 ? 'structured_prompt' : 'summary_first';
+  }
+
+  // Default escalation: standard → rechunk → structured_prompt → summary_first
+  if (attemptNumber === 2) return 'rechunk';
+  if (attemptNumber === 3) return 'structured_prompt';
+  return 'summary_first';
+}
+
+// ═══════════════════════════════════════════
+// Extraction Telemetry
+// ═══════════════════════════════════════════
+
+interface ExtractionTelemetry {
+  resource_id: string;
+  title: string;
+  content_length: number;
+  is_structured_lesson: boolean;
+  ki_count: number;
+  min_ki_floor: number;
+  attempt_number: number;
+  extractor_strategy: ExtractionStrategy;
+  failure_reason: ExtractionFailureType | null;
+  duration_ms: number;
+  routing_basis: string;
+}
+
+function logTelemetry(t: ExtractionTelemetry) {
+  console.log(`[extract-telemetry] ${JSON.stringify(t)}`);
+}
+
+// ═══════════════════════════════════════════
+// Prompts
+// ═══════════════════════════════════════════
 
 const BASE_SYSTEM_PROMPT = `You are an elite sales execution coach. Extract TACTICAL PLAYS from content.
 
@@ -72,6 +172,27 @@ For each concept, return a JSON object with:
 
 Be EXHAUSTIVE. List every distinct framework, scoring criteria, research technique, signal, decision rule, tiering system, metric, or heuristic. Return ONLY a JSON array.`;
 
+// Structured prompt variant (Attempt 3) — more explicit, step-by-step
+const STRUCTURED_PROMPT_ADDENDUM = `
+
+CRITICAL: You MUST extract at least one play for every major section or concept in the content.
+Scan the content section by section. For each heading or distinct topic, produce AT LEAST one play.
+If you find fewer than 5 plays, re-read the content and look for:
+- Named frameworks or models
+- Step-by-step processes
+- Rules of thumb or heuristics
+- Decision criteria or scoring methods
+- Specific techniques with examples
+Do NOT merge multiple concepts into one play. Each distinct idea = one play.`;
+
+// Summary-first prompt (Attempt 4 fallback)
+const SUMMARY_EXTRACTION_SYSTEM = `You are an expert content analyst. First, create a structured summary of this content organized by topic/concept. Then, for each topic, extract a tactical play.
+
+For EACH distinct concept or technique in the content, return a JSON object with all required fields.
+Be thorough — extract EVERY teachable concept, not just the main ones.
+
+Return ONLY a JSON array.`;
+
 // ═══════════════════════════════════════════
 // Types
 // ═══════════════════════════════════════════
@@ -91,6 +212,9 @@ interface ExtractionLog {
   outcome: string;
   error?: string;
   lessonPipeline?: any;
+  attemptNumber?: number;
+  strategy?: string;
+  failureType?: string;
 }
 
 // ═══════════════════════════════════════════
@@ -132,12 +256,12 @@ function decodeHTMLEntities(text: string): string {
 // AI gateway helpers
 // ═══════════════════════════════════════════
 
-async function aiRequest(apiKey: string, system: string, user: string, maxTokens = 16384): Promise<any> {
+async function aiRequest(apiKey: string, system: string, user: string, maxTokens = 16384, temperature = 0.2): Promise<any> {
   const body = JSON.stringify({
     model: 'google/gemini-2.5-flash',
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
     max_tokens: maxTokens,
-    temperature: 0.2,
+    temperature,
   });
   const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
 
@@ -166,24 +290,56 @@ function parseAiJson(result: any): any[] {
 }
 
 // ═══════════════════════════════════════════
-// Non-lesson AI extraction (direct call)
+// Non-lesson AI extraction (direct call) — strategy-aware
 // ═══════════════════════════════════════════
 
-async function callAIDirect(apiKey: string, content: string, title: string, tags: string[], _resourceType?: string): Promise<{ items: any[]; rawContent: string }> {
-  const userPrompt = `Extract tactical plays from this content:\n\nTitle: ${title}\nTags: ${(tags || []).join(', ') || 'none'}\n\nContent:\n${content}\n\nReturn ONLY a JSON array of plays.`;
-  const result = await aiRequest(apiKey, BASE_SYSTEM_PROMPT, userPrompt);
+async function callAIDirect(apiKey: string, content: string, title: string, tags: string[], _resourceType?: string, strategy: ExtractionStrategy = 'standard'): Promise<{ items: any[]; rawContent: string }> {
+  let systemPrompt = BASE_SYSTEM_PROMPT;
+  let temperature = 0.2;
+
+  if (strategy === 'structured_prompt') {
+    systemPrompt = BASE_SYSTEM_PROMPT + STRUCTURED_PROMPT_ADDENDUM;
+    temperature = 0.15;
+  } else if (strategy === 'summary_first') {
+    systemPrompt = SUMMARY_EXTRACTION_SYSTEM;
+    temperature = 0.25;
+  }
+
+  let processedContent = content;
+  if (strategy === 'rechunk') {
+    // Re-chunk: split into smaller overlapping sections
+    processedContent = rechunkContent(content);
+  }
+
+  const userPrompt = `Extract tactical plays from this content:\n\nTitle: ${title}\nTags: ${(tags || []).join(', ') || 'none'}\n\nContent:\n${processedContent}\n\nReturn ONLY a JSON array of plays.`;
+  const result = await aiRequest(apiKey, systemPrompt, userPrompt, 16384, temperature);
   return { items: parseAiJson(result), rawContent: result?.choices?.[0]?.message?.content || '' };
+}
+
+// Re-chunk content with different boundaries for retry
+function rechunkContent(content: string): string {
+  // Split by double newlines (paragraphs), then regroup into smaller chunks with overlap
+  const paragraphs = content.split(/\n{2,}/);
+  if (paragraphs.length <= 3) return content; // Too few paragraphs to rechunk
+
+  // Add section markers for better AI parsing
+  const sections: string[] = [];
+  const chunkSize = Math.ceil(paragraphs.length / 4);
+  for (let i = 0; i < paragraphs.length; i += chunkSize) {
+    const sectionNum = Math.floor(i / chunkSize) + 1;
+    const chunk = paragraphs.slice(i, i + chunkSize + 1).join('\n\n'); // +1 for overlap
+    sections.push(`=== SECTION ${sectionNum} ===\n${chunk}`);
+  }
+  return sections.join('\n\n');
 }
 
 // ═══════════════════════════════════════════
 // LESSON 2-STAGE PIPELINE (inline — never chains to extract-tactics)
-// Why inline: chained edge-function calls hit timeout cascades; lessons need
-// custom prompting, relaxed validation, and conservative dedup that differ
-// from the generic extract-tactics path.
 // ═══════════════════════════════════════════
 
 async function extractLessonDirect(
-  apiKey: string, content: string, title: string, description: string | null, tags: string[]
+  apiKey: string, content: string, title: string, description: string | null, tags: string[],
+  strategy: ExtractionStrategy = 'standard'
 ): Promise<{ items: any[]; pipelineLog: any }> {
   const pLog: any = {
     contentLength: content.length, stage1: 0, stage2Raw: 0, stage2Validated: 0,
@@ -191,12 +347,39 @@ async function extractLessonDirect(
     validationRejects: {} as Record<string, number>,
     initial_stage2_raw_count: 0, recovery_triggered: false,
     recovery_missing_candidate_count: 0, recovery_raw_count: 0, post_recovery_raw_count: 0,
+    strategy,
   };
 
-  console.log(`[lesson-pipeline] START | "${title}" | ${content.length} chars`);
+  console.log(`[lesson-pipeline] START | "${title}" | ${content.length} chars | strategy=${strategy}`);
+
+  // Summary-first strategy: generate summary, then extract from it
+  if (strategy === 'summary_first') {
+    const summaryPrompt = `Create a detailed structured summary of this training lesson, organized by concept/topic:\n\nTitle: ${title}\n${description ? `Description: ${description}` : ''}\n\nContent:\n${content}\n\nThen extract a tactical play for EACH concept. Return ONLY a JSON array.`;
+    try {
+      const result = await aiRequest(apiKey, SUMMARY_EXTRACTION_SYSTEM, summaryPrompt, 24576, 0.25);
+      const items = parseAiJson(result);
+      pLog.stage2Raw = items.length;
+      console.log(`[lesson-pipeline] Summary-first: ${items.length} items`);
+      return { items, pipelineLog: pLog };
+    } catch (err: any) {
+      console.error(`[lesson-pipeline] Summary-first FAILED: ${err?.message}`);
+      return { items: [], pipelineLog: pLog };
+    }
+  }
+
+  let processedContent = content;
+  if (strategy === 'rechunk') {
+    processedContent = rechunkContent(content);
+  }
 
   // Short lessons skip recovery (only 2 AI calls instead of 3) to avoid edge function timeout
-  const isShortLesson = content.length < 8000;
+  const isShortLesson = processedContent.length < 8000;
+
+  // Determine system prompt based on strategy
+  const expandSystem = strategy === 'structured_prompt'
+    ? BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM + STRUCTURED_PROMPT_ADDENDUM
+    : BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM;
+  const expandTemp = strategy === 'structured_prompt' ? 0.15 : 0.2;
 
   // ── Stage 1: Exhaustive enumeration ──
   const enumPrompt = `Analyze this structured training lesson and create an exhaustive inventory of every distinct teachable concept, technique, framework, rule, signal, method, or heuristic.
@@ -205,7 +388,7 @@ Title: ${title}
 ${description ? `Description: ${description}` : ''}
 
 Content:
-${content}
+${processedContent}
 
 List EVERY distinct concept. If the lesson teaches 15 things, return 15 items. Do NOT merge related concepts — each gets its own entry.`;
 
@@ -219,7 +402,6 @@ List EVERY distinct concept. If the lesson teaches 15 things, return 15 items. D
   }
 
   // ── Stage 2: Single-pass full KI expansion with candidate guidance ──
-  // Cap candidates at 18 to prevent response truncation (JSON too large for token limit)
   let rawItems: any[] = [];
   const cappedCandidates = candidates.slice(0, 18);
 
@@ -233,20 +415,20 @@ Title: ${title}
 Tags: ${(tags || []).join(', ')}
 ${candidateList ? `\nThe following ${cappedCandidates.length} concepts were identified. Extract a play for EACH one:\n${candidateList}\n` : ''}
 Content:
-${content}
+${processedContent}
 
 Return ONLY a JSON array. Each play needs: title, framework, who, source_excerpt, source_location, tactic_summary, how_to_execute, when_to_use, when_not_to_use, example_usage, macro_situation, micro_strategy, why_it_matters, what_this_unlocks, chapter, knowledge_type. Be concise per field but extract ALL plays.`;
 
   try {
-    rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, expandPrompt, 16384));
+    rawItems = parseAiJson(await aiRequest(apiKey, expandSystem, expandPrompt, 16384, expandTemp));
     pLog.stage2Raw = rawItems.length;
     console.log(`[lesson-pipeline] Stage 2: ${rawItems.length} raw items from single pass`);
   } catch (err: any) {
     console.error('[lesson-pipeline] Stage 2 FAILED:', err?.message);
     // Fallback: try without candidate list
     try {
-      const fallbackPrompt = `Extract every tactical play from this training lesson.\n\nTitle: ${title}\nTags: ${(tags || []).join(', ')}\n\nContent:\n${content}\n\nReturn ONLY a JSON array. Keep each play concise.`;
-      rawItems = parseAiJson(await aiRequest(apiKey, BASE_SYSTEM_PROMPT + LESSON_EXPAND_ADDENDUM, fallbackPrompt, 24576));
+      const fallbackPrompt = `Extract every tactical play from this training lesson.\n\nTitle: ${title}\nTags: ${(tags || []).join(', ')}\n\nContent:\n${processedContent}\n\nReturn ONLY a JSON array. Keep each play concise.`;
+      rawItems = parseAiJson(await aiRequest(apiKey, expandSystem, fallbackPrompt, 24576, expandTemp));
       pLog.stage2Raw = rawItems.length;
       console.log(`[lesson-pipeline] Stage 2 fallback: ${rawItems.length} items`);
     } catch (err2: any) {
@@ -257,7 +439,6 @@ Return ONLY a JSON array. Each play needs: title, framework, who, source_excerpt
   pLog.initial_stage2_raw_count = rawItems.length;
 
   // ── Stage 2 Recovery: only for long content where expansion significantly underperformed ──
-  // Skip recovery for short lessons to stay within edge function timeout (2 AI calls max)
   const coverageRatio = candidates.length > 0 ? rawItems.length / candidates.length : 1;
   const shouldRecover = !isShortLesson && candidates.length >= 20 && coverageRatio < 0.6 && rawItems.length >= 3;
 
@@ -265,7 +446,6 @@ Return ONLY a JSON array. Each play needs: title, framework, who, source_excerpt
     console.log(`[lesson-pipeline] Stage 2 RECOVERY triggered | coverage=${(coverageRatio * 100).toFixed(0)}% (${rawItems.length}/${candidates.length})`);
     pLog.recovery_triggered = true;
 
-    // Find missing candidates via fuzzy title matching
     const expandedTitlesLower = rawItems.map((item: any) => normalizeFingerprint(item.title || ''));
     const missingCandidates = candidates.filter((c: any) => {
       const cFp = normalizeFingerprint(c.candidate_title || '');
@@ -294,7 +474,7 @@ ${missingList}
 
 Title: ${title}
 Content:
-${content}
+${processedContent}
 
 Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute, when_to_use, source_excerpt, chapter, knowledge_type. Keep concise.`;
 
@@ -325,27 +505,21 @@ Return ONLY a JSON array. Each play needs: title, tactic_summary, how_to_execute
 
 // ═══════════════════════════════════════════
 // Challenger classification (deterministic heuristic)
-// Runs AFTER normalization, BEFORE insert. One label per KI.
 // ═══════════════════════════════════════════
 
-// Challenger signals — carefully scoped to avoid false positives on generic sales content.
-// "take_control" requires DRIVING action, not just mentioning scoring/priority concepts.
 const TAKE_CONTROL_SIGNALS = /\b(close.?the|commit.?to|lock.?in|secure.?the|push.?for|drive.?urgency|accelerate.?the|create.?urgency|deadline|status.?quo|constructive.?tension|challenge.?the.?buyer|confront|insist.?on|demand.?a|next.?step|action.?item|contract|sign.?off|get.?agreement|cost.?of.?inaction|force.?a.?decision|overcome.?inertia)\b/i;
 const TAILOR_SIGNALS = /\b(persona|stakeholder|role-specific|industry.?specific|segment|vertical|adapt.?message|customize|tailor|adjust.?framing|reframe.?for|position.?for|align.?to.?their|depending.?on.?the|varies.?by|buyer.?type|audience|executive|champion|end.?user|economic.?buyer|technical.?buyer|C.?suite)\b/i;
 const TEACH_SIGNALS = /\b(insight|reframe|framework|model|score|criteria|method|signal|heuristic|tier|research|principle|rule.?of|mental.?model|data.?point|benchmark|metric|diagnos|assess|evaluat|classif|categoriz|prioritiz|gap|inefficien|overlooked|missed|blind.?spot|counter.?intuitive)\b/i;
 
 function classifyChallengerType(item: any): 'teach' | 'tailor' | 'take_control' {
   const blob = [item.title, item.tactic_summary, item.how_to_execute].filter(Boolean).join(' ');
-  // Check take_control first (most specific — requires action-driving language)
   if (TAKE_CONTROL_SIGNALS.test(blob)) return 'take_control';
-  // Then tailor (persona/context adaptation)
   if (TAILOR_SIGNALS.test(blob)) return 'tailor';
-  // Default: teach (most common for lesson content — frameworks, insights, models)
   return 'teach';
 }
 
 // ═══════════════════════════════════════════
-// Pipeline guardrail metrics (observability only — never gates)
+// Pipeline guardrail metrics (observability only)
 // ═══════════════════════════════════════════
 
 interface GuardrailMetrics {
@@ -462,7 +636,6 @@ function validateItem(item: any, isLesson: boolean): string[] {
 
   if (!title || title.length < 5) reasons.push('title too short');
 
-  // Lessons: no verb-led requirement. Non-lessons: enforce verb-led.
   if (!isLesson) {
     const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|surface|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|seed|earn|secure|protect|defend|block|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i;
     if (!verbLedPattern.test(title)) reasons.push('title not actionable');
@@ -471,14 +644,11 @@ function validateItem(item: any, isLesson: boolean): string[] {
   if (!hasSubstance(summary, isLesson ? 10 : 20)) reasons.push('tactic_summary lacks substance');
 
   if (isLesson) {
-    // Relaxed lesson validation: need title + summary + some content
     if (!item.how_to_execute && !item.source_excerpt) reasons.push('no how_to_execute or source_excerpt');
-    // Accept defaults for attribution
     if (!item.framework) item.framework = 'General';
     if (!item.who) item.who = 'Unknown';
     if (!item.source_location) item.source_location = 'Lesson content';
   } else {
-    // Strict non-lesson validation
     if (!hasSubstance(item.how_to_execute, 20)) reasons.push('how_to_execute lacks substance');
     if (!hasSubstance(item.when_to_use, 15)) reasons.push('when_to_use lacks substance');
     if (!hasSubstance(item.source_excerpt, 20)) reasons.push('source_excerpt too short');
@@ -487,7 +657,6 @@ function validateItem(item: any, isLesson: boolean): string[] {
     if (!item.who || item.who === '') reasons.push('who missing');
   }
 
-  // Anti-junk for all
   if (title && summary && summary.toLowerCase().startsWith(title.toLowerCase().slice(0, 30))) {
     reasons.push('title duplicates start of summary');
   }
@@ -518,8 +687,6 @@ function hasSubstance(value: string | undefined | null, minChars: number): boole
 function compositeDedup(items: any[], isLesson = false): any[] {
   const result: any[] = [];
   const fingerprints = new Set<string>();
-  // Lessons use 0.75 (conservative) to avoid merging adjacent distinct tactics.
-  // Non-lessons use 0.55 (aggressive) for tighter dedup.
   const threshold = isLesson ? 0.75 : 0.55;
 
   for (const item of items) {
@@ -581,34 +748,14 @@ function wordOverlap(a: string, b: string): number {
 // Post-extraction invariant: minimum KI floor
 // ═══════════════════════════════════════════
 
-/**
- * Computes the minimum acceptable KI count based on content length.
- * This is the HARD GUARANTEE that prevents silent 0-KI or too-few-KI completions.
- *
- * For lessons (structured educational content):
- *   < 500 chars  → 0 (too short to extract from, allowed to skip)
- *   500-2000     → 3  (short lesson, at least a few concepts)
- *   2000-5000    → 5  (medium lesson)
- *   5000-10000   → 8  (substantial lesson)
- *   10000+       → 12 (large lesson, benchmark shows ~30+ is normal)
- *
- * For non-lesson content (articles, podcasts, etc.):
- *   < 500 chars  → 0
- *   500-2000     → 1
- *   2000-5000    → 2
- *   5000+        → 3
- */
 function computeMinKiFloor(contentLength: number, isLesson: boolean): number {
   if (contentLength < 500) return 0;
-
   if (isLesson) {
     if (contentLength < 2000) return 3;
     if (contentLength < 5000) return 5;
     if (contentLength < 10000) return 8;
     return 12;
   }
-
-  // Non-lesson: more conservative floors
   if (contentLength < 2000) return 1;
   if (contentLength < 5000) return 2;
   return 3;
@@ -618,10 +765,15 @@ function computeMinKiFloor(contentLength: number, isLesson: boolean): number {
 // DB helpers
 // ═══════════════════════════════════════════
 
-async function updateExtractionStatus(supabase: any, resourceId: string, status: string) {
+async function updateExtractionStatus(supabase: any, resourceId: string, status: string, extraFields?: Record<string, any>) {
+  const updatePayload: Record<string, any> = {
+    enrichment_status: status,
+    updated_at: new Date().toISOString(),
+    ...extraFields,
+  };
   const { error } = await supabase
     .from('resources')
-    .update({ enrichment_status: status, updated_at: new Date().toISOString() })
+    .update(updatePayload)
     .eq('id', resourceId);
   if (error) console.error(`[extract] Status update failed: ${error.message}`);
 }
@@ -642,6 +794,9 @@ async function saveExtractionLog(supabase: any, log: ExtractionLog) {
     preservedEdited: storable.preservedUserEdited,
     rejections: storable.rejections.length,
     lessonPipeline: storable.lessonPipeline || null,
+    attemptNumber: storable.attemptNumber || 1,
+    strategy: storable.strategy || 'standard',
+    failureType: storable.failureType || null,
     error: storable.error || null,
   })}`);
 }
@@ -675,10 +830,10 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // ── 1. Fetch resource ──
+    // ── 1. Fetch resource (including retry tracking fields) ──
     const { data: resource, error: fetchError } = await supabase
       .from('resources')
-      .select('id, title, resource_type, content, description, tags, user_id')
+      .select('id, title, resource_type, content, description, tags, user_id, extraction_attempt_count, max_extraction_attempts, extraction_failure_type, extractor_strategy')
       .eq('id', resourceId)
       .single();
 
@@ -689,6 +844,16 @@ Deno.serve(async (req) => {
     if (!resource.content || resource.content.length < 200) {
       return respond({ resourceId, title: resource.title, kis: 0, error: 'Content too short (<200 chars)' });
     }
+
+    // ── Retry orchestration: determine attempt number and strategy ──
+    const attemptNumber = (resource.extraction_attempt_count || 0) + 1;
+    const maxAttempts = resource.max_extraction_attempts || 4;
+    const lastFailureType = resource.extraction_failure_type as ExtractionFailureType | undefined;
+    const strategy = selectStrategy(attemptNumber, lastFailureType);
+
+    console.log(`[extract] Attempt ${attemptNumber}/${maxAttempts} | strategy=${strategy} | lastFailure=${lastFailureType || 'none'} | "${resource.title}"`);
+
+    const startTime = Date.now();
 
     const log: ExtractionLog = {
       resourceId,
@@ -703,37 +868,70 @@ Deno.serve(async (req) => {
       rawAiResponse: null,
       preservedUserEdited: 0,
       outcome: 'pending',
+      attemptNumber,
+      strategy,
     };
 
     console.log(`[extract] Starting: "${resource.title}" (${resource.content.length} chars)`);
 
-    // ── 2. Run AI extraction (direct inline — no chained edge functions) ──
+    // ── 2. Run AI extraction (strategy-aware) ──
     const decodedContent = decodeHTMLEntities(resource.content);
     const decodedTitle = decodeHTMLEntities(resource.title);
     const isLesson = isStructuredLesson(decodedContent, decodedTitle, resource.resource_type);
+    const routingBasis = isLesson
+      ? (decodedContent.indexOf(LESSON_TRANSCRIPT_MARKER) > 500 ? 'transcript_marker' : 'course_title_pattern')
+      : (isTranscriptType(resource.resource_type) ? 'transcript_type' : 'standard');
     let rawItems: any[];
     let rawResponse: string | null = null;
 
     try {
       if (isLesson) {
-        console.log(`[extract] LESSON PATH — using inline 2-stage pipeline`);
-        const result = await extractLessonDirect(LOVABLE_API_KEY, decodedContent, resource.title, resource.description, resource.tags || []);
+        console.log(`[extract] LESSON PATH — strategy=${strategy}`);
+        const result = await extractLessonDirect(LOVABLE_API_KEY, decodedContent, resource.title, resource.description, resource.tags || [], strategy);
         rawItems = result.items;
         rawResponse = JSON.stringify({ lesson_pipeline: result.pipelineLog });
         log.lessonPipeline = result.pipelineLog;
       } else {
-        console.log(`[extract] STANDARD PATH — direct AI call`);
-        const result = await callAIDirect(LOVABLE_API_KEY, decodedContent, resource.title, resource.tags || [], resource.resource_type);
+        console.log(`[extract] STANDARD PATH — strategy=${strategy}`);
+        const result = await callAIDirect(LOVABLE_API_KEY, decodedContent, resource.title, resource.tags || [], resource.resource_type, strategy);
         rawItems = result.items;
         rawResponse = result.rawContent;
       }
       log.rawAiResponse = rawResponse;
     } catch (aiErr: any) {
+      const failureType = classifyFailure(aiErr, 0, computeMinKiFloor(resource.content.length, isLesson), 0);
       log.outcome = 'ai_error';
       log.error = aiErr.message;
+      log.failureType = failureType;
       await saveExtractionLog(supabase, log);
-      await updateExtractionStatus(supabase, resourceId, 'extraction_failed');
-      return respond({ resourceId, title: resource.title, kis: 0, error: `AI error: ${aiErr.message}`, log });
+
+      // Telemetry
+      logTelemetry({
+        resource_id: resourceId, title: resource.title, content_length: resource.content.length,
+        is_structured_lesson: isLesson, ki_count: 0, min_ki_floor: computeMinKiFloor(resource.content.length, isLesson),
+        attempt_number: attemptNumber, extractor_strategy: strategy, failure_reason: failureType,
+        duration_ms: Date.now() - startTime, routing_basis: routingBasis,
+      });
+
+      // Update with retry tracking
+      const retryEligible = attemptNumber < maxAttempts && failureType !== 'structural_failure';
+      const newStatus = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
+
+      if (!isDryRun) {
+        await updateExtractionStatus(supabase, resourceId, newStatus, {
+          extraction_attempt_count: attemptNumber,
+          extraction_failure_type: failureType,
+          extractor_strategy: strategy,
+          extraction_retry_eligible: retryEligible,
+        });
+      }
+
+      return respond({
+        resourceId, title: resource.title, kis: 0,
+        error: `AI error: ${aiErr.message}`,
+        attemptNumber, strategy, failureType,
+        retryEligible, status: newStatus, log,
+      });
     }
 
     log.rawItemCount = rawItems.length;
@@ -817,31 +1015,64 @@ Deno.serve(async (req) => {
     }
 
     // ── 6. Quality threshold gate + post-extraction invariant ──
-    // Hard invariant: nontrivial content must produce a minimum number of KIs
-    // proportional to content length. This prevents silent 0-KI completions.
     const minKiFloor = computeMinKiFloor(resource.content.length, isLesson);
+    const durationMs = Date.now() - startTime;
 
     if (deduped.length < 1) {
+      const failureType = classifyFailure(null, 0, minKiFloor, rawItems.length);
       log.outcome = isDryRun ? 'benchmark_below_threshold' : 'below_threshold';
+      log.failureType = failureType;
+
+      logTelemetry({
+        resource_id: resourceId, title: resource.title, content_length: resource.content.length,
+        is_structured_lesson: isLesson, ki_count: 0, min_ki_floor: minKiFloor,
+        attempt_number: attemptNumber, extractor_strategy: strategy, failure_reason: failureType,
+        duration_ms: durationMs, routing_basis: routingBasis,
+      });
+
       if (!isDryRun) {
+        const retryEligible = attemptNumber < maxAttempts && failureType !== 'structural_failure';
+        const newStatus = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
         await saveExtractionLog(supabase, log);
-        await updateExtractionStatus(supabase, resourceId, 'extraction_empty');
+        await updateExtractionStatus(supabase, resourceId, newStatus, {
+          extraction_attempt_count: attemptNumber,
+          extraction_failure_type: failureType,
+          extractor_strategy: strategy,
+          extraction_retry_eligible: retryEligible,
+        });
       }
-      console.log(`[extract] ⚠️ "${resource.title}": 0 items — preserving existing KIs`);
-      return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold', log, benchmarkMode: isDryRun });
+      console.log(`[extract] ⚠️ "${resource.title}": 0 items — attempt ${attemptNumber}/${maxAttempts}`);
+      return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold', attemptNumber, strategy, log, benchmarkMode: isDryRun });
     }
 
-    // Hard invariant: if yield is below the content-proportional floor, treat as failure
+    // Hard invariant: if yield is below the content-proportional floor, trigger retry
     if (deduped.length < minKiFloor) {
+      const failureType: ExtractionFailureType = 'under_floor_invariant';
       const invariantMsg = `KI yield invariant violated: got ${deduped.length} KIs but floor is ${minKiFloor} for ${resource.content.length} chars (lesson=${isLesson})`;
       console.error(`[extract] 🚨 INVARIANT FAIL "${resource.title}": ${invariantMsg}`);
       log.outcome = isDryRun ? 'benchmark_invariant_fail' : 'invariant_fail';
       log.error = invariantMsg;
+      log.failureType = failureType;
+
+      logTelemetry({
+        resource_id: resourceId, title: resource.title, content_length: resource.content.length,
+        is_structured_lesson: isLesson, ki_count: deduped.length, min_ki_floor: minKiFloor,
+        attempt_number: attemptNumber, extractor_strategy: strategy, failure_reason: failureType,
+        duration_ms: durationMs, routing_basis: routingBasis,
+      });
+
       if (!isDryRun) {
+        const retryEligible = attemptNumber < maxAttempts;
+        const newStatus = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
         await saveExtractionLog(supabase, log);
-        await updateExtractionStatus(supabase, resourceId, 'extraction_failed');
+        await updateExtractionStatus(supabase, resourceId, newStatus, {
+          extraction_attempt_count: attemptNumber,
+          extraction_failure_type: failureType,
+          extractor_strategy: strategy,
+          extraction_retry_eligible: retryEligible,
+        });
       }
-      return respond({ resourceId, title: resource.title, kis: 0, error: invariantMsg, log, benchmarkMode: isDryRun });
+      return respond({ resourceId, title: resource.title, kis: 0, error: invariantMsg, attemptNumber, strategy, failureType, log, benchmarkMode: isDryRun });
     }
 
     // ── BENCHMARK MODE: skip all DB mutations, return metrics only ──
@@ -849,6 +1080,12 @@ Deno.serve(async (req) => {
       log.insertedCount = 0;
       log.dedupedCount = deduped.length;
       log.outcome = 'benchmark_success';
+      logTelemetry({
+        resource_id: resourceId, title: resource.title, content_length: resource.content.length,
+        is_structured_lesson: isLesson, ki_count: deduped.length, min_ki_floor: minKiFloor,
+        attempt_number: attemptNumber, extractor_strategy: strategy, failure_reason: null,
+        duration_ms: durationMs, routing_basis: routingBasis,
+      });
       console.log(`[extract] 🔬 BENCHMARK COMPLETE "${resource.title}": ${deduped.length} KIs would be inserted (dry run — no DB writes)`);
       return respond({ resourceId, title: resource.title, kis: deduped.length, preservedUserEdited: 0, log, benchmarkMode: true });
     }
@@ -914,17 +1151,36 @@ Deno.serve(async (req) => {
       log.outcome = 'insert_failed';
       log.error = insertError.message;
       await saveExtractionLog(supabase, log);
-      await updateExtractionStatus(supabase, resourceId, 'extraction_failed');
+      await updateExtractionStatus(supabase, resourceId, 'extraction_failed', {
+        extraction_attempt_count: attemptNumber,
+        extraction_failure_type: 'transient_error',
+        extractor_strategy: strategy,
+        extraction_retry_eligible: attemptNumber < maxAttempts,
+      });
       return respond({ resourceId, title: resource.title, kis: 0, error: `Insert failed: ${insertError.message}`, log });
     }
 
+    // ── SUCCESS: reset retry tracking ──
     log.insertedCount = rows.length;
     log.outcome = 'success';
     await saveExtractionLog(supabase, log);
-    await updateExtractionStatus(supabase, resourceId, 'extracted');
-    console.log(`[extract] ✅ "${resource.title}": ${rows.length} KIs inserted (${userEditedCount} user-edited preserved)`);
+    await updateExtractionStatus(supabase, resourceId, 'extracted', {
+      extraction_attempt_count: attemptNumber,
+      extraction_failure_type: null,
+      extractor_strategy: strategy,
+      extraction_retry_eligible: false,
+    });
 
-    return respond({ resourceId, title: resource.title, kis: rows.length, preservedUserEdited: userEditedCount, log });
+    logTelemetry({
+      resource_id: resourceId, title: resource.title, content_length: resource.content.length,
+      is_structured_lesson: isLesson, ki_count: rows.length, min_ki_floor: minKiFloor,
+      attempt_number: attemptNumber, extractor_strategy: strategy, failure_reason: null,
+      duration_ms: durationMs, routing_basis: routingBasis,
+    });
+
+    console.log(`[extract] ✅ "${resource.title}": ${rows.length} KIs inserted (attempt ${attemptNumber}, strategy=${strategy}, ${userEditedCount} user-edited preserved)`);
+
+    return respond({ resourceId, title: resource.title, kis: rows.length, preservedUserEdited: userEditedCount, attemptNumber, strategy, log });
   } catch (error: any) {
     console.error('[extract] Unhandled error:', error);
     return respond({ error: error?.message || 'Failed' }, 500);
