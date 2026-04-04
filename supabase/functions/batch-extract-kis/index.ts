@@ -50,7 +50,7 @@ type ExtractionFailureType =
   | 'structural_failure';    // bad content / ingestion issue
 
 // ═══════════════════════════════════════════
-// Attempt History Record (append-only)
+// Attempt History Record (persisted to resource_extraction_attempts table)
 // ═══════════════════════════════════════════
 
 interface AttemptRecord {
@@ -97,6 +97,46 @@ function buildAttemptRecord(opts: {
     started_at: opts.startedAt,
     completed_at: new Date().toISOString(),
   };
+}
+
+/** Persist attempt record to the dedicated table (canonical source) */
+async function persistAttemptRecord(supabase: any, resourceId: string, userId: string, record: AttemptRecord): Promise<void> {
+  const { error } = await supabase
+    .from('resource_extraction_attempts')
+    .upsert({
+      resource_id: resourceId,
+      user_id: userId,
+      attempt_number: record.attempt_number,
+      strategy: record.strategy,
+      ki_count: record.ki_count,
+      raw_item_count: record.raw_item_count,
+      validated_count: record.validated_count,
+      deduped_count: record.deduped_count,
+      min_ki_floor: record.min_ki_floor,
+      floor_met: record.floor_met,
+      failure_type: record.failure_type,
+      status: record.status,
+      duration_ms: record.duration_ms,
+      started_at: record.started_at,
+      completed_at: record.completed_at,
+    }, { onConflict: 'resource_id,attempt_number' });
+  if (error) {
+    console.error(`[extract-attempt] Failed to persist attempt ${record.attempt_number} for ${resourceId}: ${error.message}`);
+  }
+}
+
+/** Fetch all attempt records from the table for a resource (canonical source for audit) */
+async function fetchAttemptHistory(supabase: any, resourceId: string): Promise<AttemptRecord[]> {
+  const { data, error } = await supabase
+    .from('resource_extraction_attempts')
+    .select('attempt_number, strategy, ki_count, raw_item_count, validated_count, deduped_count, min_ki_floor, floor_met, failure_type, status, duration_ms, started_at, completed_at')
+    .eq('resource_id', resourceId)
+    .order('attempt_number', { ascending: true });
+  if (error) {
+    console.error(`[extract-attempt] Failed to fetch attempt history for ${resourceId}: ${error.message}`);
+    return [];
+  }
+  return (data || []) as AttemptRecord[];
 }
 
 function classifyFailure(
