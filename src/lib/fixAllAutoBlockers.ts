@@ -9,6 +9,14 @@ import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { autoOperationalizeBatch } from '@/lib/autoOperationalize';
 import { type BlockerType } from '@/lib/resourceTruthState';
 import { createLogger } from '@/lib/logger';
+import type { FixAllPhaseName } from '@/lib/fixAllProgress';
+
+export interface FixAllCallbacks {
+  onPhaseChange?: (phase: FixAllPhaseName, label: string, message?: string) => void;
+  onItemStart?: (resourceId: string, phase: FixAllPhaseName, message?: string) => void;
+  onItemDone?: (resourceId: string, phase: FixAllPhaseName, message?: string) => void;
+  onItemFailed?: (resourceId: string, phase: FixAllPhaseName, message?: string) => void;
+}
 
 const log = createLogger('FixAllAutoBlockers');
 
