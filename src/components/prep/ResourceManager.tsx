@@ -185,7 +185,7 @@ export function ResourceManager() {
       map.set(item.resource_id, {
         stage: item.canonical_stage,
         blocked: item.blocked_reason,
-        kiCount: item.ki_count,
+        kiCount: item.knowledge_item_count,
         activeKi: item.active_ki_count,
         activeKiWithCtx: item.active_ki_with_context_count,
       });
