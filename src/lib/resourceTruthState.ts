@@ -36,7 +36,8 @@ export type BlockerType =
   | 'downstream_ineligible'
   | 'contradictory_state'
   | 'audit_mismatch'
-  | 'unknown_processing_state';
+  | 'unknown_processing_state'
+  | 'reference_only';
 
 export type BlockerSeverity = 'critical' | 'high' | 'medium' | 'low';
 export type BlockerFixability = 'auto_fixable' | 'semi_auto_fixable' | 'manual_only';
