@@ -49,6 +49,56 @@ type ExtractionFailureType =
   | 'model_failure'          // empty or malformed response
   | 'structural_failure';    // bad content / ingestion issue
 
+// ═══════════════════════════════════════════
+// Attempt History Record (append-only)
+// ═══════════════════════════════════════════
+
+interface AttemptRecord {
+  attempt_number: number;
+  strategy: ExtractionStrategy;
+  ki_count: number;
+  raw_item_count: number;
+  validated_count: number;
+  deduped_count: number;
+  min_ki_floor: number;
+  floor_met: boolean;
+  failure_type: ExtractionFailureType | null;
+  status: string;
+  duration_ms: number;
+  started_at: string;
+  completed_at: string;
+}
+
+function buildAttemptRecord(opts: {
+  attemptNumber: number;
+  strategy: ExtractionStrategy;
+  kiCount: number;
+  rawItemCount: number;
+  validatedCount: number;
+  dedupedCount: number;
+  minKiFloor: number;
+  failureType: ExtractionFailureType | null;
+  status: string;
+  durationMs: number;
+  startedAt: string;
+}): AttemptRecord {
+  return {
+    attempt_number: opts.attemptNumber,
+    strategy: opts.strategy,
+    ki_count: opts.kiCount,
+    raw_item_count: opts.rawItemCount,
+    validated_count: opts.validatedCount,
+    deduped_count: opts.dedupedCount,
+    min_ki_floor: opts.minKiFloor,
+    floor_met: opts.kiCount >= opts.minKiFloor,
+    failure_type: opts.failureType,
+    status: opts.status,
+    duration_ms: opts.durationMs,
+    started_at: opts.startedAt,
+    completed_at: new Date().toISOString(),
+  };
+}
+
 function classifyFailure(
   error: any, kiCount: number, minFloor: number, rawItemCount: number,
   validatedCount?: number
