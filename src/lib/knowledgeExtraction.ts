@@ -61,10 +61,21 @@ export function getTranscriptPreparationState(content: string | null | undefined
   // Structured course lessons use "Course Name > Lesson Name" format.
   // These contain rich lesson text that doesn't need ## headings or transcript markers.
   const isStructuredCourseLesson = !!(title && /\s>\s/.test(title));
-  const hasSufficientContent = normalizedContent.length >= 500;
+  
+  // HARDENED: Structured lessons bypass the 500-char floor entirely.
+  // Short lessons (conclusions, checklists, reference pages) are legitimate.
+  // The title structure (" > ") is the primary signal, not content length.
+  // Minimum floor reduced to 100 chars for structured lessons.
+  const courseReadyFloor = isStructuredCourseLesson ? 100 : 500;
+  const hasSufficientContent = normalizedContent.length >= courseReadyFloor;
   const courseReady = isStructuredCourseLesson && hasSufficientContent;
 
-  const transcriptReady = !isTranscriptResource || hasLessonBody || headingCount >= 2 || courseReady;
+  // HARDENED: If usable text already exists (regardless of resource_type),
+  // do NOT gate behind transcript preparation. Content wins over type assumptions.
+  const hasUsableTextContent = normalizedContent.length >= 200;
+  const textWinsOverType = hasUsableTextContent && isTranscriptResource && !hasLessonBody && headingCount < 2;
+
+  const transcriptReady = !isTranscriptResource || hasLessonBody || headingCount >= 2 || courseReady || textWinsOverType;
 
   return {
     isTranscriptResource,
@@ -72,6 +83,7 @@ export function getTranscriptPreparationState(content: string | null | undefined
     hasLessonBody,
     transcriptReady,
     isStructuredCourseLesson,
+    textWinsOverType,
   };
 }
 

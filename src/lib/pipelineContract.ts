@@ -11,7 +11,9 @@ import { createLogger } from '@/lib/logger';
 const log = createLogger('PipelineContract');
 
 // ── Enrichment statuses that indicate "ready for extraction" ──
-export const ENRICHED_STATUSES: readonly string[] = ['enriched', 'deep_enriched', 'verified'];
+// HARDENED: content_ready is included because resources with usable content
+// in this state should proceed to extraction, not sit idle.
+export const ENRICHED_STATUSES: readonly string[] = ['enriched', 'deep_enriched', 'verified', 'content_ready'];
 
 // ── Minimum thresholds ──
 const MIN_CONTENT_FOR_FULL_EXTRACTION = 100;

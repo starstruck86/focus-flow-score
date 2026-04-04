@@ -36,7 +36,8 @@ export type BlockerType =
   | 'downstream_ineligible'
   | 'contradictory_state'
   | 'audit_mismatch'
-  | 'unknown_processing_state';
+  | 'unknown_processing_state'
+  | 'reference_only';
 
 export type BlockerSeverity = 'critical' | 'high' | 'medium' | 'low';
 export type BlockerFixability = 'auto_fixable' | 'semi_auto_fixable' | 'manual_only';
@@ -68,6 +69,7 @@ export const BLOCKER_META: Record<BlockerType, { severity: BlockerSeverity; fixa
   contradictory_state:      { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'ui_truth',       label: 'Contradictory State' },
   audit_mismatch:           { severity: 'high',     fixability: 'semi_auto_fixable', ownership: 'ui_truth',       label: 'Audit Mismatch' },
   unknown_processing_state: { severity: 'low',      fixability: 'manual_only',       ownership: 'pipeline',       label: 'Unknown State' },
+  reference_only:           { severity: 'low',      fixability: 'manual_only',       ownership: 'manual_review',  label: 'Reference Only' },
 };
 
 function blocker(type: BlockerType, detail: string): Blocker {
@@ -77,7 +79,7 @@ function blocker(type: BlockerType, detail: string): Blocker {
 
 // ── Truth State ───────────────────────────────────────────
 
-export type TruthState = 'ready' | 'processing' | 'blocked' | 'stalled' | 'qa_required' | 'quarantined';
+export type TruthState = 'ready' | 'processing' | 'blocked' | 'stalled' | 'qa_required' | 'quarantined' | 'reference_only';
 
 export interface ResourceTruth {
   truth_state: TruthState;
@@ -153,13 +155,16 @@ export function deriveResourceTruth(
   const enrichStatus = resource.enrichment_status ?? '';
 
   // ── Auth-gated resources — manual only ───────────────────
+  // HARDENED: Only classify as needs_auth when enrichment_status is explicitly 'needs_auth'
+  // AND the resource does NOT already have usable content. If content exists (>= 200 chars),
+  // the real blocker is extraction or enrichment, not auth.
   const enrichStatusRaw = enrichStatus as string;
-  if (enrichStatusRaw === 'needs_auth' && !isActivelyProcessing) {
+  if (enrichStatusRaw === 'needs_auth' && !isContentBacked && !isActivelyProcessing) {
     blockers.push(blocker('needs_auth', `Auth-gated content — ${rAny.failure_reason || 'login required'}`));
   }
 
   // ── Enrichment blockers ─────────────────────────────────
-  const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying'];
+  const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying', 'content_ready'];
   // Content-backed but not in an enriched state — needs enrichment.
   // Accept both READY and COMPLETED processing states (COMPLETED = content present but status stale).
   const canBeEnriched = ps.state === 'READY' || ps.state === 'COMPLETED';
@@ -239,15 +244,21 @@ export function deriveResourceTruth(
     truth_state = 'processing';
     readiness_label = 'Processing';
   } else if (hasBlockers) {
-    // Distinguish qa_required from blocked
-    const hasQaBlocker = sortedBlockers.some(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'needs_auth');
-    const hasOnlyQa = sortedBlockers.every(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'route_manual_assist' || b.type === 'needs_auth');
-    if (hasOnlyQa) {
-      truth_state = 'qa_required';
-      readiness_label = 'QA Required';
+    // Check if the only blocker is reference_only
+    const hasOnlyRefOnly = sortedBlockers.every(b => b.type === 'reference_only');
+    if (hasOnlyRefOnly) {
+      truth_state = 'reference_only';
+      readiness_label = 'Reference Only';
     } else {
-      truth_state = 'blocked';
-      readiness_label = 'Blocked';
+      // Distinguish qa_required from blocked
+      const hasOnlyQa = sortedBlockers.every(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'route_manual_assist' || b.type === 'needs_auth' || b.type === 'reference_only');
+      if (hasOnlyQa) {
+        truth_state = 'qa_required';
+        readiness_label = 'QA Required';
+      } else {
+        truth_state = 'blocked';
+        readiness_label = 'Blocked';
+      }
     }
   } else {
     // No blockers — truly ready
@@ -305,6 +316,9 @@ export function deriveResourceTruth(
       case 'downstream_ineligible':
         next_required_action = { label: 'Fix Eligibility', actionKey: 'view', variant: 'outline' };
         break;
+      case 'reference_only':
+        next_required_action = { label: 'Review', actionKey: 'view', variant: 'ghost' };
+        break;
       default:
         next_required_action = { label: 'Review', actionKey: 'view', variant: 'outline' };
     }
@@ -337,12 +351,13 @@ export function deriveResourceTruth(
 // ── Truth State UI Colors ─────────────────────────────────
 
 export const TRUTH_STATE_COLORS: Record<TruthState, { text: string; bg: string }> = {
-  ready:       { text: 'text-emerald-600', bg: 'bg-emerald-500/10' },
-  processing:  { text: 'text-primary',     bg: 'bg-primary/10' },
-  blocked:     { text: 'text-destructive',  bg: 'bg-destructive/10' },
-  stalled:     { text: 'text-destructive',  bg: 'bg-destructive/10' },
-  qa_required: { text: 'text-amber-600',    bg: 'bg-amber-500/10' },
-  quarantined: { text: 'text-muted-foreground', bg: 'bg-muted' },
+  ready:          { text: 'text-emerald-600', bg: 'bg-emerald-500/10' },
+  processing:     { text: 'text-primary',     bg: 'bg-primary/10' },
+  blocked:        { text: 'text-destructive',  bg: 'bg-destructive/10' },
+  stalled:        { text: 'text-destructive',  bg: 'bg-destructive/10' },
+  qa_required:    { text: 'text-amber-600',    bg: 'bg-amber-500/10' },
+  quarantined:    { text: 'text-muted-foreground', bg: 'bg-muted' },
+  reference_only: { text: 'text-muted-foreground', bg: 'bg-muted/50' },
 };
 
 // ── Library Readiness ─────────────────────────────────────
@@ -375,10 +390,12 @@ export function deriveLibraryReadiness(
       case 'stalled': stalled++; break;
       case 'qa_required': qa++; break;
       case 'quarantined': break; // intentionally excluded from blocker counts
+      case 'reference_only': break; // reference-only resources are not blocked
     }
     contradictions += t.integrity_issues.length;
     for (const b of t.all_blockers) {
       if (b.type === 'contradictory_state') continue; // counted above
+      if (b.type === 'reference_only') continue; // reference-only is not an actionable blocker
       unresolvedBlockers++;
       if (b.fixability === 'auto_fixable') autoFixable++;
       if (b.fixability === 'manual_only') manualOnly++;

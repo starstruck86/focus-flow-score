@@ -24,6 +24,7 @@ export type RootCauseCategory =
   | 'auth_required'
   | 'missing_content'
   | 'contradictory_state'
+  | 'reference_only'
   | 'unknown';
 
 export type SourceLayer =
@@ -83,6 +84,7 @@ export const ROOT_CAUSE_LABELS: Record<RootCauseCategory, string> = {
   auth_required: 'Auth Required',
   missing_content: 'Missing Content',
   contradictory_state: 'Contradictory State',
+  reference_only: 'Reference Only',
   unknown: 'Unknown',
 };
 
@@ -96,6 +98,7 @@ export const ROOT_CAUSE_COLORS: Record<RootCauseCategory, string> = {
   auth_required: 'text-amber-600',
   missing_content: 'text-destructive',
   contradictory_state: 'text-destructive',
+  reference_only: 'text-muted-foreground',
   unknown: 'text-muted-foreground',
 };
 
@@ -196,8 +199,20 @@ export function diagnoseRootCause(
     };
   }
 
-  // ── Rule 4: Auth-required
+  // ── Rule 4: Auth-required — HARDENED: only when content is genuinely missing
   if (primary.type === 'needs_auth') {
+    // If content exists but marked needs_auth, this is a misclassification
+    if (contentLength >= 200 || hasManualContent) {
+      return {
+        category: 'routing_misclassification',
+        source_layer: 'enrichment_pipeline',
+        explanation: `Marked as "needs_auth" but has ${contentLength} chars of usable content. Auth is not the real blocker — content already exists. The pipeline should extract from existing content instead.`,
+        evidence,
+        permanent_fix: 'Remove needs_auth classification when usable content exists. Route to extraction instead.',
+        auto_fixable: true,
+        resolved_by: 're_extract',
+      };
+    }
     return {
       category: 'auth_required',
       source_layer: 'enrichment_pipeline',
