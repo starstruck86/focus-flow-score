@@ -238,12 +238,15 @@ export function ResourceLibraryTable({
   const isMobile = useIsMobile();
 
   // Sync external filter from parent (e.g. NeedsAttentionQueue clicks)
-  const prevExternalFilter = useRef(externalHealthFilter);
+  // Use a counter-based approach so clicking the same filter type twice still works
+  const prevExternalFilter = useRef<string | null>(null);
+  const externalFilterVersion = useRef(0);
   useEffect(() => {
-    if (externalHealthFilter && externalHealthFilter !== prevExternalFilter.current) {
+    if (externalHealthFilter) {
+      // Always apply — even if same filter, the parent re-triggered it intentionally
       setHealthFilter(externalHealthFilter as HealthFilter);
+      prevExternalFilter.current = externalHealthFilter;
     }
-    prevExternalFilter.current = externalHealthFilter;
   }, [externalHealthFilter]);
 
   const scrollBodyRef = useRef<HTMLDivElement>(null);
