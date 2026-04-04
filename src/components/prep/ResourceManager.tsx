@@ -173,8 +173,25 @@ export function ResourceManager() {
   const updateEnrichmentStatus = useUpdateEnrichmentStatus();
   const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions(resources.length > 0);
   const { data: audioJobsMap } = useAudioJobsMap();
+  const { summary: lifecycle } = useCanonicalLifecycle();
   const queryClient = useQueryClient();
   const now = () => new Date().toISOString();
+
+  // Build lifecycle map for truth derivation in bulk actions
+  const lifecycleMap = useMemo(() => {
+    const map = new Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>();
+    if (!lifecycle) return map;
+    for (const item of lifecycle) {
+      map.set(item.resource_id, {
+        stage: item.canonical_stage,
+        blocked: item.blocked_reason,
+        kiCount: item.ki_count,
+        activeKi: item.active_ki_count,
+        activeKiWithCtx: item.active_ki_with_context_count,
+      });
+    }
+    return map;
+  }, [lifecycle]);
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
