@@ -287,16 +287,44 @@ Deno.serve(async (req) => {
     for (const item of items) {
       try {
         const resource = resourceMap.get(item.resource_id);
-        const route = resource ? deriveRoute(resource) : { pipeline: "enrich_then_extract" as Pipeline, extraction_method: "standard", primary_asset: "url" as AssetKind };
+        const route = resource ? deriveRoute(resource) : { pipeline: "enrich_then_extract" as Pipeline, extraction_method: "standard" as ExtractionMethod, primary_asset: "url" as AssetKind, confidence: "low" as RouteConfidence, has_override: false };
+
+        // Confidence-based execution gating: low confidence → QA, not execution
+        if (route.confidence === "low" && run.mode !== "dry_run") {
+          console.log(`[route-gated] resource=${item.resource_id} confidence=low → routed to QA`);
+          await supabase
+            .from("library_reconciliation_items")
+            .update({
+              processed: true,
+              qa_flagged: true,
+              qa_reason: "Low routing confidence — requires manual review",
+              phase_outcomes: {
+                phase,
+                processed_at: new Date().toISOString(),
+                action: "routed_to_qa_low_confidence",
+                route_pipeline: route.pipeline,
+                route_extraction_method: route.extraction_method,
+                route_primary_asset: route.primary_asset,
+                route_confidence: route.confidence,
+              },
+            })
+            .eq("id", item.id);
+          results.qa_flagged++;
+          results.processed++;
+          continue;
+        }
 
         let outcome: Record<string, any> = {
           phase,
           processed_at: new Date().toISOString(),
           route_pipeline: route.pipeline,
           route_extraction_method: route.extraction_method,
+          route_primary_asset: route.primary_asset,
+          route_confidence: route.confidence,
+          route_has_override: route.has_override,
         };
 
-        console.log(`[route] resource=${item.resource_id} pipeline=${route.pipeline} method=${route.extraction_method} primary_asset=${route.primary_asset}`);
+        console.log(`[route] resource=${item.resource_id} pipeline=${route.pipeline} method=${route.extraction_method} primary_asset=${route.primary_asset} confidence=${route.confidence} override=${route.has_override}`);
 
         if (phase === "enrich") {
           if (run.mode === "dry_run") {
