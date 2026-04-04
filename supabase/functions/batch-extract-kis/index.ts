@@ -1044,8 +1044,28 @@ function wordOverlap(a: string, b: string): number {
 // Post-extraction invariant: minimum KI floor
 // ═══════════════════════════════════════════
 
-function computeMinKiFloor(contentLength: number, isLesson: boolean): number {
+function computeMinKiFloor(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }): number {
   if (contentLength < 500) return 0;
+
+  // Density-aware boost: if title enumerates N items, floor = ~40% of N (at least base floor)
+  if (densitySignals?.isDense) {
+    const baseFloor = isLesson
+      ? (contentLength < 2000 ? 3 : contentLength < 5000 ? 5 : contentLength < 10000 ? 8 : 12)
+      : (contentLength < 2000 ? 1 : contentLength < 5000 ? 2 : 3);
+
+    if (densitySignals.enumeratedCount >= 5) {
+      // Title says "17 takeaways" → floor = max(base, ~40% of 17 ≈ 7)
+      const densityFloor = Math.max(Math.floor(densitySignals.enumeratedCount * 0.4), baseFloor);
+      return Math.min(densityFloor, 15); // cap at 15 to avoid unreasonable floors
+    }
+    if (densitySignals.sectionCount >= 7) {
+      // Many sections → floor = max(base, ~50% of section count)
+      const sectionFloor = Math.max(Math.floor(densitySignals.sectionCount * 0.5), baseFloor);
+      return Math.min(sectionFloor, 12);
+    }
+    return baseFloor;
+  }
+
   if (isLesson) {
     if (contentLength < 2000) return 3;
     if (contentLength < 5000) return 5;
