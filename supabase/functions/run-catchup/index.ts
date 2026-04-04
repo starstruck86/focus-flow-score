@@ -51,6 +51,7 @@ interface DerivedRoute {
   primary_asset: AssetKind;
   confidence: RouteConfidence;
   has_override: boolean;
+  reason: string[];
 }
 
 function deriveRoute(resource: any): DerivedRoute {
