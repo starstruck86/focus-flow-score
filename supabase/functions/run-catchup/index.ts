@@ -242,7 +242,7 @@ Deno.serve(async (req) => {
           route_extraction_method: route.extraction_method,
         };
 
-        console.log(`[route] resource=${item.resource_id} pipeline=${route.pipeline} method=${route.extraction_method}`);
+        console.log(`[route] resource=${item.resource_id} pipeline=${route.pipeline} method=${route.extraction_method} primary_asset=${route.primary_asset}`);
 
         if (phase === "enrich") {
           if (run.mode === "dry_run") {
