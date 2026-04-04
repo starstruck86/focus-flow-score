@@ -60,6 +60,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
+import { AppFreshnessBar } from './AppFreshnessBar';
 
 type PendingItem = {
   id: string;
@@ -512,8 +513,11 @@ export function ResourceManager() {
 
   return (
     <div className="space-y-3">
-      {/* Resource Intelligence Dashboard */}
-      <ResourceIntelligenceDashboard />
+      {/* App Freshness Bar */}
+      <div className="flex items-center justify-between">
+        <ResourceIntelligenceDashboard />
+        <AppFreshnessBar />
+      </div>
       {/* Hidden file input */}
       <input
         ref={fileInputRef}

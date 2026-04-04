@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { deriveResourceTruth } from '@/lib/resourceTruthState';
 import { Sparkles, Wrench, Tag, Loader2 as Loader2Icon } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
@@ -77,7 +78,8 @@ interface ResourceLibraryTableProps {
 }
 
 // ── Health filter type ─────────────────────────────────────
-type HealthFilter = 'all' | 'ready' | 'improving' | 'blocked' | 'failed' | 'missing_content' | 'needs_extraction' | 'needs_review';
+type HealthFilter = 'all' | 'ready' | 'improving' | 'blocked' | 'failed' | 'missing_content' | 'needs_extraction' | 'needs_review'
+  | 'needs_enrichment' | 'needs_activation' | 'stalled' | 'qa_required' | 'needs_auth' | 'contradictions';
 
 // ── Spot check presets ─────────────────────────────────────
 type SpotCheck = 'none' | 'recent' | 'failed' | 'low_yield' | 'random' | 'high_signal' | 'limited_readiness' | 'random_ready' | 'random_lessons';
@@ -268,15 +270,21 @@ export function ResourceLibraryTable({
     if (healthFilter !== 'all') {
       result = result.filter(r => {
         const lc = lifecycleMap.get(r.id);
-        const { readiness } = deriveReadiness(lc, r, audioJobsMap?.get(r.id));
+        const truth = deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
         switch (healthFilter) {
-          case 'ready': return readiness === 'ready';
-          case 'improving': return readiness === 'improving';
-          case 'blocked': return readiness === 'blocked';
+          case 'ready': return truth.truth_state === 'ready';
+          case 'improving': return truth.truth_state === 'processing';
+          case 'blocked': return truth.truth_state === 'blocked' || truth.truth_state === 'quarantined';
           case 'failed': return r.enrichment_status === 'failed';
-          case 'missing_content': return lc?.blocked === 'empty_content';
-          case 'needs_extraction': return lc?.blocked === 'no_extraction';
-          case 'needs_review': return lc?.blocked === 'stale_blocker_state';
+          case 'stalled': return truth.truth_state === 'stalled';
+          case 'qa_required': return truth.truth_state === 'qa_required';
+          case 'missing_content': return truth.primary_blocker?.type === 'missing_content';
+          case 'needs_extraction': return truth.primary_blocker?.type === 'needs_extraction';
+          case 'needs_enrichment': return truth.primary_blocker?.type === 'needs_enrichment';
+          case 'needs_activation': return truth.primary_blocker?.type === 'needs_activation';
+          case 'needs_auth': return truth.primary_blocker?.type === 'needs_auth' || truth.primary_blocker?.type === 'route_manual_assist';
+          case 'needs_review': return truth.truth_state === 'qa_required' || truth.primary_blocker?.type === 'qa_required';
+          case 'contradictions': return truth.truth_state === 'quarantined';
           default: return true;
         }
       });
@@ -371,6 +379,18 @@ export function ResourceLibraryTable({
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
   };
 
+  // Active filter label for display
+  const activeFilterLabel = useMemo(() => {
+    const labels: Record<string, string> = {
+      all: '', ready: 'Ready', improving: 'Processing', blocked: 'Blocked', failed: 'Failed',
+      stalled: 'Stalled', qa_required: 'QA Required', missing_content: 'Missing Content',
+      needs_extraction: 'Needs Extraction', needs_enrichment: 'Needs Enrichment',
+      needs_activation: 'Needs Activation', needs_auth: 'Auth Required',
+      needs_review: 'Needs Review', contradictions: 'Contradictions',
+    };
+    return labels[healthFilter] ?? '';
+  }, [healthFilter]);
+
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 160px)', minHeight: '450px' }}>
       {/* Library Trust Summary */}
@@ -386,6 +406,17 @@ export function ResourceLibraryTable({
           lastFixResult={lastFixResult}
         />
       </div>
+
+      {/* Active filter indicator */}
+      {healthFilter !== 'all' && (
+        <div className="shrink-0 flex items-center gap-2 px-2 py-1.5 mb-2 rounded-md bg-primary/5 border border-primary/20">
+          <Filter className="h-3 w-3 text-primary" />
+          <span className="text-xs text-foreground font-medium">Filtered: {activeFilterLabel}</span>
+          <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] ml-auto" onClick={() => setHealthFilter('all')}>
+            <X className="h-3 w-3 mr-0.5" /> Clear
+          </Button>
+        </div>
+      )}
 
       {/* System Health Overview */}
       <div className="shrink-0 pb-2 border-b border-border mb-2">

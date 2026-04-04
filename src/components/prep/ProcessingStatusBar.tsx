@@ -138,9 +138,9 @@ export function ProcessingStatusBar({ resources }: Props) {
           {summary.activeCount} active
         </Badge>
         {summary.stuckCount > 0 && (
-          <Badge className="text-[9px] h-4 bg-destructive/10 text-destructive">
+          <Badge className="text-[9px] h-4 bg-destructive/10 text-destructive border border-destructive/20">
             <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
-            {summary.stuckCount} stuck
+            {summary.stuckCount} stalled — no progress for 10m+
           </Badge>
         )}
         {/* Stage breakdown */}
@@ -158,7 +158,7 @@ export function ProcessingStatusBar({ resources }: Props) {
       {/* Batch progress */}
       {summary.batchActive && summary.batchTotal > 0 && (
         <div className="space-y-1">
-          <div className="flex items-center gap-2 text-[11px]">
+          <div className="flex items-center gap-2 text-[11px] flex-wrap">
             <Activity className="h-3 w-3 text-primary" />
             <span className="text-muted-foreground">
               Batch {summary.batchJobType ? getJobLabel(summary.batchJobType, 'running').replace('…', '') : 'Operation'}
@@ -185,6 +185,24 @@ export function ProcessingStatusBar({ resources }: Props) {
             )}
           </div>
           <Progress value={summary.batchPct} className="h-1.5" />
+          {/* Per-phase info */}
+          {summary.byStage.length > 0 && (
+            <div className="flex items-center gap-3 text-[9px] text-muted-foreground pt-0.5">
+              {summary.byStage.map(s => (
+                <span key={s.label} className={cn('flex items-center gap-0.5', s.color)}>
+                  {s.label}: {s.count}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stalled warning banner */}
+      {summary.stuckCount > 0 && !summary.batchActive && (
+        <div className="flex items-center gap-2 text-[11px] text-destructive bg-destructive/5 rounded px-2 py-1.5 border border-destructive/10">
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          <span>{summary.stuckCount} job{summary.stuckCount > 1 ? 's' : ''} stalled — no progress update for 10+ minutes. Consider retrying.</span>
         </div>
       )}
     </div>
