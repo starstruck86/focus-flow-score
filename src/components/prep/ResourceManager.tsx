@@ -189,11 +189,7 @@ export function ResourceManager() {
   useEffect(() => {
     if (!isFixAllRunning) return;
     const id = window.setInterval(() => {
-      setFixAllLiveProgress(prev => {
-        if (!prev) return prev;
-        const { recomputeFixAllDerived } = require('@/lib/fixAllProgress');
-        return recomputeFixAllDerived(prev);
-      });
+      setFixAllLiveProgress(prev => prev ? recomputeFixAllDerived(prev) : prev);
     }, 1000);
     return () => window.clearInterval(id);
   }, [isFixAllRunning]);
