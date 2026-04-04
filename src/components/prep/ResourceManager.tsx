@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { useResourceJobProgress } from '@/store/useResourceJobProgress';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
@@ -59,6 +59,7 @@ import { processAudioResource, retryPlatformResolution, retryAudioJob } from '@/
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
+import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 
 type PendingItem = {
   id: string;
@@ -172,8 +173,25 @@ export function ResourceManager() {
   const updateEnrichmentStatus = useUpdateEnrichmentStatus();
   const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions(resources.length > 0);
   const { data: audioJobsMap } = useAudioJobsMap();
+  const { summary: lifecycle } = useCanonicalLifecycle();
   const queryClient = useQueryClient();
   const now = () => new Date().toISOString();
+
+  // Build lifecycle map for truth derivation in bulk actions
+  const lifecycleMap = useMemo(() => {
+    const map = new Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>();
+    if (!lifecycle?.resources) return map;
+    for (const item of lifecycle.resources) {
+      map.set(item.resource_id, {
+        stage: item.canonical_stage,
+        blocked: item.blocked_reason,
+        kiCount: item.knowledge_item_count,
+        activeKi: item.active_ki_count,
+        activeKiWithCtx: item.active_ki_with_context_count,
+      });
+    }
+    return map;
+  }, [lifecycle]);
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
@@ -775,7 +793,7 @@ export function ResourceManager() {
                       const r = filteredResources.find(res => res.id === id);
                       if (!r) continue;
                       // We need lifecycle info — get from canonical lifecycle or derive
-                      const truth = deriveResourceTruth(r, undefined);
+                      const truth = deriveResourceTruth(r, lifecycleMap.get(id), audioJobsMap?.get(id));
                       const blockerType = truth.primary_blocker?.type;
                       if (blockerType && truth.primary_blocker?.fixability !== 'manual_only') {
                         const existing = blockerGroupMap.get(blockerType) ?? [];
