@@ -40,83 +40,109 @@ function classifyResource(
   const issues: string[] = [];
   let severity = 0;
   const status = r.enrichment_status || "not_enriched";
-  const contentLen = r.content_length || (r.content ? r.content.length : 0);
+  const contentLen = r.content_length || 0;
   const enrichVer = r.enrichment_version ?? 0;
+  const hasContent = contentLen >= 100;
 
-  // Missing content
-  if (!r.content || contentLen < 100) {
+  // ── 1. No content at all ──────────────────────────────────
+  if (!hasContent) {
+    // Failed enrichment → blocked
     if (status === "failed") {
-      issues.push("enrichment_failed");
-      return { resource_id: r.id, bucket: "blocked", issues, severity: 8 };
+      return { resource_id: r.id, bucket: "blocked", issues: ["enrichment_failed"], severity: 8 };
     }
-    if (!r.file_url || !r.file_url.startsWith("http")) {
-      issues.push("no_valid_source_url");
-      return { resource_id: r.id, bucket: "blocked", issues, severity: 2 };
+    // No valid URL → blocked
+    if (!r.file_url || (!r.file_url.startsWith("http") && !r.file_url.includes("/"))) {
+      return { resource_id: r.id, bucket: "blocked", issues: ["no_valid_source_url"], severity: 2 };
     }
-    issues.push("missing_content");
-    return { resource_id: r.id, bucket: "needs_enrichment", issues, severity: 7 };
+    // Can still be enriched
+    return { resource_id: r.id, bucket: "needs_enrichment", issues: ["missing_content"], severity: 7 };
   }
 
-  // Not enriched
+  // ── 2. Not-enriched / early pipeline states ───────────────
   if (["not_enriched", "queued_for_deep_enrich", "incomplete"].includes(status)) {
-    issues.push("not_enriched");
-    return { resource_id: r.id, bucket: "needs_enrichment", issues, severity: 6 };
+    return { resource_id: r.id, bucket: "needs_enrichment", issues: ["not_enriched"], severity: 6 };
   }
 
-  // Stuck in processing
+  // ── 3. Stuck in processing ────────────────────────────────
   if (["deep_enrich_in_progress", "reenrich_in_progress"].includes(status)) {
-    issues.push("stuck_in_processing");
-    return { resource_id: r.id, bucket: "needs_qa_review", issues, severity: 9 };
+    return { resource_id: r.id, bucket: "needs_qa_review", issues: ["stuck_in_processing"], severity: 9 };
   }
 
-  // Stale enrichment version
-  if (enrichVer < CURRENT_ENRICHMENT_VERSION && status === "deep_enriched") {
+  // ── 4. Content ready but not fully enriched ───────────────
+  if (["content_ready", "enriched"].includes(status)) {
+    if (kiCount === 0) {
+      // Has content but needs extraction
+      return { resource_id: r.id, bucket: "needs_extraction", issues: ["content_ready_no_kis"], severity: 5 };
+    }
+    // Has content and KIs — treat as functional
+  }
+
+  // ── 5. Extraction in progress / retrying ──────────────────
+  if (status === "extraction_retrying") {
+    // Has KIs but retrying = let it finish, but flag if stuck
+    const attemptCount = r.extraction_attempt_count || 0;
+    const maxAttempts = r.max_extraction_attempts || 4;
+    if (attemptCount >= maxAttempts) {
+      issues.push("extraction_exhausted_retries");
+      return { resource_id: r.id, bucket: "needs_qa_review", issues, severity: 6 };
+    }
+    // Still retrying — no action needed from reconciliation
+    return { resource_id: r.id, bucket: "no_action", issues: ["extraction_retrying_in_progress"], severity: 0 };
+  }
+
+  // ── 6. Version drift check (only for deep_enriched) ──────
+  const isStaleVersion = enrichVer < CURRENT_ENRICHMENT_VERSION && status === "deep_enriched";
+  if (isStaleVersion) {
     issues.push(`stale_enrichment_v${enrichVer}`);
-    severity = 4;
+    severity = Math.max(severity, 4);
   }
 
-  // Extraction status checks
-  const extractionFailed =
-    r.extraction_failure_type || r.extraction_attempt_count >= (r.max_extraction_attempts || 4);
-
-  // Missing KIs
-  if (kiCount === 0) {
-    if (extractionFailed) {
+  // ── 7. Missing KIs on enriched content ────────────────────
+  if (kiCount === 0 && ["deep_enriched", "extracted"].includes(status)) {
+    // Check if extraction was attempted and failed
+    if (r.extraction_failure_type) {
       issues.push("extraction_failed_no_kis");
       return { resource_id: r.id, bucket: "needs_qa_review", issues, severity: 7 };
     }
-    if (status === "deep_enriched") {
-      issues.push("missing_kis");
-      return { resource_id: r.id, bucket: "needs_extraction", issues, severity: 6 };
-    }
+    issues.push("missing_kis");
+    return { resource_id: r.id, bucket: "needs_extraction", issues, severity: 6 };
   }
 
-  // Low-yield
-  if (kiCount > 0 && kiCount <= 2 && contentLen > 2000) {
+  // ── 8. Low-yield check ────────────────────────────────────
+  // Scale floor by content length
+  const lowYieldFloor = contentLen > 5000 ? 3 : contentLen > 2000 ? 2 : 1;
+  if (kiCount > 0 && kiCount <= lowYieldFloor && contentLen > 2000) {
     issues.push("low_yield_extraction");
     severity = Math.max(severity, 5);
   }
 
-  // No active KIs
+  // ── 9. No active KIs ─────────────────────────────────────
   if (kiCount > 0 && activeKiCount === 0) {
     issues.push("no_active_kis");
     return { resource_id: r.id, bucket: "needs_activation", issues, severity: 5 };
   }
 
-  // Stale failure_reason on enriched
+  // ── 10. Stale failure_reason on enriched resource ─────────
   if (status === "deep_enriched" && r.failure_reason) {
     issues.push("stale_failure_reason");
     severity = Math.max(severity, 2);
   }
 
-  // Route to buckets based on issues
-  if (issues.some((i) => i.startsWith("stale_enrichment"))) {
+  // ── 11. Route to final bucket ─────────────────────────────
+  // Stale version with existing KIs → re-enrichment (not re-extraction)
+  if (isStaleVersion && kiCount > 0) {
     return { resource_id: r.id, bucket: "needs_re_enrichment", issues, severity };
   }
+  // Stale version without KIs → needs extraction after re-enrichment
+  if (isStaleVersion && kiCount === 0) {
+    return { resource_id: r.id, bucket: "needs_re_enrichment", issues, severity };
+  }
+  // Low yield → re-extraction
   if (issues.some((i) => i === "low_yield_extraction")) {
     return { resource_id: r.id, bucket: "needs_re_extraction", issues, severity };
   }
-  if (issues.length > 0) {
+  // Remaining issues → QA
+  if (issues.length > 0 && issues.some(i => !i.startsWith("extraction_retrying"))) {
     return { resource_id: r.id, bucket: "needs_qa_review", issues, severity };
   }
 
@@ -180,7 +206,7 @@ Deno.serve(async (req) => {
     while (true) {
       const { data, error } = await supabase
         .from("resources")
-        .select("id, title, content, content_length, enrichment_status, enrichment_version, validation_version, enriched_at, failure_reason, file_url, description, extraction_attempt_count, max_extraction_attempts, extraction_failure_type, last_quality_tier, last_quality_score, active_job_status")
+        .select("id, title, content_length, enrichment_status, enrichment_version, validation_version, enriched_at, failure_reason, file_url, extraction_attempt_count, max_extraction_attempts, extraction_failure_type, last_quality_tier, last_quality_score, active_job_status")
         .eq("user_id", user.id)
         .range(offset, offset + pageSize - 1);
 
@@ -195,7 +221,6 @@ Deno.serve(async (req) => {
     const resourceIds = allResources.map((r) => r.id);
     const kiCounts: Record<string, { total: number; active: number }> = {};
 
-    // Batch KI count query
     for (let i = 0; i < resourceIds.length; i += 200) {
       const chunk = resourceIds.slice(i, i + 200);
       const { data: kis } = await supabase
