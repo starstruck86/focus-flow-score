@@ -331,6 +331,14 @@ interface ExtractionAuditSummary {
   content_length: number;
   is_structured_lesson: boolean;
   completed_at: string;
+  // Yield diagnostics
+  validation_loss_pct: number;
+  dedup_loss_pct: number;
+  raw_to_final_ratio: number;
+  yield_quality_flag: 'high_loss_validation' | 'high_loss_dedup' | 'over_extracted' | 'expected';
+  base_floor: number;
+  density_adjusted_floor: number;
+  final_floor: number;
 }
 
 /** Build audit summary from actual persisted attempt history */
