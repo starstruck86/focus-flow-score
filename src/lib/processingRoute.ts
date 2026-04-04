@@ -107,7 +107,7 @@ export function deriveProcessingRoute(resource: Resource): ProcessingRoute {
   let pipeline: Pipeline;
   const totalFailures = failureCount + extractionAttempts;
 
-  if (totalFailures >= 3 && enrichmentStatus !== 'enriched') {
+  if (totalFailures >= 3 && enrichmentStatus !== 'deep_enriched') {
     pipeline = 'manual_assist';
     reason.push(`Multiple failures (${totalFailures}) — routed to manual assist`);
   } else if (source_type === 'audio' || source_type === 'video') {
