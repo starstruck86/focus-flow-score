@@ -1,6 +1,7 @@
 /**
  * CatchupDashboard — Shows reconciliation run status, phase progress,
  * bucket breakdown, rollout guidance, and trust indicators.
+ * Implements conservative staged rollout with explicit operator guidance.
  */
 import React from 'react';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   AlertTriangle, CheckCircle2, Loader2, XCircle, Play, X,
   RotateCcw, Eye, Shield, Zap, FileText, Activity, Ban, Info,
+  ArrowRight, ShieldAlert, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -47,57 +49,90 @@ const MODE_LABELS: Record<CatchupMode, { label: string; desc: string }> = {
   force_reprocess: { label: 'Force Reprocess', desc: 'Reprocess all items (use with caution)' },
 };
 
+// ── Rollout steps ──────────────────────────────────────────
+const ROLLOUT_STEPS = [
+  { key: 'dry_run', label: 'Dry Run', desc: 'Preview classifications' },
+  { key: 'enrichment', label: 'Enrichment', desc: 'Process enrichment items' },
+  { key: 'extraction', label: 'Extraction', desc: 'Generate KIs' },
+  { key: 'full', label: 'Activation + QA', desc: 'Activate & surface QA' },
+] as const;
+
+function getRolloutStepIndex(step: string): number {
+  return ROLLOUT_STEPS.findIndex(s => s.key === step);
+}
+
 // ── Rollout guidance ───────────────────────────────────────
 function getRolloutGuidance(
   mode: CatchupMode,
   status: string,
   lastStep: string,
   snapshot: any
-): { text: string; severity: 'info' | 'warning' | 'success' } | null {
+): { text: string; severity: 'info' | 'warning' | 'success'; nextAction?: string } | null {
   if (status === 'scanned' && mode === 'dry_run') {
     const noAction = snapshot?.buckets?.no_action || 0;
     const total = snapshot?.total_resources || 0;
     const healthPct = total > 0 ? Math.round((noAction / total) * 100) : 0;
     return {
-      text: `Dry run complete. ${healthPct}% healthy. Recommended: review buckets, then run safe_auto_fix on enrichment only.`,
+      text: `Dry run complete. ${healthPct}% healthy. Review bucket breakdown below.`,
       severity: 'info',
+      nextAction: 'Recommended next step: switch to Safe Auto-Fix and run enrichment only.',
     };
   }
   if (status === 'scanned' && mode === 'safe_auto_fix') {
     return {
-      text: 'Ready to execute. Start with enrichment phase only. Validate results before adding extraction.',
+      text: 'Ready to execute. Only run phases you have validated in dry run.',
       severity: 'warning',
+      nextAction: 'Start with enrichment phase only. Do not enable extraction until enrichment is validated.',
     };
   }
   if (status === 'scanned' && mode === 'force_reprocess') {
     return {
-      text: '⚠️ Force reprocess will touch all items. Only use after validating with safe_auto_fix first.',
+      text: '⚠️ Force reprocess will re-run all items regardless of current state. Data may be overwritten.',
       severity: 'warning',
+      nextAction: 'Only use after safe_auto_fix has been validated. Consider running enrichment-only first.',
     };
   }
   if (status === 'completed' && lastStep === 'dry_run') {
     return {
-      text: 'Preview complete. Next: switch to safe_auto_fix and run enrichment phase only.',
+      text: 'Preview complete. No changes were made.',
       severity: 'info',
+      nextAction: 'Next: close this run, switch to Safe Auto-Fix, and run enrichment phase only.',
     };
   }
   if (status === 'completed' && lastStep === 'enrichment') {
     return {
-      text: 'Enrichment pass complete. Next: validate enriched resources, then run extraction phase.',
+      text: 'Enrichment pass complete.',
       severity: 'success',
+      nextAction: 'Next: validate enriched resources in the control center. Then run a new dry run and enable extraction.',
     };
   }
   if (status === 'completed' && lastStep === 'extraction') {
     return {
-      text: 'Extraction pass complete. Next: validate KI outputs, then run full catch-up with activation + QA.',
+      text: 'Extraction pass complete.',
       severity: 'success',
+      nextAction: 'Next: validate KI outputs and readiness changes. Then enable activation + QA surfacing.',
     };
   }
   if (status === 'completed' && lastStep === 'full') {
     return {
-      text: 'Full catch-up complete. Review QA-surfaced items and verify control center reflects updated state.',
+      text: 'Full catch-up complete. Review QA-surfaced items and verify the control center reflects updated state.',
       severity: 'success',
     };
+  }
+  return null;
+}
+
+// ── Phase safety warnings ──────────────────────────────────
+function getPhaseWarnings(selectedPhases: CatchupPhase[], lastStep: string): string | null {
+  const stepIdx = getRolloutStepIndex(lastStep);
+  if (selectedPhases.includes('extract') && stepIdx < 1) {
+    return 'Extraction selected without completing enrichment first. Run enrichment-only and validate before enabling extraction.';
+  }
+  if (selectedPhases.includes('activate') && stepIdx < 2) {
+    return 'Activation selected without completing extraction first. Validate extraction results before activating.';
+  }
+  if (selectedPhases.includes('surface_to_qa') && stepIdx < 2) {
+    return 'QA surfacing selected early. Consider running enrichment and extraction first.';
   }
   return null;
 }
@@ -128,7 +163,7 @@ export function CatchupDashboard() {
                 Library Reconciliation
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Evaluate every resource against current standards. Start with a dry run.
+                Evaluate every resource against current standards. Always start with a dry run.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -146,9 +181,21 @@ export function CatchupDashboard() {
               </Select>
               <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => startScan(selectedMode)}>
                 <Play className="h-3 w-3" />
-                Catch Up Library
+                {selectedMode === 'dry_run' ? 'Start Dry Run' : 'Catch Up Library'}
               </Button>
             </div>
+          </div>
+          {/* Rollout roadmap when idle */}
+          <div className="mt-3 flex items-center gap-1 text-[10px] text-muted-foreground">
+            {ROLLOUT_STEPS.map((step, i) => (
+              <React.Fragment key={step.key}>
+                <span className="flex items-center gap-0.5">
+                  <span className="inline-flex items-center justify-center h-3.5 w-3.5 rounded-full bg-muted text-[8px] font-bold">{i + 1}</span>
+                  {step.label}
+                </span>
+                {i < ROLLOUT_STEPS.length - 1 && <ChevronRight className="h-2.5 w-2.5" />}
+              </React.Fragment>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -199,11 +246,19 @@ export function CatchupDashboard() {
   // Rollout guidance
   const guidance = getRolloutGuidance(mode, status, lastCompletedStep, snapshot);
 
+  // Phase safety warning
+  const phaseWarning = isScanned && mode !== 'dry_run'
+    ? getPhaseWarnings(selectedPhases, lastCompletedStep)
+    : null;
+
   // Trust indicators
   const noAction = snapshot?.buckets?.no_action || 0;
   const totalRes = snapshot?.total_resources || 0;
   const healthPct = totalRes > 0 ? Math.round((noAction / totalRes) * 100) : 0;
   const backfilled = snapshot?.backfilled_content_length || 0;
+
+  // Rollout step indicator
+  const currentStepIdx = getRolloutStepIndex(lastCompletedStep);
 
   return (
     <Card>
@@ -257,16 +312,58 @@ export function CatchupDashboard() {
           </div>
         </div>
 
+        {/* Rollout step progress bar */}
+        <div className="flex items-center gap-1 text-[10px]">
+          {ROLLOUT_STEPS.map((step, i) => {
+            const completed = i <= currentStepIdx;
+            const active = i === currentStepIdx + 1;
+            return (
+              <React.Fragment key={step.key}>
+                <span className={cn(
+                  'flex items-center gap-0.5 px-1.5 py-0.5 rounded-full',
+                  completed && 'bg-emerald-500/10 text-emerald-700 font-medium',
+                  active && 'bg-primary/10 text-primary font-medium',
+                  !completed && !active && 'text-muted-foreground',
+                )}>
+                  {completed ? (
+                    <CheckCircle2 className="h-3 w-3" />
+                  ) : (
+                    <span className="inline-flex items-center justify-center h-3 w-3 rounded-full border border-current text-[7px] font-bold">{i + 1}</span>
+                  )}
+                  {step.label}
+                </span>
+                {i < ROLLOUT_STEPS.length - 1 && <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/50" />}
+              </React.Fragment>
+            );
+          })}
+        </div>
+
         {/* Rollout guidance */}
         {guidance && (
           <div className={cn(
-            'flex items-start gap-2 text-xs p-2 rounded-md',
+            'text-xs p-2.5 rounded-md space-y-1',
             guidance.severity === 'info' && 'bg-blue-500/10 text-blue-700',
             guidance.severity === 'warning' && 'bg-amber-500/10 text-amber-700',
             guidance.severity === 'success' && 'bg-emerald-500/10 text-emerald-700',
           )}>
-            <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            <span>{guidance.text}</span>
+            <div className="flex items-start gap-2">
+              <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>{guidance.text}</span>
+            </div>
+            {guidance.nextAction && (
+              <div className="flex items-start gap-2 pl-5.5 font-medium">
+                <ArrowRight className="h-3 w-3 shrink-0 mt-0.5" />
+                <span>{guidance.nextAction}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Phase safety warning */}
+        {phaseWarning && (
+          <div className="flex items-start gap-2 text-xs p-2 rounded-md bg-amber-500/10 text-amber-700">
+            <ShieldAlert className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span>{phaseWarning}</span>
           </div>
         )}
 
@@ -317,8 +414,8 @@ export function CatchupDashboard() {
         {(isRunning || isDone) && (
           <div className="space-y-1">
             <div className="flex justify-between text-[10px] text-muted-foreground">
-              <span>Global Progress</span>
-              <span>{globalProgress}%</span>
+              <span>{isRunning ? 'Processing…' : 'Completed'}</span>
+              <span>{totalProcessed}/{totalItems} ({globalProgress}%)</span>
             </div>
             <Progress value={globalProgress} className="h-2" />
           </div>
@@ -360,8 +457,8 @@ export function CatchupDashboard() {
                     <span className={cn(isActive && 'font-medium text-primary')}>{PHASE_LABELS[phase]}</span>
                   </div>
                   <Progress value={wasSkipped ? 0 : phasePct} className="h-1.5 flex-1" />
-                  <span className="text-[10px] font-mono w-16 text-right text-muted-foreground">
-                    {wasSkipped ? 'skipped' : `${pr.succeeded}ok ${pr.failed > 0 ? `${pr.failed}❌` : ''}`}
+                  <span className="text-[10px] font-mono w-20 text-right text-muted-foreground">
+                    {wasSkipped ? 'skipped' : pr.status === 'pending' ? '—' : `${pr.succeeded} ok${pr.failed > 0 ? ` · ${pr.failed} ❌` : ''}`}
                   </span>
                 </div>
               );
