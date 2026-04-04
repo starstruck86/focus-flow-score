@@ -499,6 +499,60 @@ export function CatchupDashboard() {
           </div>
         )}
 
+        {/* ═══ 6b. BLOCKER BURN-DOWN SUMMARY ════════════════════ */}
+        {isDone && snapshot && (() => {
+          const b = snapshot.buckets || {};
+          const totalBlockers = (b.needs_enrichment || 0) + (b.needs_extraction || 0) + (b.needs_re_enrichment || 0)
+            + (b.needs_re_extraction || 0) + (b.needs_activation || 0) + (b.blocked || 0) + (b.needs_qa_review || 0);
+          const autoFixable = (b.needs_enrichment || 0) + (b.needs_extraction || 0) + (b.needs_activation || 0)
+            + (b.needs_re_enrichment || 0) + (b.needs_re_extraction || 0);
+          const manualOnly = (b.blocked || 0) + (b.needs_qa_review || 0);
+          const fixed = totalSucceeded;
+          const remaining = Math.max(0, totalBlockers - fixed);
+          const contradictions = (snapshot as any)?.contradictions || 0;
+          const stalledJobs = (snapshot as any)?.stalled_jobs || 0;
+          const systemReady = remaining === 0 && contradictions === 0 && stalledJobs === 0;
+
+          if (totalBlockers === 0 && contradictions === 0 && stalledJobs === 0) return null;
+
+          return (
+            <div className={cn(
+              'p-2.5 rounded-lg border',
+              systemReady ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-amber-500/5 border-amber-500/20',
+            )}>
+              <p className="text-[9px] font-black uppercase tracking-widest mb-1.5 text-muted-foreground">
+                Blocker Burn-Down
+              </p>
+              <div className="grid grid-cols-3 gap-1.5 text-center text-[10px]">
+                <div className="rounded bg-muted/30 px-1.5 py-1">
+                  <div className="font-mono font-bold text-sm tabular-nums">{totalBlockers}</div>
+                  <div className="text-muted-foreground">Before</div>
+                </div>
+                <div className="rounded bg-emerald-500/10 px-1.5 py-1">
+                  <div className="font-mono font-bold text-sm tabular-nums text-emerald-700">{fixed}</div>
+                  <div className="text-emerald-700">Fixed</div>
+                </div>
+                <div className={cn('rounded px-1.5 py-1', remaining > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10')}>
+                  <div className={cn('font-mono font-bold text-sm tabular-nums', remaining > 0 ? 'text-amber-700' : 'text-emerald-700')}>{remaining}</div>
+                  <div className={remaining > 0 ? 'text-amber-700' : 'text-emerald-700'}>Remaining</div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[10px]">
+                {autoFixable > 0 && <span className="text-amber-600">Auto-fixable: {Math.max(0, autoFixable - totalSucceeded)}</span>}
+                {manualOnly > 0 && <span className="text-muted-foreground">Manual-only: {manualOnly}</span>}
+                {contradictions > 0 && <span className="text-destructive font-medium">Contradictions: {contradictions}</span>}
+                {stalledJobs > 0 && <span className="text-destructive font-medium">Stalled: {stalledJobs}</span>}
+              </div>
+              {systemReady && (
+                <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-emerald-700 font-bold">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  System Ready — all auto-fixable blockers resolved
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ═══ 7. EXPANDABLE DETAILS ════════════════════════════ */}
         {snapshot && (allBuckets.length > 0 || allIssues.length > 0) && (
           <details className="text-xs group">
