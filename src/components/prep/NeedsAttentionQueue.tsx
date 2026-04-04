@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 import { deriveResourceTruth, type BlockerType, type Blocker, BLOCKER_META } from '@/lib/resourceTruthState';
 import { diagnoseRootCause, ROOT_CAUSE_LABELS, ROOT_CAUSE_COLORS, type RootCauseDiagnosis } from '@/lib/rootCauseDiagnosis';
+import { buildFailureDossier, FAILURE_STAGE_LABELS, FAILURE_MODE_LABELS, type ResourceFailureDossier } from '@/lib/failureDossier';
 import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS } from '@/lib/processingRoute';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
@@ -28,6 +29,7 @@ interface QueueItem {
   hasOverride: boolean;
   routeContext: string | null;
   rootCause: RootCauseDiagnosis;
+  dossier: ResourceFailureDossier | null;
 }
 
 interface QueueGroup {
@@ -162,6 +164,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       const routeCtx = `${PIPELINE_LABELS[route.pipeline]} · ${EXTRACTION_METHOD_LABELS[route.extraction_method]}`;
       const action = getActionForBlocker(primaryBlocker);
       const rootCause = diagnoseRootCause(r, truth);
+      const dossier = buildFailureDossier(r, truth);
 
       const item: QueueItem = {
         resource: r,
@@ -174,6 +177,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
         hasOverride: route.has_override,
         routeContext: route.confidence !== 'high' ? routeCtx : null,
         rootCause,
+        dossier,
       };
 
       if (!buckets.has(primaryBlocker.type)) buckets.set(primaryBlocker.type, []);
@@ -344,18 +348,44 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
                               <Badge className="text-[8px] h-3.5 bg-amber-500/15 text-amber-700 border-amber-500/30">Override</Badge>
                             )}
                           </div>
-                          {/* Root-cause diagnosis line */}
-                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                            <span className={cn('text-[9px] font-medium', ROOT_CAUSE_COLORS[item.rootCause.category])}>
-                              {ROOT_CAUSE_LABELS[item.rootCause.category]}
-                            </span>
-                            <span className="text-[9px] text-muted-foreground truncate max-w-[200px]">
-                              {item.rootCause.explanation.length > 80 ? item.rootCause.explanation.slice(0, 77) + '…' : item.rootCause.explanation}
-                            </span>
-                            {!item.rootCause.auto_fixable && (
-                              <Badge variant="outline" className="text-[8px] h-3.5 px-1">Manual</Badge>
-                            )}
-                          </div>
+                          {/* Dossier diagnosis line */}
+                          {item.dossier && (
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <Badge variant="outline" className="text-[8px] h-3.5 px-1">
+                                {FAILURE_STAGE_LABELS[item.dossier.failure_stage]}
+                              </Badge>
+                              <Badge variant="outline" className="text-[8px] h-3.5 px-1">
+                                {FAILURE_MODE_LABELS[item.dossier.failure_mode]}
+                              </Badge>
+                              <span className={cn('text-[9px] font-medium', ROOT_CAUSE_COLORS[item.dossier.root_cause_category])}>
+                                {ROOT_CAUSE_LABELS[item.dossier.root_cause_category]}
+                              </span>
+                              {!item.rootCause.auto_fixable && (
+                                <Badge variant="outline" className="text-[8px] h-3.5 px-1">Manual</Badge>
+                              )}
+                            </div>
+                          )}
+                          {item.dossier && (
+                            <p className="text-[9px] text-muted-foreground mt-0.5 truncate max-w-[280px]">
+                              {item.dossier.exact_explanation.length > 100
+                                ? item.dossier.exact_explanation.slice(0, 97) + '…'
+                                : item.dossier.exact_explanation}
+                            </p>
+                          )}
+                          {/* Fallback to root-cause line when no dossier */}
+                          {!item.dossier && (
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <span className={cn('text-[9px] font-medium', ROOT_CAUSE_COLORS[item.rootCause.category])}>
+                                {ROOT_CAUSE_LABELS[item.rootCause.category]}
+                              </span>
+                              <span className="text-[9px] text-muted-foreground truncate max-w-[200px]">
+                                {item.rootCause.explanation.length > 80 ? item.rootCause.explanation.slice(0, 77) + '…' : item.rootCause.explanation}
+                              </span>
+                              {!item.rootCause.auto_fixable && (
+                                <Badge variant="outline" className="text-[8px] h-3.5 px-1">Manual</Badge>
+                              )}
+                            </div>
+                          )}
                         </button>
                         <Button
                           size="sm"

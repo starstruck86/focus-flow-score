@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { CheckCircle2, AlertTriangle, Shield, Zap, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { deriveResourceTruth, deriveLibraryReadiness, type LibraryReadiness } from '@/lib/resourceTruthState';
+import { buildFailureDossier, aggregateDossierInsights, FAILURE_STAGE_LABELS, FAILURE_MODE_LABELS } from '@/lib/failureDossier';
+import { ROOT_CAUSE_LABELS } from '@/lib/rootCauseDiagnosis';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { FixAllResult } from '@/lib/fixAllAutoBlockers';
@@ -58,7 +60,7 @@ function getStatusInfo(r: LibraryReadiness): { label: string; reason: string } {
 }
 
 export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onFixAllAuto, onFilterChange, onRefresh, isRefreshing, lastFixResult }: Props) {
-  const { readiness, autoFixableIds, blockerBreakdown } = useMemo(() => {
+  const { readiness, autoFixableIds, blockerBreakdown, dossierInsights } = useMemo(() => {
     const truths = resources.map(r => {
       const lc = lifecycleMap.get(r.id);
       return deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
@@ -66,15 +68,18 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
     const rd = deriveLibraryReadiness(truths);
     const ids: string[] = [];
     const breakdown: Record<string, number> = {};
-    truths.forEach((t, i) => {
+    const dossiers = resources.map((r, i) => {
+      const t = truths[i];
       if (t.all_blockers.some(b => b.fixability === 'auto_fixable' || b.fixability === 'semi_auto_fixable')) {
-        ids.push(resources[i].id);
+        ids.push(r.id);
       }
       if (t.primary_blocker) {
         breakdown[t.primary_blocker.type] = (breakdown[t.primary_blocker.type] ?? 0) + 1;
       }
-    });
-    return { readiness: rd, autoFixableIds: ids, blockerBreakdown: breakdown };
+      return buildFailureDossier(r, t);
+    }).filter((d): d is NonNullable<typeof d> => d !== null);
+    const insights = dossiers.length > 0 ? aggregateDossierInsights(dossiers) : null;
+    return { readiness: rd, autoFixableIds: ids, blockerBreakdown: breakdown, dossierInsights: insights };
   }, [resources, lifecycleMap, audioJobsMap]);
 
   if (readiness.total_resources === 0) return null;
@@ -238,6 +243,39 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
             <p className="text-[9px] text-amber-700 mt-1">
               ⚠ Some phases made no progress — check extraction failures in the progress panel above.
             </p>
+          )}
+        </div>
+      )}
+
+      {/* Dossier Insights — grouped root cause summary */}
+      {dossierInsights && !readiness.system_ready && (
+        <div className="px-3 pb-2 border-t border-border/50 pt-1.5 space-y-1">
+          <p className="text-[10px] font-medium text-foreground">Failure Analysis</p>
+          <div className="flex items-center gap-1.5 flex-wrap text-[9px]">
+            {Object.entries(dossierInsights.by_root_cause)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 4)
+              .map(([cause, count]) => (
+                <Badge key={cause} variant="outline" className="text-[9px] h-4 px-1.5">
+                  {count} {ROOT_CAUSE_LABELS[cause as keyof typeof ROOT_CAUSE_LABELS] ?? cause}
+                </Badge>
+              ))}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap text-[9px]">
+            {Object.entries(dossierInsights.by_failure_stage)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 4)
+              .map(([stage, count]) => (
+                <span key={stage} className="text-muted-foreground">
+                  {count} at {FAILURE_STAGE_LABELS[stage as keyof typeof FAILURE_STAGE_LABELS] ?? stage}
+                </span>
+              ))}
+          </div>
+          {dossierInsights.top_permanent_fixes.length > 0 && (
+            <div className="text-[9px] text-primary">
+              <span className="text-muted-foreground">Top fix: </span>
+              {dossierInsights.top_permanent_fixes[0]}
+            </div>
           )}
         </div>
       )}
