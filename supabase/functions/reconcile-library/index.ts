@@ -40,9 +40,11 @@ function classifyResource(
   const issues: string[] = [];
   let severity = 0;
   const status = r.enrichment_status || "not_enriched";
-  const contentLen = r.content_length || 0;
+  const contentLen = r.content_length || r.actual_content_len || 0;
   const enrichVer = r.enrichment_version ?? 0;
-  const hasContent = contentLen >= 100;
+  // If status indicates successful enrichment/extraction, trust that content exists
+  const impliedContent = ["deep_enriched", "extracted", "extraction_retrying", "content_ready", "enriched"].includes(status);
+  const hasContent = contentLen >= 100 || impliedContent;
 
   // ── 1. No content at all ──────────────────────────────────
   if (!hasContent) {
