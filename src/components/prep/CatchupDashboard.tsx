@@ -74,10 +74,10 @@ function computeRunQuality(
   return 'healthy';
 }
 
-const QUALITY_DISPLAY: Record<RunQuality, { icon: string; label: string; color: string; bg: string; border: string }> = {
-  healthy: { icon: '●', label: 'Healthy', color: 'text-emerald-700', bg: 'bg-emerald-500/15', border: 'border-emerald-500/25' },
-  watch: { icon: '◐', label: 'Watch', color: 'text-amber-700', bg: 'bg-amber-500/15', border: 'border-amber-500/25' },
-  risk: { icon: '▲', label: 'Risk', color: 'text-destructive', bg: 'bg-destructive/15', border: 'border-destructive/25' },
+const QUALITY_DISPLAY: Record<RunQuality, { icon: string; label: string; cls: string }> = {
+  healthy: { icon: '●', label: 'Healthy', cls: 'bg-emerald-500/20 text-emerald-700 border-emerald-500/30 ring-emerald-500/10' },
+  watch: { icon: '◐', label: 'Watch', cls: 'bg-amber-500/20 text-amber-700 border-amber-500/30 ring-amber-500/10' },
+  risk: { icon: '▲', label: 'Risk', cls: 'bg-destructive/20 text-destructive border-destructive/30 ring-destructive/10' },
 };
 
 // ── Status header config ───────────────────────────────────
@@ -88,16 +88,16 @@ function getStatusHeader(
   const totalRes = snapshot?.total_resources || 0;
   const needsAction = snapshot?.needs_action || 0;
 
-  if (status === 'scanning') return { dot: 'bg-primary animate-pulse', title: 'SCANNING LIBRARY', sub: 'Classifying resources against current standards…', activeLine: null };
-  if (status === 'scanned' && mode === 'dry_run') return { dot: 'bg-blue-500', title: 'DRY RUN COMPLETE', sub: `${totalRes} resources scanned · ${needsAction} need action`, activeLine: null };
-  if (status === 'scanned') return { dot: 'bg-amber-500', title: 'READY TO EXECUTE', sub: `${needsAction} resources queued for processing`, activeLine: null };
+  if (status === 'scanning') return { dot: 'bg-primary animate-pulse', bg: 'bg-primary/6', border: 'border-primary/15', title: 'SCANNING LIBRARY', sub: 'Classifying resources against current standards…', activeLine: null };
+  if (status === 'scanned' && mode === 'dry_run') return { dot: 'bg-blue-500', bg: 'bg-blue-500/6', border: 'border-blue-500/20', title: 'DRY RUN COMPLETE', sub: `${totalRes} resources scanned · ${needsAction} need action`, activeLine: null };
+  if (status === 'scanned') return { dot: 'bg-amber-500', bg: 'bg-amber-500/6', border: 'border-amber-500/20', title: 'READY TO EXECUTE', sub: `${needsAction} resources queued for processing`, activeLine: null };
   if (status === 'running' && currentPhase) {
     const phaseLabel = PHASE_CONFIG[currentPhase].label.toUpperCase();
-    return { dot: 'bg-primary animate-pulse', title: `RUNNING — ${phaseLabel}`, sub: `${totalProcessed}/${totalItems} items processed`, activeLine: `Currently processing: ${PHASE_CONFIG[currentPhase].label}` };
+    return { dot: 'bg-primary animate-pulse', bg: 'bg-primary/6', border: 'border-primary/20', title: `RUNNING — ${phaseLabel}`, sub: `${totalProcessed} / ${totalItems} items processed`, activeLine: `Currently processing: ${PHASE_CONFIG[currentPhase].label}` };
   }
-  if (status === 'completed') return { dot: 'bg-emerald-500', title: 'CATCH-UP COMPLETE', sub: `${totalProcessed} items processed across selected phases`, activeLine: null };
-  if (status === 'cancelled') return { dot: 'bg-muted-foreground', title: 'RUN CANCELLED', sub: `${totalProcessed} items processed before cancellation`, activeLine: null };
-  return { dot: 'bg-muted-foreground', title: 'RECONCILIATION', sub: '', activeLine: null };
+  if (status === 'completed') return { dot: 'bg-emerald-500', bg: 'bg-emerald-500/6', border: 'border-emerald-500/20', title: 'CATCH-UP COMPLETE', sub: `${totalProcessed} items processed across selected phases`, activeLine: null };
+  if (status === 'cancelled') return { dot: 'bg-muted-foreground', bg: 'bg-muted/40', border: 'border-border', title: 'RUN CANCELLED', sub: `${totalProcessed} items processed before cancellation`, activeLine: null };
+  return { dot: 'bg-muted-foreground', bg: '', border: '', title: 'RECONCILIATION', sub: '', activeLine: null };
 }
 
 // ── Next action — directive tone ───────────────────────────
@@ -105,21 +105,21 @@ function getNextAction(
   status: string, mode: CatchupMode, lastStep: string,
 ): { label: string; bold: string; buttonLabel?: string; buttonAction?: 'execute' | 'reset' } | null {
   if (status === 'scanned' && mode === 'dry_run')
-    return { bold: 'Review bucket breakdown', label: 'then switch to Safe Auto-Fix and run enrichment only', buttonLabel: 'Run Preview', buttonAction: 'execute' };
+    return { bold: 'Review bucket breakdown', label: '— then switch to Safe Auto-Fix and run enrichment only', buttonLabel: 'Run Preview', buttonAction: 'execute' };
   if (status === 'scanned' && mode === 'safe_auto_fix')
     return { bold: 'Run enrichment only', label: '— do not enable extraction until enrichment is validated', buttonAction: 'execute' };
   if (status === 'scanned' && mode === 'force_reprocess')
     return { bold: 'Validate with safe_auto_fix first', label: '— force reprocess should only follow a clean validation pass', buttonAction: 'execute' };
   if (status === 'completed' && lastStep === 'dry_run')
-    return { bold: 'Switch to Safe Auto-Fix', label: 'and run enrichment phase only', buttonLabel: 'New Run', buttonAction: 'reset' };
+    return { bold: 'Switch to Safe Auto-Fix', label: '— run enrichment phase only', buttonLabel: 'New Run', buttonAction: 'reset' };
   if (status === 'completed' && lastStep === 'enrichment')
-    return { bold: 'Validate enriched resources', label: 'before enabling extraction in a new run', buttonLabel: 'New Run', buttonAction: 'reset' };
+    return { bold: 'Validate enriched resources', label: '— before enabling extraction in a new run', buttonLabel: 'New Run', buttonAction: 'reset' };
   if (status === 'completed' && lastStep === 'extraction')
-    return { bold: 'Validate KI outputs and readiness', label: 'then enable activation + QA surfacing', buttonLabel: 'New Run', buttonAction: 'reset' };
+    return { bold: 'Validate KI outputs and readiness', label: '— then enable activation + QA surfacing', buttonLabel: 'New Run', buttonAction: 'reset' };
   if (status === 'completed' && lastStep === 'full')
-    return { bold: 'Review QA-surfaced items', label: 'and verify control center reflects updated state', buttonLabel: 'Done', buttonAction: 'reset' };
+    return { bold: 'Review QA-surfaced items', label: '— verify control center reflects updated state', buttonLabel: 'Done', buttonAction: 'reset' };
   if (status === 'cancelled')
-    return { bold: 'Start a new dry run', label: 'to re-assess library state', buttonLabel: 'New Run', buttonAction: 'reset' };
+    return { bold: 'Start a new dry run', label: '— re-assess library state', buttonLabel: 'New Run', buttonAction: 'reset' };
   return null;
 }
 
@@ -200,10 +200,10 @@ export function CatchupDashboard() {
   // ── Scanning ──────────────────────────────────────────────
   if (status === 'scanning') {
     return (
-      <Card>
+      <Card className="border-primary/20">
         <CardContent className="py-6 text-center space-y-1.5">
           <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
-          <p className="text-sm font-bold">Scanning Library…</p>
+          <p className="text-sm font-bold tracking-wide">SCANNING LIBRARY</p>
           <p className="text-xs text-muted-foreground">Classifying every resource against current standards</p>
         </CardContent>
       </Card>
@@ -248,53 +248,51 @@ export function CatchupDashboard() {
   const totalSucceeded = Object.values(phaseResults).reduce((s, p) => s + p.succeeded, 0);
   const totalFailed = Object.values(phaseResults).reduce((s, p) => s + p.failed, 0);
 
-  // Top 3 buckets for collapsed view
-  const topBuckets = snapshot ? Object.entries(snapshot.buckets)
-    .filter(([, c]) => (c as number) > 0)
-    .sort(([, a], [, b]) => (b as number) - (a as number))
-    .slice(0, 3) : [];
-  const allBuckets = snapshot ? Object.entries(snapshot.buckets).filter(([, c]) => (c as number) > 0) : [];
-  const topIssues = snapshot ? Object.entries(snapshot.issue_breakdown)
-    .sort(([, a], [, b]) => (b as number) - (a as number))
-    .slice(0, 3) : [];
+  const allBuckets = snapshot ? Object.entries(snapshot.buckets).filter(([, c]) => (c as number) > 0).sort(([, a], [, b]) => (b as number) - (a as number)) : [];
   const allIssues = snapshot ? Object.entries(snapshot.issue_breakdown).sort(([, a], [, b]) => (b as number) - (a as number)) : [];
 
   return (
-    <Card className="overflow-hidden shadow-sm">
+    <Card className="overflow-hidden">
       {/* ═══ 1. STATUS HEADER ═══════════════════════════════════ */}
       <div className={cn(
-        'px-4 py-3 border-b transition-colors',
-        isRunning && 'bg-primary/8 border-primary/15',
-        isDone && status === 'completed' && 'bg-emerald-500/8 border-emerald-500/15',
-        isDone && status === 'cancelled' && 'bg-muted/50',
-        isScanned && mode === 'dry_run' && 'bg-blue-500/8 border-blue-500/15',
-        isScanned && mode !== 'dry_run' && 'bg-amber-500/8 border-amber-500/15',
+        'px-4 py-3 border-b-2 transition-colors duration-300',
+        statusHeader.bg,
+        statusHeader.border,
       )}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className={cn('h-3 w-3 rounded-full shrink-0 shadow-sm', statusHeader.dot)} />
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm font-extrabold tracking-wide uppercase leading-tight">{statusHeader.title}</h3>
-                <Badge variant="outline" className="text-[9px] h-4">{MODE_LABELS[mode].label}</Badge>
-                {runQuality && (
-                  <span className={cn(
-                    'text-[10px] font-bold px-2 py-0.5 rounded-full border',
-                    QUALITY_DISPLAY[runQuality].bg,
-                    QUALITY_DISPLAY[runQuality].color,
-                    QUALITY_DISPLAY[runQuality].border,
-                  )}>
-                    {QUALITY_DISPLAY[runQuality].icon} {QUALITY_DISPLAY[runQuality].label}
-                  </span>
-                )}
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{statusHeader.sub}</p>
-              {statusHeader.activeLine && (
-                <p className="text-[11px] text-primary font-semibold mt-0.5">{statusHeader.activeLine}</p>
-              )}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 space-y-1">
+            {/* Title row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={cn('h-3 w-3 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-background', statusHeader.dot,
+                isRunning && 'ring-primary/30',
+                isDone && status === 'completed' && 'ring-emerald-500/30',
+                isDone && status === 'cancelled' && 'ring-muted-foreground/20',
+                isScanned && 'ring-blue-500/20',
+              )} />
+              <h3 className="text-base font-black tracking-wide uppercase leading-none">{statusHeader.title}</h3>
+              <Badge variant="outline" className="text-[9px] h-4 font-semibold">{MODE_LABELS[mode].label}</Badge>
             </div>
+            {/* Run quality badge — prominent, right after title */}
+            {runQuality && (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={cn(
+                  'inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ring-1',
+                  QUALITY_DISPLAY[runQuality].cls,
+                )}>
+                  <span className="text-xs">{QUALITY_DISPLAY[runQuality].icon}</span>
+                  {QUALITY_DISPLAY[runQuality].label}
+                </span>
+              </div>
+            )}
+            {/* Subtext */}
+            <p className="text-[11px] text-muted-foreground leading-snug">{statusHeader.sub}</p>
+            {/* Active processing line */}
+            {statusHeader.activeLine && (
+              <p className="text-xs text-primary font-bold animate-pulse">{statusHeader.activeLine}</p>
+            )}
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+          {/* Controls */}
+          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
             {isRunning && (
               <Button size="sm" variant="destructive" className="h-7 text-xs gap-1" onClick={cancelRun}>
                 <X className="h-3 w-3" /> Cancel
@@ -307,17 +305,18 @@ export function CatchupDashboard() {
             )}
           </div>
         </div>
+        {/* Global progress bar during run */}
         {isRunning && (
-          <div className="mt-2">
-            <Progress value={globalProgress} className="h-1.5 transition-all duration-500" />
-            <p className="text-[9px] text-muted-foreground mt-0.5 text-right font-mono">{globalProgress}%</p>
+          <div className="mt-2.5">
+            <Progress value={globalProgress} className="h-2 transition-all duration-700" />
+            <p className="text-[9px] text-muted-foreground mt-0.5 text-right font-mono tabular-nums">{globalProgress}%</p>
           </div>
         )}
       </div>
 
-      <CardContent className="py-2.5 px-4 space-y-2.5">
+      <CardContent className="py-2 px-4 space-y-2">
         {/* ═══ 2. ROLLOUT STEP BAR ══════════════════════════════ */}
-        <div className="flex items-center gap-0.5 text-[10px]">
+        <div className="flex items-center gap-0.5 text-[10px] py-0.5">
           {ROLLOUT_STEPS.map((step, i) => {
             const completed = i <= currentStepIdx;
             const active = isRunning && (
@@ -329,20 +328,20 @@ export function CatchupDashboard() {
               <React.Fragment key={step.key}>
                 <span className={cn(
                   'flex items-center gap-1 px-1.5 py-0.5 rounded transition-all duration-300',
-                  completed && 'bg-emerald-500/12 text-emerald-700 font-semibold',
-                  active && 'bg-primary/12 text-primary font-semibold',
-                  !completed && !active && 'text-muted-foreground/60 bg-muted/20',
+                  completed && 'bg-emerald-500/15 text-emerald-700 font-bold',
+                  active && 'bg-primary/15 text-primary font-bold ring-1 ring-primary/20',
+                  !completed && !active && 'text-muted-foreground/50 bg-muted/15',
                 )}>
                   {active ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : completed ? (
                     <CheckCircle2 className="h-3 w-3" />
                   ) : (
-                    <Circle className="h-3 w-3 opacity-30" />
+                    <Circle className="h-3 w-3 opacity-25" />
                   )}
                   {step.label}
                 </span>
-                {i < ROLLOUT_STEPS.length - 1 && <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/25 shrink-0" />}
+                {i < ROLLOUT_STEPS.length - 1 && <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/20 shrink-0" />}
               </React.Fragment>
             );
           })}
@@ -350,16 +349,16 @@ export function CatchupDashboard() {
 
         {/* ═══ 3. PRIMARY ACTION BAR ════════════════════════════ */}
         {nextAction && (
-          <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/15">
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-primary/8 border border-primary/20 shadow-sm">
             <ArrowRight className="h-4 w-4 text-primary shrink-0" />
             <p className="text-xs flex-1 leading-snug">
-              <span className="font-bold">{nextAction.bold}</span>{' '}
+              <span className="font-black">{nextAction.bold}</span>{' '}
               <span className="text-muted-foreground">{nextAction.label}</span>
             </p>
             {nextAction.buttonAction === 'execute' && isScanned && (
               <Button
                 size="sm"
-                className="h-7 text-xs gap-1 shrink-0 shadow-sm"
+                className="h-8 text-xs gap-1.5 shrink-0 shadow-md font-bold"
                 onClick={() => executePhases()}
                 disabled={selectedPhases.length === 0}
               >
@@ -368,7 +367,7 @@ export function CatchupDashboard() {
               </Button>
             )}
             {nextAction.buttonAction === 'reset' && isDone && (
-              <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={reset}>
+              <Button size="sm" variant="outline" className="h-8 text-xs shrink-0 font-semibold" onClick={reset}>
                 {nextAction.buttonLabel}
               </Button>
             )}
@@ -377,32 +376,32 @@ export function CatchupDashboard() {
 
         {/* ═══ PHASE SAFETY WARNING ═════════════════════════════ */}
         {phaseWarning && (
-          <div className="flex items-start gap-2 p-2.5 rounded-md bg-destructive/12 border border-destructive/25 shadow-sm">
-            <ShieldAlert className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2.5 p-3 rounded-lg bg-destructive/15 border-2 border-destructive/30 shadow-sm">
+            <ShieldAlert className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-extrabold text-destructive">{phaseWarning.title}</p>
+              <p className="text-xs font-black text-destructive uppercase tracking-wide">{phaseWarning.title}</p>
               <p className="text-[11px] text-destructive/80 mt-0.5 leading-snug">{phaseWarning.desc}</p>
             </div>
           </div>
         )}
 
         {/* ═══ 4. TRUST / PROGRESS METRICS ══════════════════════ */}
-        <div className="flex flex-wrap gap-2 text-[10px]">
-          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/8 text-emerald-700 font-medium">
+        <div className="flex flex-wrap gap-1.5 text-[10px]">
+          <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-700 font-bold border border-emerald-500/15">
             <CheckCircle2 className="h-3 w-3" /> {healthPct}% healthy
           </span>
           {(snapshot?.needs_action || 0) > 0 && (
-            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/8 text-amber-700">
+            <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 text-amber-700 font-medium border border-amber-500/15">
               {snapshot.needs_action} need action
             </span>
           )}
           {(snapshot?.qa_flagged || 0) > 0 && (
-            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/8 text-purple-700">
-              {snapshot.qa_flagged} QA
+            <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-purple-500/10 text-purple-700 font-medium border border-purple-500/15">
+              {snapshot.qa_flagged} QA flagged
             </span>
           )}
           {backfilled > 0 && (
-            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+            <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted text-muted-foreground border border-border/50">
               <RotateCcw className="h-2.5 w-2.5" /> {backfilled} repaired
             </span>
           )}
@@ -442,8 +441,8 @@ export function CatchupDashboard() {
         )}
 
         {(isRunning || isDone) && (
-          <div className="space-y-1">
-            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Phase Progress</p>
+          <div className="space-y-0.5">
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">Phase Progress</p>
             {(['enrich', 'extract', 'activate', 'surface_to_qa'] as CatchupPhase[]).map(phase => {
               const pr = phaseResults[phase];
               const pc = PHASE_CONFIG[phase];
@@ -454,10 +453,10 @@ export function CatchupDashboard() {
               return (
                 <div key={phase} className={cn(
                   'flex items-center gap-1.5 px-2 py-1 rounded transition-all duration-300',
-                  isActive && 'bg-primary/6 ring-1 ring-primary/20',
-                  wasSkipped && 'opacity-30',
+                  isActive && 'bg-primary/8 ring-1 ring-primary/25 shadow-sm',
+                  wasSkipped && 'opacity-25',
                 )}>
-                  <div className="w-[88px] text-[11px] flex items-center gap-1 shrink-0">
+                  <div className="w-[84px] text-[11px] flex items-center gap-1 shrink-0">
                     {isActive ? (
                       <Loader2 className={cn('h-3 w-3 animate-spin', pc.color)} />
                     ) : pr.status === 'complete' ? (
@@ -465,12 +464,12 @@ export function CatchupDashboard() {
                     ) : wasSkipped ? (
                       <span className="text-[10px]">—</span>
                     ) : (
-                      <Circle className="h-3 w-3 opacity-25" />
+                      <Circle className="h-3 w-3 opacity-20" />
                     )}
-                    <span className={cn('font-medium', isActive && 'text-primary')}>{pc.label}</span>
+                    <span className={cn('font-semibold', isActive && 'text-primary font-bold')}>{pc.label}</span>
                   </div>
-                  <Progress value={wasSkipped ? 0 : phasePct} className="h-1 flex-1 transition-all duration-500" />
-                  <span className="text-[9px] font-mono w-16 text-right text-muted-foreground shrink-0">
+                  <Progress value={wasSkipped ? 0 : phasePct} className="h-1.5 flex-1 transition-all duration-700" />
+                  <span className="text-[9px] font-mono w-14 text-right text-muted-foreground shrink-0 tabular-nums">
                     {wasSkipped ? 'skip' : pr.status === 'pending' ? '—' : `${pr.succeeded}ok${pr.failed > 0 ? ` ${pr.failed}✗` : ''}`}
                   </span>
                 </div>
@@ -481,26 +480,26 @@ export function CatchupDashboard() {
 
         {/* ═══ 6. WHAT CHANGED ══════════════════════════════════ */}
         {isDone && status === 'completed' && totalSucceeded > 0 && (
-          <div className="p-2 rounded-md bg-emerald-500/6 border border-emerald-500/15">
-            <p className="text-[9px] font-bold text-emerald-700 uppercase tracking-widest mb-1">What Changed</p>
+          <div className="p-2.5 rounded-lg bg-emerald-500/8 border border-emerald-500/20">
+            <p className="text-[9px] font-black text-emerald-700 uppercase tracking-widest mb-1">What Changed</p>
             <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
-              {phaseResults.enrich.succeeded > 0 && <span className="text-emerald-700 font-medium">+{phaseResults.enrich.succeeded} enriched</span>}
-              {phaseResults.extract.succeeded > 0 && <span className="text-emerald-700 font-medium">+{phaseResults.extract.succeeded} extracted</span>}
-              {phaseResults.activate.succeeded > 0 && <span className="text-emerald-700 font-medium">+{phaseResults.activate.succeeded} activated</span>}
-              {phaseResults.surface_to_qa.qa_flagged > 0 && <span className="text-purple-700 font-medium">+{phaseResults.surface_to_qa.qa_flagged} QA surfaced</span>}
-              {backfilled > 0 && <span className="text-muted-foreground">+{backfilled} repaired</span>}
-              {totalFailed > 0 && <span className="text-destructive font-medium">{totalFailed} failed</span>}
+              {phaseResults.enrich.succeeded > 0 && <span className="text-emerald-700 font-bold">+{phaseResults.enrich.succeeded} enriched</span>}
+              {phaseResults.extract.succeeded > 0 && <span className="text-emerald-700 font-bold">+{phaseResults.extract.succeeded} extracted</span>}
+              {phaseResults.activate.succeeded > 0 && <span className="text-emerald-700 font-bold">+{phaseResults.activate.succeeded} activated</span>}
+              {phaseResults.surface_to_qa.qa_flagged > 0 && <span className="text-purple-700 font-bold">+{phaseResults.surface_to_qa.qa_flagged} QA surfaced</span>}
+              {backfilled > 0 && <span className="text-muted-foreground font-medium">+{backfilled} repaired</span>}
+              {totalFailed > 0 && <span className="text-destructive font-bold">{totalFailed} failed</span>}
             </div>
           </div>
         )}
 
         {/* ═══ 7. EXPANDABLE DETAILS ════════════════════════════ */}
-        {snapshot && (topBuckets.length > 0 || topIssues.length > 0) && (
+        {snapshot && (allBuckets.length > 0 || allIssues.length > 0) && (
           <details className="text-xs group">
-            <summary className="cursor-pointer text-[9px] font-bold text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors select-none">
+            <summary className="cursor-pointer text-[9px] font-bold text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors select-none py-0.5">
               Details
             </summary>
-            <div className="mt-1.5 space-y-2">
+            <div className="mt-1 space-y-1.5">
               {allBuckets.length > 0 && (
                 <div className="grid grid-cols-2 gap-1">
                   {allBuckets.map(([bucket, count]) => {
@@ -510,7 +509,7 @@ export function CatchupDashboard() {
                       <div key={bucket} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/20 text-[10px]">
                         <Icon className={cn('h-2.5 w-2.5 shrink-0', config.color)} />
                         <span className="truncate flex-1">{config.label}</span>
-                        <span className="font-mono">{count as number}</span>
+                        <span className="font-mono tabular-nums">{count as number}</span>
                       </div>
                     );
                   })}
@@ -521,7 +520,7 @@ export function CatchupDashboard() {
                   {allIssues.map(([issue, count]) => (
                     <div key={issue} className="flex justify-between py-0.5">
                       <span className="text-muted-foreground truncate">{issue.replace(/_/g, ' ')}</span>
-                      <span className="font-mono ml-1">{count as number}</span>
+                      <span className="font-mono tabular-nums ml-1">{count as number}</span>
                     </div>
                   ))}
                 </div>
@@ -531,7 +530,7 @@ export function CatchupDashboard() {
         )}
 
         {error && (
-          <div className="flex items-center gap-1.5 text-xs text-destructive p-2 rounded-md bg-destructive/5">
+          <div className="flex items-center gap-1.5 text-xs text-destructive p-2 rounded-md bg-destructive/8 border border-destructive/15">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             {error}
           </div>
