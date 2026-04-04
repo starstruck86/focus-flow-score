@@ -59,7 +59,7 @@ function computeSeverity(r: Resource, issueType: string): number {
 }
 
 export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onAction, onInspect }: Props) {
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['failed', 'missing_content', 'needs_extraction']));
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['stuck', 'failed', 'missing_content', 'needs_extraction']));
 
   const groups = useMemo<QueueGroup[]>(() => {
     const failed: QueueItem[] = [];
