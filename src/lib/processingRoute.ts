@@ -108,7 +108,8 @@ function detectAssets(resource: Resource): { assets: AssetKind[]; reason: string
   }
 
   // Parsed content — enriched web/pdf/doc content
-  const isParsed = (enrichmentStatus === 'deep_enriched' || enrichmentStatus === 'content_ready' || enrichmentStatus === 'enriched') &&
+  const parsedStatuses = ['deep_enriched', 'content_ready', 'enriched'];
+  const isParsed = parsedStatuses.includes(enrichmentStatus as string) &&
     hasContent && !isLesson && !hasTranscript;
   if (isParsed) {
     assets.push('parsed_content');
