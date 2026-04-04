@@ -335,6 +335,17 @@ async function normalizeStaleStatuses(
     stateMap.set(r.id, r);
   }
 
+  // Also fetch content lengths for needs_auth reclassification
+  const { data: contentLengths } = await supabase
+    .from('resources' as any)
+    .select('id, content_length, manual_content_present')
+    .in('id', resourceIds);
+
+  const contentMap = new Map<string, { content_length: number; manual_content_present: boolean }>();
+  for (const r of (contentLengths ?? []) as any[]) {
+    contentMap.set(r.id, { content_length: r.content_length ?? 0, manual_content_present: r.manual_content_present === true });
+  }
+
   for (const id of resourceIds) {
     const state = stateMap.get(id);
     if (!state) continue;
@@ -342,12 +353,18 @@ async function normalizeStaleStatuses(
     const hasKIs = resourcesWithKIs.has(id);
     const isFailedJob = state.active_job_status === 'failed';
     const isRetrying = state.enrichment_status === 'extraction_retrying';
+    const isNeedsAuth = state.enrichment_status === 'needs_auth';
+    const contentInfo = contentMap.get(id);
+    const hasUsableContent = (contentInfo?.content_length ?? 0) >= 200 || contentInfo?.manual_content_present === true;
+    const isIdleJob = state.active_job_status === 'idle';
     
     // Determine if this resource needs normalization
     const needsNormalization = 
       (hasKIs && isRetrying) ||      // extraction_retrying but has KIs
       (hasKIs && isFailedJob) ||      // failed job but has KIs — stale marker
-      (isFailedJob && ['deep_enriched', 'enriched', 'extracted', 'verified'].includes(state.enrichment_status)); // failed job on otherwise healthy status
+      (isFailedJob && ['deep_enriched', 'enriched', 'extracted', 'verified', 'content_ready'].includes(state.enrichment_status)) || // failed job on otherwise healthy status
+      (isNeedsAuth && hasUsableContent) || // needs_auth misclassification: content exists, reclassify to enriched
+      (isIdleJob); // stale 'idle' job status should be cleared
 
     if (!needsNormalization) continue;
 
@@ -365,9 +382,23 @@ async function normalizeStaleStatuses(
         update.active_job_finished_at = new Date().toISOString();
       }
 
+      // Clear stale 'idle' job status
+      if (isIdleJob) {
+        update.active_job_status = null;
+      }
+
       // Fix extraction_retrying → extracted when KIs exist
       if (isRetrying && hasKIs) {
         update.enrichment_status = 'extracted';
+      }
+
+      // Fix needs_auth misclassification: content exists, reclassify to enriched
+      if (isNeedsAuth && hasUsableContent) {
+        update.enrichment_status = 'enriched';
+        update.failure_reason = null;
+        update.active_job_status = null;
+        update.active_job_error = null;
+        log.info('Reclassifying needs_auth → enriched (content exists)', { id, content_length: contentInfo?.content_length });
       }
 
       const { error } = await supabase
