@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { deriveResourceTruth, type BlockerType, type Blocker, BLOCKER_META } from '@/lib/resourceTruthState';
+import { diagnoseRootCause, ROOT_CAUSE_LABELS, ROOT_CAUSE_COLORS, type RootCauseDiagnosis } from '@/lib/rootCauseDiagnosis';
 import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS } from '@/lib/processingRoute';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
