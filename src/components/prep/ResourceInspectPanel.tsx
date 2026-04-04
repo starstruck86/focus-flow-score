@@ -774,7 +774,7 @@ export function ResourceInspectPanel({ resource, onClose, onAction }: Props) {
   return (
     <div ref={containerRef} className="relative z-10 isolate bg-card border-b-2 border-primary/20 animate-fade-in">
       <IdentitySection resource={resource} onClose={onClose} onAction={onAction} />
-      <PipelineRouteSection resource={resource} />
+      <PipelineRouteSection resource={resource} onAction={onAction} />
       <ProcessingTimelineSection resource={resource} />
       <QualityTrustSection resource={resource} />
       <DownstreamEligibilitySection resource={resource} />
