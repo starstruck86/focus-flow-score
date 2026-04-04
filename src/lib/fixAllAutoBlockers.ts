@@ -575,10 +575,10 @@ export async function runFixAllAutoBlockers(
     const normalizeResult = await normalizeStaleStatuses(allIds, onProgress, callbacks);
     if (normalizeResult.attempted > 0) {
       phases.push(normalizeResult);
-      // Mark all attempted normalizations in outcomes
-      for (const id of allIds) {
+      // Mark only the actually-normalized resources in outcomes
+      for (const id of normalizeResult.normalizedIds) {
         const outcome = outcomeMap.get(id);
-        if (outcome && normalizeResult.succeeded > 0) {
+        if (outcome) {
           outcome.normalized = true;
         }
       }
