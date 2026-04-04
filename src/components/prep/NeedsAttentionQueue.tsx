@@ -1,37 +1,35 @@
 /**
  * NeedsAttentionQueue — Prioritized operational queue for resources needing intervention.
- * Groups by issue type, shows counts, reasons, quick actions, and bulk-fix opportunities.
- * Items sorted by severity within each group.
+ * Fully truth-blocker-driven: groups come from canonical blocker types, not mixed heuristics.
  */
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  XCircle, AlertTriangle, Zap, TrendingDown, Clock, Shield,
-  HelpCircle, ChevronDown, ChevronRight, CheckCircle2, Layers, Loader2,
+  XCircle, AlertTriangle, Zap, TrendingDown, Clock, Shield, Eye,
+  HelpCircle, ChevronDown, ChevronRight, CheckCircle2, Layers, Loader2, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { deriveResourceTruth } from '@/lib/resourceTruthState';
-import { detectDrift } from '@/lib/resourceLifecycle';
-import { isJobStale } from '@/store/useResourceJobProgress';
+import { deriveResourceTruth, type BlockerType, type Blocker, BLOCKER_META } from '@/lib/resourceTruthState';
 import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS } from '@/lib/processingRoute';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 
 interface QueueItem {
   resource: Resource;
-  issueType: string;
+  blockerType: BlockerType;
   reason: string;
-  priority: number;       // group priority (1 = highest)
-  severity: number;       // within-group severity (lower = more urgent)
+  priority: number;
   actionLabel: string;
   actionKey: string;
   bulkEligible: boolean;
+  hasOverride: boolean;
+  routeContext: string | null;
 }
 
 interface QueueGroup {
-  type: string;
+  type: BlockerType;
   label: string;
   icon: React.ElementType;
   color: string;
@@ -48,178 +46,155 @@ interface Props {
   onInspect: (resource: Resource) => void;
 }
 
-/** Compute a severity score for within-group sorting (lower = more urgent) */
-function computeSeverity(r: Resource, issueType: string): number {
-  const age = Date.now() - new Date(r.updated_at || r.created_at).getTime();
-  const ageHours = age / (1000 * 60 * 60);
-  // Recent items are more urgent (lower score)
-  let score = Math.min(ageHours, 720); // cap at 30 days
-  // Failed items that have been failing longer are more urgent
-  if (issueType === 'failed' && r.failure_reason) score -= 100;
-  return score;
+/** Priority order for blocker types — lower = more urgent */
+const BLOCKER_PRIORITY: Record<BlockerType, number> = {
+  contradictory_state: 0,
+  stalled_extraction: 1,
+  stalled_enrichment: 2,
+  missing_content: 3,
+  needs_enrichment: 4,
+  needs_extraction: 5,
+  needs_activation: 6,
+  missing_context: 7,
+  route_low_confidence: 8,
+  route_manual_assist: 9,
+  qa_required: 10,
+  stale_version: 11,
+  downstream_ineligible: 12,
+  audit_mismatch: 13,
+  unknown_processing_state: 14,
+};
+
+const BLOCKER_ICON: Partial<Record<BlockerType, React.ElementType>> = {
+  contradictory_state: AlertTriangle,
+  stalled_extraction: Loader2,
+  stalled_enrichment: Loader2,
+  missing_content: AlertTriangle,
+  needs_enrichment: Zap,
+  needs_extraction: Zap,
+  needs_activation: Activity,
+  missing_context: HelpCircle,
+  route_low_confidence: Eye,
+  route_manual_assist: Eye,
+  qa_required: Eye,
+  stale_version: Clock,
+  downstream_ineligible: XCircle,
+  audit_mismatch: AlertTriangle,
+  unknown_processing_state: HelpCircle,
+};
+
+const BLOCKER_COLOR: Partial<Record<BlockerType, string>> = {
+  contradictory_state: 'text-destructive',
+  stalled_extraction: 'text-destructive',
+  stalled_enrichment: 'text-destructive',
+  missing_content: 'text-destructive',
+  needs_enrichment: 'text-amber-600',
+  needs_extraction: 'text-amber-600',
+  needs_activation: 'text-amber-600',
+  missing_context: 'text-amber-600',
+  route_low_confidence: 'text-amber-600',
+  route_manual_assist: 'text-amber-600',
+  qa_required: 'text-amber-600',
+  stale_version: 'text-muted-foreground',
+};
+
+const BULK_ACTIONS: Partial<Record<BlockerType, { label: string; key: string }>> = {
+  needs_enrichment: { label: 'Enrich All', key: 'bulk_enrich' },
+  needs_extraction: { label: 'Extract All', key: 'bulk_extract' },
+  needs_activation: { label: 'Activate All', key: 'bulk_activate' },
+  missing_content: { label: 'Re-enrich All', key: 'bulk_re_enrich' },
+  stale_version: { label: 'Re-enrich All', key: 'bulk_re_enrich' },
+};
+
+function getActionForBlocker(b: Blocker): { label: string; key: string } {
+  switch (b.type) {
+    case 'contradictory_state': return { label: 'Fix State', key: 'reset' };
+    case 'stalled_extraction':
+    case 'stalled_enrichment': return { label: 'Retry', key: 'deep_enrich' };
+    case 'missing_content': return { label: 'Re-enrich', key: 're_enrich' };
+    case 'needs_enrichment': return { label: 'Enrich', key: 'deep_enrich' };
+    case 'needs_extraction': return { label: 'Extract', key: 'extract' };
+    case 'needs_activation': return { label: 'Activate', key: 'activate' };
+    case 'missing_context': return { label: 'Add Contexts', key: 'repair_contexts' };
+    case 'route_low_confidence':
+    case 'route_manual_assist': return { label: 'Review', key: 'view' };
+    case 'qa_required': return { label: 'Review', key: 'view' };
+    case 'stale_version': return { label: 'Re-enrich', key: 're_enrich' };
+    case 'downstream_ineligible': return { label: 'Inspect', key: 'view' };
+    case 'audit_mismatch': return { label: 'Review', key: 'view' };
+    default: return { label: 'Inspect', key: 'view' };
+  }
 }
 
 export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onAction, onInspect }: Props) {
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['stuck', 'failed', 'missing_content', 'needs_extraction']));
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    new Set(['contradictory_state', 'stalled_extraction', 'stalled_enrichment', 'missing_content', 'needs_extraction'])
+  );
 
   const groups = useMemo<QueueGroup[]>(() => {
-    const failed: QueueItem[] = [];
-    const stuck: QueueItem[] = [];
-    const contradictions: QueueItem[] = [];
-    const missingContent: QueueItem[] = [];
-    const needsExtraction: QueueItem[] = [];
-    const lowYield: QueueItem[] = [];
-    const stale: QueueItem[] = [];
-    const needsReview: QueueItem[] = [];
+    // Collect items grouped by primary blocker type
+    const buckets = new Map<BlockerType, QueueItem[]>();
 
     for (const r of resources) {
       const lc = lifecycleMap.get(r.id);
       if (!lc) continue;
-      const rAny = r as any;
       const truth = deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
 
-      // Contradictory state (highest priority)
-      if (truth.integrity_issues.length > 0) {
-        contradictions.push({
-          resource: r, issueType: 'contradiction', priority: 0,
-          severity: -truth.integrity_issues.length,
-          reason: truth.integrity_issues[0],
-          actionLabel: 'Fix', actionKey: 'reset',
-          bulkEligible: false,
-        });
-      }
+      // Only resources with blockers need attention
+      if (truth.is_ready || truth.all_blockers.length === 0) continue;
+      // Skip actively processing resources (they'll resolve on their own)
+      if (truth.truth_state === 'processing') continue;
 
-      // Stuck / stalled jobs (highest priority after failed)
-      if (rAny.active_job_status === 'running' && isJobStale(rAny.active_job_updated_at, 'running')) {
-        const elapsed = Math.round((Date.now() - new Date(rAny.active_job_started_at || rAny.active_job_updated_at).getTime()) / 60000);
-        stuck.push({
-          resource: r, issueType: 'stuck', priority: 1,
-          severity: -elapsed, // longer stuck = more urgent
-          reason: `${rAny.active_job_type || 'Job'} stalled for ${elapsed}min — exceeds 10min timeout`,
-          actionLabel: 'Inspect', actionKey: 'view',
-          bulkEligible: false,
-        });
-      }
+      const primaryBlocker = truth.primary_blocker;
+      if (!primaryBlocker) continue;
 
-      // Failed extractions
-      if (r.enrichment_status === 'failed') {
-        failed.push({
-          resource: r, issueType: 'failed', priority: 2,
-          severity: computeSeverity(r, 'failed'),
-          reason: r.failure_reason || 'Extraction failed',
-          actionLabel: 'Retry', actionKey: 'deep_enrich',
-          bulkEligible: true,
-        });
-      }
+      const route = deriveProcessingRoute(r);
+      const routeCtx = `${PIPELINE_LABELS[route.pipeline]} · ${EXTRACTION_METHOD_LABELS[route.extraction_method]}`;
+      const action = getActionForBlocker(primaryBlocker);
 
-      // Missing content
-      if (lc.blocked === 'empty_content') {
-        missingContent.push({
-          resource: r, issueType: 'missing_content', priority: 3,
-          severity: computeSeverity(r, 'missing_content'),
-          reason: 'No content available for processing',
-          actionLabel: 'Re-enrich', actionKey: 're_enrich',
-          bulkEligible: true,
-        });
-      }
+      const item: QueueItem = {
+        resource: r,
+        blockerType: primaryBlocker.type,
+        reason: primaryBlocker.detail,
+        priority: BLOCKER_PRIORITY[primaryBlocker.type] ?? 99,
+        actionLabel: action.label,
+        actionKey: action.key,
+        bulkEligible: primaryBlocker.fixability === 'auto_fixable' || primaryBlocker.fixability === 'semi_auto_fixable',
+        hasOverride: route.has_override,
+        routeContext: route.confidence !== 'high' ? routeCtx : null,
+      };
 
-      // Needs extraction
-      if (lc.blocked === 'no_extraction' && r.enrichment_status !== 'failed') {
-        needsExtraction.push({
-          resource: r, issueType: 'needs_extraction', priority: 4,
-          severity: computeSeverity(r, 'needs_extraction'),
-          reason: 'Content available but no knowledge extracted',
-          actionLabel: 'Extract', actionKey: 'extract',
-          bulkEligible: true,
-        });
-      }
-
-      // Low yield — include route context
-      if (lc.kiCount > 0 && lc.kiCount <= 2 && lc.stage !== 'operationalized') {
-        const route = deriveProcessingRoute(r);
-        const routeCtx = `${PIPELINE_LABELS[route.pipeline]} · ${EXTRACTION_METHOD_LABELS[route.extraction_method]}`;
-        const suffix = [
-          route.has_override ? 'Override' : '',
-          route.confidence === 'low' ? 'Low confidence' : '',
-        ].filter(Boolean).join(' · ');
-        lowYield.push({
-          resource: r, issueType: 'low_yield', priority: 5,
-          severity: computeSeverity(r, 'low_yield'),
-          reason: `Only ${lc.kiCount} KI extracted (${routeCtx}${suffix ? ' · ' + suffix : ''})`,
-          actionLabel: 'Inspect', actionKey: 'view',
-          bulkEligible: false,
-        });
-      }
-
-      // Stale / drifted
-      const driftCheck = detectDrift(r);
-      if (driftCheck.hasDrift) {
-        const route = deriveProcessingRoute(r);
-        const routeSuffix = route.confidence === 'low' ? ' · Low confidence' : '';
-        stale.push({
-          resource: r, issueType: 'stale', priority: 6,
-          severity: computeSeverity(r, 'stale'),
-          reason: `${driftCheck.issues[0] || 'Version drift detected'} (${PIPELINE_LABELS[route.pipeline]}${routeSuffix})`,
-          actionLabel: 'Re-enrich', actionKey: 're_enrich',
-          bulkEligible: true,
-        });
-      }
-
-      // Needs review
-      if (lc.blocked === 'stale_blocker_state') {
-        needsReview.push({
-          resource: r, issueType: 'needs_review', priority: 7,
-          severity: computeSeverity(r, 'needs_review'),
-          reason: 'Stale blocked state — needs manual review',
-          actionLabel: 'Review', actionKey: 'view',
-          bulkEligible: false,
-        });
-      }
+      if (!buckets.has(primaryBlocker.type)) buckets.set(primaryBlocker.type, []);
+      buckets.get(primaryBlocker.type)!.push(item);
     }
 
-    // Sort each group by severity (most urgent first)
-    const sortBySeverity = (items: QueueItem[]) => items.sort((a, b) => a.severity - b.severity);
+    // Sort groups by priority, items within by age (older = more urgent)
+    const sortedTypes = [...buckets.keys()].sort(
+      (a, b) => (BLOCKER_PRIORITY[a] ?? 99) - (BLOCKER_PRIORITY[b] ?? 99)
+    );
 
-    const groups: QueueGroup[] = [];
-    if (contradictions.length > 0) groups.push({
-      type: 'contradiction', label: 'Contradictory State', icon: AlertTriangle, color: 'text-destructive',
-      items: sortBySeverity(contradictions),
-    });
-    if (stuck.length > 0) groups.push({
-      type: 'stuck', label: 'Stuck / Stalled', icon: Loader2, color: 'text-destructive',
-      items: sortBySeverity(stuck),
-    });
-    if (failed.length > 0) groups.push({
-      type: 'failed', label: 'Failed Extractions', icon: XCircle, color: 'text-destructive',
-      items: sortBySeverity(failed),
-      bulkActionLabel: `Retry All ${failed.length}`, bulkActionKey: 'bulk_retry',
-    });
-    if (missingContent.length > 0) groups.push({
-      type: 'missing_content', label: 'Missing Content', icon: AlertTriangle, color: 'text-destructive',
-      items: sortBySeverity(missingContent),
-      bulkActionLabel: `Re-enrich All ${missingContent.length}`, bulkActionKey: 'bulk_re_enrich',
-    });
-    if (needsExtraction.length > 0) groups.push({
-      type: 'needs_extraction', label: 'Needs Extraction', icon: Zap, color: 'text-amber-600',
-      items: sortBySeverity(needsExtraction),
-      bulkActionLabel: `Extract All ${needsExtraction.length}`, bulkActionKey: 'bulk_extract',
-    });
-    if (lowYield.length > 0) groups.push({
-      type: 'low_yield', label: 'Low Yield', icon: TrendingDown, color: 'text-amber-600',
-      items: sortBySeverity(lowYield),
-    });
-    if (stale.length > 0) groups.push({
-      type: 'stale', label: 'Stale / Drifted', icon: Clock, color: 'text-amber-600',
-      items: sortBySeverity(stale),
-      bulkActionLabel: `Re-enrich All ${stale.length}`, bulkActionKey: 'bulk_re_enrich',
-    });
-    if (needsReview.length > 0) groups.push({
-      type: 'needs_review', label: 'Needs Review', icon: HelpCircle, color: 'text-amber-600',
-      items: sortBySeverity(needsReview),
-    });
+    return sortedTypes.map(type => {
+      const items = buckets.get(type)!;
+      items.sort((a, b) => {
+        const ageA = Date.now() - new Date(a.resource.updated_at || a.resource.created_at).getTime();
+        const ageB = Date.now() - new Date(b.resource.updated_at || b.resource.created_at).getTime();
+        return ageB - ageA; // older first
+      });
 
-    return groups;
-  }, [resources, lifecycleMap]);
+      const meta = BLOCKER_META[type];
+      const bulk = BULK_ACTIONS[type];
+
+      return {
+        type,
+        label: meta.label,
+        icon: BLOCKER_ICON[type] ?? HelpCircle,
+        color: BLOCKER_COLOR[type] ?? 'text-muted-foreground',
+        items,
+        bulkActionLabel: bulk && items.length > 1 ? `${bulk.label} ${items.length}` : undefined,
+        bulkActionKey: bulk?.key,
+      };
+    });
+  }, [resources, lifecycleMap, audioJobsMap]);
 
   const totalItems = groups.reduce((s, g) => s + g.items.length, 0);
 
@@ -240,8 +215,9 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
     );
   }
 
-  // Top-level urgency summary
-  const urgentCount = groups.filter(g => g.type === 'failed' || g.type === 'missing_content').reduce((s, g) => s + g.items.length, 0);
+  const urgentCount = groups
+    .filter(g => ['contradictory_state', 'stalled_extraction', 'stalled_enrichment', 'missing_content'].includes(g.type))
+    .reduce((s, g) => s + g.items.length, 0);
   const fixableCount = groups.reduce((s, g) => s + g.items.filter(i => i.bulkEligible).length, 0);
 
   return (
@@ -257,7 +233,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
             <span className="text-destructive font-medium">{urgentCount} urgent</span>
           )}
           {fixableCount > 0 && (
-            <span>· {fixableCount} bulk-fixable</span>
+            <span>· {fixableCount} auto-fixable</span>
           )}
         </div>
       </div>
@@ -279,12 +255,11 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
                 </button>
                 {isExpanded && (
                   <div className="pb-1">
-                    {/* Bulk action bar */}
                     {group.bulkActionLabel && group.items.length > 1 && (
                       <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/20 border-b border-border/50">
                         <Layers className="h-3 w-3 text-muted-foreground" />
                         <span className="text-[10px] text-muted-foreground flex-1">
-                          {group.items.filter(i => i.bulkEligible).length} items can be fixed in bulk
+                          {group.items.filter(i => i.bulkEligible).length} items can be fixed automatically
                         </span>
                         <Button
                           size="sm"
@@ -303,7 +278,15 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
                           className="flex-1 min-w-0 text-left"
                         >
                           <p className="text-[11px] font-medium text-foreground truncate">{item.resource.title}</p>
-                          <p className="text-[10px] text-muted-foreground truncate">{item.reason}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-[10px] text-muted-foreground truncate">{item.reason}</p>
+                            {item.routeContext && (
+                              <span className="text-[9px] text-muted-foreground/70">{item.routeContext}</span>
+                            )}
+                            {item.hasOverride && (
+                              <Badge className="text-[8px] h-3.5 bg-amber-500/15 text-amber-700 border-amber-500/30">Override</Badge>
+                            )}
+                          </div>
                         </button>
                         <Button
                           size="sm"
