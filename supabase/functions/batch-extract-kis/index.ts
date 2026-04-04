@@ -1229,7 +1229,7 @@ Deno.serve(async (req) => {
       }
       log.rawAiResponse = rawResponse;
     } catch (aiErr: any) {
-      const failureType = classifyFailure(aiErr, 0, computeMinKiFloor(resource.content.length, isLesson), 0);
+      const failureType = classifyFailure(aiErr, 0, computeMinKiFloor(resource.content.length, isLesson, densitySignals), 0);
       log.outcome = 'ai_error';
       log.error = aiErr.message;
       log.failureType = failureType;
