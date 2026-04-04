@@ -121,7 +121,7 @@ function PipelineRouteSection({ resource }: { resource: Resource }) {
   const r = resource as any;
 
   const route = [
-    origin === 'web_url' ? 'Web URL' : origin === 'uploaded_file' ? 'Uploaded File' : 'Manual',
+    origin === 'source_url' ? 'Web URL' : origin === 'uploaded_file' ? 'Uploaded File' : origin === 'manual_content' ? 'Manual' : 'Unknown',
     isAudio ? 'Transcript Pipeline' : r.content_length > 5000 ? 'Dense Content Pipeline' : 'Standard Pipeline',
     status?.canonical_stage === 'operationalized' ? 'Ready' : status?.canonical_stage?.replace(/_/g, ' ') || 'Unknown',
   ];
