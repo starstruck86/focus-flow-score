@@ -29,6 +29,7 @@ interface QueueItem {
   hasOverride: boolean;
   routeContext: string | null;
   rootCause: RootCauseDiagnosis;
+  dossier: ResourceFailureDossier | null;
 }
 
 interface QueueGroup {
