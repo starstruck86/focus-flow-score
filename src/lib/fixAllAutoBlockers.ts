@@ -550,6 +550,8 @@ export async function runFixAllAutoBlockers(
         resolutionOutcome: null,
         normalized: false,
         wrapperPageDetected: wrapperSet.has(id),
+        attachmentExtractionAttempted: false,
+        attachmentExtractionOutcome: null,
         originalEnrichmentStatus: origState?.enrichment_status ?? null,
         originalJobStatus: origState?.active_job_status ?? null,
       });
