@@ -61,6 +61,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import { AppFreshnessBar } from './AppFreshnessBar';
+import { useAppFreshness } from '@/hooks/useAppFreshness';
 
 type PendingItem = {
   id: string;
@@ -180,6 +181,7 @@ export function ResourceManager() {
   const { data: audioJobsMap } = useAudioJobsMap();
   const { summary: lifecycle } = useCanonicalLifecycle();
   const queryClient = useQueryClient();
+  const freshness = useAppFreshness();
   const now = () => new Date().toISOString();
 
   // Build lifecycle map for truth derivation in bulk actions
@@ -776,11 +778,8 @@ export function ResourceManager() {
             resources={filteredResources}
             selectedIds={selectedResourceIds}
             audioJobsMap={audioJobsMap}
-            onRefresh={() => {
-              queryClient.invalidateQueries({ queryKey: ['resources'] });
-              queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
-              queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
-            }}
+            onRefresh={freshness.refreshData}
+            isRefreshing={freshness.isRefreshing}
             lastFixResult={lastFixResult}
             fixAllProgressMessage={fixAllProgressMessage}
             isFixAllRunning={isFixAllRunning}

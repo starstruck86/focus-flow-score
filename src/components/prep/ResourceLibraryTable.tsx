@@ -238,10 +238,12 @@ export function ResourceLibraryTable({
   const isMobile = useIsMobile();
 
   // Sync external filter from parent (e.g. NeedsAttentionQueue clicks)
+  const prevExternalFilter = useRef(externalHealthFilter);
   useEffect(() => {
-    if (externalHealthFilter && externalHealthFilter !== healthFilter) {
+    if (externalHealthFilter && externalHealthFilter !== prevExternalFilter.current) {
       setHealthFilter(externalHealthFilter as HealthFilter);
     }
+    prevExternalFilter.current = externalHealthFilter;
   }, [externalHealthFilter]);
 
   const scrollBodyRef = useRef<HTMLDivElement>(null);
