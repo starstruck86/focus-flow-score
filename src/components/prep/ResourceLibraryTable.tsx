@@ -40,6 +40,7 @@ import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { SystemHealthBar } from './SystemHealthBar';
 import { ResourceCard } from './ResourceCard';
 import { NeedsAttentionQueue } from './NeedsAttentionQueue';
+import { ProcessingStatusBar } from './ProcessingStatusBar';
 import { CollectionBrowser } from './CollectionBrowser';
 import { deriveResourceInsight, deriveReadiness } from '@/lib/resourceSignal';
 import type { ReadinessBucket } from '@/lib/resourceAudit';
