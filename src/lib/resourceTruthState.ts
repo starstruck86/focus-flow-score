@@ -150,15 +150,14 @@ export function deriveResourceTruth(
 
   // ── Enrichment blockers ─────────────────────────────────
   const enrichStatus = resource.enrichment_status ?? '';
-  const needsEnrichment = (!enrichStatus || enrichStatus === 'not_enriched' || enrichStatus === 'failed' || enrichStatus === 'incomplete' || enrichStatus === 'stale')
-    && isContentBacked === false && !isActivelyProcessing;
-  // If content-backed but not enriched status, and ps says READY (i.e. can be enriched)
-  if (isContentBacked && !['deep_enriched', 'enriched', 'verified'].includes(enrichStatus) && ps.state === 'READY' && !isActivelyProcessing) {
+  const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying'];
+  // If content-backed but not in an enriched state, and processing is ready (can be enriched)
+  if (isContentBacked && !ENRICHED_STATUSES.includes(enrichStatus) && ps.state === 'READY' && !isActivelyProcessing) {
     blockers.push(blocker('needs_enrichment', `Status is "${enrichStatus || 'not_enriched'}" — enrichment available`));
   }
 
   // ── Extraction blockers ─────────────────────────────────
-  if (isContentBacked && kiTotal === 0 && ['deep_enriched', 'enriched', 'verified'].includes(enrichStatus) && !isActivelyProcessing) {
+  if (isContentBacked && kiTotal === 0 && ENRICHED_STATUSES.includes(enrichStatus) && !isActivelyProcessing) {
     blockers.push(blocker('needs_extraction', 'Content enriched but no knowledge items extracted'));
   }
 
