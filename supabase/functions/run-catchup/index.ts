@@ -357,7 +357,7 @@ Deno.serve(async (req) => {
             results.qa_flagged++;
             await supabase
               .from("library_reconciliation_items")
-              .update({ qa_flagged: true, qa_reason: "Routed to manual assist after repeated failures" })
+              .update({ qa_flagged: true, qa_reason: `Manual assist required: ${routeReasonSummary}` })
               .eq("id", item.id);
           } else if (route.pipeline === "direct_extract") {
             // Skip enrichment — content already present
