@@ -27,6 +27,7 @@ interface QueueItem {
   bulkEligible: boolean;
   hasOverride: boolean;
   routeContext: string | null;
+  rootCause: RootCauseDiagnosis;
 }
 
 interface QueueGroup {
