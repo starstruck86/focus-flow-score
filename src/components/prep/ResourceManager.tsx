@@ -181,6 +181,7 @@ export function ResourceManager() {
   const { data: audioJobsMap } = useAudioJobsMap();
   const { summary: lifecycle } = useCanonicalLifecycle();
   const queryClient = useQueryClient();
+  const freshness = useAppFreshness();
   const now = () => new Date().toISOString();
 
   // Build lifecycle map for truth derivation in bulk actions
