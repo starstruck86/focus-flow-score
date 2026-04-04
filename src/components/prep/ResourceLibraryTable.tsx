@@ -206,6 +206,9 @@ export function ResourceLibraryTable({
   onAction,
   onBulkAction,
   audioJobsMap,
+  onRefresh,
+  isRefreshing,
+  lastFixResult,
 }: ResourceLibraryTableProps) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
