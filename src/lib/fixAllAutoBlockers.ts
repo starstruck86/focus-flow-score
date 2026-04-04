@@ -46,6 +46,10 @@ export interface FixResourceOutcome {
   normalized: boolean;
   /** Whether wrapper-page / attachment detection applied */
   wrapperPageDetected: boolean;
+  /** Whether attachment extraction was attempted for wrapper pages */
+  attachmentExtractionAttempted: boolean;
+  /** Attachment extraction outcome if attempted */
+  attachmentExtractionOutcome: string | null;
   /** Original enrichment_status before normalization */
   originalEnrichmentStatus: string | null;
   /** Original active_job_status before normalization */
@@ -333,8 +337,8 @@ async function normalizeStaleStatuses(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
   callbacks?: FixAllCallbacks,
-): Promise<FixPhaseResult> {
-  const result: FixPhaseResult = { phase: 'normalize_status', attempted: 0, succeeded: 0, failed: 0, errors: [] };
+): Promise<FixPhaseResult & { normalizedIds: Set<string> }> {
+  const result: FixPhaseResult & { normalizedIds: Set<string> } = { phase: 'normalize_status', attempted: 0, succeeded: 0, failed: 0, errors: [], normalizedIds: new Set() };
 
   if (resourceIds.length === 0) return result;
 
@@ -380,19 +384,31 @@ async function normalizeStaleStatuses(
     const hasUsableContent = (contentInfo?.content_length ?? 0) >= 200 || contentInfo?.manual_content_present === true;
     const isIdleJob = state.active_job_status === 'idle';
     
-    // Detect stale 'running' jobs (started > 10 min ago with no update)
+  // Detect stale 'running' jobs (started > 10 min ago with no update)
     const isStaleRunning = state.active_job_status === 'running' && (() => {
       const updatedAt = state.active_job_updated_at ?? state.active_job_started_at;
       if (!updatedAt) return true; // no timestamp = stale
       return Date.now() - new Date(updatedAt).getTime() > 10 * 60 * 1000; // 10 min
     })();
+
+    // HARDENED: For structured course lessons (title contains " > "), lower the content
+    // threshold for needs_auth reclassification to 100 chars. Short conclusions/checklists
+    // are legitimate content that shouldn't stay auth-blocked.
+    const { data: titleData } = await supabase
+      .from('resources' as any)
+      .select('title')
+      .eq('id', id)
+      .single();
+    const isStructuredLesson = !!(titleData as any)?.title && /\s>\s/.test((titleData as any).title);
+    const authContentThreshold = isStructuredLesson ? 100 : 200;
+    const hasUsableContentForAuth = (contentInfo?.content_length ?? 0) >= authContentThreshold || contentInfo?.manual_content_present === true;
     
     // Determine if this resource needs normalization
     const needsNormalization = 
       (hasKIs && isRetrying) ||      // extraction_retrying but has KIs
       (hasKIs && isFailedJob) ||      // failed job but has KIs — stale marker
       (isFailedJob && ['deep_enriched', 'enriched', 'extracted', 'verified', 'content_ready'].includes(state.enrichment_status)) || // failed job on otherwise healthy status
-      (isNeedsAuth && hasUsableContent) || // needs_auth misclassification: content exists, reclassify to enriched
+      (isNeedsAuth && hasUsableContentForAuth) || // needs_auth misclassification: content exists, reclassify to enriched
       (isIdleJob) || // stale 'idle' job status should be cleared
       (isStaleRunning); // stale 'running' job — extraction likely timed out or lost response
 
@@ -431,12 +447,12 @@ async function normalizeStaleStatuses(
       }
 
       // Fix needs_auth misclassification: content exists, reclassify to enriched
-      if (isNeedsAuth && hasUsableContent) {
+      if (isNeedsAuth && hasUsableContentForAuth) {
         update.enrichment_status = 'enriched';
         update.failure_reason = null;
         update.active_job_status = null;
         update.active_job_error = null;
-        log.info('Reclassifying needs_auth → enriched (content exists)', { id, content_length: contentInfo?.content_length });
+        log.info('Reclassifying needs_auth → enriched (content exists)', { id, content_length: contentInfo?.content_length, threshold: authContentThreshold, isStructuredLesson });
       }
 
       const { error } = await supabase
@@ -446,6 +462,7 @@ async function normalizeStaleStatuses(
 
       if (!error) {
         result.succeeded++;
+        result.normalizedIds.add(id);
         log.info('Normalized stale status', { id, hadKIs: hasKIs, wasRetrying: isRetrying, wasFailed: isFailedJob });
         callbacks?.onItemDone?.(id, 'normalize_status');
       } else {
@@ -533,6 +550,8 @@ export async function runFixAllAutoBlockers(
         resolutionOutcome: null,
         normalized: false,
         wrapperPageDetected: wrapperSet.has(id),
+        attachmentExtractionAttempted: false,
+        attachmentExtractionOutcome: null,
         originalEnrichmentStatus: origState?.enrichment_status ?? null,
         originalJobStatus: origState?.active_job_status ?? null,
       });
@@ -562,10 +581,10 @@ export async function runFixAllAutoBlockers(
     const normalizeResult = await normalizeStaleStatuses(allIds, onProgress, callbacks);
     if (normalizeResult.attempted > 0) {
       phases.push(normalizeResult);
-      // Mark all attempted normalizations in outcomes
-      for (const id of allIds) {
+      // Mark only the actually-normalized resources in outcomes
+      for (const id of normalizeResult.normalizedIds) {
         const outcome = outcomeMap.get(id);
-        if (outcome && normalizeResult.succeeded > 0) {
+        if (outcome) {
           outcome.normalized = true;
         }
       }
@@ -616,8 +635,10 @@ export async function runFixAllAutoBlockers(
           const isEnriched = ['enriched', 'deep_enriched', 'verified', 'content_ready', 'extracted'].includes(fr.enrichment_status);
           // HARDENED: Also include needs_auth resources with content — normalization should have
           // reclassified them, but catch any that were missed
-          const isNeedsAuthWithContent = fr.enrichment_status === 'needs_auth' && (fr.content_length ?? 0) >= 200;
-          const hasContent = (fr.content_length ?? 0) >= 200;
+          const isStructuredLesson = !!(fr.title && /\s>\s/.test(fr.title));
+          const contentThreshold = isStructuredLesson ? 100 : 200;
+          const isNeedsAuthWithContent = fr.enrichment_status === 'needs_auth' && (fr.content_length ?? 0) >= contentThreshold;
+          const hasContent = (fr.content_length ?? 0) >= contentThreshold;
           const notRunning = !['running'].includes(fr.active_job_status ?? '');
           
           if ((isEnriched || isNeedsAuthWithContent) && hasContent && notRunning && !extractIds.includes(fr.id)) {
@@ -629,12 +650,11 @@ export async function runFixAllAutoBlockers(
             
             if ((count ?? 0) === 0) {
               extractIds.push(fr.id);
-              // Also update titleMap if not already there
               if (fr.title && !titleMap.has(fr.id)) {
                 titleMap.set(fr.id, fr.title);
               }
               initOutcome(fr.id, 'extraction', 'needs_extraction');
-              log.info('Discovered newly extraction-eligible resource after normalization', { id: fr.id, title: fr.title, status: fr.enrichment_status });
+              log.info('Discovered newly extraction-eligible resource after normalization', { id: fr.id, title: fr.title, status: fr.enrichment_status, isStructuredLesson });
             }
           }
         }
@@ -658,6 +678,17 @@ export async function runFixAllAutoBlockers(
         outcome.succeeded = detail.succeeded;
         outcome.kisCreated = detail.kisCreated;
         outcome.kisActive = detail.kisActive;
+        
+        // Track wrapper-page attachment handling
+        if (outcome.wrapperPageDetected) {
+          outcome.attachmentExtractionAttempted = true;
+          if (detail.succeeded && detail.kisCreated > 0) {
+            outcome.attachmentExtractionOutcome = 'wrapper extracted, KIs created';
+          } else {
+            outcome.attachmentExtractionOutcome = 'wrapper extracted, 0 KIs — no linked attachment found';
+          }
+        }
+        
         if (!detail.succeeded) {
           outcome.error = detail.reason || 'no KIs extracted';
           outcome.rootCauseCategory = detail.kisCreated === 0 ? 'extraction_produced_zero_kis' : 'activation_failed';
@@ -676,25 +707,76 @@ export async function runFixAllAutoBlockers(
     phases.push(activateResult);
   }
 
-  const totalSucceeded = phases.reduce((s, p) => s + p.succeeded, 0);
-  const totalFailed = phases.reduce((s, p) => s + p.failed, 0);
-  const blockersAfter = totalBefore - totalSucceeded;
+  // ── Post-run: re-query actual KI counts and truth state for all resources ──
+  // This gives accurate before/after rather than relying on phase success counts.
+  const postRunOutcomes = new Map<string, { kiCount: number; activeKiCount: number; enrichmentStatus: string; jobStatus: string | null }>();
+  if (allResourceIds.length > 0) {
+    const { data: postResources } = await supabase
+      .from('resources' as any)
+      .select('id, enrichment_status, active_job_status')
+      .in('id', allResourceIds);
+    
+    for (const pr of (postResources ?? []) as any[]) {
+      const { count: kiCount } = await supabase
+        .from('knowledge_items' as any)
+        .select('id', { count: 'exact', head: true })
+        .eq('source_resource_id', pr.id);
+      const { count: activeCount } = await supabase
+        .from('knowledge_items' as any)
+        .select('id', { count: 'exact', head: true })
+        .eq('source_resource_id', pr.id)
+        .eq('active', true);
+      postRunOutcomes.set(pr.id, {
+        kiCount: kiCount ?? 0,
+        activeKiCount: activeCount ?? 0,
+        enrichmentStatus: pr.enrichment_status ?? '',
+        jobStatus: pr.active_job_status,
+      });
+    }
+  }
 
-  // Build blocker diff
+  // Compute real resolution outcomes per resource
+  let realFixed = 0;
+  let realFailed = 0;
+  for (const [id, outcome] of outcomeMap) {
+    const post = postRunOutcomes.get(id);
+    if (post) {
+      outcome.kisCreated = Math.max(outcome.kisCreated, post.kiCount);
+      outcome.kisActive = Math.max(outcome.kisActive, post.activeKiCount);
+      outcome.finalTruthState = post.enrichmentStatus;
+      
+      if (post.kiCount > 0) {
+        outcome.succeeded = true;
+        outcome.resolutionOutcome = 'resolved_permanently';
+        realFixed++;
+      } else if (outcome.attempted && !outcome.succeeded) {
+        outcome.resolutionOutcome = 'still_blocked_same_cause';
+        if (!outcome.rootCauseCategory) {
+          outcome.rootCauseCategory = 'extraction_produced_zero_kis';
+          outcome.rootCauseExplanation = `Extraction attempted but produced 0 KIs from ${post.enrichmentStatus} resource`;
+        }
+        realFailed++;
+      } else if (!outcome.attempted) {
+        outcome.resolutionOutcome = 'still_blocked_same_cause';
+        outcome.rootCauseCategory = outcome.rootCauseCategory || 'extraction_never_triggered';
+        outcome.rootCauseExplanation = outcome.rootCauseExplanation || 'Resource was not passed to extraction phase';
+        realFailed++;
+      }
+    }
+  }
+
+  const blockersAfter = realFailed;
+
+  // Build blocker diff from real post-run state
   const afterByType: Record<string, number> = {};
   for (const [type, count] of Object.entries(beforeByType)) {
-    const phase = phases.find(p => {
-      const phaseToBlocker: Record<string, string[]> = {
-        normalize_status: [],
-        stalled_retry: ['stalled_extraction', 'stalled_enrichment'],
-        enrichment: ['needs_enrichment', 'missing_content', 'stale_version'],
-        extraction: ['needs_extraction'],
-        activation: ['needs_activation'],
-      };
-      return phaseToBlocker[p.phase]?.includes(type);
-    });
-    const resolved = phase ? phase.succeeded : 0;
-    afterByType[type] = Math.max(0, count - resolved);
+    // Count how many resources of this blocker type are still blocked (0 KIs)
+    const idsOfType = blockerGroups.filter(g => g.type === type).flatMap(g => g.resourceIds);
+    const stillBlocked = idsOfType.filter(id => {
+      const post = postRunOutcomes.get(id);
+      return !post || post.kiCount === 0;
+    }).length;
+    afterByType[type] = stillBlocked;
   }
 
   const blockerDiff: BlockerDiff[] = Object.entries(beforeByType).map(([type, before]) => {
@@ -708,14 +790,13 @@ export async function runFixAllAutoBlockers(
     };
   });
 
-  // Mark outcomes based on phase results
+  // Mark outcomes based on phase errors
   for (const phase of phases) {
     for (const err of phase.errors) {
-      // Try to extract resource ID from error string
       const idMatch = err.match(/^([a-f0-9-]{8,36}):/);
       if (idMatch) {
         const outcome = outcomeMap.get(idMatch[1]);
-        if (outcome) {
+        if (outcome && !outcome.error) {
           outcome.attempted = true;
           outcome.error = err.replace(`${idMatch[1]}: `, '');
         }
@@ -723,13 +804,13 @@ export async function runFixAllAutoBlockers(
     }
   }
 
-  // Build reason with blocker diff callout
+  // Build reason
   const unchangedExtraction = blockerDiff.find(d => d.type === 'needs_extraction' && d.unchanged > 0);
   let reason: string;
   if (blockersAfter <= 0) {
     reason = 'All auto-fixable blockers resolved';
   } else {
-    reason = `${blockersAfter} blockers remain — ${totalFailed} failed during this run`;
+    reason = `${blockersAfter} blockers remain — ${realFailed} still need attention`;
     if (unchangedExtraction && unchangedExtraction.unchanged > 0) {
       reason += `. Extraction: ${unchangedExtraction.unchanged}/${unchangedExtraction.before} unchanged.`;
     }
@@ -739,8 +820,8 @@ export async function runFixAllAutoBlockers(
     phases,
     blockers_before: totalBefore,
     blockers_after: Math.max(0, blockersAfter),
-    blockers_fixed: totalSucceeded,
-    blockers_failed: totalFailed,
+    blockers_fixed: realFixed,
+    blockers_failed: realFailed,
     system_ready: blockersAfter <= 0,
     reason,
     resourceOutcomes: [...outcomeMap.values()],

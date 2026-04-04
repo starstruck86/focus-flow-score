@@ -221,6 +221,11 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
                       <div className="flex items-center gap-1.5 text-muted-foreground flex-wrap">
                         {o.normalized && <Badge variant="outline" className="text-[8px] h-3 px-1">normalized</Badge>}
                         {o.wrapperPageDetected && <Badge variant="outline" className="text-[8px] h-3 px-1 border-amber-500/30 text-amber-700">wrapper page</Badge>}
+                        {o.attachmentExtractionAttempted && (
+                          <Badge variant="outline" className="text-[8px] h-3 px-1 border-blue-500/30 text-blue-700">
+                            {o.attachmentExtractionOutcome ?? 'attachment tried'}
+                          </Badge>
+                        )}
                         {o.kisCreated > 0 && <span className="text-emerald-600">+{o.kisCreated} KIs</span>}
                         {o.kisActive > 0 && <span className="text-emerald-600">({o.kisActive} active)</span>}
                         {o.error && <span className="text-destructive truncate max-w-[200px]">{o.error}</span>}
