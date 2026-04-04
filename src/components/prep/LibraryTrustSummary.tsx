@@ -148,7 +148,7 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
         {readiness.stalled_resources > 0 && (
           <span
             className={cn('text-destructive', onFilterChange && chipClass)}
-            onClick={() => onFilterChange?.('failed')}
+            onClick={() => onFilterChange?.('stalled')}
           >
             {readiness.stalled_resources} stalled
           </span>
@@ -156,20 +156,56 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
         {readiness.qa_required_resources > 0 && (
           <span
             className={cn('text-amber-600', onFilterChange && chipClass)}
-            onClick={() => onFilterChange?.('needs_review')}
+            onClick={() => onFilterChange?.('qa_required')}
           >
             {readiness.qa_required_resources} QA required
           </span>
         )}
         {readiness.contradiction_count > 0 && (
-          <span className="text-destructive font-medium">{readiness.contradiction_count} contradictions</span>
+          <span
+            className={cn('text-destructive font-medium', onFilterChange && chipClass)}
+            onClick={() => onFilterChange?.('contradictions')}
+          >
+            {readiness.contradiction_count} contradictions
+          </span>
         )}
-        {readiness.auto_fixable_blocker_count > 0 && (
-          <span className="text-amber-600">{readiness.auto_fixable_blocker_count} auto-fixable</span>
-        )}
-        {readiness.manual_only_blocker_count > 0 && (
-          <span className="text-muted-foreground">{readiness.manual_only_blocker_count} manual</span>
-        )}
+      </div>
+
+      {/* Per-blocker-type chips — clickable */}
+      {Object.keys(blockerBreakdown).length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap px-3 pb-2">
+          <span className="text-[9px] text-muted-foreground mr-0.5">Blockers:</span>
+          {Object.entries(blockerBreakdown)
+            .sort((a, b) => b[1] - a[1])
+            .map(([type, count]) => {
+              const filterMap: Record<string, string> = {
+                needs_enrichment: 'needs_enrichment',
+                needs_extraction: 'needs_extraction',
+                needs_activation: 'needs_activation',
+                needs_auth: 'needs_auth',
+                missing_content: 'missing_content',
+                qa_required: 'qa_required',
+                route_manual_assist: 'needs_auth',
+                stalled_extraction: 'stalled',
+                stalled_enrichment: 'stalled',
+                contradictory_state: 'contradictions',
+              };
+              const filterKey = filterMap[type] ?? 'blocked';
+              return (
+                <Badge
+                  key={type}
+                  variant="outline"
+                  className={cn(
+                    'text-[9px] h-4 px-1.5 cursor-pointer hover:bg-accent transition-colors',
+                  )}
+                  onClick={() => onFilterChange?.(filterKey)}
+                >
+                  {count} {type.replace(/_/g, ' ')}
+                </Badge>
+              );
+            })}
+        </div>
+      )
       </div>
 
       {/* Burn-down results from last Fix All run */}
