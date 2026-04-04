@@ -1119,7 +1119,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[extract] Attempt ${attemptNumber}/${maxAttempts} | strategy=${strategy} | lastFailure=${lastFailureType || 'none'} | history=${attemptHistory.length} prior | "${resource.title}"`);
+    console.log(`[extract] Attempt ${attemptNumber}/${maxAttempts} | strategy=${strategy} | lastFailure=${lastFailureType || 'none'} | "${resource.title}"`);
 
     const startTime = Date.now();
     const startedAt = new Date().toISOString();
