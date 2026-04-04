@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import { deriveProcessingState, getProcessingStateColor } from '@/lib/processingState';
 import { deriveResourceInsight } from '@/lib/resourceSignal';
+import { deriveResourceTruth } from '@/lib/resourceTruthState';
 import { getResourceOrigin } from '@/lib/resourceEligibility';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { detectDrift } from '@/lib/resourceLifecycle';
