@@ -181,25 +181,40 @@ async function fixNeedsExtraction(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixPhaseResult> {
   const result: FixPhaseResult = { phase: 'extraction', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
 
   if (resourceIds.length === 0) return result;
 
   onProgress?.(`Extracting ${resourceIds.length} resources`);
+  // Emit per-item start for all extraction items upfront
+  for (const id of resourceIds) {
+    callbacks?.onItemStart?.(id, 'extraction');
+  }
   try {
-    const results = await autoOperationalizeBatch(resourceIds, undefined, onResourcePhase);
+    const results = await autoOperationalizeBatch(resourceIds, undefined, (resourceId, phase, res) => {
+      onResourcePhase?.(resourceId, phase, res);
+      if (phase === 'done') {
+        const matched = results; // not available yet — use callback below
+      }
+    });
     for (const r of results) {
       if (r.knowledgeExtracted > 0 || r.operationalized) {
         result.succeeded++;
+        callbacks?.onItemDone?.(r.resourceId, 'extraction');
       } else {
         result.failed++;
         result.errors.push(`${r.resourceId}: ${r.reason || 'no KIs extracted'}`);
+        callbacks?.onItemFailed?.(r.resourceId, 'extraction');
       }
     }
   } catch (err: any) {
     result.failed += resourceIds.length;
     result.errors.push(`Batch extraction failed: ${err.message}`);
+    for (const id of resourceIds) {
+      callbacks?.onItemFailed?.(id, 'extraction');
+    }
   }
 
   return result;
