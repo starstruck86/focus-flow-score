@@ -127,36 +127,40 @@ function ResourceDetail({ resourceId, onBack }: { resourceId: string; onBack: ()
                 <TableHead className="text-right">Raw</TableHead>
                 <TableHead className="text-right">Valid</TableHead>
                 <TableHead className="text-right">Dedup</TableHead>
+                <TableHead className="text-right">Val Loss%</TableHead>
+                <TableHead className="text-right">Dup Loss%</TableHead>
                 <TableHead className="text-right">Floor</TableHead>
                 <TableHead>Floor Met</TableHead>
                 <TableHead className="text-right">Duration</TableHead>
-                <TableHead>Started</TableHead>
                 <TableHead>Completed</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {attempts.map((a, idx) => {
                 const isLatest = idx === attempts.length - 1;
+                const valLoss = a.raw_item_count > 0 ? Math.round(((a.raw_item_count - a.validated_count) / a.raw_item_count) * 100) : 0;
+                const dupLoss = a.validated_count > 0 ? Math.round(((a.validated_count - a.deduped_count) / a.validated_count) * 100) : 0;
                 return (
                   <TableRow key={a.id} className={isLatest ? 'bg-accent/50 font-medium' : ''}>
                     <TableCell className="font-mono">{a.attempt_number}{isLatest && <span className="ml-1 text-xs text-primary">←</span>}</TableCell>
                     <TableCell><Badge variant="outline" className="text-xs font-mono">{a.strategy}</Badge></TableCell>
                     <TableCell><StatusBadge status={a.status} /></TableCell>
                     <TableCell><FailureTypeBadge type={a.failure_type} /></TableCell>
-                    <TableCell className="text-right font-mono">{a.ki_count}</TableCell>
+                    <TableCell className="text-right font-mono font-bold">{a.ki_count}</TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">{a.raw_item_count}</TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">{a.validated_count}</TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">{a.deduped_count}</TableCell>
+                    <TableCell className={`text-right font-mono text-xs ${valLoss > 50 ? 'text-red-600 font-bold' : valLoss > 25 ? 'text-amber-600' : 'text-muted-foreground'}`}>{valLoss}%</TableCell>
+                    <TableCell className={`text-right font-mono text-xs ${dupLoss > 30 ? 'text-red-600 font-bold' : dupLoss > 15 ? 'text-amber-600' : 'text-muted-foreground'}`}>{dupLoss}%</TableCell>
                     <TableCell className="text-right font-mono">{a.min_ki_floor}</TableCell>
                     <TableCell>{a.floor_met ? '✅' : '❌'}</TableCell>
                     <TableCell className="text-right font-mono text-xs">{formatDuration(a.duration_ms)}</TableCell>
-                    <TableCell className="text-xs">{formatTime(a.started_at)}</TableCell>
                     <TableCell className="text-xs">{formatTime(a.completed_at)}</TableCell>
                   </TableRow>
                 );
               })}
               {attempts.length === 0 && (
-                <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground py-8">No attempt records found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground py-8">No attempt records found</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
