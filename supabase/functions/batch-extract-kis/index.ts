@@ -137,6 +137,7 @@ async function persistAttemptRecord(supabase: any, resourceId: string, userId: s
       duration_ms: record.duration_ms,
       started_at: record.started_at,
       completed_at: record.completed_at,
+      confidence_score: record.confidence_score ?? null,
     }, { onConflict: 'resource_id,attempt_number' });
   if (error) {
     console.error(`[extract-attempt] Failed to persist attempt ${record.attempt_number} for ${resourceId}: ${error.message}`);
