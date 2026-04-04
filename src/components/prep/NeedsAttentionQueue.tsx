@@ -181,6 +181,10 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
     const sortBySeverity = (items: QueueItem[]) => items.sort((a, b) => a.severity - b.severity);
 
     const groups: QueueGroup[] = [];
+    if (contradictions.length > 0) groups.push({
+      type: 'contradiction', label: 'Contradictory State', icon: AlertTriangle, color: 'text-destructive',
+      items: sortBySeverity(contradictions),
+    });
     if (stuck.length > 0) groups.push({
       type: 'stuck', label: 'Stuck / Stalled', icon: Loader2, color: 'text-destructive',
       items: sortBySeverity(stuck),
