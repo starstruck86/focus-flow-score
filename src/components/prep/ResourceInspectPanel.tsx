@@ -26,7 +26,10 @@ import { getResourceOrigin } from '@/lib/resourceEligibility';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
-import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, ORIGIN_TYPE_LABELS, ASSET_LABELS } from '@/lib/processingRoute';
+import {
+  deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, ORIGIN_TYPE_LABELS, ASSET_LABELS,
+  type Pipeline, type ExtractionMethod, type AssetKind, type RouteOverride,
+} from '@/lib/processingRoute';
 import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import type { Resource } from '@/hooks/useResources';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
