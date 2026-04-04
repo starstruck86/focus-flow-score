@@ -340,6 +340,7 @@ Deno.serve(async (req) => {
           route_primary_asset: route.primary_asset,
           route_confidence: route.confidence,
           route_has_override: route.has_override,
+          route_reason_summary: routeReasonSummary,
         };
 
         console.log(`[route] resource=${item.resource_id} pipeline=${route.pipeline} method=${route.extraction_method} primary_asset=${route.primary_asset} confidence=${route.confidence} override=${route.has_override}`);
