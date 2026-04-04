@@ -881,8 +881,7 @@ export function ResourceManager() {
                     setIsFixAllRunning(false);
                     setFixAllLiveProgress(prev => {
                       if (!prev) return prev;
-                      const { finalizeFixAllProgress } = require('@/lib/fixAllProgress');
-                      return finalizeFixAllProgress(prev, 'Fix All complete');
+                      return { ...prev, isRunning: false, running: 0, runningIds: [], currentMessage: 'Fix All complete' };
                     });
                   }
                   break;
