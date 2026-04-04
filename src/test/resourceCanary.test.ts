@@ -474,7 +474,7 @@ describe('Retry System Guarantee Canary', () => {
     const attemptNumber = 2;
     const maxAttempts = 4;
     const failureType: ExtractionFailureType = 'under_floor_invariant';
-    const retryEligible = attemptNumber < maxAttempts && failureType !== 'structural_failure';
+    const retryEligible = attemptNumber < maxAttempts && (failureType as string) !== 'structural_failure';
     expect(retryEligible).toBe(true);
     const status = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
     expect(status).toBe('extraction_retrying');
