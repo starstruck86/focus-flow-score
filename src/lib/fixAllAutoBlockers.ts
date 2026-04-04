@@ -98,19 +98,21 @@ async function clearFailedJobStatus(resourceId: string): Promise<boolean> {
 async function fixStalledJobs(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixPhaseResult> {
   const result: FixPhaseResult = { phase: 'stalled_retry', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
 
   for (const id of resourceIds) {
+    callbacks?.onItemStart?.(id, 'stalled_retry', `Clearing stalled job: ${id.slice(0, 8)}…`);
     onProgress?.(`Clearing stalled job: ${id.slice(0, 8)}…`);
     const cleared = await clearStalledJobStatus(id);
     if (!cleared) {
       result.failed++;
       result.errors.push(`Failed to clear stalled status for ${id}`);
+      callbacks?.onItemFailed?.(id, 'stalled_retry');
       continue;
     }
 
-    // Re-enrich after clearing
     try {
       const { data, error } = await invokeEnrichResource(
         { resource_id: id, force: true },
@@ -119,12 +121,15 @@ async function fixStalledJobs(
       if (error) {
         result.failed++;
         result.errors.push(`Enrich failed for ${id}: ${error.message}`);
+        callbacks?.onItemFailed?.(id, 'stalled_retry');
       } else {
         result.succeeded++;
+        callbacks?.onItemDone?.(id, 'stalled_retry');
       }
     } catch (err: any) {
       result.failed++;
       result.errors.push(`Enrich error for ${id}: ${err.message}`);
+      callbacks?.onItemFailed?.(id, 'stalled_retry');
     }
 
     await new Promise(r => setTimeout(r, 500));
