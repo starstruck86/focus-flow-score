@@ -314,7 +314,7 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
           <ScrollArea className="flex-1 min-h-0">
             <div className="p-4 space-y-3">
               {/* ── Lifecycle Status Panel ── */}
-              <LifecyclePanel resourceId={r.id} />
+              <LifecyclePanel resourceId={r.id} resource={r} />
 
               {/* View Content */}
               {hasContent && (
