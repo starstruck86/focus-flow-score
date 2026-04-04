@@ -1059,12 +1059,23 @@ Deno.serve(async (req) => {
       const newStatus = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
 
       if (!isDryRun) {
-        await updateExtractionStatus(supabase, resourceId, newStatus, {
+        const priorStrategies = reconstructPriorStrategies(attemptNumber, resource);
+        const auditFields: Record<string, any> = {
           extraction_attempt_count: attemptNumber,
           extraction_failure_type: failureType,
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
-        });
+        };
+        // Only persist audit summary on terminal states
+        if (!retryEligible) {
+          auditFields.extraction_audit_summary = buildAuditSummary({
+            attemptNumber, currentStrategy: strategy, previousStrategies: priorStrategies,
+            kiCount: 0, minKiFloor: computeMinKiFloor(resource.content.length, isLesson),
+            finalStatus: newStatus, failureType, durationMs: Date.now() - startTime,
+            contentLength: resource.content.length, isLesson,
+          });
+        }
+        await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
 
         // Auto-retry: fire-and-forget next attempt
         if (retryEligible) {
