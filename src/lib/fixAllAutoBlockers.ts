@@ -42,6 +42,14 @@ export interface FixResourceOutcome {
   rootCauseCategory: string | null;
   rootCauseExplanation: string | null;
   resolutionOutcome: string | null;
+  /** Whether normalization changed this resource's state */
+  normalized: boolean;
+  /** Whether wrapper-page / attachment detection applied */
+  wrapperPageDetected: boolean;
+  /** Original enrichment_status before normalization */
+  originalEnrichmentStatus: string | null;
+  /** Original active_job_status before normalization */
+  originalJobStatus: string | null;
 }
 
 export interface BlockerDiff {
@@ -477,11 +485,41 @@ export async function runFixAllAutoBlockers(
 
   // Track per-resource outcomes
   const outcomeMap = new Map<string, FixResourceOutcome>();
+
+  // Fetch titles + state for all resources upfront for readable outcomes
+  const allResourceIds = blockerGroups.flatMap(g => g.resourceIds);
+  const titleMap = new Map<string, string>();
+  const originalStateMap = new Map<string, { enrichment_status: string; active_job_status: string; content: string }>();
+  if (allResourceIds.length > 0) {
+    const { data: titleData } = await supabase
+      .from('resources' as any)
+      .select('id, title, content, enrichment_status, active_job_status')
+      .in('id', allResourceIds);
+    for (const r of (titleData ?? []) as any[]) {
+      titleMap.set(r.id, r.title ?? r.id.slice(0, 8));
+      originalStateMap.set(r.id, {
+        enrichment_status: r.enrichment_status ?? '',
+        active_job_status: r.active_job_status ?? '',
+        content: r.content ?? '',
+      });
+    }
+  }
+
+  // Detect wrapper pages using attachment detection
+  const { detectAttachmentReferences } = await import('@/lib/attachmentDetection');
+  const wrapperSet = new Set<string>();
+  for (const [id, state] of originalStateMap) {
+    if (detectAttachmentReferences(state.content).hasAttachmentReferences) {
+      wrapperSet.add(id);
+    }
+  }
+
   const initOutcome = (id: string, phase: string, blockerType: string) => {
     if (!outcomeMap.has(id)) {
+      const origState = originalStateMap.get(id);
       outcomeMap.set(id, {
         resourceId: id,
-        resourceTitle: id.slice(0, 8),
+        resourceTitle: titleMap.get(id) ?? id.slice(0, 8),
         phase,
         attempted: false,
         succeeded: false,
@@ -493,6 +531,10 @@ export async function runFixAllAutoBlockers(
         rootCauseCategory: null,
         rootCauseExplanation: null,
         resolutionOutcome: null,
+        normalized: false,
+        wrapperPageDetected: wrapperSet.has(id),
+        originalEnrichmentStatus: origState?.enrichment_status ?? null,
+        originalJobStatus: origState?.active_job_status ?? null,
       });
     }
   };
@@ -518,7 +560,16 @@ export async function runFixAllAutoBlockers(
     callbacks?.onPhaseChange?.('normalize_status', 'Normalizing statuses', 'Normalizing stale statuses…');
     onProgress?.('Normalizing stale statuses…');
     const normalizeResult = await normalizeStaleStatuses(allIds, onProgress, callbacks);
-    if (normalizeResult.attempted > 0) phases.push(normalizeResult);
+    if (normalizeResult.attempted > 0) {
+      phases.push(normalizeResult);
+      // Mark all attempted normalizations in outcomes
+      for (const id of allIds) {
+        const outcome = outcomeMap.get(id);
+        if (outcome && normalizeResult.succeeded > 0) {
+          outcome.normalized = true;
+        }
+      }
+    }
   }
 
   // Phase 1: Retry stalled jobs first
@@ -557,16 +608,19 @@ export async function runFixAllAutoBlockers(
     try {
       const { data: freshResources } = await supabase
         .from('resources' as any)
-        .select('id, enrichment_status, content_length, active_job_status')
+        .select('id, enrichment_status, content_length, active_job_status, title, content')
         .in('id', allIds);
       
       if (freshResources) {
         for (const fr of freshResources as any[]) {
           const isEnriched = ['enriched', 'deep_enriched', 'verified', 'content_ready', 'extracted'].includes(fr.enrichment_status);
+          // HARDENED: Also include needs_auth resources with content — normalization should have
+          // reclassified them, but catch any that were missed
+          const isNeedsAuthWithContent = fr.enrichment_status === 'needs_auth' && (fr.content_length ?? 0) >= 200;
           const hasContent = (fr.content_length ?? 0) >= 200;
           const notRunning = !['running'].includes(fr.active_job_status ?? '');
           
-          if (isEnriched && hasContent && notRunning && !extractIds.includes(fr.id)) {
+          if ((isEnriched || isNeedsAuthWithContent) && hasContent && notRunning && !extractIds.includes(fr.id)) {
             // Check if this resource has 0 KIs
             const { count } = await supabase
               .from('knowledge_items' as any)
@@ -575,8 +629,12 @@ export async function runFixAllAutoBlockers(
             
             if ((count ?? 0) === 0) {
               extractIds.push(fr.id);
+              // Also update titleMap if not already there
+              if (fr.title && !titleMap.has(fr.id)) {
+                titleMap.set(fr.id, fr.title);
+              }
               initOutcome(fr.id, 'extraction', 'needs_extraction');
-              log.info('Discovered newly extraction-eligible resource after normalization', { id: fr.id });
+              log.info('Discovered newly extraction-eligible resource after normalization', { id: fr.id, title: fr.title, status: fr.enrichment_status });
             }
           }
         }
