@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { formatDurationShort, type FixAllLiveProgress } from '@/lib/fixAllProgress';
 import type { FixAllResult, FixPhaseResult, BlockerDiff, FixResourceOutcome } from '@/lib/fixAllAutoBlockers';
 import { ROOT_CAUSE_LABELS, RESOLUTION_OUTCOME_LABELS, type RootCauseCategory, type ResolutionOutcome } from '@/lib/rootCauseDiagnosis';
+import { FAILURE_STAGE_LABELS, FAILURE_MODE_LABELS, type FailureStage, type FailureMode } from '@/lib/failureDossier';
 
 interface Props {
   progress: FixAllLiveProgress | null;
