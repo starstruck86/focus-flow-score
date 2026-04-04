@@ -276,6 +276,9 @@ export function deriveResourceTruth(
       case 'needs_activation':
         next_required_action = { label: 'Activate', actionKey: 'activate', variant: 'default' };
         break;
+      case 'needs_auth':
+        next_required_action = { label: 'Add Content', actionKey: 'manual_assist', variant: 'default' };
+        break;
       case 'missing_context':
         next_required_action = { label: 'Add Contexts', actionKey: 'repair_contexts', variant: 'outline' };
         break;
