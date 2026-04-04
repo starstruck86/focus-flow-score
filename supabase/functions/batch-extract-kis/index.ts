@@ -1087,10 +1087,10 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // ── 1. Fetch resource (including retry tracking fields + attempt history) ──
+    // ── 1. Fetch resource (including retry tracking fields) ──
     const { data: resource, error: fetchError } = await supabase
       .from('resources')
-      .select('id, title, resource_type, content, description, tags, user_id, extraction_attempt_count, max_extraction_attempts, extraction_failure_type, extractor_strategy, extraction_attempt_history, next_retry_at')
+      .select('id, title, resource_type, content, description, tags, user_id, extraction_attempt_count, max_extraction_attempts, extraction_failure_type, extractor_strategy, next_retry_at')
       .eq('id', resourceId)
       .single();
 
