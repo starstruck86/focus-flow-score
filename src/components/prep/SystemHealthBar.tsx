@@ -1,21 +1,24 @@
 /**
- * SystemHealthBar — top-level overview showing total/ready/improving/blocked
+ * SystemHealthBar — top-level overview showing total/ready/blocked/stalled
  * plus a "Needs Attention" summary with quick actions.
+ * Now powered by canonical truth model.
  */
 import { useMemo } from 'react';
-import { AlertTriangle, CheckCircle2, TrendingUp, XCircle, Zap, RefreshCw, Eye } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, TrendingUp, XCircle, Zap, RefreshCw, Eye, Loader2, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
-import { deriveReadiness } from '@/lib/resourceSignal';
+import { deriveResourceTruth, type ResourceTruth, type LifecycleInfo } from '@/lib/resourceTruthState';
 
 interface HealthCounts {
   total: number;
   ready: number;
-  improving: number;
+  processing: number;
   blocked: number;
+  stalled: number;
+  qa_required: number;
 }
 
 interface AttentionItem {
@@ -37,13 +40,19 @@ interface Props {
 
 export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilterChange, activeFilter }: Props) {
   const counts = useMemo<HealthCounts>(() => {
-    const c = { total: resources.length, ready: 0, improving: 0, blocked: 0 };
+    const c: HealthCounts = { total: resources.length, ready: 0, processing: 0, blocked: 0, stalled: 0, qa_required: 0 };
     for (const r of resources) {
       const lc = lifecycleMap.get(r.id);
-      const { readiness } = deriveReadiness(lc, r, audioJobsMap?.get(r.id));
-      if (readiness === 'ready') c.ready++;
-      else if (readiness === 'improving') c.improving++;
-      else c.blocked++;
+      const truth = deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
+      switch (truth.truth_state) {
+        case 'ready': c.ready++; break;
+        case 'processing': c.processing++; break;
+        case 'stalled': c.stalled++; break;
+        case 'qa_required': c.qa_required++; break;
+        case 'quarantined':
+        case 'blocked':
+        default: c.blocked++; break;
+      }
     }
     return c;
   }, [resources, lifecycleMap, audioJobsMap]);
@@ -55,15 +64,30 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
     let emptyContentCount = 0;
     let needsReviewCount = 0;
 
+    let stalledCount = 0;
+    let contradictionCount = 0;
+
     for (const r of resources) {
       const lc = lifecycleMap.get(r.id);
       if (!lc) continue;
-      if (lc.blocked === 'empty_content') emptyContentCount++;
-      if (lc.blocked === 'no_extraction') needsExtractionCount++;
-      if (lc.blocked === 'stale_blocker_state') needsReviewCount++;
-      if (r.enrichment_status === 'failed') failedCount++;
+      const truth = deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
+      for (const b of truth.all_blockers) {
+        switch (b.type) {
+          case 'missing_content': emptyContentCount++; break;
+          case 'needs_extraction': needsExtractionCount++; break;
+          case 'stalled_enrichment':
+          case 'stalled_extraction': stalledCount++; break;
+          case 'contradictory_state': contradictionCount++; break;
+          case 'stale_version': needsReviewCount++; break;
+        }
+      }
+      if (r.enrichment_status === 'failed' && !truth.all_blockers.some(b => b.type === 'stalled_enrichment')) failedCount++;
     }
 
+    if (stalledCount > 0) items.push({
+      label: 'Stalled', count: stalledCount, icon: Clock,
+      color: 'text-destructive', actionLabel: 'Fix', filterKey: 'stalled',
+    });
     if (failedCount > 0) items.push({
       label: 'Failed', count: failedCount, icon: XCircle,
       color: 'text-destructive', actionLabel: 'View', filterKey: 'failed',
@@ -76,13 +100,17 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
       label: 'Need extraction', count: needsExtractionCount, icon: Zap,
       color: 'text-amber-600', actionLabel: 'Extract', filterKey: 'needs_extraction',
     });
+    if (contradictionCount > 0) items.push({
+      label: 'Contradictions', count: contradictionCount, icon: AlertTriangle,
+      color: 'text-destructive', actionLabel: 'Fix', filterKey: 'contradictions',
+    });
     if (needsReviewCount > 0) items.push({
       label: 'Need review', count: needsReviewCount, icon: Eye,
       color: 'text-amber-600', actionLabel: 'Review', filterKey: 'needs_review',
     });
 
     return items;
-  }, [resources, lifecycleMap]);
+  }, [resources, lifecycleMap, audioJobsMap]);
 
   const totalAttention = attentionItems.reduce((s, i) => s + i.count, 0);
 
@@ -108,14 +136,25 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
           onClick={() => onFilterChange('ready')}
         />
         <HealthPill
-          label="Improving"
-          count={counts.improving}
-          colorClass="text-amber-600"
-          bgClass="bg-amber-500/10"
-          icon={<TrendingUp className="h-3 w-3" />}
-          active={activeFilter === 'improving'}
-          onClick={() => onFilterChange('improving')}
+          label="Processing"
+          count={counts.processing}
+          colorClass="text-primary"
+          bgClass="bg-primary/10"
+          icon={<Loader2 className="h-3 w-3" />}
+          active={activeFilter === 'processing'}
+          onClick={() => onFilterChange('processing')}
         />
+        {counts.stalled > 0 && (
+          <HealthPill
+            label="Stalled"
+            count={counts.stalled}
+            colorClass="text-destructive"
+            bgClass="bg-destructive/10"
+            icon={<Clock className="h-3 w-3" />}
+            active={activeFilter === 'stalled'}
+            onClick={() => onFilterChange('stalled')}
+          />
+        )}
         <HealthPill
           label="Blocked"
           count={counts.blocked}

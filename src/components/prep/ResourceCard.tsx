@@ -76,7 +76,7 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
             <p className="text-sm font-medium text-foreground leading-tight line-clamp-2">{childName}</p>
           </div>
 
-          {/* Signal + Readiness row */}
+          {/* Signal + Truth State row */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1">
               {SIGNAL_ICON[insight.signal.signal]}
@@ -91,6 +91,11 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
             )}>
               {insight.readiness.readinessLabel}
             </Badge>
+            {insight.truth.primary_blocker && (
+              <span className="text-[10px] text-destructive truncate max-w-[140px]">
+                {insight.truth.primary_blocker.label}
+              </span>
+            )}
             {lc && lc.kiCount > 0 && (
               <span className="text-[10px] text-muted-foreground">
                 {lc.activeKi}/{lc.kiCount} KI
@@ -107,7 +112,7 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
           )}
         </div>
 
-        {/* Action area */}
+        {/* Action area — truth-driven */}
         <div className="flex items-center gap-1 shrink-0">
           {insight.nextAction ? (
             <Button
@@ -118,9 +123,13 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
             >
               {insight.nextAction.label}
             </Button>
-          ) : (
+          ) : insight.truth.is_ready ? (
             <Badge className="text-[10px] h-5 bg-emerald-500/10 text-emerald-600 px-2">
-              Complete
+              Ready
+            </Badge>
+          ) : (
+            <Badge className="text-[10px] h-5 bg-amber-500/10 text-amber-600 px-2">
+              {insight.truth.readiness_label}
             </Badge>
           )}
 

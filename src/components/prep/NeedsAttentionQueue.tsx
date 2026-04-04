@@ -12,7 +12,7 @@ import {
   HelpCircle, ChevronDown, ChevronRight, CheckCircle2, Layers, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { deriveReadiness } from '@/lib/resourceSignal';
+import { deriveResourceTruth } from '@/lib/resourceTruthState';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import { isJobStale } from '@/store/useResourceJobProgress';
 import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS } from '@/lib/processingRoute';
@@ -65,6 +65,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
   const groups = useMemo<QueueGroup[]>(() => {
     const failed: QueueItem[] = [];
     const stuck: QueueItem[] = [];
+    const contradictions: QueueItem[] = [];
     const missingContent: QueueItem[] = [];
     const needsExtraction: QueueItem[] = [];
     const lowYield: QueueItem[] = [];
@@ -75,6 +76,18 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       const lc = lifecycleMap.get(r.id);
       if (!lc) continue;
       const rAny = r as any;
+      const truth = deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
+
+      // Contradictory state (highest priority)
+      if (truth.integrity_issues.length > 0) {
+        contradictions.push({
+          resource: r, issueType: 'contradiction', priority: 0,
+          severity: -truth.integrity_issues.length,
+          reason: truth.integrity_issues[0],
+          actionLabel: 'Fix', actionKey: 'reset',
+          bulkEligible: false,
+        });
+      }
 
       // Stuck / stalled jobs (highest priority after failed)
       if (rAny.active_job_status === 'running' && isJobStale(rAny.active_job_updated_at, 'running')) {
@@ -168,6 +181,10 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
     const sortBySeverity = (items: QueueItem[]) => items.sort((a, b) => a.severity - b.severity);
 
     const groups: QueueGroup[] = [];
+    if (contradictions.length > 0) groups.push({
+      type: 'contradiction', label: 'Contradictory State', icon: AlertTriangle, color: 'text-destructive',
+      items: sortBySeverity(contradictions),
+    });
     if (stuck.length > 0) groups.push({
       type: 'stuck', label: 'Stuck / Stalled', icon: Loader2, color: 'text-destructive',
       items: sortBySeverity(stuck),
