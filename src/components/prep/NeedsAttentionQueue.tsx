@@ -1,0 +1,205 @@
+/**
+ * NeedsAttentionQueue — Prioritized operational queue for resources needing intervention.
+ * Groups by issue type, shows counts, reasons, and quick actions.
+ */
+import { useMemo, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  XCircle, AlertTriangle, Zap, TrendingDown, Clock, Shield,
+  HelpCircle, ChevronDown, ChevronRight, CheckCircle2,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { deriveReadiness, deriveResourceInsight } from '@/lib/resourceSignal';
+import { detectDrift } from '@/lib/resourceLifecycle';
+import type { Resource } from '@/hooks/useResources';
+import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
+
+interface QueueItem {
+  resource: Resource;
+  issueType: string;
+  reason: string;
+  priority: number;
+  actionLabel: string;
+  actionKey: string;
+}
+
+interface QueueGroup {
+  type: string;
+  label: string;
+  icon: React.ElementType;
+  color: string;
+  items: QueueItem[];
+}
+
+interface Props {
+  resources: Resource[];
+  lifecycleMap: Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>;
+  audioJobsMap?: Map<string, AudioJobRecord>;
+  onAction: (action: string, resource: Resource) => void;
+  onInspect: (resource: Resource) => void;
+}
+
+export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onAction, onInspect }: Props) {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['failed', 'missing_content', 'needs_extraction']));
+
+  const groups = useMemo<QueueGroup[]>(() => {
+    const failed: QueueItem[] = [];
+    const missingContent: QueueItem[] = [];
+    const needsExtraction: QueueItem[] = [];
+    const lowYield: QueueItem[] = [];
+    const stale: QueueItem[] = [];
+    const needsReview: QueueItem[] = [];
+
+    for (const r of resources) {
+      const lc = lifecycleMap.get(r.id);
+      if (!lc) continue;
+
+      // Failed extractions
+      if (r.enrichment_status === 'failed') {
+        failed.push({
+          resource: r, issueType: 'failed', priority: 1,
+          reason: r.failure_reason || 'Extraction failed',
+          actionLabel: 'Retry', actionKey: 'deep_enrich',
+        });
+      }
+
+      // Missing content
+      if (lc.blocked === 'empty_content') {
+        missingContent.push({
+          resource: r, issueType: 'missing_content', priority: 2,
+          reason: 'No content available for processing',
+          actionLabel: 'Re-enrich', actionKey: 're_enrich',
+        });
+      }
+
+      // Needs extraction
+      if (lc.blocked === 'no_extraction' && r.enrichment_status !== 'failed') {
+        needsExtraction.push({
+          resource: r, issueType: 'needs_extraction', priority: 3,
+          reason: 'Content available but no knowledge extracted',
+          actionLabel: 'Extract', actionKey: 'extract',
+        });
+      }
+
+      // Low yield
+      if (lc.kiCount > 0 && lc.kiCount <= 2 && lc.stage !== 'operationalized') {
+        lowYield.push({
+          resource: r, issueType: 'low_yield', priority: 4,
+          reason: `Only ${lc.kiCount} KI extracted — may need inspection`,
+          actionLabel: 'Inspect', actionKey: 'view',
+        });
+      }
+
+      // Stale / drifted
+      const drift = detectDrift(r);
+      if (drift.hasDrift) {
+        stale.push({
+          resource: r, issueType: 'stale', priority: 5,
+          reason: drift.issues[0] || 'Version drift detected',
+          actionLabel: 'Re-enrich', actionKey: 're_enrich',
+        });
+      }
+
+      // Needs review
+      if (lc.blocked === 'stale_blocker_state') {
+        needsReview.push({
+          resource: r, issueType: 'needs_review', priority: 6,
+          reason: 'Stale blocked state — needs manual review',
+          actionLabel: 'Review', actionKey: 'view',
+        });
+      }
+    }
+
+    const groups: QueueGroup[] = [];
+    if (failed.length > 0) groups.push({ type: 'failed', label: 'Failed Extractions', icon: XCircle, color: 'text-destructive', items: failed });
+    if (missingContent.length > 0) groups.push({ type: 'missing_content', label: 'Missing Content', icon: AlertTriangle, color: 'text-destructive', items: missingContent });
+    if (needsExtraction.length > 0) groups.push({ type: 'needs_extraction', label: 'Needs Extraction', icon: Zap, color: 'text-amber-600', items: needsExtraction });
+    if (lowYield.length > 0) groups.push({ type: 'low_yield', label: 'Low Yield', icon: TrendingDown, color: 'text-amber-600', items: lowYield });
+    if (stale.length > 0) groups.push({ type: 'stale', label: 'Stale / Drifted', icon: Clock, color: 'text-amber-600', items: stale });
+    if (needsReview.length > 0) groups.push({ type: 'needs_review', label: 'Needs Review', icon: HelpCircle, color: 'text-amber-600', items: needsReview });
+
+    return groups;
+  }, [resources, lifecycleMap]);
+
+  const totalItems = groups.reduce((s, g) => s + g.items.length, 0);
+
+  const toggleGroup = (type: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type); else next.add(type);
+      return next;
+    });
+  };
+
+  if (totalItems === 0) {
+    return (
+      <div className="flex items-center gap-2 p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
+        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+        <p className="text-xs font-medium text-emerald-600">All clear — no resources need attention</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b border-border">
+        <div className="flex items-center gap-2">
+          <Shield className="h-3.5 w-3.5 text-foreground" />
+          <span className="text-xs font-semibold text-foreground">Needs Attention</span>
+          <Badge variant="secondary" className="text-[9px] h-4">{totalItems}</Badge>
+        </div>
+      </div>
+      <ScrollArea className="max-h-[400px]">
+        <div className="divide-y divide-border">
+          {groups.map(group => {
+            const isExpanded = expandedGroups.has(group.type);
+            const Icon = group.icon;
+            return (
+              <div key={group.type}>
+                <button
+                  onClick={() => toggleGroup(group.type)}
+                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors"
+                >
+                  {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  <Icon className={cn('h-3.5 w-3.5', group.color)} />
+                  <span className="text-xs font-medium text-foreground">{group.label}</span>
+                  <Badge variant="outline" className="text-[9px] h-4 ml-auto">{group.items.length}</Badge>
+                </button>
+                {isExpanded && (
+                  <div className="pb-1">
+                    {group.items.slice(0, 10).map(item => (
+                      <div key={item.resource.id} className="flex items-center gap-2 px-4 py-1.5 hover:bg-muted/20 transition-colors">
+                        <button
+                          onClick={() => onInspect(item.resource)}
+                          className="flex-1 min-w-0 text-left"
+                        >
+                          <p className="text-[11px] font-medium text-foreground truncate">{item.resource.title}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{item.reason}</p>
+                        </button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[10px] px-2 shrink-0"
+                          onClick={(e) => { e.stopPropagation(); onAction(item.actionKey, item.resource); }}
+                        >
+                          {item.actionLabel}
+                        </Button>
+                      </div>
+                    ))}
+                    {group.items.length > 10 && (
+                      <p className="text-[10px] text-muted-foreground px-4 py-1">
+                        + {group.items.length - 10} more
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}

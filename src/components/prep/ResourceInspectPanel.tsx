@@ -1,0 +1,488 @@
+/**
+ * ResourceInspectPanel — Full redesigned inspect experience.
+ * 7 sections: Identity, Pipeline Route, Quality/Trust, Downstream Eligibility,
+ * Next Action, Attempt History, Source/KI Preview.
+ */
+import { useState, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import {
+  ChevronUp, ExternalLink, Pencil, Check, X, Loader2,
+  CheckCircle2, AlertTriangle, ArrowRight, Clock, Shield,
+  FileText, Code, Copy, Eye, Info, Zap, TrendingUp,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
+import { deriveProcessingState, getProcessingStateColor } from '@/lib/processingState';
+import { deriveResourceInsight } from '@/lib/resourceSignal';
+import { getResourceOrigin } from '@/lib/resourceEligibility';
+import { decodeHTMLEntities } from '@/lib/stringUtils';
+import { detectDrift } from '@/lib/resourceLifecycle';
+import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
+import type { Resource } from '@/hooks/useResources';
+import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
+
+interface Props {
+  resource: Resource;
+  onClose: () => void;
+  onAction: (action: string, resource: Resource) => void;
+}
+
+// ── A. Identity Section ────────────────────────────────────
+function IdentitySection({ resource, onClose, onAction }: Props) {
+  const qc = useQueryClient();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(resource.title);
+  const [saving, setSaving] = useState(false);
+  const displayTitle = decodeHTMLEntities(resource.title);
+  const separatorIdx = displayTitle.indexOf(' > ');
+  const parentName = separatorIdx > 0 ? displayTitle.slice(0, separatorIdx) : null;
+  const childName = separatorIdx > 0 ? displayTitle.slice(separatorIdx + 3) : displayTitle;
+
+  const handleSaveTitle = async () => {
+    if (!editTitle.trim() || editTitle.trim() === resource.title) { setIsEditing(false); return; }
+    setSaving(true);
+    try {
+      await supabase.from('resources').update({ title: editTitle.trim(), updated_at: new Date().toISOString() } as any).eq('id', resource.id);
+      toast.success('Title updated');
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      setIsEditing(false);
+    } catch (err: any) { toast.error(err.message); }
+    finally { setSaving(false); }
+  };
+
+  const r = resource as any;
+  const tags = r.tags as string[] | null;
+
+  return (
+    <div className="px-4 py-3 bg-muted/30 border-b border-border space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          {isEditing ? (
+            <div className="flex items-center gap-1.5">
+              <Input value={editTitle} onChange={e => setEditTitle(e.target.value)}
+                className="h-7 text-sm font-semibold max-w-[300px]" autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') handleSaveTitle(); if (e.key === 'Escape') { setIsEditing(false); setEditTitle(resource.title); } }} />
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleSaveTitle} disabled={saving}>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setIsEditing(false); setEditTitle(resource.title); }}>
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              {parentName && <p className="text-[10px] text-muted-foreground">{parentName}</p>}
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-sm font-semibold text-foreground truncate">{childName}</h3>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-50 hover:opacity-100" onClick={() => setIsEditing(true)}>
+                  <Pencil className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {resource.file_url && (
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" asChild>
+              <a href={resource.file_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3.5 w-3.5" /></a>
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}><ChevronUp className="h-4 w-4" /></Button>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+        <Badge variant="outline" className="text-[9px] capitalize">{resource.resource_type}</Badge>
+        {r.resolution_method && <Badge variant="outline" className="text-[9px]">{r.resolution_method.replace(/_/g, ' ')}</Badge>}
+        {resource.updated_at && <span className="text-muted-foreground">Updated {new Date(resource.updated_at).toLocaleDateString()}</span>}
+        {tags && tags.length > 0 && tags.map(t => (
+          <Badge key={t} variant="secondary" className="text-[8px] h-4">{t}</Badge>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── B. Pipeline Route ──────────────────────────────────────
+function PipelineRouteSection({ resource }: { resource: Resource }) {
+  const { summary } = useCanonicalLifecycle();
+  const status = summary?.resources.find(r => r.resource_id === resource.id);
+  const ps = deriveProcessingState(resource);
+  const origin = getResourceOrigin(resource);
+  const drift = detectDrift(resource);
+  const isAudio = isAudioResource(resource.file_url, resource.resource_type);
+  const r = resource as any;
+
+  const route = [
+    origin === 'source_url' ? 'Web URL' : origin === 'uploaded_file' ? 'Uploaded File' : origin === 'manual_content' ? 'Manual' : 'Unknown',
+    isAudio ? 'Transcript Pipeline' : r.content_length > 5000 ? 'Dense Content Pipeline' : 'Standard Pipeline',
+    status?.canonical_stage === 'operationalized' ? 'Ready' : status?.canonical_stage?.replace(/_/g, ' ') || 'Unknown',
+  ];
+
+  const insight = deriveResourceInsight(resource, status ? {
+    stage: status.canonical_stage,
+    blocked: status.blocked_reason,
+    kiCount: status.knowledge_item_count,
+    activeKi: status.active_ki_count,
+    activeKiWithCtx: status.active_ki_with_context_count,
+  } : undefined);
+
+  return (
+    <div className="px-4 py-3 space-y-2">
+      <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pipeline Route</h4>
+      {/* Route visualization */}
+      <div className="flex items-center gap-1 flex-wrap text-[11px]">
+        {route.map((step, i) => (
+          <span key={i} className="flex items-center gap-1">
+            {i > 0 && <ArrowRight className="h-3 w-3 text-muted-foreground" />}
+            <Badge variant="outline" className="text-[9px]">{step}</Badge>
+          </span>
+        ))}
+      </div>
+      {/* Signal + Readiness */}
+      <div className="flex items-center gap-3 text-[11px]">
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">Signal:</span>
+          <span className={cn('font-medium', insight.signal.signalColor)}>{insight.signal.signalLabel}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">Readiness:</span>
+          <Badge className={cn('text-[9px] h-4', insight.readiness.readinessBg, insight.readiness.readinessColor)}>
+            {insight.readiness.readinessLabel}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">State:</span>
+          <Badge className={cn('text-[9px] h-4', getProcessingStateColor(ps.state))}>{ps.label}</Badge>
+        </div>
+      </div>
+      {drift.hasDrift && (
+        <div className="flex items-center gap-1 text-[11px] text-amber-600">
+          <AlertTriangle className="h-3 w-3" />
+          <span>Drift detected: {drift.issues.join(', ')}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── C. Quality / Trust Panel ───────────────────────────────
+function QualityTrustSection({ resource }: { resource: Resource }) {
+  const { summary } = useCanonicalLifecycle();
+  const status = summary?.resources.find(r => r.resource_id === resource.id);
+  const r = resource as any;
+  const audit = r.extraction_audit_summary as any;
+
+  return (
+    <div className="px-4 py-3 space-y-2 border-t border-border">
+      <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Quality & Trust</h4>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <MetricPill label="KI Total" value={status?.knowledge_item_count ?? 0} />
+        <MetricPill label="Active" value={status?.active_ki_count ?? 0} color={status?.active_ki_count ? 'text-emerald-600' : undefined} />
+        <MetricPill label="With Context" value={status?.active_ki_with_context_count ?? 0} color={status?.active_ki_with_context_count ? 'text-emerald-600' : undefined} />
+        {r.last_quality_score != null && <MetricPill label="Quality Score" value={Math.round(r.last_quality_score)} />}
+        {r.last_quality_tier && <MetricPill label="Quality Tier" value={r.last_quality_tier} />}
+        {r.content_length != null && <MetricPill label="Content" value={`${(r.content_length / 1000).toFixed(1)}k chars`} />}
+      </div>
+      {audit && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+          {audit.validation_loss != null && <MetricPill label="Validation Loss" value={audit.validation_loss} color={audit.validation_loss > 3 ? 'text-amber-600' : undefined} />}
+          {audit.dedup_loss != null && <MetricPill label="Dedup Loss" value={audit.dedup_loss} />}
+          {audit.floor_met != null && <MetricPill label="Floor Met" value={audit.floor_met ? '✓' : '✗'} color={audit.floor_met ? 'text-emerald-600' : 'text-destructive'} />}
+          {audit.confidence_score != null && <MetricPill label="Confidence" value={`${Math.round(audit.confidence_score * 100)}%`} />}
+          {audit.yield_flag && <MetricPill label="Yield" value={audit.yield_flag} color={audit.yield_flag === 'healthy' ? 'text-emerald-600' : 'text-amber-600'} />}
+          {audit.best_attempt_index != null && <MetricPill label="Best Attempt" value={`#${audit.best_attempt_index + 1}`} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetricPill({ label, value, color }: { label: string; value: string | number; color?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5 bg-muted/40 rounded-md px-2 py-1.5">
+      <span className="text-[9px] text-muted-foreground uppercase tracking-wider">{label}</span>
+      <span className={cn('text-xs font-semibold', color || 'text-foreground')}>{value}</span>
+    </div>
+  );
+}
+
+// ── D. Downstream Eligibility ──────────────────────────────
+function DownstreamEligibilitySection({ resource }: { resource: Resource }) {
+  const { summary } = useCanonicalLifecycle();
+  const status = summary?.resources.find(r => r.resource_id === resource.id);
+  const isReady = status?.canonical_stage === 'operationalized';
+  const hasActiveKi = (status?.active_ki_count ?? 0) > 0;
+  const hasContexts = (status?.active_ki_with_context_count ?? 0) > 0;
+
+  const targets = [
+    { key: 'dave_grounding', label: 'Dave Grounding', eligible: isReady && hasContexts },
+    { key: 'playbook_gen', label: 'Playbook Generation', eligible: hasActiveKi },
+    { key: 'coaching', label: 'Coaching', eligible: hasActiveKi && hasContexts },
+    { key: 'search', label: 'Search', eligible: hasActiveKi },
+  ];
+
+  return (
+    <div className="px-4 py-3 space-y-2 border-t border-border">
+      <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Downstream Eligibility</h4>
+      <div className="flex items-center gap-2 flex-wrap">
+        {targets.map(t => (
+          <Badge
+            key={t.key}
+            className={cn(
+              'text-[10px] h-5 px-2',
+              t.eligible
+                ? 'bg-emerald-500/10 text-emerald-600'
+                : 'bg-muted text-muted-foreground',
+            )}
+          >
+            {t.eligible ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <X className="h-3 w-3 mr-1" />}
+            {t.label}
+          </Badge>
+        ))}
+      </div>
+      {!isReady && (
+        <p className="text-[10px] text-muted-foreground">
+          {hasActiveKi
+            ? 'Resource has active KIs but needs full operationalization for Dave grounding.'
+            : 'Resource needs extraction and activation before it can feed downstream systems.'}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── E. Next Action ─────────────────────────────────────────
+function NextActionSection({ resource, onAction }: { resource: Resource; onAction: (action: string, resource: Resource) => void }) {
+  const { summary } = useCanonicalLifecycle();
+  const status = summary?.resources.find(r => r.resource_id === resource.id);
+  const lc = status ? {
+    stage: status.canonical_stage,
+    blocked: status.blocked_reason,
+    kiCount: status.knowledge_item_count,
+    activeKi: status.active_ki_count,
+    activeKiWithCtx: status.active_ki_with_context_count,
+  } : undefined;
+  const insight = deriveResourceInsight(resource, lc);
+
+  const rationale = getRationale(lc, resource);
+
+  if (!insight.nextAction) {
+    return (
+      <div className="px-4 py-3 border-t border-border">
+        <div className="flex items-center gap-2 bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+          <div>
+            <p className="text-xs font-medium text-emerald-600">Ready — No Action Needed</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">This resource is fully operationalized and feeding downstream systems.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-3 border-t border-border space-y-2">
+      <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Recommended Action</h4>
+      <div className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-lg p-3">
+        <Zap className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-foreground">{insight.nextAction.label}</p>
+          {rationale && <p className="text-[10px] text-muted-foreground mt-0.5">{rationale}</p>}
+        </div>
+        <Button size="sm" variant={insight.nextAction.variant} className="h-7 text-xs shrink-0"
+          onClick={() => onAction(insight.nextAction!.actionKey, resource)}>
+          {insight.nextAction.label}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function getRationale(lc: any, resource: Resource): string | null {
+  if (!lc) return 'Unable to determine lifecycle state.';
+  switch (lc.blocked) {
+    case 'no_extraction': return 'Content is available but no knowledge items have been extracted yet.';
+    case 'no_activation': return 'Knowledge items exist but none are marked active.';
+    case 'missing_contexts': return 'Active KIs lack context tags needed for downstream routing.';
+    case 'empty_content': return 'No content available — needs enrichment or manual input.';
+    case 'stale_blocker_state': return 'Resource is in a stale state that needs manual review.';
+  }
+  const ps = deriveProcessingState(resource);
+  if (ps.state === 'RETRYABLE_FAILURE') return `Previous attempt failed: ${ps.description}. Retry may resolve.`;
+  if (ps.state === 'MANUAL_REQUIRED') return 'Automated processing cannot resolve this — manual assistance needed.';
+  return null;
+}
+
+// ── F. Attempt History ─────────────────────────────────────
+function AttemptHistorySection({ resourceId }: { resourceId: string }) {
+  const { data: attempts = [], isLoading } = useQuery({
+    queryKey: ['extraction-attempts', resourceId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('resource_extraction_attempts')
+        .select('*')
+        .eq('resource_id', resourceId)
+        .order('attempt_number', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  if (isLoading) return <div className="px-4 py-3 border-t border-border"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>;
+  if (attempts.length === 0) return null;
+
+  return (
+    <div className="px-4 py-3 border-t border-border space-y-2">
+      <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Attempt History ({attempts.length})</h4>
+      <div className="space-y-1.5">
+        {attempts.map((a: any) => (
+          <div key={a.id} className={cn(
+            'flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px]',
+            a.status === 'succeeded' ? 'bg-emerald-500/5' : a.status === 'failed' ? 'bg-destructive/5' : 'bg-muted/30',
+          )}>
+            <span className="font-medium text-foreground w-6">#{a.attempt_number}</span>
+            <Badge variant="outline" className="text-[8px] h-4">{a.strategy || 'default'}</Badge>
+            <span className={cn(
+              'font-medium',
+              a.status === 'succeeded' ? 'text-emerald-600' : a.status === 'failed' ? 'text-destructive' : 'text-muted-foreground',
+            )}>
+              {a.status}
+            </span>
+            {a.ki_count != null && <span className="text-muted-foreground">{a.ki_count} KI</span>}
+            {a.confidence_score != null && (
+              <span className="text-muted-foreground">{Math.round(a.confidence_score * 100)}% conf</span>
+            )}
+            {a.duration_ms != null && (
+              <span className="text-muted-foreground ml-auto">{(a.duration_ms / 1000).toFixed(1)}s</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── G. Source / KI Preview ─────────────────────────────────
+function PreviewSection({ resource }: { resource: Resource }) {
+  const { user } = useAuth();
+  const r = resource as any;
+  const [tab, setTab] = useState<'content' | 'knowledge'>('content');
+  const [copied, setCopied] = useState(false);
+
+  const { data: fullContent } = useQuery({
+    queryKey: ['resource-content', resource.id],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('resources')
+        .select('content, content_length')
+        .eq('id', resource.id)
+        .single();
+      return data;
+    },
+  });
+
+  const { data: items = [] } = useQuery({
+    queryKey: ['knowledge-items-for-resource', resource.id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('knowledge_items')
+        .select('id, title, tactic_summary, confidence_score, active, status, framework, chapter')
+        .eq('source_resource_id', resource.id)
+        .order('confidence_score', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  const content = fullContent?.content ?? r.content ?? '';
+  const preview = content.slice(0, 2000);
+
+  return (
+    <div className="border-t border-border">
+      <div className="px-4 pt-3">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setTab('content')}
+            className={cn('text-[10px] font-medium pb-1 border-b-2 transition-colors', tab === 'content' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground')}>
+            Content Preview
+          </button>
+          <button onClick={() => setTab('knowledge')}
+            className={cn('text-[10px] font-medium pb-1 border-b-2 transition-colors', tab === 'knowledge' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground')}>
+            Knowledge Items ({items.length})
+          </button>
+        </div>
+      </div>
+
+      {tab === 'content' ? (
+        <div className="px-4 py-2">
+          {preview ? (
+            <ScrollArea className="h-[200px] rounded-md border border-border/60 p-3">
+              <pre className="whitespace-pre-wrap break-words text-[11px] font-sans leading-relaxed text-foreground">
+                {preview}
+                {content.length > 2000 && <span className="text-muted-foreground">{'\n\n'}… {(content.length - 2000).toLocaleString()} more characters</span>}
+              </pre>
+            </ScrollArea>
+          ) : (
+            <p className="text-xs text-muted-foreground py-4 text-center">No content available</p>
+          )}
+        </div>
+      ) : (
+        <ScrollArea className="h-[200px]">
+          <div className="px-4 py-2 space-y-1.5">
+            {items.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-4 text-center">No knowledge items</p>
+            ) : items.map((ki: any) => (
+              <div key={ki.id} className={cn(
+                'rounded border px-2 py-1.5 text-[11px]',
+                ki.active ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border',
+              )}>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-medium text-foreground flex-1 min-w-0 truncate">{ki.title}</span>
+                  <Badge variant={ki.active ? 'default' : 'secondary'} className="text-[8px] h-4 shrink-0">
+                    {ki.active ? 'Active' : ki.status}
+                  </Badge>
+                  {ki.confidence_score != null && (
+                    <span className="text-[9px] text-muted-foreground shrink-0">{Math.round(ki.confidence_score * 100)}%</span>
+                  )}
+                </div>
+                {ki.tactic_summary && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">{ki.tactic_summary}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      )}
+    </div>
+  );
+}
+
+// ── Main Component ─────────────────────────────────────────
+export function ResourceInspectPanel({ resource, onClose, onAction }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative z-10 isolate bg-card border-b-2 border-primary/20 animate-fade-in">
+      <IdentitySection resource={resource} onClose={onClose} onAction={onAction} />
+      <PipelineRouteSection resource={resource} />
+      <QualityTrustSection resource={resource} />
+      <DownstreamEligibilitySection resource={resource} />
+      <NextActionSection resource={resource} onAction={onAction} />
+      <AttemptHistorySection resourceId={resource.id} />
+      <PreviewSection resource={resource} />
+    </div>
+  );
+}

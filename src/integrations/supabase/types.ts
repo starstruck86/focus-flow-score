@@ -3448,6 +3448,92 @@ export type Database = {
           },
         ]
       }
+      resource_collection_members: {
+        Row: {
+          collection_id: string
+          created_at: string
+          id: string
+          position: number
+          resource_id: string
+          user_id: string
+        }
+        Insert: {
+          collection_id: string
+          created_at?: string
+          id?: string
+          position?: number
+          resource_id: string
+          user_id: string
+        }
+        Update: {
+          collection_id?: string
+          created_at?: string
+          id?: string
+          position?: number
+          resource_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_collection_members_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "resource_collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resource_collection_members_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resource_collections: {
+        Row: {
+          collection_type: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          parent_resource_id: string | null
+          resource_count: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          collection_type?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          parent_resource_id?: string | null
+          resource_count?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          collection_type?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          parent_resource_id?: string | null
+          resource_count?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_collections_parent_resource_id_fkey"
+            columns: ["parent_resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       resource_digests: {
         Row: {
           content_hash: string
@@ -3883,6 +3969,7 @@ export type Database = {
           dedupe_hash: string | null
           description: string | null
           discovered_at: string | null
+          downstream_eligibility: Json | null
           enriched_at: string | null
           enrichment_audit_log: Json
           enrichment_status: string
@@ -3980,6 +4067,7 @@ export type Database = {
           dedupe_hash?: string | null
           description?: string | null
           discovered_at?: string | null
+          downstream_eligibility?: Json | null
           enriched_at?: string | null
           enrichment_audit_log?: Json
           enrichment_status?: string
@@ -4077,6 +4165,7 @@ export type Database = {
           dedupe_hash?: string | null
           description?: string | null
           discovered_at?: string | null
+          downstream_eligibility?: Json | null
           enriched_at?: string | null
           enrichment_audit_log?: Json
           enrichment_status?: string

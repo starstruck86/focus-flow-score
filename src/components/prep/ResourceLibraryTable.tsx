@@ -34,10 +34,12 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
-import { InlineResourceDetail } from './InlineResourceDetail';
+import { ResourceInspectPanel } from './ResourceInspectPanel';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { SystemHealthBar } from './SystemHealthBar';
 import { ResourceCard } from './ResourceCard';
+import { NeedsAttentionQueue } from './NeedsAttentionQueue';
+import { CollectionBrowser } from './CollectionBrowser';
 import { deriveResourceInsight, deriveReadiness } from '@/lib/resourceSignal';
 import type { ReadinessBucket } from '@/lib/resourceAudit';
 import {
@@ -70,14 +72,18 @@ interface ResourceLibraryTableProps {
 type HealthFilter = 'all' | 'ready' | 'improving' | 'blocked' | 'failed' | 'missing_content' | 'needs_extraction' | 'needs_review';
 
 // ── Spot check presets ─────────────────────────────────────
-type SpotCheck = 'none' | 'recent' | 'failed' | 'low_yield' | 'random';
+type SpotCheck = 'none' | 'recent' | 'failed' | 'low_yield' | 'random' | 'high_signal' | 'limited_readiness' | 'random_ready' | 'random_lessons';
 
 const SPOT_CHECK_LABELS: Record<SpotCheck, string> = {
   none: 'All',
-  recent: 'Recent',
+  recent: 'Recent Uploads',
   failed: 'Failed',
   low_yield: 'Low Yield',
-  random: 'Random Sample',
+  random: 'Random 10',
+  high_signal: 'High Signal',
+  limited_readiness: 'Limited Readiness',
+  random_ready: 'Random 5 Ready',
+  random_lessons: 'Random 5 Lessons',
 };
 
 // ── Collection grouping ────────────────────────────────────
@@ -286,18 +292,37 @@ export function ResourceLibraryTable({
         case 'failed':
           result = result.filter(r => r.enrichment_status === 'failed');
           break;
-        case 'low_yield': {
+        case 'low_yield':
           result = result.filter(r => {
             const lc = lifecycleMap.get(r.id);
             return lc && lc.kiCount > 0 && lc.kiCount <= 2;
           });
           break;
-        }
-        case 'random': {
-          const shuffled = [...result].sort(() => Math.random() - 0.5);
-          result = shuffled.slice(0, 10);
+        case 'random':
+          result = [...result].sort(() => Math.random() - 0.5).slice(0, 10);
           break;
-        }
+        case 'high_signal':
+          result = result.filter(r => {
+            const lc = lifecycleMap.get(r.id);
+            return lc && lc.activeKiWithCtx > 0;
+          });
+          break;
+        case 'limited_readiness':
+          result = result.filter(r => {
+            const lc = lifecycleMap.get(r.id);
+            const { readiness } = deriveReadiness(lc, r, audioJobsMap?.get(r.id));
+            return readiness === 'improving';
+          });
+          break;
+        case 'random_ready':
+          result = result.filter(r => {
+            const lc = lifecycleMap.get(r.id);
+            return lc?.stage === 'operationalized';
+          }).sort(() => Math.random() - 0.5).slice(0, 5);
+          break;
+        case 'random_lessons':
+          result = result.filter(r => r.title.includes(' > ')).sort(() => Math.random() - 0.5).slice(0, 5);
+          break;
       }
     }
 
@@ -345,6 +370,38 @@ export function ResourceLibraryTable({
           activeFilter={healthFilter}
         />
       </div>
+
+      {/* Needs Attention Queue */}
+      <div className="shrink-0 mb-2">
+        <NeedsAttentionQueue
+          resources={resources}
+          lifecycleMap={lifecycleMap}
+          audioJobsMap={audioJobsMap}
+          onAction={onAction}
+          onInspect={(r) => setExpandedId(r.id)}
+        />
+      </div>
+
+      {/* Collections sidebar on desktop, inline on mobile */}
+      {!isMobile && (
+        <div className="shrink-0 mb-2">
+          <CollectionBrowser
+            resources={resources}
+            lifecycleMap={lifecycleMap}
+            onFilterByCollection={(id) => {
+              if (!id) { setCollectionFilter('all'); return; }
+              if (id.startsWith('implicit:')) {
+                const prefix = id.replace('implicit:', '');
+                setSearch(prefix + ' > ');
+                setCollectionFilter('all');
+              } else {
+                setCollectionFilter(id);
+              }
+            }}
+            activeCollectionId={collectionFilter !== 'all' ? collectionFilter : null}
+          />
+        </div>
+      )}
 
       {/* Search + spot check + collections */}
       <div className="flex items-center gap-2 flex-wrap py-1.5 shrink-0">
@@ -648,7 +705,7 @@ export function ResourceLibraryTable({
                       {expandedId === resource.id && (
                         <tr className="bg-card">
                           <td colSpan={4} className="p-0 relative z-10 bg-card">
-                            <InlineResourceDetail
+                            <ResourceInspectPanel
                               resource={resource}
                               onClose={() => setExpandedId(null)}
                               onAction={onAction}
