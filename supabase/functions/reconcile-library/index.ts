@@ -3,7 +3,7 @@
  * work buckets, persisting a reconciliation snapshot.
  *
  * POST /reconcile-library
- * Body: { mode: 'dry_run' | 'safe_auto_fix' | 'force_reprocess' }
+ * Body: { mode: 'dry_run' | 'safe_auto_fix' | 'force_reprocess', backfill_content_length?: boolean }
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -14,6 +14,15 @@ const corsHeaders = {
 };
 
 const CURRENT_ENRICHMENT_VERSION = 2;
+
+// Statuses that imply content exists even if content_length is null
+const CONTENT_IMPLIED_STATUSES = [
+  "deep_enriched",
+  "extracted",
+  "extraction_retrying",
+  "content_ready",
+  "enriched",
+];
 
 type Bucket =
   | "no_action"
@@ -40,23 +49,21 @@ function classifyResource(
   const issues: string[] = [];
   let severity = 0;
   const status = r.enrichment_status || "not_enriched";
-  const contentLen = r.content_length || r.actual_content_len || 0;
+  const contentLen = r.content_length || 0;
   const enrichVer = r.enrichment_version ?? 0;
-  // If status indicates successful enrichment/extraction, trust that content exists
-  const impliedContent = ["deep_enriched", "extracted", "extraction_retrying", "content_ready", "enriched"].includes(status);
+
+  // Determine whether content exists
+  const impliedContent = CONTENT_IMPLIED_STATUSES.includes(status);
   const hasContent = contentLen >= 100 || impliedContent;
 
   // ── 1. No content at all ──────────────────────────────────
   if (!hasContent) {
-    // Failed enrichment → blocked
     if (status === "failed") {
       return { resource_id: r.id, bucket: "blocked", issues: ["enrichment_failed"], severity: 8 };
     }
-    // No valid URL → blocked
     if (!r.file_url || (!r.file_url.startsWith("http") && !r.file_url.includes("/"))) {
       return { resource_id: r.id, bucket: "blocked", issues: ["no_valid_source_url"], severity: 2 };
     }
-    // Can still be enriched
     return { resource_id: r.id, bucket: "needs_enrichment", issues: ["missing_content"], severity: 7 };
   }
 
@@ -70,29 +77,25 @@ function classifyResource(
     return { resource_id: r.id, bucket: "needs_qa_review", issues: ["stuck_in_processing"], severity: 9 };
   }
 
-  // ── 4. Content ready but not fully enriched ───────────────
-  if (["content_ready", "enriched"].includes(status)) {
-    if (kiCount === 0) {
-      // Has content but needs extraction
-      return { resource_id: r.id, bucket: "needs_extraction", issues: ["content_ready_no_kis"], severity: 5 };
-    }
-    // Has content and KIs — treat as functional
-  }
-
-  // ── 5. Extraction in progress / retrying ──────────────────
+  // ── 4. Extraction retrying — let it finish unless exhausted
   if (status === "extraction_retrying") {
-    // Has KIs but retrying = let it finish, but flag if stuck
     const attemptCount = r.extraction_attempt_count || 0;
     const maxAttempts = r.max_extraction_attempts || 4;
     if (attemptCount >= maxAttempts) {
-      issues.push("extraction_exhausted_retries");
-      return { resource_id: r.id, bucket: "needs_qa_review", issues, severity: 6 };
+      return { resource_id: r.id, bucket: "needs_qa_review", issues: ["extraction_exhausted_retries"], severity: 6 };
     }
-    // Still retrying — no action needed from reconciliation
     return { resource_id: r.id, bucket: "no_action", issues: ["extraction_retrying_in_progress"], severity: 0 };
   }
 
-  // ── 6. Version drift check (only for deep_enriched) ──────
+  // ── 5. Content ready / enriched but not yet deep-enriched ─
+  if (["content_ready", "enriched"].includes(status)) {
+    if (kiCount === 0) {
+      return { resource_id: r.id, bucket: "needs_extraction", issues: ["content_ready_no_kis"], severity: 5 };
+    }
+    // Has KIs — functional, check activation below
+  }
+
+  // ── 6. Version drift (deep_enriched with stale version) ───
   const isStaleVersion = enrichVer < CURRENT_ENRICHMENT_VERSION && status === "deep_enriched";
   if (isStaleVersion) {
     issues.push(`stale_enrichment_v${enrichVer}`);
@@ -101,27 +104,24 @@ function classifyResource(
 
   // ── 7. Missing KIs on enriched content ────────────────────
   if (kiCount === 0 && ["deep_enriched", "extracted"].includes(status)) {
-    // Check if extraction was attempted and failed
     if (r.extraction_failure_type) {
-      issues.push("extraction_failed_no_kis");
-      return { resource_id: r.id, bucket: "needs_qa_review", issues, severity: 7 };
+      return { resource_id: r.id, bucket: "needs_qa_review", issues: ["extraction_failed_no_kis"], severity: 7 };
     }
-    issues.push("missing_kis");
-    return { resource_id: r.id, bucket: "needs_extraction", issues, severity: 6 };
+    return { resource_id: r.id, bucket: "needs_extraction", issues: ["missing_kis"], severity: 6 };
   }
 
-  // ── 8. Low-yield check ────────────────────────────────────
-  // Scale floor by content length
-  const lowYieldFloor = contentLen > 5000 ? 3 : contentLen > 2000 ? 2 : 1;
-  if (kiCount > 0 && kiCount <= lowYieldFloor && contentLen > 2000) {
+  // ── 8. Low-yield check (tighter thresholds) ───────────────
+  // Use effective content length: if implied but null, estimate conservatively
+  const effectiveLen = contentLen > 0 ? contentLen : (impliedContent ? 3000 : 0);
+  const lowYieldFloor = effectiveLen > 8000 ? 5 : effectiveLen > 4000 ? 3 : effectiveLen > 2000 ? 2 : 1;
+  if (kiCount > 0 && kiCount <= lowYieldFloor && effectiveLen > 2000) {
     issues.push("low_yield_extraction");
     severity = Math.max(severity, 5);
   }
 
   // ── 9. No active KIs ─────────────────────────────────────
   if (kiCount > 0 && activeKiCount === 0) {
-    issues.push("no_active_kis");
-    return { resource_id: r.id, bucket: "needs_activation", issues, severity: 5 };
+    return { resource_id: r.id, bucket: "needs_activation", issues: [...issues, "no_active_kis"], severity: Math.max(severity, 5) };
   }
 
   // ── 10. Stale failure_reason on enriched resource ─────────
@@ -135,20 +135,20 @@ function classifyResource(
   if (isStaleVersion && kiCount > 0) {
     return { resource_id: r.id, bucket: "needs_re_enrichment", issues, severity };
   }
-  // Stale version without KIs → needs extraction after re-enrichment
   if (isStaleVersion && kiCount === 0) {
     return { resource_id: r.id, bucket: "needs_re_enrichment", issues, severity };
   }
   // Low yield → re-extraction
-  if (issues.some((i) => i === "low_yield_extraction")) {
+  if (issues.includes("low_yield_extraction")) {
     return { resource_id: r.id, bucket: "needs_re_extraction", issues, severity };
   }
-  // Remaining issues → QA
-  if (issues.length > 0 && issues.some(i => !i.startsWith("extraction_retrying"))) {
+  // Remaining non-trivial issues → QA
+  const substantiveIssues = issues.filter(i => !i.startsWith("extraction_retrying") && i !== "stale_failure_reason");
+  if (substantiveIssues.length > 0) {
     return { resource_id: r.id, bucket: "needs_qa_review", issues, severity };
   }
 
-  return { resource_id: r.id, bucket: "no_action", issues: [], severity: 0 };
+  return { resource_id: r.id, bucket: "no_action", issues, severity: 0 };
 }
 
 Deno.serve(async (req) => {
@@ -185,6 +185,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const mode = body.mode || "dry_run";
+    const backfillContentLength = body.backfill_content_length === true;
 
     // Check no active run
     const { data: activeRuns } = await supabase
@@ -208,7 +209,7 @@ Deno.serve(async (req) => {
     while (true) {
       const { data, error } = await supabase
         .from("resources")
-        .select("id, title, content_length, enrichment_status, enrichment_version, validation_version, enriched_at, failure_reason, file_url, extraction_attempt_count, max_extraction_attempts, extraction_failure_type, last_quality_tier, last_quality_score, active_job_status")
+        .select("id, title, content, content_length, enrichment_status, enrichment_version, validation_version, enriched_at, failure_reason, file_url, extraction_attempt_count, max_extraction_attempts, extraction_failure_type, last_quality_tier, last_quality_score, active_job_status")
         .eq("user_id", user.id)
         .range(offset, offset + pageSize - 1);
 
@@ -217,6 +218,22 @@ Deno.serve(async (req) => {
       allResources.push(...data);
       if (data.length < pageSize) break;
       offset += pageSize;
+    }
+
+    // ── Content-length backfill ─────────────────────────────
+    let backfilledCount = 0;
+    if (backfillContentLength) {
+      for (const r of allResources) {
+        if (!r.content_length && r.content && r.content.length > 0) {
+          const realLen = r.content.length;
+          await supabase
+            .from("resources")
+            .update({ content_length: realLen })
+            .eq("id", r.id);
+          r.content_length = realLen;
+          backfilledCount++;
+        }
+      }
     }
 
     // Get KI counts per resource
@@ -301,6 +318,7 @@ Deno.serve(async (req) => {
       issue_breakdown: issueBreakdown,
       needs_action: allResources.length - (buckets["no_action"] || 0),
       qa_flagged: classified.filter((c) => c.bucket === "needs_qa_review").length,
+      backfilled_content_length: backfilledCount,
     };
 
     return new Response(JSON.stringify(summary), {

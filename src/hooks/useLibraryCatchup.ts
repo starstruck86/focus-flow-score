@@ -1,6 +1,7 @@
 /**
  * useLibraryCatchup — Zustand-based orchestrator for library reconciliation.
  * Manages scan → preview → phased execution → completion.
+ * Supports conservative rollout: enrichment-only, then extraction, then full.
  */
 import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,6 +32,7 @@ export interface CatchupSnapshot {
   issue_breakdown: Record<string, number>;
   needs_action: number;
   qa_flagged: number;
+  backfilled_content_length?: number;
 }
 
 interface CatchupState {
@@ -41,12 +43,17 @@ interface CatchupState {
   currentPhase: CatchupPhase | null;
   phaseResults: Record<CatchupPhase, PhaseResult>;
   error: string | null;
+  /** Which phases to run (conservative rollout) */
+  selectedPhases: CatchupPhase[];
+  /** Completed rollout step for guidance */
+  lastCompletedStep: 'none' | 'dry_run' | 'enrichment' | 'extraction' | 'full';
 
   // Actions
-  startScan: (mode?: CatchupMode) => Promise<void>;
-  executePhases: () => Promise<void>;
+  startScan: (mode?: CatchupMode, backfillContentLength?: boolean) => Promise<void>;
+  executePhases: (phases?: CatchupPhase[]) => Promise<void>;
   cancelRun: () => void;
   reset: () => void;
+  setSelectedPhases: (phases: CatchupPhase[]) => void;
 }
 
 const emptyPhaseResults = (): Record<CatchupPhase, PhaseResult> => ({
@@ -64,12 +71,14 @@ export const useLibraryCatchup = create<CatchupState>((set, get) => ({
   currentPhase: null,
   phaseResults: emptyPhaseResults(),
   error: null,
+  selectedPhases: ['enrich'],
+  lastCompletedStep: 'none',
 
-  startScan: async (mode: CatchupMode = 'dry_run') => {
-    set({ status: 'scanning', mode, error: null, snapshot: null, runId: null, phaseResults: emptyPhaseResults() });
+  startScan: async (mode: CatchupMode = 'dry_run', backfillContentLength = true) => {
+    set({ status: 'scanning', mode, error: null, snapshot: null, runId: null, phaseResults: emptyPhaseResults(), lastCompletedStep: 'none' });
     try {
       const { data, error } = await supabase.functions.invoke('reconcile-library', {
-        body: { mode },
+        body: { mode, backfill_content_length: backfillContentLength },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -84,19 +93,21 @@ export const useLibraryCatchup = create<CatchupState>((set, get) => ({
     }
   },
 
-  executePhases: async () => {
-    const { runId, mode } = get();
+  setSelectedPhases: (phases: CatchupPhase[]) => {
+    set({ selectedPhases: phases });
+  },
+
+  executePhases: async (phases?: CatchupPhase[]) => {
+    const { runId, mode, selectedPhases } = get();
     if (!runId) return;
 
-    let cancelled = false;
+    const phasesToRun = phases || selectedPhases;
     set({ status: 'running' });
 
-    for (const phase of PHASES) {
-      if (cancelled || get().status === 'cancelled') break;
+    for (const phase of phasesToRun) {
+      if (get().status === 'cancelled') break;
 
       set({ currentPhase: phase });
-
-      // Update phase status to running
       set(s => ({
         phaseResults: {
           ...s.phaseResults,
@@ -128,8 +139,28 @@ export const useLibraryCatchup = create<CatchupState>((set, get) => ({
       }
     }
 
+    // Mark unselected phases as skipped
+    for (const phase of PHASES) {
+      if (!phasesToRun.includes(phase)) {
+        set(s => ({
+          phaseResults: {
+            ...s.phaseResults,
+            [phase]: { ...s.phaseResults[phase], status: 'skipped' },
+          },
+        }));
+      }
+    }
+
+    // Determine completed rollout step
+    const ranPhases = new Set(phasesToRun);
+    let lastStep: CatchupState['lastCompletedStep'] = 'none';
+    if (mode === 'dry_run') lastStep = 'dry_run';
+    else if (ranPhases.has('surface_to_qa')) lastStep = 'full';
+    else if (ranPhases.has('extract')) lastStep = 'extraction';
+    else if (ranPhases.has('enrich')) lastStep = 'enrichment';
+
     if (get().status !== 'cancelled') {
-      set({ status: 'completed', currentPhase: null });
+      set({ status: 'completed', currentPhase: null, lastCompletedStep: lastStep });
     }
   },
 
@@ -154,6 +185,8 @@ export const useLibraryCatchup = create<CatchupState>((set, get) => ({
       currentPhase: null,
       phaseResults: emptyPhaseResults(),
       error: null,
+      selectedPhases: ['enrich'],
+      lastCompletedStep: 'none',
     });
   },
 }));
