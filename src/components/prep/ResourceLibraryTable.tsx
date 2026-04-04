@@ -270,15 +270,21 @@ export function ResourceLibraryTable({
     if (healthFilter !== 'all') {
       result = result.filter(r => {
         const lc = lifecycleMap.get(r.id);
-        const { readiness } = deriveReadiness(lc, r, audioJobsMap?.get(r.id));
+        const truth = deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
         switch (healthFilter) {
-          case 'ready': return readiness === 'ready';
-          case 'improving': return readiness === 'improving';
-          case 'blocked': return readiness === 'blocked';
+          case 'ready': return truth.truth_state === 'ready';
+          case 'improving': return truth.truth_state === 'processing';
+          case 'blocked': return truth.truth_state === 'blocked' || truth.truth_state === 'quarantined';
           case 'failed': return r.enrichment_status === 'failed';
-          case 'missing_content': return lc?.blocked === 'empty_content';
-          case 'needs_extraction': return lc?.blocked === 'no_extraction';
-          case 'needs_review': return lc?.blocked === 'stale_blocker_state';
+          case 'stalled': return truth.truth_state === 'stalled';
+          case 'qa_required': return truth.truth_state === 'qa_required';
+          case 'missing_content': return truth.primary_blocker?.type === 'missing_content';
+          case 'needs_extraction': return truth.primary_blocker?.type === 'needs_extraction';
+          case 'needs_enrichment': return truth.primary_blocker?.type === 'needs_enrichment';
+          case 'needs_activation': return truth.primary_blocker?.type === 'needs_activation';
+          case 'needs_auth': return truth.primary_blocker?.type === 'needs_auth' || truth.primary_blocker?.type === 'route_manual_assist';
+          case 'needs_review': return truth.truth_state === 'qa_required' || truth.primary_blocker?.type === 'qa_required';
+          case 'contradictions': return truth.truth_state === 'quarantined';
           default: return true;
         }
       });
