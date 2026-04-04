@@ -42,6 +42,7 @@ import { SystemHealthBar } from './SystemHealthBar';
 import { ResourceCard } from './ResourceCard';
 import { NeedsAttentionQueue } from './NeedsAttentionQueue';
 import { ProcessingStatusBar } from './ProcessingStatusBar';
+import { FixAllProgressPanel } from './FixAllProgressPanel';
 import { CollectionBrowser } from './CollectionBrowser';
 import { CatchupDashboard } from './CatchupDashboard';
 import { LibraryTrustSummary } from './LibraryTrustSummary';
@@ -75,6 +76,12 @@ interface ResourceLibraryTableProps {
   onRefresh?: () => void;
   isRefreshing?: boolean;
   lastFixResult?: import('@/lib/fixAllAutoBlockers').FixAllResult | null;
+  /** Live fix-all progress message */
+  fixAllProgressMessage?: string | null;
+  /** Is fix-all currently running? */
+  isFixAllRunning?: boolean;
+  /** External filter override (e.g. from NeedsAttentionQueue) */
+  externalHealthFilter?: string | null;
 }
 
 // ── Health filter type ─────────────────────────────────────
@@ -211,6 +218,9 @@ export function ResourceLibraryTable({
   onRefresh,
   isRefreshing,
   lastFixResult,
+  fixAllProgressMessage,
+  isFixAllRunning,
+  externalHealthFilter,
 }: ResourceLibraryTableProps) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
@@ -226,6 +236,13 @@ export function ResourceLibraryTable({
   const liveJobResources = useResourceJobProgress(s => s.resources);
   const batchActive = useResourceJobProgress(s => s.batchActive);
   const isMobile = useIsMobile();
+
+  // Sync external filter from parent (e.g. NeedsAttentionQueue clicks)
+  useEffect(() => {
+    if (externalHealthFilter && externalHealthFilter !== healthFilter) {
+      setHealthFilter(externalHealthFilter as HealthFilter);
+    }
+  }, [externalHealthFilter]);
 
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -434,6 +451,17 @@ export function ResourceLibraryTable({
         <ProcessingStatusBar resources={resources} />
       </div>
 
+      {/* Fix All Progress */}
+      {(isFixAllRunning || lastFixResult) && (
+        <div className="shrink-0 mb-2">
+          <FixAllProgressPanel
+            progressMessage={fixAllProgressMessage}
+            isRunning={!!isFixAllRunning}
+            result={lastFixResult}
+          />
+        </div>
+      )}
+
       {/* Catch-Up Dashboard */}
       <div className="shrink-0 mb-2">
         <CatchupDashboard />
@@ -448,6 +476,7 @@ export function ResourceLibraryTable({
           onAction={onAction}
           onBulkAction={onBulkAction}
           onInspect={(r) => isMobile ? setMobileInspectId(r.id) : setExpandedId(r.id)}
+          onFilterChange={(f) => setHealthFilter(f as HealthFilter)}
         />
       </div>
 
