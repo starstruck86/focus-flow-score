@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { deriveResourceTruth, type BlockerType, type Blocker, BLOCKER_META } from '@/lib/resourceTruthState';
+import { diagnoseRootCause, ROOT_CAUSE_LABELS, ROOT_CAUSE_COLORS, type RootCauseDiagnosis } from '@/lib/rootCauseDiagnosis';
 import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS } from '@/lib/processingRoute';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
@@ -26,6 +27,7 @@ interface QueueItem {
   bulkEligible: boolean;
   hasOverride: boolean;
   routeContext: string | null;
+  rootCause: RootCauseDiagnosis;
 }
 
 interface QueueGroup {
@@ -159,6 +161,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       const route = deriveProcessingRoute(r);
       const routeCtx = `${PIPELINE_LABELS[route.pipeline]} · ${EXTRACTION_METHOD_LABELS[route.extraction_method]}`;
       const action = getActionForBlocker(primaryBlocker);
+      const rootCause = diagnoseRootCause(r, truth);
 
       const item: QueueItem = {
         resource: r,
@@ -170,6 +173,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
         bulkEligible: primaryBlocker.fixability === 'auto_fixable' || primaryBlocker.fixability === 'semi_auto_fixable',
         hasOverride: route.has_override,
         routeContext: route.confidence !== 'high' ? routeCtx : null,
+        rootCause,
       };
 
       if (!buckets.has(primaryBlocker.type)) buckets.set(primaryBlocker.type, []);
@@ -338,6 +342,18 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
                             )}
                             {item.hasOverride && (
                               <Badge className="text-[8px] h-3.5 bg-amber-500/15 text-amber-700 border-amber-500/30">Override</Badge>
+                            )}
+                          </div>
+                          {/* Root-cause diagnosis line */}
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            <span className={cn('text-[9px] font-medium', ROOT_CAUSE_COLORS[item.rootCause.category])}>
+                              {ROOT_CAUSE_LABELS[item.rootCause.category]}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground truncate max-w-[200px]">
+                              {item.rootCause.explanation.length > 80 ? item.rootCause.explanation.slice(0, 77) + '…' : item.rootCause.explanation}
+                            </span>
+                            {!item.rootCause.auto_fixable && (
+                              <Badge variant="outline" className="text-[8px] h-3.5 px-1">Manual</Badge>
                             )}
                           </div>
                         </button>

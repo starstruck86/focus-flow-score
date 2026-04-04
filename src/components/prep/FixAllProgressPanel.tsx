@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDurationShort, type FixAllLiveProgress } from '@/lib/fixAllProgress';
-import type { FixAllResult, FixPhaseResult, BlockerDiff } from '@/lib/fixAllAutoBlockers';
+import type { FixAllResult, FixPhaseResult, BlockerDiff, FixResourceOutcome } from '@/lib/fixAllAutoBlockers';
+import { ROOT_CAUSE_LABELS, RESOLUTION_OUTCOME_LABELS, type RootCauseCategory, type ResolutionOutcome } from '@/lib/rootCauseDiagnosis';
 
 interface Props {
   progress: FixAllLiveProgress | null;
@@ -236,6 +237,51 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
               ))}
             </div>
           )}
+
+          {/* I. Root-cause resolution summary */}
+          {result.resourceOutcomes.length > 0 && (() => {
+            const byCause: Record<string, number> = {};
+            const byOutcome: Record<string, number> = {};
+            const stillBlocked = result.resourceOutcomes.filter(o => o.resolutionOutcome?.startsWith('still_blocked'));
+            for (const o of result.resourceOutcomes) {
+              if (o.rootCauseCategory) byCause[o.rootCauseCategory] = (byCause[o.rootCauseCategory] ?? 0) + 1;
+              if (o.resolutionOutcome) byOutcome[o.resolutionOutcome] = (byOutcome[o.resolutionOutcome] ?? 0) + 1;
+            }
+            const hasCauseData = Object.keys(byCause).length > 0;
+            if (!hasCauseData) return null;
+            return (
+              <div className="space-y-1 pt-1.5 border-t border-border/50">
+                <p className="text-[10px] font-medium text-foreground">Root Cause Summary</p>
+                <div className="flex items-center gap-2 flex-wrap text-[10px]">
+                  {Object.entries(byOutcome).map(([outcome, count]) => (
+                    <span key={outcome} className={cn(
+                      'font-medium',
+                      outcome === 'resolved_permanently' ? 'text-emerald-600'
+                        : outcome === 'temporarily_retried' ? 'text-amber-600'
+                        : 'text-destructive',
+                    )}>
+                      {count} {RESOLUTION_OUTCOME_LABELS[outcome as ResolutionOutcome] ?? outcome}
+                    </span>
+                  ))}
+                </div>
+                {stillBlocked.length > 0 && (
+                  <div className="text-[9px] text-muted-foreground space-y-0.5 mt-0.5">
+                    {stillBlocked.slice(0, 5).map(o => (
+                      <p key={o.resourceId}>
+                        <span className="font-medium text-foreground">{o.resourceTitle}</span>
+                        {' — '}
+                        {ROOT_CAUSE_LABELS[(o.rootCauseCategory as RootCauseCategory) ?? 'unknown'] ?? o.rootCauseCategory}
+                        {o.rootCauseExplanation && `: ${o.rootCauseExplanation.slice(0, 60)}…`}
+                      </p>
+                    ))}
+                    {stillBlocked.length > 5 && (
+                      <p className="text-muted-foreground">+ {stillBlocked.length - 5} more</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </>
       )}
     </div>

@@ -818,6 +818,9 @@ export function ResourceManager() {
 
                     // Build blocker groups from live truth
                     const blockerGroupMap = new Map<string, string[]>();
+                    const beforeCauseMap = new Map<string, string>();
+                    const { diagnoseRootCause } = await import('@/lib/rootCauseDiagnosis');
+                    
                     for (const id of resourceIds) {
                       const r = filteredResources.find(res => res.id === id);
                       if (!r) continue;
@@ -827,6 +830,11 @@ export function ResourceManager() {
                         const existing = blockerGroupMap.get(blockerType) ?? [];
                         existing.push(id);
                         blockerGroupMap.set(blockerType, existing);
+                      }
+                      // Capture before-run root cause for comparison
+                      if (truth.primary_blocker) {
+                        const diag = diagnoseRootCause(r, truth);
+                        beforeCauseMap.set(id, diag.category);
                       }
                     }
 
@@ -866,6 +874,28 @@ export function ResourceManager() {
                         },
                       },
                     );
+
+                    // Populate root-cause data on outcomes
+                    for (const outcome of result.resourceOutcomes) {
+                      const r = filteredResources.find(res => res.id === outcome.resourceId);
+                      if (r) {
+                        const afterTruth = deriveResourceTruth(r, lifecycleMap.get(r.id), audioJobsMap?.get(r.id));
+                        const diag = diagnoseRootCause(r, afterTruth);
+                        outcome.rootCauseCategory = diag.category;
+                        outcome.rootCauseExplanation = diag.explanation;
+                        outcome.resourceTitle = r.title || outcome.resourceTitle;
+                        const beforeCause = beforeCauseMap.get(outcome.resourceId);
+                        if (afterTruth.is_ready) {
+                          outcome.resolutionOutcome = 'resolved_permanently';
+                        } else if (beforeCause === diag.category) {
+                          outcome.resolutionOutcome = 'still_blocked_same_cause';
+                        } else if (beforeCause && beforeCause !== diag.category) {
+                          outcome.resolutionOutcome = 'still_blocked_new_cause';
+                        } else {
+                          outcome.resolutionOutcome = 'temporarily_retried';
+                        }
+                      }
+                    }
 
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });

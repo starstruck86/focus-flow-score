@@ -39,6 +39,9 @@ export interface FixResourceOutcome {
   finalTruthState: string | null;
   finalBlocker: string | null;
   error: string | null;
+  rootCauseCategory: string | null;
+  rootCauseExplanation: string | null;
+  resolutionOutcome: string | null;
 }
 
 export interface BlockerDiff {
@@ -385,6 +388,9 @@ export async function runFixAllAutoBlockers(
         finalTruthState: null,
         finalBlocker: blockerType,
         error: null,
+        rootCauseCategory: null,
+        rootCauseExplanation: null,
+        resolutionOutcome: null,
       });
     }
   };
