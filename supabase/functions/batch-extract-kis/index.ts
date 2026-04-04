@@ -137,6 +137,7 @@ async function persistAttemptRecord(supabase: any, resourceId: string, userId: s
       duration_ms: record.duration_ms,
       started_at: record.started_at,
       completed_at: record.completed_at,
+      confidence_score: record.confidence_score ?? null,
     }, { onConflict: 'resource_id,attempt_number' });
   if (error) {
     console.error(`[extract-attempt] Failed to persist attempt ${record.attempt_number} for ${resourceId}: ${error.message}`);
@@ -147,7 +148,7 @@ async function persistAttemptRecord(supabase: any, resourceId: string, userId: s
 async function fetchAttemptHistory(supabase: any, resourceId: string): Promise<AttemptRecord[]> {
   const { data, error } = await supabase
     .from('resource_extraction_attempts')
-    .select('attempt_number, strategy, ki_count, raw_item_count, validated_count, deduped_count, min_ki_floor, floor_met, failure_type, status, duration_ms, started_at, completed_at')
+    .select('attempt_number, strategy, ki_count, raw_item_count, validated_count, deduped_count, min_ki_floor, floor_met, failure_type, status, duration_ms, started_at, completed_at, confidence_score')
     .eq('resource_id', resourceId)
     .order('attempt_number', { ascending: true });
   if (error) {
@@ -357,6 +358,9 @@ interface ExtractionAuditSummary {
   base_floor: number;
   density_adjusted_floor: number;
   final_floor: number;
+  // Best-attempt tracking
+  best_attempt_index: number;
+  confidence_score: number;
 }
 
 /** Compute yield quality flag from attempt metrics */
@@ -414,6 +418,11 @@ function buildAuditFromHistory(
     console.log(`[extract-audit] 📊 Best attempt: #${bestAttempt.attempt_number} (confidence=${bestAttempt.confidence_score}, ki=${bestAttempt.ki_count}) vs last: #${lastAttempt.attempt_number} (ki=${lastAttempt.ki_count})`);
   }
 
+  const bestConfidence = sourceAttempt.confidence_score ?? computeAttemptConfidence(
+    sourceAttempt.ki_count, sourceAttempt.min_ki_floor,
+    sourceAttempt.raw_item_count, sourceAttempt.validated_count, sourceAttempt.deduped_count
+  );
+
   const summary: ExtractionAuditSummary = {
     total_attempts: attemptHistory.length,
     strategies_used: strategies,
@@ -436,6 +445,8 @@ function buildAuditFromHistory(
     base_floor: floorDetails?.base ?? sourceAttempt.min_ki_floor,
     density_adjusted_floor: floorDetails?.densityAdjusted ?? sourceAttempt.min_ki_floor,
     final_floor: floorDetails?.final ?? sourceAttempt.min_ki_floor,
+    best_attempt_index: sourceAttempt.attempt_number,
+    confidence_score: bestConfidence,
   };
 
   // ── Validate before returning ──
@@ -1212,6 +1223,10 @@ async function updateExtractionStatus(supabase: any, resourceId: string, status:
           const valLoss = lastSuccess.raw_item_count > 0 ? Math.round(((lastSuccess.raw_item_count - lastSuccess.validated_count) / lastSuccess.raw_item_count) * 100) : 0;
           const dedLoss = lastSuccess.validated_count > 0 ? Math.round(((lastSuccess.validated_count - lastSuccess.deduped_count) / lastSuccess.validated_count) * 100) : 0;
 
+          const bestConf = lastSuccess.confidence_score ?? computeAttemptConfidence(
+            lastSuccess.ki_count, lastSuccess.min_ki_floor,
+            lastSuccess.raw_item_count, lastSuccess.validated_count, lastSuccess.deduped_count
+          );
           extraFields.extraction_audit_summary = {
             total_attempts: history.length,
             strategies_used: strategies,
@@ -1231,6 +1246,8 @@ async function updateExtractionStatus(supabase: any, resourceId: string, status:
             base_floor: lastSuccess.min_ki_floor,
             density_adjusted_floor: lastSuccess.min_ki_floor,
             final_floor: lastSuccess.min_ki_floor,
+            best_attempt_index: lastSuccess.attempt_number,
+            confidence_score: bestConf,
             protected_from_degradation: true,
             source_attempt: lastSuccess.attempt_number,
           };
