@@ -443,12 +443,12 @@ async function normalizeStaleStatuses(
       }
 
       // Fix needs_auth misclassification: content exists, reclassify to enriched
-      if (isNeedsAuth && hasUsableContent) {
+      if (isNeedsAuth && hasUsableContentForAuth) {
         update.enrichment_status = 'enriched';
         update.failure_reason = null;
         update.active_job_status = null;
         update.active_job_error = null;
-        log.info('Reclassifying needs_auth → enriched (content exists)', { id, content_length: contentInfo?.content_length });
+        log.info('Reclassifying needs_auth → enriched (content exists)', { id, content_length: contentInfo?.content_length, threshold: authContentThreshold, isStructuredLesson });
       }
 
       const { error } = await supabase
