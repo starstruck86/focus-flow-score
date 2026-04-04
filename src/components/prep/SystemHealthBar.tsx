@@ -15,8 +15,10 @@ import { deriveResourceTruth, type ResourceTruth, type LifecycleInfo } from '@/l
 interface HealthCounts {
   total: number;
   ready: number;
-  improving: number;
+  processing: number;
   blocked: number;
+  stalled: number;
+  qa_required: number;
 }
 
 interface AttentionItem {
