@@ -1355,11 +1355,17 @@ Deno.serve(async (req) => {
     log.insertedCount = rows.length;
     log.outcome = 'success';
     await saveExtractionLog(supabase, log);
+    const priorStrategies2 = reconstructPriorStrategies(attemptNumber, resource);
     await updateExtractionStatus(supabase, resourceId, 'extracted', {
       extraction_attempt_count: attemptNumber,
       extraction_failure_type: null,
       extractor_strategy: strategy,
       extraction_retry_eligible: false,
+      extraction_audit_summary: buildAuditSummary({
+        attemptNumber, currentStrategy: strategy, previousStrategies: priorStrategies2,
+        kiCount: rows.length, minKiFloor, finalStatus: 'extracted', failureType: null,
+        durationMs, contentLength: resource.content.length, isLesson,
+      }),
     });
 
     logTelemetry({
