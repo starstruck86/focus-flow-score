@@ -452,6 +452,7 @@ async function normalizeStaleStatuses(
         update.failure_reason = null;
         update.active_job_status = null;
         update.active_job_error = null;
+        update.manual_input_required = false;
         log.info('Reclassifying needs_auth → enriched (content exists)', { id, content_length: contentInfo?.content_length, threshold: authContentThreshold, isStructuredLesson });
       }
 
