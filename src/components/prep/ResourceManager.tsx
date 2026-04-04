@@ -818,6 +818,8 @@ export function ResourceManager() {
                     queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
                     queryClient.invalidateQueries({ queryKey: ['all-resources'] });
 
+                    setLastFixResult(result);
+
                     if (result.system_ready) {
                       toast.success(`All ${result.blockers_fixed} blockers resolved!`, {
                         description: 'System is now ready.',
