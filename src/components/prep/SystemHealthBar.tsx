@@ -136,14 +136,25 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
           onClick={() => onFilterChange('ready')}
         />
         <HealthPill
-          label="Improving"
-          count={counts.improving}
-          colorClass="text-amber-600"
-          bgClass="bg-amber-500/10"
-          icon={<TrendingUp className="h-3 w-3" />}
-          active={activeFilter === 'improving'}
-          onClick={() => onFilterChange('improving')}
+          label="Processing"
+          count={counts.processing}
+          colorClass="text-primary"
+          bgClass="bg-primary/10"
+          icon={<Loader2 className="h-3 w-3" />}
+          active={activeFilter === 'processing'}
+          onClick={() => onFilterChange('processing')}
         />
+        {counts.stalled > 0 && (
+          <HealthPill
+            label="Stalled"
+            count={counts.stalled}
+            colorClass="text-destructive"
+            bgClass="bg-destructive/10"
+            icon={<Clock className="h-3 w-3" />}
+            active={activeFilter === 'stalled'}
+            onClick={() => onFilterChange('stalled')}
+          />
+        )}
         <HealthPill
           label="Blocked"
           count={counts.blocked}
