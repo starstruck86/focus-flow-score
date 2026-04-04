@@ -25,6 +25,7 @@ export type BlockerType =
   | 'needs_enrichment'
   | 'needs_extraction'
   | 'needs_activation'
+  | 'needs_auth'
   | 'missing_context'
   | 'stalled_enrichment'
   | 'stalled_extraction'
