@@ -1277,7 +1277,7 @@ Deno.serve(async (req) => {
     const validated: any[] = [];
     const rejectReasons: Record<string, number> = {};
     for (const item of normalized) {
-      const reasons = validateItem(item, isLesson);
+      const reasons = validateItem(item, isLesson, isDenseContent);
       if (reasons.length > 0) {
         log.rejections.push({ title: (item.title || '').slice(0, 60), reasons });
         for (const r of reasons) { rejectReasons[r] = (rejectReasons[r] || 0) + 1; }
