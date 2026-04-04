@@ -1070,9 +1070,24 @@ Deno.serve(async (req) => {
     const lastFailureType = resource.extraction_failure_type as ExtractionFailureType | undefined;
     const strategy = selectStrategy(attemptNumber, lastFailureType);
 
-    console.log(`[extract] Attempt ${attemptNumber}/${maxAttempts} | strategy=${strategy} | lastFailure=${lastFailureType || 'none'} | "${resource.title}"`);
+    // Load persisted attempt history (append-only across retries)
+    const attemptHistory: AttemptRecord[] = Array.isArray(resource.extraction_attempt_history)
+      ? resource.extraction_attempt_history as AttemptRecord[]
+      : [];
+
+    // ── Time-based retry guard: skip if next_retry_at hasn't been reached ──
+    if (attemptNumber > 1 && resource.next_retry_at) {
+      const nextRetryTime = new Date(resource.next_retry_at).getTime();
+      if (Date.now() < nextRetryTime) {
+        console.log(`[extract] ⏭️ Skipping premature retry for "${resource.title}" — next_retry_at=${resource.next_retry_at}`);
+        return respond({ resourceId, title: resource.title, kis: 0, error: 'Retry not yet due', next_retry_at: resource.next_retry_at });
+      }
+    }
+
+    console.log(`[extract] Attempt ${attemptNumber}/${maxAttempts} | strategy=${strategy} | lastFailure=${lastFailureType || 'none'} | history=${attemptHistory.length} prior | "${resource.title}"`);
 
     const startTime = Date.now();
+    const startedAt = new Date().toISOString();
 
     const log: ExtractionLog = {
       resourceId,
