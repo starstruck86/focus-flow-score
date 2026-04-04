@@ -134,7 +134,7 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                   <span className="text-sm font-medium text-foreground">
-                    {opMetrics.operationalized} / {opMetrics.total} resources ready to use
+                    {opMetrics.operationalized} / {opMetrics.total} resources operationalized
                   </span>
                   <span className="text-xs text-muted-foreground">({opMetrics.percent}%)</span>
                 </div>
