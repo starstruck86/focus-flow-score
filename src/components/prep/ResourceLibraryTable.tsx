@@ -292,18 +292,37 @@ export function ResourceLibraryTable({
         case 'failed':
           result = result.filter(r => r.enrichment_status === 'failed');
           break;
-        case 'low_yield': {
+        case 'low_yield':
           result = result.filter(r => {
             const lc = lifecycleMap.get(r.id);
             return lc && lc.kiCount > 0 && lc.kiCount <= 2;
           });
           break;
-        }
-        case 'random': {
-          const shuffled = [...result].sort(() => Math.random() - 0.5);
-          result = shuffled.slice(0, 10);
+        case 'random':
+          result = [...result].sort(() => Math.random() - 0.5).slice(0, 10);
           break;
-        }
+        case 'high_signal':
+          result = result.filter(r => {
+            const lc = lifecycleMap.get(r.id);
+            return lc && lc.activeKiWithCtx > 0;
+          });
+          break;
+        case 'limited_readiness':
+          result = result.filter(r => {
+            const lc = lifecycleMap.get(r.id);
+            const { readiness } = deriveReadiness(lc, r, audioJobsMap?.get(r.id));
+            return readiness === 'improving';
+          });
+          break;
+        case 'random_ready':
+          result = result.filter(r => {
+            const lc = lifecycleMap.get(r.id);
+            return lc?.stage === 'operationalized';
+          }).sort(() => Math.random() - 0.5).slice(0, 5);
+          break;
+        case 'random_lessons':
+          result = result.filter(r => r.title.includes(' > ')).sort(() => Math.random() - 0.5).slice(0, 5);
+          break;
       }
     }
 
