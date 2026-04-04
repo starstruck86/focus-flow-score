@@ -1408,8 +1408,20 @@ Deno.serve(async (req) => {
     }
 
     // ── 6. Quality threshold gate + post-extraction invariant ──
-    const minKiFloor = computeMinKiFloor(resource.content.length, isLesson, densitySignals);
+    const floorDetails = computeMinKiFloorDetailed(resource.content.length, isLesson, densitySignals);
+    const minKiFloor = floorDetails.final;
     const durationMs = Date.now() - startTime;
+
+    // ── Yield diagnostics logging ──
+    const valLossPct = normalized.length > 0 ? Math.round(((normalized.length - validated.length) / normalized.length) * 100) : 0;
+    const dedLossPct = validated.length > 0 ? Math.round(((validated.length - deduped.length) / validated.length) * 100) : 0;
+    const yieldFlag = computeYieldQualityFlag(rawItems.length, validated.length, deduped.length, deduped.length);
+    console.log(`[extract-yield] "${resource.title}" | raw=${rawItems.length} val=${validated.length} ded=${deduped.length} | valLoss=${valLossPct}% dedLoss=${dedLossPct}% | floor=${minKiFloor} (base=${floorDetails.base} density=${floorDetails.densityAdjusted}) | flag=${yieldFlag}`);
+
+    // Over-extraction safeguard logging
+    if (valLossPct < 10 && dedLossPct < 10 && deduped.length > 12) {
+      console.warn(`[extract-yield] ⚠️ OVER-EXTRACTION RISK: "${resource.title}" — ${deduped.length} KIs with <10% loss at both gates`);
+    }
 
     if (deduped.length < 1) {
       const failureType = classifyFailure(null, 0, minKiFloor, rawItems.length, validated.length);
