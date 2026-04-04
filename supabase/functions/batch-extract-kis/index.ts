@@ -1083,36 +1083,38 @@ function wordOverlap(a: string, b: string): number {
 // ═══════════════════════════════════════════
 
 function computeMinKiFloor(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }): number {
-  if (contentLength < 500) return 0;
+  const details = computeMinKiFloorDetailed(contentLength, isLesson, densitySignals);
+  return details.final;
+}
 
-  // Density-aware boost: if title enumerates N items, floor = ~40% of N (at least base floor)
-  if (densitySignals?.isDense) {
-    const baseFloor = isLesson
-      ? (contentLength < 2000 ? 3 : contentLength < 5000 ? 5 : contentLength < 10000 ? 8 : 12)
-      : (contentLength < 2000 ? 1 : contentLength < 5000 ? 2 : 3);
+/** Returns base, density-adjusted, and final floor with logging */
+function computeMinKiFloorDetailed(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }): { base: number; densityAdjusted: number; final: number } {
+  if (contentLength < 500) return { base: 0, densityAdjusted: 0, final: 0 };
 
-    if (densitySignals.enumeratedCount >= 5) {
-      // Title says "17 takeaways" → floor = max(base, ~40% of 17 ≈ 7)
-      const densityFloor = Math.max(Math.floor(densitySignals.enumeratedCount * 0.4), baseFloor);
-      return Math.min(densityFloor, 15); // cap at 15 to avoid unreasonable floors
-    }
-    if (densitySignals.sectionCount >= 7) {
-      // Many sections → floor = max(base, ~50% of section count)
-      const sectionFloor = Math.max(Math.floor(densitySignals.sectionCount * 0.5), baseFloor);
-      return Math.min(sectionFloor, 12);
-    }
-    return baseFloor;
-  }
-
+  // Base floor (no density adjustment)
+  let baseFloor: number;
   if (isLesson) {
-    if (contentLength < 2000) return 3;
-    if (contentLength < 5000) return 5;
-    if (contentLength < 10000) return 8;
-    return 12;
+    baseFloor = contentLength < 2000 ? 3 : contentLength < 5000 ? 5 : contentLength < 10000 ? 8 : 12;
+  } else {
+    baseFloor = contentLength < 2000 ? 1 : contentLength < 5000 ? 2 : 3;
   }
-  if (contentLength < 2000) return 1;
-  if (contentLength < 5000) return 2;
-  return 3;
+
+  if (!densitySignals?.isDense) {
+    console.log(`[extract-floor] base=${baseFloor} density=none final=${baseFloor}`);
+    return { base: baseFloor, densityAdjusted: baseFloor, final: baseFloor };
+  }
+
+  let densityAdjusted = baseFloor;
+  if (densitySignals.enumeratedCount >= 5) {
+    densityAdjusted = Math.max(Math.floor(densitySignals.enumeratedCount * 0.4), baseFloor);
+    densityAdjusted = Math.min(densityAdjusted, 15);
+  } else if (densitySignals.sectionCount >= 7) {
+    densityAdjusted = Math.max(Math.floor(densitySignals.sectionCount * 0.5), baseFloor);
+    densityAdjusted = Math.min(densityAdjusted, 12);
+  }
+
+  console.log(`[extract-floor] base=${baseFloor} densityAdjusted=${densityAdjusted} final=${densityAdjusted} (enum=${densitySignals.enumeratedCount} sections=${densitySignals.sectionCount})`);
+  return { base: baseFloor, densityAdjusted, final: densityAdjusted };
 }
 
 // ═══════════════════════════════════════════
