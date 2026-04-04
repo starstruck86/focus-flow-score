@@ -24,6 +24,7 @@ import { deriveProcessingState } from '@/lib/processingState';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import { routeFailure, getFailureBucketActions } from '@/lib/failureRouting';
+import { deriveProcessingRoute, getRouteLabel } from '@/lib/processingRoute';
 
 interface Props {
   resource: Resource;
@@ -160,8 +161,20 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
       </div>
 
       {/* Expanded details */}
-      {expanded && (
+      {expanded && (() => {
+        const route = deriveProcessingRoute(resource);
+        return (
         <div className="border-t border-border px-3 py-2 space-y-1.5 bg-muted/30">
+          {/* Route line */}
+          <div className="flex items-center gap-1.5 text-[11px]">
+            <span className="text-muted-foreground">Route:</span>
+            <span className="font-medium text-primary">{getRouteLabel(route)}</span>
+            <Badge variant="outline" className={cn('text-[8px] h-3.5 ml-1',
+              route.confidence === 'high' && 'border-emerald-500/30 text-emerald-600',
+              route.confidence === 'medium' && 'border-amber-500/30 text-amber-600',
+              route.confidence === 'low' && 'border-muted-foreground/30 text-muted-foreground',
+            )}>{route.confidence}</Badge>
+          </div>
           <div className="flex items-center gap-2 flex-wrap text-[11px]">
             <span className="text-muted-foreground">Type:</span>
             <span className="capitalize font-medium">{resource.resource_type}</span>
@@ -193,7 +206,9 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
+
     </div>
   );
 }
