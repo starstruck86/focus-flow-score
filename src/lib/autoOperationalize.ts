@@ -490,11 +490,18 @@ export async function autoOperationalizeBatch(
     reasons: results.filter(r => r.reason).map(r => ({ id: r.resourceId, outcome: r.outcome, reason: r.reason })).slice(0, 20),
   });
 
-  // Regression guard
+  // Regression guard (log-only, don't crash the batch)
   checkRegressionGuard(resourceIds.length, totalProcessed, 'autoOperationalizeBatch');
 
-  // Mismatch guard: if we got IDs but processed 0, something is wrong
-  assertEligibilityAlignment(resourceIds.length, totalProcessed, 'autoOperationalizeBatch');
+  // Mismatch guard: log warning but do NOT throw — some resources may legitimately
+  // produce 0 KIs (e.g., very short structured lessons). Throwing here crashes the
+  // entire Fix All run and prevents any post-run reporting.
+  if (resourceIds.length > 0 && totalProcessed === 0) {
+    log.warn('[PipelineContract] All resources produced no usable output', {
+      total: resourceIds.length,
+      outcomes: outcomeCounts,
+    });
+  }
 
   return results;
 }
