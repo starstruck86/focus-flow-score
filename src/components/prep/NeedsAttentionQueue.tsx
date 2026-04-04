@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 import { deriveResourceTruth, type BlockerType, type Blocker, BLOCKER_META } from '@/lib/resourceTruthState';
 import { diagnoseRootCause, ROOT_CAUSE_LABELS, ROOT_CAUSE_COLORS, type RootCauseDiagnosis } from '@/lib/rootCauseDiagnosis';
+import { buildFailureDossier, FAILURE_STAGE_LABELS, FAILURE_MODE_LABELS, type ResourceFailureDossier } from '@/lib/failureDossier';
 import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS } from '@/lib/processingRoute';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
