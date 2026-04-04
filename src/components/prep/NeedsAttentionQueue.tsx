@@ -9,11 +9,12 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   XCircle, AlertTriangle, Zap, TrendingDown, Clock, Shield,
-  HelpCircle, ChevronDown, ChevronRight, CheckCircle2, Layers,
+  HelpCircle, ChevronDown, ChevronRight, CheckCircle2, Layers, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { deriveReadiness } from '@/lib/resourceSignal';
 import { detectDrift } from '@/lib/resourceLifecycle';
+import { isJobStale } from '@/store/useResourceJobProgress';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 
