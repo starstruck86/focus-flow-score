@@ -377,14 +377,7 @@ Deno.serve(async (req) => {
 
         console.log(`[route] resource=${item.resource_id} pipeline=${route.pipeline} method=${route.extraction_method} primary_asset=${route.primary_asset} confidence=${route.confidence} override=${route.has_override}`);
 
-        // Route mismatch guard: flag if derived route conflicts with current phase
-        const phasePipelineExpected: Record<Phase, Pipeline[]> = {
-          enrich: ["enrich_then_extract", "transcript_pipeline"],
-          extract: ["direct_extract", "enrich_then_extract", "transcript_pipeline"],
-          activate: ["direct_extract", "enrich_then_extract", "transcript_pipeline"],
-          surface_to_qa: ["manual_assist", "direct_extract", "enrich_then_extract", "transcript_pipeline"],
-        };
-        const expectedPipelines = phasePipelineExpected[phase];
+        // Route mismatch guard: manual_assist routes should not auto-process in enrich/extract/activate
         if (route.pipeline === "manual_assist" && phase !== "surface_to_qa" && run.mode !== "dry_run") {
           console.warn(`[route-mismatch] resource=${item.resource_id} phase=${phase} but route=manual_assist → flagging to QA`);
           await supabase
