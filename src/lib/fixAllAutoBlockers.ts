@@ -517,7 +517,45 @@ export async function runFixAllAutoBlockers(
   }
 
   // Phase 3: Extract
-  const extractIds = groupMap.get('needs_extraction') ?? [];
+  // HARDENED: After normalization may have reclassified resources (e.g. needs_auth→enriched,
+  // idle cleared), re-query the DB for any resources that are now extraction-eligible
+  // but weren't in the original blocker groups.
+  let extractIds = groupMap.get('needs_extraction') ?? [];
+  
+  // Discover newly eligible resources after normalization
+  if (allIds.length > 0) {
+    try {
+      const { data: freshResources } = await supabase
+        .from('resources' as any)
+        .select('id, enrichment_status, content_length, active_job_status')
+        .in('id', allIds);
+      
+      if (freshResources) {
+        for (const fr of freshResources as any[]) {
+          const isEnriched = ['enriched', 'deep_enriched', 'verified', 'content_ready', 'extracted'].includes(fr.enrichment_status);
+          const hasContent = (fr.content_length ?? 0) >= 200;
+          const notRunning = !['running'].includes(fr.active_job_status ?? '');
+          
+          if (isEnriched && hasContent && notRunning && !extractIds.includes(fr.id)) {
+            // Check if this resource has 0 KIs
+            const { count } = await supabase
+              .from('knowledge_items' as any)
+              .select('id', { count: 'exact', head: true })
+              .eq('source_resource_id', fr.id);
+            
+            if ((count ?? 0) === 0) {
+              extractIds.push(fr.id);
+              initOutcome(fr.id, 'extraction', 'needs_extraction');
+              log.info('Discovered newly extraction-eligible resource after normalization', { id: fr.id });
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      log.warn('Failed to discover newly eligible resources', { error: err.message });
+    }
+  }
+  
   if (extractIds.length > 0) {
     callbacks?.onPhaseChange?.('extraction', 'Extracting knowledge items', `Extracting ${extractIds.length} resources…`);
     onProgress?.(`Extracting ${extractIds.length} resources…`);
