@@ -365,13 +365,18 @@ function selectStrategy(attemptNumber: number, lastFailureType?: ExtractionFailu
   return 'summary_first';
 }
 
-function classifyFailure(error: any, kiCount: number, minFloor: number, rawItemCount: number): ExtractionFailureType {
+function classifyFailure(error: any, kiCount: number, minFloor: number, rawItemCount: number, validatedCount?: number): ExtractionFailureType {
   const msg = (error?.message || error || '').toString().toLowerCase();
   if (msg.includes('timeout') || msg.includes('429') || msg.includes('503') || msg.includes('network')) return 'transient_error';
+  if (msg.includes('content too short') || msg.includes('no content')) return 'structural_failure';
+  // Segmentation failure: AI produced items but validation killed most
+  if (rawItemCount >= 5 && typeof validatedCount === 'number') {
+    const validationDropout = 1 - (validatedCount / rawItemCount);
+    if (validationDropout > 0.7) return 'segmentation_failure';
+  }
   if (kiCount > 0 && kiCount < minFloor) return 'under_floor_invariant';
   if (rawItemCount === 0 && !msg) return 'model_failure';
   if (msg.includes('ai error') || msg.includes('parse')) return 'model_failure';
-  if (msg.includes('content too short') || msg.includes('no content')) return 'structural_failure';
   return 'transient_error';
 }
 
