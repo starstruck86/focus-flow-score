@@ -164,7 +164,7 @@ export function deriveResourceTruth(
   }
 
   // ── Enrichment blockers ─────────────────────────────────
-  const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying'];
+  const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying', 'content_ready'];
   // Content-backed but not in an enriched state — needs enrichment.
   // Accept both READY and COMPLETED processing states (COMPLETED = content present but status stale).
   const canBeEnriched = ps.state === 'READY' || ps.state === 'COMPLETED';
