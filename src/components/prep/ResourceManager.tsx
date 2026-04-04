@@ -184,7 +184,20 @@ export function ResourceManager() {
   const freshness = useAppFreshness();
   const now = () => new Date().toISOString();
 
-  // Build lifecycle map for truth derivation in bulk actions
+  // Timer-based recompute for elapsed/eta/stalled while Fix All is running
+  useEffect(() => {
+    if (!isFixAllRunning) return;
+    const id = window.setInterval(() => {
+      setFixAllLiveProgress(prev => {
+        if (!prev) return prev;
+        const { recomputeFixAllDerived } = require('@/lib/fixAllProgress');
+        return recomputeFixAllDerived(prev);
+      });
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [isFixAllRunning]);
+
+
   const lifecycleMap = useMemo(() => {
     const map = new Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>();
     if (!lifecycle?.resources) return map;
