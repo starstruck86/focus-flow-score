@@ -358,7 +358,6 @@ function buildAuditFromHistory(
     content_length: contentLength,
     is_structured_lesson: isLesson,
     completed_at: new Date().toISOString(),
-    attempt_history: attemptHistory,
   };
 
   // ── Validate before returning ──
