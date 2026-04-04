@@ -124,10 +124,15 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       // Low yield — include route context
       if (lc.kiCount > 0 && lc.kiCount <= 2 && lc.stage !== 'operationalized') {
         const route = deriveProcessingRoute(r);
+        const routeCtx = `${PIPELINE_LABELS[route.pipeline]} · ${EXTRACTION_METHOD_LABELS[route.extraction_method]}`;
+        const suffix = [
+          route.has_override ? 'Override' : '',
+          route.confidence === 'low' ? 'Low confidence' : '',
+        ].filter(Boolean).join(' · ');
         lowYield.push({
           resource: r, issueType: 'low_yield', priority: 5,
           severity: computeSeverity(r, 'low_yield'),
-          reason: `Only ${lc.kiCount} KI extracted (${PIPELINE_LABELS[route.pipeline]} → ${EXTRACTION_METHOD_LABELS[route.extraction_method]})`,
+          reason: `Only ${lc.kiCount} KI extracted (${routeCtx}${suffix ? ' · ' + suffix : ''})`,
           actionLabel: 'Inspect', actionKey: 'view',
           bulkEligible: false,
         });
