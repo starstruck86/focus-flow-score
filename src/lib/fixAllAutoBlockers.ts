@@ -28,6 +28,27 @@ export interface FixPhaseResult {
   errors: string[];
 }
 
+export interface FixResourceOutcome {
+  resourceId: string;
+  resourceTitle: string;
+  phase: string;
+  attempted: boolean;
+  succeeded: boolean;
+  kisCreated: number;
+  kisActive: number;
+  finalTruthState: string | null;
+  finalBlocker: string | null;
+  error: string | null;
+}
+
+export interface BlockerDiff {
+  type: string;
+  before: number;
+  after: number;
+  resolved: number;
+  unchanged: number;
+}
+
 export interface FixAllResult {
   phases: FixPhaseResult[];
   blockers_before: number;
@@ -36,6 +57,10 @@ export interface FixAllResult {
   blockers_failed: number;
   system_ready: boolean;
   reason: string;
+  /** Per-resource outcomes for transparency */
+  resourceOutcomes: FixResourceOutcome[];
+  /** Before/after blocker diff by type */
+  blockerDiff: BlockerDiff[];
 }
 
 interface BlockerGroup {
