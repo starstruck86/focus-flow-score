@@ -125,7 +125,7 @@ export function diagnoseRootCause(
   truth: ResourceTruth,
 ): RootCauseDiagnosis {
   const rAny = resource as any;
-  const enrichStatus = resource.enrichment_status ?? '';
+  const enrichStatus = (resource.enrichment_status ?? '') as string;
   const contentLength = rAny.content_length ?? 0;
   const hasManualContent = rAny.manual_content_present === true;
 
