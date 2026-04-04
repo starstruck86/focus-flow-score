@@ -75,6 +75,12 @@ interface ResourceLibraryTableProps {
   onRefresh?: () => void;
   isRefreshing?: boolean;
   lastFixResult?: import('@/lib/fixAllAutoBlockers').FixAllResult | null;
+  /** Live fix-all progress message */
+  fixAllProgressMessage?: string | null;
+  /** Is fix-all currently running? */
+  isFixAllRunning?: boolean;
+  /** External filter override (e.g. from NeedsAttentionQueue) */
+  externalHealthFilter?: string | null;
 }
 
 // ── Health filter type ─────────────────────────────────────
