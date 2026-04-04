@@ -371,7 +371,22 @@ function computeYieldQualityFlag(
   return 'expected';
 }
 
-/** Build audit summary from actual persisted attempt history */
+/** Select the best attempt from history — highest confidence, preferring floor_met */
+function selectBestAttempt(history: AttemptRecord[]): AttemptRecord | null {
+  if (history.length === 0) return null;
+  // Prefer attempts that met floor, then sort by confidence (or ki_count as fallback)
+  const sorted = [...history].sort((a, b) => {
+    if (a.floor_met && !b.floor_met) return -1;
+    if (!a.floor_met && b.floor_met) return 1;
+    const aConf = a.confidence_score ?? 0;
+    const bConf = b.confidence_score ?? 0;
+    if (aConf !== bConf) return bConf - aConf;
+    return b.ki_count - a.ki_count;
+  });
+  return sorted[0];
+}
+
+/** Build audit summary from actual persisted attempt history — uses BEST attempt, not last */
 function buildAuditFromHistory(
   attemptHistory: AttemptRecord[],
   finalStatus: string,
@@ -381,25 +396,32 @@ function buildAuditFromHistory(
 ): ExtractionAuditSummary | null {
   if (attemptHistory.length === 0) return null;
 
+  // Use the best attempt for metrics, not just the last one
+  const bestAttempt = selectBestAttempt(attemptHistory)!;
   const lastAttempt = attemptHistory[attemptHistory.length - 1];
+  const sourceAttempt = bestAttempt.ki_count > 0 ? bestAttempt : lastAttempt;
   const strategies = [...new Set(attemptHistory.map(a => a.strategy))];
   const totalElapsed = attemptHistory.reduce((sum, a) => sum + a.duration_ms, 0);
 
-  const valLossPct = lastAttempt.raw_item_count > 0
-    ? Math.round(((lastAttempt.raw_item_count - lastAttempt.validated_count) / lastAttempt.raw_item_count) * 100) : 0;
-  const dedLossPct = lastAttempt.validated_count > 0
-    ? Math.round(((lastAttempt.validated_count - lastAttempt.deduped_count) / lastAttempt.validated_count) * 100) : 0;
-  const rawToFinal = lastAttempt.raw_item_count > 0
-    ? Math.round((lastAttempt.ki_count / lastAttempt.raw_item_count) * 100) / 100 : 0;
+  const valLossPct = sourceAttempt.raw_item_count > 0
+    ? Math.round(((sourceAttempt.raw_item_count - sourceAttempt.validated_count) / sourceAttempt.raw_item_count) * 100) : 0;
+  const dedLossPct = sourceAttempt.validated_count > 0
+    ? Math.round(((sourceAttempt.validated_count - sourceAttempt.deduped_count) / sourceAttempt.validated_count) * 100) : 0;
+  const rawToFinal = sourceAttempt.raw_item_count > 0
+    ? Math.round((sourceAttempt.ki_count / sourceAttempt.raw_item_count) * 100) / 100 : 0;
+
+  if (bestAttempt !== lastAttempt && bestAttempt.ki_count > 0) {
+    console.log(`[extract-audit] 📊 Best attempt: #${bestAttempt.attempt_number} (confidence=${bestAttempt.confidence_score}, ki=${bestAttempt.ki_count}) vs last: #${lastAttempt.attempt_number} (ki=${lastAttempt.ki_count})`);
+  }
 
   const summary: ExtractionAuditSummary = {
     total_attempts: attemptHistory.length,
     strategies_used: strategies,
-    final_ki_count: lastAttempt.ki_count,
-    min_ki_floor: lastAttempt.min_ki_floor,
-    floor_met: lastAttempt.ki_count >= lastAttempt.min_ki_floor,
+    final_ki_count: sourceAttempt.ki_count,
+    min_ki_floor: sourceAttempt.min_ki_floor,
+    floor_met: sourceAttempt.ki_count >= sourceAttempt.min_ki_floor,
     final_status: finalStatus,
-    final_failure_type: lastAttempt.failure_type,
+    final_failure_type: sourceAttempt.failure_type,
     total_elapsed_ms: totalElapsed,
     content_length: contentLength,
     is_structured_lesson: isLesson,
@@ -408,12 +430,12 @@ function buildAuditFromHistory(
     dedup_loss_pct: dedLossPct,
     raw_to_final_ratio: rawToFinal,
     yield_quality_flag: computeYieldQualityFlag(
-      lastAttempt.raw_item_count, lastAttempt.validated_count,
-      lastAttempt.deduped_count, lastAttempt.ki_count
+      sourceAttempt.raw_item_count, sourceAttempt.validated_count,
+      sourceAttempt.deduped_count, sourceAttempt.ki_count
     ),
-    base_floor: floorDetails?.base ?? lastAttempt.min_ki_floor,
-    density_adjusted_floor: floorDetails?.densityAdjusted ?? lastAttempt.min_ki_floor,
-    final_floor: floorDetails?.final ?? lastAttempt.min_ki_floor,
+    base_floor: floorDetails?.base ?? sourceAttempt.min_ki_floor,
+    density_adjusted_floor: floorDetails?.densityAdjusted ?? sourceAttempt.min_ki_floor,
+    final_floor: floorDetails?.final ?? sourceAttempt.min_ki_floor,
   };
 
   // ── Validate before returning ──
