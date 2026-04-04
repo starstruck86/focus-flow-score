@@ -1,6 +1,7 @@
 /**
  * NeedsAttentionQueue — Prioritized operational queue for resources needing intervention.
- * Groups by issue type, shows counts, reasons, and quick actions.
+ * Groups by issue type, shows counts, reasons, quick actions, and bulk-fix opportunities.
+ * Items sorted by severity within each group.
  */
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -8,10 +9,10 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   XCircle, AlertTriangle, Zap, TrendingDown, Clock, Shield,
-  HelpCircle, ChevronDown, ChevronRight, CheckCircle2,
+  HelpCircle, ChevronDown, ChevronRight, CheckCircle2, Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { deriveReadiness, deriveResourceInsight } from '@/lib/resourceSignal';
+import { deriveReadiness } from '@/lib/resourceSignal';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
@@ -20,9 +21,11 @@ interface QueueItem {
   resource: Resource;
   issueType: string;
   reason: string;
-  priority: number;
+  priority: number;       // group priority (1 = highest)
+  severity: number;       // within-group severity (lower = more urgent)
   actionLabel: string;
   actionKey: string;
+  bulkEligible: boolean;
 }
 
 interface QueueGroup {
@@ -31,6 +34,8 @@ interface QueueGroup {
   icon: React.ElementType;
   color: string;
   items: QueueItem[];
+  bulkActionLabel?: string;
+  bulkActionKey?: string;
 }
 
 interface Props {
@@ -39,6 +44,17 @@ interface Props {
   audioJobsMap?: Map<string, AudioJobRecord>;
   onAction: (action: string, resource: Resource) => void;
   onInspect: (resource: Resource) => void;
+}
+
+/** Compute a severity score for within-group sorting (lower = more urgent) */
+function computeSeverity(r: Resource, issueType: string): number {
+  const age = Date.now() - new Date(r.updated_at || r.created_at).getTime();
+  const ageHours = age / (1000 * 60 * 60);
+  // Recent items are more urgent (lower score)
+  let score = Math.min(ageHours, 720); // cap at 30 days
+  // Failed items that have been failing longer are more urgent
+  if (issueType === 'failed' && r.failure_reason) score -= 100;
+  return score;
 }
 
 export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onAction, onInspect }: Props) {
@@ -60,8 +76,10 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       if (r.enrichment_status === 'failed') {
         failed.push({
           resource: r, issueType: 'failed', priority: 1,
+          severity: computeSeverity(r, 'failed'),
           reason: r.failure_reason || 'Extraction failed',
           actionLabel: 'Retry', actionKey: 'deep_enrich',
+          bulkEligible: true,
         });
       }
 
@@ -69,8 +87,10 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       if (lc.blocked === 'empty_content') {
         missingContent.push({
           resource: r, issueType: 'missing_content', priority: 2,
+          severity: computeSeverity(r, 'missing_content'),
           reason: 'No content available for processing',
           actionLabel: 'Re-enrich', actionKey: 're_enrich',
+          bulkEligible: true,
         });
       }
 
@@ -78,8 +98,10 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       if (lc.blocked === 'no_extraction' && r.enrichment_status !== 'failed') {
         needsExtraction.push({
           resource: r, issueType: 'needs_extraction', priority: 3,
+          severity: computeSeverity(r, 'needs_extraction'),
           reason: 'Content available but no knowledge extracted',
           actionLabel: 'Extract', actionKey: 'extract',
+          bulkEligible: true,
         });
       }
 
@@ -87,8 +109,10 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       if (lc.kiCount > 0 && lc.kiCount <= 2 && lc.stage !== 'operationalized') {
         lowYield.push({
           resource: r, issueType: 'low_yield', priority: 4,
+          severity: computeSeverity(r, 'low_yield'),
           reason: `Only ${lc.kiCount} KI extracted — may need inspection`,
           actionLabel: 'Inspect', actionKey: 'view',
+          bulkEligible: false,
         });
       }
 
@@ -97,8 +121,10 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       if (drift.hasDrift) {
         stale.push({
           resource: r, issueType: 'stale', priority: 5,
+          severity: computeSeverity(r, 'stale'),
           reason: drift.issues[0] || 'Version drift detected',
           actionLabel: 'Re-enrich', actionKey: 're_enrich',
+          bulkEligible: true,
         });
       }
 
@@ -106,19 +132,46 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       if (lc.blocked === 'stale_blocker_state') {
         needsReview.push({
           resource: r, issueType: 'needs_review', priority: 6,
+          severity: computeSeverity(r, 'needs_review'),
           reason: 'Stale blocked state — needs manual review',
           actionLabel: 'Review', actionKey: 'view',
+          bulkEligible: false,
         });
       }
     }
 
+    // Sort each group by severity (most urgent first)
+    const sortBySeverity = (items: QueueItem[]) => items.sort((a, b) => a.severity - b.severity);
+
     const groups: QueueGroup[] = [];
-    if (failed.length > 0) groups.push({ type: 'failed', label: 'Failed Extractions', icon: XCircle, color: 'text-destructive', items: failed });
-    if (missingContent.length > 0) groups.push({ type: 'missing_content', label: 'Missing Content', icon: AlertTriangle, color: 'text-destructive', items: missingContent });
-    if (needsExtraction.length > 0) groups.push({ type: 'needs_extraction', label: 'Needs Extraction', icon: Zap, color: 'text-amber-600', items: needsExtraction });
-    if (lowYield.length > 0) groups.push({ type: 'low_yield', label: 'Low Yield', icon: TrendingDown, color: 'text-amber-600', items: lowYield });
-    if (stale.length > 0) groups.push({ type: 'stale', label: 'Stale / Drifted', icon: Clock, color: 'text-amber-600', items: stale });
-    if (needsReview.length > 0) groups.push({ type: 'needs_review', label: 'Needs Review', icon: HelpCircle, color: 'text-amber-600', items: needsReview });
+    if (failed.length > 0) groups.push({
+      type: 'failed', label: 'Failed Extractions', icon: XCircle, color: 'text-destructive',
+      items: sortBySeverity(failed),
+      bulkActionLabel: `Retry All ${failed.length}`, bulkActionKey: 'bulk_retry',
+    });
+    if (missingContent.length > 0) groups.push({
+      type: 'missing_content', label: 'Missing Content', icon: AlertTriangle, color: 'text-destructive',
+      items: sortBySeverity(missingContent),
+      bulkActionLabel: `Re-enrich All ${missingContent.length}`, bulkActionKey: 'bulk_re_enrich',
+    });
+    if (needsExtraction.length > 0) groups.push({
+      type: 'needs_extraction', label: 'Needs Extraction', icon: Zap, color: 'text-amber-600',
+      items: sortBySeverity(needsExtraction),
+      bulkActionLabel: `Extract All ${needsExtraction.length}`, bulkActionKey: 'bulk_extract',
+    });
+    if (lowYield.length > 0) groups.push({
+      type: 'low_yield', label: 'Low Yield', icon: TrendingDown, color: 'text-amber-600',
+      items: sortBySeverity(lowYield),
+    });
+    if (stale.length > 0) groups.push({
+      type: 'stale', label: 'Stale / Drifted', icon: Clock, color: 'text-amber-600',
+      items: sortBySeverity(stale),
+      bulkActionLabel: `Re-enrich All ${stale.length}`, bulkActionKey: 'bulk_re_enrich',
+    });
+    if (needsReview.length > 0) groups.push({
+      type: 'needs_review', label: 'Needs Review', icon: HelpCircle, color: 'text-amber-600',
+      items: sortBySeverity(needsReview),
+    });
 
     return groups;
   }, [resources, lifecycleMap]);
@@ -142,6 +195,10 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
     );
   }
 
+  // Top-level urgency summary
+  const urgentCount = groups.filter(g => g.type === 'failed' || g.type === 'missing_content').reduce((s, g) => s + g.items.length, 0);
+  const fixableCount = groups.reduce((s, g) => s + g.items.filter(i => i.bulkEligible).length, 0);
+
   return (
     <div className="border border-border rounded-lg overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b border-border">
@@ -149,6 +206,14 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
           <Shield className="h-3.5 w-3.5 text-foreground" />
           <span className="text-xs font-semibold text-foreground">Needs Attention</span>
           <Badge variant="secondary" className="text-[9px] h-4">{totalItems}</Badge>
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+          {urgentCount > 0 && (
+            <span className="text-destructive font-medium">{urgentCount} urgent</span>
+          )}
+          {fixableCount > 0 && (
+            <span>· {fixableCount} bulk-fixable</span>
+          )}
         </div>
       </div>
       <ScrollArea className="max-h-[400px]">
@@ -169,6 +234,23 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
                 </button>
                 {isExpanded && (
                   <div className="pb-1">
+                    {/* Bulk action bar */}
+                    {group.bulkActionLabel && group.items.length > 1 && (
+                      <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/20 border-b border-border/50">
+                        <Layers className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-[10px] text-muted-foreground flex-1">
+                          {group.items.filter(i => i.bulkEligible).length} items can be fixed in bulk
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[10px] px-2"
+                          onClick={() => onAction(group.bulkActionKey!, group.items[0].resource)}
+                        >
+                          {group.bulkActionLabel}
+                        </Button>
+                      </div>
+                    )}
                     {group.items.slice(0, 10).map(item => (
                       <div key={item.resource.id} className="flex items-center gap-2 px-4 py-1.5 hover:bg-muted/20 transition-colors">
                         <button
