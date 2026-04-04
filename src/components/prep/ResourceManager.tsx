@@ -60,6 +60,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
+import { AppFreshnessBar } from './AppFreshnessBar';
 
 type PendingItem = {
   id: string;
