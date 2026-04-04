@@ -331,6 +331,26 @@ interface ExtractionAuditSummary {
   content_length: number;
   is_structured_lesson: boolean;
   completed_at: string;
+  // Yield diagnostics
+  validation_loss_pct: number;
+  dedup_loss_pct: number;
+  raw_to_final_ratio: number;
+  yield_quality_flag: 'high_loss_validation' | 'high_loss_dedup' | 'over_extracted' | 'expected';
+  base_floor: number;
+  density_adjusted_floor: number;
+  final_floor: number;
+}
+
+/** Compute yield quality flag from attempt metrics */
+function computeYieldQualityFlag(
+  rawCount: number, validatedCount: number, dedupedCount: number, kiCount: number
+): 'high_loss_validation' | 'high_loss_dedup' | 'over_extracted' | 'expected' {
+  const valLoss = rawCount > 0 ? (rawCount - validatedCount) / rawCount : 0;
+  const dedLoss = validatedCount > 0 ? (validatedCount - dedupedCount) / validatedCount : 0;
+  if (valLoss > 0.5) return 'high_loss_validation';
+  if (dedLoss > 0.3) return 'high_loss_dedup';
+  if (valLoss < 0.1 && dedLoss < 0.1 && kiCount > 12) return 'over_extracted';
+  return 'expected';
 }
 
 /** Build audit summary from actual persisted attempt history */
@@ -339,6 +359,7 @@ function buildAuditFromHistory(
   finalStatus: string,
   contentLength: number,
   isLesson: boolean,
+  floorDetails?: { base: number; densityAdjusted: number; final: number },
 ): ExtractionAuditSummary | null {
   if (attemptHistory.length === 0) return null;
 
@@ -346,18 +367,35 @@ function buildAuditFromHistory(
   const strategies = [...new Set(attemptHistory.map(a => a.strategy))];
   const totalElapsed = attemptHistory.reduce((sum, a) => sum + a.duration_ms, 0);
 
+  const valLossPct = lastAttempt.raw_item_count > 0
+    ? Math.round(((lastAttempt.raw_item_count - lastAttempt.validated_count) / lastAttempt.raw_item_count) * 100) : 0;
+  const dedLossPct = lastAttempt.validated_count > 0
+    ? Math.round(((lastAttempt.validated_count - lastAttempt.deduped_count) / lastAttempt.validated_count) * 100) : 0;
+  const rawToFinal = lastAttempt.raw_item_count > 0
+    ? Math.round((lastAttempt.ki_count / lastAttempt.raw_item_count) * 100) / 100 : 0;
+
   const summary: ExtractionAuditSummary = {
     total_attempts: attemptHistory.length,
     strategies_used: strategies,
     final_ki_count: lastAttempt.ki_count,
     min_ki_floor: lastAttempt.min_ki_floor,
-    floor_met: lastAttempt.floor_met,
+    floor_met: lastAttempt.ki_count >= lastAttempt.min_ki_floor,
     final_status: finalStatus,
     final_failure_type: lastAttempt.failure_type,
     total_elapsed_ms: totalElapsed,
     content_length: contentLength,
     is_structured_lesson: isLesson,
     completed_at: new Date().toISOString(),
+    validation_loss_pct: valLossPct,
+    dedup_loss_pct: dedLossPct,
+    raw_to_final_ratio: rawToFinal,
+    yield_quality_flag: computeYieldQualityFlag(
+      lastAttempt.raw_item_count, lastAttempt.validated_count,
+      lastAttempt.deduped_count, lastAttempt.ki_count
+    ),
+    base_floor: floorDetails?.base ?? lastAttempt.min_ki_floor,
+    density_adjusted_floor: floorDetails?.densityAdjusted ?? lastAttempt.min_ki_floor,
+    final_floor: floorDetails?.final ?? lastAttempt.min_ki_floor,
   };
 
   // ── Validate before returning ──
@@ -1045,36 +1083,49 @@ function wordOverlap(a: string, b: string): number {
 // ═══════════════════════════════════════════
 
 function computeMinKiFloor(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }): number {
-  if (contentLength < 500) return 0;
+  const details = computeMinKiFloorDetailed(contentLength, isLesson, densitySignals);
+  return details.final;
+}
 
-  // Density-aware boost: if title enumerates N items, floor = ~40% of N (at least base floor)
-  if (densitySignals?.isDense) {
-    const baseFloor = isLesson
-      ? (contentLength < 2000 ? 3 : contentLength < 5000 ? 5 : contentLength < 10000 ? 8 : 12)
-      : (contentLength < 2000 ? 1 : contentLength < 5000 ? 2 : 3);
+/** Returns base, density-adjusted, and final floor with logging */
+function computeMinKiFloorDetailed(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }): { base: number; densityAdjusted: number; final: number } {
+  if (contentLength < 500) return { base: 0, densityAdjusted: 0, final: 0 };
 
-    if (densitySignals.enumeratedCount >= 5) {
-      // Title says "17 takeaways" → floor = max(base, ~40% of 17 ≈ 7)
-      const densityFloor = Math.max(Math.floor(densitySignals.enumeratedCount * 0.4), baseFloor);
-      return Math.min(densityFloor, 15); // cap at 15 to avoid unreasonable floors
-    }
-    if (densitySignals.sectionCount >= 7) {
-      // Many sections → floor = max(base, ~50% of section count)
-      const sectionFloor = Math.max(Math.floor(densitySignals.sectionCount * 0.5), baseFloor);
-      return Math.min(sectionFloor, 12);
-    }
-    return baseFloor;
-  }
-
+  // Base floor (no density adjustment)
+  let baseFloor: number;
   if (isLesson) {
-    if (contentLength < 2000) return 3;
-    if (contentLength < 5000) return 5;
-    if (contentLength < 10000) return 8;
-    return 12;
+    baseFloor = contentLength < 2000 ? 3 : contentLength < 5000 ? 5 : contentLength < 10000 ? 8 : 12;
+  } else {
+    // Non-lesson: conservative floors — single-topic transcripts should not be forced to retry
+    baseFloor = contentLength < 4000 ? 1 : contentLength < 8000 ? 2 : 3;
   }
-  if (contentLength < 2000) return 1;
-  if (contentLength < 5000) return 2;
-  return 3;
+
+  if (!densitySignals?.isDense) {
+    console.log(`[extract-floor] base=${baseFloor} density=none final=${baseFloor}`);
+    return { base: baseFloor, densityAdjusted: baseFloor, final: baseFloor };
+  }
+
+  let densityAdjusted = baseFloor;
+  if (densitySignals.enumeratedCount >= 5) {
+    densityAdjusted = Math.max(Math.floor(densitySignals.enumeratedCount * 0.4), baseFloor);
+    densityAdjusted = Math.min(densityAdjusted, 15);
+  } else if (densitySignals.sectionCount >= 7) {
+    densityAdjusted = Math.max(Math.floor(densitySignals.sectionCount * 0.5), baseFloor);
+    densityAdjusted = Math.min(densityAdjusted, 12);
+  }
+
+  console.log(`[extract-floor] base=${baseFloor} densityAdjusted=${densityAdjusted} final=${densityAdjusted} (enum=${densitySignals.enumeratedCount} sections=${densitySignals.sectionCount})`);
+  return { base: baseFloor, densityAdjusted, final: densityAdjusted };
+}
+
+/** Check if resource already has valid KIs from a prior successful extraction */
+async function hasExistingValidKIs(supabase: any, resourceId: string, minFloor: number): Promise<{ hasKIs: boolean; count: number }> {
+  const { count } = await supabase
+    .from('knowledge_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('source_resource_id', resourceId);
+  const kiCount = count ?? 0;
+  return { hasKIs: kiCount >= minFloor && kiCount > 0, count: kiCount };
 }
 
 // ═══════════════════════════════════════════
@@ -1082,8 +1133,25 @@ function computeMinKiFloor(contentLength: number, isLesson: boolean, densitySign
 // ═══════════════════════════════════════════
 
 async function updateExtractionStatus(supabase: any, resourceId: string, status: string, extraFields?: Record<string, any>) {
+  let finalStatus = status;
+
+  // ── Guard: protect existing successful extraction from degradation ──
+  // If we're about to mark as failed/review but valid KIs exist from a prior success, keep 'extracted'
+  if (['extraction_requires_review', 'extraction_failed'].includes(status)) {
+    const { hasKIs, count } = await hasExistingValidKIs(supabase, resourceId, 1);
+    if (hasKIs) {
+      console.log(`[extract] 🛡️ Protecting existing extraction: ${count} valid KIs found for "${resourceId}" — keeping 'extracted' instead of '${status}'`);
+      finalStatus = 'extracted';
+      // Clear failure fields since we're restoring success
+      if (extraFields) {
+        extraFields.extraction_failure_type = null;
+        extraFields.extraction_retry_eligible = false;
+      }
+    }
+  }
+
   const updatePayload: Record<string, any> = {
-    enrichment_status: status,
+    enrichment_status: finalStatus,
     updated_at: new Date().toISOString(),
     ...extraFields,
   };
@@ -1267,7 +1335,7 @@ Deno.serve(async (req) => {
         // Only persist audit summary on terminal states
         if (!retryEligible) {
           const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson);
+          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson, typeof floorDetails !== 'undefined' ? floorDetails : undefined);
           if (audit) auditFields.extraction_audit_summary = audit;
         }
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
@@ -1368,8 +1436,20 @@ Deno.serve(async (req) => {
     }
 
     // ── 6. Quality threshold gate + post-extraction invariant ──
-    const minKiFloor = computeMinKiFloor(resource.content.length, isLesson, densitySignals);
+    const floorDetails = computeMinKiFloorDetailed(resource.content.length, isLesson, densitySignals);
+    const minKiFloor = floorDetails.final;
     const durationMs = Date.now() - startTime;
+
+    // ── Yield diagnostics logging ──
+    const valLossPct = normalized.length > 0 ? Math.round(((normalized.length - validated.length) / normalized.length) * 100) : 0;
+    const dedLossPct = validated.length > 0 ? Math.round(((validated.length - deduped.length) / validated.length) * 100) : 0;
+    const yieldFlag = computeYieldQualityFlag(rawItems.length, validated.length, deduped.length, deduped.length);
+    console.log(`[extract-yield] "${resource.title}" | raw=${rawItems.length} val=${validated.length} ded=${deduped.length} | valLoss=${valLossPct}% dedLoss=${dedLossPct}% | floor=${minKiFloor} (base=${floorDetails.base} density=${floorDetails.densityAdjusted}) | flag=${yieldFlag}`);
+
+    // Over-extraction safeguard logging
+    if (valLossPct < 10 && dedLossPct < 10 && deduped.length > 12) {
+      console.warn(`[extract-yield] ⚠️ OVER-EXTRACTION RISK: "${resource.title}" — ${deduped.length} KIs with <10% loss at both gates`);
+    }
 
     if (deduped.length < 1) {
       const failureType = classifyFailure(null, 0, minKiFloor, rawItems.length, validated.length);
@@ -1404,7 +1484,7 @@ Deno.serve(async (req) => {
         };
         if (!retryEligible) {
           const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson);
+          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson, typeof floorDetails !== 'undefined' ? floorDetails : undefined);
           if (audit) auditFields.extraction_audit_summary = audit;
         }
         await saveExtractionLog(supabase, log);
@@ -1457,7 +1537,7 @@ Deno.serve(async (req) => {
         };
         if (!retryEligible) {
           const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson);
+          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson, typeof floorDetails !== 'undefined' ? floorDetails : undefined);
           if (audit) auditFields.extraction_audit_summary = audit;
         }
         await saveExtractionLog(supabase, log);
@@ -1557,7 +1637,7 @@ Deno.serve(async (req) => {
       await persistAttemptRecord(supabase, resourceId, resource.user_id, thisAttempt);
 
       const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-      const audit = buildAuditFromHistory(fullHistory, 'extraction_failed', resource.content.length, isLesson);
+      const audit = buildAuditFromHistory(fullHistory, 'extraction_failed', resource.content.length, isLesson, typeof floorDetails !== 'undefined' ? floorDetails : undefined);
 
       await updateExtractionStatus(supabase, resourceId, 'extraction_failed', {
         extraction_attempt_count: attemptNumber,
@@ -1571,21 +1651,34 @@ Deno.serve(async (req) => {
       return respond({ resourceId, title: resource.title, kis: 0, error: `Insert failed: ${insertError.message}`, log });
     }
 
-    // ── SUCCESS: reset retry tracking ──
+    // ── SUCCESS: verify actual DB state before committing status ──
+    const { count: actualKiCount } = await supabase
+      .from('knowledge_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('source_resource_id', resourceId);
+
+    const expectedCount = rows.length + userEditedCount;
+    if (actualKiCount !== null && actualKiCount !== expectedCount) {
+      console.warn(`[extract] ⚠️ KI count mismatch: expected ${expectedCount} (${rows.length} new + ${userEditedCount} edited), actual DB=${actualKiCount}`);
+    }
+
+    // Use actual DB count as the canonical ki_count for audit
+    const canonicalKiCount = actualKiCount ?? rows.length;
+
     log.insertedCount = rows.length;
     log.outcome = 'success';
     await saveExtractionLog(supabase, log);
 
     // Persist final success attempt record to table
     const successAttempt = buildAttemptRecord({
-      attemptNumber, strategy, kiCount: rows.length, rawItemCount: rawItems.length,
+      attemptNumber, strategy, kiCount: canonicalKiCount, rawItemCount: rawItems.length,
       validatedCount: validated.length, dedupedCount: deduped.length,
       minKiFloor, failureType: null, status: 'extracted', durationMs, startedAt,
     });
     await persistAttemptRecord(supabase, resourceId, resource.user_id, successAttempt);
 
     const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-    const successAudit = buildAuditFromHistory(fullHistory, 'extracted', resource.content.length, isLesson);
+    const successAudit = buildAuditFromHistory(fullHistory, 'extracted', resource.content.length, isLesson, floorDetails);
 
     await updateExtractionStatus(supabase, resourceId, 'extracted', {
       extraction_attempt_count: attemptNumber,
@@ -1599,12 +1692,12 @@ Deno.serve(async (req) => {
 
     logTelemetry({
       resource_id: resourceId, title: resource.title, content_length: resource.content.length,
-      is_structured_lesson: isLesson, ki_count: rows.length, min_ki_floor: minKiFloor,
+      is_structured_lesson: isLesson, ki_count: canonicalKiCount, min_ki_floor: minKiFloor,
       attempt_number: attemptNumber, extractor_strategy: strategy, failure_reason: null,
       duration_ms: durationMs, routing_basis: routingBasis,
     });
 
-    console.log(`[extract] ✅ "${resource.title}": ${rows.length} KIs inserted (attempt ${attemptNumber}, strategy=${strategy}, ${userEditedCount} user-edited preserved)`);
+    console.log(`[extract] ✅ "${resource.title}": ${rows.length} KIs inserted, ${canonicalKiCount} total (attempt ${attemptNumber}, strategy=${strategy}, ${userEditedCount} user-edited preserved)`);
 
     return respond({ resourceId, title: resource.title, kis: rows.length, preservedUserEdited: userEditedCount, attemptNumber, strategy, log });
   } catch (error: any) {
