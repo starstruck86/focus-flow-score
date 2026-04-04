@@ -233,7 +233,7 @@ Deno.serve(async (req) => {
     for (const item of items) {
       try {
         const resource = resourceMap.get(item.resource_id);
-        const route = resource ? deriveRoute(resource) : { pipeline: "enrich_then_extract" as Pipeline, extraction_method: "standard" };
+        const route = resource ? deriveRoute(resource) : { pipeline: "enrich_then_extract" as Pipeline, extraction_method: "standard", primary_asset: "url" as AssetKind };
 
         let outcome: Record<string, any> = {
           phase,
