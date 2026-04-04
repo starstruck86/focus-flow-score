@@ -404,6 +404,7 @@ export function ResourceLibraryTable({
           lifecycleMap={lifecycleMap}
           audioJobsMap={audioJobsMap}
           onAction={onAction}
+          onBulkAction={onBulkAction}
           onInspect={(r) => isMobile ? setMobileInspectId(r.id) : setExpandedId(r.id)}
         />
       </div>
