@@ -148,7 +148,7 @@ async function persistAttemptRecord(supabase: any, resourceId: string, userId: s
 async function fetchAttemptHistory(supabase: any, resourceId: string): Promise<AttemptRecord[]> {
   const { data, error } = await supabase
     .from('resource_extraction_attempts')
-    .select('attempt_number, strategy, ki_count, raw_item_count, validated_count, deduped_count, min_ki_floor, floor_met, failure_type, status, duration_ms, started_at, completed_at')
+    .select('attempt_number, strategy, ki_count, raw_item_count, validated_count, deduped_count, min_ki_floor, floor_met, failure_type, status, duration_ms, started_at, completed_at, confidence_score')
     .eq('resource_id', resourceId)
     .order('attempt_number', { ascending: true });
   if (error) {
