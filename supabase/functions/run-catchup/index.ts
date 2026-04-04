@@ -26,6 +26,8 @@ const PHASE_BUCKETS: Record<Phase, string[]> = {
 // ── Asset-aware server-side route derivation ──────────────
 type Pipeline = "transcript_pipeline" | "enrich_then_extract" | "direct_extract" | "manual_assist";
 type AssetKind = "lesson_text" | "transcript_text" | "parsed_content" | "manual_text" | "audio_file" | "video_file" | "uploaded_file" | "url";
+type ExtractionMethod = "standard" | "dense_teaching" | "lesson" | "summary_first";
+type RouteConfidence = "high" | "medium" | "low";
 
 const ASSET_PRIORITY: AssetKind[] = [
   "lesson_text", "transcript_text", "parsed_content", "manual_text",
@@ -36,7 +38,22 @@ function hasTextAsset(a: AssetKind): boolean {
   return a === "lesson_text" || a === "transcript_text" || a === "parsed_content" || a === "manual_text";
 }
 
-function deriveRoute(resource: any): { pipeline: Pipeline; extraction_method: string; primary_asset: AssetKind } {
+interface RouteOverride {
+  pipeline?: Pipeline;
+  extraction_method?: ExtractionMethod;
+  primary_asset?: AssetKind;
+  reason?: string;
+}
+
+interface DerivedRoute {
+  pipeline: Pipeline;
+  extraction_method: ExtractionMethod;
+  primary_asset: AssetKind;
+  confidence: RouteConfidence;
+  has_override: boolean;
+}
+
+function deriveRoute(resource: any): DerivedRoute {
   const url = resource.file_url || "";
   const resourceType = resource.resource_type || "";
   const title = resource.title || "";
@@ -89,7 +106,7 @@ function deriveRoute(resource: any): { pipeline: Pipeline; extraction_method: st
   }
 
   // Extraction method
-  let extraction_method = "standard";
+  let extraction_method: ExtractionMethod = "standard";
   if (isLesson) {
     extraction_method = "lesson";
   } else if (contentLength > 8000 || (contentLength > 10000 && (isAudio || isVideo))) {
@@ -98,7 +115,44 @@ function deriveRoute(resource: any): { pipeline: Pipeline; extraction_method: st
     extraction_method = "summary_first";
   }
 
-  return { pipeline, extraction_method, primary_asset };
+  // Outcome-aware learning: avoid repeated failures
+  if (enrichmentStatus === "failed" && failureCount >= 2) {
+    if ((isAudio || isVideo) && pipeline === "transcript_pipeline") {
+      pipeline = "manual_assist";
+    } else if (pipeline === "enrich_then_extract") {
+      pipeline = "manual_assist";
+    }
+  }
+
+  // Confidence
+  let confidence: RouteConfidence;
+  if (hasTextAsset(primary_asset) && contentLength > 2000) {
+    confidence = "high";
+  } else if (hasTextAsset(primary_asset) || primary_asset === "audio_file" || primary_asset === "video_file") {
+    confidence = "medium";
+  } else if (primary_asset === "url" && enrichmentStatus === "deep_enriched") {
+    confidence = "medium";
+  } else {
+    confidence = "low";
+  }
+
+  if (failureCount >= 3 && confidence === "high") {
+    confidence = "medium";
+  }
+
+  let has_override = false;
+
+  // Apply route override
+  const override = resource.route_override as RouteOverride | undefined;
+  if (override) {
+    has_override = true;
+    if (override.pipeline) pipeline = override.pipeline;
+    if (override.extraction_method) extraction_method = override.extraction_method;
+    if (override.primary_asset && assets.includes(override.primary_asset)) primary_asset = override.primary_asset;
+    confidence = "high";
+  }
+
+  return { pipeline, extraction_method, primary_asset, confidence, has_override };
 }
 
 Deno.serve(async (req) => {
