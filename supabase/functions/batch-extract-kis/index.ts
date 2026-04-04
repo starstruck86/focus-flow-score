@@ -49,12 +49,29 @@ type ExtractionFailureType =
   | 'model_failure'          // empty or malformed response
   | 'structural_failure';    // bad content / ingestion issue
 
-function classifyFailure(error: any, kiCount: number, minFloor: number, rawItemCount: number): ExtractionFailureType {
+function classifyFailure(
+  error: any, kiCount: number, minFloor: number, rawItemCount: number,
+  validatedCount?: number
+): ExtractionFailureType {
   const msg = (error?.message || error || '').toString().toLowerCase();
 
   // Network/timeout/rate-limit → transient
   if (msg.includes('timeout') || msg.includes('429') || msg.includes('503') || msg.includes('network') || msg.includes('econnrefused')) {
     return 'transient_error';
+  }
+
+  // Content too short or structurally broken
+  if (msg.includes('content too short') || msg.includes('no content')) {
+    return 'structural_failure';
+  }
+
+  // Segmentation failure: AI produced items but validation/dedup killed most of them
+  // This indicates the AI's chunking/structuring was poor, not that the content is bad
+  if (rawItemCount >= 5 && typeof validatedCount === 'number') {
+    const validationDropout = 1 - (validatedCount / rawItemCount);
+    if (validationDropout > 0.7) {
+      return 'segmentation_failure';
+    }
   }
 
   // Got items but below floor → under_floor
@@ -72,13 +89,36 @@ function classifyFailure(error: any, kiCount: number, minFloor: number, rawItemC
     return 'model_failure';
   }
 
-  // Content too short or structurally broken
-  if (msg.includes('content too short') || msg.includes('no content')) {
-    return 'structural_failure';
-  }
-
   // Default: transient (optimistic — allows retry)
   return 'transient_error';
+}
+
+// ═══════════════════════════════════════════
+// Auto-retry: fire-and-forget self-invocation
+// ═══════════════════════════════════════════
+
+async function scheduleRetry(supabaseUrl: string, serviceRoleKey: string, resourceId: string, delayMs = 2000) {
+  // Brief delay to avoid hammering the AI gateway
+  await new Promise(r => setTimeout(r, delayMs));
+
+  const url = `${supabaseUrl}/functions/v1/batch-extract-kis`;
+  console.log(`[extract-retry] 🔁 Auto-retrying "${resourceId}" via self-invocation`);
+
+  try {
+    // Fire-and-forget — we don't await the full response
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({ resourceId }),
+    }).catch(err => {
+      console.error(`[extract-retry] Auto-retry fetch failed for "${resourceId}": ${err?.message}`);
+    });
+  } catch (err: any) {
+    console.error(`[extract-retry] Failed to schedule retry for "${resourceId}": ${err?.message}`);
+  }
 }
 
 // Strategy selection based on attempt number and failure type
@@ -913,7 +953,7 @@ Deno.serve(async (req) => {
         duration_ms: Date.now() - startTime, routing_basis: routingBasis,
       });
 
-      // Update with retry tracking
+      // Update with retry tracking + auto-retry
       const retryEligible = attemptNumber < maxAttempts && failureType !== 'structural_failure';
       const newStatus = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
 
@@ -924,6 +964,11 @@ Deno.serve(async (req) => {
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
         });
+
+        // Auto-retry: fire-and-forget next attempt
+        if (retryEligible) {
+          scheduleRetry(supabaseUrl, serviceRoleKey, resourceId);
+        }
       }
 
       return respond({
@@ -1019,7 +1064,7 @@ Deno.serve(async (req) => {
     const durationMs = Date.now() - startTime;
 
     if (deduped.length < 1) {
-      const failureType = classifyFailure(null, 0, minKiFloor, rawItems.length);
+      const failureType = classifyFailure(null, 0, minKiFloor, rawItems.length, validated.length);
       log.outcome = isDryRun ? 'benchmark_below_threshold' : 'below_threshold';
       log.failureType = failureType;
 
@@ -1040,6 +1085,11 @@ Deno.serve(async (req) => {
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
         });
+
+        // Auto-retry: fire-and-forget next attempt
+        if (retryEligible) {
+          scheduleRetry(supabaseUrl, serviceRoleKey, resourceId);
+        }
       }
       console.log(`[extract] ⚠️ "${resource.title}": 0 items — attempt ${attemptNumber}/${maxAttempts}`);
       return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold', attemptNumber, strategy, log, benchmarkMode: isDryRun });
@@ -1071,6 +1121,11 @@ Deno.serve(async (req) => {
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
         });
+
+        // Auto-retry: fire-and-forget next attempt
+        if (retryEligible) {
+          scheduleRetry(supabaseUrl, serviceRoleKey, resourceId);
+        }
       }
       return respond({ resourceId, title: resource.title, kis: 0, error: invariantMsg, attemptNumber, strategy, failureType, log, benchmarkMode: isDryRun });
     }

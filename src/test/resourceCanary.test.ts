@@ -365,13 +365,18 @@ function selectStrategy(attemptNumber: number, lastFailureType?: ExtractionFailu
   return 'summary_first';
 }
 
-function classifyFailure(error: any, kiCount: number, minFloor: number, rawItemCount: number): ExtractionFailureType {
+function classifyFailure(error: any, kiCount: number, minFloor: number, rawItemCount: number, validatedCount?: number): ExtractionFailureType {
   const msg = (error?.message || error || '').toString().toLowerCase();
   if (msg.includes('timeout') || msg.includes('429') || msg.includes('503') || msg.includes('network')) return 'transient_error';
+  if (msg.includes('content too short') || msg.includes('no content')) return 'structural_failure';
+  // Segmentation failure: AI produced items but validation killed most
+  if (rawItemCount >= 5 && typeof validatedCount === 'number') {
+    const validationDropout = 1 - (validatedCount / rawItemCount);
+    if (validationDropout > 0.7) return 'segmentation_failure';
+  }
   if (kiCount > 0 && kiCount < minFloor) return 'under_floor_invariant';
   if (rawItemCount === 0 && !msg) return 'model_failure';
   if (msg.includes('ai error') || msg.includes('parse')) return 'model_failure';
-  if (msg.includes('content too short') || msg.includes('no content')) return 'structural_failure';
   return 'transient_error';
 }
 
@@ -430,6 +435,18 @@ describe('Failure Classification Canary', () => {
 
   it('content issues → structural_failure', () => {
     expect(classifyFailure({ message: 'Content too short' }, 0, 5, 0)).toBe('structural_failure');
+  });
+
+  it('high validation dropout → segmentation_failure', () => {
+    // 10 raw items, only 2 validated = 80% dropout → segmentation
+    expect(classifyFailure(null, 0, 5, 10, 2)).toBe('segmentation_failure');
+    // 8 raw items, only 1 validated = 87.5% dropout → segmentation
+    expect(classifyFailure(null, 0, 5, 8, 1)).toBe('segmentation_failure');
+  });
+
+  it('moderate validation dropout is NOT segmentation_failure', () => {
+    // 10 raw items, 5 validated = 50% dropout → not segmentation
+    expect(classifyFailure(null, 0, 5, 10, 5)).not.toBe('segmentation_failure');
   });
 
   it('structural_failure is the only non-retryable type', () => {
