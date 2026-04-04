@@ -151,6 +151,9 @@ export function ResourceManager() {
   const [manualAssistResource, setManualAssistResource] = useState<Resource | null>(null);
   const [drawerResource, setDrawerResource] = useState<Resource | null>(null);
   const [lastFixResult, setLastFixResult] = useState<import('@/lib/fixAllAutoBlockers').FixAllResult | null>(null);
+  const [isFixAllRunning, setIsFixAllRunning] = useState(false);
+  const [fixAllProgressMessage, setFixAllProgressMessage] = useState<string | null>(null);
+  const [externalHealthFilter, setExternalHealthFilter] = useState<string | null>(null);
 
   // AI Generate / Transform states
   const [showAIGenerate, setShowAIGenerate] = useState(false);
