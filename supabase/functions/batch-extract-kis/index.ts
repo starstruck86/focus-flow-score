@@ -1377,25 +1377,25 @@ Deno.serve(async (req) => {
         const retryEligible = attemptNumber < maxAttempts;
         const newStatus = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
 
-        // Append attempt record
+        // Persist attempt record to table
         const thisAttempt = buildAttemptRecord({
           attemptNumber, strategy, kiCount: deduped.length, rawItemCount: rawItems.length,
           validatedCount: validated.length, dedupedCount: deduped.length,
           minKiFloor, failureType, status: newStatus, durationMs, startedAt,
         });
-        const updatedHistory = [...attemptHistory, thisAttempt];
+        await persistAttemptRecord(supabase, resourceId, resource.user_id, thisAttempt);
 
         const auditFields: Record<string, any> = {
           extraction_attempt_count: attemptNumber,
           extraction_failure_type: failureType,
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
-          extraction_attempt_history: updatedHistory,
           next_retry_at: null,
           retry_scheduled_at: null,
         };
         if (!retryEligible) {
-          const audit = buildAuditFromHistory(updatedHistory, newStatus, resource.content.length, isLesson);
+          const fullHistory = await fetchAttemptHistory(supabase, resourceId);
+          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson);
           if (audit) auditFields.extraction_audit_summary = audit;
         }
         await saveExtractionLog(supabase, log);
