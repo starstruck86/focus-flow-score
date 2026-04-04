@@ -1319,7 +1319,19 @@ export function ResourceManager() {
                 }
                 case 'bulk_activate':
                 case 'bulk_activate_filtered': {
-                  toast.info('Activation runs automatically during extraction');
+                  toast.info(`Activating ${Array.isArray(resourceIds) ? resourceIds.length : 1} resources…`);
+                  try {
+                    const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
+                    const ids = Array.isArray(resourceIds) ? resourceIds : [resource.id];
+                    const results = await autoOperationalizeBatch(ids);
+                    queryClient.invalidateQueries({ queryKey: ['resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+                    const totalActivated = results.reduce((s, r) => s + (r.knowledgeActivated ?? 0), 0);
+                    toast.success(`Activated ${totalActivated} KIs`);
+                  } catch (err: any) {
+                    toast.error('Activation failed', { description: err?.message });
+                  }
                   break;
                 }
                 case 'bulk_tag':
