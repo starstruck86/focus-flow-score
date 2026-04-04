@@ -1,7 +1,7 @@
 /**
  * ResourceInspectPanel — Full redesigned inspect experience.
- * 7 sections: Identity, Pipeline Route, Quality/Trust, Downstream Eligibility,
- * Next Action, Attempt History, Source/KI Preview.
+ * 8 sections: Identity, Pipeline Route, Processing Timeline, Quality/Trust,
+ * Failure Dossier, Downstream Eligibility, Next Action, Attempt History, Source/KI Preview.
  */
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
