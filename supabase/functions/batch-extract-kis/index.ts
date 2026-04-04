@@ -499,6 +499,44 @@ function isStructuredLesson(content: string, title?: string, resourceType?: stri
   return false;
 }
 
+/**
+ * Detect dense teaching content that should receive relaxed validation
+ * even if it doesn't qualify as a structured lesson.
+ * Signals: enumerated titles, numbered sections, multiple takeaways/components.
+ */
+function isDenseTeachingContent(content: string, title: string): boolean {
+  const lower = content.toLowerCase();
+  const titleLower = title.toLowerCase();
+
+  // Title signals: "N takeaways", "N components", "N rules", etc.
+  const enumeratedTitle = /\b(\d{2,}|[5-9])\s+(takeaway|component|rule|principle|lesson|tip|step|key|thing|habit|trait|strategy|tactic|technique|mistake|way|secret|sign|signal|method|insight|idea|framework)/i.test(title);
+
+  // Content density: many numbered sections or headers
+  const numberedSections = (content.match(/^#{1,3}\s/gm) || []).length;
+  const numberedLists = (content.match(/^\s*\d+[.)]\s/gm) || []).length;
+
+  // Strong signal: title explicitly enumerates
+  if (enumeratedTitle) return true;
+
+  // Moderate signal: heavily structured content (7+ sections or 10+ numbered items)
+  if (numberedSections >= 7 || numberedLists >= 10) return true;
+
+  // Pattern: "critical components", "key takeaways", etc. in title
+  if (/\b(critical|key|essential|important|top|best|worst|biggest)\s+(component|takeaway|lesson|principle|rule|tip|step|factor|element|habit|mistake)/i.test(titleLower)) return true;
+
+  return false;
+}
+
+/** Compute content density score for floor boosting */
+function computeDensitySignals(content: string, title: string): { enumeratedCount: number; sectionCount: number; isDense: boolean } {
+  // Extract the number from titles like "17 Takeaways..."
+  const titleMatch = title.match(/\b(\d+)\s+(takeaway|component|rule|principle|lesson|tip|step|key|thing|habit|trait|strategy|tactic|technique|mistake|way|secret|sign|signal|method|insight|idea|framework)/i);
+  const enumeratedCount = titleMatch ? parseInt(titleMatch[1], 10) : 0;
+  const sectionCount = (content.match(/^#{1,3}\s/gm) || []).length;
+  const isDense = enumeratedCount >= 5 || sectionCount >= 7;
+  return { enumeratedCount, sectionCount, isDense };
+}
+
 function decodeHTMLEntities(text: string): string {
   return text
     .replace(/&ldquo;/g, '\u201C').replace(/&rdquo;/g, '\u201D')
@@ -886,14 +924,15 @@ function normalizeArray(v: any, fallback: string[]): string[] {
 // Validation
 // ═══════════════════════════════════════════
 
-function validateItem(item: any, isLesson: boolean): string[] {
+function validateItem(item: any, isLesson: boolean, isDenseContent = false): string[] {
   const reasons: string[] = [];
   const title = (item.title || '').trim();
   const summary = (item.tactic_summary || '').trim();
 
   if (!title || title.length < 5) reasons.push('title too short');
 
-  if (!isLesson) {
+  // Verb-led requirement: skip for lessons AND dense teaching content
+  if (!isLesson && !isDenseContent) {
     const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|surface|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|seed|earn|secure|protect|defend|block|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i;
     if (!verbLedPattern.test(title)) reasons.push('title not actionable');
   }
@@ -1005,8 +1044,28 @@ function wordOverlap(a: string, b: string): number {
 // Post-extraction invariant: minimum KI floor
 // ═══════════════════════════════════════════
 
-function computeMinKiFloor(contentLength: number, isLesson: boolean): number {
+function computeMinKiFloor(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }): number {
   if (contentLength < 500) return 0;
+
+  // Density-aware boost: if title enumerates N items, floor = ~40% of N (at least base floor)
+  if (densitySignals?.isDense) {
+    const baseFloor = isLesson
+      ? (contentLength < 2000 ? 3 : contentLength < 5000 ? 5 : contentLength < 10000 ? 8 : 12)
+      : (contentLength < 2000 ? 1 : contentLength < 5000 ? 2 : 3);
+
+    if (densitySignals.enumeratedCount >= 5) {
+      // Title says "17 takeaways" → floor = max(base, ~40% of 17 ≈ 7)
+      const densityFloor = Math.max(Math.floor(densitySignals.enumeratedCount * 0.4), baseFloor);
+      return Math.min(densityFloor, 15); // cap at 15 to avoid unreasonable floors
+    }
+    if (densitySignals.sectionCount >= 7) {
+      // Many sections → floor = max(base, ~50% of section count)
+      const sectionFloor = Math.max(Math.floor(densitySignals.sectionCount * 0.5), baseFloor);
+      return Math.min(sectionFloor, 12);
+    }
+    return baseFloor;
+  }
+
   if (isLesson) {
     if (contentLength < 2000) return 3;
     if (contentLength < 5000) return 5;
@@ -1147,9 +1206,11 @@ Deno.serve(async (req) => {
     const decodedContent = decodeHTMLEntities(resource.content);
     const decodedTitle = decodeHTMLEntities(resource.title);
     const isLesson = isStructuredLesson(decodedContent, decodedTitle, resource.resource_type);
+    const isDenseContent = !isLesson && isDenseTeachingContent(decodedContent, decodedTitle);
+    const densitySignals = computeDensitySignals(decodedContent, decodedTitle);
     const routingBasis = isLesson
       ? (decodedContent.indexOf(LESSON_TRANSCRIPT_MARKER) > 500 ? 'transcript_marker' : 'course_title_pattern')
-      : (isTranscriptType(resource.resource_type) ? 'transcript_type' : 'standard');
+      : isDenseContent ? 'dense_teaching' : (isTranscriptType(resource.resource_type) ? 'transcript_type' : 'standard');
     let rawItems: any[];
     let rawResponse: string | null = null;
 
@@ -1161,14 +1222,14 @@ Deno.serve(async (req) => {
         rawResponse = JSON.stringify({ lesson_pipeline: result.pipelineLog });
         log.lessonPipeline = result.pipelineLog;
       } else {
-        console.log(`[extract] STANDARD PATH — strategy=${strategy}`);
+        console.log(`[extract] STANDARD PATH — strategy=${strategy}${isDenseContent ? ' [DENSE TEACHING — relaxed validation]' : ''} density=${JSON.stringify(densitySignals)}`);
         const result = await callAIDirect(LOVABLE_API_KEY, decodedContent, resource.title, resource.tags || [], resource.resource_type, strategy);
         rawItems = result.items;
         rawResponse = result.rawContent;
       }
       log.rawAiResponse = rawResponse;
     } catch (aiErr: any) {
-      const failureType = classifyFailure(aiErr, 0, computeMinKiFloor(resource.content.length, isLesson), 0);
+      const failureType = classifyFailure(aiErr, 0, computeMinKiFloor(resource.content.length, isLesson, densitySignals), 0);
       log.outcome = 'ai_error';
       log.error = aiErr.message;
       log.failureType = failureType;
@@ -1177,7 +1238,7 @@ Deno.serve(async (req) => {
       // Telemetry
       logTelemetry({
         resource_id: resourceId, title: resource.title, content_length: resource.content.length,
-        is_structured_lesson: isLesson, ki_count: 0, min_ki_floor: computeMinKiFloor(resource.content.length, isLesson),
+        is_structured_lesson: isLesson, ki_count: 0, min_ki_floor: computeMinKiFloor(resource.content.length, isLesson, densitySignals),
         attempt_number: attemptNumber, extractor_strategy: strategy, failure_reason: failureType,
         duration_ms: Date.now() - startTime, routing_basis: routingBasis,
       });
@@ -1190,7 +1251,7 @@ Deno.serve(async (req) => {
         // Persist attempt record to table
         const thisAttempt = buildAttemptRecord({
           attemptNumber, strategy, kiCount: 0, rawItemCount: 0, validatedCount: 0, dedupedCount: 0,
-          minKiFloor: computeMinKiFloor(resource.content.length, isLesson),
+          minKiFloor: computeMinKiFloor(resource.content.length, isLesson, densitySignals),
           failureType, status: newStatus, durationMs: Date.now() - startTime, startedAt,
         });
         await persistAttemptRecord(supabase, resourceId, resource.user_id, thisAttempt);
@@ -1236,7 +1297,7 @@ Deno.serve(async (req) => {
     const validated: any[] = [];
     const rejectReasons: Record<string, number> = {};
     for (const item of normalized) {
-      const reasons = validateItem(item, isLesson);
+      const reasons = validateItem(item, isLesson, isDenseContent);
       if (reasons.length > 0) {
         log.rejections.push({ title: (item.title || '').slice(0, 60), reasons });
         for (const r of reasons) { rejectReasons[r] = (rejectReasons[r] || 0) + 1; }
@@ -1252,7 +1313,8 @@ Deno.serve(async (req) => {
       log.lessonPipeline.validationRejects = rejectReasons;
     }
 
-    console.log(`[extract] "${resource.title}": ${validated.length} validated from ${normalized.length} normalized`);
+    const validationLossPct = normalized.length > 0 ? Math.round(((normalized.length - validated.length) / normalized.length) * 100) : 0;
+    console.log(`[extract] "${resource.title}": ${validated.length} validated from ${normalized.length} normalized (${validationLossPct}% validation loss)`);
     if (Object.keys(rejectReasons).length > 0) {
       console.log(`[extract] Rejection reasons: ${JSON.stringify(rejectReasons)}`);
     }
@@ -1306,7 +1368,7 @@ Deno.serve(async (req) => {
     }
 
     // ── 6. Quality threshold gate + post-extraction invariant ──
-    const minKiFloor = computeMinKiFloor(resource.content.length, isLesson);
+    const minKiFloor = computeMinKiFloor(resource.content.length, isLesson, densitySignals);
     const durationMs = Date.now() - startTime;
 
     if (deduped.length < 1) {
