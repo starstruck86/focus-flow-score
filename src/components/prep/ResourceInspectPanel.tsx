@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import { deriveProcessingState, getProcessingStateColor } from '@/lib/processingState';
 import { deriveResourceInsight } from '@/lib/resourceSignal';
+import { deriveResourceTruth } from '@/lib/resourceTruthState';
 import { getResourceOrigin } from '@/lib/resourceEligibility';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { detectDrift } from '@/lib/resourceLifecycle';
@@ -345,20 +346,29 @@ type EligibilityState = 'eligible' | 'not_eligible' | 'recommended';
 function DownstreamEligibilitySection({ resource }: { resource: Resource }) {
   const { summary } = useCanonicalLifecycle();
   const status = summary?.resources.find(r => r.resource_id === resource.id);
-  const isReady = status?.canonical_stage === 'operationalized';
-  const hasActiveKi = (status?.active_ki_count ?? 0) > 0;
-  const hasContexts = (status?.active_ki_with_context_count ?? 0) > 0;
+  const lc = status ? {
+    stage: status.canonical_stage,
+    blocked: status.blocked_reason,
+    kiCount: status.knowledge_item_count,
+    activeKi: status.active_ki_count,
+    activeKiWithCtx: status.active_ki_with_context_count,
+  } : undefined;
+  const truth = deriveResourceTruth(resource, lc);
+  const isReady = truth.is_ready;
+  const hasActiveKi = truth.active_ki_total > 0;
+  const hasContexts = truth.active_ki_with_context_total > 0;
 
   // Read stored eligibility if present
   const r = resource as any;
   const stored = r.downstream_eligibility as Record<string, boolean> | null;
 
   // Derive heuristic eligibility
+  // Downstream eligibility derived from canonical truth — not lifecycle stage
   const heuristic: Record<string, boolean> = {
-    dave_grounding: isReady && hasContexts,
-    playbook_gen: hasActiveKi,
-    coaching: hasActiveKi && hasContexts,
-    search: hasActiveKi,
+    dave_grounding: truth.is_ready && truth.can_feed_downstream,
+    playbook_gen: truth.is_ready && hasActiveKi,
+    coaching: truth.is_ready && hasActiveKi && hasContexts,
+    search: truth.is_ready && hasActiveKi,
   };
 
   // Merge: stored overrides heuristic, but show "recommended" when heuristic says yes but stored is missing
