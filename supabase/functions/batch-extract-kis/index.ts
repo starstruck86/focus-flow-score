@@ -1599,6 +1599,66 @@ Deno.serve(async (req) => {
       return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold', attemptNumber, strategy, log, benchmarkMode: isDryRun });
     }
 
+    // ── 6a. Summary-first fallback guard: stricter acceptance ──
+    if (strategy === 'summary_first' && deduped.length > 0) {
+      const summaryValLoss = normalized.length > 0 ? (normalized.length - validated.length) / normalized.length : 0;
+      const summaryDedLoss = validated.length > 0 ? (validated.length - deduped.length) / validated.length : 0;
+      if (!((deduped.length >= minKiFloor) && summaryValLoss < 0.5 && summaryDedLoss < 0.3)) {
+        console.warn(`[extract] ⚠️ Summary-first DEGRADED output: "${resource.title}" | ki=${deduped.length} floor=${minKiFloor} valLoss=${(summaryValLoss*100).toFixed(0)}% dedLoss=${(summaryDedLoss*100).toFixed(0)}% — treating as model_failure, will not override prior results`);
+        const failureType: ExtractionFailureType = 'model_failure';
+        log.outcome = 'summary_first_rejected';
+        log.failureType = failureType;
+        if (!isDryRun) {
+          const thisAttempt = buildAttemptRecord({
+            attemptNumber, strategy, kiCount: deduped.length, rawItemCount: rawItems.length,
+            validatedCount: validated.length, dedupedCount: deduped.length,
+            minKiFloor, failureType, status: 'extraction_requires_review', durationMs, startedAt,
+          });
+          await persistAttemptRecord(supabase, resourceId, resource.user_id, thisAttempt);
+          await saveExtractionLog(supabase, log);
+          await updateExtractionStatus(supabase, resourceId, 'extraction_requires_review', {
+            extraction_attempt_count: attemptNumber,
+            extraction_failure_type: failureType,
+            extractor_strategy: strategy,
+            extraction_retry_eligible: false,
+            next_retry_at: null, retry_scheduled_at: null,
+          });
+        }
+        return respond({ resourceId, title: resource.title, kis: 0, error: 'Summary-first output rejected (degraded quality)', attemptNumber, strategy, log });
+      }
+    }
+
+    // ── 6b. Retry improvement check: stop if no improvement over previous best ──
+    if (attemptNumber > 1 && !isDryRun) {
+      const priorHistory = await fetchAttemptHistory(supabase, resourceId);
+      const previousBest = selectBestAttempt(priorHistory.filter(a => a.attempt_number < attemptNumber));
+      if (previousBest && previousBest.floor_met && previousBest.ki_count > 0) {
+        const currentConfidence = computeAttemptConfidence(deduped.length, minKiFloor, rawItems.length, validated.length, deduped.length);
+        const prevConfidence = previousBest.confidence_score ?? 0;
+        if (currentConfidence <= prevConfidence && deduped.length <= previousBest.ki_count) {
+          console.log(`[extract-retry] 🛑 No improvement: attempt ${attemptNumber} (conf=${currentConfidence}, ki=${deduped.length}) ≤ best attempt ${previousBest.attempt_number} (conf=${prevConfidence}, ki=${previousBest.ki_count}) — stopping retries, marking for review`);
+          const thisAttempt = buildAttemptRecord({
+            attemptNumber, strategy, kiCount: deduped.length, rawItemCount: rawItems.length,
+            validatedCount: validated.length, dedupedCount: deduped.length,
+            minKiFloor, failureType: 'under_floor_invariant', status: 'extraction_requires_review', durationMs, startedAt,
+          });
+          await persistAttemptRecord(supabase, resourceId, resource.user_id, thisAttempt);
+          await saveExtractionLog(supabase, log);
+          const fullHistory = await fetchAttemptHistory(supabase, resourceId);
+          const audit = buildAuditFromHistory(fullHistory, 'extraction_requires_review', resource.content.length, isLesson, floorDetails);
+          await updateExtractionStatus(supabase, resourceId, 'extraction_requires_review', {
+            extraction_attempt_count: attemptNumber,
+            extraction_failure_type: 'under_floor_invariant',
+            extractor_strategy: strategy,
+            extraction_retry_eligible: false,
+            next_retry_at: null, retry_scheduled_at: null,
+            ...(audit ? { extraction_audit_summary: audit } : {}),
+          });
+          return respond({ resourceId, title: resource.title, kis: 0, error: 'No improvement over previous best — stopped retries', attemptNumber, strategy, log });
+        }
+      }
+    }
+
     // Hard invariant: if yield is below the content-proportional floor, trigger retry
     if (deduped.length < minKiFloor) {
       const failureType: ExtractionFailureType = 'under_floor_invariant';
