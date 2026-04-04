@@ -812,8 +812,15 @@ function ProcessingTimelineSection({ resource }: { resource: Resource }) {
 
 // ── Failure Dossier Section ─────────────────────────────────
 function FailureDossierSection({ resource }: { resource: Resource }) {
-  const { lifecycleMap } = useCanonicalLifecycle();
-  const lc = lifecycleMap.get(resource.id);
+  const { summary } = useCanonicalLifecycle();
+  const status = summary?.resources.find(r => r.resource_id === resource.id);
+  const lc = status ? {
+    stage: status.canonical_stage,
+    blocked: status.blocked_reason,
+    kiCount: status.ki_count,
+    activeKi: status.active_ki_count,
+    activeKiWithCtx: status.active_ki_with_context_count ?? 0,
+  } : undefined;
   if (!lc) return null;
 
   const truth = deriveResourceTruth(resource, lc);
