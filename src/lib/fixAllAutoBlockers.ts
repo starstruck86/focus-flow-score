@@ -589,8 +589,24 @@ export async function runFixAllAutoBlockers(
   if (extractIds.length > 0) {
     callbacks?.onPhaseChange?.('extraction', 'Extracting knowledge items', `Extracting ${extractIds.length} resources…`);
     onProgress?.(`Extracting ${extractIds.length} resources…`);
-    const extractResult = await fixNeedsExtraction(extractIds, onProgress, onResourcePhase, callbacks);
+    const { phaseResult: extractResult, resourceResults: extractionOutcomes } = await fixNeedsExtraction(extractIds, onProgress, onResourcePhase, callbacks);
     phases.push(extractResult);
+
+    // Enrich per-resource outcomes with extraction details
+    for (const [resourceId, detail] of extractionOutcomes) {
+      const outcome = outcomeMap.get(resourceId);
+      if (outcome) {
+        outcome.attempted = true;
+        outcome.succeeded = detail.succeeded;
+        outcome.kisCreated = detail.kisCreated;
+        outcome.kisActive = detail.kisActive;
+        if (!detail.succeeded) {
+          outcome.error = detail.reason || 'no KIs extracted';
+          outcome.rootCauseCategory = detail.kisCreated === 0 ? 'extraction_produced_zero_kis' : 'activation_failed';
+          outcome.rootCauseExplanation = detail.reason || null;
+        }
+      }
+    }
   }
 
   // Phase 4: Activate
