@@ -1096,7 +1096,8 @@ function computeMinKiFloorDetailed(contentLength: number, isLesson: boolean, den
   if (isLesson) {
     baseFloor = contentLength < 2000 ? 3 : contentLength < 5000 ? 5 : contentLength < 10000 ? 8 : 12;
   } else {
-    baseFloor = contentLength < 2000 ? 1 : contentLength < 5000 ? 2 : 3;
+    // Non-lesson: conservative floors — single-topic transcripts should not be forced to retry
+    baseFloor = contentLength < 4000 ? 1 : contentLength < 8000 ? 2 : 3;
   }
 
   if (!densitySignals?.isDense) {
