@@ -43,6 +43,7 @@ import { NeedsAttentionQueue } from './NeedsAttentionQueue';
 import { ProcessingStatusBar } from './ProcessingStatusBar';
 import { CollectionBrowser } from './CollectionBrowser';
 import { CatchupDashboard } from './CatchupDashboard';
+import { LibraryTrustSummary } from './LibraryTrustSummary';
 import { deriveResourceInsight, deriveReadiness } from '@/lib/resourceSignal';
 import type { ReadinessBucket } from '@/lib/resourceAudit';
 import {
