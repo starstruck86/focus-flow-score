@@ -187,6 +187,15 @@ function classifyResource(
     return { resource_id: r.id, bucket: "needs_qa_review", issues, severity };
   }
 
+  // ── 12. ANTI-LIMBO GUARD ──────────────────────────────────
+  // Content-backed + 0 KIs + not processing → must not be invisible
+  if (kiCount === 0 && contentLen >= 200) {
+    if (hasAttachmentRefs) {
+      return { resource_id: r.id, bucket: "needs_extraction", issues: ["wrapper_page_needs_attachment_extraction"], severity: 5 };
+    }
+    return { resource_id: r.id, bucket: "needs_extraction", issues: ["anti_limbo_content_backed_no_kis"], severity: 5 };
+  }
+
   return { resource_id: r.id, bucket: "no_action", issues, severity: 0 };
 }
 
