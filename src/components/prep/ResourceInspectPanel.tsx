@@ -362,11 +362,12 @@ function DownstreamEligibilitySection({ resource }: { resource: Resource }) {
   const stored = r.downstream_eligibility as Record<string, boolean> | null;
 
   // Derive heuristic eligibility
+  // Downstream eligibility derived from canonical truth — not lifecycle stage
   const heuristic: Record<string, boolean> = {
-    dave_grounding: isReady && hasContexts,
-    playbook_gen: hasActiveKi,
-    coaching: hasActiveKi && hasContexts,
-    search: hasActiveKi,
+    dave_grounding: truth.is_ready && truth.can_feed_downstream,
+    playbook_gen: truth.is_ready && hasActiveKi,
+    coaching: truth.is_ready && hasActiveKi && hasContexts,
+    search: truth.is_ready && hasActiveKi,
   };
 
   // Merge: stored overrides heuristic, but show "recommended" when heuristic says yes but stored is missing
