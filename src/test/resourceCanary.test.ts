@@ -437,6 +437,18 @@ describe('Failure Classification Canary', () => {
     expect(classifyFailure({ message: 'Content too short' }, 0, 5, 0)).toBe('structural_failure');
   });
 
+  it('high validation dropout → segmentation_failure', () => {
+    // 10 raw items, only 2 validated = 80% dropout → segmentation
+    expect(classifyFailure(null, 0, 5, 10, 2)).toBe('segmentation_failure');
+    // 8 raw items, only 1 validated = 87.5% dropout → segmentation
+    expect(classifyFailure(null, 0, 5, 8, 1)).toBe('segmentation_failure');
+  });
+
+  it('moderate validation dropout is NOT segmentation_failure', () => {
+    // 10 raw items, 5 validated = 50% dropout → not segmentation
+    expect(classifyFailure(null, 0, 5, 10, 5)).not.toBe('segmentation_failure');
+  });
+
   it('structural_failure is the only non-retryable type', () => {
     // All types except structural should be retryable
     const retryable: ExtractionFailureType[] = ['transient_error', 'under_floor_invariant', 'segmentation_failure', 'model_failure'];
