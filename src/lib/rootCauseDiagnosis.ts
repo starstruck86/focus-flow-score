@@ -84,6 +84,7 @@ export const ROOT_CAUSE_LABELS: Record<RootCauseCategory, string> = {
   auth_required: 'Auth Required',
   missing_content: 'Missing Content',
   contradictory_state: 'Contradictory State',
+  reference_only: 'Reference Only',
   unknown: 'Unknown',
 };
 
