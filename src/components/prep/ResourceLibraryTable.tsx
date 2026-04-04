@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Sparkles, Wrench, Tag, Loader2 as Loader2Icon } from 'lucide-react';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import { Progress } from '@/components/ui/progress';
 import { formatRelativeTime } from '@/hooks/useReExtractResource';
@@ -205,6 +206,7 @@ export function ResourceLibraryTable({
   const [spotCheck, setSpotCheck] = useState<SpotCheck>('none');
   const [collectionFilter, setCollectionFilter] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [mobileInspectId, setMobileInspectId] = useState<string | null>(null);
   const { summary: lifecycle } = useCanonicalLifecycle();
   const { data: inUseData } = useInUseResources();
   const inUseIds = inUseData?.inUseResourceIds ?? new Set<string>();
@@ -378,7 +380,7 @@ export function ResourceLibraryTable({
           lifecycleMap={lifecycleMap}
           audioJobsMap={audioJobsMap}
           onAction={onAction}
-          onInspect={(r) => setExpandedId(r.id)}
+          onInspect={(r) => isMobile ? setMobileInspectId(r.id) : setExpandedId(r.id)}
         />
       </div>
 
@@ -498,7 +500,10 @@ export function ResourceLibraryTable({
                   audioJob={audioJobsMap?.get(resource.id) ?? null}
                   isSelected={selectedIds.has(resource.id)}
                   onToggleSelect={onToggleSelect}
-                  onAction={onAction}
+                  onAction={(action, r) => {
+                    if (action === 'view') { setMobileInspectId(r.id); return; }
+                    onAction(action, r);
+                  }}
                 />
               ))}
             </div>
@@ -767,6 +772,26 @@ export function ResourceLibraryTable({
           );
         })()}
       </div>
+
+      {/* Mobile Inspect Sheet */}
+      {isMobile && (
+        <Sheet open={!!mobileInspectId} onOpenChange={(open) => { if (!open) setMobileInspectId(null); }}>
+          <SheetContent side="bottom" className="h-[85vh] p-0 overflow-y-auto rounded-t-xl">
+            <SheetTitle className="sr-only">Resource Inspector</SheetTitle>
+            {mobileInspectId && (() => {
+              const inspectResource = resources.find(r => r.id === mobileInspectId);
+              if (!inspectResource) return null;
+              return (
+                <ResourceInspectPanel
+                  resource={inspectResource}
+                  onClose={() => setMobileInspectId(null)}
+                  onAction={onAction}
+                />
+              );
+            })()}
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 }

@@ -215,6 +215,8 @@ function MetricPill({ label, value, color }: { label: string; value: string | nu
 }
 
 // ── D. Downstream Eligibility ──────────────────────────────
+type EligibilityState = 'eligible' | 'not_eligible' | 'recommended';
+
 function DownstreamEligibilitySection({ resource }: { resource: Resource }) {
   const { summary } = useCanonicalLifecycle();
   const status = summary?.resources.find(r => r.resource_id === resource.id);
@@ -222,38 +224,62 @@ function DownstreamEligibilitySection({ resource }: { resource: Resource }) {
   const hasActiveKi = (status?.active_ki_count ?? 0) > 0;
   const hasContexts = (status?.active_ki_with_context_count ?? 0) > 0;
 
+  // Read stored eligibility if present
+  const r = resource as any;
+  const stored = r.downstream_eligibility as Record<string, boolean> | null;
+
+  // Derive heuristic eligibility
+  const heuristic: Record<string, boolean> = {
+    dave_grounding: isReady && hasContexts,
+    playbook_gen: hasActiveKi,
+    coaching: hasActiveKi && hasContexts,
+    search: hasActiveKi,
+  };
+
+  // Merge: stored overrides heuristic, but show "recommended" when heuristic says yes but stored is missing
+  function getState(key: string): EligibilityState {
+    if (stored && key in stored) return stored[key] ? 'eligible' : 'not_eligible';
+    return heuristic[key] ? 'recommended' : 'not_eligible';
+  }
+
   const targets = [
-    { key: 'dave_grounding', label: 'Dave Grounding', eligible: isReady && hasContexts },
-    { key: 'playbook_gen', label: 'Playbook Generation', eligible: hasActiveKi },
-    { key: 'coaching', label: 'Coaching', eligible: hasActiveKi && hasContexts },
-    { key: 'search', label: 'Search', eligible: hasActiveKi },
+    { key: 'dave_grounding', label: 'Dave Grounding' },
+    { key: 'playbook_gen', label: 'Playbook Generation' },
+    { key: 'coaching', label: 'Coaching' },
+    { key: 'search', label: 'Search' },
   ];
+
+  const stateConfig: Record<EligibilityState, { bg: string; color: string; icon: React.ReactNode; suffix?: string }> = {
+    eligible: { bg: 'bg-emerald-500/10', color: 'text-emerald-600', icon: <CheckCircle2 className="h-3 w-3 mr-1" /> },
+    recommended: { bg: 'bg-amber-500/10', color: 'text-amber-600', icon: <TrendingUp className="h-3 w-3 mr-1" />, suffix: '(rec.)' },
+    not_eligible: { bg: 'bg-muted', color: 'text-muted-foreground', icon: <X className="h-3 w-3 mr-1" /> },
+  };
 
   return (
     <div className="px-4 py-3 space-y-2 border-t border-border">
       <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Downstream Eligibility</h4>
       <div className="flex items-center gap-2 flex-wrap">
-        {targets.map(t => (
-          <Badge
-            key={t.key}
-            className={cn(
-              'text-[10px] h-5 px-2',
-              t.eligible
-                ? 'bg-emerald-500/10 text-emerald-600'
-                : 'bg-muted text-muted-foreground',
-            )}
-          >
-            {t.eligible ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <X className="h-3 w-3 mr-1" />}
-            {t.label}
-          </Badge>
-        ))}
+        {targets.map(t => {
+          const state = getState(t.key);
+          const cfg = stateConfig[state];
+          return (
+            <Badge key={t.key} className={cn('text-[10px] h-5 px-2', cfg.bg, cfg.color)}>
+              {cfg.icon}
+              {t.label}
+              {cfg.suffix && <span className="ml-0.5 opacity-70">{cfg.suffix}</span>}
+            </Badge>
+          );
+        })}
       </div>
       {!isReady && (
         <p className="text-[10px] text-muted-foreground">
           {hasActiveKi
-            ? 'Resource has active KIs but needs full operationalization for Dave grounding.'
-            : 'Resource needs extraction and activation before it can feed downstream systems.'}
+            ? 'Active KIs present but needs full operationalization for Dave grounding.'
+            : 'Needs extraction and activation before feeding downstream systems.'}
         </p>
+      )}
+      {stored && (
+        <p className="text-[9px] text-muted-foreground/70 italic">Stored eligibility overrides applied</p>
       )}
     </div>
   );
