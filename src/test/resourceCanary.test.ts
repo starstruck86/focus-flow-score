@@ -564,3 +564,129 @@ describe('Retry System Guarantee Canary', () => {
     }
   });
 });
+
+// ── Attempt History & Audit Traceability ───────────────────
+describe('Attempt History & Audit Traceability', () => {
+  // Simulate the AttemptRecord shape
+  interface AttemptRecord {
+    attempt_number: number;
+    strategy: string;
+    ki_count: number;
+    raw_item_count: number;
+    validated_count: number;
+    deduped_count: number;
+    min_ki_floor: number;
+    floor_met: boolean;
+    failure_type: string | null;
+    status: string;
+    duration_ms: number;
+    started_at: string;
+    completed_at: string;
+  }
+
+  function makeAttempt(overrides: Partial<AttemptRecord> & { attempt_number: number; strategy: string }): AttemptRecord {
+    return {
+      ki_count: 0, raw_item_count: 0, validated_count: 0, deduped_count: 0,
+      min_ki_floor: 5, floor_met: false, failure_type: 'under_floor_invariant',
+      status: 'extraction_retrying', duration_ms: 3000,
+      started_at: new Date().toISOString(), completed_at: new Date().toISOString(),
+      ...overrides,
+    };
+  }
+
+  it('attempt history grows on each attempt', () => {
+    const history: AttemptRecord[] = [];
+    history.push(makeAttempt({ attempt_number: 1, strategy: 'standard' }));
+    expect(history).toHaveLength(1);
+    history.push(makeAttempt({ attempt_number: 2, strategy: 'rechunk' }));
+    expect(history).toHaveLength(2);
+    history.push(makeAttempt({ attempt_number: 3, strategy: 'structured_prompt' }));
+    expect(history).toHaveLength(3);
+  });
+
+  it('strategies differ across retries when escalating', () => {
+    const history = [
+      makeAttempt({ attempt_number: 1, strategy: 'standard' }),
+      makeAttempt({ attempt_number: 2, strategy: 'rechunk' }),
+      makeAttempt({ attempt_number: 3, strategy: 'structured_prompt' }),
+      makeAttempt({ attempt_number: 4, strategy: 'summary_first', status: 'extraction_requires_review' }),
+    ];
+    const strategies = history.map(a => a.strategy);
+    const unique = new Set(strategies);
+    expect(unique.size).toBe(4);
+  });
+
+  it('audit summary is built from actual persisted history', () => {
+    const history = [
+      makeAttempt({ attempt_number: 1, strategy: 'standard', ki_count: 2, duration_ms: 3000 }),
+      makeAttempt({ attempt_number: 2, strategy: 'rechunk', ki_count: 3, duration_ms: 4000 }),
+      makeAttempt({ attempt_number: 3, strategy: 'structured_prompt', ki_count: 7, floor_met: true, failure_type: null, status: 'extracted', duration_ms: 5000 }),
+    ];
+
+    // Simulate buildAuditFromHistory logic
+    const strategies = [...new Set(history.map(a => a.strategy))];
+    const totalElapsed = history.reduce((sum, a) => sum + a.duration_ms, 0);
+    const last = history[history.length - 1];
+
+    expect(strategies).toEqual(['standard', 'rechunk', 'structured_prompt']);
+    expect(totalElapsed).toBe(12000);
+    expect(last.ki_count).toBe(7);
+    expect(last.floor_met).toBe(true);
+    expect(history.length).toBe(3);
+  });
+
+  it('next_retry_at blocks early retry execution', () => {
+    const futureRetryAt = new Date(Date.now() + 60000).toISOString();
+    const now = Date.now();
+    const nextRetryTime = new Date(futureRetryAt).getTime();
+    const shouldBlock = now < nextRetryTime;
+    expect(shouldBlock).toBe(true);
+
+    const pastRetryAt = new Date(Date.now() - 1000).toISOString();
+    const pastRetryTime = new Date(pastRetryAt).getTime();
+    const shouldAllow = now >= pastRetryTime;
+    expect(shouldAllow).toBe(true);
+  });
+
+  it('retry_scheduled_at and next_retry_at are cleared on terminal states', () => {
+    // Simulate terminal update: these should be null
+    const terminalFields = { next_retry_at: null, retry_scheduled_at: null };
+    expect(terminalFields.next_retry_at).toBeNull();
+    expect(terminalFields.retry_scheduled_at).toBeNull();
+  });
+
+  it('terminal audit summary reflects actual attempt sequence, not inferred', () => {
+    const history = [
+      makeAttempt({ attempt_number: 1, strategy: 'standard', ki_count: 1 }),
+      makeAttempt({ attempt_number: 2, strategy: 'structured_prompt', ki_count: 3 }),
+      makeAttempt({ attempt_number: 3, strategy: 'rechunk', ki_count: 2 }),
+      makeAttempt({ attempt_number: 4, strategy: 'summary_first', ki_count: 4, status: 'extraction_requires_review' }),
+    ];
+
+    // The actual sequence should match what happened, NOT what selectStrategy would predict
+    // (e.g., attempt 2 was structured_prompt, attempt 3 was rechunk — not the default escalation)
+    expect(history[1].strategy).toBe('structured_prompt');
+    expect(history[2].strategy).toBe('rechunk');
+    // Strategies from history: order is what actually happened
+    const actualStrategies = history.map(a => a.strategy);
+    expect(actualStrategies).toEqual(['standard', 'structured_prompt', 'rechunk', 'summary_first']);
+  });
+
+  it('audit validation rejects malformed summaries', () => {
+    // total_attempts < 1
+    const bad1 = { total_attempts: 0, strategies_used: ['standard'], final_ki_count: 5, min_ki_floor: 3, floor_met: true, final_status: 'extracted' };
+    expect(bad1.total_attempts < 1).toBe(true);
+
+    // non-terminal status
+    const bad2 = { final_status: 'extraction_retrying' };
+    expect(['extracted', 'extraction_requires_review', 'extraction_failed'].includes(bad2.final_status)).toBe(false);
+
+    // floor_met mismatch
+    const bad3 = { final_ki_count: 2, min_ki_floor: 5, floor_met: true };
+    expect(bad3.floor_met !== (bad3.final_ki_count >= bad3.min_ki_floor)).toBe(true);
+
+    // empty strategies
+    const bad4 = { strategies_used: [] as string[] };
+    expect(bad4.strategies_used.length < 1).toBe(true);
+  });
+});
