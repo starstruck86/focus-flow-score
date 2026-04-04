@@ -358,6 +358,9 @@ interface ExtractionAuditSummary {
   base_floor: number;
   density_adjusted_floor: number;
   final_floor: number;
+  // Best-attempt tracking
+  best_attempt_index: number;
+  confidence_score: number;
 }
 
 /** Compute yield quality flag from attempt metrics */
