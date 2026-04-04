@@ -41,6 +41,24 @@ interface ClassifiedItem {
   severity: number;
 }
 
+// ── Attachment reference detection (mirrors client-side attachmentDetection.ts) ──
+const ATTACHMENT_PATTERNS = [
+  /\bsee\s+(the\s+)?pdf\b/i,
+  /\bpdf\s+attached\b/i,
+  /\bdownload\s+(the\s+)?(worksheet|workbook|template|checklist|guide|pdf|slides?|deck)\b/i,
+  /\bsee\s+(the\s+)?(slide|attachment|document|handout|worksheet|workbook)\b/i,
+  /\brefer\s+to\s+(the\s+)?(document|pdf|slide|attachment|worksheet)\b/i,
+  /\b(attached|enclosed)\s+(pdf|document|file|worksheet|slide)\b/i,
+  /\bclick\s+(here\s+)?to\s+download\b/i,
+  /\bdownload\s+(below|above|here)\b/i,
+  /\bsee\s+attached\b/i,
+];
+
+function hasAttachmentReferences(content: string | null): boolean {
+  if (!content) return false;
+  return ATTACHMENT_PATTERNS.some(p => p.test(content));
+}
+
 function classifyResource(
   r: any,
   kiCount: number,
@@ -51,6 +69,8 @@ function classifyResource(
   const status = r.enrichment_status || "not_enriched";
   const contentLen = r.content_length || 0;
   const enrichVer = r.enrichment_version ?? 0;
+  const contentText = r.content || "";
+  const hasAttachmentRefs = hasAttachmentReferences(contentText);
 
   // Determine whether content exists
   const impliedContent = CONTENT_IMPLIED_STATUSES.includes(status);
@@ -65,6 +85,25 @@ function classifyResource(
       return { resource_id: r.id, bucket: "blocked", issues: ["no_valid_source_url"], severity: 2 };
     }
     return { resource_id: r.id, bucket: "needs_enrichment", issues: ["missing_content"], severity: 7 };
+  }
+
+  // ── 1b. False needs_auth with usable content ──────────────
+  // HARD RULE: If status is needs_auth but content already exists (>= 200 chars),
+  // the real issue is extraction, not auth. Reclassify.
+  if (status === "needs_auth") {
+    const hasUsableContent = contentLen >= 200;
+    if (hasUsableContent) {
+      // Has content — not really auth-blocked
+      if (hasAttachmentRefs) {
+        return { resource_id: r.id, bucket: "needs_extraction", issues: ["false_needs_auth_wrapper_page"], severity: 6 };
+      }
+      return { resource_id: r.id, bucket: "needs_extraction", issues: ["false_needs_auth_has_content"], severity: 5 };
+    }
+    // Truly auth-blocked with no usable content — but check for attachment references first
+    if (hasAttachmentRefs) {
+      return { resource_id: r.id, bucket: "needs_extraction", issues: ["auth_blocked_but_has_attachment_ref"], severity: 5 };
+    }
+    return { resource_id: r.id, bucket: "blocked", issues: ["auth_required"], severity: 6 };
   }
 
   // ── 2. Not-enriched / early pipeline states ───────────────
@@ -146,6 +185,15 @@ function classifyResource(
   const substantiveIssues = issues.filter(i => !i.startsWith("extraction_retrying") && i !== "stale_failure_reason");
   if (substantiveIssues.length > 0) {
     return { resource_id: r.id, bucket: "needs_qa_review", issues, severity };
+  }
+
+  // ── 12. ANTI-LIMBO GUARD ──────────────────────────────────
+  // Content-backed + 0 KIs + not processing → must not be invisible
+  if (kiCount === 0 && contentLen >= 200) {
+    if (hasAttachmentRefs) {
+      return { resource_id: r.id, bucket: "needs_extraction", issues: ["wrapper_page_needs_attachment_extraction"], severity: 5 };
+    }
+    return { resource_id: r.id, bucket: "needs_extraction", issues: ["anti_limbo_content_backed_no_kis"], severity: 5 };
   }
 
   return { resource_id: r.id, bucket: "no_action", issues, severity: 0 };

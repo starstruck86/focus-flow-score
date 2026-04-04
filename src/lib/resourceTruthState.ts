@@ -17,6 +17,7 @@ import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { deriveProcessingState } from '@/lib/processingState';
 import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, ASSET_LABELS } from '@/lib/processingRoute';
 import { isJobStale, STALE_JOB_TIMEOUT_MS } from '@/store/useResourceJobProgress';
+import { detectAttachmentReferences } from '@/lib/attachmentDetection';
 
 // ── Blocker Taxonomy ──────────────────────────────────────
 
@@ -224,6 +225,25 @@ export function deriveResourceTruth(
   if (ps.state === 'RUNNING' && stage === 'operationalized' && !rAny.active_job_status) {
     integrity.push('Processing state says RUNNING but no active job found');
     blockers.push(blocker('contradictory_state', 'Processing state conflict — RUNNING with no active job'));
+  }
+
+  // ── WRAPPER-PAGE / ATTACHMENT DETECTION ────────────────────
+  // HARD RULE: If content references "see PDF", "download worksheet", etc.,
+  // the resource must NOT be classified as reference_only, missing_content,
+  // or needs_auth until the attached document has been checked/extracted.
+  const contentText = (rAny.content as string) ?? '';
+  const attachmentResult = detectAttachmentReferences(contentText);
+  if (attachmentResult.hasAttachmentReferences && kiTotal === 0 && !isActivelyProcessing) {
+    // Remove any reference_only, missing_content, or needs_auth blockers — the real
+    // content is in the referenced attachment, not the wrapper page itself.
+    const blockerTypesToRemove: BlockerType[] = ['reference_only', 'missing_content', 'needs_auth'];
+    for (let i = blockers.length - 1; i >= 0; i--) {
+      if (blockerTypesToRemove.includes(blockers[i].type)) {
+        blockers.splice(i, 1);
+      }
+    }
+    blockers.push(blocker('needs_extraction',
+      `Wrapper page references attachment (${attachmentResult.referencePatterns.join(', ')}) — extract linked document before classifying`));
   }
 
   // ── ANTI-LIMBO GUARD ─────────────────────────────────────
