@@ -26,7 +26,7 @@ import { getResourceOrigin } from '@/lib/resourceEligibility';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
-import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, SOURCE_TYPE_LABELS } from '@/lib/processingRoute';
+import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, ORIGIN_TYPE_LABELS, ASSET_LABELS } from '@/lib/processingRoute';
 import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import type { Resource } from '@/hooks/useResources';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
@@ -131,15 +131,19 @@ function PipelineRouteSection({ resource }: { resource: Resource }) {
   return (
     <div className="px-4 py-3 space-y-2">
       <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pipeline Route</h4>
-      {/* Route details */}
+      {/* Origin + Assets */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
         <div className="flex items-center gap-1">
-          <span className="text-muted-foreground">Source:</span>
-          <span className="font-medium">{SOURCE_TYPE_LABELS[route.source_type]}</span>
+          <span className="text-muted-foreground">Origin:</span>
+          <span className="font-medium">{ORIGIN_TYPE_LABELS[route.origin_type]}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">Primary Asset:</span>
+          <span className="font-medium text-primary">{ASSET_LABELS[route.primary_asset]}</span>
         </div>
         <div className="flex items-center gap-1">
           <span className="text-muted-foreground">Pipeline:</span>
-          <span className="font-medium text-primary">{PIPELINE_LABELS[route.pipeline]}</span>
+          <span className="font-medium">{PIPELINE_LABELS[route.pipeline]}</span>
         </div>
         <div className="flex items-center gap-1">
           <span className="text-muted-foreground">Method:</span>
@@ -154,6 +158,12 @@ function PipelineRouteSection({ resource }: { resource: Resource }) {
           )}>{route.confidence.charAt(0).toUpperCase() + route.confidence.slice(1)}</Badge>
         </div>
       </div>
+      {/* Available + Secondary assets */}
+      {route.secondary_assets.length > 0 && (
+        <div className="text-[10px] text-muted-foreground">
+          Also available: {route.secondary_assets.map(a => ASSET_LABELS[a]).join(', ')}
+        </div>
+      )}
       {/* Reason log */}
       {route.reason.length > 0 && (
         <div className="text-[10px] text-muted-foreground space-y-0.5 pl-1 border-l-2 border-primary/15">

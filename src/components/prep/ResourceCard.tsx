@@ -24,7 +24,7 @@ import { deriveProcessingState } from '@/lib/processingState';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import { routeFailure, getFailureBucketActions } from '@/lib/failureRouting';
-import { deriveProcessingRoute, getRouteLabel } from '@/lib/processingRoute';
+import { deriveProcessingRoute, getRouteLabel, ASSET_LABELS } from '@/lib/processingRoute';
 
 interface Props {
   resource: Resource;
@@ -165,10 +165,12 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
         const route = deriveProcessingRoute(resource);
         return (
         <div className="border-t border-border px-3 py-2 space-y-1.5 bg-muted/30">
-          {/* Route line */}
+          {/* Asset + Route line */}
           <div className="flex items-center gap-1.5 text-[11px]">
-            <span className="text-muted-foreground">Route:</span>
-            <span className="font-medium text-primary">{getRouteLabel(route)}</span>
+            <span className="text-muted-foreground">Asset:</span>
+            <span className="font-medium text-primary">{ASSET_LABELS[route.primary_asset]}</span>
+            <span className="text-muted-foreground">→</span>
+            <span className="font-medium">{getRouteLabel(route)}</span>
             <Badge variant="outline" className={cn('text-[8px] h-3.5 ml-1',
               route.confidence === 'high' && 'border-emerald-500/30 text-emerald-600',
               route.confidence === 'medium' && 'border-amber-500/30 text-amber-600',
