@@ -143,11 +143,13 @@ async function fixStalledJobs(
 async function fixNeedsEnrichment(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixPhaseResult> {
   const result: FixPhaseResult = { phase: 'enrichment', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
 
   for (let i = 0; i < resourceIds.length; i++) {
     const id = resourceIds[i];
+    callbacks?.onItemStart?.(id, 'enrichment', `Enriching ${i + 1}/${resourceIds.length}`);
     onProgress?.(`Enriching ${i + 1}/${resourceIds.length}`);
     try {
       const { data, error } = await invokeEnrichResource(
@@ -157,12 +159,15 @@ async function fixNeedsEnrichment(
       if (error) {
         result.failed++;
         result.errors.push(`${id}: ${error.message}`);
+        callbacks?.onItemFailed?.(id, 'enrichment');
       } else {
         result.succeeded++;
+        callbacks?.onItemDone?.(id, 'enrichment');
       }
     } catch (err: any) {
       result.failed++;
       result.errors.push(`${id}: ${err.message}`);
+      callbacks?.onItemFailed?.(id, 'enrichment');
     }
     await new Promise(r => setTimeout(r, 800));
   }
