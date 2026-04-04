@@ -332,6 +332,14 @@ export async function autoOperationalizeResource(
   if (knowledgeExtracted === 0 && !hasExistingKI) {
     needsReview = true;
     reason = 'No knowledge could be extracted — content may be too generic or short';
+    // ANTI-LIMBO: Persist a durable failure state so this resource doesn't disappear
+    // into invisible limbo. It must have an explicit blocker reason.
+    await supabase.from('resources').update({
+      active_job_status: 'failed',
+      active_job_error: reason,
+      active_job_finished_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as any).eq('id', resourceId);
     return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason);
   }
   stagesCompleted.push('knowledge_extracted');
