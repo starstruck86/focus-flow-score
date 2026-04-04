@@ -67,6 +67,19 @@ interface AttemptRecord {
   duration_ms: number;
   started_at: string;
   completed_at: string;
+  confidence_score?: number;
+  validation_loss_pct?: number;
+  dedup_loss_pct?: number;
+}
+
+/** Compute a 0-1 confidence score for an extraction attempt */
+function computeAttemptConfidence(kiCount: number, minFloor: number, rawCount: number, validatedCount: number, dedupedCount: number): number {
+  if (kiCount === 0 || rawCount === 0) return 0;
+  const floorRatio = Math.min(kiCount / Math.max(minFloor, 1), 2) / 2; // 0-1, capped at 2x floor
+  const valLoss = rawCount > 0 ? (rawCount - validatedCount) / rawCount : 0;
+  const dedLoss = validatedCount > 0 ? (validatedCount - dedupedCount) / validatedCount : 0;
+  const qualityScore = 1 - (valLoss * 0.5 + dedLoss * 0.3); // lower loss = higher quality
+  return Math.round(Math.max(0, Math.min(1, (floorRatio * 0.4 + qualityScore * 0.6))) * 100) / 100;
 }
 
 function buildAttemptRecord(opts: {
@@ -82,6 +95,8 @@ function buildAttemptRecord(opts: {
   durationMs: number;
   startedAt: string;
 }): AttemptRecord {
+  const valLossPct = opts.rawItemCount > 0 ? Math.round(((opts.rawItemCount - opts.validatedCount) / opts.rawItemCount) * 100) : 0;
+  const dedLossPct = opts.validatedCount > 0 ? Math.round(((opts.validatedCount - opts.dedupedCount) / opts.validatedCount) * 100) : 0;
   return {
     attempt_number: opts.attemptNumber,
     strategy: opts.strategy,
@@ -96,6 +111,9 @@ function buildAttemptRecord(opts: {
     duration_ms: opts.durationMs,
     started_at: opts.startedAt,
     completed_at: new Date().toISOString(),
+    confidence_score: computeAttemptConfidence(opts.kiCount, opts.minKiFloor, opts.rawItemCount, opts.validatedCount, opts.dedupedCount),
+    validation_loss_pct: valLossPct,
+    dedup_loss_pct: dedLossPct,
   };
 }
 
@@ -353,7 +371,22 @@ function computeYieldQualityFlag(
   return 'expected';
 }
 
-/** Build audit summary from actual persisted attempt history */
+/** Select the best attempt from history — highest confidence, preferring floor_met */
+function selectBestAttempt(history: AttemptRecord[]): AttemptRecord | null {
+  if (history.length === 0) return null;
+  // Prefer attempts that met floor, then sort by confidence (or ki_count as fallback)
+  const sorted = [...history].sort((a, b) => {
+    if (a.floor_met && !b.floor_met) return -1;
+    if (!a.floor_met && b.floor_met) return 1;
+    const aConf = a.confidence_score ?? 0;
+    const bConf = b.confidence_score ?? 0;
+    if (aConf !== bConf) return bConf - aConf;
+    return b.ki_count - a.ki_count;
+  });
+  return sorted[0];
+}
+
+/** Build audit summary from actual persisted attempt history — uses BEST attempt, not last */
 function buildAuditFromHistory(
   attemptHistory: AttemptRecord[],
   finalStatus: string,
@@ -363,25 +396,32 @@ function buildAuditFromHistory(
 ): ExtractionAuditSummary | null {
   if (attemptHistory.length === 0) return null;
 
+  // Use the best attempt for metrics, not just the last one
+  const bestAttempt = selectBestAttempt(attemptHistory)!;
   const lastAttempt = attemptHistory[attemptHistory.length - 1];
+  const sourceAttempt = bestAttempt.ki_count > 0 ? bestAttempt : lastAttempt;
   const strategies = [...new Set(attemptHistory.map(a => a.strategy))];
   const totalElapsed = attemptHistory.reduce((sum, a) => sum + a.duration_ms, 0);
 
-  const valLossPct = lastAttempt.raw_item_count > 0
-    ? Math.round(((lastAttempt.raw_item_count - lastAttempt.validated_count) / lastAttempt.raw_item_count) * 100) : 0;
-  const dedLossPct = lastAttempt.validated_count > 0
-    ? Math.round(((lastAttempt.validated_count - lastAttempt.deduped_count) / lastAttempt.validated_count) * 100) : 0;
-  const rawToFinal = lastAttempt.raw_item_count > 0
-    ? Math.round((lastAttempt.ki_count / lastAttempt.raw_item_count) * 100) / 100 : 0;
+  const valLossPct = sourceAttempt.raw_item_count > 0
+    ? Math.round(((sourceAttempt.raw_item_count - sourceAttempt.validated_count) / sourceAttempt.raw_item_count) * 100) : 0;
+  const dedLossPct = sourceAttempt.validated_count > 0
+    ? Math.round(((sourceAttempt.validated_count - sourceAttempt.deduped_count) / sourceAttempt.validated_count) * 100) : 0;
+  const rawToFinal = sourceAttempt.raw_item_count > 0
+    ? Math.round((sourceAttempt.ki_count / sourceAttempt.raw_item_count) * 100) / 100 : 0;
+
+  if (bestAttempt !== lastAttempt && bestAttempt.ki_count > 0) {
+    console.log(`[extract-audit] 📊 Best attempt: #${bestAttempt.attempt_number} (confidence=${bestAttempt.confidence_score}, ki=${bestAttempt.ki_count}) vs last: #${lastAttempt.attempt_number} (ki=${lastAttempt.ki_count})`);
+  }
 
   const summary: ExtractionAuditSummary = {
     total_attempts: attemptHistory.length,
     strategies_used: strategies,
-    final_ki_count: lastAttempt.ki_count,
-    min_ki_floor: lastAttempt.min_ki_floor,
-    floor_met: lastAttempt.ki_count >= lastAttempt.min_ki_floor,
+    final_ki_count: sourceAttempt.ki_count,
+    min_ki_floor: sourceAttempt.min_ki_floor,
+    floor_met: sourceAttempt.ki_count >= sourceAttempt.min_ki_floor,
     final_status: finalStatus,
-    final_failure_type: lastAttempt.failure_type,
+    final_failure_type: sourceAttempt.failure_type,
     total_elapsed_ms: totalElapsed,
     content_length: contentLength,
     is_structured_lesson: isLesson,
@@ -390,12 +430,12 @@ function buildAuditFromHistory(
     dedup_loss_pct: dedLossPct,
     raw_to_final_ratio: rawToFinal,
     yield_quality_flag: computeYieldQualityFlag(
-      lastAttempt.raw_item_count, lastAttempt.validated_count,
-      lastAttempt.deduped_count, lastAttempt.ki_count
+      sourceAttempt.raw_item_count, sourceAttempt.validated_count,
+      sourceAttempt.deduped_count, sourceAttempt.ki_count
     ),
-    base_floor: floorDetails?.base ?? lastAttempt.min_ki_floor,
-    density_adjusted_floor: floorDetails?.densityAdjusted ?? lastAttempt.min_ki_floor,
-    final_floor: floorDetails?.final ?? lastAttempt.min_ki_floor,
+    base_floor: floorDetails?.base ?? sourceAttempt.min_ki_floor,
+    density_adjusted_floor: floorDetails?.densityAdjusted ?? sourceAttempt.min_ki_floor,
+    final_floor: floorDetails?.final ?? sourceAttempt.min_ki_floor,
   };
 
   // ── Validate before returning ──
@@ -1442,18 +1482,13 @@ Deno.serve(async (req) => {
     log.dedupedCount = deduped.length;
     console.log(`[extract] "${resource.title}": ${deduped.length} after dedup (from ${validated.length} validated)`);
 
-    // ── 5a. Lesson KI ceiling: prevent over-extraction ──
+    // ── 5a. Over-extraction observation (non-destructive) ──
+    // High KI density is NOT a problem if KIs are distinct and high-quality.
+    // Log for observability but do NOT trim — quality/dedup gates handle bad KIs.
     if (isLesson) {
-      const lessonCeiling = Math.max(computeMinKiFloor(resource.content.length, isLesson, densitySignals), Math.floor(resource.content.length / 500));
-      if (deduped.length > lessonCeiling) {
-        console.log(`[extract-ceiling] 🔒 LESSON CEILING APPLIED: "${resource.title}" | content=${resource.content.length} chars | raw=${deduped.length} → capped=${lessonCeiling} | floor=${computeMinKiFloor(resource.content.length, isLesson, densitySignals)} | ceiling=${lessonCeiling}`);
-        // Keep strongest/most distinct KIs — those with longer summaries and excerpts tend to be more substantive
-        deduped = deduped
-          .map(item => ({ ...item, _quality: (item.tactic_summary?.length || 0) + (item.source_excerpt?.length || 0) + (item.how_to_execute?.length || 0) }))
-          .sort((a, b) => b._quality - a._quality)
-          .slice(0, lessonCeiling)
-          .map(({ _quality, ...item }) => item);
-        log.dedupedCount = deduped.length;
+      const observationalCeiling = Math.max(computeMinKiFloor(resource.content.length, isLesson, densitySignals), Math.floor(resource.content.length / 500));
+      if (deduped.length > observationalCeiling) {
+        console.log(`[extract-ceiling] 📊 HIGH DENSITY (observational): "${resource.title}" | content=${resource.content.length} chars | kis=${deduped.length} | ref_ceiling=${observationalCeiling} | floor=${computeMinKiFloor(resource.content.length, isLesson, densitySignals)} | KEPT ALL — all KIs passed quality+dedup gates`);
       }
     }
 
@@ -1562,6 +1597,66 @@ Deno.serve(async (req) => {
       }
       console.log(`[extract] ⚠️ "${resource.title}": 0 items — attempt ${attemptNumber}/${maxAttempts}`);
       return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold', attemptNumber, strategy, log, benchmarkMode: isDryRun });
+    }
+
+    // ── 6a. Summary-first fallback guard: stricter acceptance ──
+    if (strategy === 'summary_first' && deduped.length > 0) {
+      const summaryValLoss = normalized.length > 0 ? (normalized.length - validated.length) / normalized.length : 0;
+      const summaryDedLoss = validated.length > 0 ? (validated.length - deduped.length) / validated.length : 0;
+      if (!((deduped.length >= minKiFloor) && summaryValLoss < 0.5 && summaryDedLoss < 0.3)) {
+        console.warn(`[extract] ⚠️ Summary-first DEGRADED output: "${resource.title}" | ki=${deduped.length} floor=${minKiFloor} valLoss=${(summaryValLoss*100).toFixed(0)}% dedLoss=${(summaryDedLoss*100).toFixed(0)}% — treating as model_failure, will not override prior results`);
+        const failureType: ExtractionFailureType = 'model_failure';
+        log.outcome = 'summary_first_rejected';
+        log.failureType = failureType;
+        if (!isDryRun) {
+          const thisAttempt = buildAttemptRecord({
+            attemptNumber, strategy, kiCount: deduped.length, rawItemCount: rawItems.length,
+            validatedCount: validated.length, dedupedCount: deduped.length,
+            minKiFloor, failureType, status: 'extraction_requires_review', durationMs, startedAt,
+          });
+          await persistAttemptRecord(supabase, resourceId, resource.user_id, thisAttempt);
+          await saveExtractionLog(supabase, log);
+          await updateExtractionStatus(supabase, resourceId, 'extraction_requires_review', {
+            extraction_attempt_count: attemptNumber,
+            extraction_failure_type: failureType,
+            extractor_strategy: strategy,
+            extraction_retry_eligible: false,
+            next_retry_at: null, retry_scheduled_at: null,
+          });
+        }
+        return respond({ resourceId, title: resource.title, kis: 0, error: 'Summary-first output rejected (degraded quality)', attemptNumber, strategy, log });
+      }
+    }
+
+    // ── 6b. Retry improvement check: stop if no improvement over previous best ──
+    if (attemptNumber > 1 && !isDryRun) {
+      const priorHistory = await fetchAttemptHistory(supabase, resourceId);
+      const previousBest = selectBestAttempt(priorHistory.filter(a => a.attempt_number < attemptNumber));
+      if (previousBest && previousBest.floor_met && previousBest.ki_count > 0) {
+        const currentConfidence = computeAttemptConfidence(deduped.length, minKiFloor, rawItems.length, validated.length, deduped.length);
+        const prevConfidence = previousBest.confidence_score ?? 0;
+        if (currentConfidence <= prevConfidence && deduped.length <= previousBest.ki_count) {
+          console.log(`[extract-retry] 🛑 No improvement: attempt ${attemptNumber} (conf=${currentConfidence}, ki=${deduped.length}) ≤ best attempt ${previousBest.attempt_number} (conf=${prevConfidence}, ki=${previousBest.ki_count}) — stopping retries, marking for review`);
+          const thisAttempt = buildAttemptRecord({
+            attemptNumber, strategy, kiCount: deduped.length, rawItemCount: rawItems.length,
+            validatedCount: validated.length, dedupedCount: deduped.length,
+            minKiFloor, failureType: 'under_floor_invariant', status: 'extraction_requires_review', durationMs, startedAt,
+          });
+          await persistAttemptRecord(supabase, resourceId, resource.user_id, thisAttempt);
+          await saveExtractionLog(supabase, log);
+          const fullHistory = await fetchAttemptHistory(supabase, resourceId);
+          const audit = buildAuditFromHistory(fullHistory, 'extraction_requires_review', resource.content.length, isLesson, floorDetails);
+          await updateExtractionStatus(supabase, resourceId, 'extraction_requires_review', {
+            extraction_attempt_count: attemptNumber,
+            extraction_failure_type: 'under_floor_invariant',
+            extractor_strategy: strategy,
+            extraction_retry_eligible: false,
+            next_retry_at: null, retry_scheduled_at: null,
+            ...(audit ? { extraction_audit_summary: audit } : {}),
+          });
+          return respond({ resourceId, title: resource.title, kis: 0, error: 'No improvement over previous best — stopped retries', attemptNumber, strategy, log });
+        }
+      }
     }
 
     // Hard invariant: if yield is below the content-proportional floor, trigger retry
