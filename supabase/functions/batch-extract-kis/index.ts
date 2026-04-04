@@ -173,11 +173,9 @@ async function scheduleRetry(
   _retryInFlight.add(resourceId);
 
   // ── Guard 2: prevent concurrent retries across invocations ──
-  // Only proceed if the resource is currently in 'extraction_retrying' state
-  // AND its attempt count matches what we expect (prevents stale invocations)
   const { data: current } = await supabase
     .from('resources')
-    .select('extraction_status, extraction_attempt_count')
+    .select('extraction_status, extraction_attempt_count, next_retry_at')
     .eq('id', resourceId)
     .single();
 
@@ -192,8 +190,26 @@ async function scheduleRetry(
     return;
   }
 
+  // ── Guard 3: time-based — check next_retry_at isn't in the future (set by another scheduler) ──
+  if (current.next_retry_at && new Date(current.next_retry_at).getTime() > Date.now()) {
+    console.log(`[extract-retry] ⏭️ Skipping retry for "${resourceId}" — next_retry_at is in the future (${current.next_retry_at})`);
+    _retryInFlight.delete(resourceId);
+    return;
+  }
+
   const delay = retryBackoffMs(attemptNumber);
-  console.log(`[extract-retry] 🔁 Auto-retrying "${resourceId}" attempt ${attemptNumber + 1} in ${delay}ms`);
+  const nextRetryAt = new Date(Date.now() + delay).toISOString();
+
+  // ── Persist retry timing to DB ──
+  await supabase
+    .from('resources')
+    .update({
+      retry_scheduled_at: new Date().toISOString(),
+      next_retry_at: nextRetryAt,
+    })
+    .eq('id', resourceId);
+
+  console.log(`[extract-retry] 🔁 Auto-retrying "${resourceId}" attempt ${attemptNumber + 1} in ${delay}ms (next_retry_at=${nextRetryAt})`);
   await new Promise(r => setTimeout(r, delay));
 
   const url = `${supabaseUrl}/functions/v1/batch-extract-kis`;
