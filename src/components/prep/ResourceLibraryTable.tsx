@@ -42,6 +42,7 @@ import { SystemHealthBar } from './SystemHealthBar';
 import { ResourceCard } from './ResourceCard';
 import { NeedsAttentionQueue } from './NeedsAttentionQueue';
 import { ProcessingStatusBar } from './ProcessingStatusBar';
+import { FixAllProgressPanel } from './FixAllProgressPanel';
 import { CollectionBrowser } from './CollectionBrowser';
 import { CatchupDashboard } from './CatchupDashboard';
 import { LibraryTrustSummary } from './LibraryTrustSummary';
