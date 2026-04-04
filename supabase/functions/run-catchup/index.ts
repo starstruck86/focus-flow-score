@@ -399,7 +399,7 @@ Deno.serve(async (req) => {
             results.qa_flagged++;
             await supabase
               .from("library_reconciliation_items")
-              .update({ qa_flagged: true, qa_reason: "Extraction routed to manual assist" })
+              .update({ qa_flagged: true, qa_reason: `Extraction manual assist: ${routeReasonSummary}` })
               .eq("id", item.id);
           } else {
             // Queue extraction with method hint
