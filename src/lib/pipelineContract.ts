@@ -63,6 +63,7 @@ export function isEligibleForExtraction(resource: {
   content_length?: number | null;
   content?: string | null;
   manual_content_present?: boolean | null;
+  title?: string | null;
 }): EligibilityResult {
   const isEnriched = ENRICHED_STATUSES.includes(resource.enrichment_status as any);
   const actualLen = resource.content?.length ?? 0;
@@ -70,8 +71,14 @@ export function isEligibleForExtraction(resource: {
   const effectiveLen = Math.max(actualLen, fieldLen);
   const hasManual = resource.manual_content_present === true;
 
-  // Not enriched and no content → not eligible
-  if (!isEnriched && effectiveLen < MIN_CONTENT_FOR_LIGHTWEIGHT && !hasManual) {
+  // SAFETY NET: needs_auth with usable content should still be eligible.
+  // Normalization should reclassify these, but if it was missed, don't block extraction.
+  const isStructuredLesson = !!(resource.title && /\s>\s/.test(resource.title));
+  const contentThreshold = isStructuredLesson ? 100 : MIN_CONTENT_FOR_FULL_EXTRACTION;
+  const isNeedsAuthWithContent = resource.enrichment_status === 'needs_auth' && effectiveLen >= contentThreshold;
+
+  // Not enriched and no content → not eligible (unless needs_auth with content)
+  if (!isEnriched && !isNeedsAuthWithContent && effectiveLen < MIN_CONTENT_FOR_LIGHTWEIGHT && !hasManual) {
     return {
       eligible: false,
       reason: `Not enriched (${resource.enrichment_status ?? 'null'}) and insufficient content (${effectiveLen} chars)`,
