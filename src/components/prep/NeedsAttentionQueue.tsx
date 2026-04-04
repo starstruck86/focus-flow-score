@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { deriveReadiness } from '@/lib/resourceSignal';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import { isJobStale } from '@/store/useResourceJobProgress';
+import { deriveProcessingRoute, PIPELINE_LABELS } from '@/lib/processingRoute';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 
