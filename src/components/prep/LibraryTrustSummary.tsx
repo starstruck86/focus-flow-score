@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { CheckCircle2, AlertTriangle, Shield, Zap, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { deriveResourceTruth, deriveLibraryReadiness, type LibraryReadiness } from '@/lib/resourceTruthState';
+import { buildFailureDossier, aggregateDossierInsights, FAILURE_STAGE_LABELS, FAILURE_MODE_LABELS } from '@/lib/failureDossier';
+import { ROOT_CAUSE_LABELS } from '@/lib/rootCauseDiagnosis';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { FixAllResult } from '@/lib/fixAllAutoBlockers';
