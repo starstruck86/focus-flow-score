@@ -3496,6 +3496,7 @@ export type Database = {
         Row: {
           attempt_number: number
           completed_at: string | null
+          confidence_score: number | null
           created_at: string
           deduped_count: number
           duration_ms: number
@@ -3515,6 +3516,7 @@ export type Database = {
         Insert: {
           attempt_number: number
           completed_at?: string | null
+          confidence_score?: number | null
           created_at?: string
           deduped_count?: number
           duration_ms?: number
@@ -3534,6 +3536,7 @@ export type Database = {
         Update: {
           attempt_number?: number
           completed_at?: string | null
+          confidence_score?: number | null
           created_at?: string
           deduped_count?: number
           duration_ms?: number

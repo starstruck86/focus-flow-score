@@ -1,0 +1,1 @@
+ALTER TABLE public.resource_extraction_attempts ADD COLUMN IF NOT EXISTS confidence_score numeric;
