@@ -1238,7 +1238,7 @@ Deno.serve(async (req) => {
       // Telemetry
       logTelemetry({
         resource_id: resourceId, title: resource.title, content_length: resource.content.length,
-        is_structured_lesson: isLesson, ki_count: 0, min_ki_floor: computeMinKiFloor(resource.content.length, isLesson),
+        is_structured_lesson: isLesson, ki_count: 0, min_ki_floor: computeMinKiFloor(resource.content.length, isLesson, densitySignals),
         attempt_number: attemptNumber, extractor_strategy: strategy, failure_reason: failureType,
         duration_ms: Date.now() - startTime, routing_basis: routingBasis,
       });
