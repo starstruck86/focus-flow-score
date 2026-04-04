@@ -2356,6 +2356,116 @@ export type Database = {
         }
         Relationships: []
       }
+      library_reconciliation_items: {
+        Row: {
+          bucket: string
+          created_at: string
+          id: string
+          issues: string[]
+          phase_outcomes: Json
+          processed: boolean
+          qa_flagged: boolean
+          qa_reason: string | null
+          resource_id: string
+          run_id: string
+          severity: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bucket: string
+          created_at?: string
+          id?: string
+          issues?: string[]
+          phase_outcomes?: Json
+          processed?: boolean
+          qa_flagged?: boolean
+          qa_reason?: string | null
+          resource_id: string
+          run_id: string
+          severity?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bucket?: string
+          created_at?: string
+          id?: string
+          issues?: string[]
+          phase_outcomes?: Json
+          processed?: boolean
+          qa_flagged?: boolean
+          qa_reason?: string | null
+          resource_id?: string
+          run_id?: string
+          severity?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "library_reconciliation_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "library_reconciliation_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      library_reconciliation_runs: {
+        Row: {
+          buckets: Json
+          cancelled_at: string | null
+          completed_at: string | null
+          created_at: string
+          current_phase: string | null
+          final_report: Json | null
+          id: string
+          issue_breakdown: Json
+          mode: string
+          phase_progress: Json
+          started_at: string | null
+          status: string
+          total_resources: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          buckets?: Json
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_phase?: string | null
+          final_report?: Json | null
+          id?: string
+          issue_breakdown?: Json
+          mode?: string
+          phase_progress?: Json
+          started_at?: string | null
+          status?: string
+          total_resources?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          buckets?: Json
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_phase?: string | null
+          final_report?: Json | null
+          id?: string
+          issue_breakdown?: Json
+          mode?: string
+          phase_progress?: Json
+          started_at?: string | null
+          status?: string
+          total_resources?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       mock_call_sessions: {
         Row: {
           call_type: string
