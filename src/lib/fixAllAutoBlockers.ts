@@ -46,6 +46,10 @@ export interface FixResourceOutcome {
   normalized: boolean;
   /** Whether wrapper-page / attachment detection applied */
   wrapperPageDetected: boolean;
+  /** Whether attachment extraction was attempted for wrapper pages */
+  attachmentExtractionAttempted: boolean;
+  /** Attachment extraction outcome if attempted */
+  attachmentExtractionOutcome: string | null;
   /** Original enrichment_status before normalization */
   originalEnrichmentStatus: string | null;
   /** Original active_job_status before normalization */
