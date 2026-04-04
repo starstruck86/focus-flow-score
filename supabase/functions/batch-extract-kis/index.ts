@@ -1289,19 +1289,26 @@ Deno.serve(async (req) => {
       if (!isDryRun) {
         const retryEligible = attemptNumber < maxAttempts && failureType !== 'structural_failure';
         const newStatus = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
-        const priorStrategies = reconstructPriorStrategies(attemptNumber, resource);
+
+        // Append attempt record
+        const thisAttempt = buildAttemptRecord({
+          attemptNumber, strategy, kiCount: 0, rawItemCount: rawItems.length, validatedCount: validated.length,
+          dedupedCount: 0, minKiFloor, failureType, status: newStatus, durationMs, startedAt,
+        });
+        const updatedHistory = [...attemptHistory, thisAttempt];
+
         const auditFields: Record<string, any> = {
           extraction_attempt_count: attemptNumber,
           extraction_failure_type: failureType,
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
+          extraction_attempt_history: updatedHistory,
+          next_retry_at: null,
+          retry_scheduled_at: null,
         };
         if (!retryEligible) {
-          auditFields.extraction_audit_summary = buildAuditSummary({
-            attemptNumber, currentStrategy: strategy, previousStrategies: priorStrategies,
-            kiCount: 0, minKiFloor: minKiFloor, finalStatus: newStatus, failureType,
-            durationMs: durationMs, contentLength: resource.content.length, isLesson,
-          });
+          const audit = buildAuditFromHistory(updatedHistory, newStatus, resource.content.length, isLesson);
+          if (audit) auditFields.extraction_audit_summary = audit;
         }
         await saveExtractionLog(supabase, log);
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
