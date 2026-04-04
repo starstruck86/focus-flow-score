@@ -783,7 +783,7 @@ export function ResourceManager() {
             lastFixResult={lastFixResult}
             fixAllProgressMessage={fixAllProgressMessage}
             isFixAllRunning={isFixAllRunning}
-            externalHealthFilter={externalHealthFilter}
+            
             onToggleSelect={(id) => setSelectedResourceIds(prev => {
               const next = new Set(prev);
               if (next.has(id)) next.delete(id);
