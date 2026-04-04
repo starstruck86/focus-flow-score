@@ -161,6 +161,10 @@ export function deriveResourceTruth(
   const enrichStatusRaw = enrichStatus as string;
   if (enrichStatusRaw === 'needs_auth' && !isContentBacked && !isActivelyProcessing) {
     blockers.push(blocker('needs_auth', `Auth-gated content — ${rAny.failure_reason || 'login required'}`));
+  } else if (enrichStatusRaw === 'needs_auth' && isContentBacked && !isActivelyProcessing) {
+    // HARDENED: needs_auth is a misclassification when usable content exists.
+    // Flag as needs_extraction so Fix All can reclassify and extract.
+    blockers.push(blocker('needs_extraction', `Misclassified as "needs_auth" but has ${contentLength} chars of usable content — reclassify and extract`));
   }
 
   // ── Enrichment blockers ─────────────────────────────────
