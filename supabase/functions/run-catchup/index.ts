@@ -23,34 +23,69 @@ const PHASE_BUCKETS: Record<Phase, string[]> = {
   surface_to_qa: ["needs_qa_review", "blocked"],
 };
 
-// ── Lightweight server-side route derivation ───────────────
+// ── Asset-aware server-side route derivation ──────────────
 type Pipeline = "transcript_pipeline" | "enrich_then_extract" | "direct_extract" | "manual_assist";
+type AssetKind = "lesson_text" | "transcript_text" | "parsed_content" | "manual_text" | "audio_file" | "video_file" | "uploaded_file" | "url";
 
-function deriveRoute(resource: any): { pipeline: Pipeline; extraction_method: string } {
+const ASSET_PRIORITY: AssetKind[] = [
+  "lesson_text", "transcript_text", "parsed_content", "manual_text",
+  "audio_file", "video_file", "uploaded_file", "url",
+];
+
+function hasTextAsset(a: AssetKind): boolean {
+  return a === "lesson_text" || a === "transcript_text" || a === "parsed_content" || a === "manual_text";
+}
+
+function deriveRoute(resource: any): { pipeline: Pipeline; extraction_method: string; primary_asset: AssetKind } {
   const url = resource.file_url || "";
   const resourceType = resource.resource_type || "";
   const title = resource.title || "";
   const contentLength = resource.content_length || 0;
   const failureCount = (resource.failure_count || 0) + (resource.advanced_extraction_attempts || 0);
   const enrichmentStatus = resource.enrichment_status || "";
+  const hasContent = contentLength > 200;
+  const isLesson = title.includes(" > ");
 
   const isAudio = resourceType === "audio" || resourceType === "podcast_episode" ||
     /\.mp3|\.m4a|\.wav|\.ogg/i.test(url) ||
     /spotify\.com|podcasts\.apple\.com|anchor\.fm/i.test(url);
   const isVideo = resourceType === "video" || /\.mp4/i.test(url) ||
     /youtube\.com|youtu\.be|vimeo\.com/i.test(url);
-  const isLesson = title.includes(" > ");
 
-  // Pipeline
+  // Detect available assets
+  const assets: AssetKind[] = [];
+  if (isLesson && hasContent) assets.push("lesson_text");
+  const hasTranscript = resource.has_transcript || resource.transcript_text ||
+    (enrichmentStatus === "deep_enriched" && (isAudio || isVideo));
+  if (hasTranscript && hasContent) assets.push("transcript_text");
+  const parsedStatuses = ["deep_enriched", "content_ready", "enriched"];
+  if (parsedStatuses.includes(enrichmentStatus) && hasContent && !isLesson && !hasTranscript) assets.push("parsed_content");
+  if ((resource.manual_content_present || resource.resolution_method === "resolved_manual") && hasContent) assets.push("manual_text");
+  if (hasContent && assets.length === 0 && !isAudio) assets.push("parsed_content");
+  if (isAudio) assets.push("audio_file");
+  if (isVideo) assets.push("video_file");
+  if (url.includes(".pdf") || resourceType === "pdf" || resourceType === "doc") assets.push("uploaded_file");
+  if (url.startsWith("http") && !assets.includes("audio_file") && !assets.includes("video_file") && !assets.includes("uploaded_file")) assets.push("url");
+  if (assets.length === 0 && url) assets.push("url");
+
+  // Select primary asset
+  let primary_asset: AssetKind = "url";
+  for (const a of ASSET_PRIORITY) {
+    if (assets.includes(a)) { primary_asset = a; break; }
+  }
+
+  // Pipeline based on primary asset
   let pipeline: Pipeline;
-  if (failureCount >= 3 && enrichmentStatus !== "deep_enriched") {
+  if (failureCount >= 3 && enrichmentStatus !== "deep_enriched" && !hasTextAsset(primary_asset)) {
     pipeline = "manual_assist";
-  } else if (isAudio || isVideo) {
-    pipeline = "transcript_pipeline";
-  } else if (resourceType === "text" || (resource.manual_content_present && contentLength > 0)) {
+  } else if (hasTextAsset(primary_asset)) {
     pipeline = "direct_extract";
-  } else {
+  } else if (primary_asset === "audio_file" || primary_asset === "video_file") {
+    pipeline = "transcript_pipeline";
+  } else if (primary_asset === "uploaded_file" || primary_asset === "url") {
     pipeline = "enrich_then_extract";
+  } else {
+    pipeline = "manual_assist";
   }
 
   // Extraction method
@@ -63,7 +98,7 @@ function deriveRoute(resource: any): { pipeline: Pipeline; extraction_method: st
     extraction_method = "summary_first";
   }
 
-  return { pipeline, extraction_method };
+  return { pipeline, extraction_method, primary_asset };
 }
 
 Deno.serve(async (req) => {
