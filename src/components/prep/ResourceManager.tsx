@@ -180,8 +180,8 @@ export function ResourceManager() {
   // Build lifecycle map for truth derivation in bulk actions
   const lifecycleMap = useMemo(() => {
     const map = new Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>();
-    if (!lifecycle) return map;
-    for (const item of lifecycle) {
+    if (!lifecycle?.resources) return map;
+    for (const item of lifecycle.resources) {
       map.set(item.resource_id, {
         stage: item.canonical_stage,
         blocked: item.blocked_reason,
