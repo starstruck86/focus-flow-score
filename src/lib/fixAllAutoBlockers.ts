@@ -562,23 +562,11 @@ export async function runFixAllAutoBlockers(
     const normalizeResult = await normalizeStaleStatuses(allIds, onProgress, callbacks);
     if (normalizeResult.attempted > 0) {
       phases.push(normalizeResult);
-      // Mark normalized outcomes
+      // Mark all attempted normalizations in outcomes
       for (const id of allIds) {
         const outcome = outcomeMap.get(id);
-        if (outcome) {
-          const origState = originalStateMap.get(id);
-          // Check if DB state actually changed by comparing to fresh data
-          const { data: fresh } = await supabase
-            .from('resources' as any)
-            .select('enrichment_status, active_job_status')
-            .eq('id', id)
-            .single();
-          if (fresh && origState) {
-            const f = fresh as any;
-            if (f.enrichment_status !== origState.enrichment_status || f.active_job_status !== origState.active_job_status) {
-              outcome.normalized = true;
-            }
-          }
+        if (outcome && normalizeResult.succeeded > 0) {
+          outcome.normalized = true;
         }
       }
     }
