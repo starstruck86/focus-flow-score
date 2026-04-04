@@ -42,6 +42,7 @@ import { ResourceCard } from './ResourceCard';
 import { NeedsAttentionQueue } from './NeedsAttentionQueue';
 import { ProcessingStatusBar } from './ProcessingStatusBar';
 import { CollectionBrowser } from './CollectionBrowser';
+import { CatchupDashboard } from './CatchupDashboard';
 import { deriveResourceInsight, deriveReadiness } from '@/lib/resourceSignal';
 import type { ReadinessBucket } from '@/lib/resourceAudit';
 import {
