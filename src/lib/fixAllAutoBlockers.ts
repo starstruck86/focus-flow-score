@@ -231,31 +231,38 @@ async function fixNeedsActivation(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixPhaseResult> {
   const result: FixPhaseResult = { phase: 'activation', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
 
   if (resourceIds.length === 0) return result;
 
   onProgress?.(`Activating ${resourceIds.length} resources`);
+  for (const id of resourceIds) {
+    callbacks?.onItemStart?.(id, 'activation');
+  }
   
-  // autoOperationalizeBatch handles activation as part of its pipeline.
-  // For resources that already have KIs, it will skip extraction and go straight to activation.
   try {
     const results = await autoOperationalizeBatch(resourceIds, undefined, onResourcePhase);
     for (const r of results) {
       if (r.knowledgeActivated > 0 || r.operationalized) {
         result.succeeded++;
+        callbacks?.onItemDone?.(r.resourceId, 'activation');
       } else if (r.knowledgeExtracted > 0) {
-        // Extracted but not activated — still progress
         result.succeeded++;
+        callbacks?.onItemDone?.(r.resourceId, 'activation');
       } else {
         result.failed++;
         result.errors.push(`${r.resourceId}: ${r.reason || 'activation failed'}`);
+        callbacks?.onItemFailed?.(r.resourceId, 'activation');
       }
     }
   } catch (err: any) {
     result.failed += resourceIds.length;
     result.errors.push(`Batch activation failed: ${err.message}`);
+    for (const id of resourceIds) {
+      callbacks?.onItemFailed?.(id, 'activation');
+    }
   }
 
   return result;
