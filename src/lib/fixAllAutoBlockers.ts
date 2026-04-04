@@ -327,7 +327,7 @@ async function normalizeStaleStatuses(
   // Also fetch current resource state to identify stale failed markers
   const { data: resourceStates } = await supabase
     .from('resources' as any)
-    .select('id, enrichment_status, active_job_status, active_job_error')
+    .select('id, enrichment_status, active_job_status, active_job_error, active_job_updated_at, active_job_started_at')
     .in('id', resourceIds);
 
   const stateMap = new Map<string, any>();
