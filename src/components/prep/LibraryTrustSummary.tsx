@@ -205,8 +205,7 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
               );
             })}
         </div>
-      )
-      </div>
+      )}
 
       {/* Burn-down results from last Fix All run */}
       {lastFixResult && (
