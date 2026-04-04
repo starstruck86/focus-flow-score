@@ -374,6 +374,11 @@ export function ResourceLibraryTable({
         />
       </div>
 
+      {/* Processing Status */}
+      <div className="shrink-0 mb-2">
+        <ProcessingStatusBar resources={resources} />
+      </div>
+
       {/* Needs Attention Queue */}
       <div className="shrink-0 mb-2">
         <NeedsAttentionQueue
