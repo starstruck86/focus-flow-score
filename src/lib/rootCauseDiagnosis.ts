@@ -98,6 +98,7 @@ export const ROOT_CAUSE_COLORS: Record<RootCauseCategory, string> = {
   auth_required: 'text-amber-600',
   missing_content: 'text-destructive',
   contradictory_state: 'text-destructive',
+  reference_only: 'text-muted-foreground',
   unknown: 'text-muted-foreground',
 };
 
