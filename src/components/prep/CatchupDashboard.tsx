@@ -22,6 +22,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { aggregateRoutes, PIPELINE_LABELS, type Pipeline } from '@/lib/processingRoute';
 
 // ── Constants ──────────────────────────────────────────────
 const BUCKET_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
