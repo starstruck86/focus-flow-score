@@ -210,6 +210,65 @@ function logTelemetry(t: ExtractionTelemetry) {
 }
 
 // ═══════════════════════════════════════════
+// Terminal Audit Summary
+// ═══════════════════════════════════════════
+
+interface ExtractionAuditSummary {
+  total_attempts: number;
+  strategies_used: ExtractionStrategy[];
+  final_ki_count: number;
+  min_ki_floor: number;
+  floor_met: boolean;
+  final_status: string;
+  final_failure_type: ExtractionFailureType | null;
+  total_elapsed_ms: number;
+  content_length: number;
+  is_structured_lesson: boolean;
+  completed_at: string;
+}
+
+function buildAuditSummary(opts: {
+  attemptNumber: number;
+  currentStrategy: ExtractionStrategy;
+  previousStrategies: ExtractionStrategy[];
+  kiCount: number;
+  minKiFloor: number;
+  finalStatus: string;
+  failureType: ExtractionFailureType | null;
+  durationMs: number;
+  contentLength: number;
+  isLesson: boolean;
+}): ExtractionAuditSummary {
+  // Collect all strategies used across attempts
+  const allStrategies = [...opts.previousStrategies];
+  if (!allStrategies.includes(opts.currentStrategy)) {
+    allStrategies.push(opts.currentStrategy);
+  }
+  return {
+    total_attempts: opts.attemptNumber,
+    strategies_used: allStrategies,
+    final_ki_count: opts.kiCount,
+    min_ki_floor: opts.minKiFloor,
+    floor_met: opts.kiCount >= opts.minKiFloor,
+    final_status: opts.finalStatus,
+    final_failure_type: opts.failureType,
+    total_elapsed_ms: opts.durationMs,
+    content_length: opts.contentLength,
+    is_structured_lesson: opts.isLesson,
+    completed_at: new Date().toISOString(),
+  };
+}
+
+/** Reconstruct strategies used on prior attempts by replaying selectStrategy */
+function reconstructPriorStrategies(attemptNumber: number, resource: any): ExtractionStrategy[] {
+  const strategies: ExtractionStrategy[] = [];
+  for (let i = 1; i < attemptNumber; i++) {
+    strategies.push(selectStrategy(i, i > 1 ? resource.extraction_failure_type : undefined));
+  }
+  return strategies;
+}
+
+// ═══════════════════════════════════════════
 // Prompts
 // ═══════════════════════════════════════════
 
