@@ -34,10 +34,12 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
-import { InlineResourceDetail } from './InlineResourceDetail';
+import { ResourceInspectPanel } from './ResourceInspectPanel';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { SystemHealthBar } from './SystemHealthBar';
 import { ResourceCard } from './ResourceCard';
+import { NeedsAttentionQueue } from './NeedsAttentionQueue';
+import { CollectionBrowser } from './CollectionBrowser';
 import { deriveResourceInsight, deriveReadiness } from '@/lib/resourceSignal';
 import type { ReadinessBucket } from '@/lib/resourceAudit';
 import {
