@@ -796,7 +796,9 @@ export function ResourceManager() {
             onBulkAction={async (action, resourceIds) => {
               switch (action) {
                 case 'fix_all_auto': {
-                  toast.info(`Starting auto-fix for ${resourceIds.length} blockers…`);
+                  setIsFixAllRunning(true);
+                  setFixAllProgressMessage(`Starting auto-fix for ${resourceIds.length} blockers…`);
+                  setLastFixResult(null);
                   try {
                     const { runFixAllAutoBlockers } = await import('@/lib/fixAllAutoBlockers');
                     const { deriveResourceTruth } = await import('@/lib/resourceTruthState');
@@ -806,7 +808,6 @@ export function ResourceManager() {
                     for (const id of resourceIds) {
                       const r = filteredResources.find(res => res.id === id);
                       if (!r) continue;
-                      // We need lifecycle info — get from canonical lifecycle or derive
                       const truth = deriveResourceTruth(r, lifecycleMap.get(id), audioJobsMap?.get(id));
                       const blockerType = truth.primary_blocker?.type;
                       if (blockerType && truth.primary_blocker?.fixability !== 'manual_only') {
@@ -823,7 +824,7 @@ export function ResourceManager() {
 
                     const result = await runFixAllAutoBlockers(
                       blockerGroups,
-                      (msg) => toast.info(msg, { id: 'fix-all-progress' }),
+                      (msg) => setFixAllProgressMessage(msg),
                     );
 
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
@@ -846,6 +847,9 @@ export function ResourceManager() {
                     }
                   } catch (err: any) {
                     toast.error('Auto-fix failed', { description: err?.message });
+                  } finally {
+                    setIsFixAllRunning(false);
+                    setFixAllProgressMessage(null);
                   }
                   break;
                 }
