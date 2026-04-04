@@ -486,21 +486,37 @@ export async function runFixAllAutoBlockers(
   // Track per-resource outcomes
   const outcomeMap = new Map<string, FixResourceOutcome>();
 
-  // Fetch titles for all resources upfront for readable outcomes
+  // Fetch titles + state for all resources upfront for readable outcomes
   const allResourceIds = blockerGroups.flatMap(g => g.resourceIds);
   const titleMap = new Map<string, string>();
+  const originalStateMap = new Map<string, { enrichment_status: string; active_job_status: string; content: string }>();
   if (allResourceIds.length > 0) {
     const { data: titleData } = await supabase
       .from('resources' as any)
-      .select('id, title, content')
+      .select('id, title, content, enrichment_status, active_job_status')
       .in('id', allResourceIds);
     for (const r of (titleData ?? []) as any[]) {
       titleMap.set(r.id, r.title ?? r.id.slice(0, 8));
+      originalStateMap.set(r.id, {
+        enrichment_status: r.enrichment_status ?? '',
+        active_job_status: r.active_job_status ?? '',
+        content: r.content ?? '',
+      });
+    }
+  }
+
+  // Detect wrapper pages using attachment detection
+  const { detectAttachmentReferences } = await import('@/lib/attachmentDetection');
+  const wrapperSet = new Set<string>();
+  for (const [id, state] of originalStateMap) {
+    if (detectAttachmentReferences(state.content).hasAttachmentReferences) {
+      wrapperSet.add(id);
     }
   }
 
   const initOutcome = (id: string, phase: string, blockerType: string) => {
     if (!outcomeMap.has(id)) {
+      const origState = originalStateMap.get(id);
       outcomeMap.set(id, {
         resourceId: id,
         resourceTitle: titleMap.get(id) ?? id.slice(0, 8),
@@ -515,6 +531,10 @@ export async function runFixAllAutoBlockers(
         rootCauseCategory: null,
         rootCauseExplanation: null,
         resolutionOutcome: null,
+        normalized: false,
+        wrapperPageDetected: wrapperSet.has(id),
+        originalEnrichmentStatus: origState?.enrichment_status ?? null,
+        originalJobStatus: origState?.active_job_status ?? null,
       });
     }
   };
