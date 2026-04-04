@@ -41,6 +41,24 @@ interface ClassifiedItem {
   severity: number;
 }
 
+// ── Attachment reference detection (mirrors client-side attachmentDetection.ts) ──
+const ATTACHMENT_PATTERNS = [
+  /\bsee\s+(the\s+)?pdf\b/i,
+  /\bpdf\s+attached\b/i,
+  /\bdownload\s+(the\s+)?(worksheet|workbook|template|checklist|guide|pdf|slides?|deck)\b/i,
+  /\bsee\s+(the\s+)?(slide|attachment|document|handout|worksheet|workbook)\b/i,
+  /\brefer\s+to\s+(the\s+)?(document|pdf|slide|attachment|worksheet)\b/i,
+  /\b(attached|enclosed)\s+(pdf|document|file|worksheet|slide)\b/i,
+  /\bclick\s+(here\s+)?to\s+download\b/i,
+  /\bdownload\s+(below|above|here)\b/i,
+  /\bsee\s+attached\b/i,
+];
+
+function hasAttachmentReferences(content: string | null): boolean {
+  if (!content) return false;
+  return ATTACHMENT_PATTERNS.some(p => p.test(content));
+}
+
 function classifyResource(
   r: any,
   kiCount: number,
@@ -51,6 +69,8 @@ function classifyResource(
   const status = r.enrichment_status || "not_enriched";
   const contentLen = r.content_length || 0;
   const enrichVer = r.enrichment_version ?? 0;
+  const contentText = r.content || "";
+  const hasAttachmentRefs = hasAttachmentReferences(contentText);
 
   // Determine whether content exists
   const impliedContent = CONTENT_IMPLIED_STATUSES.includes(status);
