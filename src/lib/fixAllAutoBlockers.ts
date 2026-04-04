@@ -331,7 +331,7 @@ async function normalizeStaleStatuses(
     .in('id', resourceIds);
 
   const stateMap = new Map<string, any>();
-  for (const r of (resourceStates ?? [])) {
+  for (const r of (resourceStates ?? []) as any[]) {
     stateMap.set(r.id, r);
   }
 
