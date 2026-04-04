@@ -1130,7 +1130,7 @@ Deno.serve(async (req) => {
 
         // Auto-retry: fire-and-forget next attempt
         if (retryEligible) {
-          scheduleRetry(supabaseUrl, serviceRoleKey, resourceId);
+          scheduleRetry(supabase, supabaseUrl, serviceRoleKey, resourceId, attemptNumber);
         }
       }
       console.log(`[extract] ⚠️ "${resource.title}": 0 items — attempt ${attemptNumber}/${maxAttempts}`);
