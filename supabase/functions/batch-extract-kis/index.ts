@@ -1118,6 +1118,16 @@ function computeMinKiFloorDetailed(contentLength: number, isLesson: boolean, den
   return { base: baseFloor, densityAdjusted, final: densityAdjusted };
 }
 
+/** Check if resource already has valid KIs from a prior successful extraction */
+async function hasExistingValidKIs(supabase: any, resourceId: string, minFloor: number): Promise<{ hasKIs: boolean; count: number }> {
+  const { count } = await supabase
+    .from('knowledge_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('source_resource_id', resourceId);
+  const kiCount = count ?? 0;
+  return { hasKIs: kiCount >= minFloor && kiCount > 0, count: kiCount };
+}
+
 // ═══════════════════════════════════════════
 // DB helpers
 // ═══════════════════════════════════════════
