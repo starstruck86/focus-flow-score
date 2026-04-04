@@ -1313,7 +1313,8 @@ Deno.serve(async (req) => {
       log.lessonPipeline.validationRejects = rejectReasons;
     }
 
-    console.log(`[extract] "${resource.title}": ${validated.length} validated from ${normalized.length} normalized`);
+    const validationLossPct = normalized.length > 0 ? Math.round(((normalized.length - validated.length) / normalized.length) * 100) : 0;
+    console.log(`[extract] "${resource.title}": ${validated.length} validated from ${normalized.length} normalized (${validationLossPct}% validation loss)`);
     if (Object.keys(rejectReasons).length > 0) {
       console.log(`[extract] Rejection reasons: ${JSON.stringify(rejectReasons)}`);
     }
