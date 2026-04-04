@@ -418,6 +418,11 @@ function buildAuditFromHistory(
     console.log(`[extract-audit] 📊 Best attempt: #${bestAttempt.attempt_number} (confidence=${bestAttempt.confidence_score}, ki=${bestAttempt.ki_count}) vs last: #${lastAttempt.attempt_number} (ki=${lastAttempt.ki_count})`);
   }
 
+  const bestConfidence = sourceAttempt.confidence_score ?? computeAttemptConfidence(
+    sourceAttempt.ki_count, sourceAttempt.min_ki_floor,
+    sourceAttempt.raw_item_count, sourceAttempt.validated_count, sourceAttempt.deduped_count
+  );
+
   const summary: ExtractionAuditSummary = {
     total_attempts: attemptHistory.length,
     strategies_used: strategies,
@@ -440,6 +445,8 @@ function buildAuditFromHistory(
     base_floor: floorDetails?.base ?? sourceAttempt.min_ki_floor,
     density_adjusted_floor: floorDetails?.densityAdjusted ?? sourceAttempt.min_ki_floor,
     final_floor: floorDetails?.final ?? sourceAttempt.min_ki_floor,
+    best_attempt_index: sourceAttempt.attempt_number,
+    confidence_score: bestConfidence,
   };
 
   // ── Validate before returning ──
