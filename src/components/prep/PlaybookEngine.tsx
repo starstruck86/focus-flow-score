@@ -144,7 +144,7 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
                       <Info className="h-3 w-3 text-muted-foreground" />
                     </TooltipTrigger>
                      <TooltipContent side="top" className="max-w-xs text-xs">
-                       A resource is ready to use when it has at least 1 active knowledge item with contexts assigned. This count comes from the canonical lifecycle audit.
+                       A resource is operationalized when it has at least 1 active knowledge item with contexts assigned. Check the Library Trust summary for true readiness status.
                      </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
