@@ -60,7 +60,7 @@ function getStatusInfo(r: LibraryReadiness): { label: string; reason: string } {
 }
 
 export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onFixAllAuto, onFilterChange, onRefresh, isRefreshing, lastFixResult }: Props) {
-  const { readiness, autoFixableIds, blockerBreakdown } = useMemo(() => {
+  const { readiness, autoFixableIds, blockerBreakdown, dossierInsights } = useMemo(() => {
     const truths = resources.map(r => {
       const lc = lifecycleMap.get(r.id);
       return deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
@@ -68,15 +68,18 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
     const rd = deriveLibraryReadiness(truths);
     const ids: string[] = [];
     const breakdown: Record<string, number> = {};
-    truths.forEach((t, i) => {
+    const dossiers = resources.map((r, i) => {
+      const t = truths[i];
       if (t.all_blockers.some(b => b.fixability === 'auto_fixable' || b.fixability === 'semi_auto_fixable')) {
-        ids.push(resources[i].id);
+        ids.push(r.id);
       }
       if (t.primary_blocker) {
         breakdown[t.primary_blocker.type] = (breakdown[t.primary_blocker.type] ?? 0) + 1;
       }
-    });
-    return { readiness: rd, autoFixableIds: ids, blockerBreakdown: breakdown };
+      return buildFailureDossier(r, t);
+    }).filter((d): d is NonNullable<typeof d> => d !== null);
+    const insights = dossiers.length > 0 ? aggregateDossierInsights(dossiers) : null;
+    return { readiness: rd, autoFixableIds: ids, blockerBreakdown: breakdown, dossierInsights: insights };
   }, [resources, lifecycleMap, audioJobsMap]);
 
   if (readiness.total_resources === 0) return null;
