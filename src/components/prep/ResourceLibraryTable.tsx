@@ -373,6 +373,7 @@ export function ResourceLibraryTable({
           resources={resources}
           lifecycleMap={lifecycleMap}
           audioJobsMap={audioJobsMap}
+          onFixAllAuto={onBulkAction ? (ids) => onBulkAction('fix_all_auto', ids) : undefined}
         />
       </div>
 
