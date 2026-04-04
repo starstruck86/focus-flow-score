@@ -61,6 +61,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import { AppFreshnessBar } from './AppFreshnessBar';
+import { useAppFreshness } from '@/hooks/useAppFreshness';
 
 type PendingItem = {
   id: string;
