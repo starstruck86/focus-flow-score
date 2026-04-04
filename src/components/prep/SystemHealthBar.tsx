@@ -155,6 +155,17 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
             onClick={() => onFilterChange('stalled')}
           />
         )}
+        {counts.qa_required > 0 && (
+          <HealthPill
+            label="QA Required"
+            count={counts.qa_required}
+            colorClass="text-amber-600"
+            bgClass="bg-amber-500/10"
+            icon={<Eye className="h-3 w-3" />}
+            active={activeFilter === 'qa_required'}
+            onClick={() => onFilterChange('qa_required')}
+          />
+        )}
         <HealthPill
           label="Blocked"
           count={counts.blocked}
