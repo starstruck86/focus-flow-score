@@ -380,6 +380,11 @@ export function ResourceLibraryTable({
         <ProcessingStatusBar resources={resources} />
       </div>
 
+      {/* Catch-Up Dashboard */}
+      <div className="shrink-0 mb-2">
+        <CatchupDashboard />
+      </div>
+
       {/* Needs Attention Queue */}
       <div className="shrink-0 mb-2">
         <NeedsAttentionQueue
