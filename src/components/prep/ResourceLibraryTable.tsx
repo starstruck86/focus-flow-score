@@ -76,8 +76,8 @@ interface ResourceLibraryTableProps {
   onRefresh?: () => void;
   isRefreshing?: boolean;
   lastFixResult?: import('@/lib/fixAllAutoBlockers').FixAllResult | null;
-  /** Live fix-all progress message */
-  fixAllProgressMessage?: string | null;
+  /** Live fix-all progress */
+  fixAllLiveProgress?: import('@/lib/fixAllProgress').FixAllLiveProgress | null;
   /** Is fix-all currently running? */
   isFixAllRunning?: boolean;
 }
