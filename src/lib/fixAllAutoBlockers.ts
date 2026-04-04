@@ -277,12 +277,12 @@ async function fixNeedsActivation(
 async function normalizeStaleStatuses(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixPhaseResult> {
   const result: FixPhaseResult = { phase: 'normalize_status', attempted: 0, succeeded: 0, failed: 0, errors: [] };
 
   if (resourceIds.length === 0) return result;
 
-  // Check which of these resources actually have KIs
   const { data: kiCounts } = await supabase
     .from('knowledge_items' as any)
     .select('source_resource_id')
@@ -294,12 +294,11 @@ async function normalizeStaleStatuses(
     if (!resourcesWithKIs.has(id)) continue;
     result.attempted++;
     
+    callbacks?.onItemStart?.(id, 'normalize_status', `Normalizing status for ${id.slice(0, 8)}…`);
     onProgress?.(`Normalizing status for ${id.slice(0, 8)}…`);
     
-    // Resource has KIs — clear the failed/retrying status
     const cleared = await clearFailedJobStatus(id);
     if (cleared) {
-      // Also update enrichment_status if stuck in extraction_retrying
       const { error } = await supabase
         .from('resources' as any)
         .update({
@@ -310,13 +309,16 @@ async function normalizeStaleStatuses(
       
       if (!error) {
         result.succeeded++;
+        callbacks?.onItemDone?.(id, 'normalize_status');
       } else {
         result.failed++;
         result.errors.push(`${id}: status update failed`);
+        callbacks?.onItemFailed?.(id, 'normalize_status');
       }
     } else {
       result.failed++;
       result.errors.push(`${id}: clear failed`);
+      callbacks?.onItemFailed?.(id, 'normalize_status');
     }
   }
 
