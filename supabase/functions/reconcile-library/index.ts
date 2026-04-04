@@ -87,6 +87,25 @@ function classifyResource(
     return { resource_id: r.id, bucket: "needs_enrichment", issues: ["missing_content"], severity: 7 };
   }
 
+  // ── 1b. False needs_auth with usable content ──────────────
+  // HARD RULE: If status is needs_auth but content already exists (>= 200 chars),
+  // the real issue is extraction, not auth. Reclassify.
+  if (status === "needs_auth") {
+    const hasUsableContent = contentLen >= 200;
+    if (hasUsableContent) {
+      // Has content — not really auth-blocked
+      if (hasAttachmentRefs) {
+        return { resource_id: r.id, bucket: "needs_extraction", issues: ["false_needs_auth_wrapper_page"], severity: 6 };
+      }
+      return { resource_id: r.id, bucket: "needs_extraction", issues: ["false_needs_auth_has_content"], severity: 5 };
+    }
+    // Truly auth-blocked with no usable content — but check for attachment references first
+    if (hasAttachmentRefs) {
+      return { resource_id: r.id, bucket: "needs_extraction", issues: ["auth_blocked_but_has_attachment_ref"], severity: 5 };
+    }
+    return { resource_id: r.id, bucket: "blocked", issues: ["auth_required"], severity: 6 };
+  }
+
   // ── 2. Not-enriched / early pipeline states ───────────────
   if (["not_enriched", "queued_for_deep_enrich", "incomplete"].includes(status)) {
     return { resource_id: r.id, bucket: "needs_enrichment", issues: ["not_enriched"], severity: 6 };
