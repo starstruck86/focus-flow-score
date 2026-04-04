@@ -42,6 +42,7 @@ import { ResourceCard } from './ResourceCard';
 import { NeedsAttentionQueue } from './NeedsAttentionQueue';
 import { ProcessingStatusBar } from './ProcessingStatusBar';
 import { CollectionBrowser } from './CollectionBrowser';
+import { CatchupDashboard } from './CatchupDashboard';
 import { deriveResourceInsight, deriveReadiness } from '@/lib/resourceSignal';
 import type { ReadinessBucket } from '@/lib/resourceAudit';
 import {
@@ -377,6 +378,11 @@ export function ResourceLibraryTable({
       {/* Processing Status */}
       <div className="shrink-0 mb-2">
         <ProcessingStatusBar resources={resources} />
+      </div>
+
+      {/* Catch-Up Dashboard */}
+      <div className="shrink-0 mb-2">
+        <CatchupDashboard />
       </div>
 
       {/* Needs Attention Queue */}
