@@ -298,9 +298,15 @@ export async function autoOperationalizeResource(
       }
     }
 
-    if (finalExtracted.length === 0 && !isAudioType) {
+    // HARDENED: Allow heuristic fallback for structured course lessons even when
+    // resource_type is video/audio. These contain lesson text (not raw transcripts),
+    // so heuristic sentence-splitting produces valid KIs.
+    const { isStructuredCourseLesson: isStructuredForFallback } = getTranscriptPreparationState(
+      contentForExtraction, r.resource_type, r.title,
+    );
+    if (finalExtracted.length === 0 && (!isAudioType || isStructuredForFallback)) {
       finalExtracted = extractKnowledgeHeuristic(source);
-      log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length });
+      log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length, isStructuredForFallback });
     }
 
     if (finalExtracted.length > 0) {
@@ -326,6 +332,14 @@ export async function autoOperationalizeResource(
   if (knowledgeExtracted === 0 && !hasExistingKI) {
     needsReview = true;
     reason = 'No knowledge could be extracted — content may be too generic or short';
+    // ANTI-LIMBO: Persist a durable failure state so this resource doesn't disappear
+    // into invisible limbo. It must have an explicit blocker reason.
+    await supabase.from('resources').update({
+      active_job_status: 'failed',
+      active_job_error: reason,
+      active_job_finished_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as any).eq('id', resourceId);
     return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason);
   }
   stagesCompleted.push('knowledge_extracted');
@@ -484,11 +498,18 @@ export async function autoOperationalizeBatch(
     reasons: results.filter(r => r.reason).map(r => ({ id: r.resourceId, outcome: r.outcome, reason: r.reason })).slice(0, 20),
   });
 
-  // Regression guard
+  // Regression guard (log-only, don't crash the batch)
   checkRegressionGuard(resourceIds.length, totalProcessed, 'autoOperationalizeBatch');
 
-  // Mismatch guard: if we got IDs but processed 0, something is wrong
-  assertEligibilityAlignment(resourceIds.length, totalProcessed, 'autoOperationalizeBatch');
+  // Mismatch guard: log warning but do NOT throw — some resources may legitimately
+  // produce 0 KIs (e.g., very short structured lessons). Throwing here crashes the
+  // entire Fix All run and prevents any post-run reporting.
+  if (resourceIds.length > 0 && totalProcessed === 0) {
+    log.warn('[PipelineContract] All resources produced no usable output', {
+      total: resourceIds.length,
+      outcomes: outcomeCounts,
+    });
+  }
 
   return results;
 }
