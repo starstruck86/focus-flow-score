@@ -191,7 +191,7 @@ function buildEvidence(resource: Resource, truth: ResourceTruth): DossierEvidenc
 
 // ── Classification Rules ──────────────────────────────────
 
-const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying'];
+const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying', 'content_ready'];
 
 export function buildFailureDossier(resource: Resource, truth: ResourceTruth): ResourceFailureDossier | null {
   // Only blocked/stalled/qa resources get dossiers

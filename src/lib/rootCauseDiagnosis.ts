@@ -119,7 +119,7 @@ export const RESOLUTION_OUTCOME_LABELS: Record<ResolutionOutcome, string> = {
 
 // ── Enriched statuses constant ────────────────────────────
 
-const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying'];
+const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying', 'content_ready'];
 
 // ── Main Diagnosis Function ───────────────────────────────
 
