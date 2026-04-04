@@ -65,6 +65,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
   const groups = useMemo<QueueGroup[]>(() => {
     const failed: QueueItem[] = [];
     const stuck: QueueItem[] = [];
+    const contradictions: QueueItem[] = [];
     const missingContent: QueueItem[] = [];
     const needsExtraction: QueueItem[] = [];
     const lowYield: QueueItem[] = [];
