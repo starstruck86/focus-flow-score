@@ -281,7 +281,14 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
                           size="sm"
                           variant="outline"
                           className="h-6 text-[10px] px-2"
-                          onClick={() => onAction(group.bulkActionKey!, group.items[0].resource)}
+                          onClick={() => {
+                            const ids = group.items.filter(i => i.bulkEligible).map(i => i.resource.id);
+                            if (onBulkAction && ids.length > 0) {
+                              onBulkAction(group.bulkActionKey!, ids);
+                            } else {
+                              onAction(group.bulkActionKey!, group.items[0].resource);
+                            }
+                          }}
                         >
                           {group.bulkActionLabel}
                         </Button>
