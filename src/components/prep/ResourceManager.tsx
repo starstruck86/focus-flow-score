@@ -1094,6 +1094,73 @@ export function ResourceManager() {
                   setShowDeepEnrich(true);
                   break;
                 }
+                case 'bulk_extract': {
+                  // Extract all resources that need extraction (triggered from queue)
+                  // This re-routes through the same batch extraction pipeline
+                  const ids = Array.from(selectedResourceIds).length > 0
+                    ? Array.from(selectedResourceIds)
+                    : filteredResources.filter(r => {
+                        const lc = (r as any)._lifecycle;
+                        return r.enrichment_status && ['deep_enriched', 'enriched', 'verified'].includes(r.enrichment_status);
+                      }).map(r => r.id);
+                  if (ids.length === 0) {
+                    toast.info('No resources eligible for extraction');
+                    break;
+                  }
+                  toast.info(`Starting extraction for ${ids.length} resources...`);
+                  const progressStore = useResourceJobProgress.getState();
+                  progressStore.startBatch(ids, 'extract');
+                  try {
+                    const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
+                    const results = await autoOperationalizeBatch(ids, undefined, async (resourceId, phase, result) => {
+                      const store = useResourceJobProgress.getState();
+                      if (phase === 'start') store.markRunning(resourceId, result?.resourceTitle);
+                      else if (phase === 'done') {
+                        if (result?.success) store.markDone(resourceId, `${result.knowledgeExtracted} KI`);
+                        else store.markFailed(resourceId, result?.reason);
+                      }
+                    });
+                    useResourceJobProgress.getState().endBatch();
+                    queryClient.invalidateQueries({ queryKey: ['resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+                    const totalKI = results.reduce((s, r) => s + r.knowledgeExtracted, 0);
+                    toast.success(`Extracted ${totalKI} KIs from ${results.filter(r => r.knowledgeExtracted > 0).length} resources`);
+                  } catch (error: any) {
+                    useResourceJobProgress.getState().endBatch();
+                    toast.error('Batch extraction failed', { description: error?.message });
+                  }
+                  break;
+                }
+                case 'bulk_re_enrich': {
+                  // Re-enrich resources (missing content, stale version)
+                  setShowDeepEnrich(true);
+                  break;
+                }
+                case 'bulk_retry_stalled': {
+                  // Clear stalled job status and re-enrich
+                  toast.info('Clearing stalled jobs and retrying...');
+                  try {
+                    const { clearStalledJobStatus } = await import('@/lib/fixAllAutoBlockers');
+                    const cleared = await clearStalledJobStatus(resource.id);
+                    if (cleared) {
+                      // Trigger re-enrich after clearing
+                      const enrichResult = await invokeEnrichResource(
+                        { resource_id: resource.id, force: true },
+                        { componentName: 'ResourceManager' },
+                      );
+                      queryClient.invalidateQueries({ queryKey: ['resources'] });
+                      queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+                      if (enrichResult.error) toast.error('Retry failed', { description: enrichResult.error.message });
+                      else toast.success('Stalled job cleared and re-enrichment started');
+                    } else {
+                      toast.error('Failed to clear stalled job status');
+                    }
+                  } catch (err: any) {
+                    toast.error('Stalled retry failed', { description: err?.message });
+                  }
+                  break;
+                }
                 case 'bulk_activate':
                 case 'bulk_activate_filtered': {
                   toast.info('Activation runs automatically during extraction');
