@@ -1,11 +1,10 @@
 /**
  * run-catchup — Processes items from a reconciliation snapshot in phases.
+ * Respects resource routing: audio/video → transcript pipeline,
+ * pdf/url → enrich then extract, text → direct extract, repeated failures → manual assist.
  *
  * POST /run-catchup
  * Body: { run_id, phase: 'enrich' | 'extract' | 'activate' | 'surface_to_qa', limit?: number }
- *
- * Processes items belonging to the given phase's bucket from the persisted snapshot.
- * Writes per-item outcomes back to reconciliation_items.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -23,6 +22,49 @@ const PHASE_BUCKETS: Record<Phase, string[]> = {
   activate: ["needs_activation"],
   surface_to_qa: ["needs_qa_review", "blocked"],
 };
+
+// ── Lightweight server-side route derivation ───────────────
+type Pipeline = "transcript_pipeline" | "enrich_then_extract" | "direct_extract" | "manual_assist";
+
+function deriveRoute(resource: any): { pipeline: Pipeline; extraction_method: string } {
+  const url = resource.file_url || "";
+  const resourceType = resource.resource_type || "";
+  const title = resource.title || "";
+  const contentLength = resource.content_length || 0;
+  const failureCount = (resource.failure_count || 0) + (resource.advanced_extraction_attempts || 0);
+  const enrichmentStatus = resource.enrichment_status || "";
+
+  const isAudio = resourceType === "audio" || resourceType === "podcast_episode" ||
+    /\.mp3|\.m4a|\.wav|\.ogg/i.test(url) ||
+    /spotify\.com|podcasts\.apple\.com|anchor\.fm/i.test(url);
+  const isVideo = resourceType === "video" || /\.mp4/i.test(url) ||
+    /youtube\.com|youtu\.be|vimeo\.com/i.test(url);
+  const isLesson = title.includes(" > ");
+
+  // Pipeline
+  let pipeline: Pipeline;
+  if (failureCount >= 3 && enrichmentStatus !== "deep_enriched") {
+    pipeline = "manual_assist";
+  } else if (isAudio || isVideo) {
+    pipeline = "transcript_pipeline";
+  } else if (resourceType === "text" || (resource.manual_content_present && contentLength > 0)) {
+    pipeline = "direct_extract";
+  } else {
+    pipeline = "enrich_then_extract";
+  }
+
+  // Extraction method
+  let extraction_method = "standard";
+  if (isLesson) {
+    extraction_method = "lesson";
+  } else if (contentLength > 8000 || (contentLength > 10000 && (isAudio || isVideo))) {
+    extraction_method = "dense_teaching";
+  } else if ((resource.advanced_extraction_attempts || 0) >= 3) {
+    extraction_method = "summary_first";
+  }
+
+  return { pipeline, extraction_method };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -91,7 +133,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check not cancelled
     if (run.status === "cancelled") {
       return new Response(JSON.stringify({ error: "Run was cancelled" }), {
         status: 409,
@@ -132,7 +173,6 @@ Deno.serve(async (req) => {
     };
 
     if (!items || items.length === 0) {
-      // Phase complete — no items
       const phaseProgress = run.phase_progress || {};
       phaseProgress[phase] = { ...results, status: "complete" };
       await supabase
@@ -145,19 +185,51 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Process each item based on phase
+    // Fetch resource details for routing decisions
+    const resourceIds = items.map((i) => i.resource_id);
+    const { data: resources } = await supabase
+      .from("resources")
+      .select("id, resource_type, file_url, title, content_length, failure_count, advanced_extraction_attempts, enrichment_status, manual_content_present")
+      .in("id", resourceIds);
+
+    const resourceMap = new Map((resources || []).map((r) => [r.id, r]));
+
+    // Process each item based on phase + route
     for (const item of items) {
       try {
-        let outcome: Record<string, any> = { phase, processed_at: new Date().toISOString() };
+        const resource = resourceMap.get(item.resource_id);
+        const route = resource ? deriveRoute(resource) : { pipeline: "enrich_then_extract" as Pipeline, extraction_method: "standard" };
+
+        let outcome: Record<string, any> = {
+          phase,
+          processed_at: new Date().toISOString(),
+          route_pipeline: route.pipeline,
+          route_extraction_method: route.extraction_method,
+        };
+
+        console.log(`[route] resource=${item.resource_id} pipeline=${route.pipeline} method=${route.extraction_method}`);
 
         if (phase === "enrich") {
-          // For dry_run, just mark as would-process
           if (run.mode === "dry_run") {
             outcome.action = "would_enrich";
             outcome.status = "dry_run";
             results.skipped++;
+          } else if (route.pipeline === "manual_assist") {
+            // Route to QA instead of auto-enriching
+            outcome.action = "routed_to_manual_assist";
+            outcome.status = "manual_required";
+            results.qa_flagged++;
+            await supabase
+              .from("library_reconciliation_items")
+              .update({ qa_flagged: true, qa_reason: "Routed to manual assist after repeated failures" })
+              .eq("id", item.id);
+          } else if (route.pipeline === "direct_extract") {
+            // Skip enrichment — content already present
+            outcome.action = "skip_enrichment_content_present";
+            outcome.status = "skipped";
+            results.skipped++;
           } else {
-            // Queue for enrichment by updating resource status
+            // Queue for enrichment
             const targetStatus =
               item.bucket === "needs_re_enrichment"
                 ? "queued_for_reenrich"
@@ -186,12 +258,20 @@ Deno.serve(async (req) => {
             outcome.action = "would_extract";
             outcome.status = "dry_run";
             results.skipped++;
+          } else if (route.pipeline === "manual_assist") {
+            outcome.action = "routed_to_manual_assist";
+            results.qa_flagged++;
+            await supabase
+              .from("library_reconciliation_items")
+              .update({ qa_flagged: true, qa_reason: "Extraction routed to manual assist" })
+              .eq("id", item.id);
           } else {
-            // Queue by setting extraction_status
+            // Queue extraction with method hint
             const { error: updateErr } = await supabase
               .from("resources")
               .update({
                 extraction_status: "queued",
+                extraction_method: route.extraction_method,
                 last_status_change_at: new Date().toISOString(),
               })
               .eq("id", item.resource_id)
@@ -203,6 +283,7 @@ Deno.serve(async (req) => {
               results.failed++;
             } else {
               outcome.action = "queued_for_extraction";
+              outcome.extraction_method = route.extraction_method;
               results.succeeded++;
             }
           }
@@ -212,12 +293,10 @@ Deno.serve(async (req) => {
             outcome.status = "dry_run";
             results.skipped++;
           } else {
-            // Mark for activation
             outcome.action = "queued_for_activation";
             results.succeeded++;
           }
         } else if (phase === "surface_to_qa") {
-          // Always surface — just flag
           outcome.action = "surfaced_to_qa";
           results.qa_flagged++;
           await supabase
@@ -263,7 +342,6 @@ Deno.serve(async (req) => {
     const phaseProgress = (currentRun?.phase_progress as Record<string, any>) || {};
     phaseProgress[phase] = { ...results, status: "complete" };
 
-    // Check if all phases done
     const allPhases: Phase[] = ["enrich", "extract", "activate", "surface_to_qa"];
     const completedPhases = allPhases.filter((p) => phaseProgress[p]?.status === "complete");
     const isComplete = completedPhases.length === allPhases.length;

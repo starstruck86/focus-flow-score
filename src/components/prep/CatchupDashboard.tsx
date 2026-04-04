@@ -500,29 +500,80 @@ export function CatchupDashboard() {
               Details
             </summary>
             <div className="mt-1 space-y-1.5">
+              {/* Pipeline routing breakdown (derived from buckets) */}
+              {(() => {
+                const b = snapshot.buckets || {};
+                const transcriptCount = (b.needs_enrichment || 0);
+                const enrichExtract = (b.needs_extraction || 0) + (b.needs_re_extraction || 0);
+                const directExtract = (b.needs_activation || 0);
+                const manualAssist = (b.blocked || 0) + (b.needs_qa_review || 0);
+                const hasPipeline = transcriptCount + enrichExtract + directExtract + manualAssist > 0;
+                if (!hasPipeline) return null;
+                return (
+                  <div>
+                    <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">Pipeline Routing</p>
+                    <div className="grid grid-cols-2 gap-1">
+                      {transcriptCount > 0 && (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/20 text-[10px]">
+                          <Zap className="h-2.5 w-2.5 text-amber-600 shrink-0" />
+                          <span className="flex-1">Enrich</span>
+                          <span className="font-mono tabular-nums">{transcriptCount}</span>
+                        </div>
+                      )}
+                      {enrichExtract > 0 && (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/20 text-[10px]">
+                          <FileText className="h-2.5 w-2.5 text-blue-600 shrink-0" />
+                          <span className="flex-1">Extract</span>
+                          <span className="font-mono tabular-nums">{enrichExtract}</span>
+                        </div>
+                      )}
+                      {directExtract > 0 && (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/20 text-[10px]">
+                          <Activity className="h-2.5 w-2.5 text-emerald-600 shrink-0" />
+                          <span className="flex-1">Activate</span>
+                          <span className="font-mono tabular-nums">{directExtract}</span>
+                        </div>
+                      )}
+                      {manualAssist > 0 && (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/20 text-[10px]">
+                          <Eye className="h-2.5 w-2.5 text-purple-600 shrink-0" />
+                          <span className="flex-1">Manual / QA</span>
+                          <span className="font-mono tabular-nums">{manualAssist}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               {allBuckets.length > 0 && (
-                <div className="grid grid-cols-2 gap-1">
-                  {allBuckets.map(([bucket, count]) => {
-                    const config = BUCKET_CONFIG[bucket] || { label: bucket, icon: FileText, color: 'text-muted-foreground' };
-                    const Icon = config.icon;
-                    return (
-                      <div key={bucket} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/20 text-[10px]">
-                        <Icon className={cn('h-2.5 w-2.5 shrink-0', config.color)} />
-                        <span className="truncate flex-1">{config.label}</span>
-                        <span className="font-mono tabular-nums">{count as number}</span>
-                      </div>
-                    );
-                  })}
+                <div>
+                  <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">Buckets</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {allBuckets.map(([bucket, count]) => {
+                      const config = BUCKET_CONFIG[bucket] || { label: bucket, icon: FileText, color: 'text-muted-foreground' };
+                      const Icon = config.icon;
+                      return (
+                        <div key={bucket} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/20 text-[10px]">
+                          <Icon className={cn('h-2.5 w-2.5 shrink-0', config.color)} />
+                          <span className="truncate flex-1">{config.label}</span>
+                          <span className="font-mono tabular-nums">{count as number}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
               {allIssues.length > 0 && (
-                <div className="grid grid-cols-2 gap-x-3 gap-y-0 text-[10px]">
-                  {allIssues.map(([issue, count]) => (
-                    <div key={issue} className="flex justify-between py-0.5">
-                      <span className="text-muted-foreground truncate">{issue.replace(/_/g, ' ')}</span>
-                      <span className="font-mono tabular-nums ml-1">{count as number}</span>
-                    </div>
-                  ))}
+                <div>
+                  <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">Issues</p>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-0 text-[10px]">
+                    {allIssues.map(([issue, count]) => (
+                      <div key={issue} className="flex justify-between py-0.5">
+                        <span className="text-muted-foreground truncate">{issue.replace(/_/g, ' ')}</span>
+                        <span className="font-mono tabular-nums ml-1">{count as number}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
