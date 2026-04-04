@@ -66,6 +66,7 @@ export function useAppFreshness() {
         queryClient.invalidateQueries({ queryKey: ['knowledge-items'] }),
         queryClient.invalidateQueries({ queryKey: ['audio-jobs'] }),
         queryClient.invalidateQueries({ queryKey: ['resource-duplicates'] }),
+        queryClient.invalidateQueries({ queryKey: ['in-use-resources'] }),
       ]);
       setLastRefreshed(new Date());
       toast.success('Library refreshed', {

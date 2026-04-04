@@ -778,11 +778,8 @@ export function ResourceManager() {
             resources={filteredResources}
             selectedIds={selectedResourceIds}
             audioJobsMap={audioJobsMap}
-            onRefresh={() => {
-              queryClient.invalidateQueries({ queryKey: ['resources'] });
-              queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
-              queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
-            }}
+            onRefresh={freshness.refreshData}
+            isRefreshing={freshness.isRefreshing}
             lastFixResult={lastFixResult}
             fixAllProgressMessage={fixAllProgressMessage}
             isFixAllRunning={isFixAllRunning}
