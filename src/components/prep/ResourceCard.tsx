@@ -207,8 +207,8 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
           )}
         </div>
         );
-      })()
-      )}
+      })()}
+
     </div>
   );
 }
