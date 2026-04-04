@@ -395,6 +395,14 @@ async function normalizeStaleStatuses(
         update.active_job_status = null;
       }
 
+      // Clear stale 'running' job status (extraction timed out or lost response)
+      if (isStaleRunning) {
+        update.active_job_status = null;
+        update.active_job_error = 'Cleared: stale running job (exceeded 10 min timeout)';
+        update.active_job_finished_at = new Date().toISOString();
+        log.info('Clearing stale running job', { id, started: state.active_job_started_at });
+      }
+
       // Fix extraction_retrying → extracted when KIs exist
       if (isRetrying && hasKIs) {
         update.enrichment_status = 'extracted';
