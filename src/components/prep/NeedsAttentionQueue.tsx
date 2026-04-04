@@ -12,7 +12,7 @@ import {
   HelpCircle, ChevronDown, ChevronRight, CheckCircle2, Layers, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { deriveReadiness } from '@/lib/resourceSignal';
+import { deriveResourceTruth } from '@/lib/resourceTruthState';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import { isJobStale } from '@/store/useResourceJobProgress';
 import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS } from '@/lib/processingRoute';
