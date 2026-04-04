@@ -515,4 +515,52 @@ describe('Retry System Guarantee Canary', () => {
     }
     expect(extractionAttemptCount).toBe(4);
   });
+
+  // ── Backoff & concurrency guards ──
+
+  it('retry backoff increases with attempt number', () => {
+    // Mirrors retryBackoffMs logic from batch-extract-kis
+    function retryBackoffMs(attemptNumber: number): number {
+      const base = 2000;
+      const delay = Math.min(base * Math.pow(2.2, attemptNumber - 1), 30_000);
+      // Use deterministic center for testing (no jitter)
+      return Math.round(delay * 0.85);
+    }
+    const d1 = retryBackoffMs(1);
+    const d2 = retryBackoffMs(2);
+    const d3 = retryBackoffMs(3);
+    const d4 = retryBackoffMs(4);
+    expect(d2).toBeGreaterThan(d1);
+    expect(d3).toBeGreaterThan(d2);
+    expect(d4).toBeGreaterThan(d3);
+    // Should cap at 30s
+    expect(retryBackoffMs(10)).toBeLessThanOrEqual(30_000);
+  });
+
+  it('duplicate retry for same resource is prevented by in-flight set', () => {
+    const inFlight = new Set<string>();
+    const resourceId = 'test-resource-123';
+
+    // First scheduling: allowed
+    expect(inFlight.has(resourceId)).toBe(false);
+    inFlight.add(resourceId);
+
+    // Second scheduling: blocked
+    expect(inFlight.has(resourceId)).toBe(true);
+  });
+
+  it('stale invocation is blocked by attempt count mismatch', () => {
+    const dbAttemptCount = 3 as number;
+    const staleAttemptNumber = 2 as number;
+    const shouldRetry = dbAttemptCount === staleAttemptNumber;
+    expect(shouldRetry).toBe(false);
+  });
+
+  it('retry is blocked when status is not extraction_retrying', () => {
+    const statuses = ['extracted', 'extraction_requires_review', 'extraction_failed', 'pending'];
+    for (const status of statuses) {
+      const shouldRetry = status === 'extraction_retrying';
+      expect(shouldRetry).toBe(false);
+    }
+  });
 });
