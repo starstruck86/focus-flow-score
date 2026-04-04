@@ -1136,7 +1136,8 @@ async function updateExtractionStatus(supabase: any, resourceId: string, status:
   let finalStatus = status;
 
   // ── Guard: protect existing successful extraction from degradation ──
-  if (['extraction_requires_review', 'extraction_failed'].includes(status)) {
+  // Covers ALL failure/retry transitions including extraction_retrying
+  if (['extraction_requires_review', 'extraction_failed', 'extraction_retrying'].includes(status)) {
     const { hasKIs, count } = await hasExistingValidKIs(supabase, resourceId, 1);
     if (hasKIs) {
       console.log(`[extract] 🛡️ Protecting existing extraction: ${count} valid KIs found for "${resourceId}" — keeping 'extracted' instead of '${status}'`);
