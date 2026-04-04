@@ -1136,16 +1136,52 @@ async function updateExtractionStatus(supabase: any, resourceId: string, status:
   let finalStatus = status;
 
   // ── Guard: protect existing successful extraction from degradation ──
-  // If we're about to mark as failed/review but valid KIs exist from a prior success, keep 'extracted'
   if (['extraction_requires_review', 'extraction_failed'].includes(status)) {
     const { hasKIs, count } = await hasExistingValidKIs(supabase, resourceId, 1);
     if (hasKIs) {
       console.log(`[extract] 🛡️ Protecting existing extraction: ${count} valid KIs found for "${resourceId}" — keeping 'extracted' instead of '${status}'`);
       finalStatus = 'extracted';
-      // Clear failure fields since we're restoring success
       if (extraFields) {
         extraFields.extraction_failure_type = null;
         extraFields.extraction_retry_eligible = false;
+
+        // Rebuild audit from last successful attempt, not the failed one
+        const history = await fetchAttemptHistory(supabase, resourceId);
+        const lastSuccess = [...history].reverse().find(a => a.status === 'extracted' && a.floor_met);
+        if (lastSuccess) {
+          const { data: res } = await supabase.from('resources').select('content, resource_type, title').eq('id', resourceId).single();
+          const contentLen = res?.content?.length ?? 0;
+          const isLesson = res ? isStructuredLesson(res.content || '', res.title, res.resource_type) : false;
+          const successHistory = history.filter(a => a.attempt_number <= lastSuccess.attempt_number);
+          const strategies = [...new Set(successHistory.map(a => a.strategy))];
+          const totalElapsed = successHistory.reduce((sum, a) => sum + a.duration_ms, 0);
+          const valLoss = lastSuccess.raw_item_count > 0 ? Math.round(((lastSuccess.raw_item_count - lastSuccess.validated_count) / lastSuccess.raw_item_count) * 100) : 0;
+          const dedLoss = lastSuccess.validated_count > 0 ? Math.round(((lastSuccess.validated_count - lastSuccess.deduped_count) / lastSuccess.validated_count) * 100) : 0;
+
+          extraFields.extraction_audit_summary = {
+            total_attempts: history.length,
+            strategies_used: strategies,
+            final_ki_count: count,
+            min_ki_floor: lastSuccess.min_ki_floor,
+            floor_met: true,
+            final_status: 'extracted',
+            final_failure_type: null,
+            total_elapsed_ms: totalElapsed,
+            content_length: contentLen,
+            is_structured_lesson: isLesson,
+            completed_at: new Date().toISOString(),
+            validation_loss_pct: valLoss,
+            dedup_loss_pct: dedLoss,
+            raw_to_final_ratio: lastSuccess.raw_item_count > 0 ? Math.round((count / lastSuccess.raw_item_count) * 100) / 100 : 0,
+            yield_quality_flag: 'expected',
+            base_floor: lastSuccess.min_ki_floor,
+            density_adjusted_floor: lastSuccess.min_ki_floor,
+            final_floor: lastSuccess.min_ki_floor,
+            protected_from_degradation: true,
+            source_attempt: lastSuccess.attempt_number,
+          };
+          console.log(`[extract-audit] 🛡️ Rebuilt audit from successful attempt ${lastSuccess.attempt_number} (${count} KIs) instead of failed attempt ${history.length}`);
+        }
       }
     }
   }
