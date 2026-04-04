@@ -1,15 +1,16 @@
 /**
- * SystemHealthBar — top-level overview showing total/ready/improving/blocked
+ * SystemHealthBar — top-level overview showing total/ready/blocked/stalled
  * plus a "Needs Attention" summary with quick actions.
+ * Now powered by canonical truth model.
  */
 import { useMemo } from 'react';
-import { AlertTriangle, CheckCircle2, TrendingUp, XCircle, Zap, RefreshCw, Eye } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, TrendingUp, XCircle, Zap, RefreshCw, Eye, Loader2, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
-import { deriveReadiness } from '@/lib/resourceSignal';
+import { deriveResourceTruth, type ResourceTruth, type LifecycleInfo } from '@/lib/resourceTruthState';
 
 interface HealthCounts {
   total: number;
