@@ -492,6 +492,152 @@ function PreviewSection({ resource }: { resource: Resource }) {
   );
 }
 
+// ── F2. Processing Timeline ────────────────────────────────
+function ProcessingTimelineSection({ resource }: { resource: Resource }) {
+  const r = resource as any;
+  const liveJob = useResourceJobProgress(s => s.resources[resource.id]);
+  const ps = deriveProcessingState(resource);
+
+  // Determine pipeline stages based on resource type
+  const isAudio = (resource.resource_type === 'podcast' || resource.resource_type === 'audio' ||
+    resource.file_url?.match(/\.(mp3|wav|m4a|ogg)/i));
+
+  const stages = isAudio
+    ? ['Ingested', 'Resolved', 'Transcribed', 'Enriched', 'Extracted', 'Activated', 'Operationalized']
+    : ['Ingested', 'Enriched', 'Extracted', 'Activated', 'Operationalized'];
+
+  // Determine completed stages
+  const completedStages = new Set<string>();
+  completedStages.add('Ingested');
+
+  if (r.enrichment_status === 'deep_enriched' || r.enrichment_status === 'enriched' || r.content_length > 500) {
+    completedStages.add('Enriched');
+    if (isAudio) { completedStages.add('Resolved'); completedStages.add('Transcribed'); }
+  }
+  if (r.enrichment_status === 'deep_enrich_in_progress' || r.enrichment_status === 'reenrich_in_progress') {
+    if (isAudio) { completedStages.add('Resolved'); }
+  }
+
+  // Check lifecycle for extraction/activation
+  const { summary } = useCanonicalLifecycle();
+  const status = summary?.resources.find(s => s.resource_id === resource.id);
+  if (status) {
+    if (['knowledge_extracted', 'activated', 'operationalized'].includes(status.canonical_stage)) {
+      completedStages.add('Extracted');
+    }
+    if (['activated', 'operationalized'].includes(status.canonical_stage)) {
+      completedStages.add('Activated');
+    }
+    if (status.canonical_stage === 'operationalized') {
+      completedStages.add('Operationalized');
+    }
+  }
+
+  // Determine current stage
+  let currentStage: string | null = null;
+  if (liveJob?.status === 'running') {
+    currentStage = liveJob.jobType === 'extract' ? 'Extracted'
+      : liveJob.jobType === 'enrich' || liveJob.jobType === 'deep_enrich' ? 'Enriched'
+      : liveJob.jobType === 'transcribe' ? 'Transcribed'
+      : 'Enriched';
+  } else if (ps.state === 'RUNNING') {
+    currentStage = 'Enriched';
+  }
+
+  // Stale detection
+  const isStuck = r.active_job_status === 'running' && isJobStale(r.active_job_updated_at, 'running');
+  const jobDuration = r.active_job_started_at
+    ? Math.round((Date.now() - new Date(r.active_job_started_at).getTime()) / 1000)
+    : null;
+
+  // If nothing is processing and resource is complete, don't show
+  if (!currentStage && !liveJob && ps.state !== 'RUNNING' && !isStuck && r.active_job_status !== 'running') {
+    // Still show the timeline if there's history
+    if (completedStages.size <= 1) return null;
+  }
+
+  return (
+    <div className="px-4 py-3 border-t border-border space-y-2">
+      <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+        Processing Timeline
+        {isStuck && (
+          <Badge className="text-[8px] h-4 bg-destructive/10 text-destructive ml-1">
+            <AlertTriangle className="h-2.5 w-2.5 mr-0.5" /> Stuck
+          </Badge>
+        )}
+        {liveJob?.status === 'running' && (
+          <Badge className="text-[8px] h-4 bg-primary/10 text-primary ml-1">
+            <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" /> Live
+          </Badge>
+        )}
+      </h4>
+
+      {/* Stage visualization */}
+      <div className="flex items-center gap-0.5 flex-wrap">
+        {stages.map((stage, i) => {
+          const isCompleted = completedStages.has(stage);
+          const isCurrent = stage === currentStage;
+          return (
+            <div key={stage} className="flex items-center gap-0.5">
+              {i > 0 && (
+                <div className={cn(
+                  'w-3 h-px',
+                  isCompleted ? 'bg-emerald-500' : isCurrent ? 'bg-primary' : 'bg-border',
+                )} />
+              )}
+              <div className={cn(
+                'flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium',
+                isCompleted && !isCurrent && 'bg-emerald-500/10 text-emerald-600',
+                isCurrent && 'bg-primary/10 text-primary ring-1 ring-primary/30',
+                !isCompleted && !isCurrent && 'bg-muted text-muted-foreground',
+              )}>
+                {isCompleted && !isCurrent && <CheckCircle2 className="h-2.5 w-2.5" />}
+                {isCurrent && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
+                {stage}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Active job info */}
+      {(liveJob?.status === 'running' || r.active_job_status === 'running') && (
+        <div className="flex items-center gap-2 text-[10px] bg-muted/30 rounded px-2 py-1">
+          <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
+          <span className="text-foreground font-medium">
+            {liveJob ? getJobLabel(liveJob.jobType, 'running') : r.active_job_type ? getJobLabel(r.active_job_type, 'running') : 'Processing…'}
+          </span>
+          {jobDuration != null && (
+            <span className="text-muted-foreground ml-auto">
+              {jobDuration < 60 ? `${jobDuration}s` : `${Math.floor(jobDuration / 60)}m ${jobDuration % 60}s`}
+              {isStuck && <span className="text-destructive ml-1">— exceeded 10min timeout</span>}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Last completed job */}
+      {r.active_job_status === 'succeeded' && r.active_job_result_summary && (
+        <div className="flex items-center gap-2 text-[10px] text-emerald-600">
+          <CheckCircle2 className="h-3 w-3 shrink-0" />
+          <span>{r.active_job_result_summary}</span>
+          {r.active_job_finished_at && (
+            <span className="text-muted-foreground ml-auto">
+              {new Date(r.active_job_finished_at).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      )}
+      {r.active_job_status === 'failed' && r.active_job_error && (
+        <div className="flex items-center gap-2 text-[10px] text-destructive">
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          <span className="truncate">{r.active_job_error}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────
 export function ResourceInspectPanel({ resource, onClose, onAction }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -504,6 +650,7 @@ export function ResourceInspectPanel({ resource, onClose, onAction }: Props) {
     <div ref={containerRef} className="relative z-10 isolate bg-card border-b-2 border-primary/20 animate-fade-in">
       <IdentitySection resource={resource} onClose={onClose} onAction={onAction} />
       <PipelineRouteSection resource={resource} />
+      <ProcessingTimelineSection resource={resource} />
       <QualityTrustSection resource={resource} />
       <DownstreamEligibilitySection resource={resource} />
       <NextActionSection resource={resource} onAction={onAction} />
