@@ -1,0 +1,1 @@
+ALTER TABLE public.resources ADD COLUMN IF NOT EXISTS extraction_audit_summary jsonb DEFAULT NULL;

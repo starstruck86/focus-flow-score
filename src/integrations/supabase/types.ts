@@ -3827,6 +3827,7 @@ export type Database = {
           episode_description: string | null
           external_id: string | null
           extraction_attempt_count: number
+          extraction_audit_summary: Json | null
           extraction_failure_type: string | null
           extraction_method: string | null
           extraction_priority_factors: Json | null
@@ -3920,6 +3921,7 @@ export type Database = {
           episode_description?: string | null
           external_id?: string | null
           extraction_attempt_count?: number
+          extraction_audit_summary?: Json | null
           extraction_failure_type?: string | null
           extraction_method?: string | null
           extraction_priority_factors?: Json | null
@@ -4013,6 +4015,7 @@ export type Database = {
           episode_description?: string | null
           external_id?: string | null
           extraction_attempt_count?: number
+          extraction_audit_summary?: Json | null
           extraction_failure_type?: string | null
           extraction_method?: string | null
           extraction_priority_factors?: Json | null
