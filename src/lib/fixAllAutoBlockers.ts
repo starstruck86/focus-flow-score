@@ -571,7 +571,7 @@ export async function runFixAllAutoBlockers(
     try {
       const { data: freshResources } = await supabase
         .from('resources' as any)
-        .select('id, enrichment_status, content_length, active_job_status')
+        .select('id, enrichment_status, content_length, active_job_status, title, content')
         .in('id', allIds);
       
       if (freshResources) {
