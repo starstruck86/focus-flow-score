@@ -291,47 +291,59 @@ interface ExtractionAuditSummary {
   content_length: number;
   is_structured_lesson: boolean;
   completed_at: string;
+  attempt_history: AttemptRecord[];
 }
 
-function buildAuditSummary(opts: {
-  attemptNumber: number;
-  currentStrategy: ExtractionStrategy;
-  previousStrategies: ExtractionStrategy[];
-  kiCount: number;
-  minKiFloor: number;
-  finalStatus: string;
-  failureType: ExtractionFailureType | null;
-  durationMs: number;
-  contentLength: number;
-  isLesson: boolean;
-}): ExtractionAuditSummary {
-  // Collect all strategies used across attempts
-  const allStrategies = [...opts.previousStrategies];
-  if (!allStrategies.includes(opts.currentStrategy)) {
-    allStrategies.push(opts.currentStrategy);
-  }
-  return {
-    total_attempts: opts.attemptNumber,
-    strategies_used: allStrategies,
-    final_ki_count: opts.kiCount,
-    min_ki_floor: opts.minKiFloor,
-    floor_met: opts.kiCount >= opts.minKiFloor,
-    final_status: opts.finalStatus,
-    final_failure_type: opts.failureType,
-    total_elapsed_ms: opts.durationMs,
-    content_length: opts.contentLength,
-    is_structured_lesson: opts.isLesson,
+/** Build audit summary from actual persisted attempt history */
+function buildAuditFromHistory(
+  attemptHistory: AttemptRecord[],
+  finalStatus: string,
+  contentLength: number,
+  isLesson: boolean,
+): ExtractionAuditSummary | null {
+  if (attemptHistory.length === 0) return null;
+
+  const lastAttempt = attemptHistory[attemptHistory.length - 1];
+  const strategies = [...new Set(attemptHistory.map(a => a.strategy))];
+  const totalElapsed = attemptHistory.reduce((sum, a) => sum + a.duration_ms, 0);
+
+  const summary: ExtractionAuditSummary = {
+    total_attempts: attemptHistory.length,
+    strategies_used: strategies,
+    final_ki_count: lastAttempt.ki_count,
+    min_ki_floor: lastAttempt.min_ki_floor,
+    floor_met: lastAttempt.floor_met,
+    final_status: finalStatus,
+    final_failure_type: lastAttempt.failure_type,
+    total_elapsed_ms: totalElapsed,
+    content_length: contentLength,
+    is_structured_lesson: isLesson,
     completed_at: new Date().toISOString(),
+    attempt_history: attemptHistory,
   };
+
+  // ── Validate before returning ──
+  const valid = validateAuditSummary(summary);
+  if (!valid) {
+    console.error(`[extract-audit] ❌ Audit summary validation FAILED — not persisting. summary=${JSON.stringify(summary)}`);
+    return null;
+  }
+  return summary;
 }
 
-/** Reconstruct strategies used on prior attempts by replaying selectStrategy */
-function reconstructPriorStrategies(attemptNumber: number, resource: any): ExtractionStrategy[] {
-  const strategies: ExtractionStrategy[] = [];
-  for (let i = 1; i < attemptNumber; i++) {
-    strategies.push(selectStrategy(i, i > 1 ? resource.extraction_failure_type : undefined));
+/** Validate audit summary invariants before persisting */
+function validateAuditSummary(s: ExtractionAuditSummary): boolean {
+  if (s.total_attempts < 1) { console.error('[extract-audit] total_attempts < 1'); return false; }
+  if (!['extracted', 'extraction_requires_review', 'extraction_failed'].includes(s.final_status)) {
+    console.error(`[extract-audit] final_status "${s.final_status}" is not terminal`); return false;
   }
-  return strategies;
+  if (s.final_ki_count < 0) { console.error('[extract-audit] final_ki_count < 0'); return false; }
+  if (s.min_ki_floor < 0) { console.error('[extract-audit] min_ki_floor < 0'); return false; }
+  if (s.floor_met !== (s.final_ki_count >= s.min_ki_floor)) {
+    console.error('[extract-audit] floor_met mismatch'); return false;
+  }
+  if (s.strategies_used.length < 1) { console.error('[extract-audit] no strategies_used'); return false; }
+  return true;
 }
 
 // ═══════════════════════════════════════════
