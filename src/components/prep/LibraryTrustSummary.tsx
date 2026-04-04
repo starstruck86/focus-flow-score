@@ -233,6 +233,12 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
               ))}
             </div>
           )}
+          {/* Blocker diff callout */}
+          {lastFixResult.blockerDiff && lastFixResult.blockerDiff.some(d => d.unchanged > 0 && d.unchanged === d.before && d.before > 1) && (
+            <p className="text-[9px] text-amber-700 mt-1">
+              ⚠ Some phases made no progress — check extraction failures in the progress panel above.
+            </p>
+          )}
         </div>
       )}
 
