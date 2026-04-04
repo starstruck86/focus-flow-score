@@ -105,6 +105,8 @@ const BULK_ACTIONS: Partial<Record<BlockerType, { label: string; key: string }>>
   needs_activation: { label: 'Activate All', key: 'bulk_activate' },
   missing_content: { label: 'Re-enrich All', key: 'bulk_re_enrich' },
   stale_version: { label: 'Re-enrich All', key: 'bulk_re_enrich' },
+  stalled_extraction: { label: 'Retry All', key: 'bulk_retry_stalled' },
+  stalled_enrichment: { label: 'Retry All', key: 'bulk_retry_stalled' },
 };
 
 function getActionForBlocker(b: Blocker): { label: string; key: string } {
