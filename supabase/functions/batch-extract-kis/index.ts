@@ -1307,7 +1307,7 @@ Deno.serve(async (req) => {
         // Only persist audit summary on terminal states
         if (!retryEligible) {
           const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson);
+          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson, typeof floorDetails !== 'undefined' ? floorDetails : undefined);
           if (audit) auditFields.extraction_audit_summary = audit;
         }
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
@@ -1456,7 +1456,7 @@ Deno.serve(async (req) => {
         };
         if (!retryEligible) {
           const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson);
+          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson, typeof floorDetails !== 'undefined' ? floorDetails : undefined);
           if (audit) auditFields.extraction_audit_summary = audit;
         }
         await saveExtractionLog(supabase, log);
@@ -1509,7 +1509,7 @@ Deno.serve(async (req) => {
         };
         if (!retryEligible) {
           const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson);
+          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson, typeof floorDetails !== 'undefined' ? floorDetails : undefined);
           if (audit) auditFields.extraction_audit_summary = audit;
         }
         await saveExtractionLog(supabase, log);
@@ -1609,7 +1609,7 @@ Deno.serve(async (req) => {
       await persistAttemptRecord(supabase, resourceId, resource.user_id, thisAttempt);
 
       const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-      const audit = buildAuditFromHistory(fullHistory, 'extraction_failed', resource.content.length, isLesson);
+      const audit = buildAuditFromHistory(fullHistory, 'extraction_failed', resource.content.length, isLesson, typeof floorDetails !== 'undefined' ? floorDetails : undefined);
 
       await updateExtractionStatus(supabase, resourceId, 'extraction_failed', {
         extraction_attempt_count: attemptNumber,
@@ -1637,7 +1637,7 @@ Deno.serve(async (req) => {
     await persistAttemptRecord(supabase, resourceId, resource.user_id, successAttempt);
 
     const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-    const successAudit = buildAuditFromHistory(fullHistory, 'extracted', resource.content.length, isLesson);
+    const successAudit = buildAuditFromHistory(fullHistory, 'extracted', resource.content.length, isLesson, floorDetails);
 
     await updateExtractionStatus(supabase, resourceId, 'extracted', {
       extraction_attempt_count: attemptNumber,
