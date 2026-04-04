@@ -63,6 +63,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
 
   const groups = useMemo<QueueGroup[]>(() => {
     const failed: QueueItem[] = [];
+    const stuck: QueueItem[] = [];
     const missingContent: QueueItem[] = [];
     const needsExtraction: QueueItem[] = [];
     const lowYield: QueueItem[] = [];
@@ -72,11 +73,24 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
     for (const r of resources) {
       const lc = lifecycleMap.get(r.id);
       if (!lc) continue;
+      const rAny = r as any;
+
+      // Stuck / stalled jobs (highest priority after failed)
+      if (rAny.active_job_status === 'running' && isJobStale(rAny.active_job_updated_at, 'running')) {
+        const elapsed = Math.round((Date.now() - new Date(rAny.active_job_started_at || rAny.active_job_updated_at).getTime()) / 60000);
+        stuck.push({
+          resource: r, issueType: 'stuck', priority: 1,
+          severity: -elapsed, // longer stuck = more urgent
+          reason: `${rAny.active_job_type || 'Job'} stalled for ${elapsed}min — exceeds 10min timeout`,
+          actionLabel: 'Inspect', actionKey: 'view',
+          bulkEligible: false,
+        });
+      }
 
       // Failed extractions
       if (r.enrichment_status === 'failed') {
         failed.push({
-          resource: r, issueType: 'failed', priority: 1,
+          resource: r, issueType: 'failed', priority: 2,
           severity: computeSeverity(r, 'failed'),
           reason: r.failure_reason || 'Extraction failed',
           actionLabel: 'Retry', actionKey: 'deep_enrich',
@@ -87,7 +101,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       // Missing content
       if (lc.blocked === 'empty_content') {
         missingContent.push({
-          resource: r, issueType: 'missing_content', priority: 2,
+          resource: r, issueType: 'missing_content', priority: 3,
           severity: computeSeverity(r, 'missing_content'),
           reason: 'No content available for processing',
           actionLabel: 'Re-enrich', actionKey: 're_enrich',
@@ -98,7 +112,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       // Needs extraction
       if (lc.blocked === 'no_extraction' && r.enrichment_status !== 'failed') {
         needsExtraction.push({
-          resource: r, issueType: 'needs_extraction', priority: 3,
+          resource: r, issueType: 'needs_extraction', priority: 4,
           severity: computeSeverity(r, 'needs_extraction'),
           reason: 'Content available but no knowledge extracted',
           actionLabel: 'Extract', actionKey: 'extract',
@@ -109,7 +123,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       // Low yield
       if (lc.kiCount > 0 && lc.kiCount <= 2 && lc.stage !== 'operationalized') {
         lowYield.push({
-          resource: r, issueType: 'low_yield', priority: 4,
+          resource: r, issueType: 'low_yield', priority: 5,
           severity: computeSeverity(r, 'low_yield'),
           reason: `Only ${lc.kiCount} KI extracted — may need inspection`,
           actionLabel: 'Inspect', actionKey: 'view',
@@ -121,7 +135,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       const drift = detectDrift(r);
       if (drift.hasDrift) {
         stale.push({
-          resource: r, issueType: 'stale', priority: 5,
+          resource: r, issueType: 'stale', priority: 6,
           severity: computeSeverity(r, 'stale'),
           reason: drift.issues[0] || 'Version drift detected',
           actionLabel: 'Re-enrich', actionKey: 're_enrich',
@@ -132,7 +146,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       // Needs review
       if (lc.blocked === 'stale_blocker_state') {
         needsReview.push({
-          resource: r, issueType: 'needs_review', priority: 6,
+          resource: r, issueType: 'needs_review', priority: 7,
           severity: computeSeverity(r, 'needs_review'),
           reason: 'Stale blocked state — needs manual review',
           actionLabel: 'Review', actionKey: 'view',
