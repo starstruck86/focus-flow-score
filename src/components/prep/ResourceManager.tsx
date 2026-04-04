@@ -59,6 +59,7 @@ import { processAudioResource, retryPlatformResolution, retryAudioJob } from '@/
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
+import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 
 type PendingItem = {
   id: string;
