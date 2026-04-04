@@ -121,6 +121,7 @@ function getActionForBlocker(b: Blocker): { label: string; key: string } {
     case 'needs_enrichment': return { label: 'Enrich', key: 'deep_enrich' };
     case 'needs_extraction': return { label: 'Extract', key: 'extract' };
     case 'needs_activation': return { label: 'Activate', key: 'activate' };
+    case 'needs_auth': return { label: 'Add Content', key: 'manual_assist' };
     case 'missing_context': return { label: 'Add Contexts', key: 'repair_contexts' };
     case 'route_low_confidence':
     case 'route_manual_assist': return { label: 'Review', key: 'view' };
