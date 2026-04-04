@@ -97,15 +97,57 @@ function classifyFailure(
 // Auto-retry: fire-and-forget self-invocation
 // ═══════════════════════════════════════════
 
-async function scheduleRetry(supabaseUrl: string, serviceRoleKey: string, resourceId: string, delayMs = 2000) {
-  // Brief delay to avoid hammering the AI gateway
-  await new Promise(r => setTimeout(r, delayMs));
+/** In-flight retry set — prevents duplicate scheduling within the same invocation */
+const _retryInFlight = new Set<string>();
+
+/** Compute backoff delay: 2s → 5s → 12s → 25s (attempt-based exponential with jitter) */
+function retryBackoffMs(attemptNumber: number): number {
+  const base = 2000;
+  const delay = Math.min(base * Math.pow(2.2, attemptNumber - 1), 30_000);
+  const jitter = delay * (0.7 + Math.random() * 0.3);
+  return Math.round(jitter);
+}
+
+async function scheduleRetry(
+  supabase: any,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  resourceId: string,
+  attemptNumber: number,
+) {
+  // ── Guard 1: prevent duplicate scheduling within the same invocation ──
+  if (_retryInFlight.has(resourceId)) {
+    console.log(`[extract-retry] ⏭️ Skipping duplicate retry for "${resourceId}" (already in-flight)`);
+    return;
+  }
+  _retryInFlight.add(resourceId);
+
+  // ── Guard 2: prevent concurrent retries across invocations ──
+  // Only proceed if the resource is currently in 'extraction_retrying' state
+  // AND its attempt count matches what we expect (prevents stale invocations)
+  const { data: current } = await supabase
+    .from('resources')
+    .select('extraction_status, extraction_attempt_count')
+    .eq('id', resourceId)
+    .single();
+
+  if (!current || current.extraction_status !== 'extraction_retrying') {
+    console.log(`[extract-retry] ⏭️ Skipping retry for "${resourceId}" — status is "${current?.extraction_status}", not extraction_retrying`);
+    _retryInFlight.delete(resourceId);
+    return;
+  }
+  if (current.extraction_attempt_count !== attemptNumber) {
+    console.log(`[extract-retry] ⏭️ Skipping retry for "${resourceId}" — attempt count mismatch (expected ${attemptNumber}, found ${current.extraction_attempt_count})`);
+    _retryInFlight.delete(resourceId);
+    return;
+  }
+
+  const delay = retryBackoffMs(attemptNumber);
+  console.log(`[extract-retry] 🔁 Auto-retrying "${resourceId}" attempt ${attemptNumber + 1} in ${delay}ms`);
+  await new Promise(r => setTimeout(r, delay));
 
   const url = `${supabaseUrl}/functions/v1/batch-extract-kis`;
-  console.log(`[extract-retry] 🔁 Auto-retrying "${resourceId}" via self-invocation`);
-
   try {
-    // Fire-and-forget — we don't await the full response
     fetch(url, {
       method: 'POST',
       headers: {
