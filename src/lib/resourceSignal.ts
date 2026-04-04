@@ -66,6 +66,8 @@ function truthToReadiness(truth: ResourceTruth): ResourceReadiness {
       return { readiness: 'improving', readinessLabel: 'QA Required', readinessColor: colors.text, readinessBg: colors.bg };
     case 'quarantined':
       return { readiness: 'blocked', readinessLabel: 'Quarantined', readinessColor: colors.text, readinessBg: colors.bg };
+    case 'reference_only':
+      return { readiness: 'ready', readinessLabel: 'Reference Only', readinessColor: colors.text, readinessBg: colors.bg };
     case 'blocked':
     default:
       return { readiness: 'blocked', readinessLabel: truth.readiness_label, readinessColor: colors.text, readinessBg: colors.bg };
