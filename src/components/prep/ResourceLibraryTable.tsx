@@ -71,6 +71,9 @@ interface ResourceLibraryTableProps {
   onAction: (action: string, resource: Resource) => void;
   onBulkAction?: (action: string, resourceIds: string[]) => void;
   audioJobsMap?: Map<string, AudioJobRecord>;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+  lastFixResult?: import('@/lib/fixAllAutoBlockers').FixAllResult | null;
 }
 
 // ── Health filter type ─────────────────────────────────────
