@@ -65,8 +65,11 @@ export function useAppFreshness() {
         queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] }),
         queryClient.invalidateQueries({ queryKey: ['knowledge-items'] }),
         queryClient.invalidateQueries({ queryKey: ['audio-jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] }),
         queryClient.invalidateQueries({ queryKey: ['resource-duplicates'] }),
         queryClient.invalidateQueries({ queryKey: ['in-use-resources'] }),
+        queryClient.invalidateQueries({ queryKey: ['pipeline-diagnoses'] }),
+        queryClient.invalidateQueries({ queryKey: ['extraction-attempts'] }),
       ]);
       setLastRefreshed(new Date());
       toast.success('Library refreshed', {

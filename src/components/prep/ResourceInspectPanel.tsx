@@ -865,22 +865,45 @@ function FailureDossierSection({ resource }: { resource: Resource }) {
         <div className="font-medium text-foreground">{ev.ki_count} / {ev.active_ki_count} / {ev.active_ki_with_context_count}</div>
         <div className="text-muted-foreground">Extraction attempts</div>
         <div className="font-medium text-foreground">{ev.extraction_attempt_count}</div>
+        <div className="text-muted-foreground">Content sources</div>
+        <div className="font-medium text-foreground">
+          {[
+            ev.manual_content_present && 'Manual',
+            ev.transcript_present && 'Transcript',
+            ev.lesson_text_present && 'Lesson text',
+            ev.parsed_content_present && 'Parsed',
+          ].filter(Boolean).join(', ') || 'None'}
+        </div>
         {ev.route_pipeline && (
           <>
-            <div className="text-muted-foreground">Route pipeline</div>
-            <div className="font-medium text-foreground">{ev.route_pipeline}{ev.route_override ? ' (override)' : ''}</div>
+            <div className="text-muted-foreground">Route</div>
+            <div className="font-medium text-foreground">
+              {ev.route_pipeline} → {ev.route_extraction_method ?? 'auto'}
+              {ev.route_override ? ' (override)' : ''}
+              {ev.route_confidence && <span className="text-muted-foreground"> ({ev.route_confidence})</span>}
+            </div>
           </>
         )}
         {ev.active_job_status && (
           <>
             <div className="text-muted-foreground">Job status</div>
-            <div className="font-medium text-foreground">{ev.active_job_status}{ev.active_job_error ? ` — ${ev.active_job_error}` : ''}</div>
+            <div className="font-medium text-foreground">
+              {ev.active_job_status}
+              {ev.job_elapsed_seconds != null && ` (${ev.job_elapsed_seconds > 60 ? `${Math.floor(ev.job_elapsed_seconds / 60)}m` : `${ev.job_elapsed_seconds}s`})`}
+              {ev.active_job_error && <span className="text-destructive"> — {ev.active_job_error}</span>}
+            </div>
           </>
         )}
         {ev.failure_reason && (
           <>
             <div className="text-muted-foreground">Failure reason</div>
             <div className="font-medium text-destructive">{ev.failure_reason}</div>
+          </>
+        )}
+        {ev.integrity_issues.length > 0 && (
+          <>
+            <div className="text-muted-foreground">Integrity issues</div>
+            <div className="font-medium text-destructive">{ev.integrity_issues.join('; ')}</div>
           </>
         )}
       </div>

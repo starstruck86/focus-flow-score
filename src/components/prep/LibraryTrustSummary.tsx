@@ -277,6 +277,24 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
               {dossierInsights.top_permanent_fixes[0]}
             </div>
           )}
+          {dossierInsights.top_prevention_rules.length > 0 && (
+            <div className="text-[9px] text-amber-700">
+              <span className="text-muted-foreground">Top prevention rule: </span>
+              {dossierInsights.top_prevention_rules[0]}
+            </div>
+          )}
+          {Object.keys(dossierInsights.by_failure_mode).length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap text-[9px]">
+              {Object.entries(dossierInsights.by_failure_mode)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 3)
+                .map(([mode, count]) => (
+                  <span key={mode} className="text-muted-foreground">
+                    {count} {FAILURE_MODE_LABELS[mode as keyof typeof FAILURE_MODE_LABELS] ?? mode.replace(/_/g, ' ')}
+                  </span>
+                ))}
+            </div>
+          )}
         </div>
       )}
 

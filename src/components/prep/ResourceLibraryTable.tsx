@@ -291,7 +291,7 @@ export function ResourceLibraryTable({
           case 'needs_activation': return truth.primary_blocker?.type === 'needs_activation';
           case 'needs_auth': return truth.primary_blocker?.type === 'needs_auth' || truth.primary_blocker?.type === 'route_manual_assist';
           case 'needs_review': return truth.truth_state === 'qa_required' || truth.primary_blocker?.type === 'qa_required';
-          case 'contradictions': return truth.truth_state === 'quarantined';
+          case 'contradictions': return truth.all_blockers.some(b => b.type === 'contradictory_state') || truth.truth_state === 'quarantined';
           default: return true;
         }
       });
