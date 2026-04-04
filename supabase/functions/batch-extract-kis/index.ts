@@ -1336,11 +1336,17 @@ Deno.serve(async (req) => {
       log.outcome = 'insert_failed';
       log.error = insertError.message;
       await saveExtractionLog(supabase, log);
+      const priorStrategies1 = reconstructPriorStrategies(attemptNumber, resource);
       await updateExtractionStatus(supabase, resourceId, 'extraction_failed', {
         extraction_attempt_count: attemptNumber,
         extraction_failure_type: 'transient_error',
         extractor_strategy: strategy,
         extraction_retry_eligible: attemptNumber < maxAttempts,
+        extraction_audit_summary: buildAuditSummary({
+          attemptNumber, currentStrategy: strategy, previousStrategies: priorStrategies1,
+          kiCount: 0, minKiFloor, finalStatus: 'extraction_failed', failureType: 'transient_error',
+          durationMs, contentLength: resource.content.length, isLesson,
+        }),
       });
       return respond({ resourceId, title: resource.title, kis: 0, error: `Insert failed: ${insertError.message}`, log });
     }
