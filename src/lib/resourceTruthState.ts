@@ -148,12 +148,21 @@ export function deriveResourceTruth(
     blockers.push(blocker('missing_content', 'Content length < 200 chars and no manual content'));
   }
 
-  // ── Enrichment blockers ─────────────────────────────────
   const enrichStatus = resource.enrichment_status ?? '';
+
+  // ── Auth-gated resources — manual only ───────────────────
+  const enrichStatusRaw = enrichStatus as string;
+  if (enrichStatusRaw === 'needs_auth' && !isActivelyProcessing) {
+    blockers.push(blocker('route_manual_assist', `Auth-gated content — ${rAny.failure_reason || 'login required'}`));
+  }
+
+  // ── Enrichment blockers ─────────────────────────────────
   const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying'];
-  // If content-backed but not in an enriched state, and processing is ready (can be enriched)
-  if (isContentBacked && !ENRICHED_STATUSES.includes(enrichStatus) && ps.state === 'READY' && !isActivelyProcessing) {
-    blockers.push(blocker('needs_enrichment', `Status is "${enrichStatus || 'not_enriched'}" — enrichment available`));
+  // Content-backed but not in an enriched state — needs enrichment.
+  // Accept both READY and COMPLETED processing states (COMPLETED = content present but status stale).
+  const canBeEnriched = ps.state === 'READY' || ps.state === 'COMPLETED';
+  if (isContentBacked && !ENRICHED_STATUSES.includes(enrichStatusRaw) && enrichStatusRaw !== 'needs_auth' && canBeEnriched && !isActivelyProcessing) {
+    blockers.push(blocker('needs_enrichment', `Status is "${enrichStatusRaw || 'not_enriched'}" — enrichment available`));
   }
 
   // ── Extraction blockers ─────────────────────────────────
