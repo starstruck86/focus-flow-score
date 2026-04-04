@@ -387,10 +387,12 @@ export function deriveLibraryReadiness(
       case 'stalled': stalled++; break;
       case 'qa_required': qa++; break;
       case 'quarantined': break; // intentionally excluded from blocker counts
+      case 'reference_only': break; // reference-only resources are not blocked
     }
     contradictions += t.integrity_issues.length;
     for (const b of t.all_blockers) {
       if (b.type === 'contradictory_state') continue; // counted above
+      if (b.type === 'reference_only') continue; // reference-only is not an actionable blocker
       unresolvedBlockers++;
       if (b.fixability === 'auto_fixable') autoFixable++;
       if (b.fixability === 'manual_only') manualOnly++;
