@@ -161,6 +161,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       const route = deriveProcessingRoute(r);
       const routeCtx = `${PIPELINE_LABELS[route.pipeline]} · ${EXTRACTION_METHOD_LABELS[route.extraction_method]}`;
       const action = getActionForBlocker(primaryBlocker);
+      const rootCause = diagnoseRootCause(r, truth);
 
       const item: QueueItem = {
         resource: r,
@@ -172,6 +173,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
         bulkEligible: primaryBlocker.fixability === 'auto_fixable' || primaryBlocker.fixability === 'semi_auto_fixable',
         hasOverride: route.has_override,
         routeContext: route.confidence !== 'high' ? routeCtx : null,
+        rootCause,
       };
 
       if (!buckets.has(primaryBlocker.type)) buckets.set(primaryBlocker.type, []);
