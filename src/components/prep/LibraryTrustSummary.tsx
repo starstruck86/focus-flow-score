@@ -17,6 +17,7 @@ interface Props {
   resources: Resource[];
   lifecycleMap: Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>;
   audioJobsMap?: Map<string, AudioJobRecord>;
+  onFixAllAuto?: (resourceIds: string[]) => void;
 }
 
 function getStatusInfo(r: LibraryReadiness): { label: string; reason: string } {
