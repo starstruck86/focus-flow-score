@@ -49,6 +49,56 @@ type ExtractionFailureType =
   | 'model_failure'          // empty or malformed response
   | 'structural_failure';    // bad content / ingestion issue
 
+// ═══════════════════════════════════════════
+// Attempt History Record (append-only)
+// ═══════════════════════════════════════════
+
+interface AttemptRecord {
+  attempt_number: number;
+  strategy: ExtractionStrategy;
+  ki_count: number;
+  raw_item_count: number;
+  validated_count: number;
+  deduped_count: number;
+  min_ki_floor: number;
+  floor_met: boolean;
+  failure_type: ExtractionFailureType | null;
+  status: string;
+  duration_ms: number;
+  started_at: string;
+  completed_at: string;
+}
+
+function buildAttemptRecord(opts: {
+  attemptNumber: number;
+  strategy: ExtractionStrategy;
+  kiCount: number;
+  rawItemCount: number;
+  validatedCount: number;
+  dedupedCount: number;
+  minKiFloor: number;
+  failureType: ExtractionFailureType | null;
+  status: string;
+  durationMs: number;
+  startedAt: string;
+}): AttemptRecord {
+  return {
+    attempt_number: opts.attemptNumber,
+    strategy: opts.strategy,
+    ki_count: opts.kiCount,
+    raw_item_count: opts.rawItemCount,
+    validated_count: opts.validatedCount,
+    deduped_count: opts.dedupedCount,
+    min_ki_floor: opts.minKiFloor,
+    floor_met: opts.kiCount >= opts.minKiFloor,
+    failure_type: opts.failureType,
+    status: opts.status,
+    duration_ms: opts.durationMs,
+    started_at: opts.startedAt,
+    completed_at: new Date().toISOString(),
+  };
+}
+
 function classifyFailure(
   error: any, kiCount: number, minFloor: number, rawItemCount: number,
   validatedCount?: number
@@ -123,11 +173,9 @@ async function scheduleRetry(
   _retryInFlight.add(resourceId);
 
   // ── Guard 2: prevent concurrent retries across invocations ──
-  // Only proceed if the resource is currently in 'extraction_retrying' state
-  // AND its attempt count matches what we expect (prevents stale invocations)
   const { data: current } = await supabase
     .from('resources')
-    .select('extraction_status, extraction_attempt_count')
+    .select('extraction_status, extraction_attempt_count, next_retry_at')
     .eq('id', resourceId)
     .single();
 
@@ -142,8 +190,26 @@ async function scheduleRetry(
     return;
   }
 
+  // ── Guard 3: time-based — check next_retry_at isn't in the future (set by another scheduler) ──
+  if (current.next_retry_at && new Date(current.next_retry_at).getTime() > Date.now()) {
+    console.log(`[extract-retry] ⏭️ Skipping retry for "${resourceId}" — next_retry_at is in the future (${current.next_retry_at})`);
+    _retryInFlight.delete(resourceId);
+    return;
+  }
+
   const delay = retryBackoffMs(attemptNumber);
-  console.log(`[extract-retry] 🔁 Auto-retrying "${resourceId}" attempt ${attemptNumber + 1} in ${delay}ms`);
+  const nextRetryAt = new Date(Date.now() + delay).toISOString();
+
+  // ── Persist retry timing to DB ──
+  await supabase
+    .from('resources')
+    .update({
+      retry_scheduled_at: new Date().toISOString(),
+      next_retry_at: nextRetryAt,
+    })
+    .eq('id', resourceId);
+
+  console.log(`[extract-retry] 🔁 Auto-retrying "${resourceId}" attempt ${attemptNumber + 1} in ${delay}ms (next_retry_at=${nextRetryAt})`);
   await new Promise(r => setTimeout(r, delay));
 
   const url = `${supabaseUrl}/functions/v1/batch-extract-kis`;
@@ -225,47 +291,59 @@ interface ExtractionAuditSummary {
   content_length: number;
   is_structured_lesson: boolean;
   completed_at: string;
+  attempt_history: AttemptRecord[];
 }
 
-function buildAuditSummary(opts: {
-  attemptNumber: number;
-  currentStrategy: ExtractionStrategy;
-  previousStrategies: ExtractionStrategy[];
-  kiCount: number;
-  minKiFloor: number;
-  finalStatus: string;
-  failureType: ExtractionFailureType | null;
-  durationMs: number;
-  contentLength: number;
-  isLesson: boolean;
-}): ExtractionAuditSummary {
-  // Collect all strategies used across attempts
-  const allStrategies = [...opts.previousStrategies];
-  if (!allStrategies.includes(opts.currentStrategy)) {
-    allStrategies.push(opts.currentStrategy);
-  }
-  return {
-    total_attempts: opts.attemptNumber,
-    strategies_used: allStrategies,
-    final_ki_count: opts.kiCount,
-    min_ki_floor: opts.minKiFloor,
-    floor_met: opts.kiCount >= opts.minKiFloor,
-    final_status: opts.finalStatus,
-    final_failure_type: opts.failureType,
-    total_elapsed_ms: opts.durationMs,
-    content_length: opts.contentLength,
-    is_structured_lesson: opts.isLesson,
+/** Build audit summary from actual persisted attempt history */
+function buildAuditFromHistory(
+  attemptHistory: AttemptRecord[],
+  finalStatus: string,
+  contentLength: number,
+  isLesson: boolean,
+): ExtractionAuditSummary | null {
+  if (attemptHistory.length === 0) return null;
+
+  const lastAttempt = attemptHistory[attemptHistory.length - 1];
+  const strategies = [...new Set(attemptHistory.map(a => a.strategy))];
+  const totalElapsed = attemptHistory.reduce((sum, a) => sum + a.duration_ms, 0);
+
+  const summary: ExtractionAuditSummary = {
+    total_attempts: attemptHistory.length,
+    strategies_used: strategies,
+    final_ki_count: lastAttempt.ki_count,
+    min_ki_floor: lastAttempt.min_ki_floor,
+    floor_met: lastAttempt.floor_met,
+    final_status: finalStatus,
+    final_failure_type: lastAttempt.failure_type,
+    total_elapsed_ms: totalElapsed,
+    content_length: contentLength,
+    is_structured_lesson: isLesson,
     completed_at: new Date().toISOString(),
+    attempt_history: attemptHistory,
   };
+
+  // ── Validate before returning ──
+  const valid = validateAuditSummary(summary);
+  if (!valid) {
+    console.error(`[extract-audit] ❌ Audit summary validation FAILED — not persisting. summary=${JSON.stringify(summary)}`);
+    return null;
+  }
+  return summary;
 }
 
-/** Reconstruct strategies used on prior attempts by replaying selectStrategy */
-function reconstructPriorStrategies(attemptNumber: number, resource: any): ExtractionStrategy[] {
-  const strategies: ExtractionStrategy[] = [];
-  for (let i = 1; i < attemptNumber; i++) {
-    strategies.push(selectStrategy(i, i > 1 ? resource.extraction_failure_type : undefined));
+/** Validate audit summary invariants before persisting */
+function validateAuditSummary(s: ExtractionAuditSummary): boolean {
+  if (s.total_attempts < 1) { console.error('[extract-audit] total_attempts < 1'); return false; }
+  if (!['extracted', 'extraction_requires_review', 'extraction_failed'].includes(s.final_status)) {
+    console.error(`[extract-audit] final_status "${s.final_status}" is not terminal`); return false;
   }
-  return strategies;
+  if (s.final_ki_count < 0) { console.error('[extract-audit] final_ki_count < 0'); return false; }
+  if (s.min_ki_floor < 0) { console.error('[extract-audit] min_ki_floor < 0'); return false; }
+  if (s.floor_met !== (s.final_ki_count >= s.min_ki_floor)) {
+    console.error('[extract-audit] floor_met mismatch'); return false;
+  }
+  if (s.strategies_used.length < 1) { console.error('[extract-audit] no strategies_used'); return false; }
+  return true;
 }
 
 // ═══════════════════════════════════════════
@@ -971,10 +1049,10 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // ── 1. Fetch resource (including retry tracking fields) ──
+    // ── 1. Fetch resource (including retry tracking fields + attempt history) ──
     const { data: resource, error: fetchError } = await supabase
       .from('resources')
-      .select('id, title, resource_type, content, description, tags, user_id, extraction_attempt_count, max_extraction_attempts, extraction_failure_type, extractor_strategy')
+      .select('id, title, resource_type, content, description, tags, user_id, extraction_attempt_count, max_extraction_attempts, extraction_failure_type, extractor_strategy, extraction_attempt_history, next_retry_at')
       .eq('id', resourceId)
       .single();
 
@@ -992,9 +1070,24 @@ Deno.serve(async (req) => {
     const lastFailureType = resource.extraction_failure_type as ExtractionFailureType | undefined;
     const strategy = selectStrategy(attemptNumber, lastFailureType);
 
-    console.log(`[extract] Attempt ${attemptNumber}/${maxAttempts} | strategy=${strategy} | lastFailure=${lastFailureType || 'none'} | "${resource.title}"`);
+    // Load persisted attempt history (append-only across retries)
+    const attemptHistory: AttemptRecord[] = Array.isArray(resource.extraction_attempt_history)
+      ? resource.extraction_attempt_history as AttemptRecord[]
+      : [];
+
+    // ── Time-based retry guard: skip if next_retry_at hasn't been reached ──
+    if (attemptNumber > 1 && resource.next_retry_at) {
+      const nextRetryTime = new Date(resource.next_retry_at).getTime();
+      if (Date.now() < nextRetryTime) {
+        console.log(`[extract] ⏭️ Skipping premature retry for "${resource.title}" — next_retry_at=${resource.next_retry_at}`);
+        return respond({ resourceId, title: resource.title, kis: 0, error: 'Retry not yet due', next_retry_at: resource.next_retry_at });
+      }
+    }
+
+    console.log(`[extract] Attempt ${attemptNumber}/${maxAttempts} | strategy=${strategy} | lastFailure=${lastFailureType || 'none'} | history=${attemptHistory.length} prior | "${resource.title}"`);
 
     const startTime = Date.now();
+    const startedAt = new Date().toISOString();
 
     const log: ExtractionLog = {
       resourceId,
@@ -1059,21 +1152,27 @@ Deno.serve(async (req) => {
       const newStatus = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
 
       if (!isDryRun) {
-        const priorStrategies = reconstructPriorStrategies(attemptNumber, resource);
+        // Append attempt record to history
+        const thisAttempt = buildAttemptRecord({
+          attemptNumber, strategy, kiCount: 0, rawItemCount: 0, validatedCount: 0, dedupedCount: 0,
+          minKiFloor: computeMinKiFloor(resource.content.length, isLesson),
+          failureType, status: newStatus, durationMs: Date.now() - startTime, startedAt,
+        });
+        const updatedHistory = [...attemptHistory, thisAttempt];
+
         const auditFields: Record<string, any> = {
           extraction_attempt_count: attemptNumber,
           extraction_failure_type: failureType,
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
+          extraction_attempt_history: updatedHistory,
+          next_retry_at: null,
+          retry_scheduled_at: null,
         };
         // Only persist audit summary on terminal states
         if (!retryEligible) {
-          auditFields.extraction_audit_summary = buildAuditSummary({
-            attemptNumber, currentStrategy: strategy, previousStrategies: priorStrategies,
-            kiCount: 0, minKiFloor: computeMinKiFloor(resource.content.length, isLesson),
-            finalStatus: newStatus, failureType, durationMs: Date.now() - startTime,
-            contentLength: resource.content.length, isLesson,
-          });
+          const audit = buildAuditFromHistory(updatedHistory, newStatus, resource.content.length, isLesson);
+          if (audit) auditFields.extraction_audit_summary = audit;
         }
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
 
@@ -1190,19 +1289,26 @@ Deno.serve(async (req) => {
       if (!isDryRun) {
         const retryEligible = attemptNumber < maxAttempts && failureType !== 'structural_failure';
         const newStatus = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
-        const priorStrategies = reconstructPriorStrategies(attemptNumber, resource);
+
+        // Append attempt record
+        const thisAttempt = buildAttemptRecord({
+          attemptNumber, strategy, kiCount: 0, rawItemCount: rawItems.length, validatedCount: validated.length,
+          dedupedCount: 0, minKiFloor, failureType, status: newStatus, durationMs, startedAt,
+        });
+        const updatedHistory = [...attemptHistory, thisAttempt];
+
         const auditFields: Record<string, any> = {
           extraction_attempt_count: attemptNumber,
           extraction_failure_type: failureType,
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
+          extraction_attempt_history: updatedHistory,
+          next_retry_at: null,
+          retry_scheduled_at: null,
         };
         if (!retryEligible) {
-          auditFields.extraction_audit_summary = buildAuditSummary({
-            attemptNumber, currentStrategy: strategy, previousStrategies: priorStrategies,
-            kiCount: 0, minKiFloor: minKiFloor, finalStatus: newStatus, failureType,
-            durationMs: durationMs, contentLength: resource.content.length, isLesson,
-          });
+          const audit = buildAuditFromHistory(updatedHistory, newStatus, resource.content.length, isLesson);
+          if (audit) auditFields.extraction_audit_summary = audit;
         }
         await saveExtractionLog(supabase, log);
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
@@ -1235,19 +1341,27 @@ Deno.serve(async (req) => {
       if (!isDryRun) {
         const retryEligible = attemptNumber < maxAttempts;
         const newStatus = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
-        const priorStrategies = reconstructPriorStrategies(attemptNumber, resource);
+
+        // Append attempt record
+        const thisAttempt = buildAttemptRecord({
+          attemptNumber, strategy, kiCount: deduped.length, rawItemCount: rawItems.length,
+          validatedCount: validated.length, dedupedCount: deduped.length,
+          minKiFloor, failureType, status: newStatus, durationMs, startedAt,
+        });
+        const updatedHistory = [...attemptHistory, thisAttempt];
+
         const auditFields: Record<string, any> = {
           extraction_attempt_count: attemptNumber,
           extraction_failure_type: failureType,
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
+          extraction_attempt_history: updatedHistory,
+          next_retry_at: null,
+          retry_scheduled_at: null,
         };
         if (!retryEligible) {
-          auditFields.extraction_audit_summary = buildAuditSummary({
-            attemptNumber, currentStrategy: strategy, previousStrategies: priorStrategies,
-            kiCount: deduped.length, minKiFloor, finalStatus: newStatus, failureType,
-            durationMs, contentLength: resource.content.length, isLesson,
-          });
+          const audit = buildAuditFromHistory(updatedHistory, newStatus, resource.content.length, isLesson);
+          if (audit) auditFields.extraction_audit_summary = audit;
         }
         await saveExtractionLog(supabase, log);
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
@@ -1336,17 +1450,25 @@ Deno.serve(async (req) => {
       log.outcome = 'insert_failed';
       log.error = insertError.message;
       await saveExtractionLog(supabase, log);
-      const priorStrategies1 = reconstructPriorStrategies(attemptNumber, resource);
+
+      // Append attempt record for insert failure
+      const thisAttempt = buildAttemptRecord({
+        attemptNumber, strategy, kiCount: 0, rawItemCount: rawItems.length,
+        validatedCount: validated.length, dedupedCount: deduped.length,
+        minKiFloor, failureType: 'transient_error', status: 'extraction_failed', durationMs, startedAt,
+      });
+      const updatedHistory = [...attemptHistory, thisAttempt];
+      const audit = buildAuditFromHistory(updatedHistory, 'extraction_failed', resource.content.length, isLesson);
+
       await updateExtractionStatus(supabase, resourceId, 'extraction_failed', {
         extraction_attempt_count: attemptNumber,
         extraction_failure_type: 'transient_error',
         extractor_strategy: strategy,
         extraction_retry_eligible: attemptNumber < maxAttempts,
-        extraction_audit_summary: buildAuditSummary({
-          attemptNumber, currentStrategy: strategy, previousStrategies: priorStrategies1,
-          kiCount: 0, minKiFloor, finalStatus: 'extraction_failed', failureType: 'transient_error',
-          durationMs, contentLength: resource.content.length, isLesson,
-        }),
+        extraction_attempt_history: updatedHistory,
+        next_retry_at: null,
+        retry_scheduled_at: null,
+        ...(audit ? { extraction_audit_summary: audit } : {}),
       });
       return respond({ resourceId, title: resource.title, kis: 0, error: `Insert failed: ${insertError.message}`, log });
     }
@@ -1355,17 +1477,25 @@ Deno.serve(async (req) => {
     log.insertedCount = rows.length;
     log.outcome = 'success';
     await saveExtractionLog(supabase, log);
-    const priorStrategies2 = reconstructPriorStrategies(attemptNumber, resource);
+
+    // Append final success attempt record
+    const successAttempt = buildAttemptRecord({
+      attemptNumber, strategy, kiCount: rows.length, rawItemCount: rawItems.length,
+      validatedCount: validated.length, dedupedCount: deduped.length,
+      minKiFloor, failureType: null, status: 'extracted', durationMs, startedAt,
+    });
+    const finalHistory = [...attemptHistory, successAttempt];
+    const successAudit = buildAuditFromHistory(finalHistory, 'extracted', resource.content.length, isLesson);
+
     await updateExtractionStatus(supabase, resourceId, 'extracted', {
       extraction_attempt_count: attemptNumber,
       extraction_failure_type: null,
       extractor_strategy: strategy,
       extraction_retry_eligible: false,
-      extraction_audit_summary: buildAuditSummary({
-        attemptNumber, currentStrategy: strategy, previousStrategies: priorStrategies2,
-        kiCount: rows.length, minKiFloor, finalStatus: 'extracted', failureType: null,
-        durationMs, contentLength: resource.content.length, isLesson,
-      }),
+      extraction_attempt_history: finalHistory,
+      next_retry_at: null,
+      retry_scheduled_at: null,
+      ...(successAudit ? { extraction_audit_summary: successAudit } : {}),
     });
 
     logTelemetry({
