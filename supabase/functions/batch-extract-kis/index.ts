@@ -1438,9 +1438,24 @@ Deno.serve(async (req) => {
     }
 
     // ── 5. Composite dedup (conservative for lessons) ──
-    const deduped = compositeDedup(validated, isLesson);
+    let deduped = compositeDedup(validated, isLesson);
     log.dedupedCount = deduped.length;
     console.log(`[extract] "${resource.title}": ${deduped.length} after dedup (from ${validated.length} validated)`);
+
+    // ── 5a. Lesson KI ceiling: prevent over-extraction ──
+    if (isLesson) {
+      const lessonCeiling = Math.max(computeMinKiFloor(resource.content.length, isLesson, densitySignals), Math.floor(resource.content.length / 500));
+      if (deduped.length > lessonCeiling) {
+        console.log(`[extract-ceiling] 🔒 LESSON CEILING APPLIED: "${resource.title}" | content=${resource.content.length} chars | raw=${deduped.length} → capped=${lessonCeiling} | floor=${computeMinKiFloor(resource.content.length, isLesson, densitySignals)} | ceiling=${lessonCeiling}`);
+        // Keep strongest/most distinct KIs — those with longer summaries and excerpts tend to be more substantive
+        deduped = deduped
+          .map(item => ({ ...item, _quality: (item.tactic_summary?.length || 0) + (item.source_excerpt?.length || 0) + (item.how_to_execute?.length || 0) }))
+          .sort((a, b) => b._quality - a._quality)
+          .slice(0, lessonCeiling)
+          .map(({ _quality, ...item }) => item);
+        log.dedupedCount = deduped.length;
+      }
+    }
 
     if (isLesson && log.lessonPipeline) {
       log.lessonPipeline.dedupedFinal = deduped.length;
