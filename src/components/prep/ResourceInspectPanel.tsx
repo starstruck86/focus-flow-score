@@ -27,6 +27,8 @@ import { getResourceOrigin } from '@/lib/resourceEligibility';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
+import { buildFailureDossier, FAILURE_STAGE_LABELS, FAILURE_MODE_LABELS, type ResourceFailureDossier } from '@/lib/failureDossier';
+import { ROOT_CAUSE_LABELS, ROOT_CAUSE_COLORS } from '@/lib/rootCauseDiagnosis';
 import {
   deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, ORIGIN_TYPE_LABELS, ASSET_LABELS,
   type Pipeline, type ExtractionMethod, type AssetKind, type RouteOverride,
