@@ -767,7 +767,7 @@ export function ResourceManager() {
                   toast.info(`Starting auto-fix for ${resourceIds.length} blockers…`);
                   try {
                     const { runFixAllAutoBlockers } = await import('@/lib/fixAllAutoBlockers');
-                    const { deriveResourceTruth, type BlockerType } = await import('@/lib/resourceTruthState');
+                    const { deriveResourceTruth } = await import('@/lib/resourceTruthState');
 
                     // Build blocker groups from live truth
                     const blockerGroupMap = new Map<string, string[]>();
