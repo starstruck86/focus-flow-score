@@ -77,7 +77,8 @@ interface ResourceLibraryTableProps {
 }
 
 // ── Health filter type ─────────────────────────────────────
-type HealthFilter = 'all' | 'ready' | 'improving' | 'blocked' | 'failed' | 'missing_content' | 'needs_extraction' | 'needs_review';
+type HealthFilter = 'all' | 'ready' | 'improving' | 'blocked' | 'failed' | 'missing_content' | 'needs_extraction' | 'needs_review'
+  | 'needs_enrichment' | 'needs_activation' | 'stalled' | 'qa_required' | 'needs_auth' | 'contradictions';
 
 // ── Spot check presets ─────────────────────────────────────
 type SpotCheck = 'none' | 'recent' | 'failed' | 'low_yield' | 'random' | 'high_signal' | 'limited_readiness' | 'random_ready' | 'random_lessons';
