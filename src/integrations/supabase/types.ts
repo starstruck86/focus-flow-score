@@ -3827,6 +3827,7 @@ export type Database = {
           episode_description: string | null
           external_id: string | null
           extraction_attempt_count: number
+          extraction_attempt_history: Json | null
           extraction_audit_summary: Json | null
           extraction_failure_type: string | null
           extraction_method: string | null
@@ -3855,6 +3856,7 @@ export type Database = {
           max_extraction_attempts: number
           metadata_status: string | null
           next_best_action: string | null
+          next_retry_at: string | null
           opportunity_id: string | null
           original_url: string | null
           pipeline_queue: string | null
@@ -3867,6 +3869,7 @@ export type Database = {
           recovery_status: string | null
           resolution_method: string | null
           resource_type: string
+          retry_scheduled_at: string | null
           screenshot_structure: string | null
           show_title: string | null
           source_created_at: string | null
@@ -3921,6 +3924,7 @@ export type Database = {
           episode_description?: string | null
           external_id?: string | null
           extraction_attempt_count?: number
+          extraction_attempt_history?: Json | null
           extraction_audit_summary?: Json | null
           extraction_failure_type?: string | null
           extraction_method?: string | null
@@ -3949,6 +3953,7 @@ export type Database = {
           max_extraction_attempts?: number
           metadata_status?: string | null
           next_best_action?: string | null
+          next_retry_at?: string | null
           opportunity_id?: string | null
           original_url?: string | null
           pipeline_queue?: string | null
@@ -3961,6 +3966,7 @@ export type Database = {
           recovery_status?: string | null
           resolution_method?: string | null
           resource_type?: string
+          retry_scheduled_at?: string | null
           screenshot_structure?: string | null
           show_title?: string | null
           source_created_at?: string | null
@@ -4015,6 +4021,7 @@ export type Database = {
           episode_description?: string | null
           external_id?: string | null
           extraction_attempt_count?: number
+          extraction_attempt_history?: Json | null
           extraction_audit_summary?: Json | null
           extraction_failure_type?: string | null
           extraction_method?: string | null
@@ -4043,6 +4050,7 @@ export type Database = {
           max_extraction_attempts?: number
           metadata_status?: string | null
           next_best_action?: string | null
+          next_retry_at?: string | null
           opportunity_id?: string | null
           original_url?: string | null
           pipeline_queue?: string | null
@@ -4055,6 +4063,7 @@ export type Database = {
           recovery_status?: string | null
           resolution_method?: string | null
           resource_type?: string
+          retry_scheduled_at?: string | null
           screenshot_structure?: string | null
           show_title?: string | null
           source_created_at?: string | null
