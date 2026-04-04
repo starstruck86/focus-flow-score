@@ -3,6 +3,7 @@ import { useResourceJobProgress } from '@/store/useResourceJobProgress';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
+import { recomputeFixAllDerived } from '@/lib/fixAllProgress';
 import { resolveResourceWithManualInput, getRecoveryInvalidationKeys } from '@/lib/manualRecoveryResolver';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
