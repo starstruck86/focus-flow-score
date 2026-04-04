@@ -690,25 +690,76 @@ export async function runFixAllAutoBlockers(
     phases.push(activateResult);
   }
 
-  const totalSucceeded = phases.reduce((s, p) => s + p.succeeded, 0);
-  const totalFailed = phases.reduce((s, p) => s + p.failed, 0);
-  const blockersAfter = totalBefore - totalSucceeded;
+  // ── Post-run: re-query actual KI counts and truth state for all resources ──
+  // This gives accurate before/after rather than relying on phase success counts.
+  const postRunOutcomes = new Map<string, { kiCount: number; activeKiCount: number; enrichmentStatus: string; jobStatus: string | null }>();
+  if (allResourceIds.length > 0) {
+    const { data: postResources } = await supabase
+      .from('resources' as any)
+      .select('id, enrichment_status, active_job_status')
+      .in('id', allResourceIds);
+    
+    for (const pr of (postResources ?? []) as any[]) {
+      const { count: kiCount } = await supabase
+        .from('knowledge_items' as any)
+        .select('id', { count: 'exact', head: true })
+        .eq('source_resource_id', pr.id);
+      const { count: activeCount } = await supabase
+        .from('knowledge_items' as any)
+        .select('id', { count: 'exact', head: true })
+        .eq('source_resource_id', pr.id)
+        .eq('active', true);
+      postRunOutcomes.set(pr.id, {
+        kiCount: kiCount ?? 0,
+        activeKiCount: activeCount ?? 0,
+        enrichmentStatus: pr.enrichment_status ?? '',
+        jobStatus: pr.active_job_status,
+      });
+    }
+  }
 
-  // Build blocker diff
+  // Compute real resolution outcomes per resource
+  let realFixed = 0;
+  let realFailed = 0;
+  for (const [id, outcome] of outcomeMap) {
+    const post = postRunOutcomes.get(id);
+    if (post) {
+      outcome.kisCreated = Math.max(outcome.kisCreated, post.kiCount);
+      outcome.kisActive = Math.max(outcome.kisActive, post.activeKiCount);
+      outcome.finalTruthState = post.enrichmentStatus;
+      
+      if (post.kiCount > 0) {
+        outcome.succeeded = true;
+        outcome.resolutionOutcome = 'resolved_permanently';
+        realFixed++;
+      } else if (outcome.attempted && !outcome.succeeded) {
+        outcome.resolutionOutcome = 'still_blocked_same_cause';
+        if (!outcome.rootCauseCategory) {
+          outcome.rootCauseCategory = 'extraction_produced_zero_kis';
+          outcome.rootCauseExplanation = `Extraction attempted but produced 0 KIs from ${post.enrichmentStatus} resource`;
+        }
+        realFailed++;
+      } else if (!outcome.attempted) {
+        outcome.resolutionOutcome = 'still_blocked_same_cause';
+        outcome.rootCauseCategory = outcome.rootCauseCategory || 'extraction_never_triggered';
+        outcome.rootCauseExplanation = outcome.rootCauseExplanation || 'Resource was not passed to extraction phase';
+        realFailed++;
+      }
+    }
+  }
+
+  const blockersAfter = realFailed;
+
+  // Build blocker diff from real post-run state
   const afterByType: Record<string, number> = {};
   for (const [type, count] of Object.entries(beforeByType)) {
-    const phase = phases.find(p => {
-      const phaseToBlocker: Record<string, string[]> = {
-        normalize_status: [],
-        stalled_retry: ['stalled_extraction', 'stalled_enrichment'],
-        enrichment: ['needs_enrichment', 'missing_content', 'stale_version'],
-        extraction: ['needs_extraction'],
-        activation: ['needs_activation'],
-      };
-      return phaseToBlocker[p.phase]?.includes(type);
-    });
-    const resolved = phase ? phase.succeeded : 0;
-    afterByType[type] = Math.max(0, count - resolved);
+    // Count how many resources of this blocker type are still blocked (0 KIs)
+    const idsOfType = blockerGroups.filter(g => g.type === type).flatMap(g => g.resourceIds);
+    const stillBlocked = idsOfType.filter(id => {
+      const post = postRunOutcomes.get(id);
+      return !post || post.kiCount === 0;
+    }).length;
+    afterByType[type] = stillBlocked;
   }
 
   const blockerDiff: BlockerDiff[] = Object.entries(beforeByType).map(([type, before]) => {
@@ -722,14 +773,13 @@ export async function runFixAllAutoBlockers(
     };
   });
 
-  // Mark outcomes based on phase results
+  // Mark outcomes based on phase errors
   for (const phase of phases) {
     for (const err of phase.errors) {
-      // Try to extract resource ID from error string
       const idMatch = err.match(/^([a-f0-9-]{8,36}):/);
       if (idMatch) {
         const outcome = outcomeMap.get(idMatch[1]);
-        if (outcome) {
+        if (outcome && !outcome.error) {
           outcome.attempted = true;
           outcome.error = err.replace(`${idMatch[1]}: `, '');
         }
@@ -737,13 +787,13 @@ export async function runFixAllAutoBlockers(
     }
   }
 
-  // Build reason with blocker diff callout
+  // Build reason
   const unchangedExtraction = blockerDiff.find(d => d.type === 'needs_extraction' && d.unchanged > 0);
   let reason: string;
   if (blockersAfter <= 0) {
     reason = 'All auto-fixable blockers resolved';
   } else {
-    reason = `${blockersAfter} blockers remain — ${totalFailed} failed during this run`;
+    reason = `${blockersAfter} blockers remain — ${realFailed} still need attention`;
     if (unchangedExtraction && unchangedExtraction.unchanged > 0) {
       reason += `. Extraction: ${unchangedExtraction.unchanged}/${unchangedExtraction.before} unchanged.`;
     }
@@ -753,8 +803,8 @@ export async function runFixAllAutoBlockers(
     phases,
     blockers_before: totalBefore,
     blockers_after: Math.max(0, blockersAfter),
-    blockers_fixed: totalSucceeded,
-    blockers_failed: totalFailed,
+    blockers_fixed: realFixed,
+    blockers_failed: realFailed,
     system_ready: blockersAfter <= 0,
     reason,
     resourceOutcomes: [...outcomeMap.values()],
