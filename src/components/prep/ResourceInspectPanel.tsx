@@ -26,6 +26,7 @@ import { getResourceOrigin } from '@/lib/resourceEligibility';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
+import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import type { Resource } from '@/hooks/useResources';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
 
