@@ -500,7 +500,10 @@ export function ResourceLibraryTable({
                   audioJob={audioJobsMap?.get(resource.id) ?? null}
                   isSelected={selectedIds.has(resource.id)}
                   onToggleSelect={onToggleSelect}
-                  onAction={onAction}
+                  onAction={(action, r) => {
+                    if (action === 'view') { setMobileInspectId(r.id); return; }
+                    onAction(action, r);
+                  }}
                 />
               ))}
             </div>
