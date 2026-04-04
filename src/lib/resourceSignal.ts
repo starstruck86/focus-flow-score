@@ -6,6 +6,7 @@
 import type { Resource } from '@/hooks/useResources';
 import type { BlockedReason } from '@/lib/canonicalLifecycle';
 import { deriveProcessingState } from '@/lib/processingState';
+import { isJobStale } from '@/store/useResourceJobProgress';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 
 // ── Signal Strength ────────────────────────────────────────
@@ -72,7 +73,12 @@ export function deriveReadiness(
 
   // Check processing state for running jobs
   const ps = deriveProcessingState(resource, audioJob);
+  const rAny = resource as any;
   if (ps.state === 'RUNNING') {
+    // Distinguish normal processing from stalled
+    if (rAny.active_job_status === 'running' && isJobStale(rAny.active_job_updated_at, 'running')) {
+      return { readiness: 'blocked', readinessLabel: 'Stalled', readinessColor: 'text-destructive', readinessBg: 'bg-destructive/10' };
+    }
     return { readiness: 'improving', readinessLabel: 'Processing', readinessColor: 'text-primary', readinessBg: 'bg-primary/10' };
   }
 
