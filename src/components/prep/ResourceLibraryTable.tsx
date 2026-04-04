@@ -21,37 +21,32 @@ import {
   MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,
   Eye, AlertTriangle, CheckCircle2, FileText,
   Filter, X, FileAudio, HelpCircle, Info, Inbox, ShieldAlert,
-  Star, BookOpen, Activity,
+  Star, BookOpen, Activity, Shuffle, Clock, TrendingDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type EnrichmentStatus, getResourceOrigin } from '@/lib/resourceEligibility';
-import {
-  getQualityTierLabel, getQualityTierColor,
-} from '@/lib/resourceQuality';
 import { detectDrift } from '@/lib/resourceLifecycle';
-import {
-  detectResourceSubtype, getSubtypeLabel, classifyEnrichability,
-  classifyEnrichabilityForResource,
-  getEnrichabilityColor,
-} from '@/lib/salesBrain/resourceSubtype';
-import {
-  isAudioResource, getAudioStageLabel,
-  getAudioFailureDescription,
-} from '@/lib/salesBrain/audioPipeline';
-import {
-  deriveProcessingState, getProcessingStateColor,
-} from '@/lib/processingState';
+import { deriveProcessingState, getProcessingStateColor } from '@/lib/processingState';
 import { routeFailure, getFailureBucketActions } from '@/lib/failureRouting';
 import { useCanonicalLifecycle, type BlockedReason } from '@/hooks/useCanonicalLifecycle';
 import { useInUseResources } from '@/hooks/useInUseResources';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
 import { InlineResourceDetail } from './InlineResourceDetail';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
+import { SystemHealthBar } from './SystemHealthBar';
+import { ResourceCard } from './ResourceCard';
+import { deriveResourceInsight, deriveReadiness } from '@/lib/resourceSignal';
+import type { ReadinessBucket } from '@/lib/resourceAudit';
+import {
+  isAudioResource, getAudioStageLabel,
+  getAudioFailureDescription,
+} from '@/lib/salesBrain/audioPipeline';
 
 // ── Types ──────────────────────────────────────────────────
-type SortKey = 'title' | 'resource_type' | 'enrichment_status' | 'last_quality_tier' | 'last_quality_score' | 'created_at' | 'enriched_at' | 'enrichment_version' | 'subtype';
+type SortKey = 'title' | 'created_at' | 'signal' | 'readiness';
 type SortDir = 'asc' | 'desc';
 
 export interface SavedView {
@@ -71,45 +66,24 @@ interface ResourceLibraryTableProps {
   audioJobsMap?: Map<string, AudioJobRecord>;
 }
 
-// ── Lifecycle-based quick filters ──────────────────────────
-type LifecycleFilter = 'all' | 'ready' | 'in_use' | 'blocked' | 'needs_extraction' | 'needs_activation' | 'needs_context' | 'needs_review' | 'missing_content';
+// ── Health filter type ─────────────────────────────────────
+type HealthFilter = 'all' | 'ready' | 'improving' | 'blocked' | 'failed' | 'missing_content' | 'needs_extraction' | 'needs_review';
 
-const LIFECYCLE_FILTER_LABELS: Record<LifecycleFilter, string> = {
-  all: 'All',
-  ready: 'Ready to Use',
-  in_use: 'In Use',
-  blocked: 'Blocked',
-  needs_extraction: 'Needs Extraction',
-  needs_activation: 'Needs Activation',
-  needs_context: 'Needs Context Repair',
-  needs_review: 'Needs Review',
-  missing_content: 'Missing Content',
+// ── Spot check presets ─────────────────────────────────────
+type SpotCheck = 'none' | 'recent' | 'failed' | 'low_yield' | 'random';
+
+const SPOT_CHECK_LABELS: Record<SpotCheck, string> = {
+  none: 'All',
+  recent: 'Recent',
+  failed: 'Failed',
+  low_yield: 'Low Yield',
+  random: 'Random Sample',
 };
 
-const LIFECYCLE_FILTER_ICONS: Record<LifecycleFilter, React.ReactNode> = {
-  all: <FileText className="h-3 w-3" />,
-  ready: <CheckCircle2 className="h-3 w-3" />,
-  in_use: <Activity className="h-3 w-3" />,
-  blocked: <ShieldAlert className="h-3 w-3" />,
-  needs_extraction: <Zap className="h-3 w-3" />,
-  needs_activation: <Zap className="h-3 w-3" />,
-  needs_context: <HelpCircle className="h-3 w-3" />,
-  needs_review: <AlertTriangle className="h-3 w-3" />,
-  missing_content: <Inbox className="h-3 w-3" />,
-};
+// ── Collection grouping ────────────────────────────────────
+const COLLECTION_TAGS = ['AE Operating System', 'Sales Introverts', '30MPC'];
 
-// ── Lifecycle filter → ReadinessBucket mapping ────────────
-import type { ReadinessBucket } from '@/lib/resourceAudit';
-
-const LIFECYCLE_TO_BUCKET: Partial<Record<LifecycleFilter, ReadinessBucket>> = {
-  needs_extraction: 'extractable_not_operationalized',
-  needs_activation: 'operationalized',
-  needs_context: 'content_backed_needs_fix',
-  needs_review: 'blocked_incorrectly',
-  missing_content: 'missing_content',
-  ready: 'ready',
-};
-
+// ── Blocked bucket mapping (for bulk actions) ──────────────
 const BLOCKED_TO_BUCKET: Record<string, ReadinessBucket> = {
   no_extraction: 'extractable_not_operationalized',
   no_activation: 'operationalized',
@@ -118,6 +92,14 @@ const BLOCKED_TO_BUCKET: Record<string, ReadinessBucket> = {
   empty_content: 'missing_content',
   none: 'ready',
 };
+
+interface SelectionAnalysis {
+  dominant: ReadinessBucket;
+  dominantCount: number;
+  total: number;
+  isMixed: boolean;
+  breakdown: { bucket: ReadinessBucket; count: number; label: string }[];
+}
 
 const BUCKET_FRIENDLY_LABEL: Partial<Record<ReadinessBucket, string>> = {
   extractable_not_operationalized: 'need extraction',
@@ -132,14 +114,6 @@ const BUCKET_FRIENDLY_LABEL: Partial<Record<ReadinessBucket, string>> = {
   orphaned_or_inconsistent: 'need review',
 };
 
-interface SelectionAnalysis {
-  dominant: ReadinessBucket;
-  dominantCount: number;
-  total: number;
-  isMixed: boolean;
-  breakdown: { bucket: ReadinessBucket; count: number; label: string }[];
-}
-
 function analyzeSelection(
   selectedIds: Set<string>,
   lifecycleMap: Map<string, { stage: string; blocked: string }>,
@@ -150,102 +124,46 @@ function analyzeSelection(
     const bucket = lc ? (BLOCKED_TO_BUCKET[lc.blocked] ?? 'extractable_not_operationalized') : 'extractable_not_operationalized';
     counts[bucket] = (counts[bucket] ?? 0) + 1;
   }
-
   const entries = Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
     .map(([k, v]) => ({ bucket: k as ReadinessBucket, count: v, label: BUCKET_FRIENDLY_LABEL[k as ReadinessBucket] ?? k }));
-
   const total = selectedIds.size;
   let dominant = entries[0]?.bucket ?? 'extractable_not_operationalized';
   const dominantCount = entries[0]?.count ?? 0;
   const isMixed = entries.length > 1;
-
-  // Safety: never let destructive be primary unless it's a clear majority (>60%)
   if (dominant === 'junk_or_low_signal' && dominantCount / total <= 0.6) {
-    dominant = 'extractable_not_operationalized'; // safe fallback
+    dominant = 'extractable_not_operationalized';
   }
-
   return { dominant, dominantCount, total, isMixed, breakdown: entries };
 }
 
-
-type AssetTypeFilter = 'all_assets' | 'template' | 'example' | 'reference' | 'working_asset' | 'untagged';
-
-const ASSET_TYPE_LABELS: Record<AssetTypeFilter, string> = {
-  all_assets: 'All Assets',
-  template: 'Templates',
-  example: 'Examples',
-  reference: 'References',
-  working_asset: 'Working Assets',
-  untagged: 'Untagged',
-};
-
-function getAssetType(r: Resource): AssetTypeFilter {
-  if (r.is_template) return 'template';
-  const tc = r.template_category?.toLowerCase();
-  if (tc === 'example') return 'example';
-  if (tc === 'reference') return 'reference';
-  if (tc === 'working_asset') return 'working_asset';
-  return 'untagged';
-}
-
-function getAssetTypeLabel(r: Resource): string {
-  const t = getAssetType(r);
-  if (t === 'untagged') return '';
-  return ASSET_TYPE_LABELS[t].replace(/s$/, ''); // singular
-}
-
-// ── Lifecycle stage label (user-facing) ───────────────────
-function getStageFriendlyLabel(stage: string): string {
-  switch (stage) {
-    case 'operationalized': return '✓ Ready to Use';
-    case 'activated': return 'Activated';
-    case 'knowledge_extracted': return 'Knowledge Extracted';
-    case 'tagged': return 'Tagged';
-    case 'content_ready': return 'Content Ready';
-    case 'uploaded': return 'Uploaded';
-    default: return stage;
-  }
-}
-
-// ── Next best action for blocked resources ─────────────────
-function getNextBestAction(blocked: BlockedReason | string): string {
-  switch (blocked) {
-    case 'no_extraction': return 'Run extraction';
-    case 'no_activation': return 'Activate KI';
-    case 'missing_contexts': return 'Repair contexts';
-    case 'empty_content': return 'Re-enrich content';
-    case 'stale_blocker_state': return 'Review stale state';
-    default: return '';
-  }
-}
-
-function getBlockedLabel(blocked: string): string {
-  switch (blocked) {
-    case 'no_extraction': return 'Needs extraction';
-    case 'no_activation': return 'Needs activation';
-    case 'missing_contexts': return 'Needs context repair';
-    case 'empty_content': return 'Missing content';
-    case 'stale_blocker_state': return 'Needs review';
-    default: return '';
-  }
-}
-
-// (Action helpers removed — action column now uses deriveProcessingState directly)
-
-// ── Sort comparator ────────────────────────────────────────
-function sortResources(resources: Resource[], key: SortKey, dir: SortDir): Resource[] {
+// ── Sort ───────────────────────────────────────────────────
+function sortResources(
+  resources: Resource[],
+  key: SortKey,
+  dir: SortDir,
+  lifecycleMap: Map<string, any>,
+): Resource[] {
   return [...resources].sort((a, b) => {
     let av: any, bv: any;
     switch (key) {
       case 'title': av = a.title.toLowerCase(); bv = b.title.toLowerCase(); break;
-      case 'resource_type': av = a.resource_type; bv = b.resource_type; break;
-      case 'enrichment_status': av = a.enrichment_status || ''; bv = b.enrichment_status || ''; break;
-      case 'last_quality_tier': av = (a as any).last_quality_tier || ''; bv = (b as any).last_quality_tier || ''; break;
-      case 'last_quality_score': av = (a as any).last_quality_score ?? -1; bv = (b as any).last_quality_score ?? -1; break;
       case 'created_at': av = a.created_at; bv = b.created_at; break;
-      case 'enriched_at': av = a.enriched_at || ''; bv = b.enriched_at || ''; break;
-      case 'enrichment_version': av = a.enrichment_version ?? 0; bv = b.enrichment_version ?? 0; break;
+      case 'signal': {
+        const la = lifecycleMap.get(a.id);
+        const lb = lifecycleMap.get(b.id);
+        const sa = la?.activeKiWithCtx ?? 0;
+        const sb = lb?.activeKiWithCtx ?? 0;
+        av = sa; bv = sb; break;
+      }
+      case 'readiness': {
+        const la = lifecycleMap.get(a.id);
+        const lb = lifecycleMap.get(b.id);
+        const order = { operationalized: 3, activated: 2, knowledge_extracted: 1 };
+        av = order[la?.stage as keyof typeof order] ?? 0;
+        bv = order[lb?.stage as keyof typeof order] ?? 0;
+        break;
+      }
       default: av = ''; bv = '';
     }
     if (av < bv) return dir === 'asc' ? -1 : 1;
@@ -254,7 +172,6 @@ function sortResources(resources: Resource[], key: SortKey, dir: SortDir): Resou
   });
 }
 
-// ── Format helpers ─────────────────────────────────────────
 function formatDate(d: string | null | undefined): string {
   if (!d) return '—';
   const date = new Date(d);
@@ -264,13 +181,6 @@ function formatDate(d: string | null | undefined): string {
   if (days < 30) return `${days}d ago`;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
-
-type Density = 'compact' | 'comfortable' | 'expanded';
-const DENSITY_ROW_CLASS: Record<Density, string> = {
-  compact: '[&>td]:py-1',
-  comfortable: '[&>td]:py-2',
-  expanded: '[&>td]:py-3',
-};
 
 // ── Component ──────────────────────────────────────────────
 export function ResourceLibraryTable({
@@ -285,19 +195,21 @@ export function ResourceLibraryTable({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>('all');
-  const [assetFilter, setAssetFilter] = useState<AssetTypeFilter>('all_assets');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [density, setDensity] = useState<Density>('comfortable');
-  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [healthFilter, setHealthFilter] = useState<HealthFilter>('all');
+  const [spotCheck, setSpotCheck] = useState<SpotCheck>('none');
+  const [collectionFilter, setCollectionFilter] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const { summary: lifecycle } = useCanonicalLifecycle();
   const { data: inUseData } = useInUseResources();
   const inUseIds = inUseData?.inUseResourceIds ?? new Set<string>();
   const liveJobResources = useResourceJobProgress(s => s.resources);
   const batchActive = useResourceJobProgress(s => s.batchActive);
+  const isMobile = useIsMobile();
 
-  // Build a quick lookup for canonical status per resource
+  const scrollBodyRef = useRef<HTMLDivElement>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // Build lifecycle lookup
   const lifecycleMap = useMemo(() => {
     const map = new Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>();
     if (!lifecycle) return map;
@@ -313,96 +225,96 @@ export function ResourceLibraryTable({
     return map;
   }, [lifecycle]);
 
-  // Lifecycle filter counts from canonical data
-  const filterCounts = useMemo(() => {
-    const counts: Record<LifecycleFilter, number> = {
-      all: resources.length,
-      ready: 0, in_use: 0, blocked: 0,
-      needs_extraction: 0, needs_activation: 0,
-      needs_context: 0, needs_review: 0, missing_content: 0,
-    };
+  // Available collections from resource tags
+  const availableCollections = useMemo(() => {
+    const found = new Set<string>();
     for (const r of resources) {
-      const lc = lifecycleMap.get(r.id);
-      if (!lc) continue;
-      if (lc.stage === 'operationalized') counts.ready++;
-      if (inUseIds.has(r.id)) counts.in_use++;
-      if (lc.blocked !== 'none') {
-        counts.blocked++;
-        if (lc.blocked === 'no_extraction') counts.needs_extraction++;
-        if (lc.blocked === 'no_activation') counts.needs_activation++;
-        if (lc.blocked === 'missing_contexts') counts.needs_context++;
-        if (lc.blocked === 'stale_blocker_state') counts.needs_review++;
-        if (lc.blocked === 'empty_content') counts.missing_content++;
+      const tags = (r as any).tags as string[] | null;
+      if (tags) {
+        for (const t of tags) {
+          if (COLLECTION_TAGS.some(ct => t.toLowerCase().includes(ct.toLowerCase()))) {
+            found.add(t);
+          }
+        }
       }
     }
-    return counts;
-  }, [resources, lifecycleMap, inUseIds]);
+    return Array.from(found).sort();
+  }, [resources]);
 
-  const scrollBodyRef = useRef<HTMLDivElement>(null);
-  const shellRef = useRef<HTMLDivElement>(null);
-
-  const handleSort = useCallback((key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDir('asc');
-    }
-  }, [sortKey]);
-
+  // Filter pipeline
   const filtered = useMemo(() => {
     let result = [...resources];
-    // Apply lifecycle filter
-    if (lifecycleFilter !== 'all') {
+
+    // Health filter
+    if (healthFilter !== 'all') {
       result = result.filter(r => {
         const lc = lifecycleMap.get(r.id);
-        if (!lc) return false;
-        switch (lifecycleFilter) {
-          case 'ready': return lc.stage === 'operationalized';
-          case 'in_use': return inUseIds.has(r.id);
-          case 'blocked': return lc.blocked !== 'none';
-          case 'needs_extraction': return lc.blocked === 'no_extraction';
-          case 'needs_activation': return lc.blocked === 'no_activation';
-          case 'needs_context': return lc.blocked === 'missing_contexts';
-          case 'needs_review': return lc.blocked === 'stale_blocker_state';
-          case 'missing_content': return lc.blocked === 'empty_content';
+        const { readiness } = deriveReadiness(lc, r, audioJobsMap?.get(r.id));
+        switch (healthFilter) {
+          case 'ready': return readiness === 'ready';
+          case 'improving': return readiness === 'improving';
+          case 'blocked': return readiness === 'blocked';
+          case 'failed': return r.enrichment_status === 'failed';
+          case 'missing_content': return lc?.blocked === 'empty_content';
+          case 'needs_extraction': return lc?.blocked === 'no_extraction';
+          case 'needs_review': return lc?.blocked === 'stale_blocker_state';
           default: return true;
         }
       });
     }
+
+    // Collection filter
+    if (collectionFilter !== 'all') {
+      result = result.filter(r => {
+        const tags = (r as any).tags as string[] | null;
+        return tags?.some(t => t === collectionFilter);
+      });
+    }
+
+    // Search
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(r => r.title.toLowerCase().includes(q));
     }
-    if (typeFilter !== 'all') {
-      result = result.filter(r => r.resource_type === typeFilter);
+
+    // Spot check
+    if (spotCheck !== 'none') {
+      switch (spotCheck) {
+        case 'recent':
+          result = [...result].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 20);
+          break;
+        case 'failed':
+          result = result.filter(r => r.enrichment_status === 'failed');
+          break;
+        case 'low_yield': {
+          result = result.filter(r => {
+            const lc = lifecycleMap.get(r.id);
+            return lc && lc.kiCount > 0 && lc.kiCount <= 2;
+          });
+          break;
+        }
+        case 'random': {
+          const shuffled = [...result].sort(() => Math.random() - 0.5);
+          result = shuffled.slice(0, 10);
+          break;
+        }
+      }
     }
-    if (assetFilter !== 'all_assets') {
-      result = result.filter(r => getAssetType(r) === assetFilter);
-    }
-    return sortResources(result, sortKey, sortDir);
-  }, [resources, lifecycleFilter, lifecycleMap, inUseIds, search, typeFilter, assetFilter, sortKey, sortDir]);
+
+    return sortResources(result, sortKey, sortDir, lifecycleMap);
+  }, [resources, healthFilter, collectionFilter, search, spotCheck, sortKey, sortDir, lifecycleMap, audioJobsMap]);
 
   const allSelected = filtered.length > 0 && filtered.every(r => selectedIds.has(r.id));
-
-  const SortIcon = ({ col }: { col: SortKey }) => {
-    if (sortKey !== col) return <ArrowUpDown className="h-3 w-3 opacity-30" />;
-    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
-  };
-
-  const resourceTypes = useMemo(() => {
-    const types = new Set(resources.map(r => r.resource_type));
-    return Array.from(types).sort();
-  }, [resources]);
-
   const hasSelection = selectedIds.size > 0;
 
-  // Track scroll position for scroll-to-top button
+  const handleSort = useCallback((key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  }, [sortKey]);
+
   const handleScroll = useCallback(() => {
     const el = scrollBodyRef.current;
-    if (el) {
-      setShowScrollTop(el.scrollTop > 300);
-    }
+    if (el) setShowScrollTop(el.scrollTop > 300);
   }, []);
 
   useEffect(() => {
@@ -416,55 +328,27 @@ export function ResourceLibraryTable({
     scrollBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <ArrowUpDown className="h-3 w-3 opacity-30" />;
+    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
+
   return (
-    <div ref={shellRef} className="flex flex-col" style={{ height: 'calc(100vh - 160px)', minHeight: '450px' }}>
-      {/* Lifecycle summary strip */}
-      <div className="flex items-center gap-3 py-2 px-1 shrink-0 border-b border-border mb-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">Total</span>
-          <span className="text-sm font-semibold">{filterCounts.all}</span>
-        </div>
-        <div className="h-4 w-px bg-border" />
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">Ready to Use</span>
-          <span className="text-sm font-semibold text-emerald-600">{filterCounts.ready}</span>
-        </div>
-        <div className="h-4 w-px bg-border" />
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">In Use</span>
-          <span className="text-sm font-semibold text-blue-600">{filterCounts.in_use}</span>
-        </div>
-        <div className="h-4 w-px bg-border" />
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">Blocked</span>
-          <span className="text-sm font-semibold text-destructive">{filterCounts.blocked}</span>
-        </div>
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 160px)', minHeight: '450px' }}>
+      {/* System Health Overview */}
+      <div className="shrink-0 pb-2 border-b border-border mb-2">
+        <SystemHealthBar
+          resources={resources}
+          lifecycleMap={lifecycleMap}
+          audioJobsMap={audioJobsMap}
+          onFilterChange={(f) => setHealthFilter(f as HealthFilter)}
+          activeFilter={healthFilter}
+        />
       </div>
 
-      {/* Lifecycle quick filters */}
-      <div className="flex items-center gap-1 overflow-x-auto pb-1 shrink-0">
-        {(Object.keys(LIFECYCLE_FILTER_LABELS) as LifecycleFilter[]).map(key => (
-          <Button
-            key={key}
-            variant={lifecycleFilter === key ? 'default' : 'ghost'}
-            size="sm"
-            className={cn('h-7 text-xs gap-1 shrink-0', lifecycleFilter === key && 'shadow-sm')}
-            onClick={() => setLifecycleFilter(key)}
-          >
-            {LIFECYCLE_FILTER_ICONS[key]}
-            {LIFECYCLE_FILTER_LABELS[key]}
-            {key !== 'all' && (
-              <span className="ml-0.5 opacity-70">
-                ({filterCounts[key]})
-              </span>
-            )}
-          </Button>
-        ))}
-      </div>
-
-      {/* Search + filters + density — pinned top */}
+      {/* Search + spot check + collections */}
       <div className="flex items-center gap-2 flex-wrap py-1.5 shrink-0">
-        <div className="relative flex-1 min-w-[180px]">
+        <div className="relative flex-1 min-w-[160px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             value={search}
@@ -473,602 +357,311 @@ export function ResourceLibraryTable({
             className="pl-8 h-8 text-xs"
           />
         </div>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
+
+        {/* Spot check */}
+        <Select value={spotCheck} onValueChange={v => setSpotCheck(v as SpotCheck)}>
           <SelectTrigger className="h-8 w-[130px] text-xs">
-            <SelectValue placeholder="Type" />
+            <Filter className="h-3 w-3 mr-1" />
+            <SelectValue placeholder="Spot Check" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            {resourceTypes.map(t => (
-              <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
+            {(Object.keys(SPOT_CHECK_LABELS) as SpotCheck[]).map(k => (
+              <SelectItem key={k} value={k}>{SPOT_CHECK_LABELS[k]}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select value={assetFilter} onValueChange={(v) => setAssetFilter(v as AssetTypeFilter)}>
-          <SelectTrigger className="h-8 w-[140px] text-xs">
-            <Star className="h-3 w-3 mr-1" />
-            <SelectValue placeholder="Asset Type" />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(ASSET_TYPE_LABELS) as AssetTypeFilter[]).map(k => (
-              <SelectItem key={k} value={k}>{ASSET_TYPE_LABELS[k]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {(lifecycleFilter !== 'all' || typeFilter !== 'all' || assetFilter !== 'all_assets' || search) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 text-xs gap-1"
-            onClick={() => { setLifecycleFilter('all'); setTypeFilter('all'); setAssetFilter('all_assets'); setSearch(''); }}
-          >
+
+        {/* Collections */}
+        {availableCollections.length > 0 && (
+          <Select value={collectionFilter} onValueChange={setCollectionFilter}>
+            <SelectTrigger className="h-8 w-[150px] text-xs">
+              <SelectValue placeholder="Collection" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Collections</SelectItem>
+              {availableCollections.map(c => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Sort */}
+        {!isMobile && (
+          <Select value={`${sortKey}_${sortDir}`} onValueChange={v => {
+            const [k, d] = v.split('_') as [SortKey, SortDir];
+            setSortKey(k); setSortDir(d);
+          }}>
+            <SelectTrigger className="h-8 w-[130px] text-xs">
+              <ArrowUpDown className="h-3 w-3 mr-1" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="created_at_desc">Newest</SelectItem>
+              <SelectItem value="created_at_asc">Oldest</SelectItem>
+              <SelectItem value="title_asc">Title A-Z</SelectItem>
+              <SelectItem value="signal_desc">Signal ↓</SelectItem>
+              <SelectItem value="readiness_desc">Readiness ↓</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+
+        {(healthFilter !== 'all' || search || spotCheck !== 'none' || collectionFilter !== 'all') && (
+          <Button variant="ghost" size="sm" className="h-8 text-xs gap-1"
+            onClick={() => { setHealthFilter('all'); setSearch(''); setSpotCheck('none'); setCollectionFilter('all'); }}>
             <X className="h-3 w-3" /> Clear
           </Button>
         )}
 
-        {/* Density toggle */}
-        <div className="flex items-center border border-border rounded-md overflow-hidden ml-auto">
-          {(['compact', 'comfortable', 'expanded'] as Density[]).map(d => (
-            <button
-              key={d}
-              className={cn(
-                'px-2 py-1 text-[10px] transition-colors',
-                density === d ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
-              )}
-              onClick={() => setDensity(d)}
-            >
-              {d.charAt(0).toUpperCase() + d.slice(1, 4)}
-            </button>
-          ))}
-        </div>
-
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground ml-auto">
           {filtered.length} of {resources.length}
         </span>
       </div>
 
-      {/* Table shell — flex-1 takes remaining height, min-h-0 allows shrinking */}
+      {/* Main content area */}
       <div className="flex-1 min-h-0 border border-border rounded-lg flex flex-col overflow-hidden relative">
-        {/* Scrollable region — THIS is the sole vertical scroll owner */}
         <div
           ref={scrollBodyRef}
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-auto"
+          className="flex-1 min-h-0 overflow-y-auto"
           style={{ paddingBottom: hasSelection ? '72px' : '8px' }}
         >
-          <table className="w-full caption-bottom text-sm">
-            {/* Sticky header */}
-            <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm border-b border-border">
-              <tr>
-                <th className="h-9 px-3 text-left align-middle font-medium text-muted-foreground w-10">
-                  <Checkbox
-                    checked={allSelected}
-                    onCheckedChange={onToggleSelectAll}
-                    aria-label="Select all"
-                  />
-                </th>
-                <th
-                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors min-w-[200px] text-xs"
-                  onClick={() => handleSort('title')}
-                >
-                  <div className="flex items-center gap-1">Title <SortIcon col="title" /></div>
-                </th>
-                <th
-                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[90px] text-xs"
-                  onClick={() => handleSort('resource_type')}
-                >
-                  <div className="flex items-center gap-1">Type <SortIcon col="resource_type" /></div>
-                </th>
-                <th
-                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[100px] text-xs"
-                  onClick={() => handleSort('subtype')}
-                >
-                  <div className="flex items-center gap-1">Subtype <SortIcon col="subtype" /></div>
-                </th>
-                <th
-                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[110px] text-xs"
-                  onClick={() => handleSort('enrichment_status')}
-                >
-                  <div className="flex items-center gap-1">Status <SortIcon col="enrichment_status" /></div>
-                </th>
-                <th
-                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[90px] text-xs"
-                  onClick={() => handleSort('last_quality_tier')}
-                >
-                  <div className="flex items-center gap-1">Quality <SortIcon col="last_quality_tier" /></div>
-                </th>
-                <th
-                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[60px] text-xs"
-                  onClick={() => handleSort('last_quality_score')}
-                >
-                  <div className="flex items-center gap-1">Score <SortIcon col="last_quality_score" /></div>
-                </th>
-                <th
-                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[80px] text-xs"
-                  onClick={() => handleSort('created_at')}
-                >
-                  <div className="flex items-center gap-1">Added <SortIcon col="created_at" /></div>
-                </th>
-                <th
-                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[80px] text-xs"
-                  onClick={() => handleSort('enriched_at')}
-                >
-                  <div className="flex items-center gap-1">Enriched <SortIcon col="enriched_at" /></div>
-                </th>
-                <th className="h-9 px-3 text-left align-middle font-medium text-muted-foreground w-[50px] text-xs">Ver</th>
-                <th className="h-9 px-3 text-left align-middle font-medium text-muted-foreground w-[90px] text-xs">Action</th>
-                <th className="h-9 px-3 text-left align-middle font-medium text-muted-foreground w-[40px]" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <FileText className="h-6 w-6 mb-2 opacity-40" />
+              <p className="text-sm">No resources match filters</p>
+            </div>
+          ) : isMobile ? (
+            /* ── MOBILE: Card layout ──────────────────────── */
+            <div className="p-2 space-y-2">
+              {filtered.map(resource => (
+                <ResourceCard
+                  key={resource.id}
+                  resource={resource}
+                  lc={lifecycleMap.get(resource.id)}
+                  audioJob={audioJobsMap?.get(resource.id) ?? null}
+                  isSelected={selectedIds.has(resource.id)}
+                  onToggleSelect={onToggleSelect}
+                  onAction={onAction}
+                />
+              ))}
+            </div>
+          ) : (
+            /* ── DESKTOP: Simplified table ────────────────── */
+            <table className="w-full caption-bottom text-sm">
+              <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm border-b border-border">
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-muted-foreground">
-                    <FileText className="h-6 w-6 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm">No resources match filters</p>
-                  </td>
+                  <th className="h-9 px-3 text-left align-middle font-medium text-muted-foreground w-10">
+                    <Checkbox checked={allSelected} onCheckedChange={onToggleSelectAll} aria-label="Select all" />
+                  </th>
+                  <th
+                    className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors text-xs"
+                    onClick={() => handleSort('title')}
+                  >
+                    <div className="flex items-center gap-1">Resource <SortIcon col="title" /></div>
+                  </th>
+                  <th className="h-9 px-3 text-left align-middle font-medium text-muted-foreground w-[100px] text-xs">
+                    Action
+                  </th>
+                  <th className="h-9 px-3 text-left align-middle font-medium text-muted-foreground w-[40px]" />
                 </tr>
-              ) : (
-                filtered.map(resource => {
-                  const drift = detectDrift(resource);
-                  const isSelected = selectedIds.has(resource.id);
-                  const isAudio = isAudioResource(resource.file_url, resource.resource_type);
-                  const audioJob = audioJobsMap?.get(resource.id) || null;
+              </thead>
+              <tbody>
+                {filtered.map(resource => {
                   const lc = lifecycleMap.get(resource.id);
+                  const audioJob = audioJobsMap?.get(resource.id) ?? null;
+                  const insight = deriveResourceInsight(resource, lc, audioJob);
+                  const isSelected = selectedIds.has(resource.id);
+                  const drift = detectDrift(resource);
+                  const decoded = decodeHTMLEntities(resource.title);
+                  const separatorIdx = decoded.indexOf(' > ');
+                  const parentName = separatorIdx > 0 ? decoded.slice(0, separatorIdx) : null;
+                  const childName = separatorIdx > 0 ? decoded.slice(separatorIdx + 3) : decoded;
+                  const liveJob = liveJobResources[resource.id];
 
                   return (
                     <React.Fragment key={resource.id}>
-                    <tr
-                      className={cn(
-                        'cursor-pointer border-b border-border transition-colors hover:bg-muted/50',
-                        DENSITY_ROW_CLASS[density],
-                        isSelected && 'bg-primary/5',
-                        expandedId === resource.id && 'bg-primary/5 border-b-0 border-l-2 border-l-primary',
-                        drift.hasDrift && 'border-l-2 border-l-status-yellow',
-                      )}
-                      onClick={() => setExpandedId(prev => prev === resource.id ? null : resource.id)}
-                    >
-                      <td className="px-3 align-middle" onClick={e => e.stopPropagation()}>
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => onToggleSelect(resource.id)}
-                        />
-                      </td>
-                      <td className="px-3 align-middle">
-                        <div className="min-w-0">
-                          {(() => {
-                            const decoded = decodeHTMLEntities(resource.title);
-                            const separatorIdx = decoded.indexOf(' > ');
-                            const parentName = separatorIdx > 0 ? decoded.slice(0, separatorIdx) : null;
-                            const childName = separatorIdx > 0 ? decoded.slice(separatorIdx + 3) : decoded;
-                            return (
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {parentName && (
-                                  <span className="text-[9px] text-muted-foreground truncate max-w-[120px]">{parentName} ›</span>
-                                )}
-                                <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{childName}</p>
-                                {lc && (
-                                  <Badge variant="outline" className={cn(
-                                    'text-[8px] h-4 px-1 shrink-0',
-                                    lc.stage === 'operationalized' ? 'border-emerald-500/40 text-emerald-600' :
-                                    lc.blocked !== 'none' ? 'border-destructive/40 text-destructive' :
-                                    'border-border text-muted-foreground'
-                                  )}>
-                                    {lc.stage === 'operationalized' ? '✓ Ready' :
-                                     lc.stage === 'activated' ? 'Activated' :
-                                     lc.stage === 'knowledge_extracted' ? 'Extracted' :
-                                     lc.stage === 'tagged' ? 'Tagged' :
-                                     lc.stage === 'content_ready' ? 'Content' :
-                                     'Uploaded'}
-                                  </Badge>
-                                )}
-                                {inUseIds.has(resource.id) && (
-                                  <Badge variant="outline" className="text-[8px] h-4 px-1 shrink-0 border-blue-500/40 text-blue-600">
-                                    In Use
-                                  </Badge>
-                                )}
-                                {lc && lc.kiCount > 0 && (
-                                  <span className="text-[8px] text-muted-foreground shrink-0">
-                                    {lc.activeKi}/{lc.kiCount} KI
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })()}
-                          {/* Inline job progress: live Zustand → durable backend fallback */}
-                          {(() => {
-                            const liveJob = liveJobResources[resource.id];
-                            // 1. Live state takes precedence
-                            if (liveJob) {
-                              const pct = liveJob.status === 'queued' ? 0 : liveJob.status === 'running' ? 50 : 100;
-                              const label = liveJob.status === 'queued' ? 'Queued'
-                                : liveJob.status === 'running' ? getJobLabel(liveJob.jobType, 'running')
-                                : liveJob.status === 'done' ? `${getJobLabel(liveJob.jobType, 'done')}${liveJob.resultSummary ? ` · ${liveJob.resultSummary}` : ''}`
-                                : getJobLabel(liveJob.jobType, 'failed');
-                              return (
-                                <div className="flex items-center gap-2 mt-1">
-                                  {liveJob.status === 'running' && <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />}
-                                  {liveJob.status === 'done' && <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />}
-                                  {liveJob.status === 'failed' && <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />}
-                                  <Progress value={pct} className="h-1.5 flex-1 max-w-[120px]" />
-                                  <span className="text-[9px] text-muted-foreground shrink-0">{label}</span>
-                                </div>
-                              );
-                            }
-                            // 2. Durable fallback from active_job_* fields
-                            const durableStatus = (resource as any).active_job_status;
-                            const durableType = (resource as any).active_job_type;
-                            if (!durableStatus || durableStatus === 'idle') return null;
-                            const finishedAt = (resource as any).active_job_finished_at;
-                            const updatedAt = (resource as any).active_job_updated_at;
-                            const timeLabel = formatRelativeTime(finishedAt || updatedAt);
-                            const stale = isJobStale(updatedAt, durableStatus);
-
-                            if (durableStatus === 'running' || durableStatus === 'queued') {
-                              return (
-                                <div className="flex items-center gap-2 mt-1">
-                                  {stale
-                                    ? <AlertTriangle className="h-3 w-3 text-muted-foreground shrink-0" />
-                                    : <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />}
-                                  <span className={cn('text-[9px]', stale ? 'text-muted-foreground/60' : 'text-muted-foreground')}>
-                                    {stale ? 'Interrupted' : getJobLabel(durableType || 'extract', 'running')}
-                                    {timeLabel && ` · started ${timeLabel}`}
-                                  </span>
-                                </div>
-                              );
-                            }
-                            if (durableStatus === 'succeeded') {
-                              const summary = (resource as any).active_job_result_summary;
-                              return (
-                                <div className="flex items-center gap-1.5 mt-1">
-                                  <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />
-                                  <span className="text-[9px] text-muted-foreground">
-                                    {getJobLabel(durableType || 'extract', 'done')}
-                                    {summary && ` · ${summary}`}
-                                    {timeLabel && ` · ${timeLabel}`}
-                                  </span>
-                                </div>
-                              );
-                            }
-                            if (durableStatus === 'failed') {
-                              return (
-                                <div className="flex items-center gap-1.5 mt-1">
-                                  <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />
-                                  <span className="text-[9px] text-destructive/80">
-                                    {getJobLabel(durableType || 'extract', 'failed')}
-                                    {timeLabel && ` · ${timeLabel}`}
-                                  </span>
-                                </div>
-                              );
-                            }
-                            return null;
-                          })()}
-                          {lc && lc.blocked !== 'none' && (
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <p className="text-[9px] text-destructive/80">
-                                {getBlockedLabel(lc.blocked)}
-                              </p>
-                              <button
-                                className="text-[9px] text-primary/80 font-medium hover:text-primary hover:underline transition-colors"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  const actionMap: Record<string, string> = {
-                                    no_extraction: 'extract',
-                                    no_activation: 'activate',
-                                    missing_contexts: 'repair_contexts',
-                                    empty_content: 're_enrich',
-                                  };
-                                  const action = actionMap[lc.blocked] || 'extract';
-                                  onAction(action, resource);
-                                }}
-                              >
-                                → {getNextBestAction(lc.blocked)}
-                              </button>
-                            </div>
-                          )}
-                          {drift.hasDrift && (
-                            <p className="text-[10px] text-status-yellow flex items-center gap-0.5 mt-0.5">
-                              <AlertTriangle className="h-2.5 w-2.5" />
-                              Drift: {drift.issues[0]}
-                            </p>
-                          )}
-                          {/* Manual recovery provenance badge */}
-                          {((resource as any).manual_content_present || (resource as any).resolution_method) && (
-                            <Badge variant="outline" className="text-[8px] h-4 px-1 mt-0.5 border-primary/30 text-primary">
-                              {(resource as any).resolution_method === 'metadata_only' ? 'Metadata Only' :
-                               (resource as any).resolution_method === 'manual_transcript_paste' ? 'Manual Transcript' :
-                               (resource as any).resolution_method === 'manual_paste' ? 'Manual Content' :
-                               (resource as any).resolution_method === 'transcript_upload' ? 'Uploaded Transcript' :
-                               (resource as any).resolution_method === 'content_upload' ? 'Uploaded Content' :
-                               (resource as any).resolution_method === 'alternate_url' ? 'Alternate URL' :
-                               (resource as any).resolution_method === 'fixed_from_existing_content' ? 'Fixed From Content' :
-                               (resource as any).resolution_method === 'manual_content' ? 'Manual Content' :
-                               (resource as any).resolution_method === 'notion_zip_import' ? 'Notion ZIP Import' :
-                               (resource as any).resolution_method === 'notion_zip_split' ? 'Notion Split' :
-                               (resource as any).resolution_method === 'notion_zip_source' ? 'Notion Source' :
-                               'Manual Recovery'}
-                            </Badge>
-                          )}
-                          {/* Audio status inline */}
-                          {isAudio && audioJob && (
-                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                              <Badge variant="outline" className="text-[8px] h-4 px-1">
-                                {getAudioStageLabel(audioJob.stage as AudioPipelineStage)}
-                              </Badge>
-                              {audioJob.transcript_mode && audioJob.transcript_mode !== 'direct_transcription' && (
-                                <Badge variant="outline" className="text-[8px] h-4 px-1">
-                                  {audioJob.transcript_mode === 'metadata_only' ? 'Metadata Only' :
-                                   audioJob.transcript_mode === 'manual_assist' ? 'Manual Assist' :
-                                   audioJob.transcript_mode}
-                                </Badge>
-                              )}
-                              {audioJob.failure_code && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Badge variant="destructive" className="text-[8px] h-4 px-1 cursor-help">
-                                      {audioJob.failure_code.replace(/_/g, ' ').toLowerCase()}
-                                    </Badge>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="bottom" className="text-xs max-w-[250px]">
-                                    {getAudioFailureDescription(audioJob.failure_code as AudioFailureCode).explanation}
-                                    <br />→ {getAudioFailureDescription(audioJob.failure_code as AudioFailureCode).nextAction}
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 align-middle">
-                        <span className="text-xs text-muted-foreground capitalize">{resource.resource_type}</span>
-                      </td>
-                      <td className="px-3 align-middle">
-                        {(() => {
-                          const subtype = detectResourceSubtype(resource.file_url, resource.resource_type);
-                          const ea = classifyEnrichability(resource.file_url, resource.resource_type);
-                          return (
-                            <Badge className={cn('text-[8px]', getEnrichabilityColor(ea.enrichability))} title={ea.reason}>
-                              {getSubtypeLabel(subtype)}
-                            </Badge>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-3 align-middle">
-                        {(() => {
-                          const ps = deriveProcessingState(resource, audioJob);
-                          return (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge className={cn('text-[9px] cursor-help', getProcessingStateColor(ps.state))}>
-                                  {ps.label}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom" className="text-xs max-w-[250px]">
-                                <p>{ps.description}</p>
-                                {ps.nextAction && <p className="mt-1 text-primary">→ {ps.nextAction}</p>}
-                              </TooltipContent>
-                            </Tooltip>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-3 align-middle">
-                        {(resource as any).last_quality_tier ? (
-                          <Badge className={cn('text-[9px]', getQualityTierColor((resource as any).last_quality_tier))}>
-                            {getQualityTierLabel((resource as any).last_quality_tier)}
-                          </Badge>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground">—</span>
+                      <tr
+                        className={cn(
+                          'cursor-pointer border-b border-border transition-colors hover:bg-muted/50 [&>td]:py-2',
+                          isSelected && 'bg-primary/5',
+                          expandedId === resource.id && 'bg-primary/5 border-b-0 border-l-2 border-l-primary',
+                          drift.hasDrift && 'border-l-2 border-l-amber-500',
                         )}
-                      </td>
-                      <td className="px-3 align-middle">
-                        <span className="text-xs text-muted-foreground">
-                          {(resource as any).last_quality_score != null
-                            ? Math.round((resource as any).last_quality_score)
-                            : '—'}
-                        </span>
-                      </td>
-                      <td className="px-3 align-middle">
-                        <span className="text-[11px] text-muted-foreground">{formatDate(resource.created_at)}</span>
-                      </td>
-                      <td className="px-3 align-middle">
-                        <span className="text-[11px] text-muted-foreground">{formatDate(resource.enriched_at)}</span>
-                      </td>
-                      <td className="px-3 align-middle">
-                        <span className="text-[11px] text-muted-foreground">v{resource.enrichment_version ?? 0}</span>
-                      </td>
-                      <td className="px-3 align-middle">
-                        {(() => {
-                          const ps = deriveProcessingState(resource, audioJob);
-                          if (lc?.stage === 'operationalized') {
-                            return (
-                              <Badge className={cn('text-[9px]', getProcessingStateColor('COMPLETED'))}>
-                                Complete
-                              </Badge>
-                            );
-                          }
-                          // Lifecycle-aware: if blocked=no_extraction, show Extract action
-                          if (lc?.blocked === 'no_extraction') {
-                            return (
-                              <Badge className={cn('text-[9px] cursor-pointer bg-primary/20 text-primary')}
-                                onClick={e => { e.stopPropagation(); onAction('extract', resource); }}>
-                                Extract
-                              </Badge>
-                            );
-                          }
-                          if (lc?.blocked === 'no_activation') {
-                            return (
-                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('READY'))}
-                                onClick={e => { e.stopPropagation(); onAction('activate', resource); }}>
-                                Activate
-                              </Badge>
-                            );
-                          }
-                          if (lc?.blocked === 'missing_contexts') {
-                            return (
-                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('READY'))}
-                                onClick={e => { e.stopPropagation(); onAction('repair_contexts', resource); }}>
-                                Repair
-                              </Badge>
-                            );
-                          }
-                          // Missing content: origin-aware action
-                          if (lc?.blocked === 'empty_content') {
-                            const origin = getResourceOrigin(resource);
-                            return (
-                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('READY'))}
-                                onClick={e => { e.stopPropagation(); onAction(origin === 'uploaded_file' ? 'reparse_file' : 'deep_enrich', resource); }}>
-                                {origin === 'uploaded_file' ? 'Re-parse' : 'Re-fetch'}
-                              </Badge>
-                            );
-                          }
-                          if (ps.state === 'READY' && resource.file_url?.startsWith('http')) {
-                            return (
-                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('READY'))}
-                                onClick={e => { e.stopPropagation(); onAction('deep_enrich', resource); }}>
-                                Deep Enrich
-                              </Badge>
-                            );
-                          }
-                          if (ps.state === 'RETRYABLE_FAILURE') {
-                            return (
-                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('RETRYABLE_FAILURE'))}
-                                onClick={e => { e.stopPropagation(); onAction('deep_enrich', resource); }}>
-                                Retry
-                              </Badge>
-                            );
-                          }
-                          if (ps.state === 'MANUAL_REQUIRED') {
-                            return (
-                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('MANUAL_REQUIRED'))}
-                                onClick={e => { e.stopPropagation(); onAction('manual_assist', resource); }}>
-                                Manual Assist
-                              </Badge>
-                            );
-                          }
-                          if (ps.state === 'METADATA_ONLY') {
-                            return (
-                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('METADATA_ONLY'))}
-                                onClick={e => { e.stopPropagation(); onAction('manual_assist', resource); }}>
-                                Manual Assist
-                              </Badge>
-                            );
-                          }
-                          if (ps.state === 'COMPLETED' && resource.file_url?.startsWith('http')) {
-                            return (
-                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('COMPLETED'))}
-                                onClick={e => { e.stopPropagation(); onAction('re_enrich', resource); }}>
-                                Re-enrich
-                              </Badge>
-                            );
-                          }
-                          return <span className="text-[10px] text-muted-foreground">—</span>;
-                        })()}
-                      </td>
-                      <td className="px-3 align-middle" onClick={e => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7">
-                              <MoreHorizontal className="h-3.5 w-3.5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => onAction('view', resource)}>
-                              <Eye className="h-3.5 w-3.5 mr-2" /> Inspect
-                            </DropdownMenuItem>
-                            {isAudio && (
-                              <DropdownMenuItem onClick={() => onAction('inspect_audio', resource)}>
-                                <Info className="h-3.5 w-3.5 mr-2" /> Audio Inspector
-                              </DropdownMenuItem>
-                            )}
-                            {/* State-driven actions — failure-bucket-aware */}
-                            {(() => {
-                              const ps = deriveProcessingState(resource, audioJob);
-                              const items: React.ReactNode[] = [];
+                        onClick={() => setExpandedId(prev => prev === resource.id ? null : resource.id)}
+                      >
+                        {/* Checkbox */}
+                        <td className="px-3 align-middle" onClick={e => e.stopPropagation()}>
+                          <Checkbox checked={isSelected} onCheckedChange={() => onToggleSelect(resource.id)} />
+                        </td>
 
-                              if (ps.state === 'READY' && resource.file_url?.startsWith('http')) {
-                                items.push(
-                                  <DropdownMenuItem key="enrich" onClick={() => onAction('deep_enrich', resource)}>
+                        {/* Title + signal + readiness */}
+                        <td className="px-3 align-middle">
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {parentName && (
+                                <span className="text-[9px] text-muted-foreground truncate max-w-[120px]">{parentName} ›</span>
+                              )}
+                              <p className="text-sm font-medium text-foreground truncate max-w-[300px]">{childName}</p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {/* Signal indicator */}
+                              <div className="flex items-center gap-0.5">
+                                {insight.signal.signal === 'high' && <CheckCircle2 className="h-3 w-3 text-emerald-600" />}
+                                {insight.signal.signal === 'medium' && <Activity className="h-3 w-3 text-amber-600" />}
+                                {insight.signal.signal === 'low' && <AlertTriangle className="h-3 w-3 text-muted-foreground" />}
+                                <span className={cn('text-[10px] font-medium', insight.signal.signalColor)}>
+                                  {insight.signal.signalLabel}
+                                </span>
+                              </div>
+                              {/* Readiness badge */}
+                              <Badge className={cn(
+                                'text-[9px] h-4 px-1.5',
+                                insight.readiness.readinessBg,
+                                insight.readiness.readinessColor,
+                              )}>
+                                {insight.readiness.readinessLabel}
+                              </Badge>
+                              {/* KI count */}
+                              {lc && lc.kiCount > 0 && (
+                                <span className="text-[9px] text-muted-foreground">
+                                  {lc.activeKi}/{lc.kiCount} KI
+                                </span>
+                              )}
+                              {/* In use badge */}
+                              {inUseIds.has(resource.id) && (
+                                <Badge variant="outline" className="text-[8px] h-4 px-1 border-blue-500/40 text-blue-600">In Use</Badge>
+                              )}
+                            </div>
+                            {/* Live job progress */}
+                            {liveJob && liveJob.status === 'running' && (
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <Loader2Icon className="h-3 w-3 animate-spin text-primary shrink-0" />
+                                <Progress value={50} className="h-1.5 flex-1 max-w-[120px]" />
+                                <span className="text-[9px] text-muted-foreground">{getJobLabel(liveJob.jobType, 'running')}</span>
+                              </div>
+                            )}
+                            {/* Blocked reason inline */}
+                            {lc && lc.blocked !== 'none' && (
+                              <p className="text-[9px] text-destructive/80 mt-0.5">
+                                {lc.blocked.replace(/_/g, ' ')}
+                              </p>
+                            )}
+                            {drift.hasDrift && (
+                              <p className="text-[9px] text-amber-600 flex items-center gap-0.5 mt-0.5">
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                Drift: {drift.issues[0]}
+                              </p>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Next Action */}
+                        <td className="px-3 align-middle" onClick={e => e.stopPropagation()}>
+                          {insight.nextAction ? (
+                            <Button
+                              size="sm"
+                              variant={insight.nextAction.variant}
+                              className="h-7 text-xs px-2.5"
+                              onClick={() => onAction(insight.nextAction!.actionKey, resource)}
+                            >
+                              {insight.nextAction.label}
+                            </Button>
+                          ) : (
+                            <Badge className="text-[9px] bg-emerald-500/10 text-emerald-600">
+                              Complete
+                            </Badge>
+                          )}
+                        </td>
+
+                        {/* Menu */}
+                        <td className="px-3 align-middle" onClick={e => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => onAction('view', resource)}>
+                                <Eye className="h-3.5 w-3.5 mr-2" /> Inspect
+                              </DropdownMenuItem>
+                              {isAudioResource(resource.file_url, resource.resource_type) && (
+                                <DropdownMenuItem onClick={() => onAction('inspect_audio', resource)}>
+                                  <Info className="h-3.5 w-3.5 mr-2" /> Audio Inspector
+                                </DropdownMenuItem>
+                              )}
+                              {(() => {
+                                const ps = deriveProcessingState(resource, audioJob);
+                                const items: React.ReactNode[] = [];
+                                if (ps.state === 'READY' && resource.file_url?.startsWith('http')) {
+                                  items.push(<DropdownMenuItem key="enrich" onClick={() => onAction('deep_enrich', resource)}>
                                     <Zap className="h-3.5 w-3.5 mr-2" /> Deep Enrich
-                                  </DropdownMenuItem>
-                                );
-                              }
-                              if (ps.state === 'COMPLETED' && resource.file_url?.startsWith('http')) {
-                                items.push(
-                                  <DropdownMenuItem key="reenrich" onClick={() => onAction('re_enrich', resource)}>
-                                    <RefreshCw className="h-3.5 w-3.5 mr-2" /> Re-enrich
-                                  </DropdownMenuItem>
-                                );
-                              }
-                              // Failed states: use failure routing for precise actions
-                              if (ps.state === 'RETRYABLE_FAILURE' || ps.state === 'MANUAL_REQUIRED' || ps.state === 'METADATA_ONLY') {
-                                const routing = routeFailure(
-                                  resource.file_url,
-                                  resource.resource_type ?? undefined,
-                                  undefined,
-                                  resource.failure_reason ?? undefined,
-                                );
-                                const bucketActions = getFailureBucketActions(routing.bucket);
-                                for (const ba of bucketActions) {
-                                  const icon = ba.icon === 'retry' ? <RefreshCw className="h-3.5 w-3.5 mr-2" />
-                                    : ba.icon === 'inspect_audio' ? <Info className="h-3.5 w-3.5 mr-2" />
-                                    : ba.icon === 'mark_metadata' ? <CheckCircle2 className="h-3.5 w-3.5 mr-2" />
-                                    : <HelpCircle className="h-3.5 w-3.5 mr-2" />;
-                                  items.push(
-                                    <DropdownMenuItem key={ba.action} onClick={() => onAction(ba.action === 'mark_metadata_only' ? 'mark_metadata_only' : ba.action, resource)}>
-                                      {icon} {ba.label}
-                                    </DropdownMenuItem>
-                                  );
+                                  </DropdownMenuItem>);
                                 }
-                              }
-                              // Manual Assist always available for non-RUNNING, non-failed (already covered above)
-                              if (ps.state === 'READY' || ps.state === 'COMPLETED') {
-                                items.push(
-                                  <DropdownMenuItem key="manual" onClick={() => onAction('manual_assist', resource)}>
+                                if (ps.state === 'COMPLETED' && resource.file_url?.startsWith('http')) {
+                                  items.push(<DropdownMenuItem key="reenrich" onClick={() => onAction('re_enrich', resource)}>
+                                    <RefreshCw className="h-3.5 w-3.5 mr-2" /> Re-enrich
+                                  </DropdownMenuItem>);
+                                }
+                                if (ps.state === 'RETRYABLE_FAILURE' || ps.state === 'MANUAL_REQUIRED' || ps.state === 'METADATA_ONLY') {
+                                  const routing = routeFailure(resource.file_url, resource.resource_type ?? undefined, undefined, resource.failure_reason ?? undefined);
+                                  const bucketActions = getFailureBucketActions(routing.bucket);
+                                  for (const ba of bucketActions) {
+                                    const icon = ba.icon === 'retry' ? <RefreshCw className="h-3.5 w-3.5 mr-2" />
+                                      : ba.icon === 'inspect_audio' ? <Info className="h-3.5 w-3.5 mr-2" />
+                                      : ba.icon === 'mark_metadata' ? <CheckCircle2 className="h-3.5 w-3.5 mr-2" />
+                                      : <HelpCircle className="h-3.5 w-3.5 mr-2" />;
+                                    items.push(<DropdownMenuItem key={ba.action} onClick={() => onAction(ba.action === 'mark_metadata_only' ? 'mark_metadata_only' : ba.action, resource)}>
+                                      {icon} {ba.label}
+                                    </DropdownMenuItem>);
+                                  }
+                                }
+                                if (ps.state === 'READY' || ps.state === 'COMPLETED') {
+                                  items.push(<DropdownMenuItem key="manual" onClick={() => onAction('manual_assist', resource)}>
                                     <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
-                                  </DropdownMenuItem>
-                                );
-                              }
-                              return items;
-                            })()}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => onAction('mark_template', resource)}>
-                              <Star className="h-3.5 w-3.5 mr-2" /> Use as Template
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onAction('mark_example', resource)}>
-                              <BookOpen className="h-3.5 w-3.5 mr-2" /> Mark as Example
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => onAction('reset', resource)}>
-                              <RotateCcw className="h-3.5 w-3.5 mr-2" /> Reset Status
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onAction('mark_duplicate', resource)}>
-                              <AlertTriangle className="h-3.5 w-3.5 mr-2" /> Mark Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive" onClick={() => onAction('delete', resource)}>
-                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                    {/* Expanded lifecycle detail panel */}
-                    {expandedId === resource.id && (
-                      <tr className="bg-card">
-                        <td colSpan={12} className="p-0 relative z-10 bg-card">
-                          <InlineResourceDetail
-                            resource={resource}
-                            onClose={() => setExpandedId(null)}
-                            onAction={onAction}
-                          />
+                                  </DropdownMenuItem>);
+                                }
+                                return items;
+                              })()}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => onAction('mark_template', resource)}>
+                                <Star className="h-3.5 w-3.5 mr-2" /> Use as Template
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onAction('mark_example', resource)}>
+                                <BookOpen className="h-3.5 w-3.5 mr-2" /> Mark as Example
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => onAction('reset', resource)}>
+                                <RotateCcw className="h-3.5 w-3.5 mr-2" /> Reset Status
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onAction('mark_duplicate', resource)}>
+                                <AlertTriangle className="h-3.5 w-3.5 mr-2" /> Mark Duplicate
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-destructive" onClick={() => onAction('delete', resource)}>
+                                <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </td>
                       </tr>
-                    )}
+                      {expandedId === resource.id && (
+                        <tr className="bg-card">
+                          <td colSpan={4} className="p-0 relative z-10 bg-card">
+                            <InlineResourceDetail
+                              resource={resource}
+                              onClose={() => setExpandedId(null)}
+                              onAction={onAction}
+                            />
+                          </td>
+                        </tr>
+                      )}
                     </React.Fragment>
                   );
-                })
-              )}
-            </tbody>
-          </table>
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
 
         {/* Scroll to top */}
@@ -1083,65 +676,34 @@ export function ResourceLibraryTable({
           </button>
         )}
 
-        {/* Contextual bulk action for filtered views (no selection needed) */}
-        {!hasSelection && lifecycleFilter !== 'all' && filtered.length > 0 && (() => {
-          const mapped = LIFECYCLE_TO_BUCKET[lifecycleFilter];
-          const action = mapped ? PRIMARY_ACTIONS[mapped] : null;
-          if (!action) return null;
-          const Icon = action.icon;
-          return (
-            <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-2">
-              <span className="text-sm font-medium">{filtered.length} {LIFECYCLE_FILTER_LABELS[lifecycleFilter]}</span>
-              <Button size="sm" variant={action.variant === 'destructive' ? 'destructive' : 'outline'} className="h-7 text-xs gap-1"
-                onClick={() => onAction(`bulk_${action.actionType}_filtered`, { id: '' } as Resource)}>
-                <Icon className="h-3 w-3" />
-                {action.label.replace('Selected', `All ${filtered.length}`)}
-              </Button>
-            </div>
-          );
-        })()}
-
-        {/* Sticky bulk action bar — uses queue-driven PRIMARY_ACTIONS */}
+        {/* Bulk action bar */}
         {hasSelection && (() => {
           const analysis = analyzeSelection(selectedIds, lifecycleMap);
           const action = PRIMARY_ACTIONS[analysis.dominant];
           const Icon = action.icon;
           return (
             <div className="absolute bottom-0 left-0 right-0 z-20 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-2 space-y-1">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-sm font-medium">{selectedIds.size} selected</span>
                 <Button size="sm" variant={action.variant === 'destructive' ? 'destructive' : 'default'} className="h-7 text-xs gap-1"
                   onClick={() => onAction(`bulk_${action.actionType}`, { id: '' } as Resource)}>
                   <Icon className="h-3 w-3" />
                   {action.label}
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-                  onClick={() => onAction('bulk_mark_template', { id: '' } as Resource)}>
-                  <Star className="h-3 w-3" />
-                  Mark as Template
-                </Button>
                 <Button size="sm" variant="destructive" className="h-7 text-xs gap-1"
                   onClick={() => onAction('bulk_delete', { id: '' } as Resource)}>
-                  <Trash2 className="h-3 w-3" />
-                  Delete
+                  <Trash2 className="h-3 w-3" /> Delete
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onToggleSelectAll}>
                   <X className="h-3 w-3 mr-1" /> Clear
                 </Button>
               </div>
               {analysis.isMixed && (
-                <p className="text-[10px] text-muted-foreground leading-tight">
-                  Primary action: <span className="font-medium text-foreground">{analysis.dominantCount} of {analysis.total}</span> {analysis.breakdown[0]?.label}
-                  {analysis.breakdown.length > 1 && (
-                    <span>
-                      {' · '}
-                      {analysis.breakdown.slice(1).map((b, i) => (
-                        <span key={b.bucket}>
-                          {i > 0 && ', '}{b.count} {b.label}
-                        </span>
-                      ))}
-                    </span>
-                  )}
+                <p className="text-[10px] text-muted-foreground">
+                  Primary: <span className="font-medium text-foreground">{analysis.dominantCount}/{analysis.total}</span> {analysis.breakdown[0]?.label}
+                  {analysis.breakdown.slice(1).map((b, i) => (
+                    <span key={b.bucket}> · {b.count} {b.label}</span>
+                  ))}
                 </p>
               )}
             </div>
