@@ -125,15 +125,47 @@ function deriveRoute(resource: any): DerivedRoute {
     reason.push("Summary-first fallback (prior attempts exhausted)");
   }
 
-  // Outcome-aware learning: avoid repeated failures
-  if (enrichmentStatus === "failed" && failureCount >= 2) {
-    if ((isAudio || isVideo) && pipeline === "transcript_pipeline") {
-      pipeline = "manual_assist";
-      reason.push("Transcript pipeline avoided — repeated failures");
-    } else if (pipeline === "enrich_then_extract") {
-      pipeline = "manual_assist";
-      reason.push("Enrich pipeline avoided — repeated failures");
+  // Outcome-aware learning: derive failure history from extraction_audit_summary
+  const audit = resource.extraction_audit_summary;
+  const failedMethods: Record<string, number> = {};
+  const failedPipelines: Record<string, number> = {};
+  let totalAttempts = 0;
+
+  if (audit?.attempts_summary && Array.isArray(audit.attempts_summary)) {
+    for (const attempt of audit.attempts_summary) {
+      totalAttempts++;
+      if (attempt.status === "failed") {
+        const method = (attempt.strategy || "standard");
+        failedMethods[method] = (failedMethods[method] || 0) + 1;
+      }
     }
+  }
+  totalAttempts = Math.max(totalAttempts, failureCount);
+
+  if (enrichmentStatus === "failed" && (resource.failure_count || 0) >= 2) {
+    if ((isAudio || isVideo)) {
+      failedPipelines["transcript_pipeline"] = (failedPipelines["transcript_pipeline"] || 0) + (resource.failure_count || 0);
+    } else {
+      failedPipelines["enrich_then_extract"] = (failedPipelines["enrich_then_extract"] || 0) + (resource.failure_count || 0);
+    }
+  }
+
+  // Apply learning: avoid repeated failures
+  if ((failedPipelines["transcript_pipeline"] || 0) >= 2 && pipeline === "transcript_pipeline") {
+    pipeline = "manual_assist";
+    reason.push("Transcript pipeline avoided — repeated failures detected");
+  }
+  if ((failedPipelines["enrich_then_extract"] || 0) >= 2 && pipeline === "enrich_then_extract") {
+    pipeline = "manual_assist";
+    reason.push("Enrich pipeline avoided — repeated failures detected");
+  }
+  if ((failedMethods["standard"] || 0) >= 2 && extraction_method === "standard") {
+    extraction_method = "dense_teaching";
+    reason.push("Escalated to dense teaching — standard extraction failed repeatedly");
+  }
+  if ((failedMethods["dense_teaching"] || 0) >= 2 && extraction_method === "dense_teaching") {
+    extraction_method = "summary_first";
+    reason.push("Escalated to summary-first — dense teaching failed repeatedly");
   }
 
   // Confidence
@@ -149,7 +181,7 @@ function deriveRoute(resource: any): DerivedRoute {
     reason.push("Ambiguous routing — low confidence");
   }
 
-  if (failureCount >= 3 && confidence === "high") {
+  if (totalAttempts >= 3 && confidence === "high") {
     confidence = "medium";
     reason.push("Confidence reduced — multiple prior attempts");
   }
@@ -293,7 +325,7 @@ Deno.serve(async (req) => {
     const resourceIds = items.map((i) => i.resource_id);
     const { data: resources } = await supabase
       .from("resources")
-      .select("id, resource_type, file_url, title, content_length, failure_count, advanced_extraction_attempts, enrichment_status, manual_content_present, has_transcript, transcript_text, resolution_method, route_override")
+      .select("id, resource_type, file_url, title, content_length, failure_count, advanced_extraction_attempts, enrichment_status, manual_content_present, has_transcript, transcript_text, resolution_method, route_override, extraction_audit_summary")
       .in("id", resourceIds);
 
     const resourceMap = new Map((resources || []).map((r) => [r.id, r]));
@@ -344,6 +376,34 @@ Deno.serve(async (req) => {
         };
 
         console.log(`[route] resource=${item.resource_id} pipeline=${route.pipeline} method=${route.extraction_method} primary_asset=${route.primary_asset} confidence=${route.confidence} override=${route.has_override}`);
+
+        // Route mismatch guard: flag if derived route conflicts with current phase
+        const phasePipelineExpected: Record<Phase, Pipeline[]> = {
+          enrich: ["enrich_then_extract", "transcript_pipeline"],
+          extract: ["direct_extract", "enrich_then_extract", "transcript_pipeline"],
+          activate: ["direct_extract", "enrich_then_extract", "transcript_pipeline"],
+          surface_to_qa: ["manual_assist", "direct_extract", "enrich_then_extract", "transcript_pipeline"],
+        };
+        const expectedPipelines = phasePipelineExpected[phase];
+        if (route.pipeline === "manual_assist" && phase !== "surface_to_qa" && run.mode !== "dry_run") {
+          console.warn(`[route-mismatch] resource=${item.resource_id} phase=${phase} but route=manual_assist → flagging to QA`);
+          await supabase
+            .from("library_reconciliation_items")
+            .update({
+              processed: true,
+              qa_flagged: true,
+              qa_reason: `Route mismatch: ${phase} phase but route is manual_assist (${routeReasonSummary})`,
+              phase_outcomes: {
+                ...outcome,
+                action: "routed_to_qa_mismatch",
+                mismatch_detail: `Phase ${phase} incompatible with pipeline manual_assist`,
+              },
+            })
+            .eq("id", item.id);
+          results.qa_flagged++;
+          results.processed++;
+          continue;
+        }
 
         if (phase === "enrich") {
           if (run.mode === "dry_run") {
