@@ -94,6 +94,7 @@ const BLOCKER_COLOR: Partial<Record<BlockerType, string>> = {
   needs_enrichment: 'text-amber-600',
   needs_extraction: 'text-amber-600',
   needs_activation: 'text-amber-600',
+  needs_auth: 'text-amber-600',
   missing_context: 'text-amber-600',
   route_low_confidence: 'text-amber-600',
   route_manual_assist: 'text-amber-600',
