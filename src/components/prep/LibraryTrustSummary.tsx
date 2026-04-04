@@ -122,6 +122,21 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
           <span className="text-muted-foreground">{readiness.manual_only_blocker_count} manual</span>
         )}
       </div>
+
+      {/* Fix All Auto-Fixable action */}
+      {!readiness.system_ready && autoFixableIds.length > 0 && onFixAllAuto && (
+        <div className="px-3 pb-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1.5 w-full"
+            onClick={() => onFixAllAuto(autoFixableIds)}
+          >
+            <Zap className="h-3 w-3" />
+            Fix {autoFixableIds.length} auto-fixable blockers
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
