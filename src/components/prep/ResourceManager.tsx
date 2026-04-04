@@ -1319,11 +1319,10 @@ export function ResourceManager() {
                 }
                 case 'bulk_activate':
                 case 'bulk_activate_filtered': {
-                  toast.info(`Activating ${Array.isArray(resourceIds) ? resourceIds.length : 1} resources…`);
+                  toast.info('Activating resource…');
                   try {
                     const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
-                    const ids = Array.isArray(resourceIds) ? resourceIds : [resource.id];
-                    const results = await autoOperationalizeBatch(ids);
+                    const results = await autoOperationalizeBatch([resource.id]);
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
                     queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
