@@ -127,7 +127,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
         lowYield.push({
           resource: r, issueType: 'low_yield', priority: 5,
           severity: computeSeverity(r, 'low_yield'),
-          reason: `Only ${lc.kiCount} KI extracted (${PIPELINE_LABELS[route.pipeline]} → ${route.extraction_method})`,
+          reason: `Only ${lc.kiCount} KI extracted (${PIPELINE_LABELS[route.pipeline]} → ${EXTRACTION_METHOD_LABELS[route.extraction_method]})`,
           actionLabel: 'Inspect', actionKey: 'view',
           bulkEligible: false,
         });
