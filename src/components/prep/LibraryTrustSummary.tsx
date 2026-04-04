@@ -6,7 +6,8 @@
  */
 import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, AlertTriangle, Shield } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CheckCircle2, AlertTriangle, Shield, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { deriveResourceTruth, deriveLibraryReadiness, type LibraryReadiness } from '@/lib/resourceTruthState';
 import type { Resource } from '@/hooks/useResources';
