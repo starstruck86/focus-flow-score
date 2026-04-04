@@ -247,6 +247,39 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
         </div>
       )}
 
+      {/* Dossier Insights — grouped root cause summary */}
+      {dossierInsights && !readiness.system_ready && (
+        <div className="px-3 pb-2 border-t border-border/50 pt-1.5 space-y-1">
+          <p className="text-[10px] font-medium text-foreground">Failure Analysis</p>
+          <div className="flex items-center gap-1.5 flex-wrap text-[9px]">
+            {Object.entries(dossierInsights.by_root_cause)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 4)
+              .map(([cause, count]) => (
+                <Badge key={cause} variant="outline" className="text-[9px] h-4 px-1.5">
+                  {count} {ROOT_CAUSE_LABELS[cause as keyof typeof ROOT_CAUSE_LABELS] ?? cause}
+                </Badge>
+              ))}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap text-[9px]">
+            {Object.entries(dossierInsights.by_failure_stage)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 4)
+              .map(([stage, count]) => (
+                <span key={stage} className="text-muted-foreground">
+                  {count} at {FAILURE_STAGE_LABELS[stage as keyof typeof FAILURE_STAGE_LABELS] ?? stage}
+                </span>
+              ))}
+          </div>
+          {dossierInsights.top_permanent_fixes.length > 0 && (
+            <div className="text-[9px] text-primary">
+              <span className="text-muted-foreground">Top fix: </span>
+              {dossierInsights.top_permanent_fixes[0]}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Fix All Auto-Fixable action */}
       {!readiness.system_ready && autoFixableIds.length > 0 && onFixAllAuto && (
         <div className="px-3 pb-2">
