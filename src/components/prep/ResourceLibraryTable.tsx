@@ -216,7 +216,7 @@ export function ResourceLibraryTable({
   onRefresh,
   isRefreshing,
   lastFixResult,
-  fixAllProgressMessage,
+  fixAllLiveProgress,
   isFixAllRunning,
 }: ResourceLibraryTableProps) {
   const [search, setSearch] = useState('');
