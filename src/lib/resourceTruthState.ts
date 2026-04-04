@@ -155,8 +155,11 @@ export function deriveResourceTruth(
   const enrichStatus = resource.enrichment_status ?? '';
 
   // ── Auth-gated resources — manual only ───────────────────
+  // HARDENED: Only classify as needs_auth when enrichment_status is explicitly 'needs_auth'
+  // AND the resource does NOT already have usable content. If content exists (>= 200 chars),
+  // the real blocker is extraction or enrichment, not auth.
   const enrichStatusRaw = enrichStatus as string;
-  if (enrichStatusRaw === 'needs_auth' && !isActivelyProcessing) {
+  if (enrichStatusRaw === 'needs_auth' && !isContentBacked && !isActivelyProcessing) {
     blockers.push(blocker('needs_auth', `Auth-gated content — ${rAny.failure_reason || 'login required'}`));
   }
 
