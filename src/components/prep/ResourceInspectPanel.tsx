@@ -117,16 +117,8 @@ function PipelineRouteSection({ resource }: { resource: Resource }) {
   const { summary } = useCanonicalLifecycle();
   const status = summary?.resources.find(r => r.resource_id === resource.id);
   const ps = deriveProcessingState(resource);
-  const origin = getResourceOrigin(resource);
   const drift = detectDrift(resource);
-  const isAudio = isAudioResource(resource.file_url, resource.resource_type);
-  const r = resource as any;
-
-  const route = [
-    origin === 'source_url' ? 'Web URL' : origin === 'uploaded_file' ? 'Uploaded File' : origin === 'manual_content' ? 'Manual' : 'Unknown',
-    isAudio ? 'Transcript Pipeline' : r.content_length > 5000 ? 'Dense Content Pipeline' : 'Standard Pipeline',
-    status?.canonical_stage === 'operationalized' ? 'Ready' : status?.canonical_stage?.replace(/_/g, ' ') || 'Unknown',
-  ];
+  const route = deriveProcessingRoute(resource);
 
   const insight = deriveResourceInsight(resource, status ? {
     stage: status.canonical_stage,
@@ -139,15 +131,37 @@ function PipelineRouteSection({ resource }: { resource: Resource }) {
   return (
     <div className="px-4 py-3 space-y-2">
       <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pipeline Route</h4>
-      {/* Route visualization */}
-      <div className="flex items-center gap-1 flex-wrap text-[11px]">
-        {route.map((step, i) => (
-          <span key={i} className="flex items-center gap-1">
-            {i > 0 && <ArrowRight className="h-3 w-3 text-muted-foreground" />}
-            <Badge variant="outline" className="text-[9px]">{step}</Badge>
-          </span>
-        ))}
+      {/* Route details */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">Source:</span>
+          <span className="font-medium">{SOURCE_TYPE_LABELS[route.source_type]}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">Pipeline:</span>
+          <span className="font-medium text-primary">{PIPELINE_LABELS[route.pipeline]}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">Method:</span>
+          <span className="font-medium">{EXTRACTION_METHOD_LABELS[route.extraction_method]}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">Confidence:</span>
+          <Badge variant="outline" className={cn('text-[9px] h-4',
+            route.confidence === 'high' && 'border-emerald-500/30 text-emerald-600',
+            route.confidence === 'medium' && 'border-amber-500/30 text-amber-600',
+            route.confidence === 'low' && 'border-muted-foreground/30 text-muted-foreground',
+          )}>{route.confidence.charAt(0).toUpperCase() + route.confidence.slice(1)}</Badge>
+        </div>
       </div>
+      {/* Reason log */}
+      {route.reason.length > 0 && (
+        <div className="text-[10px] text-muted-foreground space-y-0.5 pl-1 border-l-2 border-primary/15">
+          {route.reason.map((r, i) => (
+            <p key={i}>• {r}</p>
+          ))}
+        </div>
+      )}
       {/* Signal + Readiness */}
       <div className="flex items-center gap-3 text-[11px]">
         <div className="flex items-center gap-1">
