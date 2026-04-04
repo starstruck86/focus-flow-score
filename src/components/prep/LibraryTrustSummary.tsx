@@ -2,22 +2,28 @@
  * LibraryTrustSummary — compact library-level trust indicator
  * derived exclusively from deriveLibraryReadiness().
  *
- * Shows: system state label, explicit reason string, and blocker counts.
+ * Shows: system state label, explicit reason string, blocker counts,
+ * burn-down results after Fix All, and clickable health chips.
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, AlertTriangle, Shield, Zap } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Shield, Zap, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { deriveResourceTruth, deriveLibraryReadiness, type LibraryReadiness } from '@/lib/resourceTruthState';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
+import type { FixAllResult } from '@/lib/fixAllAutoBlockers';
 
 interface Props {
   resources: Resource[];
   lifecycleMap: Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>;
   audioJobsMap?: Map<string, AudioJobRecord>;
   onFixAllAuto?: (resourceIds: string[]) => void;
+  onFilterChange?: (filter: string) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+  lastFixResult?: FixAllResult | null;
 }
 
 function getStatusInfo(r: LibraryReadiness): { label: string; reason: string } {
@@ -51,7 +57,7 @@ function getStatusInfo(r: LibraryReadiness): { label: string; reason: string } {
   return { label: 'System Not Ready', reason: 'Unknown blockers remain.' };
 }
 
-export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onFixAllAuto }: Props) {
+export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onFixAllAuto, onFilterChange, onRefresh, isRefreshing, lastFixResult }: Props) {
   const { readiness, autoFixableIds } = useMemo(() => {
     const truths = resources.map(r => {
       const lc = lifecycleMap.get(r.id);
@@ -72,6 +78,8 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
   const { label: statusLabel, reason } = getStatusInfo(readiness);
   const StatusIcon = readiness.system_ready ? CheckCircle2 : AlertTriangle;
 
+  const chipClass = 'cursor-pointer hover:underline transition-colors';
+
   return (
     <div className={cn(
       'rounded-lg border text-xs',
@@ -90,6 +98,18 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
           <StatusIcon className="h-2.5 w-2.5" />
           {statusLabel}
         </Badge>
+        <div className="flex-1" />
+        {onRefresh && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={cn('h-3 w-3', isRefreshing && 'animate-spin')} />
+          </Button>
+        )}
       </div>
 
       {/* Reason string */}
@@ -97,20 +117,45 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
         <p className="text-[10px] text-muted-foreground">{reason}</p>
       </div>
 
-      {/* Metric pills */}
+      {/* Metric pills — clickable */}
       <div className="flex items-center gap-1.5 flex-wrap px-3 pb-2">
-        <span className="text-emerald-600 font-medium">{readiness.ready_resources} ready</span>
+        <span
+          className={cn('text-emerald-600 font-medium', onFilterChange && chipClass)}
+          onClick={() => onFilterChange?.('ready')}
+        >
+          {readiness.ready_resources} ready
+        </span>
         {readiness.processing_resources > 0 && (
-          <span className="text-primary">{readiness.processing_resources} processing</span>
+          <span
+            className={cn('text-primary', onFilterChange && chipClass)}
+            onClick={() => onFilterChange?.('improving')}
+          >
+            {readiness.processing_resources} processing
+          </span>
         )}
         {readiness.blocked_resources > 0 && (
-          <span className="text-destructive">{readiness.blocked_resources} blocked</span>
+          <span
+            className={cn('text-destructive', onFilterChange && chipClass)}
+            onClick={() => onFilterChange?.('blocked')}
+          >
+            {readiness.blocked_resources} blocked
+          </span>
         )}
         {readiness.stalled_resources > 0 && (
-          <span className="text-destructive">{readiness.stalled_resources} stalled</span>
+          <span
+            className={cn('text-destructive', onFilterChange && chipClass)}
+            onClick={() => onFilterChange?.('failed')}
+          >
+            {readiness.stalled_resources} stalled
+          </span>
         )}
         {readiness.qa_required_resources > 0 && (
-          <span className="text-amber-600">{readiness.qa_required_resources} QA required</span>
+          <span
+            className={cn('text-amber-600', onFilterChange && chipClass)}
+            onClick={() => onFilterChange?.('needs_review')}
+          >
+            {readiness.qa_required_resources} QA required
+          </span>
         )}
         {readiness.contradiction_count > 0 && (
           <span className="text-destructive font-medium">{readiness.contradiction_count} contradictions</span>
@@ -122,6 +167,35 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onF
           <span className="text-muted-foreground">{readiness.manual_only_blocker_count} manual</span>
         )}
       </div>
+
+      {/* Burn-down results from last Fix All run */}
+      {lastFixResult && (
+        <div className="px-3 pb-2 border-t border-border/50 pt-1.5">
+          <p className="text-[10px] font-medium text-foreground mb-1">Last Fix All Results</p>
+          <div className="flex items-center gap-2 flex-wrap text-[10px]">
+            <span className="text-muted-foreground">Before: {lastFixResult.blockers_before}</span>
+            <span className="text-emerald-600">Fixed: {lastFixResult.blockers_fixed}</span>
+            {lastFixResult.blockers_failed > 0 && (
+              <span className="text-destructive">Failed: {lastFixResult.blockers_failed}</span>
+            )}
+            <span className={lastFixResult.blockers_after === 0 ? 'text-emerald-600 font-medium' : 'text-amber-600'}>
+              Remaining: {lastFixResult.blockers_after}
+            </span>
+          </div>
+          {lastFixResult.phases.length > 0 && (
+            <div className="mt-1 space-y-0.5">
+              {lastFixResult.phases.map((p, i) => (
+                <div key={i} className="flex items-center gap-2 text-[9px] text-muted-foreground">
+                  <span className="font-medium min-w-[80px]">{p.phase}</span>
+                  <span>{p.attempted} attempted</span>
+                  <span className="text-emerald-600">{p.succeeded} ✓</span>
+                  {p.failed > 0 && <span className="text-destructive">{p.failed} ✗</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Fix All Auto-Fixable action */}
       {!readiness.system_ready && autoFixableIds.length > 0 && onFixAllAuto && (
