@@ -3492,6 +3492,66 @@ export type Database = {
           },
         ]
       }
+      resource_extraction_attempts: {
+        Row: {
+          attempt_number: number
+          completed_at: string | null
+          created_at: string
+          deduped_count: number
+          duration_ms: number
+          failure_type: string | null
+          floor_met: boolean
+          id: string
+          ki_count: number
+          min_ki_floor: number
+          raw_item_count: number
+          resource_id: string
+          started_at: string | null
+          status: string
+          strategy: string
+          user_id: string
+          validated_count: number
+        }
+        Insert: {
+          attempt_number: number
+          completed_at?: string | null
+          created_at?: string
+          deduped_count?: number
+          duration_ms?: number
+          failure_type?: string | null
+          floor_met?: boolean
+          id?: string
+          ki_count?: number
+          min_ki_floor?: number
+          raw_item_count?: number
+          resource_id: string
+          started_at?: string | null
+          status: string
+          strategy: string
+          user_id: string
+          validated_count?: number
+        }
+        Update: {
+          attempt_number?: number
+          completed_at?: string | null
+          created_at?: string
+          deduped_count?: number
+          duration_ms?: number
+          failure_type?: string | null
+          floor_met?: boolean
+          id?: string
+          ki_count?: number
+          min_ki_floor?: number
+          raw_item_count?: number
+          resource_id?: string
+          started_at?: string | null
+          status?: string
+          strategy?: string
+          user_id?: string
+          validated_count?: number
+        }
+        Relationships: []
+      }
       resource_folders: {
         Row: {
           color: string | null

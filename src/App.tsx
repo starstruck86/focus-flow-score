@@ -36,6 +36,7 @@ const Cockpit = lazy(() => import("./pages/Cockpit"));
 const EnrichmentVerification = lazy(() => import("./pages/EnrichmentVerification"));
 const ExecuteWorkspace = lazy(() => import("./pages/ExecuteWorkspace"));
 const BulkExtractRunner = lazy(() => import("./pages/BulkExtractRunner"));
+const ExtractionAdmin = lazy(() => import("./pages/ExtractionAdmin"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -123,6 +124,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
                         <BulkExtractRunner />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/extraction-admin" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                        <ExtractionAdmin />
                       </Suspense>
                     </ProtectedRoute>
                   } />
