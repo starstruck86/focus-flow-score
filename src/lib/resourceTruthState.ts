@@ -56,6 +56,7 @@ export const BLOCKER_META: Record<BlockerType, { severity: BlockerSeverity; fixa
   needs_enrichment:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'pipeline',       label: 'Needs Enrichment' },
   needs_extraction:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'extraction',     label: 'Needs Extraction' },
   needs_activation:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'activation',     label: 'Needs Activation' },
+  needs_auth:               { severity: 'high',     fixability: 'manual_only',       ownership: 'manual_review',  label: 'Auth Required' },
   missing_context:          { severity: 'medium',   fixability: 'semi_auto_fixable', ownership: 'activation',     label: 'Missing Contexts' },
   stalled_enrichment:       { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'pipeline',       label: 'Stalled Enrichment' },
   stalled_extraction:       { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'extraction',     label: 'Stalled Extraction' },
