@@ -50,6 +50,7 @@ const BLOCKER_LABELS: Record<string, string> = {
   stale_version: 'Stale Version',
   needs_auth: 'Auth Required',
   contradictory_state: 'Contradictions',
+  reference_only: 'Reference Only',
 };
 
 export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalled }: Props) {
