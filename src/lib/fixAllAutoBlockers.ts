@@ -42,6 +42,14 @@ export interface FixResourceOutcome {
   rootCauseCategory: string | null;
   rootCauseExplanation: string | null;
   resolutionOutcome: string | null;
+  /** Whether normalization changed this resource's state */
+  normalized: boolean;
+  /** Whether wrapper-page / attachment detection applied */
+  wrapperPageDetected: boolean;
+  /** Original enrichment_status before normalization */
+  originalEnrichmentStatus: string | null;
+  /** Original active_job_status before normalization */
+  originalJobStatus: string | null;
 }
 
 export interface BlockerDiff {
