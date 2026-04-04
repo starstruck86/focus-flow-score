@@ -388,6 +388,9 @@ export async function runFixAllAutoBlockers(
         finalTruthState: null,
         finalBlocker: blockerType,
         error: null,
+        rootCauseCategory: null,
+        rootCauseExplanation: null,
+        resolutionOutcome: null,
       });
     }
   };
