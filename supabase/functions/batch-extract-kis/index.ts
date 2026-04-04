@@ -1133,8 +1133,25 @@ async function hasExistingValidKIs(supabase: any, resourceId: string, minFloor: 
 // ═══════════════════════════════════════════
 
 async function updateExtractionStatus(supabase: any, resourceId: string, status: string, extraFields?: Record<string, any>) {
+  let finalStatus = status;
+
+  // ── Guard: protect existing successful extraction from degradation ──
+  // If we're about to mark as failed/review but valid KIs exist from a prior success, keep 'extracted'
+  if (['extraction_requires_review', 'extraction_failed'].includes(status)) {
+    const { hasKIs, count } = await hasExistingValidKIs(supabase, resourceId, 1);
+    if (hasKIs) {
+      console.log(`[extract] 🛡️ Protecting existing extraction: ${count} valid KIs found for "${resourceId}" — keeping 'extracted' instead of '${status}'`);
+      finalStatus = 'extracted';
+      // Clear failure fields since we're restoring success
+      if (extraFields) {
+        extraFields.extraction_failure_type = null;
+        extraFields.extraction_retry_eligible = false;
+      }
+    }
+  }
+
   const updatePayload: Record<string, any> = {
-    enrichment_status: status,
+    enrichment_status: finalStatus,
     updated_at: new Date().toISOString(),
     ...extraFields,
   };
