@@ -69,6 +69,7 @@ export const BLOCKER_META: Record<BlockerType, { severity: BlockerSeverity; fixa
   contradictory_state:      { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'ui_truth',       label: 'Contradictory State' },
   audit_mismatch:           { severity: 'high',     fixability: 'semi_auto_fixable', ownership: 'ui_truth',       label: 'Audit Mismatch' },
   unknown_processing_state: { severity: 'low',      fixability: 'manual_only',       ownership: 'pipeline',       label: 'Unknown State' },
+  reference_only:           { severity: 'low',      fixability: 'manual_only',       ownership: 'manual_review',  label: 'Reference Only' },
 };
 
 function blocker(type: BlockerType, detail: string): Blocker {
