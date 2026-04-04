@@ -810,6 +810,93 @@ function ProcessingTimelineSection({ resource }: { resource: Resource }) {
   );
 }
 
+// ── Failure Dossier Section ─────────────────────────────────
+function FailureDossierSection({ resource }: { resource: Resource }) {
+  const { lifecycleMap } = useCanonicalLifecycle();
+  const lc = lifecycleMap.get(resource.id);
+  if (!lc) return null;
+
+  const truth = deriveResourceTruth(resource, lc);
+  const dossier = buildFailureDossier(resource, truth);
+  if (!dossier) return null;
+
+  const ev = dossier.evidence;
+
+  return (
+    <div className="px-4 py-3 border-t border-border space-y-2.5">
+      <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+        <AlertTriangle className="h-3 w-3" />
+        Failure Dossier
+        <Badge className={cn('text-[8px] h-4 ml-1', ROOT_CAUSE_COLORS[dossier.root_cause_category])}>
+          {ROOT_CAUSE_LABELS[dossier.root_cause_category]}
+        </Badge>
+        <Badge variant="outline" className="text-[8px] h-4">
+          {dossier.root_cause_confidence} confidence
+        </Badge>
+      </h4>
+
+      {/* Stage & Mode */}
+      <div className="flex items-center gap-2 flex-wrap text-[10px]">
+        <span className="text-muted-foreground">Stage:</span>
+        <span className="font-medium text-foreground">{FAILURE_STAGE_LABELS[dossier.failure_stage]}</span>
+        <span className="text-muted-foreground">Mode:</span>
+        <span className="font-medium text-foreground">{FAILURE_MODE_LABELS[dossier.failure_mode]}</span>
+      </div>
+
+      {/* Explanation */}
+      <div className="text-[11px] text-foreground bg-muted/30 rounded px-2.5 py-2 leading-relaxed">
+        {dossier.exact_explanation}
+      </div>
+
+      {/* Key Evidence */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
+        <div className="text-muted-foreground">Content length</div>
+        <div className="font-medium text-foreground">{ev.content_length} chars</div>
+        <div className="text-muted-foreground">Enrichment status</div>
+        <div className="font-medium text-foreground">{ev.enrichment_status ?? 'none'}</div>
+        <div className="text-muted-foreground">KIs / Active / w/Context</div>
+        <div className="font-medium text-foreground">{ev.ki_count} / {ev.active_ki_count} / {ev.active_ki_with_context_count}</div>
+        <div className="text-muted-foreground">Extraction attempts</div>
+        <div className="font-medium text-foreground">{ev.extraction_attempt_count}</div>
+        {ev.route_pipeline && (
+          <>
+            <div className="text-muted-foreground">Route pipeline</div>
+            <div className="font-medium text-foreground">{ev.route_pipeline}{ev.route_override ? ' (override)' : ''}</div>
+          </>
+        )}
+        {ev.active_job_status && (
+          <>
+            <div className="text-muted-foreground">Job status</div>
+            <div className="font-medium text-foreground">{ev.active_job_status}{ev.active_job_error ? ` — ${ev.active_job_error}` : ''}</div>
+          </>
+        )}
+        {ev.failure_reason && (
+          <>
+            <div className="text-muted-foreground">Failure reason</div>
+            <div className="font-medium text-destructive">{ev.failure_reason}</div>
+          </>
+        )}
+      </div>
+
+      {/* Fix recommendations */}
+      <div className="space-y-1.5 pt-1 border-t border-border/50">
+        <div className="text-[10px]">
+          <span className="text-muted-foreground">Immediate fix: </span>
+          <span className="font-medium text-foreground">{dossier.recommended_immediate_action}</span>
+        </div>
+        <div className="text-[10px]">
+          <span className="text-muted-foreground">Permanent fix: </span>
+          <span className="font-medium text-foreground">{dossier.recommended_permanent_fix}</span>
+        </div>
+        <div className="text-[10px]">
+          <span className="text-muted-foreground">Prevention rule: </span>
+          <span className="font-medium text-primary">{dossier.future_prevention_rule}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────
 export function ResourceInspectPanel({ resource, onClose, onAction }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -824,6 +911,7 @@ export function ResourceInspectPanel({ resource, onClose, onAction }: Props) {
       <PipelineRouteSection resource={resource} onAction={onAction} />
       <ProcessingTimelineSection resource={resource} />
       <QualityTrustSection resource={resource} />
+      <FailureDossierSection resource={resource} />
       <DownstreamEligibilitySection resource={resource} />
       <NextActionSection resource={resource} onAction={onAction} />
       <AttemptHistorySection resourceId={resource.id} />
