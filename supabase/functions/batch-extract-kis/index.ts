@@ -962,7 +962,7 @@ function normalizeArray(v: any, fallback: string[]): string[] {
 // Validation
 // ═══════════════════════════════════════════
 
-function validateItem(item: any, isLesson: boolean, isDenseContent = false): string[] {
+function validateItem(item: any, isLesson: boolean, isDenseContent = false, contentLength = 0): string[] {
   const reasons: string[] = [];
   const title = (item.title || '').trim();
   const summary = (item.tactic_summary || '').trim();
@@ -970,9 +970,22 @@ function validateItem(item: any, isLesson: boolean, isDenseContent = false): str
   if (!title || title.length < 5) reasons.push('title too short');
 
   // Verb-led requirement: skip for lessons AND dense teaching content
+  // For long narrative transcripts (>10k), allow descriptive/takeaway-style titles
+  const isLongNarrative = !isLesson && !isDenseContent && contentLength > 10000;
   if (!isLesson && !isDenseContent) {
     const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|surface|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|seed|earn|secure|protect|defend|block|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i;
-    if (!verbLedPattern.test(title)) reasons.push('title not actionable');
+    if (!verbLedPattern.test(title)) {
+      if (isLongNarrative) {
+        // For long narratives, allow descriptive titles if they have substance
+        const descriptivePattern = /\b(the|how|why|what|when|key|critical|important|essential|effective|strategic|tactical|approach|method|technique|framework|principle|strategy|insight|lesson|takeaway|pattern|signal|rule|model)\b/i;
+        if (!descriptivePattern.test(title)) {
+          reasons.push('title not actionable');
+        }
+        // else: long narrative relaxation applied — descriptive title accepted
+      } else {
+        reasons.push('title not actionable');
+      }
+    }
   }
 
   if (!hasSubstance(summary, isLesson ? 10 : 20)) reasons.push('tactic_summary lacks substance');
