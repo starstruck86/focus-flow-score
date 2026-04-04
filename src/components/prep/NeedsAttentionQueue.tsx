@@ -139,12 +139,14 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       }
 
       // Stale / drifted
-      const drift = detectDrift(r);
-      if (drift.hasDrift) {
+      const driftCheck = detectDrift(r);
+      if (driftCheck.hasDrift) {
+        const route = deriveProcessingRoute(r);
+        const routeSuffix = route.confidence === 'low' ? ' · Low confidence' : '';
         stale.push({
           resource: r, issueType: 'stale', priority: 6,
           severity: computeSeverity(r, 'stale'),
-          reason: drift.issues[0] || 'Version drift detected',
+          reason: `${driftCheck.issues[0] || 'Version drift detected'} (${PIPELINE_LABELS[route.pipeline]}${routeSuffix})`,
           actionLabel: 'Re-enrich', actionKey: 're_enrich',
           bulkEligible: true,
         });
