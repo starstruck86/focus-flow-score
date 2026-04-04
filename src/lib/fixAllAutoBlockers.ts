@@ -458,6 +458,7 @@ async function normalizeStaleStatuses(
 
       if (!error) {
         result.succeeded++;
+        result.normalizedIds.add(id);
         log.info('Normalized stale status', { id, hadKIs: hasKIs, wasRetrying: isRetrying, wasFailed: isFailedJob });
         callbacks?.onItemDone?.(id, 'normalize_status');
       } else {
