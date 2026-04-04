@@ -50,6 +50,7 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
         case 'stalled': c.stalled++; break;
         case 'qa_required': c.qa_required++; break;
         case 'quarantined':
+        case 'reference_only': break; // reference-only not counted as blocked
         case 'blocked':
         default: c.blocked++; break;
       }

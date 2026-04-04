@@ -84,7 +84,7 @@ interface ResourceLibraryTableProps {
 
 // ── Health filter type ─────────────────────────────────────
 type HealthFilter = 'all' | 'ready' | 'improving' | 'blocked' | 'failed' | 'missing_content' | 'needs_extraction' | 'needs_review'
-  | 'needs_enrichment' | 'needs_activation' | 'stalled' | 'qa_required' | 'needs_auth' | 'contradictions';
+  | 'needs_enrichment' | 'needs_activation' | 'stalled' | 'qa_required' | 'needs_auth' | 'contradictions' | 'reference_only' | 'processing';
 
 // ── Spot check presets ─────────────────────────────────────
 type SpotCheck = 'none' | 'recent' | 'failed' | 'low_yield' | 'random' | 'high_signal' | 'limited_readiness' | 'random_ready' | 'random_lessons';
@@ -292,6 +292,8 @@ export function ResourceLibraryTable({
           case 'needs_auth': return truth.primary_blocker?.type === 'needs_auth' || truth.primary_blocker?.type === 'route_manual_assist';
           case 'needs_review': return truth.truth_state === 'qa_required' || truth.primary_blocker?.type === 'qa_required';
           case 'contradictions': return truth.all_blockers.some(b => b.type === 'contradictory_state') || truth.truth_state === 'quarantined';
+          case 'reference_only': return truth.truth_state === 'reference_only';
+          case 'processing': return truth.truth_state === 'processing';
           default: return true;
         }
       });

@@ -191,7 +191,7 @@ function buildEvidence(resource: Resource, truth: ResourceTruth): DossierEvidenc
 
 // ── Classification Rules ──────────────────────────────────
 
-const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying'];
+const ENRICHED_STATUSES = ['deep_enriched', 'enriched', 'verified', 'extracted', 'extraction_retrying', 'content_ready'];
 
 export function buildFailureDossier(resource: Resource, truth: ResourceTruth): ResourceFailureDossier | null {
   // Only blocked/stalled/qa resources get dossiers
@@ -246,15 +246,37 @@ export function buildFailureDossier(resource: Resource, truth: ResourceTruth): R
     prevention = 'Jobs running > 10m without progress must auto-reset.';
   }
 
-  // ── Rule 4: Auth required
+  // ── Rule 4: Auth required — HARDENED: only when content is genuinely inaccessible
   else if (truth.primary_blocker?.type === 'needs_auth') {
-    stage = 'enrichment';
-    mode = 'auth_required';
-    confidence = 'high';
-    explanation = `Content is behind authentication. ${r.failure_reason || 'Login required to access source.'}`;
-    immediateFix = 'Upload authenticated content manually or use session-assisted extraction.';
-    permanentFix = 'Detect auth-walls earlier in enrichment and classify as auth_required immediately.';
-    prevention = 'Auth-gated resources must be classified distinctly from generic enrichment failures.';
+    // If content exists but marked needs_auth, this is a misclassification
+    if (contentLength >= 200 || r.manual_content_present) {
+      stage = 'routing';
+      mode = 'pipeline_misrouted';
+      confidence = 'high';
+      explanation = `Marked "needs_auth" but has ${contentLength} chars of usable content. Auth is not the real blocker — content already exists and should be extracted.`;
+      immediateFix = 'Run extraction on existing content instead of requiring auth.';
+      permanentFix = 'Never classify as needs_auth when usable content (≥200 chars) already exists.';
+      prevention = 'needs_auth must only apply when content is genuinely inaccessible or missing. Content ≥ 200 chars = route to extraction.';
+    } else {
+      stage = 'enrichment';
+      mode = 'auth_required';
+      confidence = 'high';
+      explanation = `Content is behind authentication. ${r.failure_reason || 'Login required to access source.'}`;
+      immediateFix = 'Upload authenticated content manually or use session-assisted extraction.';
+      permanentFix = 'Detect auth-walls earlier in enrichment and classify as auth_required immediately.';
+      prevention = 'Auth-gated resources must be classified distinctly from generic enrichment failures.';
+    }
+  }
+
+  // ── Rule 4b: Reference-only resources
+  else if (truth.primary_blocker?.type === 'reference_only') {
+    stage = 'extraction';
+    mode = 'content_extracted_but_zero_kis';
+    confidence = 'medium';
+    explanation = `Resource has short/low-density content (${contentLength} chars) and extraction produced 0 KIs. This is classified as reference-only — not actionable for KI extraction.`;
+    immediateFix = 'No action needed — this is informational/reference content.';
+    permanentFix = 'Classify genuinely low-density content as reference_only instead of blocked.';
+    prevention = 'Short self-contained content with 0 KIs after extraction = reference_only, not blocked.';
   }
 
   // ── Rule 5: Contradictory state
