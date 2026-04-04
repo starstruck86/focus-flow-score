@@ -1,13 +1,13 @@
 /**
  * fixAllAutoBlockers — Orchestrates safe sequential fix of all auto-fixable blockers.
  * 
- * Order: stalled retry → enrichment → extraction → activation
+ * Order: stalled retry → normalize stale statuses → enrichment → extraction → activation
  * Stops if contradictions or unexpected failures increase.
  */
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { autoOperationalizeBatch } from '@/lib/autoOperationalize';
-import { deriveResourceTruth, deriveLibraryReadiness, type BlockerType, type ResourceTruth } from '@/lib/resourceTruthState';
+import { type BlockerType } from '@/lib/resourceTruthState';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('FixAllAutoBlockers');
@@ -35,6 +35,8 @@ interface BlockerGroup {
   resourceIds: string[];
 }
 
+// ── Stalled Job Recovery ──────────────────────────────────
+
 /**
  * Clear stalled job status so the resource can be retried.
  * Resets active_job_status and related fields.
@@ -58,6 +60,27 @@ export async function clearStalledJobStatus(resourceId: string): Promise<boolean
     return false;
   }
   log.info('Cleared stalled job status', { resourceId });
+  return true;
+}
+
+/**
+ * Clear failed job status for resources that actually have KIs
+ * (their extract partially succeeded but left a 'failed' job marker).
+ */
+async function clearFailedJobStatus(resourceId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('resources' as any)
+    .update({
+      active_job_status: 'succeeded',
+      active_job_finished_at: new Date().toISOString(),
+      active_job_error: null,
+    } as any)
+    .eq('id', resourceId);
+
+  if (error) {
+    log.error('Failed to clear failed job status', { resourceId, error: error.message });
+    return false;
+  }
   return true;
 }
 
@@ -96,16 +119,14 @@ async function fixStalledJobs(
       result.errors.push(`Enrich error for ${id}: ${err.message}`);
     }
 
-    // Small delay between requests
     await new Promise(r => setTimeout(r, 500));
   }
 
   return result;
 }
 
-/**
- * Enrich resources that need enrichment.
- */
+// ── Enrichment ────────────────────────────────────────────
+
 async function fixNeedsEnrichment(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
@@ -136,9 +157,8 @@ async function fixNeedsEnrichment(
   return result;
 }
 
-/**
- * Extract knowledge items for resources that need extraction.
- */
+// ── Extraction ────────────────────────────────────────────
+
 async function fixNeedsExtraction(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
@@ -167,6 +187,104 @@ async function fixNeedsExtraction(
   return result;
 }
 
+// ── Activation ────────────────────────────────────────────
+
+/**
+ * Activate KIs for resources that have extracted KIs but none active.
+ * Uses autoOperationalizeBatch which includes Stage 4 (activation).
+ * If extraction already happened, it skips to activation automatically.
+ */
+async function fixNeedsActivation(
+  resourceIds: string[],
+  onProgress?: (msg: string) => void,
+  onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
+): Promise<FixPhaseResult> {
+  const result: FixPhaseResult = { phase: 'activation', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
+
+  if (resourceIds.length === 0) return result;
+
+  onProgress?.(`Activating ${resourceIds.length} resources`);
+  
+  // autoOperationalizeBatch handles activation as part of its pipeline.
+  // For resources that already have KIs, it will skip extraction and go straight to activation.
+  try {
+    const results = await autoOperationalizeBatch(resourceIds, undefined, onResourcePhase);
+    for (const r of results) {
+      if (r.knowledgeActivated > 0 || r.operationalized) {
+        result.succeeded++;
+      } else if (r.knowledgeExtracted > 0) {
+        // Extracted but not activated — still progress
+        result.succeeded++;
+      } else {
+        result.failed++;
+        result.errors.push(`${r.resourceId}: ${r.reason || 'activation failed'}`);
+      }
+    }
+  } catch (err: any) {
+    result.failed += resourceIds.length;
+    result.errors.push(`Batch activation failed: ${err.message}`);
+  }
+
+  return result;
+}
+
+// ── Status Normalization ──────────────────────────────────
+
+/**
+ * Normalize resources stuck in 'extraction_retrying' or with 'failed' job status
+ * but that actually have KIs. Clear their stale status markers.
+ */
+async function normalizeStaleStatuses(
+  resourceIds: string[],
+  onProgress?: (msg: string) => void,
+): Promise<FixPhaseResult> {
+  const result: FixPhaseResult = { phase: 'normalize_status', attempted: 0, succeeded: 0, failed: 0, errors: [] };
+
+  if (resourceIds.length === 0) return result;
+
+  // Check which of these resources actually have KIs
+  const { data: kiCounts } = await supabase
+    .from('knowledge_items' as any)
+    .select('source_resource_id')
+    .in('source_resource_id', resourceIds);
+
+  const resourcesWithKIs = new Set((kiCounts ?? []).map((r: any) => r.source_resource_id));
+
+  for (const id of resourceIds) {
+    if (!resourcesWithKIs.has(id)) continue;
+    result.attempted++;
+    
+    onProgress?.(`Normalizing status for ${id.slice(0, 8)}…`);
+    
+    // Resource has KIs — clear the failed/retrying status
+    const cleared = await clearFailedJobStatus(id);
+    if (cleared) {
+      // Also update enrichment_status if stuck in extraction_retrying
+      const { error } = await supabase
+        .from('resources' as any)
+        .update({
+          enrichment_status: 'extracted',
+        } as any)
+        .eq('id', id)
+        .in('enrichment_status', ['extraction_retrying']);
+      
+      if (!error) {
+        result.succeeded++;
+      } else {
+        result.failed++;
+        result.errors.push(`${id}: status update failed`);
+      }
+    } else {
+      result.failed++;
+      result.errors.push(`${id}: clear failed`);
+    }
+  }
+
+  return result;
+}
+
+// ── Main Orchestrator ─────────────────────────────────────
+
 /**
  * Run the full auto-fix pass in safe order.
  */
@@ -184,6 +302,14 @@ export async function runFixAllAutoBlockers(
     const existing = groupMap.get(g.type) ?? [];
     existing.push(...g.resourceIds);
     groupMap.set(g.type, existing);
+  }
+
+  // Phase 0: Normalize stale statuses (extraction_retrying with KIs, failed with KIs)
+  const allIds = blockerGroups.flatMap(g => g.resourceIds);
+  if (allIds.length > 0) {
+    onProgress?.('Normalizing stale statuses…');
+    const normalizeResult = await normalizeStaleStatuses(allIds, onProgress);
+    if (normalizeResult.attempted > 0) phases.push(normalizeResult);
   }
 
   // Phase 1: Retry stalled jobs first
@@ -217,12 +343,11 @@ export async function runFixAllAutoBlockers(
     phases.push(extractResult);
   }
 
-  // Phase 4: Activate (handled inline by extraction — note for clarity)
+  // Phase 4: Activate (dedicated path, not re-extraction)
   const activateIds = groupMap.get('needs_activation') ?? [];
   if (activateIds.length > 0) {
     onProgress?.(`Activating ${activateIds.length} resources…`);
-    const activateResult = await fixNeedsExtraction(activateIds, onProgress, onResourcePhase);
-    activateResult.phase = 'activation';
+    const activateResult = await fixNeedsActivation(activateIds, onProgress, onResourcePhase);
     phases.push(activateResult);
   }
 
