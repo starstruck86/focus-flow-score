@@ -410,7 +410,7 @@ function DownstreamEligibilitySection({ resource }: { resource: Resource }) {
   );
 }
 
-// ── E. Next Action ─────────────────────────────────────────
+// ── E. Next Action (truth-driven) ──────────────────────────
 function NextActionSection({ resource, onAction }: { resource: Resource; onAction: (action: string, resource: Resource) => void }) {
   const { summary } = useCanonicalLifecycle();
   const status = summary?.resources.find(r => r.resource_id === resource.id);
@@ -422,17 +422,47 @@ function NextActionSection({ resource, onAction }: { resource: Resource; onActio
     activeKiWithCtx: status.active_ki_with_context_count,
   } : undefined;
   const insight = deriveResourceInsight(resource, lc);
+  const truth = insight.truth;
 
-  const rationale = getRationale(lc, resource);
-
-  if (!insight.nextAction) {
+  // Only show "Ready — No Action Needed" when truth_state is truly ready
+  if (truth.is_ready && !insight.nextAction) {
     return (
       <div className="px-4 py-3 border-t border-border">
         <div className="flex items-center gap-2 bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
           <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
           <div>
             <p className="text-xs font-medium text-emerald-600">Ready — No Action Needed</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">This resource is fully operationalized and feeding downstream systems.</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              This resource is fully operationalized and feeding downstream systems.
+              {truth.ki_total > 0 && ` ${truth.active_ki_total}/${truth.ki_total} KIs active.`}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show blocker summary when truth says not ready, even if nextAction derived
+  const blockerDetail = truth.primary_blocker
+    ? `${truth.primary_blocker.label}: ${truth.primary_blocker.detail}`
+    : getRationale(lc, resource);
+
+  const action = insight.nextAction ?? truth.next_required_action;
+
+  if (!action) {
+    // Not ready but no action — show state
+    return (
+      <div className="px-4 py-3 border-t border-border">
+        <div className="flex items-center gap-2 bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+          <div>
+            <p className="text-xs font-medium text-amber-600">{truth.readiness_label}</p>
+            {blockerDetail && <p className="text-[10px] text-muted-foreground mt-0.5">{blockerDetail}</p>}
+            {truth.has_stuck_job && (
+              <p className="text-[10px] text-destructive mt-0.5">
+                Job stalled for {Math.round(truth.stuck_duration_seconds / 60)}m
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -445,12 +475,17 @@ function NextActionSection({ resource, onAction }: { resource: Resource; onActio
       <div className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-lg p-3">
         <Zap className="h-4 w-4 text-primary shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-foreground">{insight.nextAction.label}</p>
-          {rationale && <p className="text-[10px] text-muted-foreground mt-0.5">{rationale}</p>}
+          <p className="text-xs font-medium text-foreground">{action.label}</p>
+          {blockerDetail && <p className="text-[10px] text-muted-foreground mt-0.5">{blockerDetail}</p>}
+          {truth.has_stuck_job && (
+            <p className="text-[10px] text-destructive mt-0.5">
+              Job stalled for {Math.round(truth.stuck_duration_seconds / 60)}m
+            </p>
+          )}
         </div>
-        <Button size="sm" variant={insight.nextAction.variant} className="h-7 text-xs shrink-0"
-          onClick={() => onAction(insight.nextAction!.actionKey, resource)}>
-          {insight.nextAction.label}
+        <Button size="sm" variant={action.variant} className="h-7 text-xs shrink-0"
+          onClick={() => onAction(action.actionKey, resource)}>
+          {action.label}
         </Button>
       </div>
     </div>
