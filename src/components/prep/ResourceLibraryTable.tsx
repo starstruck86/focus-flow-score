@@ -650,7 +650,7 @@ export function ResourceLibraryTable({
                       {expandedId === resource.id && (
                         <tr className="bg-card">
                           <td colSpan={4} className="p-0 relative z-10 bg-card">
-                            <InlineResourceDetail
+                            <ResourceInspectPanel
                               resource={resource}
                               onClose={() => setExpandedId(null)}
                               onAction={onAction}
