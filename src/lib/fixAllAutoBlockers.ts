@@ -629,8 +629,10 @@ export async function runFixAllAutoBlockers(
           const isEnriched = ['enriched', 'deep_enriched', 'verified', 'content_ready', 'extracted'].includes(fr.enrichment_status);
           // HARDENED: Also include needs_auth resources with content — normalization should have
           // reclassified them, but catch any that were missed
-          const isNeedsAuthWithContent = fr.enrichment_status === 'needs_auth' && (fr.content_length ?? 0) >= 200;
-          const hasContent = (fr.content_length ?? 0) >= 200;
+          const isStructuredLesson = !!(fr.title && /\s>\s/.test(fr.title));
+          const contentThreshold = isStructuredLesson ? 100 : 200;
+          const isNeedsAuthWithContent = fr.enrichment_status === 'needs_auth' && (fr.content_length ?? 0) >= contentThreshold;
+          const hasContent = (fr.content_length ?? 0) >= contentThreshold;
           const notRunning = !['running'].includes(fr.active_job_status ?? '');
           
           if ((isEnriched || isNeedsAuthWithContent) && hasContent && notRunning && !extractIds.includes(fr.id)) {
@@ -642,12 +644,11 @@ export async function runFixAllAutoBlockers(
             
             if ((count ?? 0) === 0) {
               extractIds.push(fr.id);
-              // Also update titleMap if not already there
               if (fr.title && !titleMap.has(fr.id)) {
                 titleMap.set(fr.id, fr.title);
               }
               initOutcome(fr.id, 'extraction', 'needs_extraction');
-              log.info('Discovered newly extraction-eligible resource after normalization', { id: fr.id, title: fr.title, status: fr.enrichment_status });
+              log.info('Discovered newly extraction-eligible resource after normalization', { id: fr.id, title: fr.title, status: fr.enrichment_status, isStructuredLesson });
             }
           }
         }
