@@ -761,6 +761,122 @@ export function ResourceManager() {
               return new Set(filteredResources.map(r => r.id));
             })}
             onResourceClick={handleResourceClick}
+            onBulkAction={async (action, resourceIds) => {
+              switch (action) {
+                case 'fix_all_auto': {
+                  toast.info(`Starting auto-fix for ${resourceIds.length} blockers…`);
+                  try {
+                    const { runFixAllAutoBlockers } = await import('@/lib/fixAllAutoBlockers');
+                    const { deriveResourceTruth, type BlockerType } = await import('@/lib/resourceTruthState');
+
+                    // Build blocker groups from live truth
+                    const blockerGroupMap = new Map<string, string[]>();
+                    for (const id of resourceIds) {
+                      const r = filteredResources.find(res => res.id === id);
+                      if (!r) continue;
+                      // We need lifecycle info — get from canonical lifecycle or derive
+                      const truth = deriveResourceTruth(r, undefined);
+                      const blockerType = truth.primary_blocker?.type;
+                      if (blockerType && truth.primary_blocker?.fixability !== 'manual_only') {
+                        const existing = blockerGroupMap.get(blockerType) ?? [];
+                        existing.push(id);
+                        blockerGroupMap.set(blockerType, existing);
+                      }
+                    }
+
+                    const blockerGroups = [...blockerGroupMap.entries()].map(([type, ids]) => ({
+                      type: type as any,
+                      resourceIds: ids,
+                    }));
+
+                    const result = await runFixAllAutoBlockers(
+                      blockerGroups,
+                      (msg) => toast.info(msg, { id: 'fix-all-progress' }),
+                    );
+
+                    queryClient.invalidateQueries({ queryKey: ['resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+                    queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+
+                    if (result.system_ready) {
+                      toast.success(`All ${result.blockers_fixed} blockers resolved!`, {
+                        description: 'System is now ready.',
+                        duration: 8000,
+                      });
+                    } else {
+                      toast.warning(`Fixed ${result.blockers_fixed}, ${result.blockers_after} remain`, {
+                        description: result.reason,
+                        duration: 8000,
+                      });
+                    }
+                  } catch (err: any) {
+                    toast.error('Auto-fix failed', { description: err?.message });
+                  }
+                  break;
+                }
+                case 'bulk_enrich': {
+                  // Select these resource IDs and open the enrich modal
+                  setSelectedResourceIds(new Set(resourceIds));
+                  setShowDeepEnrich(true);
+                  break;
+                }
+                case 'bulk_extract': {
+                  toast.info(`Starting extraction for ${resourceIds.length} resources...`);
+                  const progressStore = useResourceJobProgress.getState();
+                  progressStore.startBatch(resourceIds, 'extract');
+                  try {
+                    const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
+                    const results = await autoOperationalizeBatch(resourceIds, undefined, async (resourceId, phase, result) => {
+                      const store = useResourceJobProgress.getState();
+                      if (phase === 'start') store.markRunning(resourceId, result?.resourceTitle);
+                      else if (phase === 'done') {
+                        if (result?.success) store.markDone(resourceId, `${result.knowledgeExtracted} KI`);
+                        else store.markFailed(resourceId, result?.reason);
+                      }
+                    });
+                    useResourceJobProgress.getState().endBatch();
+                    queryClient.invalidateQueries({ queryKey: ['resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+                    const totalKI = results.reduce((s, r) => s + r.knowledgeExtracted, 0);
+                    toast.success(`Extracted ${totalKI} KIs from ${results.filter(r => r.knowledgeExtracted > 0).length} resources`);
+                  } catch (error: any) {
+                    useResourceJobProgress.getState().endBatch();
+                    toast.error('Batch extraction failed', { description: error?.message });
+                  }
+                  break;
+                }
+                case 'bulk_re_enrich': {
+                  setSelectedResourceIds(new Set(resourceIds));
+                  setShowDeepEnrich(true);
+                  break;
+                }
+                case 'bulk_retry_stalled': {
+                  toast.info(`Retrying ${resourceIds.length} stalled jobs…`);
+                  try {
+                    const { clearStalledJobStatus } = await import('@/lib/fixAllAutoBlockers');
+                    for (const id of resourceIds) {
+                      await clearStalledJobStatus(id);
+                      await invokeEnrichResource(
+                        { resource_id: id, force: true },
+                        { componentName: 'ResourceManager' },
+                      );
+                    }
+                    queryClient.invalidateQueries({ queryKey: ['resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+                    toast.success(`Retried ${resourceIds.length} stalled jobs`);
+                  } catch (err: any) {
+                    toast.error('Stalled retry failed', { description: err?.message });
+                  }
+                  break;
+                }
+                case 'bulk_activate': {
+                  toast.info('Activation runs automatically during extraction');
+                  break;
+                }
+              }
+            }}
             onAction={async (action, resource) => {
               switch (action) {
                 case 'view':
