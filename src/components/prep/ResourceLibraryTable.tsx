@@ -445,9 +445,10 @@ export function ResourceLibraryTable({
       {(isFixAllRunning || lastFixResult) && (
         <div className="shrink-0 mb-2">
           <FixAllProgressPanel
-            progressMessage={fixAllProgressMessage}
+            progress={fixAllLiveProgress ?? null}
             isRunning={!!isFixAllRunning}
-            result={lastFixResult}
+            result={lastFixResult ?? null}
+            onRetryStalled={() => onBulkAction?.('bulk_retry_stalled', [])}
           />
         </div>
       )}

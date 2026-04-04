@@ -37,13 +37,13 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalled }: Props) {
-  if (!isRunning && !result && !progress) return null;
-
   const lastUpdateAgo = useMemo(() => {
     if (!progress?.lastProgressAt) return null;
     const ms = Date.now() - new Date(progress.lastProgressAt).getTime();
     return formatDurationShort(ms);
-  }, [progress?.lastProgressAt, progress?.elapsedMs]); // elapsedMs changes every second to trigger recompute
+  }, [progress?.lastProgressAt, progress?.elapsedMs]);
+
+  if (!isRunning && !result && !progress) return null;
 
   return (
     <div className={cn(
