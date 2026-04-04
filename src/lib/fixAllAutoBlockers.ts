@@ -678,6 +678,17 @@ export async function runFixAllAutoBlockers(
         outcome.succeeded = detail.succeeded;
         outcome.kisCreated = detail.kisCreated;
         outcome.kisActive = detail.kisActive;
+        
+        // Track wrapper-page attachment handling
+        if (outcome.wrapperPageDetected) {
+          outcome.attachmentExtractionAttempted = true;
+          if (detail.succeeded && detail.kisCreated > 0) {
+            outcome.attachmentExtractionOutcome = 'wrapper extracted, KIs created';
+          } else {
+            outcome.attachmentExtractionOutcome = 'wrapper extracted, 0 KIs — no linked attachment found';
+          }
+        }
+        
         if (!detail.succeeded) {
           outcome.error = detail.reason || 'no KIs extracted';
           outcome.rootCauseCategory = detail.kisCreated === 0 ? 'extraction_produced_zero_kis' : 'activation_failed';
