@@ -45,6 +45,7 @@ interface Props {
   onAction: (action: string, resource: Resource) => void;
   onBulkAction?: (action: string, resourceIds: string[]) => void;
   onInspect: (resource: Resource) => void;
+  onFilterChange?: (filter: string) => void;
 }
 
 /** Priority order for blocker types — lower = more urgent */
