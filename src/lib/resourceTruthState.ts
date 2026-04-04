@@ -157,7 +157,7 @@ export function deriveResourceTruth(
   }
 
   // ── Extraction blockers ─────────────────────────────────
-  if (isContentBacked && kiTotal === 0 && ['deep_enriched', 'enriched', 'verified'].includes(enrichStatus) && !isActivelyProcessing) {
+  if (isContentBacked && kiTotal === 0 && ENRICHED_STATUSES.includes(enrichStatus) && !isActivelyProcessing) {
     blockers.push(blocker('needs_extraction', 'Content enriched but no knowledge items extracted'));
   }
 
