@@ -365,6 +365,15 @@ export function ResourceLibraryTable({
 
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 160px)', minHeight: '450px' }}>
+      {/* Library Trust Summary */}
+      <div className="shrink-0 pb-2 border-b border-border mb-2">
+        <LibraryTrustSummary
+          resources={resources}
+          lifecycleMap={lifecycleMap}
+          audioJobsMap={audioJobsMap}
+        />
+      </div>
+
       {/* System Health Overview */}
       <div className="shrink-0 pb-2 border-b border-border mb-2">
         <SystemHealthBar

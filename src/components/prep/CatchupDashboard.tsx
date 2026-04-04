@@ -543,10 +543,23 @@ export function CatchupDashboard() {
                 {contradictions > 0 && <span className="text-destructive font-medium">Contradictions: {contradictions}</span>}
                 {stalledJobs > 0 && <span className="text-destructive font-medium">Stalled: {stalledJobs}</span>}
               </div>
-              {systemReady && (
+              {systemReady ? (
                 <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-emerald-700 font-bold">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   System Ready — all auto-fixable blockers resolved
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 mt-1.5 text-[11px] font-bold">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                  <span className="text-amber-700">
+                    {contradictions > 0
+                      ? 'Blocked by Contradictions'
+                      : stalledJobs > 0
+                      ? 'Blocked by Stalled Jobs'
+                      : remaining > 0
+                      ? `System Not Ready — ${Math.max(0, autoFixable - totalSucceeded)} auto-fixable remaining`
+                      : 'System Not Ready'}
+                  </span>
                 </div>
               )}
             </div>
