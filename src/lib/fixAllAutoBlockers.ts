@@ -333,8 +333,8 @@ async function normalizeStaleStatuses(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
   callbacks?: FixAllCallbacks,
-): Promise<FixPhaseResult> {
-  const result: FixPhaseResult = { phase: 'normalize_status', attempted: 0, succeeded: 0, failed: 0, errors: [] };
+): Promise<FixPhaseResult & { normalizedIds: Set<string> }> {
+  const result: FixPhaseResult & { normalizedIds: Set<string> } = { phase: 'normalize_status', attempted: 0, succeeded: 0, failed: 0, errors: [], normalizedIds: new Set() };
 
   if (resourceIds.length === 0) return result;
 
