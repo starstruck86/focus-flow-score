@@ -206,6 +206,7 @@ export function ResourceLibraryTable({
   const [spotCheck, setSpotCheck] = useState<SpotCheck>('none');
   const [collectionFilter, setCollectionFilter] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [mobileInspectId, setMobileInspectId] = useState<string | null>(null);
   const { summary: lifecycle } = useCanonicalLifecycle();
   const { data: inUseData } = useInUseResources();
   const inUseIds = inUseData?.inUseResourceIds ?? new Set<string>();
