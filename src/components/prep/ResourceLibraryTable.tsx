@@ -201,6 +201,7 @@ export function ResourceLibraryTable({
   onToggleSelectAll,
   onResourceClick,
   onAction,
+  onBulkAction,
   audioJobsMap,
 }: ResourceLibraryTableProps) {
   const [search, setSearch] = useState('');
