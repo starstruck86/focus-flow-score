@@ -220,6 +220,11 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
                       <p className="font-medium text-foreground truncate">{o.resourceTitle}</p>
                       <div className="flex items-center gap-1.5 text-muted-foreground flex-wrap">
                         {o.normalized && <Badge variant="outline" className="text-[8px] h-3 px-1">normalized</Badge>}
+                        {o.originalEnrichmentStatus && o.originalEnrichmentStatus !== o.finalTruthState && (
+                          <Badge variant="outline" className="text-[8px] h-3 px-1 border-primary/30 text-primary">
+                            {o.originalEnrichmentStatus} → {o.finalTruthState ?? '?'}
+                          </Badge>
+                        )}
                         {o.wrapperPageDetected && <Badge variant="outline" className="text-[8px] h-3 px-1 border-amber-500/30 text-amber-700">wrapper page</Badge>}
                         {o.attachmentExtractionAttempted && (
                           <Badge variant="outline" className="text-[8px] h-3 px-1 border-blue-500/30 text-blue-700">
@@ -228,9 +233,14 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
                         )}
                         {o.kisCreated > 0 && <span className="text-emerald-600">+{o.kisCreated} KIs</span>}
                         {o.kisActive > 0 && <span className="text-emerald-600">({o.kisActive} active)</span>}
+                        {!o.succeeded && o.kisCreated === 0 && o.attempted && (
+                          <span className="text-destructive">0 KIs extracted</span>
+                        )}
                         {o.error && <span className="text-destructive truncate max-w-[200px]">{o.error}</span>}
-                        {o.originalJobStatus && (
-                          <span className="text-muted-foreground/70">was: {o.originalJobStatus}</span>
+                        {o.rootCauseCategory && !o.succeeded && (
+                          <span className="text-muted-foreground/70 italic">
+                            {ROOT_CAUSE_LABELS[(o.rootCauseCategory as RootCauseCategory)] ?? o.rootCauseCategory}
+                          </span>
                         )}
                       </div>
                     </div>
