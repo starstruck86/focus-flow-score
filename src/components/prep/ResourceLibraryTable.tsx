@@ -71,6 +71,9 @@ interface ResourceLibraryTableProps {
   onAction: (action: string, resource: Resource) => void;
   onBulkAction?: (action: string, resourceIds: string[]) => void;
   audioJobsMap?: Map<string, AudioJobRecord>;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+  lastFixResult?: import('@/lib/fixAllAutoBlockers').FixAllResult | null;
 }
 
 // ── Health filter type ─────────────────────────────────────
@@ -203,6 +206,9 @@ export function ResourceLibraryTable({
   onAction,
   onBulkAction,
   audioJobsMap,
+  onRefresh,
+  isRefreshing,
+  lastFixResult,
 }: ResourceLibraryTableProps) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
@@ -374,6 +380,10 @@ export function ResourceLibraryTable({
           lifecycleMap={lifecycleMap}
           audioJobsMap={audioJobsMap}
           onFixAllAuto={onBulkAction ? (ids) => onBulkAction('fix_all_auto', ids) : undefined}
+          onFilterChange={(f) => setHealthFilter(f as HealthFilter)}
+          onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
+          lastFixResult={lastFixResult}
         />
       </div>
 

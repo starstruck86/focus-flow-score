@@ -56,14 +56,15 @@ const BLOCKER_PRIORITY: Record<BlockerType, number> = {
   needs_enrichment: 4,
   needs_extraction: 5,
   needs_activation: 6,
-  missing_context: 7,
-  route_low_confidence: 8,
-  route_manual_assist: 9,
-  qa_required: 10,
-  stale_version: 11,
-  downstream_ineligible: 12,
-  audit_mismatch: 13,
-  unknown_processing_state: 14,
+  needs_auth: 7,
+  missing_context: 8,
+  route_low_confidence: 9,
+  route_manual_assist: 10,
+  qa_required: 11,
+  stale_version: 12,
+  downstream_ineligible: 13,
+  audit_mismatch: 14,
+  unknown_processing_state: 15,
 };
 
 const BLOCKER_ICON: Partial<Record<BlockerType, React.ElementType>> = {
@@ -74,6 +75,7 @@ const BLOCKER_ICON: Partial<Record<BlockerType, React.ElementType>> = {
   needs_enrichment: Zap,
   needs_extraction: Zap,
   needs_activation: Activity,
+  needs_auth: Shield,
   missing_context: HelpCircle,
   route_low_confidence: Eye,
   route_manual_assist: Eye,
@@ -92,6 +94,7 @@ const BLOCKER_COLOR: Partial<Record<BlockerType, string>> = {
   needs_enrichment: 'text-amber-600',
   needs_extraction: 'text-amber-600',
   needs_activation: 'text-amber-600',
+  needs_auth: 'text-amber-600',
   missing_context: 'text-amber-600',
   route_low_confidence: 'text-amber-600',
   route_manual_assist: 'text-amber-600',
@@ -118,6 +121,7 @@ function getActionForBlocker(b: Blocker): { label: string; key: string } {
     case 'needs_enrichment': return { label: 'Enrich', key: 'deep_enrich' };
     case 'needs_extraction': return { label: 'Extract', key: 'extract' };
     case 'needs_activation': return { label: 'Activate', key: 'activate' };
+    case 'needs_auth': return { label: 'Add Content', key: 'manual_assist' };
     case 'missing_context': return { label: 'Add Contexts', key: 'repair_contexts' };
     case 'route_low_confidence':
     case 'route_manual_assist': return { label: 'Review', key: 'view' };

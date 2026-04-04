@@ -25,6 +25,7 @@ export type BlockerType =
   | 'needs_enrichment'
   | 'needs_extraction'
   | 'needs_activation'
+  | 'needs_auth'
   | 'missing_context'
   | 'stalled_enrichment'
   | 'stalled_extraction'
@@ -55,6 +56,7 @@ export const BLOCKER_META: Record<BlockerType, { severity: BlockerSeverity; fixa
   needs_enrichment:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'pipeline',       label: 'Needs Enrichment' },
   needs_extraction:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'extraction',     label: 'Needs Extraction' },
   needs_activation:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'activation',     label: 'Needs Activation' },
+  needs_auth:               { severity: 'high',     fixability: 'manual_only',       ownership: 'manual_review',  label: 'Auth Required' },
   missing_context:          { severity: 'medium',   fixability: 'semi_auto_fixable', ownership: 'activation',     label: 'Missing Contexts' },
   stalled_enrichment:       { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'pipeline',       label: 'Stalled Enrichment' },
   stalled_extraction:       { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'extraction',     label: 'Stalled Extraction' },
@@ -153,7 +155,7 @@ export function deriveResourceTruth(
   // ── Auth-gated resources — manual only ───────────────────
   const enrichStatusRaw = enrichStatus as string;
   if (enrichStatusRaw === 'needs_auth' && !isActivelyProcessing) {
-    blockers.push(blocker('route_manual_assist', `Auth-gated content — ${rAny.failure_reason || 'login required'}`));
+    blockers.push(blocker('needs_auth', `Auth-gated content — ${rAny.failure_reason || 'login required'}`));
   }
 
   // ── Enrichment blockers ─────────────────────────────────
@@ -238,8 +240,8 @@ export function deriveResourceTruth(
     readiness_label = 'Processing';
   } else if (hasBlockers) {
     // Distinguish qa_required from blocked
-    const hasQaBlocker = sortedBlockers.some(b => b.type === 'qa_required' || b.type === 'route_low_confidence');
-    const hasOnlyQa = sortedBlockers.every(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'route_manual_assist');
+    const hasQaBlocker = sortedBlockers.some(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'needs_auth');
+    const hasOnlyQa = sortedBlockers.every(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'route_manual_assist' || b.type === 'needs_auth');
     if (hasOnlyQa) {
       truth_state = 'qa_required';
       readiness_label = 'QA Required';
@@ -273,6 +275,9 @@ export function deriveResourceTruth(
         break;
       case 'needs_activation':
         next_required_action = { label: 'Activate', actionKey: 'activate', variant: 'default' };
+        break;
+      case 'needs_auth':
+        next_required_action = { label: 'Add Content', actionKey: 'manual_assist', variant: 'default' };
         break;
       case 'missing_context':
         next_required_action = { label: 'Add Contexts', actionKey: 'repair_contexts', variant: 'outline' };

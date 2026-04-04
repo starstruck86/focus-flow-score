@@ -149,6 +149,7 @@ export function ResourceManager() {
   const [inspectingAudioResource, setInspectingAudioResource] = useState<Resource | null>(null);
   const [manualAssistResource, setManualAssistResource] = useState<Resource | null>(null);
   const [drawerResource, setDrawerResource] = useState<Resource | null>(null);
+  const [lastFixResult, setLastFixResult] = useState<import('@/lib/fixAllAutoBlockers').FixAllResult | null>(null);
 
   // AI Generate / Transform states
   const [showAIGenerate, setShowAIGenerate] = useState(false);
@@ -768,6 +769,12 @@ export function ResourceManager() {
             resources={filteredResources}
             selectedIds={selectedResourceIds}
             audioJobsMap={audioJobsMap}
+            onRefresh={() => {
+              queryClient.invalidateQueries({ queryKey: ['resources'] });
+              queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+              queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+            }}
+            lastFixResult={lastFixResult}
             onToggleSelect={(id) => setSelectedResourceIds(prev => {
               const next = new Set(prev);
               if (next.has(id)) next.delete(id);
@@ -816,6 +823,8 @@ export function ResourceManager() {
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
                     queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
                     queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+
+                    setLastFixResult(result);
 
                     if (result.system_ready) {
                       toast.success(`All ${result.blockers_fixed} blockers resolved!`, {
@@ -890,7 +899,29 @@ export function ResourceManager() {
                   break;
                 }
                 case 'bulk_activate': {
-                  toast.info('Activation runs automatically during extraction');
+                  toast.info(`Activating ${resourceIds.length} resources…`);
+                  try {
+                    const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
+                    const progressStore = useResourceJobProgress.getState();
+                    progressStore.startBatch(resourceIds, 'activate');
+                    const results = await autoOperationalizeBatch(resourceIds, undefined, async (resourceId, phase, result) => {
+                      const store = useResourceJobProgress.getState();
+                      if (phase === 'start') store.markRunning(resourceId, result?.resourceTitle);
+                      else if (phase === 'done') {
+                        if (result?.success) store.markDone(resourceId, `${result.knowledgeActivated ?? 0} activated`);
+                        else store.markFailed(resourceId, result?.reason);
+                      }
+                    });
+                    useResourceJobProgress.getState().endBatch();
+                    queryClient.invalidateQueries({ queryKey: ['resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+                    const totalActivated = results.reduce((s, r) => s + (r.knowledgeActivated ?? 0), 0);
+                    toast.success(`Activated ${totalActivated} KIs across ${results.filter(r => (r.knowledgeActivated ?? 0) > 0).length} resources`);
+                  } catch (err: any) {
+                    useResourceJobProgress.getState().endBatch();
+                    toast.error('Bulk activation failed', { description: err?.message });
+                  }
                   break;
                 }
               }
@@ -1297,7 +1328,18 @@ export function ResourceManager() {
                 }
                 case 'bulk_activate':
                 case 'bulk_activate_filtered': {
-                  toast.info('Activation runs automatically during extraction');
+                  toast.info('Activating resource…');
+                  try {
+                    const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
+                    const results = await autoOperationalizeBatch([resource.id]);
+                    queryClient.invalidateQueries({ queryKey: ['resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+                    const totalActivated = results.reduce((s, r) => s + (r.knowledgeActivated ?? 0), 0);
+                    toast.success(`Activated ${totalActivated} KIs`);
+                  } catch (err: any) {
+                    toast.error('Activation failed', { description: err?.message });
+                  }
                   break;
                 }
                 case 'bulk_tag':
