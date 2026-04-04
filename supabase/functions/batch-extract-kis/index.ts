@@ -67,6 +67,19 @@ interface AttemptRecord {
   duration_ms: number;
   started_at: string;
   completed_at: string;
+  confidence_score?: number;
+  validation_loss_pct?: number;
+  dedup_loss_pct?: number;
+}
+
+/** Compute a 0-1 confidence score for an extraction attempt */
+function computeAttemptConfidence(kiCount: number, minFloor: number, rawCount: number, validatedCount: number, dedupedCount: number): number {
+  if (kiCount === 0 || rawCount === 0) return 0;
+  const floorRatio = Math.min(kiCount / Math.max(minFloor, 1), 2) / 2; // 0-1, capped at 2x floor
+  const valLoss = rawCount > 0 ? (rawCount - validatedCount) / rawCount : 0;
+  const dedLoss = validatedCount > 0 ? (validatedCount - dedupedCount) / validatedCount : 0;
+  const qualityScore = 1 - (valLoss * 0.5 + dedLoss * 0.3); // lower loss = higher quality
+  return Math.round(Math.max(0, Math.min(1, (floorRatio * 0.4 + qualityScore * 0.6))) * 100) / 100;
 }
 
 function buildAttemptRecord(opts: {
@@ -82,6 +95,8 @@ function buildAttemptRecord(opts: {
   durationMs: number;
   startedAt: string;
 }): AttemptRecord {
+  const valLossPct = opts.rawItemCount > 0 ? Math.round(((opts.rawItemCount - opts.validatedCount) / opts.rawItemCount) * 100) : 0;
+  const dedLossPct = opts.validatedCount > 0 ? Math.round(((opts.validatedCount - opts.dedupedCount) / opts.validatedCount) * 100) : 0;
   return {
     attempt_number: opts.attemptNumber,
     strategy: opts.strategy,
@@ -96,6 +111,9 @@ function buildAttemptRecord(opts: {
     duration_ms: opts.durationMs,
     started_at: opts.startedAt,
     completed_at: new Date().toISOString(),
+    confidence_score: computeAttemptConfidence(opts.kiCount, opts.minKiFloor, opts.rawItemCount, opts.validatedCount, opts.dedupedCount),
+    validation_loss_pct: valLossPct,
+    dedup_loss_pct: dedLossPct,
   };
 }
 
