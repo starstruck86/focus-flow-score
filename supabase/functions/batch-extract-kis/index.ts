@@ -1450,17 +1450,25 @@ Deno.serve(async (req) => {
       log.outcome = 'insert_failed';
       log.error = insertError.message;
       await saveExtractionLog(supabase, log);
-      const priorStrategies1 = reconstructPriorStrategies(attemptNumber, resource);
+
+      // Append attempt record for insert failure
+      const thisAttempt = buildAttemptRecord({
+        attemptNumber, strategy, kiCount: 0, rawItemCount: rawItems.length,
+        validatedCount: validated.length, dedupedCount: deduped.length,
+        minKiFloor, failureType: 'transient_error', status: 'extraction_failed', durationMs, startedAt,
+      });
+      const updatedHistory = [...attemptHistory, thisAttempt];
+      const audit = buildAuditFromHistory(updatedHistory, 'extraction_failed', resource.content.length, isLesson);
+
       await updateExtractionStatus(supabase, resourceId, 'extraction_failed', {
         extraction_attempt_count: attemptNumber,
         extraction_failure_type: 'transient_error',
         extractor_strategy: strategy,
         extraction_retry_eligible: attemptNumber < maxAttempts,
-        extraction_audit_summary: buildAuditSummary({
-          attemptNumber, currentStrategy: strategy, previousStrategies: priorStrategies1,
-          kiCount: 0, minKiFloor, finalStatus: 'extraction_failed', failureType: 'transient_error',
-          durationMs, contentLength: resource.content.length, isLesson,
-        }),
+        extraction_attempt_history: updatedHistory,
+        next_retry_at: null,
+        retry_scheduled_at: null,
+        ...(audit ? { extraction_audit_summary: audit } : {}),
       });
       return respond({ resourceId, title: resource.title, kis: 0, error: `Insert failed: ${insertError.message}`, log });
     }
@@ -1469,17 +1477,25 @@ Deno.serve(async (req) => {
     log.insertedCount = rows.length;
     log.outcome = 'success';
     await saveExtractionLog(supabase, log);
-    const priorStrategies2 = reconstructPriorStrategies(attemptNumber, resource);
+
+    // Append final success attempt record
+    const successAttempt = buildAttemptRecord({
+      attemptNumber, strategy, kiCount: rows.length, rawItemCount: rawItems.length,
+      validatedCount: validated.length, dedupedCount: deduped.length,
+      minKiFloor, failureType: null, status: 'extracted', durationMs, startedAt,
+    });
+    const finalHistory = [...attemptHistory, successAttempt];
+    const successAudit = buildAuditFromHistory(finalHistory, 'extracted', resource.content.length, isLesson);
+
     await updateExtractionStatus(supabase, resourceId, 'extracted', {
       extraction_attempt_count: attemptNumber,
       extraction_failure_type: null,
       extractor_strategy: strategy,
       extraction_retry_eligible: false,
-      extraction_audit_summary: buildAuditSummary({
-        attemptNumber, currentStrategy: strategy, previousStrategies: priorStrategies2,
-        kiCount: rows.length, minKiFloor, finalStatus: 'extracted', failureType: null,
-        durationMs, contentLength: resource.content.length, isLesson,
-      }),
+      extraction_attempt_history: finalHistory,
+      next_retry_at: null,
+      retry_scheduled_at: null,
+      ...(successAudit ? { extraction_audit_summary: successAudit } : {}),
     });
 
     logTelemetry({
