@@ -772,6 +772,26 @@ export function ResourceLibraryTable({
           );
         })()}
       </div>
+
+      {/* Mobile Inspect Sheet */}
+      {isMobile && (
+        <Sheet open={!!mobileInspectId} onOpenChange={(open) => { if (!open) setMobileInspectId(null); }}>
+          <SheetContent side="bottom" className="h-[85vh] p-0 overflow-y-auto rounded-t-xl">
+            <SheetTitle className="sr-only">Resource Inspector</SheetTitle>
+            {mobileInspectId && (() => {
+              const inspectResource = resources.find(r => r.id === mobileInspectId);
+              if (!inspectResource) return null;
+              return (
+                <ResourceInspectPanel
+                  resource={inspectResource}
+                  onClose={() => setMobileInspectId(null)}
+                  onAction={onAction}
+                />
+              );
+            })()}
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 }
