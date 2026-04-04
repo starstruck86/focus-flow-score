@@ -76,8 +76,8 @@ interface ResourceLibraryTableProps {
   onRefresh?: () => void;
   isRefreshing?: boolean;
   lastFixResult?: import('@/lib/fixAllAutoBlockers').FixAllResult | null;
-  /** Live fix-all progress message */
-  fixAllProgressMessage?: string | null;
+  /** Live fix-all progress */
+  fixAllLiveProgress?: import('@/lib/fixAllProgress').FixAllLiveProgress | null;
   /** Is fix-all currently running? */
   isFixAllRunning?: boolean;
 }
@@ -216,7 +216,7 @@ export function ResourceLibraryTable({
   onRefresh,
   isRefreshing,
   lastFixResult,
-  fixAllProgressMessage,
+  fixAllLiveProgress,
   isFixAllRunning,
 }: ResourceLibraryTableProps) {
   const [search, setSearch] = useState('');
@@ -445,9 +445,10 @@ export function ResourceLibraryTable({
       {(isFixAllRunning || lastFixResult) && (
         <div className="shrink-0 mb-2">
           <FixAllProgressPanel
-            progressMessage={fixAllProgressMessage}
+            progress={fixAllLiveProgress ?? null}
             isRunning={!!isFixAllRunning}
-            result={lastFixResult}
+            result={lastFixResult ?? null}
+            onRetryStalled={() => onBulkAction?.('bulk_retry_stalled', [])}
           />
         </div>
       )}

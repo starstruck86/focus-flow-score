@@ -9,6 +9,14 @@ import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { autoOperationalizeBatch } from '@/lib/autoOperationalize';
 import { type BlockerType } from '@/lib/resourceTruthState';
 import { createLogger } from '@/lib/logger';
+import type { FixAllPhaseName } from '@/lib/fixAllProgress';
+
+export interface FixAllCallbacks {
+  onPhaseChange?: (phase: FixAllPhaseName, label: string, message?: string) => void;
+  onItemStart?: (resourceId: string, phase: FixAllPhaseName, message?: string) => void;
+  onItemDone?: (resourceId: string, phase: FixAllPhaseName, message?: string) => void;
+  onItemFailed?: (resourceId: string, phase: FixAllPhaseName, message?: string) => void;
+}
 
 const log = createLogger('FixAllAutoBlockers');
 
@@ -90,19 +98,21 @@ async function clearFailedJobStatus(resourceId: string): Promise<boolean> {
 async function fixStalledJobs(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixPhaseResult> {
   const result: FixPhaseResult = { phase: 'stalled_retry', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
 
   for (const id of resourceIds) {
+    callbacks?.onItemStart?.(id, 'stalled_retry', `Clearing stalled job: ${id.slice(0, 8)}…`);
     onProgress?.(`Clearing stalled job: ${id.slice(0, 8)}…`);
     const cleared = await clearStalledJobStatus(id);
     if (!cleared) {
       result.failed++;
       result.errors.push(`Failed to clear stalled status for ${id}`);
+      callbacks?.onItemFailed?.(id, 'stalled_retry');
       continue;
     }
 
-    // Re-enrich after clearing
     try {
       const { data, error } = await invokeEnrichResource(
         { resource_id: id, force: true },
@@ -111,12 +121,15 @@ async function fixStalledJobs(
       if (error) {
         result.failed++;
         result.errors.push(`Enrich failed for ${id}: ${error.message}`);
+        callbacks?.onItemFailed?.(id, 'stalled_retry');
       } else {
         result.succeeded++;
+        callbacks?.onItemDone?.(id, 'stalled_retry');
       }
     } catch (err: any) {
       result.failed++;
       result.errors.push(`Enrich error for ${id}: ${err.message}`);
+      callbacks?.onItemFailed?.(id, 'stalled_retry');
     }
 
     await new Promise(r => setTimeout(r, 500));
@@ -130,11 +143,13 @@ async function fixStalledJobs(
 async function fixNeedsEnrichment(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixPhaseResult> {
   const result: FixPhaseResult = { phase: 'enrichment', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
 
   for (let i = 0; i < resourceIds.length; i++) {
     const id = resourceIds[i];
+    callbacks?.onItemStart?.(id, 'enrichment', `Enriching ${i + 1}/${resourceIds.length}`);
     onProgress?.(`Enriching ${i + 1}/${resourceIds.length}`);
     try {
       const { data, error } = await invokeEnrichResource(
@@ -144,12 +159,15 @@ async function fixNeedsEnrichment(
       if (error) {
         result.failed++;
         result.errors.push(`${id}: ${error.message}`);
+        callbacks?.onItemFailed?.(id, 'enrichment');
       } else {
         result.succeeded++;
+        callbacks?.onItemDone?.(id, 'enrichment');
       }
     } catch (err: any) {
       result.failed++;
       result.errors.push(`${id}: ${err.message}`);
+      callbacks?.onItemFailed?.(id, 'enrichment');
     }
     await new Promise(r => setTimeout(r, 800));
   }
@@ -163,25 +181,40 @@ async function fixNeedsExtraction(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixPhaseResult> {
   const result: FixPhaseResult = { phase: 'extraction', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
 
   if (resourceIds.length === 0) return result;
 
   onProgress?.(`Extracting ${resourceIds.length} resources`);
+  // Emit per-item start for all extraction items upfront
+  for (const id of resourceIds) {
+    callbacks?.onItemStart?.(id, 'extraction');
+  }
   try {
-    const results = await autoOperationalizeBatch(resourceIds, undefined, onResourcePhase);
+    const results = await autoOperationalizeBatch(resourceIds, undefined, (resourceId, phase, res) => {
+      onResourcePhase?.(resourceId, phase, res);
+      if (phase === 'done') {
+        const matched = results; // not available yet — use callback below
+      }
+    });
     for (const r of results) {
       if (r.knowledgeExtracted > 0 || r.operationalized) {
         result.succeeded++;
+        callbacks?.onItemDone?.(r.resourceId, 'extraction');
       } else {
         result.failed++;
         result.errors.push(`${r.resourceId}: ${r.reason || 'no KIs extracted'}`);
+        callbacks?.onItemFailed?.(r.resourceId, 'extraction');
       }
     }
   } catch (err: any) {
     result.failed += resourceIds.length;
     result.errors.push(`Batch extraction failed: ${err.message}`);
+    for (const id of resourceIds) {
+      callbacks?.onItemFailed?.(id, 'extraction');
+    }
   }
 
   return result;
@@ -198,31 +231,38 @@ async function fixNeedsActivation(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixPhaseResult> {
   const result: FixPhaseResult = { phase: 'activation', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
 
   if (resourceIds.length === 0) return result;
 
   onProgress?.(`Activating ${resourceIds.length} resources`);
+  for (const id of resourceIds) {
+    callbacks?.onItemStart?.(id, 'activation');
+  }
   
-  // autoOperationalizeBatch handles activation as part of its pipeline.
-  // For resources that already have KIs, it will skip extraction and go straight to activation.
   try {
     const results = await autoOperationalizeBatch(resourceIds, undefined, onResourcePhase);
     for (const r of results) {
       if (r.knowledgeActivated > 0 || r.operationalized) {
         result.succeeded++;
+        callbacks?.onItemDone?.(r.resourceId, 'activation');
       } else if (r.knowledgeExtracted > 0) {
-        // Extracted but not activated — still progress
         result.succeeded++;
+        callbacks?.onItemDone?.(r.resourceId, 'activation');
       } else {
         result.failed++;
         result.errors.push(`${r.resourceId}: ${r.reason || 'activation failed'}`);
+        callbacks?.onItemFailed?.(r.resourceId, 'activation');
       }
     }
   } catch (err: any) {
     result.failed += resourceIds.length;
     result.errors.push(`Batch activation failed: ${err.message}`);
+    for (const id of resourceIds) {
+      callbacks?.onItemFailed?.(id, 'activation');
+    }
   }
 
   return result;
@@ -237,12 +277,12 @@ async function fixNeedsActivation(
 async function normalizeStaleStatuses(
   resourceIds: string[],
   onProgress?: (msg: string) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixPhaseResult> {
   const result: FixPhaseResult = { phase: 'normalize_status', attempted: 0, succeeded: 0, failed: 0, errors: [] };
 
   if (resourceIds.length === 0) return result;
 
-  // Check which of these resources actually have KIs
   const { data: kiCounts } = await supabase
     .from('knowledge_items' as any)
     .select('source_resource_id')
@@ -254,12 +294,11 @@ async function normalizeStaleStatuses(
     if (!resourcesWithKIs.has(id)) continue;
     result.attempted++;
     
+    callbacks?.onItemStart?.(id, 'normalize_status', `Normalizing status for ${id.slice(0, 8)}…`);
     onProgress?.(`Normalizing status for ${id.slice(0, 8)}…`);
     
-    // Resource has KIs — clear the failed/retrying status
     const cleared = await clearFailedJobStatus(id);
     if (cleared) {
-      // Also update enrichment_status if stuck in extraction_retrying
       const { error } = await supabase
         .from('resources' as any)
         .update({
@@ -270,13 +309,16 @@ async function normalizeStaleStatuses(
       
       if (!error) {
         result.succeeded++;
+        callbacks?.onItemDone?.(id, 'normalize_status');
       } else {
         result.failed++;
         result.errors.push(`${id}: status update failed`);
+        callbacks?.onItemFailed?.(id, 'normalize_status');
       }
     } else {
       result.failed++;
       result.errors.push(`${id}: clear failed`);
+      callbacks?.onItemFailed?.(id, 'normalize_status');
     }
   }
 
@@ -292,6 +334,7 @@ export async function runFixAllAutoBlockers(
   blockerGroups: BlockerGroup[],
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixAllResult> {
   const phases: FixPhaseResult[] = [];
   const totalBefore = blockerGroups.reduce((s, g) => s + g.resourceIds.length, 0);
@@ -304,11 +347,12 @@ export async function runFixAllAutoBlockers(
     groupMap.set(g.type, existing);
   }
 
-  // Phase 0: Normalize stale statuses (extraction_retrying with KIs, failed with KIs)
+  // Phase 0: Normalize stale statuses
   const allIds = blockerGroups.flatMap(g => g.resourceIds);
   if (allIds.length > 0) {
+    callbacks?.onPhaseChange?.('normalize_status', 'Normalizing statuses', 'Normalizing stale statuses…');
     onProgress?.('Normalizing stale statuses…');
-    const normalizeResult = await normalizeStaleStatuses(allIds, onProgress);
+    const normalizeResult = await normalizeStaleStatuses(allIds, onProgress, callbacks);
     if (normalizeResult.attempted > 0) phases.push(normalizeResult);
   }
 
@@ -318,8 +362,9 @@ export async function runFixAllAutoBlockers(
     ...(groupMap.get('stalled_enrichment') ?? []),
   ];
   if (stalledIds.length > 0) {
+    callbacks?.onPhaseChange?.('stalled_retry', 'Retrying stalled jobs', `Retrying ${stalledIds.length} stalled jobs…`);
     onProgress?.(`Retrying ${stalledIds.length} stalled jobs…`);
-    const stalledResult = await fixStalledJobs(stalledIds, onProgress);
+    const stalledResult = await fixStalledJobs(stalledIds, onProgress, callbacks);
     phases.push(stalledResult);
   }
 
@@ -330,24 +375,27 @@ export async function runFixAllAutoBlockers(
     ...(groupMap.get('stale_version') ?? []),
   ];
   if (enrichIds.length > 0) {
+    callbacks?.onPhaseChange?.('enrichment', 'Enriching resources', `Enriching ${enrichIds.length} resources…`);
     onProgress?.(`Enriching ${enrichIds.length} resources…`);
-    const enrichResult = await fixNeedsEnrichment(enrichIds, onProgress);
+    const enrichResult = await fixNeedsEnrichment(enrichIds, onProgress, callbacks);
     phases.push(enrichResult);
   }
 
   // Phase 3: Extract
   const extractIds = groupMap.get('needs_extraction') ?? [];
   if (extractIds.length > 0) {
+    callbacks?.onPhaseChange?.('extraction', 'Extracting knowledge items', `Extracting ${extractIds.length} resources…`);
     onProgress?.(`Extracting ${extractIds.length} resources…`);
-    const extractResult = await fixNeedsExtraction(extractIds, onProgress, onResourcePhase);
+    const extractResult = await fixNeedsExtraction(extractIds, onProgress, onResourcePhase, callbacks);
     phases.push(extractResult);
   }
 
-  // Phase 4: Activate (dedicated path, not re-extraction)
+  // Phase 4: Activate
   const activateIds = groupMap.get('needs_activation') ?? [];
   if (activateIds.length > 0) {
+    callbacks?.onPhaseChange?.('activation', 'Activating knowledge items', `Activating ${activateIds.length} resources…`);
     onProgress?.(`Activating ${activateIds.length} resources…`);
-    const activateResult = await fixNeedsActivation(activateIds, onProgress, onResourcePhase);
+    const activateResult = await fixNeedsActivation(activateIds, onProgress, onResourcePhase, callbacks);
     phases.push(activateResult);
   }
 
