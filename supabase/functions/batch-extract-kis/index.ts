@@ -1186,9 +1186,11 @@ Deno.serve(async (req) => {
     const decodedContent = decodeHTMLEntities(resource.content);
     const decodedTitle = decodeHTMLEntities(resource.title);
     const isLesson = isStructuredLesson(decodedContent, decodedTitle, resource.resource_type);
+    const isDenseContent = !isLesson && isDenseTeachingContent(decodedContent, decodedTitle);
+    const densitySignals = computeDensitySignals(decodedContent, decodedTitle);
     const routingBasis = isLesson
       ? (decodedContent.indexOf(LESSON_TRANSCRIPT_MARKER) > 500 ? 'transcript_marker' : 'course_title_pattern')
-      : (isTranscriptType(resource.resource_type) ? 'transcript_type' : 'standard');
+      : isDenseContent ? 'dense_teaching' : (isTranscriptType(resource.resource_type) ? 'transcript_type' : 'standard');
     let rawItems: any[];
     let rawResponse: string | null = null;
 
