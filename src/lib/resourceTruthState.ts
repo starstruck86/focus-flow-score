@@ -148,6 +148,8 @@ export function deriveResourceTruth(
     blockers.push(blocker('missing_content', 'Content length < 200 chars and no manual content'));
   }
 
+  const enrichStatus = resource.enrichment_status ?? '';
+
   // ── Auth-gated resources — manual only ───────────────────
   if (enrichStatus === 'needs_auth' && !isActivelyProcessing) {
     blockers.push(blocker('route_manual_assist', `Auth-gated content — ${rAny.failure_reason || 'login required'}`));
