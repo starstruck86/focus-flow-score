@@ -380,6 +380,10 @@ export function ResourceLibraryTable({
           lifecycleMap={lifecycleMap}
           audioJobsMap={audioJobsMap}
           onFixAllAuto={onBulkAction ? (ids) => onBulkAction('fix_all_auto', ids) : undefined}
+          onFilterChange={(f) => setHealthFilter(f as HealthFilter)}
+          onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
+          lastFixResult={lastFixResult}
         />
       </div>
 
