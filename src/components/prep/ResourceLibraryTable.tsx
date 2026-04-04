@@ -69,6 +69,7 @@ interface ResourceLibraryTableProps {
   onToggleSelectAll: () => void;
   onResourceClick: (resource: Resource) => void;
   onAction: (action: string, resource: Resource) => void;
+  onBulkAction?: (action: string, resourceIds: string[]) => void;
   audioJobsMap?: Map<string, AudioJobRecord>;
 }
 
@@ -200,6 +201,7 @@ export function ResourceLibraryTable({
   onToggleSelectAll,
   onResourceClick,
   onAction,
+  onBulkAction,
   audioJobsMap,
 }: ResourceLibraryTableProps) {
   const [search, setSearch] = useState('');
@@ -371,6 +373,7 @@ export function ResourceLibraryTable({
           resources={resources}
           lifecycleMap={lifecycleMap}
           audioJobsMap={audioJobsMap}
+          onFixAllAuto={onBulkAction ? (ids) => onBulkAction('fix_all_auto', ids) : undefined}
         />
       </div>
 
@@ -402,6 +405,7 @@ export function ResourceLibraryTable({
           lifecycleMap={lifecycleMap}
           audioJobsMap={audioJobsMap}
           onAction={onAction}
+          onBulkAction={onBulkAction}
           onInspect={(r) => isMobile ? setMobileInspectId(r.id) : setExpandedId(r.id)}
         />
       </div>

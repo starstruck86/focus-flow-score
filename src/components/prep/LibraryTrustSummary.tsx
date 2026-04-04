@@ -6,7 +6,8 @@
  */
 import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, AlertTriangle, Shield } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CheckCircle2, AlertTriangle, Shield, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { deriveResourceTruth, deriveLibraryReadiness, type LibraryReadiness } from '@/lib/resourceTruthState';
 import type { Resource } from '@/hooks/useResources';
@@ -16,6 +17,7 @@ interface Props {
   resources: Resource[];
   lifecycleMap: Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>;
   audioJobsMap?: Map<string, AudioJobRecord>;
+  onFixAllAuto?: (resourceIds: string[]) => void;
 }
 
 function getStatusInfo(r: LibraryReadiness): { label: string; reason: string } {
@@ -49,13 +51,20 @@ function getStatusInfo(r: LibraryReadiness): { label: string; reason: string } {
   return { label: 'System Not Ready', reason: 'Unknown blockers remain.' };
 }
 
-export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap }: Props) {
-  const readiness = useMemo<LibraryReadiness>(() => {
+export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap, onFixAllAuto }: Props) {
+  const { readiness, autoFixableIds } = useMemo(() => {
     const truths = resources.map(r => {
       const lc = lifecycleMap.get(r.id);
       return deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
     });
-    return deriveLibraryReadiness(truths);
+    const rd = deriveLibraryReadiness(truths);
+    const ids: string[] = [];
+    truths.forEach((t, i) => {
+      if (t.all_blockers.some(b => b.fixability === 'auto_fixable' || b.fixability === 'semi_auto_fixable')) {
+        ids.push(resources[i].id);
+      }
+    });
+    return { readiness: rd, autoFixableIds: ids };
   }, [resources, lifecycleMap, audioJobsMap]);
 
   if (readiness.total_resources === 0) return null;
@@ -113,6 +122,21 @@ export function LibraryTrustSummary({ resources, lifecycleMap, audioJobsMap }: P
           <span className="text-muted-foreground">{readiness.manual_only_blocker_count} manual</span>
         )}
       </div>
+
+      {/* Fix All Auto-Fixable action */}
+      {!readiness.system_ready && autoFixableIds.length > 0 && onFixAllAuto && (
+        <div className="px-3 pb-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1.5 w-full"
+            onClick={() => onFixAllAuto(autoFixableIds)}
+          >
+            <Zap className="h-3 w-3" />
+            Fix {autoFixableIds.length} auto-fixable blockers
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

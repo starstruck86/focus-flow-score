@@ -43,6 +43,7 @@ interface Props {
   lifecycleMap: Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>;
   audioJobsMap?: Map<string, AudioJobRecord>;
   onAction: (action: string, resource: Resource) => void;
+  onBulkAction?: (action: string, resourceIds: string[]) => void;
   onInspect: (resource: Resource) => void;
 }
 
@@ -104,6 +105,8 @@ const BULK_ACTIONS: Partial<Record<BlockerType, { label: string; key: string }>>
   needs_activation: { label: 'Activate All', key: 'bulk_activate' },
   missing_content: { label: 'Re-enrich All', key: 'bulk_re_enrich' },
   stale_version: { label: 'Re-enrich All', key: 'bulk_re_enrich' },
+  stalled_extraction: { label: 'Retry All', key: 'bulk_retry_stalled' },
+  stalled_enrichment: { label: 'Retry All', key: 'bulk_retry_stalled' },
 };
 
 function getActionForBlocker(b: Blocker): { label: string; key: string } {
@@ -126,7 +129,7 @@ function getActionForBlocker(b: Blocker): { label: string; key: string } {
   }
 }
 
-export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onAction, onInspect }: Props) {
+export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onAction, onBulkAction, onInspect }: Props) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     new Set(['contradictory_state', 'stalled_extraction', 'stalled_enrichment', 'missing_content', 'needs_extraction'])
   );
@@ -232,8 +235,21 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
           {urgentCount > 0 && (
             <span className="text-destructive font-medium">{urgentCount} urgent</span>
           )}
-          {fixableCount > 0 && (
-            <span>· {fixableCount} auto-fixable</span>
+          {fixableCount > 0 && onBulkAction && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-5 text-[9px] px-2 gap-1"
+              onClick={() => {
+                const autoFixableIds = groups
+                  .flatMap(g => g.items.filter(i => i.bulkEligible))
+                  .map(i => i.resource.id);
+                if (autoFixableIds.length > 0) onBulkAction('fix_all_auto', autoFixableIds);
+              }}
+            >
+              <Zap className="h-2.5 w-2.5" />
+              Fix {fixableCount} auto-fixable
+            </Button>
           )}
         </div>
       </div>
@@ -265,7 +281,14 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
                           size="sm"
                           variant="outline"
                           className="h-6 text-[10px] px-2"
-                          onClick={() => onAction(group.bulkActionKey!, group.items[0].resource)}
+                          onClick={() => {
+                            const ids = group.items.filter(i => i.bulkEligible).map(i => i.resource.id);
+                            if (onBulkAction && ids.length > 0) {
+                              onBulkAction(group.bulkActionKey!, ids);
+                            } else {
+                              onAction(group.bulkActionKey!, group.items[0].resource);
+                            }
+                          }}
                         >
                           {group.bulkActionLabel}
                         </Button>
