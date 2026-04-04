@@ -164,6 +164,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       const routeCtx = `${PIPELINE_LABELS[route.pipeline]} · ${EXTRACTION_METHOD_LABELS[route.extraction_method]}`;
       const action = getActionForBlocker(primaryBlocker);
       const rootCause = diagnoseRootCause(r, truth);
+      const dossier = buildFailureDossier(r, truth);
 
       const item: QueueItem = {
         resource: r,
@@ -176,6 +177,7 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
         hasOverride: route.has_override,
         routeContext: route.confidence !== 'high' ? routeCtx : null,
         rootCause,
+        dossier,
       };
 
       if (!buckets.has(primaryBlocker.type)) buckets.set(primaryBlocker.type, []);
