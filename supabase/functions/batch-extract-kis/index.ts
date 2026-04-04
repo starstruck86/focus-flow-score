@@ -953,7 +953,7 @@ Deno.serve(async (req) => {
         duration_ms: Date.now() - startTime, routing_basis: routingBasis,
       });
 
-      // Update with retry tracking
+      // Update with retry tracking + auto-retry
       const retryEligible = attemptNumber < maxAttempts && failureType !== 'structural_failure';
       const newStatus = retryEligible ? 'extraction_retrying' : 'extraction_requires_review';
 
@@ -964,6 +964,11 @@ Deno.serve(async (req) => {
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
         });
+
+        // Auto-retry: fire-and-forget next attempt
+        if (retryEligible) {
+          scheduleRetry(supabaseUrl, serviceRoleKey, resourceId);
+        }
       }
 
       return respond({
