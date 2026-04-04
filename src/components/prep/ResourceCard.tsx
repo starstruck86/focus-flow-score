@@ -24,6 +24,7 @@ import { deriveProcessingState } from '@/lib/processingState';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import { routeFailure, getFailureBucketActions } from '@/lib/failureRouting';
+import { deriveProcessingRoute, getRouteLabel } from '@/lib/processingRoute';
 
 interface Props {
   resource: Resource;
