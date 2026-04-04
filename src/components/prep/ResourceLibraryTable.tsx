@@ -72,14 +72,18 @@ interface ResourceLibraryTableProps {
 type HealthFilter = 'all' | 'ready' | 'improving' | 'blocked' | 'failed' | 'missing_content' | 'needs_extraction' | 'needs_review';
 
 // ── Spot check presets ─────────────────────────────────────
-type SpotCheck = 'none' | 'recent' | 'failed' | 'low_yield' | 'random';
+type SpotCheck = 'none' | 'recent' | 'failed' | 'low_yield' | 'random' | 'high_signal' | 'limited_readiness' | 'random_ready' | 'random_lessons';
 
 const SPOT_CHECK_LABELS: Record<SpotCheck, string> = {
   none: 'All',
-  recent: 'Recent',
+  recent: 'Recent Uploads',
   failed: 'Failed',
   low_yield: 'Low Yield',
-  random: 'Random Sample',
+  random: 'Random 10',
+  high_signal: 'High Signal',
+  limited_readiness: 'Limited Readiness',
+  random_ready: 'Random 5 Ready',
+  random_lessons: 'Random 5 Lessons',
 };
 
 // ── Collection grouping ────────────────────────────────────
