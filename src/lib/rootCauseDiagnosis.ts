@@ -24,6 +24,7 @@ export type RootCauseCategory =
   | 'auth_required'
   | 'missing_content'
   | 'contradictory_state'
+  | 'reference_only'
   | 'unknown';
 
 export type SourceLayer =
