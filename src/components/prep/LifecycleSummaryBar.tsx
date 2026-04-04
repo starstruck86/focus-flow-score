@@ -61,7 +61,7 @@ export const LifecycleSummaryBar = memo(function LifecycleSummaryBar({ summary: 
         <span className="text-border">·</span>
         <span>{summary.with_knowledge} with knowledge</span>
         <span className="text-border">·</span>
-        <span className="text-emerald-600 font-medium">{summary.operationalized} ready to use</span>
+        <span className="text-emerald-600 font-medium">{summary.operationalized} operationalized</span>
         {totalBlocked > 0 && (
           <>
             <span className="text-border">·</span>
@@ -81,7 +81,7 @@ export const LifecycleSummaryBar = memo(function LifecycleSummaryBar({ summary: 
         <StageStat label="Content" value={summary.content_ready} color="text-amber-600" />
         <StageStat label="With Knowledge" value={summary.with_knowledge} color="text-blue-600" />
         <StageStat label="Activated" value={summary.activated} color="text-emerald-600" />
-        <StageStat label="Ready to Use" value={summary.operationalized} color="text-emerald-600" />
+        <StageStat label="Operationalized" value={summary.operationalized} color="text-emerald-600" />
       </div>
 
       {/* Blocked breakdown */}
