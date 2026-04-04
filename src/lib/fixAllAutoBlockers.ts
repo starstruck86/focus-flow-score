@@ -39,6 +39,9 @@ export interface FixResourceOutcome {
   finalTruthState: string | null;
   finalBlocker: string | null;
   error: string | null;
+  rootCauseCategory: string | null;
+  rootCauseExplanation: string | null;
+  resolutionOutcome: string | null;
 }
 
 export interface BlockerDiff {
