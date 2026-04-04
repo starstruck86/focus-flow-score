@@ -75,6 +75,7 @@ const BLOCKER_ICON: Partial<Record<BlockerType, React.ElementType>> = {
   needs_enrichment: Zap,
   needs_extraction: Zap,
   needs_activation: Activity,
+  needs_auth: Shield,
   missing_context: HelpCircle,
   route_low_confidence: Eye,
   route_manual_assist: Eye,
