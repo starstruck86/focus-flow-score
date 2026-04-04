@@ -401,6 +401,11 @@ export function CatchupDashboard() {
               {snapshot.qa_flagged} QA flagged
             </span>
           )}
+          {(snapshot?.low_confidence_routes || 0) > 0 && (
+            <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 text-amber-600 font-medium border border-amber-500/15">
+              <AlertTriangle className="h-2.5 w-2.5" /> {snapshot.low_confidence_routes} low-confidence routes
+            </span>
+          )}
           {backfilled > 0 && (
             <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted text-muted-foreground border border-border/50">
               <RotateCcw className="h-2.5 w-2.5" /> {backfilled} repaired
