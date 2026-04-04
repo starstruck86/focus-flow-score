@@ -28,6 +28,27 @@ export interface FixPhaseResult {
   errors: string[];
 }
 
+export interface FixResourceOutcome {
+  resourceId: string;
+  resourceTitle: string;
+  phase: string;
+  attempted: boolean;
+  succeeded: boolean;
+  kisCreated: number;
+  kisActive: number;
+  finalTruthState: string | null;
+  finalBlocker: string | null;
+  error: string | null;
+}
+
+export interface BlockerDiff {
+  type: string;
+  before: number;
+  after: number;
+  resolved: number;
+  unchanged: number;
+}
+
 export interface FixAllResult {
   phases: FixPhaseResult[];
   blockers_before: number;
@@ -36,6 +57,10 @@ export interface FixAllResult {
   blockers_failed: number;
   system_ready: boolean;
   reason: string;
+  /** Per-resource outcomes for transparency */
+  resourceOutcomes: FixResourceOutcome[];
+  /** Before/after blocker diff by type */
+  blockerDiff: BlockerDiff[];
 }
 
 interface BlockerGroup {
@@ -339,6 +364,38 @@ export async function runFixAllAutoBlockers(
   const phases: FixPhaseResult[] = [];
   const totalBefore = blockerGroups.reduce((s, g) => s + g.resourceIds.length, 0);
 
+  // Capture before-snapshot of blocker types
+  const beforeByType: Record<string, number> = {};
+  for (const g of blockerGroups) {
+    beforeByType[g.type] = (beforeByType[g.type] ?? 0) + g.resourceIds.length;
+  }
+
+  // Track per-resource outcomes
+  const outcomeMap = new Map<string, FixResourceOutcome>();
+  const initOutcome = (id: string, phase: string, blockerType: string) => {
+    if (!outcomeMap.has(id)) {
+      outcomeMap.set(id, {
+        resourceId: id,
+        resourceTitle: id.slice(0, 8),
+        phase,
+        attempted: false,
+        succeeded: false,
+        kisCreated: 0,
+        kisActive: 0,
+        finalTruthState: null,
+        finalBlocker: blockerType,
+        error: null,
+      });
+    }
+  };
+
+  // Initialize outcomes for all resources
+  for (const g of blockerGroups) {
+    for (const id of g.resourceIds) {
+      initOutcome(id, g.type, g.type);
+    }
+  }
+
   // Group by type
   const groupMap = new Map<BlockerType, string[]>();
   for (const g of blockerGroups) {
@@ -403,6 +460,61 @@ export async function runFixAllAutoBlockers(
   const totalFailed = phases.reduce((s, p) => s + p.failed, 0);
   const blockersAfter = totalBefore - totalSucceeded;
 
+  // Build blocker diff
+  const afterByType: Record<string, number> = {};
+  for (const [type, count] of Object.entries(beforeByType)) {
+    const phase = phases.find(p => {
+      const phaseToBlocker: Record<string, string[]> = {
+        normalize_status: [],
+        stalled_retry: ['stalled_extraction', 'stalled_enrichment'],
+        enrichment: ['needs_enrichment', 'missing_content', 'stale_version'],
+        extraction: ['needs_extraction'],
+        activation: ['needs_activation'],
+      };
+      return phaseToBlocker[p.phase]?.includes(type);
+    });
+    const resolved = phase ? phase.succeeded : 0;
+    afterByType[type] = Math.max(0, count - resolved);
+  }
+
+  const blockerDiff: BlockerDiff[] = Object.entries(beforeByType).map(([type, before]) => {
+    const after = afterByType[type] ?? before;
+    return {
+      type,
+      before,
+      after,
+      resolved: before - after,
+      unchanged: after,
+    };
+  });
+
+  // Mark outcomes based on phase results
+  for (const phase of phases) {
+    for (const err of phase.errors) {
+      // Try to extract resource ID from error string
+      const idMatch = err.match(/^([a-f0-9-]{8,36}):/);
+      if (idMatch) {
+        const outcome = outcomeMap.get(idMatch[1]);
+        if (outcome) {
+          outcome.attempted = true;
+          outcome.error = err.replace(`${idMatch[1]}: `, '');
+        }
+      }
+    }
+  }
+
+  // Build reason with blocker diff callout
+  const unchangedExtraction = blockerDiff.find(d => d.type === 'needs_extraction' && d.unchanged > 0);
+  let reason: string;
+  if (blockersAfter <= 0) {
+    reason = 'All auto-fixable blockers resolved';
+  } else {
+    reason = `${blockersAfter} blockers remain — ${totalFailed} failed during this run`;
+    if (unchangedExtraction && unchangedExtraction.unchanged > 0) {
+      reason += `. Extraction: ${unchangedExtraction.unchanged}/${unchangedExtraction.before} unchanged.`;
+    }
+  }
+
   return {
     phases,
     blockers_before: totalBefore,
@@ -410,8 +522,8 @@ export async function runFixAllAutoBlockers(
     blockers_fixed: totalSucceeded,
     blockers_failed: totalFailed,
     system_ready: blockersAfter <= 0,
-    reason: blockersAfter <= 0
-      ? 'All auto-fixable blockers resolved'
-      : `${blockersAfter} blockers remain — ${totalFailed} failed during this run`,
+    reason,
+    resourceOutcomes: [...outcomeMap.values()],
+    blockerDiff,
   };
 }
