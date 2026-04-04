@@ -240,8 +240,8 @@ export function deriveResourceTruth(
     readiness_label = 'Processing';
   } else if (hasBlockers) {
     // Distinguish qa_required from blocked
-    const hasQaBlocker = sortedBlockers.some(b => b.type === 'qa_required' || b.type === 'route_low_confidence');
-    const hasOnlyQa = sortedBlockers.every(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'route_manual_assist');
+    const hasQaBlocker = sortedBlockers.some(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'needs_auth');
+    const hasOnlyQa = sortedBlockers.every(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'route_manual_assist' || b.type === 'needs_auth');
     if (hasOnlyQa) {
       truth_state = 'qa_required';
       readiness_label = 'QA Required';
