@@ -550,9 +550,8 @@ describe('Retry System Guarantee Canary', () => {
   });
 
   it('stale invocation is blocked by attempt count mismatch', () => {
-    // Simulates: DB has attempt_count=3, but a stale invocation tries to retry with attemptNumber=2
-    const dbAttemptCount = 3;
-    const staleAttemptNumber = 2;
+    const dbAttemptCount = 3 as number;
+    const staleAttemptNumber = 2 as number;
     const shouldRetry = dbAttemptCount === staleAttemptNumber;
     expect(shouldRetry).toBe(false);
   });
