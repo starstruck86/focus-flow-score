@@ -43,6 +43,7 @@ interface Props {
   lifecycleMap: Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>;
   audioJobsMap?: Map<string, AudioJobRecord>;
   onAction: (action: string, resource: Resource) => void;
+  onBulkAction?: (action: string, resourceIds: string[]) => void;
   onInspect: (resource: Resource) => void;
 }
 
