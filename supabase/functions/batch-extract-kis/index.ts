@@ -1222,7 +1222,7 @@ Deno.serve(async (req) => {
         rawResponse = JSON.stringify({ lesson_pipeline: result.pipelineLog });
         log.lessonPipeline = result.pipelineLog;
       } else {
-        console.log(`[extract] STANDARD PATH — strategy=${strategy}`);
+        console.log(`[extract] STANDARD PATH — strategy=${strategy}${isDenseContent ? ' [DENSE TEACHING — relaxed validation]' : ''} density=${JSON.stringify(densitySignals)}`);
         const result = await callAIDirect(LOVABLE_API_KEY, decodedContent, resource.title, resource.tags || [], resource.resource_type, strategy);
         rawItems = result.items;
         rawResponse = result.rawContent;
