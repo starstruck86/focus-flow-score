@@ -781,7 +781,7 @@ export function ResourceManager() {
             onRefresh={freshness.refreshData}
             isRefreshing={freshness.isRefreshing}
             lastFixResult={lastFixResult}
-            fixAllProgressMessage={fixAllProgressMessage}
+            fixAllLiveProgress={fixAllLiveProgress}
             isFixAllRunning={isFixAllRunning}
             
             onToggleSelect={(id) => setSelectedResourceIds(prev => {
@@ -798,8 +798,9 @@ export function ResourceManager() {
             onBulkAction={async (action, resourceIds) => {
               switch (action) {
                 case 'fix_all_auto': {
+                  const { createFixAllProgress, markFixAllPhase, markFixAllItemStart, markFixAllItemDone, markFixAllItemFailed, finalizeFixAllProgress, recomputeFixAllDerived } = await import('@/lib/fixAllProgress');
                   setIsFixAllRunning(true);
-                  setFixAllProgressMessage(`Starting auto-fix for ${resourceIds.length} blockers…`);
+                  setFixAllLiveProgress(createFixAllProgress(resourceIds.length));
                   setLastFixResult(null);
                   try {
                     const { runFixAllAutoBlockers } = await import('@/lib/fixAllAutoBlockers');
@@ -826,7 +827,34 @@ export function ResourceManager() {
 
                     const result = await runFixAllAutoBlockers(
                       blockerGroups,
-                      (msg) => setFixAllProgressMessage(msg),
+                      (msg) => {
+                        setFixAllLiveProgress(prev =>
+                          prev ? recomputeFixAllDerived({ ...prev, currentMessage: msg, lastProgressAt: new Date().toISOString() }) : prev
+                        );
+                      },
+                      undefined,
+                      {
+                        onPhaseChange: (phase, label, message) => {
+                          setFixAllLiveProgress(prev =>
+                            prev ? markFixAllPhase(prev, phase, label, message) : prev
+                          );
+                        },
+                        onItemStart: (resourceId, _phase, message) => {
+                          setFixAllLiveProgress(prev =>
+                            prev ? markFixAllItemStart(prev, resourceId, message) : prev
+                          );
+                        },
+                        onItemDone: (resourceId, _phase, message) => {
+                          setFixAllLiveProgress(prev =>
+                            prev ? markFixAllItemDone(prev, resourceId, message) : prev
+                          );
+                        },
+                        onItemFailed: (resourceId, _phase, message) => {
+                          setFixAllLiveProgress(prev =>
+                            prev ? markFixAllItemFailed(prev, resourceId, message) : prev
+                          );
+                        },
+                      },
                     );
 
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
@@ -851,7 +879,11 @@ export function ResourceManager() {
                     toast.error('Auto-fix failed', { description: err?.message });
                   } finally {
                     setIsFixAllRunning(false);
-                    setFixAllProgressMessage(null);
+                    setFixAllLiveProgress(prev => {
+                      if (!prev) return prev;
+                      const { finalizeFixAllProgress } = require('@/lib/fixAllProgress');
+                      return finalizeFixAllProgress(prev, 'Fix All complete');
+                    });
                   }
                   break;
                 }
