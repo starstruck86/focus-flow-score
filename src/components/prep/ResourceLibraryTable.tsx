@@ -476,6 +476,7 @@ export function ResourceLibraryTable({
           onAction={onAction}
           onBulkAction={onBulkAction}
           onInspect={(r) => isMobile ? setMobileInspectId(r.id) : setExpandedId(r.id)}
+          onFilterChange={(f) => setHealthFilter(f as HealthFilter)}
         />
       </div>
 

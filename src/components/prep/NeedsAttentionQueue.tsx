@@ -272,6 +272,31 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
                   {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                   <Icon className={cn('h-3.5 w-3.5', group.color)} />
                   <span className="text-xs font-medium text-foreground">{group.label}</span>
+                  {onFilterChange && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-4 px-1.5 text-[9px] text-muted-foreground hover:text-foreground"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const filterMap: Record<string, string> = {
+                          needs_enrichment: 'needs_enrichment',
+                          needs_extraction: 'needs_extraction',
+                          needs_activation: 'needs_activation',
+                          needs_auth: 'needs_auth',
+                          missing_content: 'missing_content',
+                          qa_required: 'qa_required',
+                          route_manual_assist: 'needs_auth',
+                          stalled_extraction: 'stalled',
+                          stalled_enrichment: 'stalled',
+                          contradictory_state: 'contradictions',
+                        };
+                        onFilterChange(filterMap[group.type] ?? 'blocked');
+                      }}
+                    >
+                      Filter
+                    </Button>
+                  )}
                   <Badge variant="outline" className="text-[9px] h-4 ml-auto">{group.items.length}</Badge>
                 </button>
                 {isExpanded && (
