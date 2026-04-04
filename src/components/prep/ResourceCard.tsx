@@ -166,7 +166,7 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
         return (
         <div className="border-t border-border px-3 py-2 space-y-1.5 bg-muted/30">
           {/* Asset + Route line */}
-          <div className="flex items-center gap-1.5 text-[11px]">
+          <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
             <span className="text-muted-foreground">Asset:</span>
             <span className="font-medium text-primary">{ASSET_LABELS[route.primary_asset]}</span>
             <span className="text-muted-foreground">→</span>
@@ -176,6 +176,9 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
               route.confidence === 'medium' && 'border-amber-500/30 text-amber-600',
               route.confidence === 'low' && 'border-muted-foreground/30 text-muted-foreground',
             )}>{route.confidence}</Badge>
+            {route.has_override && (
+              <Badge className="text-[8px] h-3.5 bg-amber-500/15 text-amber-700 border-amber-500/30">Override</Badge>
+            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap text-[11px]">
             <span className="text-muted-foreground">Type:</span>

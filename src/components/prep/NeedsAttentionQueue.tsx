@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { deriveReadiness } from '@/lib/resourceSignal';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import { isJobStale } from '@/store/useResourceJobProgress';
+import { deriveProcessingRoute, PIPELINE_LABELS } from '@/lib/processingRoute';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 
@@ -120,12 +121,13 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
         });
       }
 
-      // Low yield
+      // Low yield — include route context
       if (lc.kiCount > 0 && lc.kiCount <= 2 && lc.stage !== 'operationalized') {
+        const route = deriveProcessingRoute(r);
         lowYield.push({
           resource: r, issueType: 'low_yield', priority: 5,
           severity: computeSeverity(r, 'low_yield'),
-          reason: `Only ${lc.kiCount} KI extracted — may need inspection`,
+          reason: `Only ${lc.kiCount} KI extracted (${PIPELINE_LABELS[route.pipeline]} → ${route.extraction_method})`,
           actionLabel: 'Inspect', actionKey: 'view',
           bulkEligible: false,
         });

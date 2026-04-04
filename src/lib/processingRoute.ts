@@ -1,6 +1,7 @@
 /**
  * processingRoute.ts — Asset-aware deterministic routing engine.
  * Routes based on BEST AVAILABLE PROCESSING ASSET, not just source type.
+ * Supports: route overrides, outcome-aware learning, confidence gating.
  * Client-side computed, not persisted.
  */
 import type { Resource } from '@/hooks/useResources';
@@ -25,6 +26,13 @@ export type EnrichmentMethod = 'crawler' | 'file_parser' | 'transcription' | 'no
 export type ExtractionMethod = 'standard' | 'dense_teaching' | 'lesson' | 'summary_first';
 export type RouteConfidence = 'high' | 'medium' | 'low';
 
+export interface RouteOverride {
+  pipeline?: Pipeline;
+  extraction_method?: ExtractionMethod;
+  primary_asset?: AssetKind;
+  reason?: string;
+}
+
 export interface ProcessingRoute {
   origin_type: OriginType;
   available_assets: AssetKind[];
@@ -36,6 +44,13 @@ export interface ProcessingRoute {
   extraction_method: ExtractionMethod;
   confidence: RouteConfidence;
   reason: string[];
+  has_override: boolean;
+}
+
+export interface RoutingHistory {
+  failedPipelines: Partial<Record<Pipeline, number>>;
+  failedMethods: Partial<Record<ExtractionMethod, number>>;
+  totalAttempts: number;
 }
 
 // ── Labels ─────────────────────────────────────────────────
@@ -195,6 +210,49 @@ function detectOriginType(resource: Resource): OriginType {
   return 'manual_text';
 }
 
+// ── Routing history (outcome-aware learning) ───────────────
+export function getRoutingHistory(resource: Resource): RoutingHistory {
+  const r = resource as any;
+  const history: RoutingHistory = {
+    failedPipelines: {},
+    failedMethods: {},
+    totalAttempts: 0,
+  };
+
+  // Derive from extraction audit summary if available
+  const audit = r.extraction_audit_summary as any;
+  if (audit) {
+    // Count failed methods from audit
+    if (audit.attempts_summary && Array.isArray(audit.attempts_summary)) {
+      for (const attempt of audit.attempts_summary) {
+        history.totalAttempts++;
+        if (attempt.status === 'failed') {
+          const method = (attempt.strategy || 'standard') as ExtractionMethod;
+          history.failedMethods[method] = (history.failedMethods[method] || 0) + 1;
+        }
+      }
+    }
+  }
+
+  // Count from failure_count and advanced_extraction_attempts
+  const failureCount = resource.failure_count || 0;
+  const extractionAttempts = r.advanced_extraction_attempts || 0;
+  history.totalAttempts = Math.max(history.totalAttempts, failureCount + extractionAttempts);
+
+  // If enrichment has failed repeatedly, track pipeline failures
+  if (r.enrichment_status === 'failed' && failureCount >= 2) {
+    // Infer that the previously attempted pipeline failed
+    const origin = detectOriginType(resource);
+    if (origin === 'audio' || origin === 'video') {
+      history.failedPipelines['transcript_pipeline'] = (history.failedPipelines['transcript_pipeline'] || 0) + failureCount;
+    } else {
+      history.failedPipelines['enrich_then_extract'] = (history.failedPipelines['enrich_then_extract'] || 0) + failureCount;
+    }
+  }
+
+  return history;
+}
+
 // ── Main derivation ────────────────────────────────────────
 export function deriveProcessingRoute(resource: Resource): ProcessingRoute {
   const r = resource as any;
@@ -217,7 +275,7 @@ export function deriveProcessingRoute(resource: Resource): ProcessingRoute {
   reason.push(...assetReasons);
 
   // 3. Primary & secondary assets
-  const primary_asset = selectPrimaryAsset(available_assets);
+  let primary_asset = selectPrimaryAsset(available_assets);
   const secondary_assets = available_assets.filter(a => a !== primary_asset);
   reason.push(`Primary asset: ${ASSET_LABELS[primary_asset]}`);
 
@@ -245,7 +303,6 @@ export function deriveProcessingRoute(resource: Resource): ProcessingRoute {
     pipeline = 'manual_assist';
     reason.push(`Multiple failures (${totalFailures}) + no usable text → manual assist`);
   } else if (hasTextAsset(primary_asset)) {
-    // Text-based asset available — go direct
     pipeline = 'direct_extract';
     reason.push(`Usable text asset (${ASSET_LABELS[primary_asset]}) → direct extraction`);
   } else if (primary_asset === 'audio_file' || primary_asset === 'video_file') {
@@ -289,7 +346,26 @@ export function deriveProcessingRoute(resource: Resource): ProcessingRoute {
     extraction_method = 'standard';
   }
 
-  // 8. Confidence
+  // 8. Outcome-aware learning adjustments
+  const history = getRoutingHistory(resource);
+  if (history.failedPipelines['transcript_pipeline'] && (history.failedPipelines['transcript_pipeline'] ?? 0) >= 2 && pipeline === 'transcript_pipeline') {
+    pipeline = 'manual_assist';
+    reason.push('Transcript pipeline avoided — repeated failures detected');
+  }
+  if (history.failedPipelines['enrich_then_extract'] && (history.failedPipelines['enrich_then_extract'] ?? 0) >= 2 && pipeline === 'enrich_then_extract') {
+    pipeline = 'manual_assist';
+    reason.push('Enrich pipeline avoided — repeated failures detected');
+  }
+  if ((history.failedMethods['standard'] ?? 0) >= 2 && extraction_method === 'standard') {
+    extraction_method = 'dense_teaching';
+    reason.push('Escalated to dense teaching — standard extraction failed repeatedly');
+  }
+  if ((history.failedMethods['dense_teaching'] ?? 0) >= 2 && extraction_method === 'dense_teaching') {
+    extraction_method = 'summary_first';
+    reason.push('Escalated to summary-first — dense teaching failed repeatedly');
+  }
+
+  // 9. Confidence
   let confidence: RouteConfidence;
   if (hasTextAsset(primary_asset) && contentLength > 2000) {
     confidence = 'high';
@@ -302,17 +378,51 @@ export function deriveProcessingRoute(resource: Resource): ProcessingRoute {
     reason.push('Ambiguous routing — low confidence');
   }
 
+  // Downgrade confidence if learning detected issues
+  if (history.totalAttempts >= 3 && confidence === 'high') {
+    confidence = 'medium';
+    reason.push('Confidence reduced — multiple prior attempts');
+  }
+
+  let has_override = false;
+
+  // 10. Apply route override if present
+  const override = r.route_override as RouteOverride | undefined;
+  if (override) {
+    has_override = true;
+    if (override.pipeline) {
+      pipeline = override.pipeline;
+    }
+    if (override.extraction_method) {
+      extraction_method = override.extraction_method;
+    }
+    if (override.primary_asset && available_assets.includes(override.primary_asset)) {
+      primary_asset = override.primary_asset;
+    }
+    confidence = 'high';
+    reason.push(`Manual override applied: ${override.reason || 'user override'}`);
+
+    // Recalculate enrichment method for overridden pipeline
+    if (override.pipeline) {
+      if (pipeline === 'direct_extract') enrichment_method = 'none';
+      else if (pipeline === 'transcript_pipeline') enrichment_method = 'transcription';
+      else if (primary_asset === 'uploaded_file') enrichment_method = 'file_parser';
+      else enrichment_method = 'crawler';
+    }
+  }
+
   return {
     origin_type,
     available_assets,
     primary_asset,
-    secondary_assets,
+    secondary_assets: available_assets.filter(a => a !== primary_asset),
     content_type,
     pipeline,
     enrichment_method,
     extraction_method,
     confidence,
     reason,
+    has_override,
   };
 }
 
@@ -351,6 +461,16 @@ export function aggregateByPrimaryAsset(resources: Resource[]): Record<AssetKind
   for (const r of resources) {
     const route = deriveProcessingRoute(r);
     counts[route.primary_asset] = (counts[route.primary_asset] || 0) + 1;
+  }
+  return counts;
+}
+
+// ── Aggregate confidence levels ────────────────────────────
+export function aggregateConfidence(resources: Resource[]): Record<RouteConfidence, number> {
+  const counts: Record<RouteConfidence, number> = { high: 0, medium: 0, low: 0 };
+  for (const r of resources) {
+    const route = deriveProcessingRoute(r);
+    counts[route.confidence]++;
   }
   return counts;
 }

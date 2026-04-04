@@ -26,7 +26,10 @@ import { getResourceOrigin } from '@/lib/resourceEligibility';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
-import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, ORIGIN_TYPE_LABELS, ASSET_LABELS } from '@/lib/processingRoute';
+import {
+  deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, ORIGIN_TYPE_LABELS, ASSET_LABELS,
+  type Pipeline, type ExtractionMethod, type AssetKind, type RouteOverride,
+} from '@/lib/processingRoute';
 import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import type { Resource } from '@/hooks/useResources';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
@@ -113,12 +116,19 @@ function IdentitySection({ resource, onClose, onAction }: Props) {
 }
 
 // ── B. Pipeline Route ──────────────────────────────────────
-function PipelineRouteSection({ resource }: { resource: Resource }) {
+function PipelineRouteSection({ resource, onAction }: { resource: Resource; onAction: (action: string, resource: Resource) => void }) {
   const { summary } = useCanonicalLifecycle();
+  const qc = useQueryClient();
   const status = summary?.resources.find(r => r.resource_id === resource.id);
   const ps = deriveProcessingState(resource);
   const drift = detectDrift(resource);
   const route = deriveProcessingRoute(resource);
+  const [showOverride, setShowOverride] = useState(false);
+  const [overridePipeline, setOverridePipeline] = useState<Pipeline>(route.pipeline);
+  const [overrideMethod, setOverrideMethod] = useState<ExtractionMethod>(route.extraction_method);
+  const [overrideAsset, setOverrideAsset] = useState<AssetKind>(route.primary_asset);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [savingOverride, setSavingOverride] = useState(false);
 
   const insight = deriveResourceInsight(resource, status ? {
     stage: status.canonical_stage,
@@ -128,9 +138,55 @@ function PipelineRouteSection({ resource }: { resource: Resource }) {
     activeKiWithCtx: status.active_ki_with_context_count,
   } : undefined);
 
+  const handleSaveOverride = async () => {
+    setSavingOverride(true);
+    try {
+      const override: RouteOverride = {
+        pipeline: overridePipeline,
+        extraction_method: overrideMethod,
+        primary_asset: overrideAsset,
+        reason: overrideReason || 'Manual override',
+      };
+      await supabase.from('resources').update({
+        route_override: override as any,
+        updated_at: new Date().toISOString(),
+      } as any).eq('id', resource.id);
+      toast.success('Route override saved');
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      setShowOverride(false);
+    } catch (err: any) { toast.error(err.message); }
+    finally { setSavingOverride(false); }
+  };
+
+  const handleClearOverride = async () => {
+    setSavingOverride(true);
+    try {
+      await supabase.from('resources').update({
+        route_override: null,
+        updated_at: new Date().toISOString(),
+      } as any).eq('id', resource.id);
+      toast.success('Override cleared');
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      setShowOverride(false);
+    } catch (err: any) { toast.error(err.message); }
+    finally { setSavingOverride(false); }
+  };
+
   return (
     <div className="px-4 py-3 space-y-2">
-      <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pipeline Route</h4>
+      <div className="flex items-center justify-between">
+        <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pipeline Route</h4>
+        <div className="flex items-center gap-1">
+          {route.has_override && (
+            <Badge className="text-[8px] h-4 bg-amber-500/15 text-amber-700 border-amber-500/30">
+              <AlertTriangle className="h-2.5 w-2.5 mr-0.5" /> Override Active
+            </Badge>
+          )}
+          <Button variant="ghost" size="sm" className="h-5 text-[9px] px-1.5" onClick={() => setShowOverride(!showOverride)}>
+            {showOverride ? 'Close' : 'Override'}
+          </Button>
+        </div>
+      </div>
       {/* Origin + Assets */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
         <div className="flex items-center gap-1">
@@ -172,6 +228,49 @@ function PipelineRouteSection({ resource }: { resource: Resource }) {
           ))}
         </div>
       )}
+
+      {/* Override controls */}
+      {showOverride && (
+        <div className="space-y-2 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20">
+          <p className="text-[10px] font-semibold text-amber-700">Manual Route Override</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[9px] text-muted-foreground">Primary Asset</label>
+              <select className="w-full h-7 text-[11px] rounded border border-border bg-background px-1.5" value={overrideAsset} onChange={e => setOverrideAsset(e.target.value as AssetKind)}>
+                {route.available_assets.map(a => <option key={a} value={a}>{ASSET_LABELS[a]}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] text-muted-foreground">Pipeline</label>
+              <select className="w-full h-7 text-[11px] rounded border border-border bg-background px-1.5" value={overridePipeline} onChange={e => setOverridePipeline(e.target.value as Pipeline)}>
+                {Object.entries(PIPELINE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] text-muted-foreground">Extraction Method</label>
+              <select className="w-full h-7 text-[11px] rounded border border-border bg-background px-1.5" value={overrideMethod} onChange={e => setOverrideMethod(e.target.value as ExtractionMethod)}>
+                {Object.entries(EXTRACTION_METHOD_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] text-muted-foreground">Reason</label>
+              <Input className="h-7 text-[11px]" placeholder="Why override?" value={overrideReason} onChange={e => setOverrideReason(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Button size="sm" className="h-6 text-[10px] px-2" onClick={handleSaveOverride} disabled={savingOverride}>
+              {savingOverride ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save Override'}
+            </Button>
+            {route.has_override && (
+              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={handleClearOverride} disabled={savingOverride}>
+                Clear Override
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2" onClick={() => setShowOverride(false)}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
       {/* Signal + Readiness */}
       <div className="flex items-center gap-3 text-[11px]">
         <div className="flex items-center gap-1">
@@ -675,7 +774,7 @@ export function ResourceInspectPanel({ resource, onClose, onAction }: Props) {
   return (
     <div ref={containerRef} className="relative z-10 isolate bg-card border-b-2 border-primary/20 animate-fade-in">
       <IdentitySection resource={resource} onClose={onClose} onAction={onAction} />
-      <PipelineRouteSection resource={resource} />
+      <PipelineRouteSection resource={resource} onAction={onAction} />
       <ProcessingTimelineSection resource={resource} />
       <QualityTrustSection resource={resource} />
       <DownstreamEligibilitySection resource={resource} />

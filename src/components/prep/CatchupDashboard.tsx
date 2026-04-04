@@ -22,6 +22,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { aggregateRoutes, PIPELINE_LABELS, type Pipeline } from '@/lib/processingRoute';
 
 // ── Constants ──────────────────────────────────────────────
 const BUCKET_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
@@ -398,6 +399,11 @@ export function CatchupDashboard() {
           {(snapshot?.qa_flagged || 0) > 0 && (
             <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-purple-500/10 text-purple-700 font-medium border border-purple-500/15">
               {snapshot.qa_flagged} QA flagged
+            </span>
+          )}
+          {((snapshot as any)?.low_confidence_routes || 0) > 0 && (
+            <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 text-amber-600 font-medium border border-amber-500/15">
+              <AlertTriangle className="h-2.5 w-2.5" /> {(snapshot as any).low_confidence_routes} low-confidence routes
             </span>
           )}
           {backfilled > 0 && (
