@@ -124,22 +124,29 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       // Low yield — include route context
       if (lc.kiCount > 0 && lc.kiCount <= 2 && lc.stage !== 'operationalized') {
         const route = deriveProcessingRoute(r);
+        const routeCtx = `${PIPELINE_LABELS[route.pipeline]} · ${EXTRACTION_METHOD_LABELS[route.extraction_method]}`;
+        const suffix = [
+          route.has_override ? 'Override' : '',
+          route.confidence === 'low' ? 'Low confidence' : '',
+        ].filter(Boolean).join(' · ');
         lowYield.push({
           resource: r, issueType: 'low_yield', priority: 5,
           severity: computeSeverity(r, 'low_yield'),
-          reason: `Only ${lc.kiCount} KI extracted (${PIPELINE_LABELS[route.pipeline]} → ${EXTRACTION_METHOD_LABELS[route.extraction_method]})`,
+          reason: `Only ${lc.kiCount} KI extracted (${routeCtx}${suffix ? ' · ' + suffix : ''})`,
           actionLabel: 'Inspect', actionKey: 'view',
           bulkEligible: false,
         });
       }
 
       // Stale / drifted
-      const drift = detectDrift(r);
-      if (drift.hasDrift) {
+      const driftCheck = detectDrift(r);
+      if (driftCheck.hasDrift) {
+        const route = deriveProcessingRoute(r);
+        const routeSuffix = route.confidence === 'low' ? ' · Low confidence' : '';
         stale.push({
           resource: r, issueType: 'stale', priority: 6,
           severity: computeSeverity(r, 'stale'),
-          reason: drift.issues[0] || 'Version drift detected',
+          reason: `${driftCheck.issues[0] || 'Version drift detected'} (${PIPELINE_LABELS[route.pipeline]}${routeSuffix})`,
           actionLabel: 'Re-enrich', actionKey: 're_enrich',
           bulkEligible: true,
         });

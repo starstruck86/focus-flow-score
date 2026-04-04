@@ -51,6 +51,7 @@ interface DerivedRoute {
   primary_asset: AssetKind;
   confidence: RouteConfidence;
   has_override: boolean;
+  reason: string[];
 }
 
 function deriveRoute(resource: any): DerivedRoute {
@@ -62,6 +63,7 @@ function deriveRoute(resource: any): DerivedRoute {
   const enrichmentStatus = resource.enrichment_status || "";
   const hasContent = contentLength > 200;
   const isLesson = title.includes(" > ");
+  const reason: string[] = [];
 
   const isAudio = resourceType === "audio" || resourceType === "podcast_episode" ||
     /\.mp3|\.m4a|\.wav|\.ogg/i.test(url) ||
@@ -71,19 +73,19 @@ function deriveRoute(resource: any): DerivedRoute {
 
   // Detect available assets
   const assets: AssetKind[] = [];
-  if (isLesson && hasContent) assets.push("lesson_text");
+  if (isLesson && hasContent) { assets.push("lesson_text"); reason.push("Lesson structure + content present"); }
   const hasTranscript = resource.has_transcript || resource.transcript_text ||
     (enrichmentStatus === "deep_enriched" && (isAudio || isVideo));
-  if (hasTranscript && hasContent) assets.push("transcript_text");
+  if (hasTranscript && hasContent) { assets.push("transcript_text"); reason.push("Transcript text available"); }
   const parsedStatuses = ["deep_enriched", "content_ready", "enriched"];
-  if (parsedStatuses.includes(enrichmentStatus) && hasContent && !isLesson && !hasTranscript) assets.push("parsed_content");
-  if ((resource.manual_content_present || resource.resolution_method === "resolved_manual") && hasContent) assets.push("manual_text");
-  if (hasContent && assets.length === 0 && !isAudio) assets.push("parsed_content");
-  if (isAudio) assets.push("audio_file");
-  if (isVideo) assets.push("video_file");
-  if (url.includes(".pdf") || resourceType === "pdf" || resourceType === "doc") assets.push("uploaded_file");
-  if (url.startsWith("http") && !assets.includes("audio_file") && !assets.includes("video_file") && !assets.includes("uploaded_file")) assets.push("url");
-  if (assets.length === 0 && url) assets.push("url");
+  if (parsedStatuses.includes(enrichmentStatus) && hasContent && !isLesson && !hasTranscript) { assets.push("parsed_content"); reason.push("Parsed/enriched content available"); }
+  if ((resource.manual_content_present || resource.resolution_method === "resolved_manual") && hasContent) { assets.push("manual_text"); reason.push("Manual text content present"); }
+  if (hasContent && assets.length === 0 && !isAudio) { assets.push("parsed_content"); reason.push(`Usable content detected (${Math.round(contentLength / 1000)}k chars)`); }
+  if (isAudio) { assets.push("audio_file"); reason.push("Audio file source"); }
+  if (isVideo) { assets.push("video_file"); reason.push("Video file source"); }
+  if (url.includes(".pdf") || resourceType === "pdf" || resourceType === "doc") { assets.push("uploaded_file"); reason.push("Uploaded file source"); }
+  if (url.startsWith("http") && !assets.includes("audio_file") && !assets.includes("video_file") && !assets.includes("uploaded_file")) { assets.push("url"); reason.push("Web URL source"); }
+  if (assets.length === 0 && url) { assets.push("url"); reason.push("Only URL available"); }
 
   // Select primary asset
   let primary_asset: AssetKind = "url";
@@ -95,32 +97,42 @@ function deriveRoute(resource: any): DerivedRoute {
   let pipeline: Pipeline;
   if (failureCount >= 3 && enrichmentStatus !== "deep_enriched" && !hasTextAsset(primary_asset)) {
     pipeline = "manual_assist";
+    reason.push(`Multiple failures (${failureCount}) + no usable text → manual assist`);
   } else if (hasTextAsset(primary_asset)) {
     pipeline = "direct_extract";
+    reason.push(`Usable text asset → direct extraction`);
   } else if (primary_asset === "audio_file" || primary_asset === "video_file") {
     pipeline = "transcript_pipeline";
+    reason.push("No text available, media source → transcript pipeline");
   } else if (primary_asset === "uploaded_file" || primary_asset === "url") {
     pipeline = "enrich_then_extract";
+    reason.push("Needs enrichment before extraction");
   } else {
     pipeline = "manual_assist";
+    reason.push("No actionable asset → manual assist");
   }
 
   // Extraction method
   let extraction_method: ExtractionMethod = "standard";
   if (isLesson) {
     extraction_method = "lesson";
+    reason.push("Lesson extraction pipeline");
   } else if (contentLength > 8000 || (contentLength > 10000 && (isAudio || isVideo))) {
     extraction_method = "dense_teaching";
+    reason.push("Dense teaching extraction (high-yield content)");
   } else if ((resource.advanced_extraction_attempts || 0) >= 3) {
     extraction_method = "summary_first";
+    reason.push("Summary-first fallback (prior attempts exhausted)");
   }
 
   // Outcome-aware learning: avoid repeated failures
   if (enrichmentStatus === "failed" && failureCount >= 2) {
     if ((isAudio || isVideo) && pipeline === "transcript_pipeline") {
       pipeline = "manual_assist";
+      reason.push("Transcript pipeline avoided — repeated failures");
     } else if (pipeline === "enrich_then_extract") {
       pipeline = "manual_assist";
+      reason.push("Enrich pipeline avoided — repeated failures");
     }
   }
 
@@ -134,10 +146,12 @@ function deriveRoute(resource: any): DerivedRoute {
     confidence = "medium";
   } else {
     confidence = "low";
+    reason.push("Ambiguous routing — low confidence");
   }
 
   if (failureCount >= 3 && confidence === "high") {
     confidence = "medium";
+    reason.push("Confidence reduced — multiple prior attempts");
   }
 
   let has_override = false;
@@ -150,9 +164,10 @@ function deriveRoute(resource: any): DerivedRoute {
     if (override.extraction_method) extraction_method = override.extraction_method;
     if (override.primary_asset && assets.includes(override.primary_asset)) primary_asset = override.primary_asset;
     confidence = "high";
+    reason.push(`Manual override applied: ${override.reason || "user override"}`);
   }
 
-  return { pipeline, extraction_method, primary_asset, confidence, has_override };
+  return { pipeline, extraction_method, primary_asset, confidence, has_override, reason };
 }
 
 Deno.serve(async (req) => {
@@ -287,17 +302,18 @@ Deno.serve(async (req) => {
     for (const item of items) {
       try {
         const resource = resourceMap.get(item.resource_id);
-        const route = resource ? deriveRoute(resource) : { pipeline: "enrich_then_extract" as Pipeline, extraction_method: "standard" as ExtractionMethod, primary_asset: "url" as AssetKind, confidence: "low" as RouteConfidence, has_override: false };
+        const route = resource ? deriveRoute(resource) : { pipeline: "enrich_then_extract" as Pipeline, extraction_method: "standard" as ExtractionMethod, primary_asset: "url" as AssetKind, confidence: "low" as RouteConfidence, has_override: false, reason: ["No resource data — fallback route"] };
+        const routeReasonSummary = route.reason.slice(0, 3).join("; ");
 
         // Confidence-based execution gating: low confidence → QA, not execution
         if (route.confidence === "low" && run.mode !== "dry_run") {
-          console.log(`[route-gated] resource=${item.resource_id} confidence=low → routed to QA`);
+          console.log(`[route-gated] resource=${item.resource_id} confidence=low reason="${routeReasonSummary}" → routed to QA`);
           await supabase
             .from("library_reconciliation_items")
             .update({
               processed: true,
               qa_flagged: true,
-              qa_reason: "Low routing confidence — requires manual review",
+              qa_reason: `Low routing confidence: ${routeReasonSummary}`,
               phase_outcomes: {
                 phase,
                 processed_at: new Date().toISOString(),
@@ -306,6 +322,8 @@ Deno.serve(async (req) => {
                 route_extraction_method: route.extraction_method,
                 route_primary_asset: route.primary_asset,
                 route_confidence: route.confidence,
+                route_has_override: route.has_override,
+                route_reason_summary: routeReasonSummary,
               },
             })
             .eq("id", item.id);
@@ -322,6 +340,7 @@ Deno.serve(async (req) => {
           route_primary_asset: route.primary_asset,
           route_confidence: route.confidence,
           route_has_override: route.has_override,
+          route_reason_summary: routeReasonSummary,
         };
 
         console.log(`[route] resource=${item.resource_id} pipeline=${route.pipeline} method=${route.extraction_method} primary_asset=${route.primary_asset} confidence=${route.confidence} override=${route.has_override}`);
@@ -338,7 +357,7 @@ Deno.serve(async (req) => {
             results.qa_flagged++;
             await supabase
               .from("library_reconciliation_items")
-              .update({ qa_flagged: true, qa_reason: "Routed to manual assist after repeated failures" })
+              .update({ qa_flagged: true, qa_reason: `Manual assist required: ${routeReasonSummary}` })
               .eq("id", item.id);
           } else if (route.pipeline === "direct_extract") {
             // Skip enrichment — content already present
@@ -380,7 +399,7 @@ Deno.serve(async (req) => {
             results.qa_flagged++;
             await supabase
               .from("library_reconciliation_items")
-              .update({ qa_flagged: true, qa_reason: "Extraction routed to manual assist" })
+              .update({ qa_flagged: true, qa_reason: `Extraction manual assist: ${routeReasonSummary}` })
               .eq("id", item.id);
           } else {
             // Queue extraction with method hint
