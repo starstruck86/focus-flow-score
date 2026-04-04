@@ -512,8 +512,11 @@ export function ResourceManager() {
 
   return (
     <div className="space-y-3">
-      {/* Resource Intelligence Dashboard */}
-      <ResourceIntelligenceDashboard />
+      {/* App Freshness Bar */}
+      <div className="flex items-center justify-between">
+        <ResourceIntelligenceDashboard />
+        <AppFreshnessBar />
+      </div>
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
