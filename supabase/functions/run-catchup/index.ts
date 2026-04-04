@@ -278,7 +278,7 @@ Deno.serve(async (req) => {
     const resourceIds = items.map((i) => i.resource_id);
     const { data: resources } = await supabase
       .from("resources")
-      .select("id, resource_type, file_url, title, content_length, failure_count, advanced_extraction_attempts, enrichment_status, manual_content_present, has_transcript, transcript_text, resolution_method")
+      .select("id, resource_type, file_url, title, content_length, failure_count, advanced_extraction_attempts, enrichment_status, manual_content_present, has_transcript, transcript_text, resolution_method, route_override")
       .in("id", resourceIds);
 
     const resourceMap = new Map((resources || []).map((r) => [r.id, r]));
