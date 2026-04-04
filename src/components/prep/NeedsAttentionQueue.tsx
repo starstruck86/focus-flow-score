@@ -70,6 +70,7 @@ const BLOCKER_PRIORITY: Record<BlockerType, number> = {
   downstream_ineligible: 13,
   audit_mismatch: 14,
   unknown_processing_state: 15,
+  reference_only: 16,
 };
 
 const BLOCKER_ICON: Partial<Record<BlockerType, React.ElementType>> = {
