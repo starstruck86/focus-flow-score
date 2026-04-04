@@ -380,19 +380,31 @@ async function normalizeStaleStatuses(
     const hasUsableContent = (contentInfo?.content_length ?? 0) >= 200 || contentInfo?.manual_content_present === true;
     const isIdleJob = state.active_job_status === 'idle';
     
-    // Detect stale 'running' jobs (started > 10 min ago with no update)
+  // Detect stale 'running' jobs (started > 10 min ago with no update)
     const isStaleRunning = state.active_job_status === 'running' && (() => {
       const updatedAt = state.active_job_updated_at ?? state.active_job_started_at;
       if (!updatedAt) return true; // no timestamp = stale
       return Date.now() - new Date(updatedAt).getTime() > 10 * 60 * 1000; // 10 min
     })();
+
+    // HARDENED: For structured course lessons (title contains " > "), lower the content
+    // threshold for needs_auth reclassification to 100 chars. Short conclusions/checklists
+    // are legitimate content that shouldn't stay auth-blocked.
+    const { data: titleData } = await supabase
+      .from('resources' as any)
+      .select('title')
+      .eq('id', id)
+      .single();
+    const isStructuredLesson = !!(titleData as any)?.title && /\s>\s/.test((titleData as any).title);
+    const authContentThreshold = isStructuredLesson ? 100 : 200;
+    const hasUsableContentForAuth = (contentInfo?.content_length ?? 0) >= authContentThreshold || contentInfo?.manual_content_present === true;
     
     // Determine if this resource needs normalization
     const needsNormalization = 
       (hasKIs && isRetrying) ||      // extraction_retrying but has KIs
       (hasKIs && isFailedJob) ||      // failed job but has KIs — stale marker
       (isFailedJob && ['deep_enriched', 'enriched', 'extracted', 'verified', 'content_ready'].includes(state.enrichment_status)) || // failed job on otherwise healthy status
-      (isNeedsAuth && hasUsableContent) || // needs_auth misclassification: content exists, reclassify to enriched
+      (isNeedsAuth && hasUsableContentForAuth) || // needs_auth misclassification: content exists, reclassify to enriched
       (isIdleJob) || // stale 'idle' job status should be cleared
       (isStaleRunning); // stale 'running' job — extraction likely timed out or lost response
 
