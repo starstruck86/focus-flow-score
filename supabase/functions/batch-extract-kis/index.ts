@@ -1623,14 +1623,27 @@ Deno.serve(async (req) => {
       return respond({ resourceId, title: resource.title, kis: 0, error: `Insert failed: ${insertError.message}`, log });
     }
 
-    // ── SUCCESS: reset retry tracking ──
+    // ── SUCCESS: verify actual DB state before committing status ──
+    const { count: actualKiCount } = await supabase
+      .from('knowledge_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('source_resource_id', resourceId);
+
+    const expectedCount = rows.length + userEditedCount;
+    if (actualKiCount !== null && actualKiCount !== expectedCount) {
+      console.warn(`[extract] ⚠️ KI count mismatch: expected ${expectedCount} (${rows.length} new + ${userEditedCount} edited), actual DB=${actualKiCount}`);
+    }
+
+    // Use actual DB count as the canonical ki_count for audit
+    const canonicalKiCount = actualKiCount ?? rows.length;
+
     log.insertedCount = rows.length;
     log.outcome = 'success';
     await saveExtractionLog(supabase, log);
 
     // Persist final success attempt record to table
     const successAttempt = buildAttemptRecord({
-      attemptNumber, strategy, kiCount: rows.length, rawItemCount: rawItems.length,
+      attemptNumber, strategy, kiCount: canonicalKiCount, rawItemCount: rawItems.length,
       validatedCount: validated.length, dedupedCount: deduped.length,
       minKiFloor, failureType: null, status: 'extracted', durationMs, startedAt,
     });
@@ -1651,12 +1664,12 @@ Deno.serve(async (req) => {
 
     logTelemetry({
       resource_id: resourceId, title: resource.title, content_length: resource.content.length,
-      is_structured_lesson: isLesson, ki_count: rows.length, min_ki_floor: minKiFloor,
+      is_structured_lesson: isLesson, ki_count: canonicalKiCount, min_ki_floor: minKiFloor,
       attempt_number: attemptNumber, extractor_strategy: strategy, failure_reason: null,
       duration_ms: durationMs, routing_basis: routingBasis,
     });
 
-    console.log(`[extract] ✅ "${resource.title}": ${rows.length} KIs inserted (attempt ${attemptNumber}, strategy=${strategy}, ${userEditedCount} user-edited preserved)`);
+    console.log(`[extract] ✅ "${resource.title}": ${rows.length} KIs inserted, ${canonicalKiCount} total (attempt ${attemptNumber}, strategy=${strategy}, ${userEditedCount} user-edited preserved)`);
 
     return respond({ resourceId, title: resource.title, kis: rows.length, preservedUserEdited: userEditedCount, attemptNumber, strategy, log });
   } catch (error: any) {
