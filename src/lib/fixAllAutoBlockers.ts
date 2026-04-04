@@ -560,7 +560,28 @@ export async function runFixAllAutoBlockers(
     callbacks?.onPhaseChange?.('normalize_status', 'Normalizing statuses', 'Normalizing stale statuses…');
     onProgress?.('Normalizing stale statuses…');
     const normalizeResult = await normalizeStaleStatuses(allIds, onProgress, callbacks);
-    if (normalizeResult.attempted > 0) phases.push(normalizeResult);
+    if (normalizeResult.attempted > 0) {
+      phases.push(normalizeResult);
+      // Mark normalized outcomes
+      for (const id of allIds) {
+        const outcome = outcomeMap.get(id);
+        if (outcome) {
+          const origState = originalStateMap.get(id);
+          // Check if DB state actually changed by comparing to fresh data
+          const { data: fresh } = await supabase
+            .from('resources' as any)
+            .select('enrichment_status, active_job_status')
+            .eq('id', id)
+            .single();
+          if (fresh && origState) {
+            const f = fresh as any;
+            if (f.enrichment_status !== origState.enrichment_status || f.active_job_status !== origState.active_job_status) {
+              outcome.normalized = true;
+            }
+          }
+        }
+      }
+    }
   }
 
   // Phase 1: Retry stalled jobs first
