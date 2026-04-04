@@ -6,6 +6,7 @@
 import type { Resource } from '@/hooks/useResources';
 import type { BlockedReason } from '@/lib/canonicalLifecycle';
 import { deriveProcessingState } from '@/lib/processingState';
+import { isJobStale } from '@/store/useResourceJobProgress';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 
 // ── Signal Strength ────────────────────────────────────────
