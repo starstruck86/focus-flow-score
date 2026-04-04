@@ -1166,7 +1166,7 @@ Deno.serve(async (req) => {
 
         // Auto-retry: fire-and-forget next attempt
         if (retryEligible) {
-          scheduleRetry(supabaseUrl, serviceRoleKey, resourceId);
+          scheduleRetry(supabase, supabaseUrl, serviceRoleKey, resourceId, attemptNumber);
         }
       }
       return respond({ resourceId, title: resource.title, kis: 0, error: invariantMsg, attemptNumber, strategy, failureType, log, benchmarkMode: isDryRun });
