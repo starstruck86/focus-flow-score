@@ -345,9 +345,17 @@ type EligibilityState = 'eligible' | 'not_eligible' | 'recommended';
 function DownstreamEligibilitySection({ resource }: { resource: Resource }) {
   const { summary } = useCanonicalLifecycle();
   const status = summary?.resources.find(r => r.resource_id === resource.id);
-  const isReady = status?.canonical_stage === 'operationalized';
-  const hasActiveKi = (status?.active_ki_count ?? 0) > 0;
-  const hasContexts = (status?.active_ki_with_context_count ?? 0) > 0;
+  const lc = status ? {
+    stage: status.canonical_stage,
+    blocked: status.blocked_reason,
+    kiCount: status.knowledge_item_count,
+    activeKi: status.active_ki_count,
+    activeKiWithCtx: status.active_ki_with_context_count,
+  } : undefined;
+  const truth = deriveResourceTruth(resource, lc);
+  const isReady = truth.is_ready;
+  const hasActiveKi = truth.active_ki_total > 0;
+  const hasContexts = truth.active_ki_with_context_total > 0;
 
   // Read stored eligibility if present
   const r = resource as any;
