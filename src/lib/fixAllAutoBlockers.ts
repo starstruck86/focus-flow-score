@@ -210,31 +210,45 @@ async function fixNeedsExtraction(
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
   callbacks?: FixAllCallbacks,
-): Promise<FixPhaseResult> {
+): Promise<{ phaseResult: FixPhaseResult; resourceResults: Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean }> }> {
   const result: FixPhaseResult = { phase: 'extraction', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
+  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean }>();
 
-  if (resourceIds.length === 0) return result;
+  if (resourceIds.length === 0) return { phaseResult: result, resourceResults };
 
   onProgress?.(`Extracting ${resourceIds.length} resources`);
   // Emit per-item start for all extraction items upfront
   for (const id of resourceIds) {
     callbacks?.onItemStart?.(id, 'extraction');
   }
+
+  let completedCount = 0;
   try {
-    const results = await autoOperationalizeBatch(resourceIds, undefined, (resourceId, phase, res) => {
+    const results = await autoOperationalizeBatch(resourceIds, (processed, total, title) => {
+      // Per-resource progress: "Extracting 4/13 — Title…"
+      onProgress?.(`Extracting ${processed}/${total} — ${title}`);
+    }, (resourceId, phase, res) => {
       onResourcePhase?.(resourceId, phase, res);
-      if (phase === 'done') {
-        const matched = results; // not available yet — use callback below
+      if (phase === 'done' && res) {
+        completedCount++;
+        const msg = res.knowledgeExtracted > 0
+          ? `Extracted ${res.knowledgeExtracted} KIs (${res.knowledgeActivated} activated)`
+          : res.reason || 'no KIs extracted';
+        callbacks?.[res.knowledgeExtracted > 0 || res.operationalized ? 'onItemDone' : 'onItemFailed']?.(resourceId, 'extraction', msg);
       }
     });
     for (const r of results) {
+      resourceResults.set(r.resourceId, {
+        kisCreated: r.knowledgeExtracted,
+        kisActive: r.knowledgeActivated,
+        reason: r.reason,
+        succeeded: r.knowledgeExtracted > 0 || r.operationalized,
+      });
       if (r.knowledgeExtracted > 0 || r.operationalized) {
         result.succeeded++;
-        callbacks?.onItemDone?.(r.resourceId, 'extraction');
       } else {
         result.failed++;
         result.errors.push(`${r.resourceId}: ${r.reason || 'no KIs extracted'}`);
-        callbacks?.onItemFailed?.(r.resourceId, 'extraction');
       }
     }
   } catch (err: any) {
@@ -245,7 +259,7 @@ async function fixNeedsExtraction(
     }
   }
 
-  return result;
+  return { phaseResult: result, resourceResults };
 }
 
 // ── Activation ────────────────────────────────────────────
