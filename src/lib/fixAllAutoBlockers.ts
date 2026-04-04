@@ -210,31 +210,45 @@ async function fixNeedsExtraction(
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
   callbacks?: FixAllCallbacks,
-): Promise<FixPhaseResult> {
+): Promise<{ phaseResult: FixPhaseResult; resourceResults: Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean }> }> {
   const result: FixPhaseResult = { phase: 'extraction', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
+  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean }>();
 
-  if (resourceIds.length === 0) return result;
+  if (resourceIds.length === 0) return { phaseResult: result, resourceResults };
 
   onProgress?.(`Extracting ${resourceIds.length} resources`);
   // Emit per-item start for all extraction items upfront
   for (const id of resourceIds) {
     callbacks?.onItemStart?.(id, 'extraction');
   }
+
+  let completedCount = 0;
   try {
-    const results = await autoOperationalizeBatch(resourceIds, undefined, (resourceId, phase, res) => {
+    const results = await autoOperationalizeBatch(resourceIds, (processed, total, title) => {
+      // Per-resource progress: "Extracting 4/13 — Title…"
+      onProgress?.(`Extracting ${processed}/${total} — ${title}`);
+    }, (resourceId, phase, res) => {
       onResourcePhase?.(resourceId, phase, res);
-      if (phase === 'done') {
-        const matched = results; // not available yet — use callback below
+      if (phase === 'done' && res) {
+        completedCount++;
+        const msg = res.knowledgeExtracted > 0
+          ? `Extracted ${res.knowledgeExtracted} KIs (${res.knowledgeActivated} activated)`
+          : res.reason || 'no KIs extracted';
+        callbacks?.[res.knowledgeExtracted > 0 || res.operationalized ? 'onItemDone' : 'onItemFailed']?.(resourceId, 'extraction', msg);
       }
     });
     for (const r of results) {
+      resourceResults.set(r.resourceId, {
+        kisCreated: r.knowledgeExtracted,
+        kisActive: r.knowledgeActivated,
+        reason: r.reason,
+        succeeded: r.knowledgeExtracted > 0 || r.operationalized,
+      });
       if (r.knowledgeExtracted > 0 || r.operationalized) {
         result.succeeded++;
-        callbacks?.onItemDone?.(r.resourceId, 'extraction');
       } else {
         result.failed++;
         result.errors.push(`${r.resourceId}: ${r.reason || 'no KIs extracted'}`);
-        callbacks?.onItemFailed?.(r.resourceId, 'extraction');
       }
     }
   } catch (err: any) {
@@ -245,7 +259,7 @@ async function fixNeedsExtraction(
     }
   }
 
-  return result;
+  return { phaseResult: result, resourceResults };
 }
 
 // ── Activation ────────────────────────────────────────────
@@ -327,7 +341,7 @@ async function normalizeStaleStatuses(
   // Also fetch current resource state to identify stale failed markers
   const { data: resourceStates } = await supabase
     .from('resources' as any)
-    .select('id, enrichment_status, active_job_status, active_job_error')
+    .select('id, enrichment_status, active_job_status, active_job_error, active_job_updated_at, active_job_started_at')
     .in('id', resourceIds);
 
   const stateMap = new Map<string, any>();
@@ -358,13 +372,21 @@ async function normalizeStaleStatuses(
     const hasUsableContent = (contentInfo?.content_length ?? 0) >= 200 || contentInfo?.manual_content_present === true;
     const isIdleJob = state.active_job_status === 'idle';
     
+    // Detect stale 'running' jobs (started > 10 min ago with no update)
+    const isStaleRunning = state.active_job_status === 'running' && (() => {
+      const updatedAt = state.active_job_updated_at ?? state.active_job_started_at;
+      if (!updatedAt) return true; // no timestamp = stale
+      return Date.now() - new Date(updatedAt).getTime() > 10 * 60 * 1000; // 10 min
+    })();
+    
     // Determine if this resource needs normalization
     const needsNormalization = 
       (hasKIs && isRetrying) ||      // extraction_retrying but has KIs
       (hasKIs && isFailedJob) ||      // failed job but has KIs — stale marker
       (isFailedJob && ['deep_enriched', 'enriched', 'extracted', 'verified', 'content_ready'].includes(state.enrichment_status)) || // failed job on otherwise healthy status
       (isNeedsAuth && hasUsableContent) || // needs_auth misclassification: content exists, reclassify to enriched
-      (isIdleJob); // stale 'idle' job status should be cleared
+      (isIdleJob) || // stale 'idle' job status should be cleared
+      (isStaleRunning); // stale 'running' job — extraction likely timed out or lost response
 
     if (!needsNormalization) continue;
 
@@ -385,6 +407,14 @@ async function normalizeStaleStatuses(
       // Clear stale 'idle' job status
       if (isIdleJob) {
         update.active_job_status = null;
+      }
+
+      // Clear stale 'running' job status (extraction timed out or lost response)
+      if (isStaleRunning) {
+        update.active_job_status = null;
+        update.active_job_error = 'Cleared: stale running job (exceeded 10 min timeout)';
+        update.active_job_finished_at = new Date().toISOString();
+        log.info('Clearing stale running job', { id, started: state.active_job_started_at });
       }
 
       // Fix extraction_retrying → extracted when KIs exist
@@ -559,8 +589,24 @@ export async function runFixAllAutoBlockers(
   if (extractIds.length > 0) {
     callbacks?.onPhaseChange?.('extraction', 'Extracting knowledge items', `Extracting ${extractIds.length} resources…`);
     onProgress?.(`Extracting ${extractIds.length} resources…`);
-    const extractResult = await fixNeedsExtraction(extractIds, onProgress, onResourcePhase, callbacks);
+    const { phaseResult: extractResult, resourceResults: extractionOutcomes } = await fixNeedsExtraction(extractIds, onProgress, onResourcePhase, callbacks);
     phases.push(extractResult);
+
+    // Enrich per-resource outcomes with extraction details
+    for (const [resourceId, detail] of extractionOutcomes) {
+      const outcome = outcomeMap.get(resourceId);
+      if (outcome) {
+        outcome.attempted = true;
+        outcome.succeeded = detail.succeeded;
+        outcome.kisCreated = detail.kisCreated;
+        outcome.kisActive = detail.kisActive;
+        if (!detail.succeeded) {
+          outcome.error = detail.reason || 'no KIs extracted';
+          outcome.rootCauseCategory = detail.kisCreated === 0 ? 'extraction_produced_zero_kis' : 'activation_failed';
+          outcome.rootCauseExplanation = detail.reason || null;
+        }
+      }
+    }
   }
 
   // Phase 4: Activate
