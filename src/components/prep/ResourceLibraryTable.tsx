@@ -371,6 +371,38 @@ export function ResourceLibraryTable({
         />
       </div>
 
+      {/* Needs Attention Queue */}
+      <div className="shrink-0 mb-2">
+        <NeedsAttentionQueue
+          resources={resources}
+          lifecycleMap={lifecycleMap}
+          audioJobsMap={audioJobsMap}
+          onAction={onAction}
+          onInspect={(r) => setExpandedId(r.id)}
+        />
+      </div>
+
+      {/* Collections sidebar on desktop, inline on mobile */}
+      {!isMobile && (
+        <div className="shrink-0 mb-2">
+          <CollectionBrowser
+            resources={resources}
+            lifecycleMap={lifecycleMap}
+            onFilterByCollection={(id) => {
+              if (!id) { setCollectionFilter('all'); return; }
+              if (id.startsWith('implicit:')) {
+                const prefix = id.replace('implicit:', '');
+                setSearch(prefix + ' > ');
+                setCollectionFilter('all');
+              } else {
+                setCollectionFilter(id);
+              }
+            }}
+            activeCollectionId={collectionFilter !== 'all' ? collectionFilter : null}
+          />
+        </div>
+      )}
+
       {/* Search + spot check + collections */}
       <div className="flex items-center gap-2 flex-wrap py-1.5 shrink-0">
         <div className="relative flex-1 min-w-[160px]">
