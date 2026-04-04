@@ -203,6 +203,38 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
             </div>
           )}
 
+          {/* G-pre. Per-resource execution outcome table */}
+          {result.resourceOutcomes.length > 0 && (
+            <div className="space-y-1 pt-1.5 border-t border-border/50">
+              <p className="text-[10px] font-medium text-foreground">Resource Outcomes ({result.resourceOutcomes.length})</p>
+              <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                {result.resourceOutcomes.map((o) => (
+                  <div key={o.resourceId} className={cn(
+                    'flex items-start gap-1.5 text-[9px] py-0.5 px-1 rounded',
+                    o.succeeded ? 'bg-emerald-500/5' : o.attempted ? 'bg-destructive/5' : 'bg-muted/30',
+                  )}>
+                    <span className="shrink-0 mt-0.5">
+                      {o.succeeded ? '✅' : o.attempted ? '❌' : '⏸️'}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground truncate">{o.resourceTitle}</p>
+                      <div className="flex items-center gap-1.5 text-muted-foreground flex-wrap">
+                        {o.normalized && <Badge variant="outline" className="text-[8px] h-3 px-1">normalized</Badge>}
+                        {o.wrapperPageDetected && <Badge variant="outline" className="text-[8px] h-3 px-1 border-amber-500/30 text-amber-700">wrapper page</Badge>}
+                        {o.kisCreated > 0 && <span className="text-emerald-600">+{o.kisCreated} KIs</span>}
+                        {o.kisActive > 0 && <span className="text-emerald-600">({o.kisActive} active)</span>}
+                        {o.error && <span className="text-destructive truncate max-w-[200px]">{o.error}</span>}
+                        {o.originalJobStatus && (
+                          <span className="text-muted-foreground/70">was: {o.originalJobStatus}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* G. Blocker diff — before/after by type */}
           {result.blockerDiff && result.blockerDiff.length > 0 && (
             <div className="space-y-1 pt-1.5 border-t border-border/50">
