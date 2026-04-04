@@ -793,7 +793,7 @@ export function ResourceManager() {
                       const r = filteredResources.find(res => res.id === id);
                       if (!r) continue;
                       // We need lifecycle info — get from canonical lifecycle or derive
-                      const truth = deriveResourceTruth(r, undefined);
+                      const truth = deriveResourceTruth(r, lifecycleMap.get(id), audioJobsMap?.get(id));
                       const blockerType = truth.primary_blocker?.type;
                       if (blockerType && truth.primary_blocker?.fixability !== 'manual_only') {
                         const existing = blockerGroupMap.get(blockerType) ?? [];
