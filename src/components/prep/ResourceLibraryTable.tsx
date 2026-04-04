@@ -217,6 +217,9 @@ export function ResourceLibraryTable({
   onRefresh,
   isRefreshing,
   lastFixResult,
+  fixAllProgressMessage,
+  isFixAllRunning,
+  externalHealthFilter,
 }: ResourceLibraryTableProps) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
