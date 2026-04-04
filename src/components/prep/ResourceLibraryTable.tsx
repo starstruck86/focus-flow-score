@@ -379,6 +379,18 @@ export function ResourceLibraryTable({
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
   };
 
+  // Active filter label for display
+  const activeFilterLabel = useMemo(() => {
+    const labels: Record<string, string> = {
+      all: '', ready: 'Ready', improving: 'Processing', blocked: 'Blocked', failed: 'Failed',
+      stalled: 'Stalled', qa_required: 'QA Required', missing_content: 'Missing Content',
+      needs_extraction: 'Needs Extraction', needs_enrichment: 'Needs Enrichment',
+      needs_activation: 'Needs Activation', needs_auth: 'Auth Required',
+      needs_review: 'Needs Review', contradictions: 'Contradictions',
+    };
+    return labels[healthFilter] ?? '';
+  }, [healthFilter]);
+
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 160px)', minHeight: '450px' }}>
       {/* Library Trust Summary */}
@@ -394,6 +406,17 @@ export function ResourceLibraryTable({
           lastFixResult={lastFixResult}
         />
       </div>
+
+      {/* Active filter indicator */}
+      {healthFilter !== 'all' && (
+        <div className="shrink-0 flex items-center gap-2 px-2 py-1.5 mb-2 rounded-md bg-primary/5 border border-primary/20">
+          <Filter className="h-3 w-3 text-primary" />
+          <span className="text-xs text-foreground font-medium">Filtered: {activeFilterLabel}</span>
+          <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] ml-auto" onClick={() => setHealthFilter('all')}>
+            <X className="h-3 w-3 mr-0.5" /> Clear
+          </Button>
+        </div>
+      )}
 
       {/* System Health Overview */}
       <div className="shrink-0 pb-2 border-b border-border mb-2">
