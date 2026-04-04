@@ -382,9 +382,23 @@ async function normalizeStaleStatuses(
         update.active_job_finished_at = new Date().toISOString();
       }
 
+      // Clear stale 'idle' job status
+      if (isIdleJob) {
+        update.active_job_status = null;
+      }
+
       // Fix extraction_retrying → extracted when KIs exist
       if (isRetrying && hasKIs) {
         update.enrichment_status = 'extracted';
+      }
+
+      // Fix needs_auth misclassification: content exists, reclassify to enriched
+      if (isNeedsAuth && hasUsableContent) {
+        update.enrichment_status = 'enriched';
+        update.failure_reason = null;
+        update.active_job_status = null;
+        update.active_job_error = null;
+        log.info('Reclassifying needs_auth → enriched (content exists)', { id, content_length: contentInfo?.content_length });
       }
 
       const { error } = await supabase
