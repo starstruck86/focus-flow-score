@@ -817,7 +817,7 @@ function FailureDossierSection({ resource }: { resource: Resource }) {
   const lc = status ? {
     stage: status.canonical_stage,
     blocked: status.blocked_reason,
-    kiCount: status.ki_count,
+    kiCount: status.knowledge_item_count,
     activeKi: status.active_ki_count,
     activeKiWithCtx: status.active_ki_with_context_count ?? 0,
   } : undefined;
