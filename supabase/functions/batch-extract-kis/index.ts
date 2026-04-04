@@ -341,12 +341,25 @@ interface ExtractionAuditSummary {
   final_floor: number;
 }
 
+/** Compute yield quality flag from attempt metrics */
+function computeYieldQualityFlag(
+  rawCount: number, validatedCount: number, dedupedCount: number, kiCount: number
+): 'high_loss_validation' | 'high_loss_dedup' | 'over_extracted' | 'expected' {
+  const valLoss = rawCount > 0 ? (rawCount - validatedCount) / rawCount : 0;
+  const dedLoss = validatedCount > 0 ? (validatedCount - dedupedCount) / validatedCount : 0;
+  if (valLoss > 0.5) return 'high_loss_validation';
+  if (dedLoss > 0.3) return 'high_loss_dedup';
+  if (valLoss < 0.1 && dedLoss < 0.1 && kiCount > 12) return 'over_extracted';
+  return 'expected';
+}
+
 /** Build audit summary from actual persisted attempt history */
 function buildAuditFromHistory(
   attemptHistory: AttemptRecord[],
   finalStatus: string,
   contentLength: number,
   isLesson: boolean,
+  floorDetails?: { base: number; densityAdjusted: number; final: number },
 ): ExtractionAuditSummary | null {
   if (attemptHistory.length === 0) return null;
 
@@ -354,18 +367,35 @@ function buildAuditFromHistory(
   const strategies = [...new Set(attemptHistory.map(a => a.strategy))];
   const totalElapsed = attemptHistory.reduce((sum, a) => sum + a.duration_ms, 0);
 
+  const valLossPct = lastAttempt.raw_item_count > 0
+    ? Math.round(((lastAttempt.raw_item_count - lastAttempt.validated_count) / lastAttempt.raw_item_count) * 100) : 0;
+  const dedLossPct = lastAttempt.validated_count > 0
+    ? Math.round(((lastAttempt.validated_count - lastAttempt.deduped_count) / lastAttempt.validated_count) * 100) : 0;
+  const rawToFinal = lastAttempt.raw_item_count > 0
+    ? Math.round((lastAttempt.ki_count / lastAttempt.raw_item_count) * 100) / 100 : 0;
+
   const summary: ExtractionAuditSummary = {
     total_attempts: attemptHistory.length,
     strategies_used: strategies,
     final_ki_count: lastAttempt.ki_count,
     min_ki_floor: lastAttempt.min_ki_floor,
-    floor_met: lastAttempt.floor_met,
+    floor_met: lastAttempt.ki_count >= lastAttempt.min_ki_floor,
     final_status: finalStatus,
     final_failure_type: lastAttempt.failure_type,
     total_elapsed_ms: totalElapsed,
     content_length: contentLength,
     is_structured_lesson: isLesson,
     completed_at: new Date().toISOString(),
+    validation_loss_pct: valLossPct,
+    dedup_loss_pct: dedLossPct,
+    raw_to_final_ratio: rawToFinal,
+    yield_quality_flag: computeYieldQualityFlag(
+      lastAttempt.raw_item_count, lastAttempt.validated_count,
+      lastAttempt.deduped_count, lastAttempt.ki_count
+    ),
+    base_floor: floorDetails?.base ?? lastAttempt.min_ki_floor,
+    density_adjusted_floor: floorDetails?.densityAdjusted ?? lastAttempt.min_ki_floor,
+    final_floor: floorDetails?.final ?? lastAttempt.min_ki_floor,
   };
 
   // ── Validate before returning ──
