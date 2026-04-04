@@ -283,6 +283,25 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
               </div>
             );
           })()}
+
+          {/* J. Prevention insights from still-blocked resources */}
+          {result.resourceOutcomes.length > 0 && (() => {
+            const stillBlocked = result.resourceOutcomes.filter(o => o.resolutionOutcome?.startsWith('still_blocked'));
+            if (stillBlocked.length === 0) return null;
+            // Count resolution outcomes for quick summary
+            const sameCause = stillBlocked.filter(o => o.resolutionOutcome === 'still_blocked_same_cause').length;
+            const newCause = stillBlocked.filter(o => o.resolutionOutcome === 'still_blocked_new_cause').length;
+            return (
+              <div className="text-[10px] text-amber-700 bg-amber-500/5 border border-amber-500/10 rounded px-2 py-1.5 space-y-0.5">
+                {sameCause > 0 && (
+                  <p>{sameCause} resource{sameCause > 1 ? 's' : ''} still blocked by the same root cause — retry alone will not resolve these.</p>
+                )}
+                {newCause > 0 && (
+                  <p>{newCause} resource{newCause > 1 ? 's' : ''} blocked by a new root cause after fix attempt.</p>
+                )}
+              </div>
+            );
+          })()}
         </>
       )}
     </div>
