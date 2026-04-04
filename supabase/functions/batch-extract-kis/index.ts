@@ -1064,7 +1064,7 @@ Deno.serve(async (req) => {
     const durationMs = Date.now() - startTime;
 
     if (deduped.length < 1) {
-      const failureType = classifyFailure(null, 0, minKiFloor, rawItems.length);
+      const failureType = classifyFailure(null, 0, minKiFloor, rawItems.length, validated.length);
       log.outcome = isDryRun ? 'benchmark_below_threshold' : 'below_threshold';
       log.failureType = failureType;
 
@@ -1085,6 +1085,11 @@ Deno.serve(async (req) => {
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
         });
+
+        // Auto-retry: fire-and-forget next attempt
+        if (retryEligible) {
+          scheduleRetry(supabaseUrl, serviceRoleKey, resourceId);
+        }
       }
       console.log(`[extract] ⚠️ "${resource.title}": 0 items — attempt ${attemptNumber}/${maxAttempts}`);
       return respond({ resourceId, title: resource.title, kis: 0, error: 'Below quality threshold', attemptNumber, strategy, log, benchmarkMode: isDryRun });
