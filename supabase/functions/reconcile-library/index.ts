@@ -236,24 +236,33 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get KI counts per resource
+    // Get KI counts per resource — paginated to avoid 1000-row limit
     const resourceIds = allResources.map((r) => r.id);
     const kiCounts: Record<string, { total: number; active: number }> = {};
 
-    for (let i = 0; i < resourceIds.length; i += 200) {
-      const chunk = resourceIds.slice(i, i + 200);
-      const { data: kis } = await supabase
-        .from("knowledge_items")
-        .select("source_resource_id, active")
-        .in("source_resource_id", chunk);
+    for (let i = 0; i < resourceIds.length; i += 50) {
+      const chunk = resourceIds.slice(i, i + 50);
+      // Paginate within each chunk to handle >1000 KIs per chunk
+      let kiOffset = 0;
+      const kiPageSize = 1000;
+      while (true) {
+        const { data: kis } = await supabase
+          .from("knowledge_items")
+          .select("source_resource_id, active")
+          .in("source_resource_id", chunk)
+          .range(kiOffset, kiOffset + kiPageSize - 1);
 
-      if (kis) {
+        if (!kis || kis.length === 0) break;
+
         for (const ki of kis) {
           const rid = ki.source_resource_id;
           if (!kiCounts[rid]) kiCounts[rid] = { total: 0, active: 0 };
           kiCounts[rid].total++;
           if (ki.active) kiCounts[rid].active++;
         }
+
+        if (kis.length < kiPageSize) break;
+        kiOffset += kiPageSize;
       }
     }
 
