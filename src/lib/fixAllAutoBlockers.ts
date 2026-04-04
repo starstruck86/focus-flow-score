@@ -334,6 +334,7 @@ export async function runFixAllAutoBlockers(
   blockerGroups: BlockerGroup[],
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
+  callbacks?: FixAllCallbacks,
 ): Promise<FixAllResult> {
   const phases: FixPhaseResult[] = [];
   const totalBefore = blockerGroups.reduce((s, g) => s + g.resourceIds.length, 0);
@@ -346,11 +347,12 @@ export async function runFixAllAutoBlockers(
     groupMap.set(g.type, existing);
   }
 
-  // Phase 0: Normalize stale statuses (extraction_retrying with KIs, failed with KIs)
+  // Phase 0: Normalize stale statuses
   const allIds = blockerGroups.flatMap(g => g.resourceIds);
   if (allIds.length > 0) {
+    callbacks?.onPhaseChange?.('normalize_status', 'Normalizing statuses', 'Normalizing stale statuses…');
     onProgress?.('Normalizing stale statuses…');
-    const normalizeResult = await normalizeStaleStatuses(allIds, onProgress);
+    const normalizeResult = await normalizeStaleStatuses(allIds, onProgress, callbacks);
     if (normalizeResult.attempted > 0) phases.push(normalizeResult);
   }
 
@@ -360,8 +362,9 @@ export async function runFixAllAutoBlockers(
     ...(groupMap.get('stalled_enrichment') ?? []),
   ];
   if (stalledIds.length > 0) {
+    callbacks?.onPhaseChange?.('stalled_retry', 'Retrying stalled jobs', `Retrying ${stalledIds.length} stalled jobs…`);
     onProgress?.(`Retrying ${stalledIds.length} stalled jobs…`);
-    const stalledResult = await fixStalledJobs(stalledIds, onProgress);
+    const stalledResult = await fixStalledJobs(stalledIds, onProgress, callbacks);
     phases.push(stalledResult);
   }
 
@@ -372,24 +375,27 @@ export async function runFixAllAutoBlockers(
     ...(groupMap.get('stale_version') ?? []),
   ];
   if (enrichIds.length > 0) {
+    callbacks?.onPhaseChange?.('enrichment', 'Enriching resources', `Enriching ${enrichIds.length} resources…`);
     onProgress?.(`Enriching ${enrichIds.length} resources…`);
-    const enrichResult = await fixNeedsEnrichment(enrichIds, onProgress);
+    const enrichResult = await fixNeedsEnrichment(enrichIds, onProgress, callbacks);
     phases.push(enrichResult);
   }
 
   // Phase 3: Extract
   const extractIds = groupMap.get('needs_extraction') ?? [];
   if (extractIds.length > 0) {
+    callbacks?.onPhaseChange?.('extraction', 'Extracting knowledge items', `Extracting ${extractIds.length} resources…`);
     onProgress?.(`Extracting ${extractIds.length} resources…`);
-    const extractResult = await fixNeedsExtraction(extractIds, onProgress, onResourcePhase);
+    const extractResult = await fixNeedsExtraction(extractIds, onProgress, onResourcePhase, callbacks);
     phases.push(extractResult);
   }
 
-  // Phase 4: Activate (dedicated path, not re-extraction)
+  // Phase 4: Activate
   const activateIds = groupMap.get('needs_activation') ?? [];
   if (activateIds.length > 0) {
+    callbacks?.onPhaseChange?.('activation', 'Activating knowledge items', `Activating ${activateIds.length} resources…`);
     onProgress?.(`Activating ${activateIds.length} resources…`);
-    const activateResult = await fixNeedsActivation(activateIds, onProgress, onResourcePhase);
+    const activateResult = await fixNeedsActivation(activateIds, onProgress, onResourcePhase, callbacks);
     phases.push(activateResult);
   }
 
