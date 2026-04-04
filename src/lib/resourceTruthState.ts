@@ -342,12 +342,13 @@ export function deriveResourceTruth(
 // ── Truth State UI Colors ─────────────────────────────────
 
 export const TRUTH_STATE_COLORS: Record<TruthState, { text: string; bg: string }> = {
-  ready:       { text: 'text-emerald-600', bg: 'bg-emerald-500/10' },
-  processing:  { text: 'text-primary',     bg: 'bg-primary/10' },
-  blocked:     { text: 'text-destructive',  bg: 'bg-destructive/10' },
-  stalled:     { text: 'text-destructive',  bg: 'bg-destructive/10' },
-  qa_required: { text: 'text-amber-600',    bg: 'bg-amber-500/10' },
-  quarantined: { text: 'text-muted-foreground', bg: 'bg-muted' },
+  ready:          { text: 'text-emerald-600', bg: 'bg-emerald-500/10' },
+  processing:     { text: 'text-primary',     bg: 'bg-primary/10' },
+  blocked:        { text: 'text-destructive',  bg: 'bg-destructive/10' },
+  stalled:        { text: 'text-destructive',  bg: 'bg-destructive/10' },
+  qa_required:    { text: 'text-amber-600',    bg: 'bg-amber-500/10' },
+  quarantined:    { text: 'text-muted-foreground', bg: 'bg-muted' },
+  reference_only: { text: 'text-muted-foreground', bg: 'bg-muted/50' },
 };
 
 // ── Library Readiness ─────────────────────────────────────
