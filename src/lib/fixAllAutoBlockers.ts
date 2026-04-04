@@ -477,11 +477,25 @@ export async function runFixAllAutoBlockers(
 
   // Track per-resource outcomes
   const outcomeMap = new Map<string, FixResourceOutcome>();
+
+  // Fetch titles for all resources upfront for readable outcomes
+  const allResourceIds = blockerGroups.flatMap(g => g.resourceIds);
+  const titleMap = new Map<string, string>();
+  if (allResourceIds.length > 0) {
+    const { data: titleData } = await supabase
+      .from('resources' as any)
+      .select('id, title, content')
+      .in('id', allResourceIds);
+    for (const r of (titleData ?? []) as any[]) {
+      titleMap.set(r.id, r.title ?? r.id.slice(0, 8));
+    }
+  }
+
   const initOutcome = (id: string, phase: string, blockerType: string) => {
     if (!outcomeMap.has(id)) {
       outcomeMap.set(id, {
         resourceId: id,
-        resourceTitle: id.slice(0, 8),
+        resourceTitle: titleMap.get(id) ?? id.slice(0, 8),
         phase,
         attempted: false,
         succeeded: false,

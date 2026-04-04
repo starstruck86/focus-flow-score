@@ -164,7 +164,8 @@ export async function autoOperationalizeResource(
   stagesCompleted.push('content_ready');
 
   // ── Clear stale blockers if content-backed ──
-  if (r.manual_input_required || r.enrichment_status === 'failed' || r.recovery_queue_bucket) {
+  // HARDENED: Also clear needs_auth when content actually exists — false auth classification
+  if (r.manual_input_required || r.enrichment_status === 'failed' || r.enrichment_status === 'needs_auth' || r.recovery_queue_bucket) {
     await supabase.from('resources').update({
       enrichment_status: 'deep_enriched',
       resolution_method: 'resolved_manual',
