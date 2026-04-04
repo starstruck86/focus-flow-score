@@ -156,7 +156,7 @@ export function deriveProcessingRoute(resource: Resource): ProcessingRoute {
     (source_type === 'url' && contentLength > 2000)
   ) {
     confidence = 'high';
-  } else if (contentLength > 0 || enrichmentStatus === 'enriched') {
+  } else if (contentLength > 0 || enrichmentStatus === 'deep_enriched') {
     confidence = 'medium';
   } else {
     confidence = 'low';
