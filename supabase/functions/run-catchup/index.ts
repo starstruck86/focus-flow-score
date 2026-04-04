@@ -125,15 +125,47 @@ function deriveRoute(resource: any): DerivedRoute {
     reason.push("Summary-first fallback (prior attempts exhausted)");
   }
 
-  // Outcome-aware learning: avoid repeated failures
-  if (enrichmentStatus === "failed" && failureCount >= 2) {
-    if ((isAudio || isVideo) && pipeline === "transcript_pipeline") {
-      pipeline = "manual_assist";
-      reason.push("Transcript pipeline avoided — repeated failures");
-    } else if (pipeline === "enrich_then_extract") {
-      pipeline = "manual_assist";
-      reason.push("Enrich pipeline avoided — repeated failures");
+  // Outcome-aware learning: derive failure history from extraction_audit_summary
+  const audit = resource.extraction_audit_summary;
+  const failedMethods: Record<string, number> = {};
+  const failedPipelines: Record<string, number> = {};
+  let totalAttempts = 0;
+
+  if (audit?.attempts_summary && Array.isArray(audit.attempts_summary)) {
+    for (const attempt of audit.attempts_summary) {
+      totalAttempts++;
+      if (attempt.status === "failed") {
+        const method = (attempt.strategy || "standard");
+        failedMethods[method] = (failedMethods[method] || 0) + 1;
+      }
     }
+  }
+  totalAttempts = Math.max(totalAttempts, failureCount);
+
+  if (enrichmentStatus === "failed" && (resource.failure_count || 0) >= 2) {
+    if ((isAudio || isVideo)) {
+      failedPipelines["transcript_pipeline"] = (failedPipelines["transcript_pipeline"] || 0) + (resource.failure_count || 0);
+    } else {
+      failedPipelines["enrich_then_extract"] = (failedPipelines["enrich_then_extract"] || 0) + (resource.failure_count || 0);
+    }
+  }
+
+  // Apply learning: avoid repeated failures
+  if ((failedPipelines["transcript_pipeline"] || 0) >= 2 && pipeline === "transcript_pipeline") {
+    pipeline = "manual_assist";
+    reason.push("Transcript pipeline avoided — repeated failures detected");
+  }
+  if ((failedPipelines["enrich_then_extract"] || 0) >= 2 && pipeline === "enrich_then_extract") {
+    pipeline = "manual_assist";
+    reason.push("Enrich pipeline avoided — repeated failures detected");
+  }
+  if ((failedMethods["standard"] || 0) >= 2 && extraction_method === "standard") {
+    extraction_method = "dense_teaching";
+    reason.push("Escalated to dense teaching — standard extraction failed repeatedly");
+  }
+  if ((failedMethods["dense_teaching"] || 0) >= 2 && extraction_method === "dense_teaching") {
+    extraction_method = "summary_first";
+    reason.push("Escalated to summary-first — dense teaching failed repeatedly");
   }
 
   // Confidence
@@ -149,7 +181,7 @@ function deriveRoute(resource: any): DerivedRoute {
     reason.push("Ambiguous routing — low confidence");
   }
 
-  if (failureCount >= 3 && confidence === "high") {
+  if (totalAttempts >= 3 && confidence === "high") {
     confidence = "medium";
     reason.push("Confidence reduced — multiple prior attempts");
   }
