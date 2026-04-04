@@ -1108,10 +1108,7 @@ Deno.serve(async (req) => {
     const lastFailureType = resource.extraction_failure_type as ExtractionFailureType | undefined;
     const strategy = selectStrategy(attemptNumber, lastFailureType);
 
-    // Load persisted attempt history (append-only across retries)
-    const attemptHistory: AttemptRecord[] = Array.isArray(resource.extraction_attempt_history)
-      ? resource.extraction_attempt_history as AttemptRecord[]
-      : [];
+    // Attempt history is now stored in resource_extraction_attempts table (no JSON on resource)
 
     // ── Time-based retry guard: skip if next_retry_at hasn't been reached ──
     if (attemptNumber > 1 && resource.next_retry_at) {
