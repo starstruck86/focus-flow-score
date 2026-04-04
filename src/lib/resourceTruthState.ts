@@ -244,15 +244,21 @@ export function deriveResourceTruth(
     truth_state = 'processing';
     readiness_label = 'Processing';
   } else if (hasBlockers) {
-    // Distinguish qa_required from blocked
-    const hasQaBlocker = sortedBlockers.some(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'needs_auth');
-    const hasOnlyQa = sortedBlockers.every(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'route_manual_assist' || b.type === 'needs_auth');
-    if (hasOnlyQa) {
-      truth_state = 'qa_required';
-      readiness_label = 'QA Required';
+    // Check if the only blocker is reference_only
+    const hasOnlyRefOnly = sortedBlockers.every(b => b.type === 'reference_only');
+    if (hasOnlyRefOnly) {
+      truth_state = 'reference_only';
+      readiness_label = 'Reference Only';
     } else {
-      truth_state = 'blocked';
-      readiness_label = 'Blocked';
+      // Distinguish qa_required from blocked
+      const hasOnlyQa = sortedBlockers.every(b => b.type === 'qa_required' || b.type === 'route_low_confidence' || b.type === 'route_manual_assist' || b.type === 'needs_auth' || b.type === 'reference_only');
+      if (hasOnlyQa) {
+        truth_state = 'qa_required';
+        readiness_label = 'QA Required';
+      } else {
+        truth_state = 'blocked';
+        readiness_label = 'Blocked';
+      }
     }
   } else {
     // No blockers — truly ready
