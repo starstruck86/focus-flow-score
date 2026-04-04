@@ -1223,6 +1223,10 @@ async function updateExtractionStatus(supabase: any, resourceId: string, status:
           const valLoss = lastSuccess.raw_item_count > 0 ? Math.round(((lastSuccess.raw_item_count - lastSuccess.validated_count) / lastSuccess.raw_item_count) * 100) : 0;
           const dedLoss = lastSuccess.validated_count > 0 ? Math.round(((lastSuccess.validated_count - lastSuccess.deduped_count) / lastSuccess.validated_count) * 100) : 0;
 
+          const bestConf = lastSuccess.confidence_score ?? computeAttemptConfidence(
+            lastSuccess.ki_count, lastSuccess.min_ki_floor,
+            lastSuccess.raw_item_count, lastSuccess.validated_count, lastSuccess.deduped_count
+          );
           extraFields.extraction_audit_summary = {
             total_attempts: history.length,
             strategies_used: strategies,
@@ -1242,6 +1246,8 @@ async function updateExtractionStatus(supabase: any, resourceId: string, status:
             base_floor: lastSuccess.min_ki_floor,
             density_adjusted_floor: lastSuccess.min_ki_floor,
             final_floor: lastSuccess.min_ki_floor,
+            best_attempt_index: lastSuccess.attempt_number,
+            confidence_score: bestConf,
             protected_from_degradation: true,
             source_attempt: lastSuccess.attempt_number,
           };
