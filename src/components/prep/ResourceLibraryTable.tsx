@@ -236,6 +236,13 @@ export function ResourceLibraryTable({
   const batchActive = useResourceJobProgress(s => s.batchActive);
   const isMobile = useIsMobile();
 
+  // Sync external filter from parent (e.g. NeedsAttentionQueue clicks)
+  useEffect(() => {
+    if (externalHealthFilter && externalHealthFilter !== healthFilter) {
+      setHealthFilter(externalHealthFilter as HealthFilter);
+    }
+  }, [externalHealthFilter]);
+
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
