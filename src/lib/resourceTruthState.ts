@@ -226,6 +226,13 @@ export function deriveResourceTruth(
     blockers.push(blocker('contradictory_state', 'Processing state conflict — RUNNING with no active job'));
   }
 
+  // ── ANTI-LIMBO GUARD ─────────────────────────────────────
+  // HARD RULE: A content-backed resource with 0 KIs that is not processing
+  // MUST have at least one blocker. If nothing else caught it, force needs_extraction.
+  if (isContentBacked && kiTotal === 0 && !isActivelyProcessing && blockers.length === 0) {
+    blockers.push(blocker('needs_extraction', `Anti-limbo guard: content-backed (${contentLength} chars) with 0 KIs — extraction required`));
+  }
+
   // ── Determine truth state ───────────────────────────────
   const hasBlockers = blockers.length > 0;
   const sortedBlockers = [...blockers].sort((a, b) => {
