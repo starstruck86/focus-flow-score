@@ -417,7 +417,7 @@ const BLOCKED_ACTIONS: Record<string, string> = {
   none: 'No action needed',
 };
 
-function LifecyclePanel({ resourceId }: { resourceId: string }) {
+function LifecyclePanel({ resourceId, resource }: { resourceId: string; resource?: Resource }) {
   const { summary } = useCanonicalLifecycle();
   if (!summary) return null;
 
@@ -427,8 +427,17 @@ function LifecyclePanel({ resourceId }: { resourceId: string }) {
   const stageLabel = HUMAN_STAGE_LABELS[status.canonical_stage] ?? status.canonical_stage;
   const blockedLabel = HUMAN_BLOCKED_LABELS[status.blocked_reason] ?? status.blocked_reason;
   const actionLabel = BLOCKED_ACTIONS[status.blocked_reason] ?? '';
-  const isReady = status.canonical_stage === 'operationalized';
-  const isBlocked = status.blocked_reason !== 'none';
+  // Derive readiness from canonical truth — not lifecycle stage alone
+  const lc = {
+    stage: status.canonical_stage,
+    blocked: status.blocked_reason,
+    kiCount: status.knowledge_item_count,
+    activeKi: status.active_ki_count,
+    activeKiWithCtx: status.active_ki_with_context_count,
+  };
+  const truth = resource ? deriveResourceTruth(resource, lc) : null;
+  const isReady = truth ? truth.is_ready : false;
+  const isBlocked = truth ? !truth.is_ready && truth.all_blockers.length > 0 : status.blocked_reason !== 'none';
 
   return (
     <div className={cn(
