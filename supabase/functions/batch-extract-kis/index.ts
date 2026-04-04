@@ -331,7 +331,6 @@ interface ExtractionAuditSummary {
   content_length: number;
   is_structured_lesson: boolean;
   completed_at: string;
-  attempt_history: AttemptRecord[];
 }
 
 /** Build audit summary from actual persisted attempt history */
