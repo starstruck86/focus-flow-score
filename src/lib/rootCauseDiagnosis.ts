@@ -199,8 +199,20 @@ export function diagnoseRootCause(
     };
   }
 
-  // ── Rule 4: Auth-required
+  // ── Rule 4: Auth-required — HARDENED: only when content is genuinely missing
   if (primary.type === 'needs_auth') {
+    // If content exists but marked needs_auth, this is a misclassification
+    if (contentLength >= 200 || hasManualContent) {
+      return {
+        category: 'routing_misclassification',
+        source_layer: 'enrichment_pipeline',
+        explanation: `Marked as "needs_auth" but has ${contentLength} chars of usable content. Auth is not the real blocker — content already exists. The pipeline should extract from existing content instead.`,
+        evidence,
+        permanent_fix: 'Remove needs_auth classification when usable content exists. Route to extraction instead.',
+        auto_fixable: true,
+        resolved_by: 're_extract',
+      };
+    }
     return {
       category: 'auth_required',
       source_layer: 'enrichment_pipeline',

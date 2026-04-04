@@ -316,6 +316,9 @@ export function deriveResourceTruth(
       case 'downstream_ineligible':
         next_required_action = { label: 'Fix Eligibility', actionKey: 'view', variant: 'outline' };
         break;
+      case 'reference_only':
+        next_required_action = { label: 'Review', actionKey: 'view', variant: 'ghost' };
+        break;
       default:
         next_required_action = { label: 'Review', actionKey: 'view', variant: 'outline' };
     }
