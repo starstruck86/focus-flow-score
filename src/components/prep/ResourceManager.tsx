@@ -934,10 +934,25 @@ export function ResourceManager() {
                   break;
                 }
                 case 'bulk_retry_stalled': {
-                  toast.info(`Retrying ${resourceIds.length} stalled jobs…`);
+                  // Derive stalled IDs from truth if none provided
+                  let stalledIds = resourceIds.filter(id => id); // filter empties
+                  if (stalledIds.length === 0) {
+                    const { deriveResourceTruth } = await import('@/lib/resourceTruthState');
+                    stalledIds = filteredResources
+                      .filter(r => {
+                        const truth = deriveResourceTruth(r, lifecycleMap.get(r.id), audioJobsMap?.get(r.id));
+                        return truth.truth_state === 'stalled';
+                      })
+                      .map(r => r.id);
+                  }
+                  if (stalledIds.length === 0) {
+                    toast.info('No stalled jobs found');
+                    break;
+                  }
+                  toast.info(`Retrying ${stalledIds.length} stalled jobs…`);
                   try {
                     const { clearStalledJobStatus } = await import('@/lib/fixAllAutoBlockers');
-                    for (const id of resourceIds) {
+                    for (const id of stalledIds) {
                       await clearStalledJobStatus(id);
                       await invokeEnrichResource(
                         { resource_id: id, force: true },
@@ -946,7 +961,7 @@ export function ResourceManager() {
                     }
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
-                    toast.success(`Retried ${resourceIds.length} stalled jobs`);
+                    toast.success(`Retried ${stalledIds.length} stalled jobs`);
                   } catch (err: any) {
                     toast.error('Stalled retry failed', { description: err?.message });
                   }

@@ -1,6 +1,7 @@
 /**
  * FixAllProgressPanel — Shows real-time progress during a Fix All run.
- * Displays progress bar, timing, stall detection, and per-phase results.
+ * Displays progress bar, timing, stall detection, per-phase results,
+ * and post-run blocker diff with "why still blocked" visibility.
  */
 import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -8,10 +9,11 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import {
   Loader2, CheckCircle2, AlertTriangle, Activity, Zap, RefreshCw, Clock, RotateCcw,
+  TrendingDown, ArrowRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDurationShort, type FixAllLiveProgress } from '@/lib/fixAllProgress';
-import type { FixAllResult, FixPhaseResult } from '@/lib/fixAllAutoBlockers';
+import type { FixAllResult, FixPhaseResult, BlockerDiff } from '@/lib/fixAllAutoBlockers';
 
 interface Props {
   progress: FixAllLiveProgress | null;
@@ -36,6 +38,18 @@ const PHASE_LABELS: Record<string, string> = {
   activation: 'Activation',
 };
 
+const BLOCKER_LABELS: Record<string, string> = {
+  needs_enrichment: 'Needs Enrichment',
+  needs_extraction: 'Needs Extraction',
+  needs_activation: 'Needs Activation',
+  missing_content: 'Missing Content',
+  stalled_extraction: 'Stalled Extraction',
+  stalled_enrichment: 'Stalled Enrichment',
+  stale_version: 'Stale Version',
+  needs_auth: 'Auth Required',
+  contradictory_state: 'Contradictions',
+};
+
 export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalled }: Props) {
   const lastUpdateAgo = useMemo(() => {
     if (!progress?.lastProgressAt) return null;
@@ -44,6 +58,9 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
   }, [progress?.lastProgressAt, progress?.elapsedMs]);
 
   if (!isRunning && !result && !progress) return null;
+
+  // Identify high-unchanged blocker types for callout
+  const unchangedCallouts = result?.blockerDiff?.filter(d => d.unchanged > 0 && d.before > 1) ?? [];
 
   return (
     <div className={cn(
@@ -180,6 +197,43 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* G. Blocker diff — before/after by type */}
+          {result.blockerDiff && result.blockerDiff.length > 0 && (
+            <div className="space-y-1 pt-1.5 border-t border-border/50">
+              <p className="text-[10px] font-medium text-foreground flex items-center gap-1">
+                <TrendingDown className="h-3 w-3" />
+                Blocker Breakdown
+              </p>
+              {result.blockerDiff.map((d) => (
+                <div key={d.type} className="flex items-center gap-2 text-[10px]">
+                  <span className="min-w-[100px] text-muted-foreground">
+                    {BLOCKER_LABELS[d.type] ?? d.type.replace(/_/g, ' ')}
+                  </span>
+                  <span className="text-muted-foreground">{d.before}</span>
+                  <ArrowRight className="h-2.5 w-2.5 text-muted-foreground" />
+                  <span className={d.after === 0 ? 'text-emerald-600 font-medium' : d.after === d.before ? 'text-destructive font-medium' : 'text-amber-600'}>
+                    {d.after}
+                  </span>
+                  {d.resolved > 0 && (
+                    <span className="text-emerald-600 text-[9px]">−{d.resolved}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* H. High-unchanged callout */}
+          {unchangedCallouts.length > 0 && !result.system_ready && (
+            <div className="text-[10px] text-amber-700 bg-amber-500/5 border border-amber-500/10 rounded px-2 py-1.5">
+              {unchangedCallouts.map(d => (
+                <p key={d.type}>
+                  {BLOCKER_LABELS[d.type] ?? d.type}: {d.unchanged}/{d.before} unchanged
+                  {d.unchanged === d.before && ' — phase made no progress'}
+                </p>
+              ))}
             </div>
           )}
         </>
