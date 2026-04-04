@@ -1204,6 +1204,8 @@ Deno.serve(async (req) => {
             durationMs: durationMs, contentLength: resource.content.length, isLesson,
           });
         }
+        await saveExtractionLog(supabase, log);
+        await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
 
         // Auto-retry: fire-and-forget next attempt
         if (retryEligible) {
