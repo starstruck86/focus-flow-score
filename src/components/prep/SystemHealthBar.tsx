@@ -64,15 +64,30 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
     let emptyContentCount = 0;
     let needsReviewCount = 0;
 
+    let stalledCount = 0;
+    let contradictionCount = 0;
+
     for (const r of resources) {
       const lc = lifecycleMap.get(r.id);
       if (!lc) continue;
-      if (lc.blocked === 'empty_content') emptyContentCount++;
-      if (lc.blocked === 'no_extraction') needsExtractionCount++;
-      if (lc.blocked === 'stale_blocker_state') needsReviewCount++;
-      if (r.enrichment_status === 'failed') failedCount++;
+      const truth = deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
+      for (const b of truth.all_blockers) {
+        switch (b.type) {
+          case 'missing_content': emptyContentCount++; break;
+          case 'needs_extraction': needsExtractionCount++; break;
+          case 'stalled_enrichment':
+          case 'stalled_extraction': stalledCount++; break;
+          case 'contradictory_state': contradictionCount++; break;
+          case 'stale_version': needsReviewCount++; break;
+        }
+      }
+      if (r.enrichment_status === 'failed' && !truth.all_blockers.some(b => b.type === 'stalled_enrichment')) failedCount++;
     }
 
+    if (stalledCount > 0) items.push({
+      label: 'Stalled', count: stalledCount, icon: Clock,
+      color: 'text-destructive', actionLabel: 'Fix', filterKey: 'stalled',
+    });
     if (failedCount > 0) items.push({
       label: 'Failed', count: failedCount, icon: XCircle,
       color: 'text-destructive', actionLabel: 'View', filterKey: 'failed',
@@ -85,13 +100,17 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
       label: 'Need extraction', count: needsExtractionCount, icon: Zap,
       color: 'text-amber-600', actionLabel: 'Extract', filterKey: 'needs_extraction',
     });
+    if (contradictionCount > 0) items.push({
+      label: 'Contradictions', count: contradictionCount, icon: AlertTriangle,
+      color: 'text-destructive', actionLabel: 'Fix', filterKey: 'contradictions',
+    });
     if (needsReviewCount > 0) items.push({
       label: 'Need review', count: needsReviewCount, icon: Eye,
       color: 'text-amber-600', actionLabel: 'Review', filterKey: 'needs_review',
     });
 
     return items;
-  }, [resources, lifecycleMap]);
+  }, [resources, lifecycleMap, audioJobsMap]);
 
   const totalAttention = attentionItems.reduce((s, i) => s + i.count, 0);
 
