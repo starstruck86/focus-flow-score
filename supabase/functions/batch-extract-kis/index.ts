@@ -1121,6 +1121,11 @@ Deno.serve(async (req) => {
           extractor_strategy: strategy,
           extraction_retry_eligible: retryEligible,
         });
+
+        // Auto-retry: fire-and-forget next attempt
+        if (retryEligible) {
+          scheduleRetry(supabaseUrl, serviceRoleKey, resourceId);
+        }
       }
       return respond({ resourceId, title: resource.title, kis: 0, error: invariantMsg, attemptNumber, strategy, failureType, log, benchmarkMode: isDryRun });
     }
