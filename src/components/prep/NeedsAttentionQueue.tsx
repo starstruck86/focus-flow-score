@@ -76,6 +76,18 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
       const lc = lifecycleMap.get(r.id);
       if (!lc) continue;
       const rAny = r as any;
+      const truth = deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
+
+      // Contradictory state (highest priority)
+      if (truth.integrity_issues.length > 0) {
+        contradictions.push({
+          resource: r, issueType: 'contradiction', priority: 0,
+          severity: -truth.integrity_issues.length,
+          reason: truth.integrity_issues[0],
+          actionLabel: 'Fix', actionKey: 'reset',
+          bulkEligible: false,
+        });
+      }
 
       // Stuck / stalled jobs (highest priority after failed)
       if (rAny.active_job_status === 'running' && isJobStale(rAny.active_job_updated_at, 'running')) {
