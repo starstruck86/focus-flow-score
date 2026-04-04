@@ -451,6 +451,17 @@ export function ResourceLibraryTable({
         <ProcessingStatusBar resources={resources} />
       </div>
 
+      {/* Fix All Progress */}
+      {(isFixAllRunning || lastFixResult) && (
+        <div className="shrink-0 mb-2">
+          <FixAllProgressPanel
+            progressMessage={fixAllProgressMessage}
+            isRunning={!!isFixAllRunning}
+            result={lastFixResult}
+          />
+        </div>
+      )}
+
       {/* Catch-Up Dashboard */}
       <div className="shrink-0 mb-2">
         <CatchupDashboard />
