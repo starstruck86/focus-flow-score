@@ -235,8 +235,21 @@ export function NeedsAttentionQueue({ resources, lifecycleMap, audioJobsMap, onA
           {urgentCount > 0 && (
             <span className="text-destructive font-medium">{urgentCount} urgent</span>
           )}
-          {fixableCount > 0 && (
-            <span>· {fixableCount} auto-fixable</span>
+          {fixableCount > 0 && onBulkAction && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-5 text-[9px] px-2 gap-1"
+              onClick={() => {
+                const autoFixableIds = groups
+                  .flatMap(g => g.items.filter(i => i.bulkEligible))
+                  .map(i => i.resource.id);
+                if (autoFixableIds.length > 0) onBulkAction('fix_all_auto', autoFixableIds);
+              }}
+            >
+              <Zap className="h-2.5 w-2.5" />
+              Fix {fixableCount} auto-fixable
+            </Button>
           )}
         </div>
       </div>
