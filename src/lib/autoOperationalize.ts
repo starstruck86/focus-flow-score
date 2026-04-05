@@ -96,6 +96,8 @@ export interface AutoOperationalizeResult {
   reason?: string;
   /** Which extraction method actually produced KIs: 'llm', 'heuristic', or 'none' */
   extractionMethod?: 'llm' | 'heuristic' | 'none';
+  /** Was heuristic fallback attempted? */
+  heuristicFallbackAttempted?: boolean;
 }
 
 // ── Auto-activation thresholds ─────────────────────────────
@@ -243,6 +245,7 @@ export async function autoOperationalizeResource(
   // Use tiered extraction based on contract tier
   const canExtract = !hasExistingKI && (eligibility.extractionTier === 'full' || eligibility.extractionTier === 'lightweight' || eligibility.extractionTier === 'reduced');
   let usedExtractionMethod: 'llm' | 'heuristic' | 'none' = 'none';
+  let heuristicFallbackAttempted = false;
   if (canExtract) {
     // Extract knowledge heuristically
     const { data: userData } = await supabase.auth.getUser();
@@ -309,6 +312,7 @@ export async function autoOperationalizeResource(
       contentForExtraction, r.resource_type, r.title,
     );
     if (finalExtracted.length === 0 && (!isAudioType || isStructuredForFallback)) {
+      heuristicFallbackAttempted = true;
       finalExtracted = extractKnowledgeHeuristic(source);
       if (finalExtracted.length > 0) usedExtractionMethod = 'heuristic';
       log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length, isStructuredForFallback });
@@ -345,7 +349,7 @@ export async function autoOperationalizeResource(
       active_job_finished_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as any).eq('id', resourceId);
-    return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason, undefined, undefined, usedExtractionMethod);
+    return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason, undefined, undefined, usedExtractionMethod, heuristicFallbackAttempted);
   }
   stagesCompleted.push('knowledge_extracted');
 
@@ -463,6 +467,7 @@ export async function autoOperationalizeResource(
     undefined,
     undefined,
     usedExtractionMethod,
+    heuristicFallbackAttempted,
   );
 }
 
@@ -694,6 +699,7 @@ function makeResult(
   extractionTier: AutoOperationalizeResult['extractionTier'] = 'none',
   outcome?: PipelineOutcome,
   extractionMethod?: 'llm' | 'heuristic' | 'none',
+  heuristicFallbackAttempted?: boolean,
 ): AutoOperationalizeResult {
   const derivedOutcome: PipelineOutcome = outcome
     ?? (operationalized ? 'operationalized'
@@ -717,6 +723,7 @@ function makeResult(
     extractionTier,
     reason,
     extractionMethod,
+    heuristicFallbackAttempted: heuristicFallbackAttempted ?? false,
   };
 }
 

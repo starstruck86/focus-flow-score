@@ -57,6 +57,19 @@ export interface FixResourceOutcome {
   contentLength: number;
   /** Extraction method used (llm, heuristic, none) */
   extractionMethod: string | null;
+  /** Was this resource in the original needs_extraction blocker group? */
+  inOriginalExtractionGroup: boolean;
+  /** Was this resource included in the extraction batch sent to autoOperationalizeBatch? */
+  batchIncluded: boolean;
+  /** Was heuristic fallback attempted after LLM? */
+  heuristicFallbackAttempted: boolean;
+  /** Extraction tier from pipeline contract */
+  extractionTier: string | null;
+  /** Post-run fresh DB state */
+  postRunEnrichmentStatus: string | null;
+  postRunJobStatus: string | null;
+  postRunKiCount: number | null;
+  postRunActiveKiCount: number | null;
 }
 
 export interface BlockerDiff {
@@ -225,9 +238,9 @@ async function fixNeedsExtraction(
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
   callbacks?: FixAllCallbacks,
-): Promise<{ phaseResult: FixPhaseResult; resourceResults: Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string }> }> {
+): Promise<{ phaseResult: FixPhaseResult; resourceResults: Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string; heuristicFallbackAttempted?: boolean; extractionTier?: string }> }> {
   const result: FixPhaseResult = { phase: 'extraction', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
-  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string }>();
+  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string; heuristicFallbackAttempted?: boolean; extractionTier?: string }>();
 
   if (resourceIds.length === 0) return { phaseResult: result, resourceResults };
 
@@ -259,6 +272,8 @@ async function fixNeedsExtraction(
         reason: r.reason,
         succeeded: r.knowledgeExtracted > 0 || r.operationalized,
         extractionMethod: r.extractionMethod,
+        heuristicFallbackAttempted: r.heuristicFallbackAttempted,
+        extractionTier: r.extractionTier,
       });
       if (r.knowledgeExtracted > 0 || r.operationalized) {
         result.succeeded++;
@@ -561,6 +576,9 @@ export async function runFixAllAutoBlockers(
     }
   }
 
+  // originalExtractionIds populated after groupMap is built (below)
+  let originalExtractionIds = new Set<string>();
+
   const initOutcome = (id: string, phase: string, blockerType: string) => {
     if (!outcomeMap.has(id)) {
       const origState = originalStateMap.get(id);
@@ -589,6 +607,14 @@ export async function runFixAllAutoBlockers(
         originalJobStatus: origState?.active_job_status ?? null,
         contentLength: origState?.content?.length ?? 0,
         extractionMethod: null,
+        inOriginalExtractionGroup: originalExtractionIds.has(id),
+        batchIncluded: false,
+        heuristicFallbackAttempted: false,
+        extractionTier: null,
+        postRunEnrichmentStatus: null,
+        postRunJobStatus: null,
+        postRunKiCount: null,
+        postRunActiveKiCount: null,
       });
     }
   };
@@ -606,6 +632,14 @@ export async function runFixAllAutoBlockers(
     const existing = groupMap.get(g.type) ?? [];
     existing.push(...g.resourceIds);
     groupMap.set(g.type, existing);
+  }
+
+  // Now populate originalExtractionIds
+  originalExtractionIds = new Set(groupMap.get('needs_extraction') ?? []);
+  // Update all outcomes with inOriginalExtractionGroup
+  for (const id of originalExtractionIds) {
+    const outcome = outcomeMap.get(id);
+    if (outcome) outcome.inOriginalExtractionGroup = true;
   }
 
   // Phase 0: Normalize stale statuses
@@ -703,6 +737,12 @@ export async function runFixAllAutoBlockers(
   }
   
   if (extractIds.length > 0) {
+    // Mark all extraction batch members
+    for (const id of extractIds) {
+      const outcome = outcomeMap.get(id);
+      if (outcome) outcome.batchIncluded = true;
+    }
+    log.info('Extraction batch', { extractIds, count: extractIds.length });
     callbacks?.onPhaseChange?.('extraction', 'Extracting knowledge items', `Extracting ${extractIds.length} resources…`);
     onProgress?.(`Extracting ${extractIds.length} resources…`);
     const { phaseResult: extractResult, resourceResults: extractionOutcomes } = await fixNeedsExtraction(extractIds, onProgress, onResourcePhase, callbacks);
@@ -718,6 +758,8 @@ export async function runFixAllAutoBlockers(
         outcome.kisCreated = detail.kisCreated;
         outcome.kisActive = detail.kisActive;
         outcome.extractionMethod = detail.extractionMethod ?? null;
+        outcome.heuristicFallbackAttempted = detail.heuristicFallbackAttempted ?? false;
+        outcome.extractionTier = detail.extractionTier ?? null;
         
         // Track wrapper-page attachment handling
         if (outcome.wrapperPageDetected) {
@@ -785,6 +827,10 @@ export async function runFixAllAutoBlockers(
       outcome.kisCreated = Math.max(outcome.kisCreated, post.kiCount);
       outcome.kisActive = Math.max(outcome.kisActive, post.activeKiCount);
       outcome.finalTruthState = post.enrichmentStatus;
+      outcome.postRunEnrichmentStatus = post.enrichmentStatus;
+      outcome.postRunJobStatus = post.jobStatus;
+      outcome.postRunKiCount = post.kiCount;
+      outcome.postRunActiveKiCount = post.activeKiCount;
       
       if (post.kiCount > 0) {
         outcome.succeeded = true;
