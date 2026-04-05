@@ -57,6 +57,19 @@ export interface FixResourceOutcome {
   contentLength: number;
   /** Extraction method used (llm, heuristic, none) */
   extractionMethod: string | null;
+  /** Was this resource in the original needs_extraction blocker group? */
+  inOriginalExtractionGroup: boolean;
+  /** Was this resource included in the extraction batch sent to autoOperationalizeBatch? */
+  batchIncluded: boolean;
+  /** Was heuristic fallback attempted after LLM? */
+  heuristicFallbackAttempted: boolean;
+  /** Extraction tier from pipeline contract */
+  extractionTier: string | null;
+  /** Post-run fresh DB state */
+  postRunEnrichmentStatus: string | null;
+  postRunJobStatus: string | null;
+  postRunKiCount: number | null;
+  postRunActiveKiCount: number | null;
 }
 
 export interface BlockerDiff {
