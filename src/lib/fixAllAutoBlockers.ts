@@ -44,32 +44,29 @@ export interface FixResourceOutcome {
   rootCauseExplanation: string | null;
   resolutionOutcome: string | null;
   normalized: boolean;
-  /** Was this resource found during post-normalization rediscovery? */
   rediscovered: boolean;
-  /** Did extraction actually execute for this resource? */
   extractionRan: boolean;
   wrapperPageDetected: boolean;
   attachmentExtractionAttempted: boolean;
   attachmentExtractionOutcome: string | null;
   originalEnrichmentStatus: string | null;
   originalJobStatus: string | null;
-  /** Content length at time of processing */
   contentLength: number;
-  /** Extraction method used (llm, heuristic, none) */
   extractionMethod: string | null;
-  /** Was this resource in the original needs_extraction blocker group? */
   inOriginalExtractionGroup: boolean;
-  /** Was this resource included in the extraction batch sent to autoOperationalizeBatch? */
   batchIncluded: boolean;
-  /** Was heuristic fallback attempted after LLM? */
   heuristicFallbackAttempted: boolean;
-  /** Extraction tier from pipeline contract */
   extractionTier: string | null;
-  /** Post-run fresh DB state */
   postRunEnrichmentStatus: string | null;
   postRunJobStatus: string | null;
   postRunKiCount: number | null;
   postRunActiveKiCount: number | null;
+  /** Edge function invocation proof */
+  edgeFunctionInvoked: boolean;
+  edgeFunctionName: string | null;
+  edgeFunctionStatus: number | null;
+  edgeFunctionError: string | null;
+  edgeFunctionReturnedItems: number | null;
 }
 
 export interface BlockerDiff {
