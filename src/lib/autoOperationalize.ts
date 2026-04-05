@@ -459,6 +459,10 @@ export async function autoOperationalizeResource(
     knowledgeActivated,
     hasActiveWithContexts,
     false,
+    undefined,
+    undefined,
+    undefined,
+    usedExtractionMethod,
   );
 }
 
