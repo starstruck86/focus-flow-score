@@ -9,13 +9,33 @@
  */
 
 import type { KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
-import { trackedInvoke } from '@/lib/trackedInvoke';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { createLogger } from '@/lib/logger';
 import { inferTags, mergeTags } from '@/lib/resourceTags';
 import { validateTrust, deduplicateKnowledgeItems, type TrustValidation } from '@/lib/trustValidation';
 import { detectFramework } from '@/data/frameworkLibrary';
 
 const log = createLogger('KnowledgeExtraction');
+
+export interface EdgeFunctionExtractionDebug {
+  edgeFunctionInvoked: boolean;
+  edgeFunctionName: 'extract-tactics';
+  edgeFunctionStatus: number | null;
+  edgeFunctionError: string | null;
+  edgeFunctionReturnedItems: number | null;
+}
+
+const edgeFunctionExtractionDebug = new Map<string, EdgeFunctionExtractionDebug>();
+
+function setEdgeFunctionExtractionDebug(resourceId: string, debug: EdgeFunctionExtractionDebug) {
+  edgeFunctionExtractionDebug.set(resourceId, debug);
+}
+
+export function consumeEdgeFunctionExtractionDebug(resourceId: string): EdgeFunctionExtractionDebug | null {
+  const debug = edgeFunctionExtractionDebug.get(resourceId) ?? null;
+  edgeFunctionExtractionDebug.delete(resourceId);
+  return debug;
+}
 
 /** Decode common HTML entities that survive scraping */
 function decodeHTMLEntities(text: string): string {
@@ -586,7 +606,8 @@ export async function extractKnowledgeLLMFallback(
 
     // No client-side content cap — server-side extract-tactics handles chunking
     // for arbitrarily long transcripts via section-aware splitting
-    const result = await trackedInvoke<{ items?: any[] }>('extract-tactics', {
+    const response = await authenticatedFetch({
+      functionName: 'extract-tactics',
       body: {
         resourceId: source.resourceId,
         title: source.title,
@@ -595,13 +616,33 @@ export async function extractKnowledgeLLMFallback(
         tags: source.tags,
         resourceType: source.resourceType,
       },
-      // Transcripts can be large and need more time for multi-chunk extraction
+      componentName: 'KnowledgeExtraction',
       timeoutMs: isTranscriptResource ? 120_000 : 60_000,
     });
 
-    if (result?.data?.items && Array.isArray(result.data.items)) {
+    const payload = await response.json().catch(() => ({} as { items?: any[]; error?: string }));
+    const returnedItems = Array.isArray(payload?.items) ? payload.items.length : 0;
+
+    setEdgeFunctionExtractionDebug(source.resourceId, {
+      edgeFunctionInvoked: true,
+      edgeFunctionName: 'extract-tactics',
+      edgeFunctionStatus: response.status,
+      edgeFunctionError: response.ok ? null : String(payload?.error || `HTTP ${response.status}`),
+      edgeFunctionReturnedItems: response.ok ? returnedItems : null,
+    });
+
+    if (!response.ok) {
+      log.warn('extract-tactics returned non-OK response', {
+        resourceId: source.resourceId,
+        status: response.status,
+        error: payload?.error || `HTTP ${response.status}`,
+      });
+      return [];
+    }
+
+    if (payload?.items && Array.isArray(payload.items)) {
       const rawItems: KnowledgeItemInsert[] = [];
-      for (const item of result.data.items) {
+      for (const item of payload.items) {
         if (!item.tactic_summary || item.tactic_summary.length < 20) continue;
         if (!item.when_to_use || item.when_to_use.length < 10) continue;
         if (!item.title || item.title.length < 5) continue;
@@ -758,6 +799,13 @@ export async function extractKnowledgeLLMFallback(
       return kept;
     }
   } catch (err) {
+    setEdgeFunctionExtractionDebug(source.resourceId, {
+      edgeFunctionInvoked: false,
+      edgeFunctionName: 'extract-tactics',
+      edgeFunctionStatus: null,
+      edgeFunctionError: err instanceof Error ? err.message : String(err),
+      edgeFunctionReturnedItems: null,
+    });
     log.warn('LLM fallback extraction failed', { resourceId: source.resourceId, error: err });
   }
 

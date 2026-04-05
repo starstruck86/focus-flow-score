@@ -16,6 +16,7 @@ import { inferTags, mergeTags, type StructuredTag } from './resourceTags';
 import {
   extractKnowledgeHeuristic,
   extractKnowledgeLLMFallback,
+  consumeEdgeFunctionExtractionDebug,
   getTranscriptPreparationState,
   type ExtractionSource,
 } from './knowledgeExtraction';
@@ -98,6 +99,11 @@ export interface AutoOperationalizeResult {
   extractionMethod?: 'llm' | 'heuristic' | 'none';
   /** Was heuristic fallback attempted? */
   heuristicFallbackAttempted?: boolean;
+  edgeFunctionInvoked?: boolean;
+  edgeFunctionName?: string | null;
+  edgeFunctionStatus?: number | null;
+  edgeFunctionError?: string | null;
+  edgeFunctionReturnedItems?: number | null;
 }
 
 // ── Auto-activation thresholds ─────────────────────────────
@@ -128,6 +134,11 @@ export async function autoOperationalizeResource(
   let knowledgeActivated = 0;
   let needsReview = false;
   let reason: string | undefined;
+  let edgeFunctionInvoked = false;
+  let edgeFunctionName: string | null = null;
+  let edgeFunctionStatus: number | null = null;
+  let edgeFunctionError: string | null = null;
+  let edgeFunctionReturnedItems: number | null = null;
 
   // ── Load resource ──
   const { data: resource, error: rErr } = await supabase
@@ -298,6 +309,14 @@ export async function autoOperationalizeResource(
       log.info('Running LLM extraction', { resourceId, resourceType: r.resource_type });
       try {
         finalExtracted = await extractKnowledgeLLMFallback(source);
+        const edgeDebug = consumeEdgeFunctionExtractionDebug(resourceId);
+        if (edgeDebug) {
+          edgeFunctionInvoked = edgeDebug.edgeFunctionInvoked;
+          edgeFunctionName = edgeDebug.edgeFunctionName;
+          edgeFunctionStatus = edgeDebug.edgeFunctionStatus;
+          edgeFunctionError = edgeDebug.edgeFunctionError;
+          edgeFunctionReturnedItems = edgeDebug.edgeFunctionReturnedItems;
+        }
         if (finalExtracted.length > 0) usedExtractionMethod = 'llm';
         log.info('LLM extraction result', { resourceId, count: finalExtracted.length });
       } catch (err: any) {
@@ -468,6 +487,11 @@ export async function autoOperationalizeResource(
     undefined,
     usedExtractionMethod,
     heuristicFallbackAttempted,
+    edgeFunctionInvoked,
+    edgeFunctionName,
+    edgeFunctionStatus,
+    edgeFunctionError,
+    edgeFunctionReturnedItems,
   );
 }
 
@@ -700,6 +724,11 @@ function makeResult(
   outcome?: PipelineOutcome,
   extractionMethod?: 'llm' | 'heuristic' | 'none',
   heuristicFallbackAttempted?: boolean,
+  edgeFunctionInvoked = false,
+  edgeFunctionName: string | null = null,
+  edgeFunctionStatus: number | null = null,
+  edgeFunctionError: string | null = null,
+  edgeFunctionReturnedItems: number | null = null,
 ): AutoOperationalizeResult {
   const derivedOutcome: PipelineOutcome = outcome
     ?? (operationalized ? 'operationalized'
@@ -724,6 +753,11 @@ function makeResult(
     reason,
     extractionMethod,
     heuristicFallbackAttempted: heuristicFallbackAttempted ?? false,
+    edgeFunctionInvoked,
+    edgeFunctionName,
+    edgeFunctionStatus,
+    edgeFunctionError,
+    edgeFunctionReturnedItems,
   };
 }
 
