@@ -34,6 +34,7 @@ export interface FixResourceOutcome {
   phase: string;
   attempted: boolean;
   succeeded: boolean;
+  kiBefore: number;
   kisCreated: number;
   kisActive: number;
   finalTruthState: string | null;
@@ -42,18 +43,16 @@ export interface FixResourceOutcome {
   rootCauseCategory: string | null;
   rootCauseExplanation: string | null;
   resolutionOutcome: string | null;
-  /** Whether normalization changed this resource's state */
   normalized: boolean;
-  /** Whether wrapper-page / attachment detection applied */
   wrapperPageDetected: boolean;
-  /** Whether attachment extraction was attempted for wrapper pages */
   attachmentExtractionAttempted: boolean;
-  /** Attachment extraction outcome if attempted */
   attachmentExtractionOutcome: string | null;
-  /** Original enrichment_status before normalization */
   originalEnrichmentStatus: string | null;
-  /** Original active_job_status before normalization */
   originalJobStatus: string | null;
+  /** Content length at time of processing */
+  contentLength: number;
+  /** Extraction method used (llm, heuristic, none) */
+  extractionMethod: string | null;
 }
 
 export interface BlockerDiff {
@@ -361,15 +360,20 @@ async function normalizeStaleStatuses(
     stateMap.set(r.id, r);
   }
 
-  // Also fetch content lengths for needs_auth reclassification
-  const { data: contentLengths } = await supabase
+  // Also fetch content lengths and actual content for needs_auth reclassification + content_length sync
+  const { data: contentData } = await supabase
     .from('resources' as any)
-    .select('id, content_length, manual_content_present')
+    .select('id, content_length, manual_content_present, content')
     .in('id', resourceIds);
 
-  const contentMap = new Map<string, { content_length: number; manual_content_present: boolean }>();
-  for (const r of (contentLengths ?? []) as any[]) {
-    contentMap.set(r.id, { content_length: r.content_length ?? 0, manual_content_present: r.manual_content_present === true });
+  const contentMap = new Map<string, { content_length: number; actual_content_length: number; manual_content_present: boolean }>();
+  for (const r of (contentData ?? []) as any[]) {
+    const actualLen = (r.content as string)?.length ?? 0;
+    contentMap.set(r.id, {
+      content_length: r.content_length ?? 0,
+      actual_content_length: actualLen,
+      manual_content_present: r.manual_content_present === true,
+    });
   }
 
   for (const id of resourceIds) {
@@ -381,7 +385,8 @@ async function normalizeStaleStatuses(
     const isRetrying = state.enrichment_status === 'extraction_retrying';
     const isNeedsAuth = state.enrichment_status === 'needs_auth';
     const contentInfo = contentMap.get(id);
-    const hasUsableContent = (contentInfo?.content_length ?? 0) >= 200 || contentInfo?.manual_content_present === true;
+    const effectiveContentLen = Math.max(contentInfo?.content_length ?? 0, contentInfo?.actual_content_length ?? 0);
+    const hasUsableContent = effectiveContentLen >= 200 || contentInfo?.manual_content_present === true;
     const isIdleJob = state.active_job_status === 'idle';
     
   // Detect stale 'running' jobs (started > 10 min ago with no update)
@@ -401,7 +406,10 @@ async function normalizeStaleStatuses(
       .single();
     const isStructuredLesson = !!(titleData as any)?.title && /\s>\s/.test((titleData as any).title);
     const authContentThreshold = isStructuredLesson ? 100 : 200;
-    const hasUsableContentForAuth = (contentInfo?.content_length ?? 0) >= authContentThreshold || contentInfo?.manual_content_present === true;
+    const hasUsableContentForAuth = effectiveContentLen >= authContentThreshold || contentInfo?.manual_content_present === true;
+
+    // Check if content_length field is stale (actual content longer than stored)
+    const needsContentLengthSync = contentInfo && contentInfo.actual_content_length > contentInfo.content_length;
     
     // Determine if this resource needs normalization
     const needsNormalization = 
@@ -410,7 +418,8 @@ async function normalizeStaleStatuses(
       (isFailedJob && ['deep_enriched', 'enriched', 'extracted', 'verified', 'content_ready'].includes(state.enrichment_status)) || // failed job on otherwise healthy status
       (isNeedsAuth && hasUsableContentForAuth) || // needs_auth misclassification: content exists, reclassify to enriched
       (isIdleJob) || // stale 'idle' job status should be cleared
-      (isStaleRunning); // stale 'running' job — extraction likely timed out or lost response
+      (isStaleRunning) || // stale 'running' job — extraction likely timed out or lost response
+      (needsContentLengthSync); // stale content_length field
 
     if (!needsNormalization) continue;
 
@@ -453,7 +462,13 @@ async function normalizeStaleStatuses(
         update.active_job_status = null;
         update.active_job_error = null;
         update.manual_input_required = false;
-        log.info('Reclassifying needs_auth → enriched (content exists)', { id, content_length: contentInfo?.content_length, threshold: authContentThreshold, isStructuredLesson });
+        log.info('Reclassifying needs_auth → enriched (content exists)', { id, content_length: effectiveContentLen, threshold: authContentThreshold, isStructuredLesson });
+      }
+
+      // Sync stale content_length field with actual content length
+      if (needsContentLengthSync && contentInfo) {
+        update.content_length = contentInfo.actual_content_length;
+        log.info('Syncing stale content_length', { id, old: contentInfo.content_length, new: contentInfo.actual_content_length });
       }
 
       const { error } = await supabase
@@ -541,6 +556,7 @@ export async function runFixAllAutoBlockers(
         phase,
         attempted: false,
         succeeded: false,
+        kiBefore: 0,
         kisCreated: 0,
         kisActive: 0,
         finalTruthState: null,
@@ -555,6 +571,8 @@ export async function runFixAllAutoBlockers(
         attachmentExtractionOutcome: null,
         originalEnrichmentStatus: origState?.enrichment_status ?? null,
         originalJobStatus: origState?.active_job_status ?? null,
+        contentLength: origState?.content?.length ?? 0,
+        extractionMethod: null,
       });
     }
   };
@@ -709,13 +727,14 @@ export async function runFixAllAutoBlockers(
   }
 
   // ── Post-run: re-query actual KI counts and truth state for all resources ──
-  // This gives accurate before/after rather than relying on phase success counts.
+  // Include any resources discovered during re-discovery phase
+  const allProcessedIds = [...new Set([...allResourceIds, ...extractIds, ...activateIds])];
   const postRunOutcomes = new Map<string, { kiCount: number; activeKiCount: number; enrichmentStatus: string; jobStatus: string | null }>();
-  if (allResourceIds.length > 0) {
+  if (allProcessedIds.length > 0) {
     const { data: postResources } = await supabase
       .from('resources' as any)
       .select('id, enrichment_status, active_job_status')
-      .in('id', allResourceIds);
+      .in('id', allProcessedIds);
     
     for (const pr of (postResources ?? []) as any[]) {
       const { count: kiCount } = await supabase

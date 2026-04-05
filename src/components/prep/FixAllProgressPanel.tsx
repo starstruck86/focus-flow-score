@@ -231,11 +231,14 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
                             {o.attachmentExtractionOutcome ?? 'attachment tried'}
                           </Badge>
                         )}
+                        {o.contentLength > 0 && <span className="text-muted-foreground/70">{o.contentLength} chars</span>}
+                        {o.kiBefore > 0 && <span className="text-muted-foreground/70">was {o.kiBefore} KIs</span>}
                         {o.kisCreated > 0 && <span className="text-emerald-600">+{o.kisCreated} KIs</span>}
                         {o.kisActive > 0 && <span className="text-emerald-600">({o.kisActive} active)</span>}
                         {!o.succeeded && o.kisCreated === 0 && o.attempted && (
                           <span className="text-destructive">0 KIs extracted</span>
                         )}
+                        {o.extractionMethod && <span className="text-muted-foreground/70">via {o.extractionMethod}</span>}
                         {o.error && <span className="text-destructive truncate max-w-[200px]">{o.error}</span>}
                         {o.rootCauseCategory && !o.succeeded && (
                           <span className="text-muted-foreground/70 italic">
