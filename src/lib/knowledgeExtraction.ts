@@ -25,6 +25,17 @@ export interface EdgeFunctionExtractionDebug {
   edgeFunctionReturnedItems: number | null;
 }
 
+/** Typed result from LLM extraction — replaces the old array-with-metadata hack */
+export interface LLMExtractionResult {
+  items: KnowledgeItemInsert[];
+  serverPersisted: boolean;
+  serverSavedCount: number;
+  serverActiveCount: number;
+  serverRunId: string | null;
+  serverStatus: string | null;
+  serverDuplicatesSkipped: number;
+}
+
 const edgeFunctionExtractionDebug = new Map<string, EdgeFunctionExtractionDebug>();
 
 function setEdgeFunctionExtractionDebug(resourceId: string, debug: EdgeFunctionExtractionDebug) {
