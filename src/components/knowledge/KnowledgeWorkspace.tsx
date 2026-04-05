@@ -1,12 +1,12 @@
 /**
  * Knowledge Workspace — merges Learn + Library into one place.
  * 
- * 5 internal sub-tabs: Overview, Resources, Knowledge Items, Review, Audit
+ * 6 internal sub-tabs: Overview, Resources, Knowledge Items, Review, Coverage, Audit
  */
 
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BarChart3, FileText, Brain, Shield, ClipboardCheck } from 'lucide-react';
+import { BarChart3, FileText, Brain, Shield, ClipboardCheck, Microscope } from 'lucide-react';
 import { SHELL } from '@/lib/layout';
 
 // Sub-tab content
