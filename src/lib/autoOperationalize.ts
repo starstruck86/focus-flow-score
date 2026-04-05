@@ -274,6 +274,7 @@ export async function autoOperationalizeResource(
     // Always prefer LLM extraction — produces structured KIs with framework, attribution, etc.
     // Heuristic sentence-splitting produces low-quality transcript fragments for all resource types.
     let finalExtracted: any[] = [];
+    let usedExtractionMethod: 'llm' | 'heuristic' | 'none' = 'none';
 
     // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
     // (indicated by ## section headings). Raw transcripts produce garbage KIs.
@@ -287,13 +288,14 @@ export async function autoOperationalizeResource(
       log.warn('Skipping extraction: transcript not preprocessed', { resourceId, headingCount, hasLessonBody });
       needsReview = true;
       reason = 'Transcript needs preprocessing before KI extraction (no ## section headings found)';
-      return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason);
+      return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason, undefined, undefined, 'none');
     }
     
     if (contentForExtraction.length >= 100) {
       log.info('Running LLM extraction', { resourceId, resourceType: r.resource_type });
       try {
         finalExtracted = await extractKnowledgeLLMFallback(source);
+        if (finalExtracted.length > 0) usedExtractionMethod = 'llm';
         log.info('LLM extraction result', { resourceId, count: finalExtracted.length });
       } catch (err: any) {
         log.warn('LLM extraction failed', { resourceId, error: err?.message || err });
@@ -308,6 +310,7 @@ export async function autoOperationalizeResource(
     );
     if (finalExtracted.length === 0 && (!isAudioType || isStructuredForFallback)) {
       finalExtracted = extractKnowledgeHeuristic(source);
+      if (finalExtracted.length > 0) usedExtractionMethod = 'heuristic';
       log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length, isStructuredForFallback });
     }
 
