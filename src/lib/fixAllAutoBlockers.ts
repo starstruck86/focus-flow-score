@@ -360,15 +360,20 @@ async function normalizeStaleStatuses(
     stateMap.set(r.id, r);
   }
 
-  // Also fetch content lengths for needs_auth reclassification
-  const { data: contentLengths } = await supabase
+  // Also fetch content lengths and actual content for needs_auth reclassification + content_length sync
+  const { data: contentData } = await supabase
     .from('resources' as any)
-    .select('id, content_length, manual_content_present')
+    .select('id, content_length, manual_content_present, content')
     .in('id', resourceIds);
 
-  const contentMap = new Map<string, { content_length: number; manual_content_present: boolean }>();
-  for (const r of (contentLengths ?? []) as any[]) {
-    contentMap.set(r.id, { content_length: r.content_length ?? 0, manual_content_present: r.manual_content_present === true });
+  const contentMap = new Map<string, { content_length: number; actual_content_length: number; manual_content_present: boolean }>();
+  for (const r of (contentData ?? []) as any[]) {
+    const actualLen = (r.content as string)?.length ?? 0;
+    contentMap.set(r.id, {
+      content_length: r.content_length ?? 0,
+      actual_content_length: actualLen,
+      manual_content_present: r.manual_content_present === true,
+    });
   }
 
   for (const id of resourceIds) {
