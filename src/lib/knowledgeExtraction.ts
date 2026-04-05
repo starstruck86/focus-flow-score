@@ -782,8 +782,10 @@ export async function extractKnowledgeAI(
   // Always prefer LLM — heuristic produces low-quality sentence fragments
   if ((source.content?.length ?? 0) >= 100) {
     try {
-      const llmItems = await extractKnowledgeLLMFallback(source, existingItems);
-      if (llmItems.length > 0) return llmItems;
+      const llmResult = await extractKnowledgeLLMFallback(source, existingItems);
+      // If server persisted, return empty — caller should check via extractKnowledgeLLMFallback directly
+      if (llmResult.serverPersisted) return [];
+      if (llmResult.items.length > 0) return llmResult.items;
     } catch {
       // LLM failed, fall through to heuristic
     }
