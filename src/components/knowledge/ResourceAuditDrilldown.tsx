@@ -34,6 +34,9 @@ interface Props {
     post_ki_count?: number;
     post_kis_per_1k?: number;
     post_active_count?: number;
+    dominant_bottleneck?: string;
+    ef_dedup_details?: Record<string, number>;
+    ef_validation_rejections?: Record<string, number>;
   };
 }
 
