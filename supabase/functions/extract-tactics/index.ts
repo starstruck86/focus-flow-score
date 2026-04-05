@@ -1055,6 +1055,7 @@ async function serverSidePersist(
   const runSavedKisPer1k = contentLength > 0 ? Math.round((savedCount * 1000 / contentLength) * 100) / 100 : 0;
 
   const finalSummary = `${result.extractionMode}: ${result.passesRun.join('+')} | ${result.rawCount} raw → ${result.dedupeResult.kept.length} deduped → ${result.validatedCount} validated → ${savedCount} saved (${duplicatesSkipped} dupes skipped) | resource total: ${totalKIs} KIs, ${currentKisPer1k} KIs/1k | ${currentDepthBucket}`;
+  console.log(`[extract-tactics] PERSIST COMPLETE: ${finalSummary}`);
 
   // Create extraction_run record
   try {
