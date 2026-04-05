@@ -103,14 +103,34 @@ function diagnoseNoLift(
   efSaved: number,
   contentLength: number,
 ): NoLiftReason | undefined {
-  if (kiDelta > 0) return undefined; // has lift, no diagnosis needed
+  if (kiDelta > 0) return undefined;
 
   if (preKisPer1k >= 1.5) return 'already_dense';
   if (efReturned === 0) return 'extractor_returned_no_new_items';
-  if (efReturned > 0 && efValidated === 0) return 'items_generated_but_filtered_out';
+  if (efReturned > 0 && efReturned < 3) return 'extractor_weak_output';
+  if (efReturned > 0 && efValidated === 0) return 'validation_too_strict';
+  if (efReturned > 0 && efValidated > 0 && efValidated < efReturned * 0.3) return 'validation_too_strict';
   if (efValidated > 0 && efSaved === 0 && dupsSkipped > 0) return 'items_generated_but_deduped';
   if (dupsSkipped > 0 && efSaved === 0) return 'duplicate_heavy';
+  if (efReturned > 0 && efValidated === 0) return 'items_generated_but_filtered_out';
   if (contentLength < 1500) return 'resource_not_suitable';
+  return 'unknown';
+}
+
+function classifyBottleneck(
+  efReturned: number,
+  efValidated: number,
+  efSaved: number,
+  dupsSkipped: number,
+  preKisPer1k: number,
+  kiDelta: number,
+): DominantBottleneck {
+  if (kiDelta > 0) return 'none';
+  if (preKisPer1k >= 1.5) return 'already_mined';
+  if (efReturned === 0) return 'extractor_weak_output';
+  if (efReturned > 0 && efValidated < efReturned * 0.3) return 'validation_too_strict';
+  if (efValidated > 0 && efSaved === 0 && dupsSkipped > 0) return 'dedup_too_aggressive';
+  if (efReturned < 3) return 'extractor_weak_output';
   return 'unknown';
 }
 
