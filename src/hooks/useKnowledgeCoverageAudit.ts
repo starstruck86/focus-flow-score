@@ -53,12 +53,17 @@ export interface CoverageAuditSummary {
   top20Weakest: ResourceAuditRow[];
 }
 
-function computeUnderExtracted(contentLength: number, kiCount: number): boolean {
-  if (contentLength >= 5000 && kiCount <= 6) return true;
-  if (contentLength >= 3000 && kiCount <= 4) return true;
+function computeUnderExtracted(contentLength: number, kiCount: number, resourceType?: string): boolean {
+  if (contentLength < 500) return false;
+  if (contentLength >= 10000 && kiCount <= 6) return true;
+  if (contentLength >= 5000 && kiCount <= 4) return true;
+  if (contentLength >= 3000 && kiCount <= 3) return true;
   if (contentLength >= 1500 && kiCount <= 2) return true;
   const kisPer1k = contentLength > 0 ? (kiCount * 1000) / contentLength : 0;
-  if (kisPer1k < 1.0 && kiCount > 0) return true;
+  // Type-aware thresholds
+  const isTranscript = ['transcript', 'podcast', 'audio', 'podcast_episode'].includes((resourceType || '').toLowerCase());
+  const minDensity = isTranscript ? 0.5 : 0.75;
+  if (kisPer1k < minDensity && kiCount > 0) return true;
   return false;
 }
 
@@ -144,10 +149,9 @@ export function useKnowledgeCoverageAudit() {
         // If DB says 0 but we actually have KIs, use computed value
         const finalKisPer1k = (dbKisPer1k === 0 && kiTotal > 0 && cl > 0) ? computedKisPer1k : dbKisPer1k;
 
-        const dbDepth = (kiTotal > 0 && r.extraction_depth_bucket && r.extraction_depth_bucket !== 'none')
-          ? r.extraction_depth_bucket
-          : computeDepthBucket(finalKisPer1k, kiTotal);
-        const dbUnderExtracted = r.under_extracted_flag ?? computeUnderExtracted(cl, kiTotal);
+        // Always recompute depth bucket and under-extracted from real counts — DB values may be stale
+        const dbDepth = computeDepthBucket(finalKisPer1k, kiTotal);
+        const dbUnderExtracted = computeUnderExtracted(cl, kiTotal, r.resource_type);
         const method = r.extraction_method || null;
 
         return {

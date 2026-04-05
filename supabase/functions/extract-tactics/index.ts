@@ -194,11 +194,11 @@ Be EXHAUSTIVE. Include every distinct framework, scoring criteria, research tech
 Return ONLY a JSON array. No markdown fences.`;
 
 const LESSON_TRANSCRIPT_MARKER = '--- Video Transcript ---';
-const DOC_CHUNK_SIZE = 8000;
-const DOC_CHUNK_OVERLAP = 500;
+const DOC_CHUNK_SIZE = 12000;
+const DOC_CHUNK_OVERLAP = 800;
 const TRANSCRIPT_CHUNK_SIZE = 25000;
 const TRANSCRIPT_CHUNK_OVERLAP = 1500;
-const DOC_SINGLE_PASS_THRESHOLD = 12000;
+const DOC_SINGLE_PASS_THRESHOLD = 15000;
 const TRANSCRIPT_SINGLE_PASS_THRESHOLD = 30000;
 const MAX_TOKENS = 16384;
 const MODEL_NAME = 'google/gemini-2.5-flash';
@@ -456,10 +456,16 @@ function validateItem(item: any, isTranscript: boolean, isLesson: boolean): Vali
   if (HTML_PATTERN.test(allText)) return { passed: false, rejectionReason: 'html_artifacts' };
 
   if (isTranscript) {
-    const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|de-escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|expose|surface|extract|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|invert|plant|seed|earn|secure|protect|defend|block|pre-empt|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|slow|speed|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome|diagnose|discover|distinguish|recognize|convert|transform|transition|shift|adopt|abandon|replace|supplement|integrate|prioritize)\b/i;
-    if (!verbLedPattern.test(item.title.trim())) return { passed: false, rejectionReason: 'transcript_title_not_verb_led' };
+    // Relaxed transcript validation: allow more verbs and don't require verb-led for rich items
+    const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|de-escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|expose|surface|extract|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|invert|plant|seed|earn|secure|protect|defend|block|pre-empt|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|slow|speed|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome|diagnose|discover|distinguish|recognize|convert|transform|transition|shift|adopt|abandon|replace|supplement|integrate|prioritize|understand|learn|study|research|analyze|plan|design|craft|compose|formulate|construct|organize|arrange|optimize|refine|improve|enhance|strengthen|expand|extend|maintain|sustain|retain|preserve|support|enable|empower|motivate|inspire|encourage|persuade|convince|influence|impact|differentiate|compete|outperform|outpace|surpass|exceed|maximize|minimize|reduce|eliminate|avoid|prevent|mitigate|resolve|fix|repair|recover|restore|rebuild|reinvent|innovate|disrupt|experiment|iterate|prototype|test|validate|verify|check|inspect|audit|review|critique|question|challenge|debate|argue|justify|explain|teach|train|educate|inform|brief|update|report|communicate|present|pitch|sell|promote|market|advertise|brand|package|position|target|segment|personalize|customize|tailor|adapt|modify|change|alter|revise|edit|rewrite|rework|rethink|reconsider|reassess|reevaluate|recalibrate|realign|reprioritize|reallocate|redistribute|restructure|reorganize|reposition|redirect|reroute|reschedule|renegotiate|rethink|reimagine)\b/i;
+    if (!verbLedPattern.test(item.title.trim())) {
+      // Only reject if the item is also short — longer items with good content should pass
+      if ((item.tactic_summary || '').length < 60 && (item.how_to_execute || '').length < 80) {
+        return { passed: false, rejectionReason: 'transcript_title_not_verb_led' };
+      }
+    }
     if (item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 25))) return { passed: false, rejectionReason: 'summary_mirrors_title' };
-    if (item.how_to_execute.length < 50) return { passed: false, rejectionReason: 'short_how_to_execute_transcript' };
+    if (item.how_to_execute.length < 40) return { passed: false, rejectionReason: 'short_how_to_execute_transcript' };
   }
 
   return { passed: true, rejectionReason: null };
