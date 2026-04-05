@@ -86,8 +86,6 @@ QUALITY GATES — REJECT any item that:
 
 Return high-quality tactical plays as a JSON array. Only return the JSON array, no markdown fences.`;
 
-// ── Pass modifiers for multi-pass extraction ──
-
 const PASS_MODIFIERS: Record<string, string> = {
   core: `Pass 1 — Core Tactics: Extract explicit tactical knowledge directly stated in the source.
 Focus on clear tactics, frameworks, sequences, checklists, objection handling, discovery strategy, qualification logic, and execution guidance.`,
@@ -164,6 +162,7 @@ const TRANSCRIPT_CHUNK_OVERLAP = 1500;
 const DOC_SINGLE_PASS_THRESHOLD = 12000;
 const TRANSCRIPT_SINGLE_PASS_THRESHOLD = 30000;
 const MAX_TOKENS = 16384;
+const MODEL_NAME = 'google/gemini-2.5-flash';
 
 function isTranscriptType(resourceType?: string): boolean {
   return ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
@@ -244,7 +243,7 @@ async function requestExtraction(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
+      model: MODEL_NAME,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -293,97 +292,112 @@ async function extractFromChunk(apiKey: string, systemPrompt: string, userPrompt
 }
 
 // ══════════════════════════════════════════════════════
-// DEDUPLICATION — cross-pass aware
+// DEDUPLICATION
 // ══════════════════════════════════════════════════════
 
 function normalize(s: string): string { return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim(); }
 function wordSet(s: string): Set<string> { return new Set(normalize(s).split(/\s+/).filter(w => w.length > 2)); }
 
-function deduplicateItems(items: any[], isLesson = false): any[] {
+interface DedupeResult {
+  kept: any[];
+  mergedCount: number;
+  details: { exact_summary: number; similar_title_summary: number; title_overlap: number; substring: number };
+}
+
+function deduplicateItems(items: any[], isLesson = false): DedupeResult {
   const OVERLAP_THRESHOLD = isLesson ? 0.85 : 0.6;
   const result: any[] = [];
+  const details = { exact_summary: 0, similar_title_summary: 0, title_overlap: 0, substring: 0 };
+
   for (const item of items) {
     const itemWords = wordSet(item.title || '');
     const itemSummaryWords = wordSet(item.tactic_summary || '');
     let isDupe = false;
+    let dupeReason = '';
+
     for (let i = 0; i < result.length; i++) {
       const existingWords = wordSet(result[i].title || '');
       const intersection = [...itemWords].filter(w => existingWords.has(w));
-      const overlapRatio = intersection.length / Math.min(itemWords.size, existingWords.size);
-      
+      const overlapRatio = Math.min(itemWords.size, existingWords.size) > 0
+        ? intersection.length / Math.min(itemWords.size, existingWords.size) : 0;
+
       const existingSummaryWords = wordSet(result[i].tactic_summary || '');
       const summaryIntersection = [...itemSummaryWords].filter(w => existingSummaryWords.has(w));
       const summaryOverlap = itemSummaryWords.size > 0 && existingSummaryWords.size > 0
         ? summaryIntersection.length / Math.min(itemSummaryWords.size, existingSummaryWords.size) : 0;
 
-      // Exact same tactic_summary → dedupe
       if (normalize(item.tactic_summary || '') === normalize(result[i].tactic_summary || '') && (item.tactic_summary || '').length > 20) {
-        isDupe = true;
-      }
-      // Highly similar title + tactic_summary → dedupe
-      else if (overlapRatio > 0.7 && summaryOverlap > 0.7) {
-        isDupe = true;
-      }
-      // Title overlap threshold
-      else if (overlapRatio > OVERLAP_THRESHOLD) {
-        isDupe = true;
-      }
-      // Substring match (non-lesson only)
-      else if (!isLesson && (normalize(item.title).includes(normalize(result[i].title)) || normalize(result[i].title).includes(normalize(item.title)))) {
-        isDupe = true;
+        isDupe = true; dupeReason = 'exact_summary';
+      } else if (overlapRatio > 0.7 && summaryOverlap > 0.7) {
+        isDupe = true; dupeReason = 'similar_title_summary';
+      } else if (overlapRatio > OVERLAP_THRESHOLD) {
+        isDupe = true; dupeReason = 'title_overlap';
+      } else if (!isLesson && (normalize(item.title).includes(normalize(result[i].title)) || normalize(result[i].title).includes(normalize(item.title)))) {
+        isDupe = true; dupeReason = 'substring';
       }
 
       if (isDupe) {
-        // Keep the richer version (merge preference: stronger title, better actionability)
         const existingRichness = (result[i].how_to_execute?.length || 0) + (result[i].when_to_use?.length || 0) + (result[i].source_excerpt?.length || 0);
         const newRichness = (item.how_to_execute?.length || 0) + (item.when_to_use?.length || 0) + (item.source_excerpt?.length || 0);
-        if (newRichness > existingRichness) {
-          result[i] = item;
-        }
+        if (newRichness > existingRichness) result[i] = item;
+        if (dupeReason) (details as any)[dupeReason]++;
         break;
       }
     }
     if (!isDupe) result.push(item);
   }
-  return result;
+  return { kept: result, mergedCount: items.length - result.length, details };
 }
 
-function validateItem(item: any, isTranscript: boolean, isLesson: boolean): boolean {
+// ══════════════════════════════════════════════════════
+// VALIDATION — with structured rejection tracking
+// ══════════════════════════════════════════════════════
+
+interface ValidationResult {
+  passed: boolean;
+  rejectionReason: string | null;
+}
+
+function validateItem(item: any, isTranscript: boolean, isLesson: boolean): ValidationResult {
   const MIN_FIELD_LEN = 40;
   const HTML_PATTERN = /<[a-z][\s\S]*>/i;
-  if (!item.title) return false;
-  if (!item.tactic_summary || item.tactic_summary.length < 15) return false;
+
+  if (!item.title) return { passed: false, rejectionReason: 'missing_title' };
+  if (!item.tactic_summary || item.tactic_summary.length < 15) return { passed: false, rejectionReason: 'short_tactic_summary' };
+
   const example = item.example_usage || item.example || '';
 
   if (isLesson) {
-    if (!item.how_to_execute && !item.source_excerpt) return false;
+    if (!item.how_to_execute && !item.source_excerpt) return { passed: false, rejectionReason: 'missing_how_to_execute_and_excerpt' };
     const allText = [item.title, item.tactic_summary, item.how_to_execute, example].join(' ');
-    if (HTML_PATTERN.test(allText)) return false;
+    if (HTML_PATTERN.test(allText)) return { passed: false, rejectionReason: 'html_artifacts' };
     if (!item.framework) item.framework = 'General';
     if (!item.who) item.who = 'Unknown';
     if (!item.source_location) item.source_location = 'Lesson content';
-    return true;
+    return { passed: true, rejectionReason: null };
   }
 
-  if (!item.framework || item.framework.trim() === '') return false;
-  if (!item.who || item.who.trim() === '') return false;
-  if (!item.source_excerpt || item.source_excerpt.length < 20) return false;
-  if (!item.source_location || item.source_location.trim() === '') return false;
-  if (!item.when_to_use || item.when_to_use.length < 20) return false;
-  if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return false;
-  if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return false;
-  if (!item.how_to_execute || item.how_to_execute.length < MIN_FIELD_LEN) return false;
-  if (example.length < 30) return false;
+  if (!item.framework || item.framework.trim() === '') return { passed: false, rejectionReason: 'missing_framework' };
+  if (!item.who || item.who.trim() === '') return { passed: false, rejectionReason: 'missing_who' };
+  if (!item.source_excerpt || item.source_excerpt.length < 20) return { passed: false, rejectionReason: 'missing_source_excerpt' };
+  if (!item.source_location || item.source_location.trim() === '') return { passed: false, rejectionReason: 'missing_source_location' };
+  if (!item.when_to_use || item.when_to_use.length < 20) return { passed: false, rejectionReason: 'short_when_to_use' };
+  if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return { passed: false, rejectionReason: 'short_macro_situation' };
+  if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return { passed: false, rejectionReason: 'short_micro_strategy' };
+  if (!item.how_to_execute || item.how_to_execute.length < MIN_FIELD_LEN) return { passed: false, rejectionReason: 'short_how_to_execute' };
+  if (example.length < 30) return { passed: false, rejectionReason: 'short_example_usage' };
+
   const allText = [item.title, item.tactic_summary, item.macro_situation, item.how_to_execute, example].join(' ');
-  if (HTML_PATTERN.test(allText)) return false;
+  if (HTML_PATTERN.test(allText)) return { passed: false, rejectionReason: 'html_artifacts' };
 
   if (isTranscript) {
     const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|de-escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|expose|surface|extract|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|invert|plant|seed|earn|secure|protect|defend|block|pre-empt|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|slow|speed|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i;
-    if (!verbLedPattern.test(item.title.trim())) return false;
-    if (item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 25))) return false;
-    if (item.how_to_execute.length < 80) return false;
+    if (!verbLedPattern.test(item.title.trim())) return { passed: false, rejectionReason: 'transcript_title_not_verb_led' };
+    if (item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 25))) return { passed: false, rejectionReason: 'summary_mirrors_title' };
+    if (item.how_to_execute.length < 80) return { passed: false, rejectionReason: 'short_how_to_execute_transcript' };
   }
-  return true;
+
+  return { passed: true, rejectionReason: null };
 }
 
 function normalizeItem(item: any, title: string): any {
@@ -398,24 +412,65 @@ function normalizeItem(item: any, title: string): any {
 }
 
 // ══════════════════════════════════════════════════════
-// DEPTH SCORING
+// DEPTH SCORING — content-type stratified
 // ══════════════════════════════════════════════════════
 
-function computeDepthBucket(kiCount: number, contentLength: number): string {
+interface DepthThresholds {
+  shallowBelow: number;
+  moderateBelow: number;
+  underExtracted: (kiCount: number, contentLength: number) => boolean;
+}
+
+const DEPTH_THRESHOLDS: Record<string, DepthThresholds> = {
+  lesson: {
+    shallowBelow: 1.0,
+    moderateBelow: 2.0,
+    underExtracted: (ki, cl) => {
+      if (cl >= 5000 && ki <= 8) return true;
+      if (cl >= 3000 && ki <= 5) return true;
+      if (cl >= 1500 && ki <= 3) return true;
+      return cl > 0 && (ki * 1000 / cl) < 1.0;
+    },
+  },
+  transcript: {
+    shallowBelow: 0.5,
+    moderateBelow: 1.0,
+    underExtracted: (ki, cl) => {
+      if (cl >= 10000 && ki <= 4) return true;
+      if (cl >= 5000 && ki <= 2) return true;
+      return cl > 0 && (ki * 1000 / cl) < 0.5;
+    },
+  },
+  document: {
+    shallowBelow: 0.75,
+    moderateBelow: 1.5,
+    underExtracted: (ki, cl) => {
+      if (cl >= 5000 && ki <= 6) return true;
+      if (cl >= 3000 && ki <= 4) return true;
+      if (cl >= 1500 && ki <= 2) return true;
+      return cl > 0 && (ki * 1000 / cl) < 1.0;
+    },
+  },
+};
+
+function getContentCategory(isTranscript: boolean, isLesson: boolean): string {
+  if (isLesson) return 'lesson';
+  if (isTranscript) return 'transcript';
+  return 'document';
+}
+
+function computeDepthBucket(kiCount: number, contentLength: number, category: string): string {
   if (kiCount === 0) return 'none';
   const kisPer1k = contentLength > 0 ? (kiCount * 1000) / contentLength : 0;
-  if (kisPer1k < 0.75) return 'shallow';
-  if (kisPer1k < 1.5) return 'moderate';
+  const t = DEPTH_THRESHOLDS[category] || DEPTH_THRESHOLDS.document;
+  if (kisPer1k < t.shallowBelow) return 'shallow';
+  if (kisPer1k < t.moderateBelow) return 'moderate';
   return 'strong';
 }
 
-function computeUnderExtracted(kiCount: number, contentLength: number): boolean {
-  const kisPer1k = contentLength > 0 ? (kiCount * 1000) / contentLength : 0;
-  if (contentLength >= 5000 && kiCount <= 6) return true;
-  if (contentLength >= 3000 && kiCount <= 4) return true;
-  if (contentLength >= 1500 && kiCount <= 2) return true;
-  if (kisPer1k < 1.0 && kiCount > 0) return true;
-  return false;
+function computeUnderExtracted(kiCount: number, contentLength: number, category: string): boolean {
+  const t = DEPTH_THRESHOLDS[category] || DEPTH_THRESHOLDS.document;
+  return t.underExtracted(kiCount, contentLength);
 }
 
 // ══════════════════════════════════════════════════════
@@ -424,18 +479,20 @@ function computeUnderExtracted(kiCount: number, contentLength: number): boolean 
 
 interface MultiPassResult {
   items: any[];
-  passMetrics: {
-    core: number;
-    hidden: number;
-    framework: number;
-  };
-  mergedCount: number;
+  rawCount: number;
+  passMetrics: Record<string, number>;
+  dedupeResult: DedupeResult;
+  validatedCount: number;
+  validationRejections: Record<string, number>;
   extractionMode: string;
   passesRun: string[];
   depthBucket: string;
   underExtracted: boolean;
   kisPer1k: number;
   summary: string;
+  chunksTotal: number;
+  chunksProcessed: number;
+  chunksFailed: number;
 }
 
 async function runMultiPassExtraction(
@@ -448,15 +505,16 @@ async function runMultiPassExtraction(
   isTranscript: boolean,
   deepMode: boolean,
 ): Promise<MultiPassResult> {
+  const category = getContentCategory(isTranscript, false);
   const baseSystem = isTranscript ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM : BASE_SYSTEM_PROMPT;
   const chunks = chunkContent(content, isTranscript);
   const passesRun: string[] = [];
-  const passMetrics = { core: 0, hidden: 0, framework: 0 };
+  const passMetrics: Record<string, number> = {};
   let allCandidates: any[] = [];
   const contentLength = content.length;
   const isRich = contentLength >= 2500;
+  let chunksFailed = 0;
 
-  // ── Helper: run one pass across all chunks ──
   const runPass = async (passName: string): Promise<any[]> => {
     const modifier = PASS_MODIFIERS[passName];
     const systemPrompt = `${baseSystem}\n\n${modifier}`;
@@ -465,7 +523,7 @@ async function runMultiPassExtraction(
     for (let i = 0; i < chunks.length; i++) {
       const chunkLabel = chunks.length > 1 ? `Chunk ${i + 1} of ${chunks.length}` : '';
       const sectionHeadings = (chunks[i].match(/^## .+$/gm) || []).map((h: string) => h.replace('## ', '')).join(', ');
-      
+
       const userPrompt = `Extract the maximum number of high-value, non-duplicative Knowledge Items from the following content.
 
 Your goal is depth, not brevity.
@@ -508,76 +566,84 @@ ${chunks[i]}`;
         passItems.push(...items);
       } catch (err) {
         console.error(`[extract-tactics] ${passName} ${chunkLabel} failed:`, err);
+        chunksFailed++;
       }
     }
     return passItems;
   };
 
-  // ── Pass 1: Core Tactics (always runs) ──
+  // Pass 1: Core Tactics (always)
   console.log(`[extract-tactics] Pass 1 (core) starting | ${chunks.length} chunk(s) | ${contentLength} chars`);
   const coreItems = await runPass('core');
   passMetrics.core = coreItems.length;
   allCandidates.push(...coreItems);
   passesRun.push('core');
-  console.log(`[extract-tactics] Pass 1 (core): ${coreItems.length} candidates`);
 
-  // ── Determine if Pass 2+3 needed ──
+  // Determine if escalation needed
   const pass1Deduped = deduplicateItems(allCandidates, false);
-  const pass1Validated = pass1Deduped.filter(it => validateItem(it, isTranscript, false));
-  const pass1Depth = computeDepthBucket(pass1Validated.length, contentLength);
-  const pass1UnderExtracted = computeUnderExtracted(pass1Validated.length, contentLength);
-  const shouldEscalate = deepMode || pass1UnderExtracted || pass1Depth === 'shallow' || (isRich && pass1Validated.length < 6);
+  const pass1Valid = pass1Deduped.kept.filter(it => validateItem(it, isTranscript, false).passed);
+  const pass1Depth = computeDepthBucket(pass1Valid.length, contentLength, category);
+  const pass1Under = computeUnderExtracted(pass1Valid.length, contentLength, category);
+  const shouldEscalate = deepMode || pass1Under || pass1Depth === 'shallow' || (isRich && pass1Valid.length < 6);
 
   if (shouldEscalate) {
-    // ── Pass 2: Hidden Insights ──
-    console.log(`[extract-tactics] Pass 2 (hidden) starting | reason: ${deepMode ? 'deep_mode' : pass1UnderExtracted ? 'under_extracted' : 'shallow'}`);
-    // Add 2s delay between passes to avoid rate limiting
     await new Promise(r => setTimeout(r, 2000));
     const hiddenItems = await runPass('hidden');
     passMetrics.hidden = hiddenItems.length;
     allCandidates.push(...hiddenItems);
     passesRun.push('hidden');
-    console.log(`[extract-tactics] Pass 2 (hidden): ${hiddenItems.length} candidates`);
 
-    // ── Pass 3: Framework Synthesis ──
-    console.log(`[extract-tactics] Pass 3 (framework) starting`);
     await new Promise(r => setTimeout(r, 2000));
     const frameworkItems = await runPass('framework');
     passMetrics.framework = frameworkItems.length;
     allCandidates.push(...frameworkItems);
     passesRun.push('framework');
-    console.log(`[extract-tactics] Pass 3 (framework): ${frameworkItems.length} candidates`);
   }
 
-  // ── Merge + dedupe across all passes ──
-  const merged = deduplicateItems(allCandidates, false);
-  const validated = merged
-    .filter(it => validateItem(it, isTranscript, false))
-    .map(it => normalizeItem(it, title));
+  // Dedupe
+  const dedupeResult = deduplicateItems(allCandidates, false);
+
+  // Validate with rejection tracking
+  const validationRejections: Record<string, number> = {};
+  const validated: any[] = [];
+  for (const item of dedupeResult.kept) {
+    const v = validateItem(item, isTranscript, false);
+    if (v.passed) {
+      validated.push(normalizeItem(item, title));
+    } else if (v.rejectionReason) {
+      validationRejections[v.rejectionReason] = (validationRejections[v.rejectionReason] || 0) + 1;
+    }
+  }
 
   const kisPer1k = contentLength > 0 ? Math.round((validated.length * 1000 / contentLength) * 100) / 100 : 0;
-  const depthBucket = computeDepthBucket(validated.length, contentLength);
-  const underExtracted = computeUnderExtracted(validated.length, contentLength);
+  const depthBucket = computeDepthBucket(validated.length, contentLength, category);
+  const underExtracted = computeUnderExtracted(validated.length, contentLength, category);
   const extractionMode = shouldEscalate ? 'deep' : 'standard';
 
-  const summary = `${extractionMode} extraction: ${passesRun.join('+')} passes | ${allCandidates.length} raw → ${merged.length} merged → ${validated.length} validated | ${kisPer1k} KIs/1k | ${depthBucket}`;
+  const summary = `${extractionMode}: ${passesRun.join('+')} | ${allCandidates.length} raw → ${dedupeResult.kept.length} deduped → ${validated.length} validated | ${kisPer1k} KIs/1k | ${depthBucket}`;
   console.log(`[extract-tactics] FINAL: ${summary}`);
 
   return {
     items: validated,
+    rawCount: allCandidates.length,
     passMetrics,
-    mergedCount: merged.length,
+    dedupeResult,
+    validatedCount: validated.length,
+    validationRejections,
     extractionMode,
     passesRun,
     depthBucket,
     underExtracted,
     kisPer1k,
     summary,
+    chunksTotal: chunks.length,
+    chunksProcessed: chunks.length - chunksFailed,
+    chunksFailed,
   };
 }
 
 // ══════════════════════════════════════════════════════
-// LESSON 2-STAGE PIPELINE (preserved, enhanced with metrics)
+// LESSON 2-STAGE PIPELINE
 // ══════════════════════════════════════════════════════
 
 async function extractLessonTwoStage(
@@ -587,9 +653,10 @@ async function extractLessonTwoStage(
   description: string | undefined,
   tags: string[],
   resourceType: string | undefined,
-): Promise<any> {
-  const pipelineLog: any = { stage1_candidates: 0, stage2_raw: 0, stage2_validated: 0, recovery_found: 0, recovery_added: 0, final: 0 };
-  console.log(`[extract-tactics] LESSON 2-STAGE mode | Content: ${content.length} chars`);
+): Promise<MultiPassResult> {
+  const pipelineLog: any = { stage1_candidates: 0, stage2_raw: 0, recovery_found: 0, recovery_added: 0 };
+  const category = 'lesson';
+  const validationRejections: Record<string, number> = {};
 
   // Stage 1: Enumerate
   const enumeratePrompt = `Analyze this structured training lesson and create an exhaustive inventory of every distinct teachable concept.
@@ -607,7 +674,6 @@ List EVERY distinct concept. If the lesson teaches 15 things, return 15 items.`;
     const enumResult = await requestExtraction(apiKey, LESSON_ENUMERATE_SYSTEM, enumeratePrompt, 4096);
     candidates = parseAiResponse(enumResult);
     pipelineLog.stage1_candidates = candidates.length;
-    console.log(`[extract-tactics] Stage 1: ${candidates.length} candidates`);
   } catch (err) { console.error('[extract-tactics] Stage 1 failed:', err); }
 
   // Stage 2: Full expansion
@@ -634,7 +700,6 @@ CRITICAL: One complete play per concept. Do not merge. Do not skip.`;
     rawItems = parseAiResponse(stage2Result);
 
     if (isTruncatedResponse(stage2Result) && candidates.length > rawItems.length) {
-      console.log(`[extract-tactics] Stage 2 truncated at ${rawItems.length}, retrying remaining`);
       const producedTitles = rawItems.map((it: any) => (it.title || '').toLowerCase());
       const missed = candidates.filter((c: any) => {
         const ct = (c.candidate_title || '').toLowerCase();
@@ -650,11 +715,19 @@ CRITICAL: One complete play per concept. Do not merge. Do not skip.`;
     pipelineLog.stage2_raw = rawItems.length;
   } catch (err) { console.error('[extract-tactics] Stage 2 failed:', err); }
 
-  const deduped = deduplicateItems(rawItems, true);
-  const validated = deduped.filter(item => validateItem(item, false, true)).map(it => normalizeItem(it, title));
-  pipelineLog.stage2_validated = validated.length;
+  const dedupeResult = deduplicateItems(rawItems, true);
+  const validated: any[] = [];
+  for (const item of dedupeResult.kept) {
+    const v = validateItem(item, false, true);
+    if (v.passed) {
+      validated.push(normalizeItem(item, title));
+    } else if (v.rejectionReason) {
+      validationRejections[v.rejectionReason] = (validationRejections[v.rejectionReason] || 0) + 1;
+    }
+  }
 
-  // Recovery pass for missed candidates
+  // Recovery pass — deterministic merge (sort by title before combining)
+  let recoveryAdded = 0;
   if (candidates.length > 0 && validated.length < candidates.length) {
     const producedTitles = validated.map((v: any) => (v.title || '').toLowerCase());
     const missed = candidates.filter((c: any) => {
@@ -671,36 +744,226 @@ CRITICAL: One complete play per concept. Do not merge. Do not skip.`;
       const missedList = missed.map((c: any, i: number) => `${i + 1}. ${c.candidate_title} [${c.concept_type}] — ${c.source_hint || ''}`).join('\n');
       try {
         const recoveryResult = await requestExtraction(apiKey, stage2System, `These ${missed.length} concepts were missed. Extract a full play for EACH:\n\n${missedList}\n\nTitle: ${title}\nContent:\n${content}\n\nReturn ONLY JSON array.`, MAX_TOKENS);
-        const recoveryItems = parseAiResponse(recoveryResult).filter(it => validateItem(it, false, true)).map(it => normalizeItem(it, title));
-        const combined = deduplicateItems([...validated, ...recoveryItems], true);
-        pipelineLog.recovery_added = combined.length - validated.length;
-        if (combined.length > validated.length) validated.push(...combined.slice(validated.length));
+        const recoveryRaw = parseAiResponse(recoveryResult);
+        const recoveryValidated = recoveryRaw.filter(it => validateItem(it, false, true).passed).map(it => normalizeItem(it, title));
+
+        // Deterministic merge: combine all, sort by title, then dedupe
+        const combined = [...validated, ...recoveryValidated].sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+        const finalDeduped = deduplicateItems(combined, true);
+        recoveryAdded = finalDeduped.kept.length - validated.length;
+        // Replace validated with deterministic result
+        validated.length = 0;
+        validated.push(...finalDeduped.kept);
       } catch (err) { console.error('[extract-tactics] Recovery failed:', err); }
     }
   }
+  pipelineLog.recovery_added = recoveryAdded;
 
-  pipelineLog.final = validated.length;
   const kisPer1k = content.length > 0 ? Math.round((validated.length * 1000 / content.length) * 100) / 100 : 0;
-  console.log(`[extract-tactics] LESSON FINAL: ${validated.length} items | ${kisPer1k} KIs/1k`);
+  const depthBucket = computeDepthBucket(validated.length, content.length, category);
+  const underExtracted = computeUnderExtracted(validated.length, content.length, category);
+
+  const summary = `lesson: ${candidates.length} enumerated → ${rawItems.length} expanded → ${dedupeResult.kept.length} deduped → ${validated.length} validated | +${recoveryAdded} recovery | ${kisPer1k} KIs/1k | ${depthBucket}`;
 
   return {
     items: validated,
-    chunks_total: 1,
-    chunks_processed: 1,
-    chunks_failed: 0,
-    lesson_pipeline: pipelineLog,
-    extraction_metrics: {
-      extraction_mode: 'standard',
-      extraction_passes_run: ['lesson_enumerate', 'lesson_expand', 'lesson_recovery'],
-      raw_candidate_counts: { enumerate: candidates.length, expand: rawItems.length, recovery: pipelineLog.recovery_added || 0 },
-      merged_candidate_count: deduped.length,
-      final_ki_count: validated.length,
-      kis_per_1k_chars: kisPer1k,
-      extraction_depth_bucket: computeDepthBucket(validated.length, content.length),
-      under_extracted_flag: computeUnderExtracted(validated.length, content.length),
-      last_extraction_summary: `lesson pipeline: ${candidates.length} enumerated → ${rawItems.length} expanded → ${validated.length} validated | ${kisPer1k} KIs/1k`,
-    },
+    rawCount: rawItems.length,
+    passMetrics: { enumerate: candidates.length, expand: rawItems.length, recovery: recoveryAdded },
+    dedupeResult,
+    validatedCount: validated.length,
+    validationRejections,
+    extractionMode: 'standard',
+    passesRun: ['lesson_enumerate', 'lesson_expand', 'lesson_recovery'],
+    depthBucket,
+    underExtracted,
+    kisPer1k,
+    summary,
+    chunksTotal: 1,
+    chunksProcessed: 1,
+    chunksFailed: 0,
   };
+}
+
+// ══════════════════════════════════════════════════════
+// SERVER-SIDE KI SAVE + RUN RECORD + RESOURCE UPDATE
+// ══════════════════════════════════════════════════════
+
+async function serverSidePersist(
+  supabaseAdmin: any,
+  resourceId: string,
+  userId: string,
+  result: MultiPassResult,
+  contentLength: number,
+  startedAt: number,
+): Promise<{ runId: string; savedCount: number; activeCount: number; status: string; error: string | null }> {
+  const runId = crypto.randomUUID();
+  const completedAt = new Date().toISOString();
+  const durationMs = Date.now() - startedAt;
+
+  // Build KI rows for upsert
+  const kiRows = result.items.map((item: any) => ({
+    id: crypto.randomUUID(),
+    user_id: userId,
+    source_resource_id: resourceId,
+    source_doctrine_id: null,
+    title: item.title || 'Untitled',
+    knowledge_type: item.knowledge_type || 'skill',
+    chapter: item.chapter || 'messaging',
+    sub_chapter: item.sub_chapter || null,
+    competitor_name: item.competitor_name || null,
+    product_area: item.product_area || null,
+    applies_to_contexts: item.applies_to_contexts || ['dave', 'playbooks'],
+    tactic_summary: item.tactic_summary || '',
+    why_it_matters: item.why_it_matters || null,
+    when_to_use: item.when_to_use || null,
+    when_not_to_use: item.when_not_to_use || null,
+    example_usage: item.example_usage || null,
+    macro_situation: item.macro_situation || null,
+    micro_strategy: item.micro_strategy || null,
+    how_to_execute: item.how_to_execute || null,
+    what_this_unlocks: item.what_this_unlocks || null,
+    source_excerpt: item.source_excerpt || null,
+    source_title: item.source_title || null,
+    source_location: item.source_location || null,
+    confidence_score: typeof item.confidence_score === 'number' ? item.confidence_score : 0.7,
+    status: 'extracted',
+    active: false,
+    user_edited: false,
+    tags: Array.isArray(item.tags) ? item.tags : [],
+    who: item.who || 'Unknown',
+    framework: item.framework || 'General',
+    review_status: 'pending',
+    source_heading: item.source_heading || null,
+    source_segment_index: item.source_segment_index || null,
+    source_char_range: item.source_char_range || null,
+    challenger_type: item.challenger_type || null,
+    activation_metadata: item.activation_metadata || null,
+  }));
+
+  let savedCount = 0;
+  let activeCount = 0;
+  let status = 'completed';
+  let error: string | null = null;
+
+  try {
+    // Save KIs in batches of 50
+    for (let i = 0; i < kiRows.length; i += 50) {
+      const batch = kiRows.slice(i, i + 50);
+      const { error: insertErr, data: inserted } = await supabaseAdmin
+        .from('knowledge_items')
+        .insert(batch)
+        .select('id');
+      if (insertErr) {
+        console.error(`[extract-tactics] KI save batch error:`, insertErr);
+        error = insertErr.message;
+        status = i > 0 ? 'partial' : 'failed';
+        break;
+      }
+      savedCount += inserted?.length ?? batch.length;
+    }
+
+    // Activate high-quality items
+    if (savedCount > 0) {
+      const ACTIVATION_THRESHOLD = 0.6;
+      const activatableIds = kiRows
+        .filter(ki => ki.confidence_score >= ACTIVATION_THRESHOLD &&
+          ki.tactic_summary.length >= 80 &&
+          (ki.how_to_execute?.length ?? 0) >= 80)
+        .map(ki => ki.id);
+
+      if (activatableIds.length > 0) {
+        const { error: activateErr } = await supabaseAdmin
+          .from('knowledge_items')
+          .update({ active: true, status: 'active' })
+          .in('id', activatableIds);
+        if (!activateErr) activeCount = activatableIds.length;
+      }
+    }
+
+    if (savedCount === 0 && kiRows.length > 0) {
+      status = 'failed';
+      error = error || 'All KI saves failed';
+    } else if (savedCount < kiRows.length) {
+      status = 'partial';
+    }
+  } catch (err: any) {
+    status = 'failed';
+    error = err.message;
+  }
+
+  // Compute saved-truth metrics
+  const savedKisPer1k = contentLength > 0 ? Math.round((savedCount * 1000 / contentLength) * 100) / 100 : 0;
+  const savedDepthBucket = computeDepthBucket(savedCount, contentLength, result.depthBucket.includes('lesson') ? 'lesson' : 'document');
+  const savedUnderExtracted = computeUnderExtracted(savedCount, contentLength, 'document');
+
+  const finalSummary = `${result.extractionMode}: ${result.passesRun.join('+')} | ${result.rawCount} raw → ${result.dedupeResult.kept.length} deduped → ${result.validatedCount} validated → ${savedCount} saved | ${savedKisPer1k} KIs/1k | ${savedDepthBucket}`;
+
+  // Create extraction_run record
+  try {
+    await supabaseAdmin.from('extraction_runs').insert({
+      id: runId,
+      resource_id: resourceId,
+      user_id: userId,
+      started_at: new Date(startedAt).toISOString(),
+      completed_at: completedAt,
+      duration_ms: durationMs,
+      status,
+      extraction_method: 'llm',
+      extraction_mode: result.extractionMode,
+      model: MODEL_NAME,
+      passes_run: result.passesRun,
+      chunks_total: result.chunksTotal,
+      chunks_processed: result.chunksProcessed,
+      chunks_failed: result.chunksFailed,
+      raw_candidate_counts: result.passMetrics,
+      merged_candidate_count: result.dedupeResult.kept.length,
+      validated_candidate_count: result.validatedCount,
+      saved_candidate_count: savedCount,
+      kis_per_1k_chars: savedKisPer1k,
+      extraction_depth_bucket: savedDepthBucket,
+      under_extracted_flag: savedUnderExtracted,
+      validation_rejection_counts: result.validationRejections,
+      dedupe_merge_counts: result.dedupeResult.details,
+      error_message: error,
+      summary: finalSummary,
+    });
+  } catch (runErr) {
+    console.error('[extract-tactics] Failed to create extraction_run:', runErr);
+  }
+
+  // Update resource snapshot
+  try {
+    await supabaseAdmin.from('resources').update({
+      last_extraction_run_id: runId,
+      last_extraction_run_status: status,
+      last_extraction_returned_ki_count: result.rawCount,
+      last_extraction_deduped_ki_count: result.dedupeResult.kept.length,
+      last_extraction_validated_ki_count: result.validatedCount,
+      last_extraction_saved_ki_count: savedCount,
+      last_extraction_error: error,
+      last_extraction_started_at: new Date(startedAt).toISOString(),
+      last_extraction_completed_at: completedAt,
+      last_extraction_duration_ms: durationMs,
+      last_extraction_model: MODEL_NAME,
+      // Also update legacy metrics columns
+      extraction_mode: result.extractionMode,
+      extraction_passes_run: result.passesRun,
+      raw_candidate_counts: result.passMetrics,
+      merged_candidate_count: result.dedupeResult.kept.length,
+      kis_per_1k_chars: savedKisPer1k,
+      extraction_depth_bucket: savedDepthBucket,
+      under_extracted_flag: savedUnderExtracted,
+      last_extraction_summary: finalSummary,
+      extraction_method: 'llm',
+      // Update enrichment/job status
+      enrichment_status: savedCount > 0 ? 'deep_enriched' : undefined,
+      active_job_status: status === 'completed' ? 'succeeded' : (status === 'partial' ? 'succeeded' : 'failed'),
+    }).eq('id', resourceId);
+  } catch (resErr) {
+    console.error('[extract-tactics] Failed to update resource:', resErr);
+  }
+
+  return { runId, savedCount, activeCount, status, error };
 }
 
 // ══════════════════════════════════════════════════════
@@ -712,6 +975,8 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startedAt = Date.now();
+
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -720,30 +985,46 @@ Deno.serve(async (req) => {
       });
     }
 
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+    // Auth check
     const batchKey = req.headers.get('x-batch-key');
     const isServiceRole = batchKey != null && batchKey === serviceRoleKey;
+    let userId: string | null = null;
 
-    if (!isServiceRole) {
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_ANON_KEY')!,
-        { global: { headers: { Authorization: authHeader } } },
-      );
-      const { data: { user } } = await supabase.auth.getUser();
+    if (isServiceRole) {
+      // Service role — userId must come from body
+    } else {
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await userClient.auth.getUser();
       if (!user) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      userId = user.id;
     }
 
-    const { title, content, description, tags, resourceType, deepMode } = await req.json();
+    const body = await req.json();
+    const { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist } = body;
+
+    // Resolve userId
+    if (!userId) userId = bodyUserId;
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'userId required' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     if (!content || content.length < 100) {
-      return new Response(JSON.stringify({ items: [], chunks_total: 0, chunks_processed: 0, chunks_failed: 0 }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify({
+        items: [], chunks_total: 0, chunks_processed: 0, chunks_failed: 0,
+        extraction_metrics: { raw_count: 0, deduped_count: 0, validated_count: 0, saved_count: 0 },
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -756,40 +1037,62 @@ Deno.serve(async (req) => {
     const isTranscript = isTranscriptType(resourceType);
     const isLesson = isStructuredLesson(content, title, resourceType);
 
-    // ── LESSON MODE ──
+    let result: MultiPassResult;
+
     if (isLesson) {
       const cleanedContent = prepareLessonContent(content, title);
       console.log(`[extract-tactics] LESSON: "${title}" | ${cleanedContent.length} chars`);
-      const result = await extractLessonTwoStage(LOVABLE_API_KEY, cleanedContent, title, description, tags, resourceType);
-      return new Response(JSON.stringify(result), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      result = await extractLessonTwoStage(LOVABLE_API_KEY, cleanedContent, title, description, tags, resourceType);
+    } else {
+      console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} multi-pass | ${content.length} chars | deepMode=${!!deepMode}`);
+      result = await runMultiPassExtraction(LOVABLE_API_KEY, content, title, description, tags || [], resourceType, isTranscript, !!deepMode);
     }
 
-    // ── MULTI-PASS MODE (docs + transcripts) ──
-    console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} multi-pass | ${content.length} chars | deepMode=${!!deepMode}`);
+    // Server-side persistence when resourceId is provided
+    const shouldPersist = persist !== false && resourceId;
+    let persistResult: { runId: string; savedCount: number; activeCount: number; status: string; error: string | null } | null = null;
 
-    const result = await runMultiPassExtraction(
-      LOVABLE_API_KEY, content, title, description, tags || [], resourceType, isTranscript, !!deepMode,
-    );
+    if (shouldPersist) {
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+      persistResult = await serverSidePersist(
+        supabaseAdmin, resourceId, userId, result, content.length, startedAt,
+      );
+    }
 
-    return new Response(JSON.stringify({
+    const responsePayload = {
       items: result.items,
-      chunks_total: chunkContent(content, isTranscript).length,
-      chunks_processed: chunkContent(content, isTranscript).length,
-      chunks_failed: 0,
+      chunks_total: result.chunksTotal,
+      chunks_processed: result.chunksProcessed,
+      chunks_failed: result.chunksFailed,
       extraction_metrics: {
         extraction_mode: result.extractionMode,
         extraction_passes_run: result.passesRun,
         raw_candidate_counts: result.passMetrics,
-        merged_candidate_count: result.mergedCount,
-        final_ki_count: result.items.length,
+        raw_count: result.rawCount,
+        merged_candidate_count: result.dedupeResult.kept.length,
+        deduped_count: result.dedupeResult.kept.length,
+        validated_count: result.validatedCount,
+        saved_count: persistResult?.savedCount ?? null,
+        active_count: persistResult?.activeCount ?? null,
         kis_per_1k_chars: result.kisPer1k,
         extraction_depth_bucket: result.depthBucket,
         under_extracted_flag: result.underExtracted,
         last_extraction_summary: result.summary,
+        validation_rejection_counts: result.validationRejections,
+        dedupe_merge_counts: result.dedupeResult.details,
+        model: MODEL_NAME,
       },
-    }), {
+      // Server persistence proof
+      persistence: persistResult ? {
+        run_id: persistResult.runId,
+        saved_count: persistResult.savedCount,
+        active_count: persistResult.activeCount,
+        status: persistResult.status,
+        error: persistResult.error,
+      } : null,
+    };
+
+    return new Response(JSON.stringify(responsePayload), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
