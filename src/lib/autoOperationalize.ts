@@ -317,27 +317,49 @@ export async function autoOperationalizeResource(
           edgeFunctionError = edgeDebug.edgeFunctionError;
           edgeFunctionReturnedItems = edgeDebug.edgeFunctionReturnedItems;
         }
-        if (finalExtracted.length > 0) usedExtractionMethod = 'llm';
-        log.info('LLM extraction result', { resourceId, count: finalExtracted.length });
+
+        // Check if server already persisted KIs (new server-owned truth model)
+        const serverPersisted = (finalExtracted as any)?._serverPersisted === true;
+        if (serverPersisted) {
+          knowledgeExtracted = (finalExtracted as any)._serverSavedCount || 0;
+          usedExtractionMethod = 'llm';
+          log.info('Server-persisted extraction — skipping client-side insert', {
+            resourceId, savedCount: knowledgeExtracted,
+            activeCount: (finalExtracted as any)._serverActiveCount,
+            runId: (finalExtracted as any)._serverRunId,
+          });
+          // Re-fetch existing items to get server-saved KIs for activation stage
+          const { data: freshKIs } = await supabase
+            .from('knowledge_items' as any)
+            .select('id, active, applies_to_contexts, confidence_score, user_edited, tactic_summary, chapter, tags')
+            .eq('source_resource_id', resourceId);
+          if (freshKIs) {
+            existingItems.length = 0;
+            existingItems.push(...(freshKIs as any[]));
+          }
+        } else {
+          if (finalExtracted.length > 0) usedExtractionMethod = 'llm';
+          log.info('LLM extraction result', { resourceId, count: finalExtracted.length });
+        }
       } catch (err: any) {
         log.warn('LLM extraction failed', { resourceId, error: err?.message || err });
       }
     }
 
-    // HARDENED: Allow heuristic fallback for structured course lessons even when
-    // resource_type is video/audio. These contain lesson text (not raw transcripts),
-    // so heuristic sentence-splitting produces valid KIs.
+    // Heuristic fallback for non-audio types or structured course lessons
     const { isStructuredCourseLesson: isStructuredForFallback } = getTranscriptPreparationState(
       contentForExtraction, r.resource_type, r.title,
     );
-    if (finalExtracted.length === 0 && (!isAudioType || isStructuredForFallback)) {
+    const serverAlreadySaved = (finalExtracted as any)?._serverPersisted === true;
+    if (!serverAlreadySaved && finalExtracted.length === 0 && (!isAudioType || isStructuredForFallback)) {
       heuristicFallbackAttempted = true;
       finalExtracted = extractKnowledgeHeuristic(source);
       if (finalExtracted.length > 0) usedExtractionMethod = 'heuristic';
       log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length, isStructuredForFallback });
     }
 
-    if (finalExtracted.length > 0) {
+    // Client-side insert only if server did NOT persist
+    if (!serverAlreadySaved && finalExtracted.length > 0) {
       const { data: inserted, error: insErr } = await supabase
         .from('knowledge_items' as any)
         .insert(finalExtracted as any)
@@ -346,11 +368,11 @@ export async function autoOperationalizeResource(
       if (!insErr && inserted) {
         knowledgeExtracted = inserted.length;
         existingItems.push(...(inserted as any[]));
-        log.info('Extracted knowledge items', { resourceId, count: knowledgeExtracted });
+        log.info('Extracted knowledge items (client-side)', { resourceId, count: knowledgeExtracted });
       } else if (insErr) {
         log.warn('Failed to insert extracted knowledge', { resourceId, error: insErr.message });
       }
-    } else {
+    } else if (!serverAlreadySaved && finalExtracted.length === 0) {
       log.warn('Both heuristic and LLM extraction returned 0 items', { resourceId, contentLength: contentForExtraction.length });
     }
   } else if (hasExistingKI) {
