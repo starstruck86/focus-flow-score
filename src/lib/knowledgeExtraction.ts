@@ -662,6 +662,28 @@ export async function extractKnowledgeLLMFallback(
       return [];
     }
 
+    // If server persisted KIs, return empty array with metadata marker
+    // so callers (autoOperationalize) skip client-side insert.
+    if (payload?.persistence && payload.persistence.saved_count > 0) {
+      log.info('Server persisted KIs — skipping client-side processing', {
+        resourceId: source.resourceId,
+        savedCount: payload.persistence.saved_count,
+        activeCount: payload.persistence.active_count,
+      });
+
+      // Return a special marker array: empty items but with metadata
+      // indicating server already saved. Callers check _serverPersisted.
+      const marker: KnowledgeItemInsert[] = [];
+      (marker as any)._serverPersisted = true;
+      (marker as any)._serverSavedCount = payload.persistence.saved_count;
+      (marker as any)._serverActiveCount = payload.persistence.active_count;
+      (marker as any)._serverRunId = payload.persistence.run_id;
+      (marker as any)._serverStatus = payload.persistence.status;
+      return marker;
+    }
+
+    // Fallback: server did not persist (persist=false or no resourceId).
+    // Process items client-side as before.
     if (payload?.items && Array.isArray(payload.items)) {
       const rawItems: KnowledgeItemInsert[] = [];
       for (const item of payload.items) {
@@ -669,8 +691,6 @@ export async function extractKnowledgeLLMFallback(
         if (!item.when_to_use || item.when_to_use.length < 10) continue;
         if (!item.title || item.title.length < 5) continue;
 
-        // Structural quality gate: reject transcript fragments posing as KIs
-        // A proper KI title should be an action phrase, not a sentence fragment
         const titleLooksLikeSentence = item.title.length > 60 && !/^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize)/i.test(item.title);
         const summaryIsSameAsTitle = item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 30));
         if (titleLooksLikeSentence && summaryIsSameAsTitle) {
@@ -678,7 +698,6 @@ export async function extractKnowledgeLLMFallback(
           continue;
         }
 
-        // Trust validation
         const trust = validateTrust(
           {
             title: item.title,
@@ -730,14 +749,12 @@ export async function extractKnowledgeLLMFallback(
         const whoIsWeak = !ki.who || WEAK_WHO.includes((ki.who || '').toLowerCase().trim());
         const frameworkIsWeak = !ki.framework || WEAK_FRAMEWORK.includes((ki.framework || '').toLowerCase().trim());
 
-        // Attribution provenance metadata (persisted in activation_metadata)
         const attributionProvenance: Record<string, string> = {
           who_source: 'llm',
           framework_source: 'llm',
         };
 
         if (whoIsWeak || frameworkIsWeak) {
-          // Try strong-signal sources in priority order
           const strongSources: { label: string; text: string }[] = [
             { label: 'resource_title', text: source.title || '' },
             { label: 'resource_description', text: source.description || '' },
@@ -786,21 +803,11 @@ export async function extractKnowledgeLLMFallback(
                 who_source: attributionProvenance.who_source,
                 framework_source: attributionProvenance.framework_source,
                 signalSource,
-                reason: `LLM returned weak values (who="${oldWho}", framework="${oldFramework}"), detected from ${signalSource}`,
               });
             }
           }
-        } else {
-          // LLM returned specific values — preserve them
-          log.debug('Attribution preserved from LLM', {
-            title: ki.title,
-            who: ki.who,
-            framework: ki.framework,
-            provenance: 'llm',
-          });
         }
 
-        // Merge attribution provenance into activation_metadata
         (ki as any).activation_metadata = {
           ...((ki as any).activation_metadata || {}),
           attribution: attributionProvenance,
@@ -809,10 +816,9 @@ export async function extractKnowledgeLLMFallback(
         rawItems.push(ki);
       }
 
-      // Deduplicate
       const { kept, duplicates } = deduplicateKnowledgeItems(rawItems, existingItems);
 
-      log.info('LLM fallback extraction complete', {
+      log.info('LLM fallback extraction complete (client-side mode)', {
         resourceId: source.resourceId,
         extracted: kept.length,
         duplicates_suppressed: duplicates.length,
