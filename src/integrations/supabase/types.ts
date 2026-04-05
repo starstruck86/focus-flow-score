@@ -4089,8 +4089,11 @@ export type Database = {
           extraction_attempt_count: number
           extraction_attempt_history: Json | null
           extraction_audit_summary: Json | null
+          extraction_depth_bucket: string | null
           extraction_failure_type: string | null
           extraction_method: string | null
+          extraction_mode: string | null
+          extraction_passes_run: Json | null
           extraction_priority_factors: Json | null
           extraction_priority_score: number | null
           extraction_retry_eligible: boolean
@@ -4103,8 +4106,10 @@ export type Database = {
           id: string
           is_screenshot_template: boolean | null
           is_template: boolean | null
+          kis_per_1k_chars: number | null
           last_advanced_extraction_at: string | null
           last_enrichment_attempt_at: string | null
+          last_extraction_summary: string | null
           last_quality_score: number | null
           last_quality_tier: string | null
           last_reconciled_at: string | null
@@ -4114,6 +4119,7 @@ export type Database = {
           manual_content_present: boolean | null
           manual_input_required: boolean | null
           max_extraction_attempts: number
+          merged_candidate_count: number | null
           metadata_status: string | null
           next_best_action: string | null
           next_retry_at: string | null
@@ -4121,6 +4127,7 @@ export type Database = {
           original_url: string | null
           pipeline_queue: string | null
           platform_status: string | null
+          raw_candidate_counts: Json | null
           re_extract_at: string | null
           re_extract_status: string
           recovery_attempt_count: number | null
@@ -4140,6 +4147,7 @@ export type Database = {
           template_category: string | null
           title: string
           transcript_status: string | null
+          under_extracted_flag: boolean | null
           updated_at: string
           user_id: string
           validation_version: number
@@ -4187,8 +4195,11 @@ export type Database = {
           extraction_attempt_count?: number
           extraction_attempt_history?: Json | null
           extraction_audit_summary?: Json | null
+          extraction_depth_bucket?: string | null
           extraction_failure_type?: string | null
           extraction_method?: string | null
+          extraction_mode?: string | null
+          extraction_passes_run?: Json | null
           extraction_priority_factors?: Json | null
           extraction_priority_score?: number | null
           extraction_retry_eligible?: boolean
@@ -4201,8 +4212,10 @@ export type Database = {
           id?: string
           is_screenshot_template?: boolean | null
           is_template?: boolean | null
+          kis_per_1k_chars?: number | null
           last_advanced_extraction_at?: string | null
           last_enrichment_attempt_at?: string | null
+          last_extraction_summary?: string | null
           last_quality_score?: number | null
           last_quality_tier?: string | null
           last_reconciled_at?: string | null
@@ -4212,6 +4225,7 @@ export type Database = {
           manual_content_present?: boolean | null
           manual_input_required?: boolean | null
           max_extraction_attempts?: number
+          merged_candidate_count?: number | null
           metadata_status?: string | null
           next_best_action?: string | null
           next_retry_at?: string | null
@@ -4219,6 +4233,7 @@ export type Database = {
           original_url?: string | null
           pipeline_queue?: string | null
           platform_status?: string | null
+          raw_candidate_counts?: Json | null
           re_extract_at?: string | null
           re_extract_status?: string
           recovery_attempt_count?: number | null
@@ -4238,6 +4253,7 @@ export type Database = {
           template_category?: string | null
           title: string
           transcript_status?: string | null
+          under_extracted_flag?: boolean | null
           updated_at?: string
           user_id: string
           validation_version?: number
@@ -4285,8 +4301,11 @@ export type Database = {
           extraction_attempt_count?: number
           extraction_attempt_history?: Json | null
           extraction_audit_summary?: Json | null
+          extraction_depth_bucket?: string | null
           extraction_failure_type?: string | null
           extraction_method?: string | null
+          extraction_mode?: string | null
+          extraction_passes_run?: Json | null
           extraction_priority_factors?: Json | null
           extraction_priority_score?: number | null
           extraction_retry_eligible?: boolean
@@ -4299,8 +4318,10 @@ export type Database = {
           id?: string
           is_screenshot_template?: boolean | null
           is_template?: boolean | null
+          kis_per_1k_chars?: number | null
           last_advanced_extraction_at?: string | null
           last_enrichment_attempt_at?: string | null
+          last_extraction_summary?: string | null
           last_quality_score?: number | null
           last_quality_tier?: string | null
           last_reconciled_at?: string | null
@@ -4310,6 +4331,7 @@ export type Database = {
           manual_content_present?: boolean | null
           manual_input_required?: boolean | null
           max_extraction_attempts?: number
+          merged_candidate_count?: number | null
           metadata_status?: string | null
           next_best_action?: string | null
           next_retry_at?: string | null
@@ -4317,6 +4339,7 @@ export type Database = {
           original_url?: string | null
           pipeline_queue?: string | null
           platform_status?: string | null
+          raw_candidate_counts?: Json | null
           re_extract_at?: string | null
           re_extract_status?: string
           recovery_attempt_count?: number | null
@@ -4336,6 +4359,7 @@ export type Database = {
           template_category?: string | null
           title?: string
           transcript_status?: string | null
+          under_extracted_flag?: boolean | null
           updated_at?: string
           user_id?: string
           validation_version?: number

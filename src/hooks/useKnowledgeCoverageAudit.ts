@@ -21,6 +21,13 @@ export interface ResourceAuditRow {
   kis_per_1k_chars: number;
   under_extracted_flag: boolean;
   extraction_depth_bucket: 'none' | 'shallow' | 'moderate' | 'strong';
+  // New multi-pass fields
+  extraction_mode: string;
+  extraction_passes_run: string[];
+  raw_candidate_counts: Record<string, number>;
+  merged_candidate_count: number;
+  last_extraction_summary: string | null;
+  extraction_method: string | null;
 }
 
 export interface CoverageAuditSummary {
@@ -37,16 +44,18 @@ export interface CoverageAuditSummary {
 }
 
 function computeUnderExtracted(contentLength: number, kiCount: number): boolean {
-  if (contentLength >= 5000 && kiCount <= 3) return true;
-  if (contentLength >= 3000 && kiCount <= 2) return true;
-  if (contentLength >= 1500 && kiCount <= 1) return true;
+  if (contentLength >= 5000 && kiCount <= 6) return true;
+  if (contentLength >= 3000 && kiCount <= 4) return true;
+  if (contentLength >= 1500 && kiCount <= 2) return true;
+  const kisPer1k = contentLength > 0 ? (kiCount * 1000) / contentLength : 0;
+  if (kisPer1k < 1.0 && kiCount > 0) return true;
   return false;
 }
 
 function computeDepthBucket(kisPer1k: number, kiCount: number): ResourceAuditRow['extraction_depth_bucket'] {
   if (kiCount === 0) return 'none';
-  if (kisPer1k < 0.3) return 'shallow';
-  if (kisPer1k < 0.8) return 'moderate';
+  if (kisPer1k < 0.75) return 'shallow';
+  if (kisPer1k < 1.5) return 'moderate';
   return 'strong';
 }
 
@@ -56,14 +65,13 @@ export function useKnowledgeCoverageAudit() {
   return useQuery({
     queryKey: ['knowledge-coverage-audit', user?.id],
     queryFn: async () => {
-      // Fetch all resources
       const { data: resources, error: rErr } = await supabase
         .from('resources' as any)
-        .select('id, title, resource_type, enrichment_status, active_job_status, content_length, extraction_attempt_count')
+        .select('id, title, resource_type, enrichment_status, active_job_status, content_length, extraction_attempt_count, extraction_mode, extraction_passes_run, raw_candidate_counts, merged_candidate_count, kis_per_1k_chars, extraction_depth_bucket, under_extracted_flag, last_extraction_summary, extraction_method')
         .order('content_length', { ascending: false });
       if (rErr) throw rErr;
 
-      // Fetch all KI counts grouped by resource — paginate to avoid 1000 limit
+      // Paginate KIs
       const PAGE_SIZE = 1000;
       let allKIs: any[] = [];
       let from = 0;
@@ -79,7 +87,6 @@ export function useKnowledgeCoverageAudit() {
         from += PAGE_SIZE;
       }
 
-      // Group KIs by resource
       const kiMap = new Map<string, { total: number; active: number; withCtx: number }>();
       for (const ki of allKIs) {
         const rid = ki.source_resource_id;
@@ -94,11 +101,23 @@ export function useKnowledgeCoverageAudit() {
       const dbTotalKIs = allKIs.length;
       const dbActiveKIs = allKIs.filter((k: any) => k.active).length;
 
-      // Build audit rows
+      // Method mix counters
+      const methodMix = { llm: 0, heuristic: 0, hybrid: 0, unknown: 0 };
+
       const rows: ResourceAuditRow[] = (resources ?? []).map((r: any) => {
         const ki = kiMap.get(r.id) ?? { total: 0, active: 0, withCtx: 0 };
         const cl = r.content_length ?? 0;
-        const kisPer1k = cl > 0 ? Math.round((ki.total * 1000 / cl) * 100) / 100 : 0;
+        // Prefer DB-persisted metrics, fall back to computed
+        const dbKisPer1k = r.kis_per_1k_chars != null ? Number(r.kis_per_1k_chars) : (cl > 0 ? Math.round((ki.total * 1000 / cl) * 100) / 100 : 0);
+        const dbDepth = r.extraction_depth_bucket || computeDepthBucket(dbKisPer1k, ki.total);
+        const dbUnderExtracted = r.under_extracted_flag ?? computeUnderExtracted(cl, ki.total);
+        const method = r.extraction_method || null;
+
+        if (method === 'llm') methodMix.llm++;
+        else if (method === 'heuristic') methodMix.heuristic++;
+        else if (method === 'hybrid') methodMix.hybrid++;
+        else methodMix.unknown++;
+
         return {
           resource_id: r.id,
           title: r.title ?? '(untitled)',
@@ -110,9 +129,15 @@ export function useKnowledgeCoverageAudit() {
           ki_count_active: ki.active,
           ki_with_context_count: ki.withCtx,
           extraction_attempt_count: r.extraction_attempt_count ?? 0,
-          kis_per_1k_chars: kisPer1k,
-          under_extracted_flag: computeUnderExtracted(cl, ki.total),
-          extraction_depth_bucket: computeDepthBucket(kisPer1k, ki.total),
+          kis_per_1k_chars: dbKisPer1k,
+          under_extracted_flag: dbUnderExtracted,
+          extraction_depth_bucket: dbDepth,
+          extraction_mode: r.extraction_mode || 'unknown',
+          extraction_passes_run: r.extraction_passes_run || [],
+          raw_candidate_counts: r.raw_candidate_counts || {},
+          merged_candidate_count: r.merged_candidate_count || 0,
+          last_extraction_summary: r.last_extraction_summary || null,
+          extraction_method: method,
         };
       });
 
@@ -140,7 +165,7 @@ export function useKnowledgeCoverageAudit() {
         resourcesUnderExtracted,
         resourcesZeroKIs,
         avgKisPer1k,
-        methodMix: { llm: 0, heuristic: 0, hybrid: 0, unknown: rows.length }, // TODO: track method per resource
+        methodMix,
         top20Weakest,
       } as CoverageAuditSummary;
     },
