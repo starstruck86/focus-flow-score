@@ -872,6 +872,7 @@ async function serverSidePersist(
       user_id: userId,
       source_resource_id: resourceId,
       source_doctrine_id: null,
+      ki_fingerprint: fp,
       title: item.title || 'Untitled',
       knowledge_type: item.knowledge_type || 'skill',
       chapter: item.chapter || 'messaging',
