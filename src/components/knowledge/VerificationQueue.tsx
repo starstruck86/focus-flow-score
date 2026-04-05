@@ -24,44 +24,65 @@ interface QueueEntry {
   priority: number;
 }
 
+// Resource type priority: higher = more valuable for extraction
+const TYPE_PRIORITY: Record<string, number> = {
+  document: 4,   // frameworks, playbooks
+  article: 3,    // structured content
+  lesson: 2,     // training content
+  transcript: 2, // call/podcast transcripts
+  podcast: 2,
+  reference_only: 0, // excluded
+};
+
+function isExcluded(r: ResourceAuditRow): boolean {
+  return r.resource_type === 'reference_only';
+}
+
+function isAlreadyStrong(r: ResourceAuditRow): boolean {
+  return r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5;
+}
+
 function buildQueue(resources: ResourceAuditRow[]): QueueEntry[] {
   const seen = new Set<string>();
   const entries: QueueEntry[] = [];
+  // Guardrail: exclude reference_only and already-strong resources
+  const eligible = resources.filter(r => !isExcluded(r) && !isAlreadyStrong(r));
 
   const add = (r: ResourceAuditRow, reason: string, priority: number) => {
     if (seen.has(r.resource_id)) return;
     seen.add(r.resource_id);
-    entries.push({ resource: r, reason, priority });
+    // Boost priority by resource type value
+    const typeBoost = TYPE_PRIORITY[r.resource_type] ?? 1;
+    entries.push({ resource: r, reason, priority: priority - (typeBoost * 0.1) });
   };
 
-  // Top 10 highest-value under-extracted
-  const underExtracted = resources
+  // Bucket A — High value + under-extracted (content_length ≥ 1500)
+  eligible
     .filter(r => r.under_extracted_flag && r.content_length >= 1500)
     .sort((a, b) => b.content_length - a.content_length)
-    .slice(0, 10);
-  underExtracted.forEach(r => add(r, 'Under-extracted, high content value', 1));
+    .slice(0, 10)
+    .forEach(r => add(r, 'Under-extracted, high content value', 1));
 
-  // Top 10 richest content with weakest KI density
-  const richWeak = resources
-    .filter(r => r.content_length >= 2000 && r.ki_count_total > 0)
+  // Bucket B — Rich content, weak density (content_length ≥ 3000, kis_per_1k < 1.0)
+  eligible
+    .filter(r => r.content_length >= 3000 && r.kis_per_1k_chars < 1.0)
     .sort((a, b) => a.kis_per_1k_chars - b.kis_per_1k_chars)
-    .slice(0, 10);
-  richWeak.forEach(r => add(r, 'Rich content, weak KI density', 2));
+    .slice(0, 10)
+    .forEach(r => add(r, 'Rich content, weak KI density', 2));
 
-  // Top 5 transcript resources
-  const transcripts = resources
-    .filter(r => r.resource_type === 'transcript' || r.resource_type === 'podcast')
+  // Bucket C — Large framework assets (document, content_length ≥ 5000)
+  eligible
+    .filter(r => (r.resource_type === 'document' || r.resource_type === 'article') && r.content_length >= 5000)
     .sort((a, b) => a.kis_per_1k_chars - b.kis_per_1k_chars)
-    .slice(0, 5);
-  transcripts.forEach(r => add(r, 'Transcript — density review', 3));
+    .slice(0, 5)
+    .forEach(r => add(r, 'Large framework asset — high extraction potential', 3));
 
-  // Top 5 structured framework/template resources
-  const frameworks = resources
-    .filter(r => r.resource_type === 'document' || r.resource_type === 'article')
-    .filter(r => r.content_length >= 1500)
+  // Bucket D — Weak transcripts (kis_per_1k < 0.8)
+  eligible
+    .filter(r => (r.resource_type === 'transcript' || r.resource_type === 'podcast') && r.kis_per_1k_chars < 0.8)
     .sort((a, b) => a.kis_per_1k_chars - b.kis_per_1k_chars)
-    .slice(0, 5);
-  frameworks.forEach(r => add(r, 'Framework/template — density review', 4));
+    .slice(0, 5)
+    .forEach(r => add(r, 'Transcript — weak density', 4));
 
   return entries.sort((a, b) => a.priority - b.priority);
 }

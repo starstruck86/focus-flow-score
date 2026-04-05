@@ -43,7 +43,26 @@ export function useDeepReExtraction() {
   const [liftSummary, setLiftSummary] = useState<CoverageLiftSummary | null>(null);
 
   const flagForReExtraction = useCallback((resources: ResourceAuditRow[], reason: string) => {
-    const newItems: ReExtractQueueItem[] = resources.map(r => ({
+    // Guardrails: skip already-strong, reference_only, and duplicate-heavy resources
+    const eligible = resources.filter(r => {
+      if (r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5) {
+        console.log(`[ReExtract] SKIP strong resource: ${r.title} (${r.kis_per_1k_chars} KIs/1k)`);
+        return false;
+      }
+      if (r.resource_type === 'reference_only') {
+        console.log(`[ReExtract] SKIP reference_only: ${r.title}`);
+        return false;
+      }
+      return true;
+    });
+
+    if (eligible.length === 0) {
+      toast.info('No eligible resources to re-extract (all strong or excluded)');
+      return;
+    }
+
+    const skipped = resources.length - eligible.length;
+    const newItems: ReExtractQueueItem[] = eligible.map(r => ({
       resource_id: r.resource_id,
       title: r.title,
       content_length: r.content_length,
@@ -58,7 +77,10 @@ export function useDeepReExtraction() {
       const unique = newItems.filter(i => !existingIds.has(i.resource_id));
       return [...prev, ...unique];
     });
-    toast.success(`${newItems.length} resources flagged for deep re-extraction`);
+    const msg = skipped > 0
+      ? `${newItems.length} flagged for re-extraction (${skipped} skipped — already strong or excluded)`
+      : `${newItems.length} resources flagged for deep re-extraction`;
+    toast.success(msg);
   }, []);
 
   const removeFromQueue = useCallback((resourceId: string) => {
