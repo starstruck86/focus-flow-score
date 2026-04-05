@@ -77,7 +77,7 @@ export function useKnowledgeCoverageAudit() {
     queryFn: async () => {
       const { data: resources, error: rErr } = await supabase
         .from('resources' as any)
-        .select('id, title, resource_type, enrichment_status, active_job_status, content_length, extraction_attempt_count, extraction_mode, extraction_passes_run, raw_candidate_counts, merged_candidate_count, kis_per_1k_chars, extraction_depth_bucket, under_extracted_flag, last_extraction_summary, extraction_method')
+        .select('id, title, resource_type, enrichment_status, active_job_status, content_length, extraction_attempt_count, extraction_mode, extraction_passes_run, raw_candidate_counts, merged_candidate_count, kis_per_1k_chars, extraction_depth_bucket, under_extracted_flag, last_extraction_summary, extraction_method, last_extraction_run_id, last_extraction_run_status, last_extraction_returned_ki_count, last_extraction_deduped_ki_count, last_extraction_validated_ki_count, last_extraction_saved_ki_count, last_extraction_error, last_extraction_duration_ms, last_extraction_model')
         .order('content_length', { ascending: false });
       if (rErr) throw rErr;
 
