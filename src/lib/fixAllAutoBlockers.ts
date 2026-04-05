@@ -711,13 +711,14 @@ export async function runFixAllAutoBlockers(
   }
 
   // ── Post-run: re-query actual KI counts and truth state for all resources ──
-  // This gives accurate before/after rather than relying on phase success counts.
+  // Include any resources discovered during re-discovery phase
+  const allProcessedIds = [...new Set([...allResourceIds, ...extractIds, ...activateIds])];
   const postRunOutcomes = new Map<string, { kiCount: number; activeKiCount: number; enrichmentStatus: string; jobStatus: string | null }>();
-  if (allResourceIds.length > 0) {
+  if (allProcessedIds.length > 0) {
     const { data: postResources } = await supabase
       .from('resources' as any)
       .select('id, enrichment_status, active_job_status')
-      .in('id', allResourceIds);
+      .in('id', allProcessedIds);
     
     for (const pr of (postResources ?? []) as any[]) {
       const { count: kiCount } = await supabase
