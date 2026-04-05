@@ -689,6 +689,9 @@ export async function runFixAllAutoBlockers(
                 titleMap.set(fr.id, fr.title);
               }
               initOutcome(fr.id, 'extraction', 'needs_extraction');
+              // Mark as rediscovered (found after normalization, not in original blocker groups)
+              const outcome = outcomeMap.get(fr.id);
+              if (outcome) outcome.rediscovered = true;
               log.info('Discovered newly extraction-eligible resource after normalization', { id: fr.id, title: fr.title, status: fr.enrichment_status, isStructuredLesson });
             }
           }
