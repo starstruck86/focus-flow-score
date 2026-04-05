@@ -98,12 +98,20 @@ export function useDeepReExtraction() {
         if (error) throw new Error(error.message);
         if (data?.error) throw new Error(data.error);
 
-        const savedCount = data?.persistence?.saved_count ?? 0;
-        const currentKiCount = data?.saved_metrics?.current_resource_ki_count ?? (item.pre_ki_count + savedCount);
-        const currentKisPer1k = data?.saved_metrics?.current_resource_kis_per_1k ?? 0;
         const passesRun = data?.model_metrics?.extraction_passes_run ?? [];
         const dupsSkipped = data?.persistence?.duplicates_skipped ?? 0;
         const status = data?.persistence?.status ?? 'completed';
+
+        // After-metrics: query fresh DB count instead of trusting edge function response
+        const { count: freshKiCount } = await supabase
+          .from('knowledge_items' as any)
+          .select('*', { count: 'exact', head: true })
+          .eq('source_resource_id', item.resource_id);
+
+        const currentKiCount = freshKiCount ?? data?.saved_metrics?.current_resource_ki_count ?? item.pre_ki_count;
+        const currentKisPer1k = item.content_length > 0
+          ? Math.round((currentKiCount * 1000 / item.content_length) * 100) / 100
+          : 0;
         const kiDelta = currentKiCount - item.pre_ki_count;
 
         const isUpgrade = (item.pre_depth_bucket === 'none' || item.pre_depth_bucket === 'shallow') &&
