@@ -1208,12 +1208,14 @@ Deno.serve(async (req) => {
       },
       // Saved/persisted metrics (what actually landed in the DB)
       saved_metrics: persistResult ? {
-        saved_count: persistResult.savedCount,
-        active_count: persistResult.activeCount,
-        duplicates_skipped: persistResult.duplicatesSkipped,
-        saved_kis_per_1k: result.items.length > 0 && content.length > 0
+        last_run_saved_count: persistResult.savedCount,
+        last_run_active_count: persistResult.activeCount,
+        last_run_duplicates_skipped: persistResult.duplicatesSkipped,
+        last_run_saved_kis_per_1k: result.items.length > 0 && content.length > 0
           ? Math.round((persistResult.savedCount * 1000 / content.length) * 100) / 100
           : 0,
+        current_resource_ki_count: persistResult.currentResourceKiCount,
+        current_resource_kis_per_1k: persistResult.currentKisPer1k,
       } : null,
       // Server persistence proof
       persistence: persistResult ? {
@@ -1221,6 +1223,7 @@ Deno.serve(async (req) => {
         saved_count: persistResult.savedCount,
         active_count: persistResult.activeCount,
         duplicates_skipped: persistResult.duplicatesSkipped,
+        current_resource_ki_count: persistResult.currentResourceKiCount,
         status: persistResult.status,
         error: persistResult.error,
       } : null,
