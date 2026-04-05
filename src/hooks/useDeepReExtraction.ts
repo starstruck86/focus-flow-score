@@ -265,8 +265,10 @@ export function useDeepReExtraction() {
             already_dense: 'Already dense — resource well-mined',
             duplicate_heavy: 'No true lift — duplicates / overlap only',
             extractor_returned_no_new_items: 'Extractor returned no new items',
+            extractor_weak_output: 'Extractor produced too few candidates',
             items_generated_but_filtered_out: 'Items generated but failed validation',
             items_generated_but_deduped: 'Items generated but all were duplicates',
+            validation_too_strict: 'Validation rejected most candidates',
             resource_not_suitable: 'Resource not suitable for extraction',
             unknown: 'No lift — cause unknown',
           };
