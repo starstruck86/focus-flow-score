@@ -826,6 +826,8 @@ interface PersistenceResult {
   status: 'completed' | 'partial' | 'failed';
   error: string | null;
   duplicatesSkipped: number;
+  currentResourceKiCount: number;
+  currentKisPer1k: number;
 }
 
 async function serverSidePersist(
