@@ -59,13 +59,23 @@ export function useKnowledgeItems(chapter?: string, filters?: { who?: string; fr
   return useQuery({
     queryKey: ['knowledge-items', user?.id, chapter, filters?.who, filters?.framework],
     queryFn: async () => {
-      let q = supabase.from(TABLE).select('*').order('confidence_score', { ascending: false });
-      if (chapter) q = q.eq('chapter', chapter);
-      if (filters?.who) q = q.eq('who', filters.who);
-      if (filters?.framework) q = q.eq('framework', filters.framework);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []) as unknown as KnowledgeItem[];
+      // Paginate to avoid Supabase 1000-row default limit
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      while (true) {
+        let q = supabase.from(TABLE).select('*').order('confidence_score', { ascending: false }).range(from, from + PAGE_SIZE - 1);
+        if (chapter) q = q.eq('chapter', chapter);
+        if (filters?.who) q = q.eq('who', filters.who);
+        if (filters?.framework) q = q.eq('framework', filters.framework);
+        const { data, error } = await q;
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+      return allData as unknown as KnowledgeItem[];
     },
     enabled: !!user,
   });
