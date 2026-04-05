@@ -1261,7 +1261,7 @@ Deno.serve(async (req) => {
     let persistResult: PersistenceResult | null = null;
 
     if (shouldPersist) {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+      // supabaseAdmin already created above for resource fetch / existing KI query
       persistResult = await serverSidePersist(
         supabaseAdmin, resourceId, userId, result, content.length, startedAt,
       );
