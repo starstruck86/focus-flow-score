@@ -156,6 +156,35 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
                     <span>{qr.quality_label || qr.no_lift_reason}</span>
                   </div>
                 )}
+                {qr.dominant_bottleneck && qr.dominant_bottleneck !== 'none' && (
+                  <div className="mt-1">
+                    <Badge variant="outline" className="text-[8px] border-destructive/30 text-destructive">
+                      Bottleneck: {qr.dominant_bottleneck.replace(/_/g, ' ')}
+                    </Badge>
+                  </div>
+                )}
+                {/* Validation rejection breakdown */}
+                {qr.ef_validation_rejections && Object.keys(qr.ef_validation_rejections).length > 0 && (
+                  <div className="mt-2 text-[10px]">
+                    <div className="text-muted-foreground font-medium mb-1">Validation Rejections</div>
+                    <div className="flex gap-1 flex-wrap">
+                      {Object.entries(qr.ef_validation_rejections).map(([reason, count]) => (
+                        <Badge key={reason} variant="secondary" className="text-[8px]">{reason}: {count}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Dedup breakdown */}
+                {qr.ef_dedup_details && Object.values(qr.ef_dedup_details).some(v => v > 0) && (
+                  <div className="mt-2 text-[10px]">
+                    <div className="text-muted-foreground font-medium mb-1">Dedup Details</div>
+                    <div className="flex gap-1 flex-wrap">
+                      {Object.entries(qr.ef_dedup_details).filter(([_, count]) => count > 0).map(([reason, count]) => (
+                        <Badge key={reason} variant="secondary" className="text-[8px]">{reason}: {count}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}
