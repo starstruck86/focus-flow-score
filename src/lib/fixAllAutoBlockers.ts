@@ -237,7 +237,7 @@ async function fixNeedsExtraction(
   callbacks?: FixAllCallbacks,
 ): Promise<{ phaseResult: FixPhaseResult; resourceResults: Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string; heuristicFallbackAttempted?: boolean; extractionTier?: string }> }> {
   const result: FixPhaseResult = { phase: 'extraction', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
-  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string; heuristicFallbackAttempted?: boolean; extractionTier?: string }>();
+  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string; heuristicFallbackAttempted?: boolean; extractionTier?: string; edgeFunctionInvoked?: boolean; edgeFunctionName?: string | null; edgeFunctionStatus?: number | null; edgeFunctionError?: string | null; edgeFunctionReturnedItems?: number | null }>();
 
   if (resourceIds.length === 0) return { phaseResult: result, resourceResults };
 
