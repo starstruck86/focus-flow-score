@@ -399,6 +399,17 @@ export function useDeepReExtraction() {
       if (count > topCount) { topNoLiftReason = reason; topCount = count; }
     }
 
+    // Find top bottleneck
+    const bnCounts = new Map<DominantBottleneck, number>();
+    for (const b of bottlenecks) {
+      bnCounts.set(b, (bnCounts.get(b) || 0) + 1);
+    }
+    let topBottleneck: DominantBottleneck | null = null;
+    let topBnCount = 0;
+    for (const [bn, count] of bnCounts) {
+      if (count > topBnCount) { topBottleneck = bn; topBnCount = count; }
+    }
+
     setLiftSummary({
       resourcesProcessed: queued.length,
       resourcesSucceeded: succeeded,
@@ -411,6 +422,7 @@ export function useDeepReExtraction() {
       depthUpgrades,
       noLiftCount,
       topNoLiftReason,
+      topBottleneck,
       successRate: queued.length > 0 ? Math.round((succeeded / queued.length) * 100) : 0,
     });
 
