@@ -632,6 +632,14 @@ export async function runFixAllAutoBlockers(
     groupMap.set(g.type, existing);
   }
 
+  // Now populate originalExtractionIds
+  originalExtractionIds = new Set(groupMap.get('needs_extraction') ?? []);
+  // Update all outcomes with inOriginalExtractionGroup
+  for (const id of originalExtractionIds) {
+    const outcome = outcomeMap.get(id);
+    if (outcome) outcome.inOriginalExtractionGroup = true;
+  }
+
   // Phase 0: Normalize stale statuses
   const allIds = blockerGroups.flatMap(g => g.resourceIds);
   if (allIds.length > 0) {
