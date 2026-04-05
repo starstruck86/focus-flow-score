@@ -94,6 +94,8 @@ export interface AutoOperationalizeResult {
   outcome: PipelineOutcome;
   extractionTier: 'full' | 'reduced' | 'lightweight' | 'none';
   reason?: string;
+  /** Which extraction method actually produced KIs: 'llm', 'heuristic', or 'none' */
+  extractionMethod?: 'llm' | 'heuristic' | 'none';
 }
 
 // ── Auto-activation thresholds ─────────────────────────────
@@ -240,6 +242,7 @@ export async function autoOperationalizeResource(
 
   // Use tiered extraction based on contract tier
   const canExtract = !hasExistingKI && (eligibility.extractionTier === 'full' || eligibility.extractionTier === 'lightweight' || eligibility.extractionTier === 'reduced');
+  let usedExtractionMethod: 'llm' | 'heuristic' | 'none' = 'none';
   if (canExtract) {
     // Extract knowledge heuristically
     const { data: userData } = await supabase.auth.getUser();
@@ -285,13 +288,14 @@ export async function autoOperationalizeResource(
       log.warn('Skipping extraction: transcript not preprocessed', { resourceId, headingCount, hasLessonBody });
       needsReview = true;
       reason = 'Transcript needs preprocessing before KI extraction (no ## section headings found)';
-      return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason);
+      return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason, undefined, undefined, 'none');
     }
     
     if (contentForExtraction.length >= 100) {
       log.info('Running LLM extraction', { resourceId, resourceType: r.resource_type });
       try {
         finalExtracted = await extractKnowledgeLLMFallback(source);
+        if (finalExtracted.length > 0) usedExtractionMethod = 'llm';
         log.info('LLM extraction result', { resourceId, count: finalExtracted.length });
       } catch (err: any) {
         log.warn('LLM extraction failed', { resourceId, error: err?.message || err });
@@ -306,6 +310,7 @@ export async function autoOperationalizeResource(
     );
     if (finalExtracted.length === 0 && (!isAudioType || isStructuredForFallback)) {
       finalExtracted = extractKnowledgeHeuristic(source);
+      if (finalExtracted.length > 0) usedExtractionMethod = 'heuristic';
       log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length, isStructuredForFallback });
     }
 
@@ -340,7 +345,7 @@ export async function autoOperationalizeResource(
       active_job_finished_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as any).eq('id', resourceId);
-    return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason);
+    return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason, undefined, undefined, usedExtractionMethod);
   }
   stagesCompleted.push('knowledge_extracted');
 
@@ -421,11 +426,16 @@ export async function autoOperationalizeResource(
   }
 
   // ── Update resource enrichment_status + last_status_change_at after successful extraction ──
+  // HARDENED: Also clear stale active_job_status (idle/failed) so the resource
+  // doesn't stay blocked by a stale job marker after successful extraction.
   const finalStage = stagesCompleted[stagesCompleted.length - 1];
   if (knowledgeExtracted > 0 || knowledgeActivated > 0 || hasActiveWithContexts) {
     const statusUpdate: Record<string, any> = {
       last_status_change_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      active_job_status: 'succeeded',
+      active_job_finished_at: new Date().toISOString(),
+      active_job_error: null,
     };
     // Only upgrade enrichment_status if it's not already deep_enriched or better
     const currentStatus = r.enrichment_status ?? 'not_enriched';
@@ -449,6 +459,10 @@ export async function autoOperationalizeResource(
     knowledgeActivated,
     hasActiveWithContexts,
     false,
+    undefined,
+    undefined,
+    undefined,
+    usedExtractionMethod,
   );
 }
 
@@ -679,6 +693,7 @@ function makeResult(
   reason?: string,
   extractionTier: AutoOperationalizeResult['extractionTier'] = 'none',
   outcome?: PipelineOutcome,
+  extractionMethod?: 'llm' | 'heuristic' | 'none',
 ): AutoOperationalizeResult {
   const derivedOutcome: PipelineOutcome = outcome
     ?? (operationalized ? 'operationalized'
@@ -701,6 +716,7 @@ function makeResult(
     outcome: derivedOutcome,
     extractionTier,
     reason,
+    extractionMethod,
   };
 }
 

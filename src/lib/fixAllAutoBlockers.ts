@@ -221,9 +221,9 @@ async function fixNeedsExtraction(
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
   callbacks?: FixAllCallbacks,
-): Promise<{ phaseResult: FixPhaseResult; resourceResults: Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean }> }> {
+): Promise<{ phaseResult: FixPhaseResult; resourceResults: Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string }> }> {
   const result: FixPhaseResult = { phase: 'extraction', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
-  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean }>();
+  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string }>();
 
   if (resourceIds.length === 0) return { phaseResult: result, resourceResults };
 
@@ -254,6 +254,7 @@ async function fixNeedsExtraction(
         kisActive: r.knowledgeActivated,
         reason: r.reason,
         succeeded: r.knowledgeExtracted > 0 || r.operationalized,
+        extractionMethod: r.extractionMethod,
       });
       if (r.knowledgeExtracted > 0 || r.operationalized) {
         result.succeeded++;
@@ -523,6 +524,7 @@ export async function runFixAllAutoBlockers(
   const allResourceIds = blockerGroups.flatMap(g => g.resourceIds);
   const titleMap = new Map<string, string>();
   const originalStateMap = new Map<string, { enrichment_status: string; active_job_status: string; content: string }>();
+  const kiBeforeMap = new Map<string, number>();
   if (allResourceIds.length > 0) {
     const { data: titleData } = await supabase
       .from('resources' as any)
@@ -535,6 +537,14 @@ export async function runFixAllAutoBlockers(
         active_job_status: r.active_job_status ?? '',
         content: r.content ?? '',
       });
+    }
+    // Fetch pre-run KI counts for all resources
+    for (const id of allResourceIds) {
+      const { count } = await supabase
+        .from('knowledge_items' as any)
+        .select('id', { count: 'exact', head: true })
+        .eq('source_resource_id', id);
+      kiBeforeMap.set(id, count ?? 0);
     }
   }
 
@@ -556,7 +566,7 @@ export async function runFixAllAutoBlockers(
         phase,
         attempted: false,
         succeeded: false,
-        kiBefore: 0,
+        kiBefore: kiBeforeMap.get(id) ?? 0,
         kisCreated: 0,
         kisActive: 0,
         finalTruthState: null,
@@ -697,6 +707,7 @@ export async function runFixAllAutoBlockers(
         outcome.succeeded = detail.succeeded;
         outcome.kisCreated = detail.kisCreated;
         outcome.kisActive = detail.kisActive;
+        outcome.extractionMethod = detail.extractionMethod ?? null;
         
         // Track wrapper-page attachment handling
         if (outcome.wrapperPageDetected) {
