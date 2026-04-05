@@ -2247,6 +2247,7 @@ export type Database = {
           confidence_score: number
           created_at: string
           example_usage: string | null
+          extraction_method: string | null
           framework: string | null
           how_to_execute: string | null
           id: string
@@ -2288,6 +2289,7 @@ export type Database = {
           confidence_score?: number
           created_at?: string
           example_usage?: string | null
+          extraction_method?: string | null
           framework?: string | null
           how_to_execute?: string | null
           id?: string
@@ -2329,6 +2331,7 @@ export type Database = {
           confidence_score?: number
           created_at?: string
           example_usage?: string | null
+          extraction_method?: string | null
           framework?: string | null
           how_to_execute?: string | null
           id?: string

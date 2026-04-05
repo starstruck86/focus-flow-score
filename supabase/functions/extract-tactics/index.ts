@@ -907,6 +907,7 @@ async function serverSidePersist(
       source_char_range: item.source_char_range || null,
       challenger_type: item.challenger_type || null,
       activation_metadata: item.activation_metadata || null,
+      extraction_method: 'llm',
     });
   }
 

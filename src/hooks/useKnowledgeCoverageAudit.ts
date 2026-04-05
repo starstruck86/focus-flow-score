@@ -77,18 +77,18 @@ export function useKnowledgeCoverageAudit() {
     queryFn: async () => {
       const { data: resources, error: rErr } = await supabase
         .from('resources' as any)
-        .select('id, title, resource_type, enrichment_status, active_job_status, content_length, extraction_attempt_count, extraction_mode, extraction_passes_run, raw_candidate_counts, merged_candidate_count, kis_per_1k_chars, extraction_depth_bucket, under_extracted_flag, last_extraction_summary, extraction_method, last_extraction_run_id, last_extraction_run_status, last_extraction_returned_ki_count, last_extraction_deduped_ki_count, last_extraction_validated_ki_count, last_extraction_saved_ki_count, last_extraction_error, last_extraction_duration_ms, last_extraction_model')
+        .select('id, title, resource_type, enrichment_status, active_job_status, content_length, extraction_attempt_count, extraction_mode, extraction_passes_run, raw_candidate_counts, merged_candidate_count, kis_per_1k_chars, extraction_depth_bucket, under_extracted_flag, last_extraction_summary, extraction_method, last_extraction_run_id, last_extraction_run_status, last_extraction_returned_ki_count, last_extraction_deduped_ki_count, last_extraction_validated_ki_count, last_extraction_saved_ki_count, last_extraction_error, last_extraction_duration_ms, last_extraction_model, current_resource_ki_count, current_resource_kis_per_1k')
         .order('content_length', { ascending: false });
       if (rErr) throw rErr;
 
-      // Paginate KIs
+      // Paginate KIs — include extraction_method for method mix
       const PAGE_SIZE = 1000;
       let allKIs: any[] = [];
       let from = 0;
       while (true) {
         const { data: kis, error: kErr } = await supabase
           .from('knowledge_items' as any)
-          .select('source_resource_id, active, applies_to_contexts')
+          .select('source_resource_id, active, applies_to_contexts, extraction_method')
           .range(from, from + PAGE_SIZE - 1);
         if (kErr) throw kErr;
         if (!kis || kis.length === 0) break;
@@ -98,35 +98,57 @@ export function useKnowledgeCoverageAudit() {
       }
 
       const kiMap = new Map<string, { total: number; active: number; withCtx: number }>();
+      // Method mix from KIs (source of truth)
+      const methodMix = { llm: 0, heuristic: 0, hybrid: 0, unknown: 0 };
+
       for (const ki of allKIs) {
         const rid = ki.source_resource_id;
-        if (!rid) continue;
-        if (!kiMap.has(rid)) kiMap.set(rid, { total: 0, active: 0, withCtx: 0 });
-        const entry = kiMap.get(rid)!;
-        entry.total++;
-        if (ki.active) entry.active++;
-        if (ki.active && ki.applies_to_contexts && (ki.applies_to_contexts as string[]).length > 0) entry.withCtx++;
+        if (rid) {
+          if (!kiMap.has(rid)) kiMap.set(rid, { total: 0, active: 0, withCtx: 0 });
+          const entry = kiMap.get(rid)!;
+          entry.total++;
+          if (ki.active) entry.active++;
+          if (ki.active && ki.applies_to_contexts && (ki.applies_to_contexts as string[]).length > 0) entry.withCtx++;
+        }
+
+        // Aggregate method mix from actual KIs
+        const method = ki.extraction_method;
+        if (method === 'llm') methodMix.llm++;
+        else if (method === 'heuristic') methodMix.heuristic++;
+        else if (method === 'hybrid') methodMix.hybrid++;
+        else methodMix.unknown++;
       }
 
       const dbTotalKIs = allKIs.length;
       const dbActiveKIs = allKIs.filter((k: any) => k.active).length;
 
-      // Method mix counters
-      const methodMix = { llm: 0, heuristic: 0, hybrid: 0, unknown: 0 };
-
       const rows: ResourceAuditRow[] = (resources ?? []).map((r: any) => {
         const ki = kiMap.get(r.id) ?? { total: 0, active: 0, withCtx: 0 };
-        const cl = r.content_length ?? 0;
-        // Prefer DB-persisted metrics, fall back to computed
-        const dbKisPer1k = r.kis_per_1k_chars != null ? Number(r.kis_per_1k_chars) : (cl > 0 ? Math.round((ki.total * 1000 / cl) * 100) / 100 : 0);
-        const dbDepth = r.extraction_depth_bucket || computeDepthBucket(dbKisPer1k, ki.total);
-        const dbUnderExtracted = r.under_extracted_flag ?? computeUnderExtracted(cl, ki.total);
-        const method = r.extraction_method || null;
+        const cl = Number(r.content_length) || 0;
 
-        if (method === 'llm') methodMix.llm++;
-        else if (method === 'heuristic') methodMix.heuristic++;
-        else if (method === 'hybrid') methodMix.hybrid++;
-        else methodMix.unknown++;
+        // Use server-persisted current_resource_ki_count if available, else use counted KIs
+        const kiTotal = (r.current_resource_ki_count != null && Number(r.current_resource_ki_count) > 0)
+          ? Number(r.current_resource_ki_count)
+          : ki.total;
+
+        // Compute KIs/1k from real counts — never trust a potentially stale DB field alone
+        const computedKisPer1k = cl > 0 ? Math.round((kiTotal * 1000 / cl) * 100) / 100 : 0;
+
+        // Use DB-persisted if available AND non-zero when we have KIs, otherwise computed
+        const dbKisPer1k = (r.current_resource_kis_per_1k != null && Number(r.current_resource_kis_per_1k) > 0)
+          ? Number(r.current_resource_kis_per_1k)
+          : (r.kis_per_1k_chars != null && Number(r.kis_per_1k_chars) > 0)
+            ? Number(r.kis_per_1k_chars)
+            : computedKisPer1k;
+
+        // If DB says 0 but we actually have KIs, use computed value
+        const finalKisPer1k = (dbKisPer1k === 0 && kiTotal > 0 && cl > 0) ? computedKisPer1k : dbKisPer1k;
+
+        const dbDepth = (kiTotal > 0 && r.extraction_depth_bucket && r.extraction_depth_bucket !== 'none')
+          ? r.extraction_depth_bucket
+          : computeDepthBucket(finalKisPer1k, kiTotal);
+        const dbUnderExtracted = r.under_extracted_flag ?? computeUnderExtracted(cl, kiTotal);
+        const method = r.extraction_method || null;
 
         return {
           resource_id: r.id,
@@ -135,11 +157,11 @@ export function useKnowledgeCoverageAudit() {
           enrichment_status: r.enrichment_status ?? 'unknown',
           active_job_status: r.active_job_status,
           content_length: cl,
-          ki_count_total: ki.total,
+          ki_count_total: kiTotal,
           ki_count_active: ki.active,
           ki_with_context_count: ki.withCtx,
           extraction_attempt_count: r.extraction_attempt_count ?? 0,
-          kis_per_1k_chars: dbKisPer1k,
+          kis_per_1k_chars: finalKisPer1k,
           under_extracted_flag: dbUnderExtracted,
           extraction_depth_bucket: dbDepth,
           extraction_mode: r.extraction_mode || 'unknown',
@@ -160,6 +182,13 @@ export function useKnowledgeCoverageAudit() {
           last_extraction_model: r.last_extraction_model || null,
         };
       });
+
+      // Guardrail: detect measurement integrity issues
+      const resourcesWithKIs = rows.filter(r => r.ki_count_total > 0);
+      const zeroKisPer1kWithKIs = resourcesWithKIs.filter(r => r.kis_per_1k_chars === 0);
+      if (zeroKisPer1kWithKIs.length > 5 && resourcesWithKIs.length > 0) {
+        console.warn(`[Coverage Audit] GUARDRAIL: ${zeroKisPer1kWithKIs.length}/${resourcesWithKIs.length} resources have KIs but show 0 KIs/1k — likely mapping issue`);
+      }
 
       const resourcesZeroKIs = rows.filter(r => r.ki_count_total === 0).length;
       const resourcesUnderExtracted = rows.filter(r => r.under_extracted_flag).length;
