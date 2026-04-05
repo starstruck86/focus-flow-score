@@ -580,6 +580,8 @@ export async function runFixAllAutoBlockers(
         rootCauseExplanation: null,
         resolutionOutcome: null,
         normalized: false,
+        rediscovered: false,
+        extractionRan: false,
         wrapperPageDetected: wrapperSet.has(id),
         attachmentExtractionAttempted: false,
         attachmentExtractionOutcome: null,
