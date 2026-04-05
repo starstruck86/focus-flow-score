@@ -1,12 +1,12 @@
 /**
  * Knowledge Workspace — merges Learn + Library into one place.
  * 
- * 5 internal sub-tabs: Overview, Resources, Knowledge Items, Review, Audit
+ * 6 internal sub-tabs: Overview, Resources, Knowledge Items, Review, Coverage, Audit
  */
 
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BarChart3, FileText, Brain, Shield, ClipboardCheck } from 'lucide-react';
+import { BarChart3, FileText, Brain, Shield, ClipboardCheck, Microscope } from 'lucide-react';
 import { SHELL } from '@/lib/layout';
 
 // Sub-tab content
@@ -17,6 +17,7 @@ import { ResourceReadinessSheet } from '@/components/prep/ResourceReadinessSheet
 import { ResourceUpsideQueue } from './ResourceUpsideQueue';
 import { LowYieldReviewQueue } from './LowYieldReviewQueue';
 import { DuplicateReviewQueue } from './DuplicateReviewQueue';
+import { KnowledgeCoverageAudit } from './KnowledgeCoverageAudit';
 
 export function KnowledgeWorkspace() {
   const [subTab, setSubTab] = useState('overview');
@@ -42,6 +43,10 @@ export function KnowledgeWorkspace() {
           <TabsTrigger value="review" className={SHELL.tabs.triggerWithIcon}>
             <ClipboardCheck className="h-3 w-3" />
             Review
+          </TabsTrigger>
+          <TabsTrigger value="coverage" className={SHELL.tabs.triggerWithIcon}>
+            <Microscope className="h-3 w-3" />
+            Coverage
           </TabsTrigger>
           <TabsTrigger value="audit" className={SHELL.tabs.triggerWithIcon}>
             <Shield className="h-3 w-3" />
@@ -70,6 +75,10 @@ export function KnowledgeWorkspace() {
             <LowYieldReviewQueue />
             <DuplicateReviewQueue />
           </div>
+        </TabsContent>
+
+        <TabsContent value="coverage" className="mt-3">
+          <KnowledgeCoverageAudit />
         </TabsContent>
 
         <TabsContent value="audit" className="mt-3">
