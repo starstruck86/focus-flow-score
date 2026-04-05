@@ -84,6 +84,7 @@ export interface CoverageLiftSummary {
   depthUpgrades: number;
   noLiftCount: number;
   topNoLiftReason: NoLiftReason | null;
+  topBottleneck: DominantBottleneck | null;
   successRate: number;
 }
 
