@@ -698,6 +698,7 @@ function makeResult(
   extractionTier: AutoOperationalizeResult['extractionTier'] = 'none',
   outcome?: PipelineOutcome,
   extractionMethod?: 'llm' | 'heuristic' | 'none',
+  heuristicFallbackAttempted?: boolean,
 ): AutoOperationalizeResult {
   const derivedOutcome: PipelineOutcome = outcome
     ?? (operationalized ? 'operationalized'
@@ -721,6 +722,7 @@ function makeResult(
     extractionTier,
     reason,
     extractionMethod,
+    heuristicFallbackAttempted: heuristicFallbackAttempted ?? false,
   };
 }
 
