@@ -238,9 +238,9 @@ async function fixNeedsExtraction(
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
   callbacks?: FixAllCallbacks,
-): Promise<{ phaseResult: FixPhaseResult; resourceResults: Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string }> }> {
+): Promise<{ phaseResult: FixPhaseResult; resourceResults: Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string; heuristicFallbackAttempted?: boolean; extractionTier?: string }> }> {
   const result: FixPhaseResult = { phase: 'extraction', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
-  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string }>();
+  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string; heuristicFallbackAttempted?: boolean; extractionTier?: string }>();
 
   if (resourceIds.length === 0) return { phaseResult: result, resourceResults };
 
@@ -272,6 +272,8 @@ async function fixNeedsExtraction(
         reason: r.reason,
         succeeded: r.knowledgeExtracted > 0 || r.operationalized,
         extractionMethod: r.extractionMethod,
+        heuristicFallbackAttempted: r.heuristicFallbackAttempted,
+        extractionTier: r.extractionTier,
       });
       if (r.knowledgeExtracted > 0 || r.operationalized) {
         result.succeeded++;
