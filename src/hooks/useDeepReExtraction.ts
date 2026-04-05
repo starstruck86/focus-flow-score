@@ -415,7 +415,13 @@ export function useDeepReExtraction() {
     qc.invalidateQueries({ queryKey: ['knowledge-coverage-audit'] });
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
     qc.invalidateQueries({ queryKey: ['resources'] });
-    toast.success(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalNetNew} net new KIs`);
+    if (totalNetNew > 0) {
+      toast.success(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalNetNew} net new KIs`);
+    } else if (noLiftCount === succeeded && succeeded > 0) {
+      toast.warning(`${succeeded}/${queued.length} runs completed, but produced no measurable coverage lift`);
+    } else {
+      toast.info(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalNetNew} net new KIs`);
+    }
   }, [queue, qc]);
 
   return {
