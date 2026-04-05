@@ -610,7 +610,7 @@ ${description ? `Description: ${description}` : ''}
 Tags: ${(tags || []).join(', ')}
 ${chunkLabel ? `Position: ${chunkLabel}` : ''}
 ${sectionHeadings ? `Sections covered: ${sectionHeadings}` : ''}
-
+${existingKiContext}
 Source content:
 ${chunks[i]}`;
 
