@@ -332,6 +332,11 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                         Top reason: <strong>{formatNoLiftReason(liftSummary.topNoLiftReason)}</strong>
                       </div>
                     )}
+                    {liftSummary.topBottleneck && (
+                      <div className="mt-0.5 text-[11px]">
+                        Dominant bottleneck: <strong>{formatBottleneck(liftSummary.topBottleneck)}</strong>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
