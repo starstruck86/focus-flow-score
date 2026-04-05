@@ -3,6 +3,7 @@
  * lift classification, no-lift diagnosis, and coverage lift summary.
  */
 import { useState } from 'react';
+import type { DominantBottleneck } from '@/hooks/useDeepReExtraction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -102,6 +103,44 @@ function formatNoLiftReason(reason: NoLiftReason): string {
     unknown: 'No lift — cause could not be determined',
   };
   return map[reason] || reason;
+}
+
+function formatBottleneck(b: DominantBottleneck): string {
+  const map: Record<DominantBottleneck, string> = {
+    extractor_weak_output: 'Extractor weak',
+    validation_too_strict: 'Validation strict',
+    dedup_too_aggressive: 'Dedup aggressive',
+    already_mined: 'Already mined',
+    unsuitable_content: 'Unsuitable content',
+    none: 'No bottleneck',
+    unknown: 'Unknown',
+  };
+  return map[b] || b;
+}
+
+function BottleneckBadge({ bottleneck }: { bottleneck?: DominantBottleneck }) {
+  if (!bottleneck || bottleneck === 'none') return null;
+  const cls = bottleneck === 'already_mined' ? 'border-muted-foreground/40 text-muted-foreground'
+    : bottleneck === 'extractor_weak_output' ? 'border-destructive/40 text-destructive'
+    : bottleneck === 'validation_too_strict' ? 'border-amber-500/40 text-amber-600'
+    : bottleneck === 'dedup_too_aggressive' ? 'border-blue-500/40 text-blue-600'
+    : 'border-muted-foreground/40 text-muted-foreground';
+  return <Badge variant="outline" className={cn("text-[8px]", cls)}>{formatBottleneck(bottleneck)}</Badge>;
+}
+
+function PipelineTooltip({ item }: { item: ReExtractQueueItem }) {
+  if (item.ef_returned_count == null) return null;
+  return (
+    <div className="text-[10px] space-y-0.5">
+      <div>Raw returned: <strong>{item.ef_returned_count}</strong></div>
+      <div>Validated: <strong>{item.ef_validated_count ?? '—'}</strong></div>
+      <div>Saved: <strong>{item.ef_saved_count ?? '—'}</strong></div>
+      <div>Dupes skipped: <strong>{item.duplicates_skipped ?? 0}</strong></div>
+      {item.dominant_bottleneck && item.dominant_bottleneck !== 'none' && (
+        <div className="pt-1 font-semibold">Bottleneck: {formatBottleneck(item.dominant_bottleneck)}</div>
+      )}
+    </div>
+  );
 }
 
 export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtraction, onRemove, onClear, onMarkExcluded }: Props) {
@@ -212,15 +251,30 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                       <TableCell className="text-[11px] text-right font-mono text-muted-foreground">
                         {item.duplicates_skipped != null ? item.duplicates_skipped : '—'}
                       </TableCell>
-                      <TableCell className="text-[10px] max-w-[100px]">
+                      <TableCell className="text-[10px] max-w-[130px]">
                         {item.status === 'queued' ? (
                           <span className="text-muted-foreground truncate text-[9px]">{item.reason}</span>
                         ) : (item.status === 'completed' || item.status === 'partial') ? (
-                          <LiftBadge
-                            liftStatus={item.lift_status}
-                            noLiftReason={item.no_lift_reason}
-                            qualityLabel={item.quality_label}
-                          />
+                          <div className="space-y-0.5">
+                            <LiftBadge
+                              liftStatus={item.lift_status}
+                              noLiftReason={item.no_lift_reason}
+                              qualityLabel={item.quality_label}
+                            />
+                            <BottleneckBadge bottleneck={item.dominant_bottleneck} />
+                            {item.ef_returned_count != null && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <div className="text-[8px] text-muted-foreground cursor-help">
+                                    {item.ef_returned_count}→{item.ef_validated_count ?? '?'}→{item.ef_saved_count ?? '?'}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent><PipelineTooltip item={item} /></TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        ) : item.status === 'failed' ? (
+                          <span className="text-[9px] text-destructive truncate">{item.error || 'Failed'}</span>
                         ) : null}
                       </TableCell>
                       <TableCell>
@@ -276,6 +330,11 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                     {liftSummary.topNoLiftReason && (
                       <div className="mt-1 text-[11px]">
                         Top reason: <strong>{formatNoLiftReason(liftSummary.topNoLiftReason)}</strong>
+                      </div>
+                    )}
+                    {liftSummary.topBottleneck && (
+                      <div className="mt-0.5 text-[11px]">
+                        Dominant bottleneck: <strong>{formatBottleneck(liftSummary.topBottleneck)}</strong>
                       </div>
                     )}
                   </div>

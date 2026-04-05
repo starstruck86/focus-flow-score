@@ -84,6 +84,7 @@ export interface CoverageLiftSummary {
   depthUpgrades: number;
   noLiftCount: number;
   topNoLiftReason: NoLiftReason | null;
+  topBottleneck: DominantBottleneck | null;
   successRate: number;
 }
 
@@ -221,6 +222,7 @@ export function useDeepReExtraction() {
     let depthUpgrades = 0;
     let noLiftCount = 0;
     const noLiftReasons: NoLiftReason[] = [];
+    const bottlenecks: DominantBottleneck[] = [];
     const preKisArr: number[] = [];
     const postKisArr: number[] = [];
 
@@ -365,6 +367,7 @@ export function useDeepReExtraction() {
           if (liftStatus === 'no_lift') {
             noLiftCount++;
             if (noLiftReason) noLiftReasons.push(noLiftReason);
+            if (dominantBottleneck && dominantBottleneck !== 'none') bottlenecks.push(dominantBottleneck);
           }
         }
         preKisArr.push(item.pre_kis_per_1k);
@@ -396,6 +399,17 @@ export function useDeepReExtraction() {
       if (count > topCount) { topNoLiftReason = reason; topCount = count; }
     }
 
+    // Find top bottleneck
+    const bnCounts = new Map<DominantBottleneck, number>();
+    for (const b of bottlenecks) {
+      bnCounts.set(b, (bnCounts.get(b) || 0) + 1);
+    }
+    let topBottleneck: DominantBottleneck | null = null;
+    let topBnCount = 0;
+    for (const [bn, count] of bnCounts) {
+      if (count > topBnCount) { topBottleneck = bn; topBnCount = count; }
+    }
+
     setLiftSummary({
       resourcesProcessed: queued.length,
       resourcesSucceeded: succeeded,
@@ -408,6 +422,7 @@ export function useDeepReExtraction() {
       depthUpgrades,
       noLiftCount,
       topNoLiftReason,
+      topBottleneck,
       successRate: queued.length > 0 ? Math.round((succeeded / queued.length) * 100) : 0,
     });
 

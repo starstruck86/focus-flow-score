@@ -34,6 +34,9 @@ interface Props {
     post_ki_count?: number;
     post_kis_per_1k?: number;
     post_active_count?: number;
+    dominant_bottleneck?: string;
+    ef_dedup_details?: Record<string, number>;
+    ef_validation_rejections?: Record<string, number>;
   };
 }
 
@@ -151,6 +154,35 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
                   <div className="mt-2 text-[11px] text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded px-2 py-1 flex items-start gap-1">
                     <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
                     <span>{qr.quality_label || qr.no_lift_reason}</span>
+                  </div>
+                )}
+                {qr.dominant_bottleneck && qr.dominant_bottleneck !== 'none' && (
+                  <div className="mt-1">
+                    <Badge variant="outline" className="text-[8px] border-destructive/30 text-destructive">
+                      Bottleneck: {qr.dominant_bottleneck.replace(/_/g, ' ')}
+                    </Badge>
+                  </div>
+                )}
+                {/* Validation rejection breakdown */}
+                {qr.ef_validation_rejections && Object.keys(qr.ef_validation_rejections).length > 0 && (
+                  <div className="mt-2 text-[10px]">
+                    <div className="text-muted-foreground font-medium mb-1">Validation Rejections</div>
+                    <div className="flex gap-1 flex-wrap">
+                      {Object.entries(qr.ef_validation_rejections).map(([reason, count]) => (
+                        <Badge key={reason} variant="secondary" className="text-[8px]">{reason}: {count}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Dedup breakdown */}
+                {qr.ef_dedup_details && Object.values(qr.ef_dedup_details).some(v => v > 0) && (
+                  <div className="mt-2 text-[10px]">
+                    <div className="text-muted-foreground font-medium mb-1">Dedup Details</div>
+                    <div className="flex gap-1 flex-wrap">
+                      {Object.entries(qr.ef_dedup_details).filter(([_, count]) => count > 0).map(([reason, count]) => (
+                        <Badge key={reason} variant="secondary" className="text-[8px]">{reason}: {count}</Badge>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
