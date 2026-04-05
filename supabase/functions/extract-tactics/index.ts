@@ -164,6 +164,12 @@ const TRANSCRIPT_SINGLE_PASS_THRESHOLD = 30000;
 const MAX_TOKENS = 16384;
 const MODEL_NAME = 'google/gemini-2.5-flash';
 
+// ══════════════════════════════════════════════════════
+// CONTENT CATEGORY — explicit, passed through entire pipeline
+// ══════════════════════════════════════════════════════
+
+type ContentCategory = 'lesson' | 'transcript' | 'document';
+
 function isTranscriptType(resourceType?: string): boolean {
   return ['transcript', 'podcast', 'audio', 'podcast_episode', 'video', 'recording'].includes(
     (resourceType || '').toLowerCase()
@@ -177,6 +183,12 @@ function isStructuredLesson(content: string, title?: string, resourceType?: stri
   const isVideoType = ['video', 'lesson'].includes((resourceType || '').toLowerCase());
   if (hasCourseTitle && isVideoType && content.length >= 500) return true;
   return false;
+}
+
+function classifyContentCategory(content: string, title?: string, resourceType?: string): ContentCategory {
+  if (isStructuredLesson(content, title, resourceType)) return 'lesson';
+  if (isTranscriptType(resourceType)) return 'transcript';
+  return 'document';
 }
 
 function prepareLessonContent(content: string, title?: string): string {
@@ -289,6 +301,17 @@ async function extractFromChunk(apiKey: string, systemPrompt: string, userPrompt
   const retryItems = parseAiResponse(retryResult);
   if (retryItems.length > 0) items = retryItems;
   return items;
+}
+
+// ══════════════════════════════════════════════════════
+// DETERMINISTIC KI FINGERPRINTING — for duplicate protection
+// ══════════════════════════════════════════════════════
+
+function computeKiFingerprint(resourceId: string, title: string, tacticSummary: string): string {
+  // Deterministic fingerprint: resource_id + normalized title + first 100 chars of summary
+  const normTitle = (title || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().slice(0, 80);
+  const normSummary = (tacticSummary || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().slice(0, 100);
+  return `${resourceId}::${normTitle}::${normSummary}`;
 }
 
 // ══════════════════════════════════════════════════════
@@ -421,7 +444,7 @@ interface DepthThresholds {
   underExtracted: (kiCount: number, contentLength: number) => boolean;
 }
 
-const DEPTH_THRESHOLDS: Record<string, DepthThresholds> = {
+const DEPTH_THRESHOLDS: Record<ContentCategory, DepthThresholds> = {
   lesson: {
     shallowBelow: 1.0,
     moderateBelow: 2.0,
@@ -453,13 +476,7 @@ const DEPTH_THRESHOLDS: Record<string, DepthThresholds> = {
   },
 };
 
-function getContentCategory(isTranscript: boolean, isLesson: boolean): string {
-  if (isLesson) return 'lesson';
-  if (isTranscript) return 'transcript';
-  return 'document';
-}
-
-function computeDepthBucket(kiCount: number, contentLength: number, category: string): string {
+function computeDepthBucket(kiCount: number, contentLength: number, category: ContentCategory): string {
   if (kiCount === 0) return 'none';
   const kisPer1k = contentLength > 0 ? (kiCount * 1000) / contentLength : 0;
   const t = DEPTH_THRESHOLDS[category] || DEPTH_THRESHOLDS.document;
@@ -468,7 +485,7 @@ function computeDepthBucket(kiCount: number, contentLength: number, category: st
   return 'strong';
 }
 
-function computeUnderExtracted(kiCount: number, contentLength: number, category: string): boolean {
+function computeUnderExtracted(kiCount: number, contentLength: number, category: ContentCategory): boolean {
   const t = DEPTH_THRESHOLDS[category] || DEPTH_THRESHOLDS.document;
   return t.underExtracted(kiCount, contentLength);
 }
@@ -479,6 +496,7 @@ function computeUnderExtracted(kiCount: number, contentLength: number, category:
 
 interface MultiPassResult {
   items: any[];
+  category: ContentCategory;
   rawCount: number;
   passMetrics: Record<string, number>;
   dedupeResult: DedupeResult;
@@ -486,9 +504,10 @@ interface MultiPassResult {
   validationRejections: Record<string, number>;
   extractionMode: string;
   passesRun: string[];
-  depthBucket: string;
-  underExtracted: boolean;
-  kisPer1k: number;
+  // Model-level metrics (based on validated items, before save)
+  modelDepthBucket: string;
+  modelUnderExtracted: boolean;
+  modelKisPer1k: number;
   summary: string;
   chunksTotal: number;
   chunksProcessed: number;
@@ -502,10 +521,10 @@ async function runMultiPassExtraction(
   description: string | undefined,
   tags: string[],
   resourceType: string | undefined,
-  isTranscript: boolean,
+  category: ContentCategory,
   deepMode: boolean,
 ): Promise<MultiPassResult> {
-  const category = getContentCategory(isTranscript, false);
+  const isTranscript = category === 'transcript';
   const baseSystem = isTranscript ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM : BASE_SYSTEM_PROMPT;
   const chunks = chunkContent(content, isTranscript);
   const passesRun: string[] = [];
@@ -615,16 +634,17 @@ ${chunks[i]}`;
     }
   }
 
-  const kisPer1k = contentLength > 0 ? Math.round((validated.length * 1000 / contentLength) * 100) / 100 : 0;
-  const depthBucket = computeDepthBucket(validated.length, contentLength, category);
-  const underExtracted = computeUnderExtracted(validated.length, contentLength, category);
+  const modelKisPer1k = contentLength > 0 ? Math.round((validated.length * 1000 / contentLength) * 100) / 100 : 0;
+  const modelDepthBucket = computeDepthBucket(validated.length, contentLength, category);
+  const modelUnderExtracted = computeUnderExtracted(validated.length, contentLength, category);
   const extractionMode = shouldEscalate ? 'deep' : 'standard';
 
-  const summary = `${extractionMode}: ${passesRun.join('+')} | ${allCandidates.length} raw → ${dedupeResult.kept.length} deduped → ${validated.length} validated | ${kisPer1k} KIs/1k | ${depthBucket}`;
+  const summary = `${extractionMode}: ${passesRun.join('+')} | ${allCandidates.length} raw → ${dedupeResult.kept.length} deduped → ${validated.length} validated | ${modelKisPer1k} KIs/1k | ${modelDepthBucket}`;
   console.log(`[extract-tactics] FINAL: ${summary}`);
 
   return {
     items: validated,
+    category,
     rawCount: allCandidates.length,
     passMetrics,
     dedupeResult,
@@ -632,9 +652,9 @@ ${chunks[i]}`;
     validationRejections,
     extractionMode,
     passesRun,
-    depthBucket,
-    underExtracted,
-    kisPer1k,
+    modelDepthBucket,
+    modelUnderExtracted,
+    modelKisPer1k,
     summary,
     chunksTotal: chunks.length,
     chunksProcessed: chunks.length - chunksFailed,
@@ -655,7 +675,7 @@ async function extractLessonTwoStage(
   resourceType: string | undefined,
 ): Promise<MultiPassResult> {
   const pipelineLog: any = { stage1_candidates: 0, stage2_raw: 0, recovery_found: 0, recovery_added: 0 };
-  const category = 'lesson';
+  const category: ContentCategory = 'lesson';
   const validationRejections: Record<string, number> = {};
 
   // Stage 1: Enumerate
@@ -745,7 +765,17 @@ CRITICAL: One complete play per concept. Do not merge. Do not skip.`;
       try {
         const recoveryResult = await requestExtraction(apiKey, stage2System, `These ${missed.length} concepts were missed. Extract a full play for EACH:\n\n${missedList}\n\nTitle: ${title}\nContent:\n${content}\n\nReturn ONLY JSON array.`, MAX_TOKENS);
         const recoveryRaw = parseAiResponse(recoveryResult);
-        const recoveryValidated = recoveryRaw.filter(it => validateItem(it, false, true).passed).map(it => normalizeItem(it, title));
+        
+        // Count recovery validation rejections into the same tracker
+        const recoveryValidated: any[] = [];
+        for (const it of recoveryRaw) {
+          const v = validateItem(it, false, true);
+          if (v.passed) {
+            recoveryValidated.push(normalizeItem(it, title));
+          } else if (v.rejectionReason) {
+            validationRejections[v.rejectionReason] = (validationRejections[v.rejectionReason] || 0) + 1;
+          }
+        }
 
         // Deterministic merge: combine all, sort by title, then dedupe
         const combined = [...validated, ...recoveryValidated].sort((a, b) => (a.title || '').localeCompare(b.title || ''));
@@ -759,14 +789,15 @@ CRITICAL: One complete play per concept. Do not merge. Do not skip.`;
   }
   pipelineLog.recovery_added = recoveryAdded;
 
-  const kisPer1k = content.length > 0 ? Math.round((validated.length * 1000 / content.length) * 100) / 100 : 0;
-  const depthBucket = computeDepthBucket(validated.length, content.length, category);
-  const underExtracted = computeUnderExtracted(validated.length, content.length, category);
+  const modelKisPer1k = content.length > 0 ? Math.round((validated.length * 1000 / content.length) * 100) / 100 : 0;
+  const modelDepthBucket = computeDepthBucket(validated.length, content.length, category);
+  const modelUnderExtracted = computeUnderExtracted(validated.length, content.length, category);
 
-  const summary = `lesson: ${candidates.length} enumerated → ${rawItems.length} expanded → ${dedupeResult.kept.length} deduped → ${validated.length} validated | +${recoveryAdded} recovery | ${kisPer1k} KIs/1k | ${depthBucket}`;
+  const summary = `lesson: ${candidates.length} enumerated → ${rawItems.length} expanded → ${dedupeResult.kept.length} deduped → ${validated.length} validated | +${recoveryAdded} recovery | ${modelKisPer1k} KIs/1k | ${modelDepthBucket}`;
 
   return {
     items: validated,
+    category,
     rawCount: rawItems.length,
     passMetrics: { enumerate: candidates.length, expand: rawItems.length, recovery: recoveryAdded },
     dedupeResult,
@@ -774,9 +805,9 @@ CRITICAL: One complete play per concept. Do not merge. Do not skip.`;
     validationRejections,
     extractionMode: 'standard',
     passesRun: ['lesson_enumerate', 'lesson_expand', 'lesson_recovery'],
-    depthBucket,
-    underExtracted,
-    kisPer1k,
+    modelDepthBucket,
+    modelUnderExtracted,
+    modelKisPer1k,
     summary,
     chunksTotal: 1,
     chunksProcessed: 1,
@@ -788,6 +819,15 @@ CRITICAL: One complete play per concept. Do not merge. Do not skip.`;
 // SERVER-SIDE KI SAVE + RUN RECORD + RESOURCE UPDATE
 // ══════════════════════════════════════════════════════
 
+interface PersistenceResult {
+  runId: string;
+  savedCount: number;
+  activeCount: number;
+  status: 'completed' | 'partial' | 'failed';
+  error: string | null;
+  duplicatesSkipped: number;
+}
+
 async function serverSidePersist(
   supabaseAdmin: any,
   resourceId: string,
@@ -795,74 +835,106 @@ async function serverSidePersist(
   result: MultiPassResult,
   contentLength: number,
   startedAt: number,
-): Promise<{ runId: string; savedCount: number; activeCount: number; status: string; error: string | null }> {
+): Promise<PersistenceResult> {
   const runId = crypto.randomUUID();
   const completedAt = new Date().toISOString();
   const durationMs = Date.now() - startedAt;
+  const category = result.category;
 
-  // Build KI rows for upsert
-  const kiRows = result.items.map((item: any) => ({
-    id: crypto.randomUUID(),
-    user_id: userId,
-    source_resource_id: resourceId,
-    source_doctrine_id: null,
-    title: item.title || 'Untitled',
-    knowledge_type: item.knowledge_type || 'skill',
-    chapter: item.chapter || 'messaging',
-    sub_chapter: item.sub_chapter || null,
-    competitor_name: item.competitor_name || null,
-    product_area: item.product_area || null,
-    applies_to_contexts: item.applies_to_contexts || ['dave', 'playbooks'],
-    tactic_summary: item.tactic_summary || '',
-    why_it_matters: item.why_it_matters || null,
-    when_to_use: item.when_to_use || null,
-    when_not_to_use: item.when_not_to_use || null,
-    example_usage: item.example_usage || null,
-    macro_situation: item.macro_situation || null,
-    micro_strategy: item.micro_strategy || null,
-    how_to_execute: item.how_to_execute || null,
-    what_this_unlocks: item.what_this_unlocks || null,
-    source_excerpt: item.source_excerpt || null,
-    source_title: item.source_title || null,
-    source_location: item.source_location || null,
-    confidence_score: typeof item.confidence_score === 'number' ? item.confidence_score : 0.7,
-    status: 'extracted',
-    active: false,
-    user_edited: false,
-    tags: Array.isArray(item.tags) ? item.tags : [],
-    who: item.who || 'Unknown',
-    framework: item.framework || 'General',
-    review_status: 'pending',
-    source_heading: item.source_heading || null,
-    source_segment_index: item.source_segment_index || null,
-    source_char_range: item.source_char_range || null,
-    challenger_type: item.challenger_type || null,
-    activation_metadata: item.activation_metadata || null,
-  }));
+  // ── Step 1: Fetch existing KIs for this resource to check for duplicates ──
+  const { data: existingKIs } = await supabaseAdmin
+    .from('knowledge_items')
+    .select('id, title, tactic_summary, user_edited')
+    .eq('source_resource_id', resourceId)
+    .eq('user_id', userId);
+
+  const existingFingerprints = new Set<string>();
+  const userEditedIds = new Set<string>();
+  for (const ki of (existingKIs || [])) {
+    existingFingerprints.add(computeKiFingerprint(resourceId, ki.title, ki.tactic_summary));
+    if (ki.user_edited) userEditedIds.add(ki.id);
+  }
+
+  // ── Step 2: Filter out duplicates, build KI rows ──
+  let duplicatesSkipped = 0;
+  const kiRows: any[] = [];
+  
+  for (const item of result.items) {
+    const fp = computeKiFingerprint(resourceId, item.title || '', item.tactic_summary || '');
+    if (existingFingerprints.has(fp)) {
+      duplicatesSkipped++;
+      continue;
+    }
+    existingFingerprints.add(fp); // prevent intra-batch duplicates too
+
+    kiRows.push({
+      id: crypto.randomUUID(),
+      user_id: userId,
+      source_resource_id: resourceId,
+      source_doctrine_id: null,
+      title: item.title || 'Untitled',
+      knowledge_type: item.knowledge_type || 'skill',
+      chapter: item.chapter || 'messaging',
+      sub_chapter: item.sub_chapter || null,
+      competitor_name: item.competitor_name || null,
+      product_area: item.product_area || null,
+      applies_to_contexts: item.applies_to_contexts || ['dave', 'playbooks'],
+      tactic_summary: item.tactic_summary || '',
+      why_it_matters: item.why_it_matters || null,
+      when_to_use: item.when_to_use || null,
+      when_not_to_use: item.when_not_to_use || null,
+      example_usage: item.example_usage || null,
+      macro_situation: item.macro_situation || null,
+      micro_strategy: item.micro_strategy || null,
+      how_to_execute: item.how_to_execute || null,
+      what_this_unlocks: item.what_this_unlocks || null,
+      source_excerpt: item.source_excerpt || null,
+      source_title: item.source_title || null,
+      source_location: item.source_location || null,
+      confidence_score: typeof item.confidence_score === 'number' ? item.confidence_score : 0.7,
+      status: 'extracted',
+      active: false,
+      user_edited: false,
+      tags: Array.isArray(item.tags) ? item.tags : [],
+      who: item.who || 'Unknown',
+      framework: item.framework || 'General',
+      review_status: 'pending',
+      source_heading: item.source_heading || null,
+      source_segment_index: item.source_segment_index || null,
+      source_char_range: item.source_char_range || null,
+      challenger_type: item.challenger_type || null,
+      activation_metadata: item.activation_metadata || null,
+    });
+  }
 
   let savedCount = 0;
   let activeCount = 0;
-  let status = 'completed';
+  let status: 'completed' | 'partial' | 'failed' = 'completed';
   let error: string | null = null;
 
   try {
-    // Save KIs in batches of 50
-    for (let i = 0; i < kiRows.length; i += 50) {
-      const batch = kiRows.slice(i, i + 50);
-      const { error: insertErr, data: inserted } = await supabaseAdmin
-        .from('knowledge_items')
-        .insert(batch)
-        .select('id');
-      if (insertErr) {
-        console.error(`[extract-tactics] KI save batch error:`, insertErr);
-        error = insertErr.message;
-        status = i > 0 ? 'partial' : 'failed';
-        break;
+    if (kiRows.length === 0) {
+      // All items were duplicates or no items to save
+      status = duplicatesSkipped > 0 ? 'completed' : (result.validatedCount > 0 ? 'failed' : 'completed');
+    } else {
+      // Save KIs in batches of 50
+      for (let i = 0; i < kiRows.length; i += 50) {
+        const batch = kiRows.slice(i, i + 50);
+        const { error: insertErr, data: inserted } = await supabaseAdmin
+          .from('knowledge_items')
+          .insert(batch)
+          .select('id');
+        if (insertErr) {
+          console.error(`[extract-tactics] KI save batch error:`, insertErr);
+          error = insertErr.message;
+          status = savedCount > 0 ? 'partial' : 'failed';
+          break;
+        }
+        savedCount += inserted?.length ?? batch.length;
       }
-      savedCount += inserted?.length ?? batch.length;
     }
 
-    // Activate high-quality items
+    // Activate high-quality items (new + existing non-user-edited)
     if (savedCount > 0) {
       const ACTIVATION_THRESHOLD = 0.6;
       const activatableIds = kiRows
@@ -880,10 +952,10 @@ async function serverSidePersist(
       }
     }
 
-    if (savedCount === 0 && kiRows.length > 0) {
+    if (kiRows.length > 0 && savedCount === 0) {
       status = 'failed';
       error = error || 'All KI saves failed';
-    } else if (savedCount < kiRows.length) {
+    } else if (kiRows.length > 0 && savedCount < kiRows.length) {
       status = 'partial';
     }
   } catch (err: any) {
@@ -891,12 +963,13 @@ async function serverSidePersist(
     error = err.message;
   }
 
-  // Compute saved-truth metrics
+  // ── Compute saved-truth metrics using correct category ──
+  const totalSavedForResource = savedCount + (existingKIs?.filter((k: any) => !userEditedIds.has(k.id)).length ?? 0);
   const savedKisPer1k = contentLength > 0 ? Math.round((savedCount * 1000 / contentLength) * 100) / 100 : 0;
-  const savedDepthBucket = computeDepthBucket(savedCount, contentLength, result.depthBucket.includes('lesson') ? 'lesson' : 'document');
-  const savedUnderExtracted = computeUnderExtracted(savedCount, contentLength, 'document');
+  const savedDepthBucket = computeDepthBucket(savedCount, contentLength, category);
+  const savedUnderExtracted = computeUnderExtracted(savedCount, contentLength, category);
 
-  const finalSummary = `${result.extractionMode}: ${result.passesRun.join('+')} | ${result.rawCount} raw → ${result.dedupeResult.kept.length} deduped → ${result.validatedCount} validated → ${savedCount} saved | ${savedKisPer1k} KIs/1k | ${savedDepthBucket}`;
+  const finalSummary = `${result.extractionMode}: ${result.passesRun.join('+')} | ${result.rawCount} raw → ${result.dedupeResult.kept.length} deduped → ${result.validatedCount} validated → ${savedCount} saved (${duplicatesSkipped} dupes skipped) | ${savedKisPer1k} KIs/1k | ${savedDepthBucket}`;
 
   // Create extraction_run record
   try {
@@ -931,9 +1004,26 @@ async function serverSidePersist(
     console.error('[extract-tactics] Failed to create extraction_run:', runErr);
   }
 
-  // Update resource snapshot
+  // ── Update resource snapshot — enrichment_status based on quality ──
   try {
-    await supabaseAdmin.from('resources').update({
+    // Determine appropriate enrichment_status
+    // Do NOT blindly set deep_enriched. Only upgrade if save was meaningful.
+    let enrichmentStatusUpdate: string | undefined;
+    if (status === 'completed' && savedCount > 0) {
+      enrichmentStatusUpdate = 'deep_enriched';
+    } else if (status === 'partial' && savedCount > 0) {
+      // Partial: some saved, leave enrichment as-is or set enriched (not deep)
+      enrichmentStatusUpdate = 'enriched';
+    }
+    // failed or 0 saved: do NOT change enrichment_status
+
+    // Map run status to job status honestly
+    let jobStatus: string;
+    if (status === 'completed') jobStatus = 'succeeded';
+    else if (status === 'partial') jobStatus = 'partial'; // honest partial, NOT succeeded
+    else jobStatus = 'failed';
+
+    const resourceUpdate: Record<string, any> = {
       last_extraction_run_id: runId,
       last_extraction_run_status: status,
       last_extraction_returned_ki_count: result.rawCount,
@@ -945,7 +1035,7 @@ async function serverSidePersist(
       last_extraction_completed_at: completedAt,
       last_extraction_duration_ms: durationMs,
       last_extraction_model: MODEL_NAME,
-      // Also update legacy metrics columns
+      // Legacy metrics columns
       extraction_mode: result.extractionMode,
       extraction_passes_run: result.passesRun,
       raw_candidate_counts: result.passMetrics,
@@ -955,15 +1045,18 @@ async function serverSidePersist(
       under_extracted_flag: savedUnderExtracted,
       last_extraction_summary: finalSummary,
       extraction_method: 'llm',
-      // Update enrichment/job status
-      enrichment_status: savedCount > 0 ? 'deep_enriched' : undefined,
-      active_job_status: status === 'completed' ? 'succeeded' : (status === 'partial' ? 'succeeded' : 'failed'),
-    }).eq('id', resourceId);
+      active_job_status: jobStatus,
+    };
+    if (enrichmentStatusUpdate) {
+      resourceUpdate.enrichment_status = enrichmentStatusUpdate;
+    }
+
+    await supabaseAdmin.from('resources').update(resourceUpdate).eq('id', resourceId);
   } catch (resErr) {
     console.error('[extract-tactics] Failed to update resource:', resErr);
   }
 
-  return { runId, savedCount, activeCount, status, error };
+  return { runId, savedCount, activeCount, status, error, duplicatesSkipped };
 }
 
 // ══════════════════════════════════════════════════════
@@ -1022,8 +1115,13 @@ Deno.serve(async (req) => {
 
     if (!content || content.length < 100) {
       return new Response(JSON.stringify({
-        items: [], chunks_total: 0, chunks_processed: 0, chunks_failed: 0,
-        extraction_metrics: { raw_count: 0, deduped_count: 0, validated_count: 0, saved_count: 0 },
+        items: [],
+        chunks_total: 0,
+        chunks_processed: 0,
+        chunks_failed: 0,
+        model_metrics: { raw_count: 0, deduped_count: 0, validated_count: 0 },
+        saved_metrics: null,
+        persistence: null,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -1034,23 +1132,24 @@ Deno.serve(async (req) => {
       });
     }
 
-    const isTranscript = isTranscriptType(resourceType);
-    const isLesson = isStructuredLesson(content, title, resourceType);
+    // Classify content category once, pass through entire pipeline
+    const category = classifyContentCategory(content, title, resourceType);
 
     let result: MultiPassResult;
 
-    if (isLesson) {
+    if (category === 'lesson') {
       const cleanedContent = prepareLessonContent(content, title);
       console.log(`[extract-tactics] LESSON: "${title}" | ${cleanedContent.length} chars`);
       result = await extractLessonTwoStage(LOVABLE_API_KEY, cleanedContent, title, description, tags, resourceType);
     } else {
+      const isTranscript = category === 'transcript';
       console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} multi-pass | ${content.length} chars | deepMode=${!!deepMode}`);
-      result = await runMultiPassExtraction(LOVABLE_API_KEY, content, title, description, tags || [], resourceType, isTranscript, !!deepMode);
+      result = await runMultiPassExtraction(LOVABLE_API_KEY, content, title, description, tags || [], resourceType, category, !!deepMode);
     }
 
     // Server-side persistence when resourceId is provided
     const shouldPersist = persist !== false && resourceId;
-    let persistResult: { runId: string; savedCount: number; activeCount: number; status: string; error: string | null } | null = null;
+    let persistResult: PersistenceResult | null = null;
 
     if (shouldPersist) {
       const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
@@ -1059,34 +1158,44 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ── Build response with CLEAR separation of model vs saved metrics ──
     const responsePayload = {
       items: result.items,
       chunks_total: result.chunksTotal,
       chunks_processed: result.chunksProcessed,
       chunks_failed: result.chunksFailed,
-      extraction_metrics: {
+      content_category: category,
+      // Model/extraction-level metrics (what the AI produced, before save)
+      model_metrics: {
         extraction_mode: result.extractionMode,
         extraction_passes_run: result.passesRun,
         raw_candidate_counts: result.passMetrics,
         raw_count: result.rawCount,
-        merged_candidate_count: result.dedupeResult.kept.length,
         deduped_count: result.dedupeResult.kept.length,
         validated_count: result.validatedCount,
-        saved_count: persistResult?.savedCount ?? null,
-        active_count: persistResult?.activeCount ?? null,
-        kis_per_1k_chars: result.kisPer1k,
-        extraction_depth_bucket: result.depthBucket,
-        under_extracted_flag: result.underExtracted,
-        last_extraction_summary: result.summary,
+        model_kis_per_1k: result.modelKisPer1k,
+        model_depth_bucket: result.modelDepthBucket,
+        model_under_extracted: result.modelUnderExtracted,
         validation_rejection_counts: result.validationRejections,
         dedupe_merge_counts: result.dedupeResult.details,
         model: MODEL_NAME,
+        summary: result.summary,
       },
+      // Saved/persisted metrics (what actually landed in the DB)
+      saved_metrics: persistResult ? {
+        saved_count: persistResult.savedCount,
+        active_count: persistResult.activeCount,
+        duplicates_skipped: persistResult.duplicatesSkipped,
+        saved_kis_per_1k: result.items.length > 0 && content.length > 0
+          ? Math.round((persistResult.savedCount * 1000 / content.length) * 100) / 100
+          : 0,
+      } : null,
       // Server persistence proof
       persistence: persistResult ? {
         run_id: persistResult.runId,
         saved_count: persistResult.savedCount,
         active_count: persistResult.activeCount,
+        duplicates_skipped: persistResult.duplicatesSkipped,
         status: persistResult.status,
         error: persistResult.error,
       } : null,
