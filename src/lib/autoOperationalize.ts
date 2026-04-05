@@ -345,7 +345,7 @@ export async function autoOperationalizeResource(
       active_job_finished_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as any).eq('id', resourceId);
-    return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason);
+    return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason, undefined, undefined, usedExtractionMethod);
   }
   stagesCompleted.push('knowledge_extracted');
 
