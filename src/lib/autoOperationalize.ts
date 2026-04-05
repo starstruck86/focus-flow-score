@@ -275,7 +275,6 @@ export async function autoOperationalizeResource(
     // Always prefer LLM extraction — produces structured KIs with framework, attribution, etc.
     // Heuristic sentence-splitting produces low-quality transcript fragments for all resource types.
     let finalExtracted: any[] = [];
-    let usedExtractionMethod: 'llm' | 'heuristic' | 'none' = 'none';
 
     // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
     // (indicated by ## section headings). Raw transcripts produce garbage KIs.
