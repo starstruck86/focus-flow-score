@@ -94,6 +94,8 @@ export interface AutoOperationalizeResult {
   outcome: PipelineOutcome;
   extractionTier: 'full' | 'reduced' | 'lightweight' | 'none';
   reason?: string;
+  /** Which extraction method actually produced KIs: 'llm', 'heuristic', or 'none' */
+  extractionMethod?: 'llm' | 'heuristic' | 'none';
 }
 
 // ── Auto-activation thresholds ─────────────────────────────
