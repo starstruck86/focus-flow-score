@@ -34,6 +34,7 @@ export interface FixResourceOutcome {
   phase: string;
   attempted: boolean;
   succeeded: boolean;
+  kiBefore: number;
   kisCreated: number;
   kisActive: number;
   finalTruthState: string | null;
@@ -42,18 +43,16 @@ export interface FixResourceOutcome {
   rootCauseCategory: string | null;
   rootCauseExplanation: string | null;
   resolutionOutcome: string | null;
-  /** Whether normalization changed this resource's state */
   normalized: boolean;
-  /** Whether wrapper-page / attachment detection applied */
   wrapperPageDetected: boolean;
-  /** Whether attachment extraction was attempted for wrapper pages */
   attachmentExtractionAttempted: boolean;
-  /** Attachment extraction outcome if attempted */
   attachmentExtractionOutcome: string | null;
-  /** Original enrichment_status before normalization */
   originalEnrichmentStatus: string | null;
-  /** Original active_job_status before normalization */
   originalJobStatus: string | null;
+  /** Content length at time of processing */
+  contentLength: number;
+  /** Extraction method used (llm, heuristic, none) */
+  extractionMethod: string | null;
 }
 
 export interface BlockerDiff {
