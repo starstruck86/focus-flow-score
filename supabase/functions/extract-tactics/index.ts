@@ -367,7 +367,7 @@ interface DedupeResult {
 }
 
 function deduplicateItems(items: any[], isLesson = false): DedupeResult {
-  const OVERLAP_THRESHOLD = isLesson ? 0.85 : 0.6;
+  const OVERLAP_THRESHOLD = isLesson ? 0.85 : 0.75; // Relaxed from 0.6 to 0.75 to allow more distinct items
   const result: any[] = [];
   const details = { exact_summary: 0, similar_title_summary: 0, title_overlap: 0, substring: 0 };
 
@@ -390,13 +390,14 @@ function deduplicateItems(items: any[], isLesson = false): DedupeResult {
 
       if (normalize(item.tactic_summary || '') === normalize(result[i].tactic_summary || '') && (item.tactic_summary || '').length > 20) {
         isDupe = true; dupeReason = 'exact_summary';
-      } else if (overlapRatio > 0.7 && summaryOverlap > 0.7) {
+      } else if (overlapRatio > 0.8 && summaryOverlap > 0.8) {
+        // Tightened from 0.7/0.7 — only merge when VERY similar on both title and summary
         isDupe = true; dupeReason = 'similar_title_summary';
-      } else if (overlapRatio > OVERLAP_THRESHOLD) {
+      } else if (overlapRatio > OVERLAP_THRESHOLD && summaryOverlap > 0.6) {
+        // Require summary overlap too for title-based dedup (previously title-only at 0.6)
         isDupe = true; dupeReason = 'title_overlap';
-      } else if (!isLesson && (normalize(item.title).includes(normalize(result[i].title)) || normalize(result[i].title).includes(normalize(item.title)))) {
-        isDupe = true; dupeReason = 'substring';
       }
+      // Removed aggressive substring matching that was blocking related-but-distinct items
 
       if (isDupe) {
         const existingRichness = (result[i].how_to_execute?.length || 0) + (result[i].when_to_use?.length || 0) + (result[i].source_excerpt?.length || 0);
