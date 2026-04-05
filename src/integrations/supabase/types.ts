@@ -2250,6 +2250,7 @@ export type Database = {
           framework: string | null
           how_to_execute: string | null
           id: string
+          ki_fingerprint: string | null
           knowledge_type: string
           macro_situation: string | null
           micro_strategy: string | null
@@ -2290,6 +2291,7 @@ export type Database = {
           framework?: string | null
           how_to_execute?: string | null
           id?: string
+          ki_fingerprint?: string | null
           knowledge_type?: string
           macro_situation?: string | null
           micro_strategy?: string | null
@@ -2330,6 +2332,7 @@ export type Database = {
           framework?: string | null
           how_to_execute?: string | null
           id?: string
+          ki_fingerprint?: string | null
           knowledge_type?: string
           macro_situation?: string | null
           micro_strategy?: string | null
@@ -4160,6 +4163,8 @@ export type Database = {
           content_length: number | null
           content_status: string
           created_at: string
+          current_resource_ki_count: number | null
+          current_resource_kis_per_1k: number | null
           current_version: number | null
           date_confidence: string | null
           date_source: string | null
@@ -4277,6 +4282,8 @@ export type Database = {
           content_length?: number | null
           content_status?: string
           created_at?: string
+          current_resource_ki_count?: number | null
+          current_resource_kis_per_1k?: number | null
           current_version?: number | null
           date_confidence?: string | null
           date_source?: string | null
@@ -4394,6 +4401,8 @@ export type Database = {
           content_length?: number | null
           content_status?: string
           created_at?: string
+          current_resource_ki_count?: number | null
+          current_resource_kis_per_1k?: number | null
           current_version?: number | null
           date_confidence?: string | null
           date_source?: string | null

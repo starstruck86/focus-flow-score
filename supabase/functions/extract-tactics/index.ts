@@ -826,6 +826,8 @@ interface PersistenceResult {
   status: 'completed' | 'partial' | 'failed';
   error: string | null;
   duplicatesSkipped: number;
+  currentResourceKiCount: number;
+  currentKisPer1k: number;
 }
 
 async function serverSidePersist(
@@ -872,6 +874,7 @@ async function serverSidePersist(
       user_id: userId,
       source_resource_id: resourceId,
       source_doctrine_id: null,
+      ki_fingerprint: fp,
       title: item.title || 'Untitled',
       knowledge_type: item.knowledge_type || 'skill',
       chapter: item.chapter || 'messaging',
@@ -914,10 +917,9 @@ async function serverSidePersist(
 
   try {
     if (kiRows.length === 0) {
-      // All items were duplicates or no items to save
       status = duplicatesSkipped > 0 ? 'completed' : (result.validatedCount > 0 ? 'failed' : 'completed');
     } else {
-      // Save KIs in batches of 50
+      // Save KIs in batches of 50 — DB unique index on (user_id, ki_fingerprint) is the final guard
       for (let i = 0; i < kiRows.length; i += 50) {
         const batch = kiRows.slice(i, i + 50);
         const { error: insertErr, data: inserted } = await supabaseAdmin
@@ -925,16 +927,35 @@ async function serverSidePersist(
           .insert(batch)
           .select('id');
         if (insertErr) {
-          console.error(`[extract-tactics] KI save batch error:`, insertErr);
-          error = insertErr.message;
-          status = savedCount > 0 ? 'partial' : 'failed';
-          break;
+          // Check if it's a unique constraint violation (DB-level duplicate catch)
+          if (insertErr.code === '23505' && insertErr.message?.includes('fingerprint')) {
+            console.log(`[extract-tactics] DB-level duplicate caught, falling back to one-by-one insert`);
+            // Insert one-by-one, skip DB-level duplicates
+            for (const row of batch) {
+              const { error: singleErr, data: singleInserted } = await supabaseAdmin
+                .from('knowledge_items')
+                .insert(row)
+                .select('id');
+              if (singleErr) {
+                if (singleErr.code === '23505') { duplicatesSkipped++; continue; }
+                console.error(`[extract-tactics] Single KI save error:`, singleErr);
+              } else {
+                savedCount += singleInserted?.length ?? 1;
+              }
+            }
+          } else {
+            console.error(`[extract-tactics] KI save batch error:`, insertErr);
+            error = insertErr.message;
+            status = savedCount > 0 ? 'partial' : 'failed';
+            break;
+          }
+        } else {
+          savedCount += inserted?.length ?? batch.length;
         }
-        savedCount += inserted?.length ?? batch.length;
       }
     }
 
-    // Activate high-quality items (new + existing non-user-edited)
+    // Activate high-quality items
     if (savedCount > 0) {
       const ACTIVATION_THRESHOLD = 0.6;
       const activatableIds = kiRows
@@ -963,13 +984,22 @@ async function serverSidePersist(
     error = err.message;
   }
 
-  // ── Compute saved-truth metrics using correct category ──
-  const totalSavedForResource = savedCount + (existingKIs?.filter((k: any) => !userEditedIds.has(k.id)).length ?? 0);
-  const savedKisPer1k = contentLength > 0 ? Math.round((savedCount * 1000 / contentLength) * 100) / 100 : 0;
-  const savedDepthBucket = computeDepthBucket(savedCount, contentLength, category);
-  const savedUnderExtracted = computeUnderExtracted(savedCount, contentLength, category);
+  // ── Compute CURRENT RESOURCE totals (not just this run) ──
+  const { count: currentResourceKiCount } = await supabaseAdmin
+    .from('knowledge_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('source_resource_id', resourceId)
+    .eq('user_id', userId);
+  
+  const totalKIs = currentResourceKiCount ?? 0;
+  const currentKisPer1k = contentLength > 0 ? Math.round((totalKIs * 1000 / contentLength) * 100) / 100 : 0;
+  const currentDepthBucket = computeDepthBucket(totalKIs, contentLength, category);
+  const currentUnderExtracted = computeUnderExtracted(totalKIs, contentLength, category);
 
-  const finalSummary = `${result.extractionMode}: ${result.passesRun.join('+')} | ${result.rawCount} raw → ${result.dedupeResult.kept.length} deduped → ${result.validatedCount} validated → ${savedCount} saved (${duplicatesSkipped} dupes skipped) | ${savedKisPer1k} KIs/1k | ${savedDepthBucket}`;
+  // Run-level metrics (what THIS run produced)
+  const runSavedKisPer1k = contentLength > 0 ? Math.round((savedCount * 1000 / contentLength) * 100) / 100 : 0;
+
+  const finalSummary = `${result.extractionMode}: ${result.passesRun.join('+')} | ${result.rawCount} raw → ${result.dedupeResult.kept.length} deduped → ${result.validatedCount} validated → ${savedCount} saved (${duplicatesSkipped} dupes skipped) | resource total: ${totalKIs} KIs, ${currentKisPer1k} KIs/1k | ${currentDepthBucket}`;
 
   // Create extraction_run record
   try {
@@ -992,9 +1022,9 @@ async function serverSidePersist(
       merged_candidate_count: result.dedupeResult.kept.length,
       validated_candidate_count: result.validatedCount,
       saved_candidate_count: savedCount,
-      kis_per_1k_chars: savedKisPer1k,
-      extraction_depth_bucket: savedDepthBucket,
-      under_extracted_flag: savedUnderExtracted,
+      kis_per_1k_chars: runSavedKisPer1k,
+      extraction_depth_bucket: currentDepthBucket,
+      under_extracted_flag: currentUnderExtracted,
       validation_rejection_counts: result.validationRejections,
       dedupe_merge_counts: result.dedupeResult.details,
       error_message: error,
@@ -1004,26 +1034,22 @@ async function serverSidePersist(
     console.error('[extract-tactics] Failed to create extraction_run:', runErr);
   }
 
-  // ── Update resource snapshot — enrichment_status based on quality ──
+  // ── Update resource snapshot ──
   try {
-    // Determine appropriate enrichment_status
-    // Do NOT blindly set deep_enriched. Only upgrade if save was meaningful.
     let enrichmentStatusUpdate: string | undefined;
     if (status === 'completed' && savedCount > 0) {
       enrichmentStatusUpdate = 'deep_enriched';
     } else if (status === 'partial' && savedCount > 0) {
-      // Partial: some saved, leave enrichment as-is or set enriched (not deep)
       enrichmentStatusUpdate = 'enriched';
     }
-    // failed or 0 saved: do NOT change enrichment_status
 
-    // Map run status to job status honestly
     let jobStatus: string;
     if (status === 'completed') jobStatus = 'succeeded';
-    else if (status === 'partial') jobStatus = 'partial'; // honest partial, NOT succeeded
+    else if (status === 'partial') jobStatus = 'partial';
     else jobStatus = 'failed';
 
     const resourceUpdate: Record<string, any> = {
+      // Last run metrics
       last_extraction_run_id: runId,
       last_extraction_run_status: status,
       last_extraction_returned_ki_count: result.rawCount,
@@ -1035,14 +1061,15 @@ async function serverSidePersist(
       last_extraction_completed_at: completedAt,
       last_extraction_duration_ms: durationMs,
       last_extraction_model: MODEL_NAME,
-      // Legacy metrics columns
+      // Current resource coverage (total truth)
+      current_resource_ki_count: totalKIs,
+      current_resource_kis_per_1k: currentKisPer1k,
+      // Depth and mode
       extraction_mode: result.extractionMode,
       extraction_passes_run: result.passesRun,
-      raw_candidate_counts: result.passMetrics,
-      merged_candidate_count: result.dedupeResult.kept.length,
-      kis_per_1k_chars: savedKisPer1k,
-      extraction_depth_bucket: savedDepthBucket,
-      under_extracted_flag: savedUnderExtracted,
+      kis_per_1k_chars: currentKisPer1k,
+      extraction_depth_bucket: currentDepthBucket,
+      under_extracted_flag: currentUnderExtracted,
       last_extraction_summary: finalSummary,
       extraction_method: 'llm',
       active_job_status: jobStatus,
@@ -1056,7 +1083,7 @@ async function serverSidePersist(
     console.error('[extract-tactics] Failed to update resource:', resErr);
   }
 
-  return { runId, savedCount, activeCount, status, error, duplicatesSkipped };
+  return { runId, savedCount, activeCount, status, error, duplicatesSkipped, currentResourceKiCount: totalKIs, currentKisPer1k };
 }
 
 // ══════════════════════════════════════════════════════
@@ -1183,12 +1210,14 @@ Deno.serve(async (req) => {
       },
       // Saved/persisted metrics (what actually landed in the DB)
       saved_metrics: persistResult ? {
-        saved_count: persistResult.savedCount,
-        active_count: persistResult.activeCount,
-        duplicates_skipped: persistResult.duplicatesSkipped,
-        saved_kis_per_1k: result.items.length > 0 && content.length > 0
+        last_run_saved_count: persistResult.savedCount,
+        last_run_active_count: persistResult.activeCount,
+        last_run_duplicates_skipped: persistResult.duplicatesSkipped,
+        last_run_saved_kis_per_1k: result.items.length > 0 && content.length > 0
           ? Math.round((persistResult.savedCount * 1000 / content.length) * 100) / 100
           : 0,
+        current_resource_ki_count: persistResult.currentResourceKiCount,
+        current_resource_kis_per_1k: persistResult.currentKisPer1k,
       } : null,
       // Server persistence proof
       persistence: persistResult ? {
@@ -1196,6 +1225,7 @@ Deno.serve(async (req) => {
         saved_count: persistResult.savedCount,
         active_count: persistResult.activeCount,
         duplicates_skipped: persistResult.duplicatesSkipped,
+        current_resource_ki_count: persistResult.currentResourceKiCount,
         status: persistResult.status,
         error: persistResult.error,
       } : null,
