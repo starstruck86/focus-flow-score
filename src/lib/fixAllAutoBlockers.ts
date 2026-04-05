@@ -735,6 +735,12 @@ export async function runFixAllAutoBlockers(
   }
   
   if (extractIds.length > 0) {
+    // Mark all extraction batch members
+    for (const id of extractIds) {
+      const outcome = outcomeMap.get(id);
+      if (outcome) outcome.batchIncluded = true;
+    }
+    log.info('Extraction batch', { extractIds, count: extractIds.length });
     callbacks?.onPhaseChange?.('extraction', 'Extracting knowledge items', `Extracting ${extractIds.length} resources…`);
     onProgress?.(`Extracting ${extractIds.length} resources…`);
     const { phaseResult: extractResult, resourceResults: extractionOutcomes } = await fixNeedsExtraction(extractIds, onProgress, onResourcePhase, callbacks);
