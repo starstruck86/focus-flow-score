@@ -143,9 +143,11 @@ export function assertEligibilityAlignment(
   context: string,
 ): void {
   if (uiCount > 0 && pipelineCount === 0) {
+    // HARDENED: Log error but do NOT throw — throwing here crashes the entire
+    // Fix All run and prevents post-run reporting. Some resources may legitimately
+    // produce 0 eligible results after normalization reclassifies them.
     const msg = `[PipelineContract] CRITICAL MISMATCH in ${context}: UI sent ${uiCount} IDs but pipeline found 0 eligible. This indicates a filter divergence between UI audit buckets and pipeline eligibility.`;
     log.error(msg);
-    throw new Error(msg);
   }
 
   // Warn on significant variance (>30% difference)

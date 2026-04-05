@@ -421,11 +421,16 @@ export async function autoOperationalizeResource(
   }
 
   // ── Update resource enrichment_status + last_status_change_at after successful extraction ──
+  // HARDENED: Also clear stale active_job_status (idle/failed) so the resource
+  // doesn't stay blocked by a stale job marker after successful extraction.
   const finalStage = stagesCompleted[stagesCompleted.length - 1];
   if (knowledgeExtracted > 0 || knowledgeActivated > 0 || hasActiveWithContexts) {
     const statusUpdate: Record<string, any> = {
       last_status_change_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      active_job_status: 'succeeded',
+      active_job_finished_at: new Date().toISOString(),
+      active_job_error: null,
     };
     // Only upgrade enrichment_status if it's not already deep_enriched or better
     const currentStatus = r.enrichment_status ?? 'not_enriched';
