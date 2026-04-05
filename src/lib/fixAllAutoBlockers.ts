@@ -523,6 +523,7 @@ export async function runFixAllAutoBlockers(
   const allResourceIds = blockerGroups.flatMap(g => g.resourceIds);
   const titleMap = new Map<string, string>();
   const originalStateMap = new Map<string, { enrichment_status: string; active_job_status: string; content: string }>();
+  const kiBeforeMap = new Map<string, number>();
   if (allResourceIds.length > 0) {
     const { data: titleData } = await supabase
       .from('resources' as any)
@@ -535,6 +536,14 @@ export async function runFixAllAutoBlockers(
         active_job_status: r.active_job_status ?? '',
         content: r.content ?? '',
       });
+    }
+    // Fetch pre-run KI counts for all resources
+    for (const id of allResourceIds) {
+      const { count } = await supabase
+        .from('knowledge_items' as any)
+        .select('id', { count: 'exact', head: true })
+        .eq('source_resource_id', id);
+      kiBeforeMap.set(id, count ?? 0);
     }
   }
 
