@@ -565,7 +565,7 @@ export async function runFixAllAutoBlockers(
         phase,
         attempted: false,
         succeeded: false,
-        kiBefore: 0,
+        kiBefore: kiBeforeMap.get(id) ?? 0,
         kisCreated: 0,
         kisActive: 0,
         finalTruthState: null,
