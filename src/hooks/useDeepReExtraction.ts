@@ -17,9 +17,20 @@ export type NoLiftReason =
   | 'already_dense'
   | 'duplicate_heavy'
   | 'extractor_returned_no_new_items'
+  | 'extractor_weak_output'
   | 'items_generated_but_filtered_out'
   | 'items_generated_but_deduped'
+  | 'validation_too_strict'
   | 'resource_not_suitable'
+  | 'unknown';
+
+export type DominantBottleneck =
+  | 'extractor_weak_output'
+  | 'validation_too_strict'
+  | 'dedup_too_aggressive'
+  | 'already_mined'
+  | 'unsuitable_content'
+  | 'none'
   | 'unknown';
 
 export interface ReExtractQueueItem {
