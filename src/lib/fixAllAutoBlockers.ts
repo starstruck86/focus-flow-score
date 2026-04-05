@@ -767,6 +767,11 @@ export async function runFixAllAutoBlockers(
         outcome.extractionMethod = detail.extractionMethod ?? null;
         outcome.heuristicFallbackAttempted = detail.heuristicFallbackAttempted ?? false;
         outcome.extractionTier = detail.extractionTier ?? null;
+        outcome.edgeFunctionInvoked = detail.edgeFunctionInvoked ?? false;
+        outcome.edgeFunctionName = detail.edgeFunctionName ?? null;
+        outcome.edgeFunctionStatus = detail.edgeFunctionStatus ?? null;
+        outcome.edgeFunctionError = detail.edgeFunctionError ?? null;
+        outcome.edgeFunctionReturnedItems = detail.edgeFunctionReturnedItems ?? null;
         
         // Track wrapper-page attachment handling
         if (outcome.wrapperPageDetected) {
