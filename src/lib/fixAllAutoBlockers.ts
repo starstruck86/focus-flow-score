@@ -540,6 +540,7 @@ export async function runFixAllAutoBlockers(
         phase,
         attempted: false,
         succeeded: false,
+        kiBefore: 0,
         kisCreated: 0,
         kisActive: 0,
         finalTruthState: null,
@@ -554,6 +555,8 @@ export async function runFixAllAutoBlockers(
         attachmentExtractionOutcome: null,
         originalEnrichmentStatus: origState?.enrichment_status ?? null,
         originalJobStatus: origState?.active_job_status ?? null,
+        contentLength: origState?.content?.length ?? 0,
+        extractionMethod: null,
       });
     }
   };
