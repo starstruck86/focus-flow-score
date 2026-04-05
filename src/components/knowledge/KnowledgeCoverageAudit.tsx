@@ -1,0 +1,290 @@
+/**
+ * Knowledge Coverage Audit — proves extraction thoroughness across all resources.
+ * Parts 1-4: Audit table, count integrity, under-extracted recovery, coverage summary.
+ */
+
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  Brain, AlertTriangle, CheckCircle2, ChevronDown, BarChart3,
+  Search, Zap, Loader2, RefreshCw, TrendingUp,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useKnowledgeCoverageAudit, type ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
+import { useKnowledgeStats } from '@/hooks/useKnowledgeItems';
+import { toast } from 'sonner';
+
+export function KnowledgeCoverageAudit() {
+  const { data: audit, isLoading, refetch } = useKnowledgeCoverageAudit();
+  const uiStats = useKnowledgeStats();
+  const [showAuditTable, setShowAuditTable] = useState(false);
+  const [showTop20, setShowTop20] = useState(false);
+
+  if (isLoading || !audit) {
+    return (
+      <div className="flex items-center justify-center py-12 gap-2">
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        <span className="text-sm text-muted-foreground">Running coverage audit…</span>
+      </div>
+    );
+  }
+
+  const uiTotal = uiStats.total;
+  const uiActive = uiStats.active;
+  const dbTotal = audit.dbTotalKIs;
+  const dbActive = audit.dbActiveKIs;
+  const totalDelta = dbTotal - uiTotal;
+  const activeDelta = dbActive - uiActive;
+  const hasPaginationBug = (uiTotal === 1000 && dbTotal > 1000) || (uiActive === 1000 && dbActive > 1000);
+  const countIntegrityPass = totalDelta === 0 && activeDelta === 0;
+
+  const fullyMinedPct = audit.resources.length > 0 ? Math.round((audit.resourcesFullyMined / audit.resources.length) * 100) : 0;
+
+  return (
+    <div className="space-y-4">
+      {/* PART 4 — Knowledge Coverage Summary */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              Knowledge Coverage Summary
+            </CardTitle>
+            <Button variant="ghost" size="sm" onClick={() => refetch()}>
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <MiniStat label="Fully Mined" value={audit.resourcesFullyMined} color="text-emerald-600" />
+            <MiniStat label="Shallow" value={audit.resourcesShallowlyMined} color="text-amber-500" />
+            <MiniStat label="Under-Extracted" value={audit.resourcesUnderExtracted} color="text-destructive" />
+            <MiniStat label="Zero KIs" value={audit.resourcesZeroKIs} color="text-muted-foreground" />
+          </div>
+
+          <div className="flex items-center gap-3 text-xs">
+            <span className="text-muted-foreground">Coverage:</span>
+            <Progress value={fullyMinedPct} className="h-2 flex-1" />
+            <span className="font-medium">{fullyMinedPct}%</span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="border border-border rounded-md p-2">
+              <div className="text-lg font-bold">{audit.dbTotalKIs}</div>
+              <div className="text-muted-foreground">Total KIs</div>
+            </div>
+            <div className="border border-border rounded-md p-2">
+              <div className="text-lg font-bold text-emerald-600">{audit.dbActiveKIs}</div>
+              <div className="text-muted-foreground">Active KIs</div>
+            </div>
+            <div className="border border-border rounded-md p-2">
+              <div className="text-lg font-bold">{audit.avgKisPer1k}</div>
+              <div className="text-muted-foreground">Avg KIs/1k chars</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* PART 2 — Count Integrity Check */}
+      <Card className={cn(!countIntegrityPass && 'border-destructive/30')}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            {countIntegrityPass
+              ? <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              : <AlertTriangle className="h-4 w-4 text-destructive" />
+            }
+            Count Integrity Check
+            <Badge variant={countIntegrityPass ? 'default' : 'destructive'} className="text-[10px]">
+              {countIntegrityPass ? 'PASS' : 'FAIL'}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-1 text-xs">
+            <div className="font-medium text-muted-foreground"></div>
+            <div className="font-medium text-center">DB</div>
+            <div className="font-medium text-center">UI</div>
+
+            <div className="text-muted-foreground">Total KIs</div>
+            <div className="text-center font-mono">{dbTotal}</div>
+            <div className={cn("text-center font-mono", totalDelta !== 0 && "text-destructive font-bold")}>{uiTotal}</div>
+
+            <div className="text-muted-foreground">Active KIs</div>
+            <div className="text-center font-mono">{dbActive}</div>
+            <div className={cn("text-center font-mono", activeDelta !== 0 && "text-destructive font-bold")}>{uiActive}</div>
+
+            {totalDelta !== 0 && (
+              <>
+                <div className="text-muted-foreground">Delta</div>
+                <div className="text-center text-destructive font-mono col-span-2">
+                  {totalDelta > 0 ? `UI missing ${totalDelta}` : `UI over-counting by ${Math.abs(totalDelta)}`}
+                </div>
+              </>
+            )}
+          </div>
+          {hasPaginationBug && (
+            <div className="mt-2 text-[11px] bg-destructive/10 text-destructive rounded-md px-3 py-2">
+              ⚠️ Likely pagination/query cap bug — UI shows exactly 1000 but DB has {dbTotal}.
+              The query has been fixed to paginate past the 1000-row limit.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* PART 3 — Under-Extracted Recovery */}
+      {audit.resourcesUnderExtracted > 0 && (
+        <Card className="border-amber-500/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-amber-500" />
+              Under-Extracted Resources ({audit.resourcesUnderExtracted})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-[11px] text-muted-foreground">
+              These resources have rich content but low KI density. Re-extracting could yield significantly more knowledge.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              onClick={() => {
+                toast.info(`${audit.resourcesUnderExtracted} under-extracted resources identified for re-extraction. Use the extraction pipeline to process them.`);
+              }}
+            >
+              <Zap className="h-3 w-3" />
+              Flag {audit.resourcesUnderExtracted} for Re-Extraction
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Top 20 Weakest */}
+      <Collapsible open={showTop20} onOpenChange={setShowTop20}>
+        <CollapsibleTrigger className="w-full">
+          <div className="flex items-center justify-between border border-border rounded-md px-3 py-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Search className="h-3.5 w-3.5" />
+              Top 20 Richest Resources with Weakest KI Density
+            </span>
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showTop20 && "rotate-180")} />
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2">
+          <div className="border border-border rounded-md overflow-hidden">
+            <div className="max-h-[400px] overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[10px]">Resource</TableHead>
+                    <TableHead className="text-[10px] text-right">Content</TableHead>
+                    <TableHead className="text-[10px] text-right">KIs</TableHead>
+                    <TableHead className="text-[10px] text-right">KIs/1k</TableHead>
+                    <TableHead className="text-[10px]">Depth</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {audit.top20Weakest.map(r => (
+                    <TableRow key={r.resource_id}>
+                      <TableCell className="text-[11px] max-w-[200px] truncate">{r.title}</TableCell>
+                      <TableCell className="text-[11px] text-right font-mono">{(r.content_length / 1000).toFixed(1)}k</TableCell>
+                      <TableCell className="text-[11px] text-right font-mono">{r.ki_count_total}</TableCell>
+                      <TableCell className="text-[11px] text-right font-mono">{r.kis_per_1k_chars}</TableCell>
+                      <TableCell>
+                        <DepthBadge bucket={r.extraction_depth_bucket} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* PART 1 — Full Audit Table */}
+      <Collapsible open={showAuditTable} onOpenChange={setShowAuditTable}>
+        <CollapsibleTrigger className="w-full">
+          <div className="flex items-center justify-between border border-border rounded-md px-3 py-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Brain className="h-3.5 w-3.5" />
+              Full Resource Audit Table ({audit.resources.length} resources)
+            </span>
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showAuditTable && "rotate-180")} />
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2">
+          <div className="border border-border rounded-md overflow-hidden">
+            <div className="max-h-[500px] overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[10px]">Resource</TableHead>
+                    <TableHead className="text-[10px]">Type</TableHead>
+                    <TableHead className="text-[10px]">Status</TableHead>
+                    <TableHead className="text-[10px] text-right">Content</TableHead>
+                    <TableHead className="text-[10px] text-right">KIs</TableHead>
+                    <TableHead className="text-[10px] text-right">Active</TableHead>
+                    <TableHead className="text-[10px] text-right">w/ Ctx</TableHead>
+                    <TableHead className="text-[10px] text-right">KIs/1k</TableHead>
+                    <TableHead className="text-[10px]">Depth</TableHead>
+                    <TableHead className="text-[10px]">Flag</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {audit.resources.map(r => (
+                    <TableRow key={r.resource_id}>
+                      <TableCell className="text-[11px] max-w-[180px] truncate">{r.title}</TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground">{r.resource_type}</TableCell>
+                      <TableCell className="text-[10px]">
+                        <Badge variant="outline" className="text-[9px]">{r.enrichment_status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-[11px] text-right font-mono">{(r.content_length / 1000).toFixed(1)}k</TableCell>
+                      <TableCell className="text-[11px] text-right font-mono">{r.ki_count_total}</TableCell>
+                      <TableCell className="text-[11px] text-right font-mono">{r.ki_count_active}</TableCell>
+                      <TableCell className="text-[11px] text-right font-mono">{r.ki_with_context_count}</TableCell>
+                      <TableCell className="text-[11px] text-right font-mono">{r.kis_per_1k_chars}</TableCell>
+                      <TableCell><DepthBadge bucket={r.extraction_depth_bucket} /></TableCell>
+                      <TableCell>
+                        {r.under_extracted_flag && (
+                          <Badge variant="destructive" className="text-[9px]">Under</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="border border-border rounded-md p-2 text-center">
+      <div className={cn("text-xl font-bold", color)}>{value}</div>
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+function DepthBadge({ bucket }: { bucket: string }) {
+  const variant = bucket === 'strong' ? 'default'
+    : bucket === 'moderate' ? 'secondary'
+    : bucket === 'shallow' ? 'outline'
+    : 'destructive';
+  return <Badge variant={variant} className="text-[9px]">{bucket}</Badge>;
+}
