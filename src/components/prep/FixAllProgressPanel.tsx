@@ -221,6 +221,8 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
                       <div className="flex items-center gap-1.5 text-muted-foreground flex-wrap">
                         {o.normalized && <Badge variant="outline" className="text-[8px] h-3 px-1">normalized</Badge>}
                         {o.rediscovered && <Badge variant="outline" className="text-[8px] h-3 px-1 border-blue-500/30 text-blue-700">rediscovered</Badge>}
+                        {o.inOriginalExtractionGroup && <Badge variant="outline" className="text-[8px] h-3 px-1 border-primary/20 text-primary/70">in extract group</Badge>}
+                        {o.batchIncluded && <Badge variant="outline" className="text-[8px] h-3 px-1 border-emerald-500/20 text-emerald-600/70">batch included</Badge>}
                         {o.originalEnrichmentStatus && o.originalEnrichmentStatus !== o.finalTruthState && (
                           <Badge variant="outline" className="text-[8px] h-3 px-1 border-primary/30 text-primary">
                             {o.originalEnrichmentStatus} → {o.finalTruthState ?? '?'}
@@ -239,6 +241,7 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
                         )}
                         {o.contentLength > 0 && <span className="text-muted-foreground/70">{o.contentLength} chars</span>}
                         {o.kiBefore > 0 && <span className="text-muted-foreground/70">was {o.kiBefore} KIs</span>}
+                        {o.kiBefore === 0 && <span className="text-muted-foreground/70">was 0 KIs</span>}
                         {o.extractionRan ? (
                           <Badge variant="outline" className="text-[8px] h-3 px-1 border-emerald-500/30 text-emerald-700">
                             extraction ran{o.extractionMethod ? ` (${o.extractionMethod})` : ''}
@@ -247,11 +250,26 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
                           <Badge variant="outline" className="text-[8px] h-3 px-1 border-destructive/30 text-destructive">
                             extraction never ran
                           </Badge>
+                        ) : !o.batchIncluded ? (
+                          <Badge variant="outline" className="text-[8px] h-3 px-1 border-destructive/30 text-destructive">
+                            not in extraction batch
+                          </Badge>
                         ) : null}
+                        {o.heuristicFallbackAttempted && (
+                          <Badge variant="outline" className="text-[8px] h-3 px-1 border-amber-500/20 text-amber-600/70">
+                            heuristic tried
+                          </Badge>
+                        )}
                         {o.kisCreated > 0 && <span className="text-emerald-600">+{o.kisCreated} KIs</span>}
                         {o.kisActive > 0 && <span className="text-emerald-600">({o.kisActive} active)</span>}
                         {!o.succeeded && o.kisCreated === 0 && o.extractionRan && (
                           <span className="text-destructive">0 KIs extracted</span>
+                        )}
+                        {/* Post-run DB verification */}
+                        {o.postRunKiCount != null && (
+                          <span className="text-muted-foreground/60 text-[8px]">
+                            DB: {o.postRunKiCount} KIs ({o.postRunActiveKiCount} active) | {o.postRunEnrichmentStatus} | job: {o.postRunJobStatus ?? 'null'}
+                          </span>
                         )}
                         {o.error && <span className="text-destructive truncate max-w-[200px]">{o.error}</span>}
                         {o.rootCauseCategory && !o.succeeded && (
