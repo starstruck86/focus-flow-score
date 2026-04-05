@@ -574,8 +574,8 @@ export async function runFixAllAutoBlockers(
     }
   }
 
-  // Track which resources were in the original needs_extraction group
-  const originalExtractionIds = new Set(groupMap.get('needs_extraction') ?? []);
+  // originalExtractionIds populated after groupMap is built (below)
+  let originalExtractionIds = new Set<string>();
 
   const initOutcome = (id: string, phase: string, blockerType: string) => {
     if (!outcomeMap.has(id)) {
