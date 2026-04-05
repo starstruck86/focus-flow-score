@@ -96,6 +96,8 @@ export interface AutoOperationalizeResult {
   reason?: string;
   /** Which extraction method actually produced KIs: 'llm', 'heuristic', or 'none' */
   extractionMethod?: 'llm' | 'heuristic' | 'none';
+  /** Was heuristic fallback attempted? */
+  heuristicFallbackAttempted?: boolean;
 }
 
 // ── Auto-activation thresholds ─────────────────────────────
