@@ -758,6 +758,8 @@ export async function runFixAllAutoBlockers(
         outcome.kisCreated = detail.kisCreated;
         outcome.kisActive = detail.kisActive;
         outcome.extractionMethod = detail.extractionMethod ?? null;
+        outcome.heuristicFallbackAttempted = detail.heuristicFallbackAttempted ?? false;
+        outcome.extractionTier = detail.extractionTier ?? null;
         
         // Track wrapper-page attachment handling
         if (outcome.wrapperPageDetected) {
