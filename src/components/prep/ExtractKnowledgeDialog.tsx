@@ -167,7 +167,7 @@ export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props
         if (items.length === 0 && (resource.content?.length ?? 0) >= 100) {
           const llmResult = await extractKnowledgeLLMFallback(source, existingForDedup);
           if (llmResult.serverPersisted) {
-            succeeded++;
+            // Server already saved KIs — skip client-side insert
             continue;
           }
           items = llmResult.items;
