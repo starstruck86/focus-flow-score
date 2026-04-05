@@ -222,6 +222,7 @@ export function useDeepReExtraction() {
     let depthUpgrades = 0;
     let noLiftCount = 0;
     const noLiftReasons: NoLiftReason[] = [];
+    const bottlenecks: DominantBottleneck[] = [];
     const preKisArr: number[] = [];
     const postKisArr: number[] = [];
 
