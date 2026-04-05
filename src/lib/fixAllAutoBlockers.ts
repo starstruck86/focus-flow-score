@@ -44,6 +44,10 @@ export interface FixResourceOutcome {
   rootCauseExplanation: string | null;
   resolutionOutcome: string | null;
   normalized: boolean;
+  /** Was this resource found during post-normalization rediscovery? */
+  rediscovered: boolean;
+  /** Did extraction actually execute for this resource? */
+  extractionRan: boolean;
   wrapperPageDetected: boolean;
   attachmentExtractionAttempted: boolean;
   attachmentExtractionOutcome: string | null;
@@ -576,6 +580,8 @@ export async function runFixAllAutoBlockers(
         rootCauseExplanation: null,
         resolutionOutcome: null,
         normalized: false,
+        rediscovered: false,
+        extractionRan: false,
         wrapperPageDetected: wrapperSet.has(id),
         attachmentExtractionAttempted: false,
         attachmentExtractionOutcome: null,
@@ -683,6 +689,9 @@ export async function runFixAllAutoBlockers(
                 titleMap.set(fr.id, fr.title);
               }
               initOutcome(fr.id, 'extraction', 'needs_extraction');
+              // Mark as rediscovered (found after normalization, not in original blocker groups)
+              const outcome = outcomeMap.get(fr.id);
+              if (outcome) outcome.rediscovered = true;
               log.info('Discovered newly extraction-eligible resource after normalization', { id: fr.id, title: fr.title, status: fr.enrichment_status, isStructuredLesson });
             }
           }
@@ -704,6 +713,7 @@ export async function runFixAllAutoBlockers(
       const outcome = outcomeMap.get(resourceId);
       if (outcome) {
         outcome.attempted = true;
+        outcome.extractionRan = true;
         outcome.succeeded = detail.succeeded;
         outcome.kisCreated = detail.kisCreated;
         outcome.kisActive = detail.kisActive;

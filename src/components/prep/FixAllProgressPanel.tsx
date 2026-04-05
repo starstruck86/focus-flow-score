@@ -220,9 +220,15 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
                       <p className="font-medium text-foreground truncate">{o.resourceTitle}</p>
                       <div className="flex items-center gap-1.5 text-muted-foreground flex-wrap">
                         {o.normalized && <Badge variant="outline" className="text-[8px] h-3 px-1">normalized</Badge>}
+                        {o.rediscovered && <Badge variant="outline" className="text-[8px] h-3 px-1 border-blue-500/30 text-blue-700">rediscovered</Badge>}
                         {o.originalEnrichmentStatus && o.originalEnrichmentStatus !== o.finalTruthState && (
                           <Badge variant="outline" className="text-[8px] h-3 px-1 border-primary/30 text-primary">
                             {o.originalEnrichmentStatus} → {o.finalTruthState ?? '?'}
+                          </Badge>
+                        )}
+                        {o.originalJobStatus && (
+                          <Badge variant="outline" className="text-[8px] h-3 px-1 border-muted-foreground/30">
+                            job: {o.originalJobStatus}
                           </Badge>
                         )}
                         {o.wrapperPageDetected && <Badge variant="outline" className="text-[8px] h-3 px-1 border-amber-500/30 text-amber-700">wrapper page</Badge>}
@@ -233,12 +239,20 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
                         )}
                         {o.contentLength > 0 && <span className="text-muted-foreground/70">{o.contentLength} chars</span>}
                         {o.kiBefore > 0 && <span className="text-muted-foreground/70">was {o.kiBefore} KIs</span>}
+                        {o.extractionRan ? (
+                          <Badge variant="outline" className="text-[8px] h-3 px-1 border-emerald-500/30 text-emerald-700">
+                            extraction ran{o.extractionMethod ? ` (${o.extractionMethod})` : ''}
+                          </Badge>
+                        ) : o.attempted ? (
+                          <Badge variant="outline" className="text-[8px] h-3 px-1 border-destructive/30 text-destructive">
+                            extraction never ran
+                          </Badge>
+                        ) : null}
                         {o.kisCreated > 0 && <span className="text-emerald-600">+{o.kisCreated} KIs</span>}
                         {o.kisActive > 0 && <span className="text-emerald-600">({o.kisActive} active)</span>}
-                        {!o.succeeded && o.kisCreated === 0 && o.attempted && (
+                        {!o.succeeded && o.kisCreated === 0 && o.extractionRan && (
                           <span className="text-destructive">0 KIs extracted</span>
                         )}
-                        {o.extractionMethod && <span className="text-muted-foreground/70">via {o.extractionMethod}</span>}
                         {o.error && <span className="text-destructive truncate max-w-[200px]">{o.error}</span>}
                         {o.rootCauseCategory && !o.succeeded && (
                           <span className="text-muted-foreground/70 italic">
