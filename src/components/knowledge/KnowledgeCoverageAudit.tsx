@@ -46,7 +46,6 @@ export function KnowledgeCoverageAudit() {
   const activeDelta = dbActive - uiActive;
   const hasPaginationBug = (uiTotal === 1000 && dbTotal > 1000) || (uiActive === 1000 && dbActive > 1000);
   const countIntegrityPass = totalDelta === 0 && activeDelta === 0;
-
   const fullyMinedPct = audit.resources.length > 0 ? Math.round((audit.resourcesFullyMined / audit.resources.length) * 100) : 0;
 
   return (
@@ -92,6 +91,17 @@ export function KnowledgeCoverageAudit() {
               <div className="text-muted-foreground">Avg KIs/1k chars</div>
             </div>
           </div>
+
+          {/* Method Mix */}
+          <div className="border border-border rounded-md p-2">
+            <div className="text-[10px] text-muted-foreground mb-1 font-medium">Extraction Method Mix</div>
+            <div className="flex gap-2 text-xs">
+              <Badge variant="default" className="text-[9px]">LLM: {audit.methodMix.llm}</Badge>
+              <Badge variant="secondary" className="text-[9px]">Heuristic: {audit.methodMix.heuristic}</Badge>
+              <Badge variant="outline" className="text-[9px]">Hybrid: {audit.methodMix.hybrid}</Badge>
+              <Badge variant="outline" className="text-[9px]">Unknown: {audit.methodMix.unknown}</Badge>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -114,15 +124,12 @@ export function KnowledgeCoverageAudit() {
             <div className="font-medium text-muted-foreground"></div>
             <div className="font-medium text-center">DB</div>
             <div className="font-medium text-center">UI</div>
-
             <div className="text-muted-foreground">Total KIs</div>
             <div className="text-center font-mono">{dbTotal}</div>
             <div className={cn("text-center font-mono", totalDelta !== 0 && "text-destructive font-bold")}>{uiTotal}</div>
-
             <div className="text-muted-foreground">Active KIs</div>
             <div className="text-center font-mono">{dbActive}</div>
             <div className={cn("text-center font-mono", activeDelta !== 0 && "text-destructive font-bold")}>{uiActive}</div>
-
             {totalDelta !== 0 && (
               <>
                 <div className="text-muted-foreground">Delta</div>
@@ -135,7 +142,6 @@ export function KnowledgeCoverageAudit() {
           {hasPaginationBug && (
             <div className="mt-2 text-[11px] bg-destructive/10 text-destructive rounded-md px-3 py-2">
               ⚠️ Likely pagination/query cap bug — UI shows exactly 1000 but DB has {dbTotal}.
-              The query has been fixed to paginate past the 1000-row limit.
             </div>
           )}
         </CardContent>
@@ -152,18 +158,18 @@ export function KnowledgeCoverageAudit() {
           </CardHeader>
           <CardContent className="space-y-2">
             <p className="text-[11px] text-muted-foreground">
-              These resources have rich content but low KI density. Re-extracting could yield significantly more knowledge.
+              These resources have rich content but low KI density. Re-extracting with deep multi-pass mode could yield significantly more knowledge.
             </p>
             <Button
               variant="outline"
               size="sm"
               className="text-xs gap-1.5"
               onClick={() => {
-                toast.info(`${audit.resourcesUnderExtracted} under-extracted resources identified for re-extraction. Use the extraction pipeline to process them.`);
+                toast.info(`${audit.resourcesUnderExtracted} under-extracted resources identified. Use the extraction pipeline with deep mode to re-process them.`);
               }}
             >
               <Zap className="h-3 w-3" />
-              Flag {audit.resourcesUnderExtracted} for Re-Extraction
+              Flag {audit.resourcesUnderExtracted} for Deep Re-Extraction
             </Button>
           </CardContent>
         </Card>
@@ -191,17 +197,21 @@ export function KnowledgeCoverageAudit() {
                     <TableHead className="text-[10px] text-right">KIs</TableHead>
                     <TableHead className="text-[10px] text-right">KIs/1k</TableHead>
                     <TableHead className="text-[10px]">Depth</TableHead>
+                    <TableHead className="text-[10px]">Mode</TableHead>
+                    <TableHead className="text-[10px]">Passes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {audit.top20Weakest.map(r => (
                     <TableRow key={r.resource_id}>
-                      <TableCell className="text-[11px] max-w-[200px] truncate">{r.title}</TableCell>
+                      <TableCell className="text-[11px] max-w-[160px] truncate">{r.title}</TableCell>
                       <TableCell className="text-[11px] text-right font-mono">{(r.content_length / 1000).toFixed(1)}k</TableCell>
                       <TableCell className="text-[11px] text-right font-mono">{r.ki_count_total}</TableCell>
                       <TableCell className="text-[11px] text-right font-mono">{r.kis_per_1k_chars}</TableCell>
-                      <TableCell>
-                        <DepthBadge bucket={r.extraction_depth_bucket} />
+                      <TableCell><DepthBadge bucket={r.extraction_depth_bucket} /></TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground">{r.extraction_mode}</TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground">
+                        {r.extraction_passes_run.length > 0 ? r.extraction_passes_run.join('+') : '—'}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -231,30 +241,32 @@ export function KnowledgeCoverageAudit() {
                   <TableRow>
                     <TableHead className="text-[10px]">Resource</TableHead>
                     <TableHead className="text-[10px]">Type</TableHead>
-                    <TableHead className="text-[10px]">Status</TableHead>
                     <TableHead className="text-[10px] text-right">Content</TableHead>
                     <TableHead className="text-[10px] text-right">KIs</TableHead>
                     <TableHead className="text-[10px] text-right">Active</TableHead>
-                    <TableHead className="text-[10px] text-right">w/ Ctx</TableHead>
                     <TableHead className="text-[10px] text-right">KIs/1k</TableHead>
                     <TableHead className="text-[10px]">Depth</TableHead>
+                    <TableHead className="text-[10px]">Mode</TableHead>
+                    <TableHead className="text-[10px]">Passes</TableHead>
+                    <TableHead className="text-[10px]">Method</TableHead>
                     <TableHead className="text-[10px]">Flag</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {audit.resources.map(r => (
                     <TableRow key={r.resource_id}>
-                      <TableCell className="text-[11px] max-w-[180px] truncate">{r.title}</TableCell>
+                      <TableCell className="text-[11px] max-w-[150px] truncate">{r.title}</TableCell>
                       <TableCell className="text-[10px] text-muted-foreground">{r.resource_type}</TableCell>
-                      <TableCell className="text-[10px]">
-                        <Badge variant="outline" className="text-[9px]">{r.enrichment_status}</Badge>
-                      </TableCell>
                       <TableCell className="text-[11px] text-right font-mono">{(r.content_length / 1000).toFixed(1)}k</TableCell>
                       <TableCell className="text-[11px] text-right font-mono">{r.ki_count_total}</TableCell>
                       <TableCell className="text-[11px] text-right font-mono">{r.ki_count_active}</TableCell>
-                      <TableCell className="text-[11px] text-right font-mono">{r.ki_with_context_count}</TableCell>
                       <TableCell className="text-[11px] text-right font-mono">{r.kis_per_1k_chars}</TableCell>
                       <TableCell><DepthBadge bucket={r.extraction_depth_bucket} /></TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground">{r.extraction_mode}</TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground">
+                        {r.extraction_passes_run.length > 0 ? r.extraction_passes_run.join('+') : '—'}
+                      </TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground">{r.extraction_method || '—'}</TableCell>
                       <TableCell>
                         {r.under_extracted_flag && (
                           <Badge variant="destructive" className="text-[9px]">Under</Badge>
