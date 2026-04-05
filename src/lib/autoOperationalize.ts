@@ -245,6 +245,7 @@ export async function autoOperationalizeResource(
   // Use tiered extraction based on contract tier
   const canExtract = !hasExistingKI && (eligibility.extractionTier === 'full' || eligibility.extractionTier === 'lightweight' || eligibility.extractionTier === 'reduced');
   let usedExtractionMethod: 'llm' | 'heuristic' | 'none' = 'none';
+  let heuristicFallbackAttempted = false;
   if (canExtract) {
     // Extract knowledge heuristically
     const { data: userData } = await supabase.auth.getUser();
