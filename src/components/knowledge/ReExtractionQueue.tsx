@@ -1,6 +1,6 @@
 /**
  * Re-Extraction Queue — shows flagged resources with status tracking,
- * confirmation modal, coverage lift summary, and verification layer.
+ * lift classification, no-lift diagnosis, and coverage lift summary.
  */
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,10 +17,10 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  Zap, Loader2, CheckCircle2, XCircle, AlertTriangle, TrendingUp, Trash2, Info,
+  Zap, Loader2, CheckCircle2, XCircle, AlertTriangle, TrendingUp, Trash2, Info, Ban, TrendingDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ReExtractQueueItem, CoverageLiftSummary } from '@/hooks/useDeepReExtraction';
+import type { ReExtractQueueItem, CoverageLiftSummary, LiftStatus, NoLiftReason } from '@/hooks/useDeepReExtraction';
 
 interface Props {
   queue: ReExtractQueueItem[];
@@ -29,6 +29,7 @@ interface Props {
   onRunDeepExtraction: () => void;
   onRemove: (resourceId: string) => void;
   onClear: () => void;
+  onMarkExcluded?: (resourceId: string) => void;
 }
 
 function StatusIcon({ status }: { status: string }) {
@@ -39,7 +40,7 @@ function StatusIcon({ status }: { status: string }) {
   return <div className="h-3.5 w-3.5 rounded-full border-2 border-muted-foreground/30" />;
 }
 
-function DeltaCell({ value, label }: { value?: number; label?: string }) {
+function DeltaCell({ value }: { value?: number }) {
   if (value == null) return <span className="text-muted-foreground">—</span>;
   return (
     <span className={cn(
@@ -47,12 +48,61 @@ function DeltaCell({ value, label }: { value?: number; label?: string }) {
       value > 0 ? "text-emerald-600" : value < 0 ? "text-destructive" : "text-muted-foreground"
     )}>
       {value > 0 ? `+${value}` : value}
-      {label && <span className="font-normal text-muted-foreground ml-0.5">{label}</span>}
     </span>
   );
 }
 
-export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtraction, onRemove, onClear }: Props) {
+function LiftBadge({ liftStatus, noLiftReason, qualityLabel }: {
+  liftStatus?: LiftStatus;
+  noLiftReason?: NoLiftReason;
+  qualityLabel?: string;
+}) {
+  if (!liftStatus) return null;
+
+  const config: Record<LiftStatus, { icon: React.ReactNode; label: string; cls: string }> = {
+    meaningful_lift: { icon: <TrendingUp className="h-2.5 w-2.5" />, label: 'Lift', cls: 'border-emerald-500/40 text-emerald-600' },
+    minor_lift: { icon: <TrendingUp className="h-2.5 w-2.5" />, label: 'Minor', cls: 'border-blue-500/40 text-blue-600' },
+    no_lift: { icon: <Ban className="h-2.5 w-2.5" />, label: 'No Lift', cls: 'border-amber-500/40 text-amber-600' },
+    regression: { icon: <TrendingDown className="h-2.5 w-2.5" />, label: 'Regress', cls: 'border-destructive/40 text-destructive' },
+  };
+
+  const c = config[liftStatus];
+  const tooltip = qualityLabel || (noLiftReason ? formatNoLiftReason(noLiftReason) : undefined);
+
+  if (tooltip) {
+    return (
+      <Tooltip>
+        <TooltipTrigger>
+          <Badge variant="outline" className={cn("text-[9px] gap-0.5", c.cls)}>
+            {c.icon} {c.label}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[220px] text-xs">{tooltip}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Badge variant="outline" className={cn("text-[9px] gap-0.5", c.cls)}>
+      {c.icon} {c.label}
+    </Badge>
+  );
+}
+
+function formatNoLiftReason(reason: NoLiftReason): string {
+  const map: Record<NoLiftReason, string> = {
+    already_dense: 'Already dense — resource well-mined',
+    duplicate_heavy: 'All new items were duplicates of existing KIs',
+    extractor_returned_no_new_items: 'AI extractor returned no new items from this content',
+    items_generated_but_filtered_out: 'Items generated but failed quality validation',
+    items_generated_but_deduped: 'Items generated but all matched existing fingerprints',
+    resource_not_suitable: 'Content too thin or not suitable for extraction',
+    unknown: 'No lift — cause could not be determined',
+  };
+  return map[reason] || reason;
+}
+
+export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtraction, onRemove, onClear, onMarkExcluded }: Props) {
   const [showConfirm, setShowConfirm] = useState(false);
 
   if (queue.length === 0) return null;
@@ -65,6 +115,9 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
   const progressPct = queue.length > 0
     ? Math.round(((completed.length + failed.length) / queue.length) * 100)
     : 0;
+
+  const allDone = queued.length === 0 && (completed.length + failed.length) > 0;
+  const allNoLift = allDone && liftSummary && liftSummary.totalKiDelta === 0 && liftSummary.resourcesSucceeded > 0;
 
   return (
     <TooltipProvider>
@@ -119,7 +172,7 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                     <TableHead className="text-[10px] text-right">Net New</TableHead>
                     <TableHead className="text-[10px] text-right">+Active</TableHead>
                     <TableHead className="text-[10px] text-right">Dupes</TableHead>
-                    <TableHead className="text-[10px]">Quality</TableHead>
+                    <TableHead className="text-[10px]">Lift</TableHead>
                     <TableHead className="text-[10px] w-8"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -158,32 +211,34 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                         {item.duplicates_skipped != null ? item.duplicates_skipped : '—'}
                       </TableCell>
                       <TableCell className="text-[10px] max-w-[100px]">
-                        {item.quality_label ? (
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600 gap-0.5">
-                                <AlertTriangle className="h-2.5 w-2.5" />
-                                Low
-                              </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-[200px] text-xs">
-                              {item.quality_label}
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : item.status === 'completed' && (item.net_new_unique ?? 0) > 0 ? (
-                          <Badge variant="outline" className="text-[9px] border-emerald-500/40 text-emerald-600">
-                            ✓ Lift
-                          </Badge>
-                        ) : item.status === 'queued' ? (
-                          <span className="text-muted-foreground truncate">{item.reason}</span>
+                        {item.status === 'queued' ? (
+                          <span className="text-muted-foreground truncate text-[9px]">{item.reason}</span>
+                        ) : (item.status === 'completed' || item.status === 'partial') ? (
+                          <LiftBadge
+                            liftStatus={item.lift_status}
+                            noLiftReason={item.no_lift_reason}
+                            qualityLabel={item.quality_label}
+                          />
                         ) : null}
                       </TableCell>
                       <TableCell>
-                        {item.status === 'queued' && !isRunning && (
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onRemove(item.resource_id)}>
-                            <XCircle className="h-3 w-3 text-muted-foreground" />
-                          </Button>
-                        )}
+                        <div className="flex gap-0.5">
+                          {item.status === 'queued' && !isRunning && (
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onRemove(item.resource_id)}>
+                              <XCircle className="h-3 w-3 text-muted-foreground" />
+                            </Button>
+                          )}
+                          {item.lift_status === 'no_lift' && onMarkExcluded && !item.excluded_from_future && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onMarkExcluded(item.resource_id)}>
+                                  <Ban className="h-3 w-3 text-muted-foreground" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent className="text-xs">Exclude from future re-extraction</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -193,23 +248,45 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
           </CardContent>
         </Card>
 
-        {/* Coverage Lift Summary — with verification metrics */}
+        {/* Coverage Lift Summary */}
         {liftSummary && (
-          <Card className="border-emerald-500/20">
+          <Card className={cn(
+            "border-emerald-500/20",
+            allNoLift && "border-amber-500/30"
+          )}>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-emerald-600" />
+                {allNoLift ? (
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                ) : (
+                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+                )}
                 Coverage Lift Summary
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {/* Warning banner for zero lift */}
+              {allNoLift && (
+                <div className="mb-3 text-[12px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <div>
+                    <div className="font-semibold">Runs completed but produced no measurable coverage lift.</div>
+                    {liftSummary.topNoLiftReason && (
+                      <div className="mt-1 text-[11px]">
+                        Top reason: <strong>{formatNoLiftReason(liftSummary.topNoLiftReason)}</strong>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <div className="border border-border rounded-md p-2">
                   <div className="text-lg font-bold">{liftSummary.resourcesSucceeded}/{liftSummary.resourcesProcessed}</div>
                   <div className="text-muted-foreground">Succeeded</div>
                 </div>
                 <div className="border border-border rounded-md p-2">
-                  <div className={cn("text-lg font-bold", liftSummary.totalKiDelta > 0 ? "text-emerald-600" : "")}>
+                  <div className={cn("text-lg font-bold", liftSummary.totalKiDelta > 0 ? "text-emerald-600" : "text-muted-foreground")}>
                     {liftSummary.totalKiDelta > 0 ? '+' : ''}{liftSummary.totalKiDelta}
                   </div>
                   <div className="text-muted-foreground">Raw KI Delta</div>
@@ -221,13 +298,13 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                   <div className="text-muted-foreground">Net New Unique</div>
                 </div>
                 <div className="border border-border rounded-md p-2">
-                  <div className={cn("text-lg font-bold", liftSummary.totalNewActive > 0 ? "text-emerald-600" : "")}>
+                  <div className={cn("text-lg font-bold", liftSummary.totalNewActive > 0 ? "text-emerald-600" : "text-muted-foreground")}>
                     {liftSummary.totalNewActive > 0 ? '+' : ''}{liftSummary.totalNewActive}
                   </div>
                   <div className="text-muted-foreground">New Active KIs</div>
                 </div>
                 <div className="border border-border rounded-md p-2">
-                  <div className={cn("text-lg font-bold", liftSummary.totalNewWithContext > 0 ? "text-emerald-600" : "")}>
+                  <div className={cn("text-lg font-bold", liftSummary.totalNewWithContext > 0 ? "text-emerald-600" : "text-muted-foreground")}>
                     {liftSummary.totalNewWithContext > 0 ? '+' : ''}{liftSummary.totalNewWithContext}
                   </div>
                   <div className="text-muted-foreground">New w/ Context</div>
@@ -236,24 +313,27 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                   <div className="text-lg font-bold text-primary">{liftSummary.depthUpgrades}</div>
                   <div className="text-muted-foreground">Depth Upgrades</div>
                 </div>
+                <div className="border border-border rounded-md p-2">
+                  <div className={cn("text-lg font-bold", liftSummary.noLiftCount > 0 ? "text-amber-500" : "text-muted-foreground")}>
+                    {liftSummary.noLiftCount}
+                  </div>
+                  <div className="text-muted-foreground">No-Lift Runs</div>
+                </div>
+                <div className="border border-border rounded-md p-2 col-span-2">
+                  <div className="text-muted-foreground text-[10px]">
+                    {liftSummary.topNoLiftReason
+                      ? `Top reason: ${formatNoLiftReason(liftSummary.topNoLiftReason)}`
+                      : 'No no-lift reasons'}
+                  </div>
+                </div>
               </div>
               <div className="mt-2 flex justify-between text-[11px] text-muted-foreground border-t border-border pt-2">
                 <span>Avg KIs/1k before: <strong>{liftSummary.avgKisPer1kBefore}</strong></span>
                 <span>→</span>
-                <span>Avg KIs/1k after: <strong className="text-emerald-600">{liftSummary.avgKisPer1kAfter}</strong></span>
+                <span>Avg KIs/1k after: <strong className={cn(
+                  liftSummary.avgKisPer1kAfter > liftSummary.avgKisPer1kBefore ? "text-emerald-600" : "text-muted-foreground"
+                )}>{liftSummary.avgKisPer1kAfter}</strong></span>
               </div>
-              {liftSummary.totalKiDelta > 0 && liftSummary.totalNetNewUnique === 0 && (
-                <div className="mt-2 text-[11px] text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded px-2 py-1 flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  No true lift — all delta was duplicates / overlap
-                </div>
-              )}
-              {liftSummary.totalNetNewUnique > 0 && liftSummary.totalNewActive === 0 && (
-                <div className="mt-2 text-[11px] text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded px-2 py-1 flex items-center gap-1">
-                  <Info className="h-3 w-3" />
-                  Low operational value — new KIs exist but none activated
-                </div>
-              )}
             </CardContent>
           </Card>
         )}
