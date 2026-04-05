@@ -689,6 +689,7 @@ function makeResult(
   reason?: string,
   extractionTier: AutoOperationalizeResult['extractionTier'] = 'none',
   outcome?: PipelineOutcome,
+  extractionMethod?: 'llm' | 'heuristic' | 'none',
 ): AutoOperationalizeResult {
   const derivedOutcome: PipelineOutcome = outcome
     ?? (operationalized ? 'operationalized'
@@ -711,6 +712,7 @@ function makeResult(
     outcome: derivedOutcome,
     extractionTier,
     reason,
+    extractionMethod,
   };
 }
 
