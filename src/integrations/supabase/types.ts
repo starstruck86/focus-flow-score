@@ -1887,6 +1887,93 @@ export type Database = {
         }
         Relationships: []
       }
+      extraction_runs: {
+        Row: {
+          chunks_failed: number | null
+          chunks_processed: number | null
+          chunks_total: number | null
+          completed_at: string | null
+          created_at: string
+          dedupe_merge_counts: Json | null
+          duration_ms: number | null
+          error_message: string | null
+          extraction_depth_bucket: string | null
+          extraction_method: string | null
+          extraction_mode: string | null
+          id: string
+          kis_per_1k_chars: number | null
+          merged_candidate_count: number | null
+          model: string | null
+          passes_run: string[] | null
+          raw_candidate_counts: Json | null
+          resource_id: string
+          saved_candidate_count: number | null
+          started_at: string
+          status: string
+          summary: string | null
+          under_extracted_flag: boolean | null
+          user_id: string
+          validated_candidate_count: number | null
+          validation_rejection_counts: Json | null
+        }
+        Insert: {
+          chunks_failed?: number | null
+          chunks_processed?: number | null
+          chunks_total?: number | null
+          completed_at?: string | null
+          created_at?: string
+          dedupe_merge_counts?: Json | null
+          duration_ms?: number | null
+          error_message?: string | null
+          extraction_depth_bucket?: string | null
+          extraction_method?: string | null
+          extraction_mode?: string | null
+          id?: string
+          kis_per_1k_chars?: number | null
+          merged_candidate_count?: number | null
+          model?: string | null
+          passes_run?: string[] | null
+          raw_candidate_counts?: Json | null
+          resource_id: string
+          saved_candidate_count?: number | null
+          started_at?: string
+          status?: string
+          summary?: string | null
+          under_extracted_flag?: boolean | null
+          user_id: string
+          validated_candidate_count?: number | null
+          validation_rejection_counts?: Json | null
+        }
+        Update: {
+          chunks_failed?: number | null
+          chunks_processed?: number | null
+          chunks_total?: number | null
+          completed_at?: string | null
+          created_at?: string
+          dedupe_merge_counts?: Json | null
+          duration_ms?: number | null
+          error_message?: string | null
+          extraction_depth_bucket?: string | null
+          extraction_method?: string | null
+          extraction_mode?: string | null
+          id?: string
+          kis_per_1k_chars?: number | null
+          merged_candidate_count?: number | null
+          model?: string | null
+          passes_run?: string[] | null
+          raw_candidate_counts?: Json | null
+          resource_id?: string
+          saved_candidate_count?: number | null
+          started_at?: string
+          status?: string
+          summary?: string | null
+          under_extracted_flag?: boolean | null
+          user_id?: string
+          validated_candidate_count?: number | null
+          validation_rejection_counts?: Json | null
+        }
+        Relationships: []
+      }
       holidays: {
         Row: {
           created_at: string
@@ -4109,7 +4196,18 @@ export type Database = {
           kis_per_1k_chars: number | null
           last_advanced_extraction_at: string | null
           last_enrichment_attempt_at: string | null
+          last_extraction_completed_at: string | null
+          last_extraction_deduped_ki_count: number | null
+          last_extraction_duration_ms: number | null
+          last_extraction_error: string | null
+          last_extraction_model: string | null
+          last_extraction_returned_ki_count: number | null
+          last_extraction_run_id: string | null
+          last_extraction_run_status: string | null
+          last_extraction_saved_ki_count: number | null
+          last_extraction_started_at: string | null
           last_extraction_summary: string | null
+          last_extraction_validated_ki_count: number | null
           last_quality_score: number | null
           last_quality_tier: string | null
           last_reconciled_at: string | null
@@ -4215,7 +4313,18 @@ export type Database = {
           kis_per_1k_chars?: number | null
           last_advanced_extraction_at?: string | null
           last_enrichment_attempt_at?: string | null
+          last_extraction_completed_at?: string | null
+          last_extraction_deduped_ki_count?: number | null
+          last_extraction_duration_ms?: number | null
+          last_extraction_error?: string | null
+          last_extraction_model?: string | null
+          last_extraction_returned_ki_count?: number | null
+          last_extraction_run_id?: string | null
+          last_extraction_run_status?: string | null
+          last_extraction_saved_ki_count?: number | null
+          last_extraction_started_at?: string | null
           last_extraction_summary?: string | null
+          last_extraction_validated_ki_count?: number | null
           last_quality_score?: number | null
           last_quality_tier?: string | null
           last_reconciled_at?: string | null
@@ -4321,7 +4430,18 @@ export type Database = {
           kis_per_1k_chars?: number | null
           last_advanced_extraction_at?: string | null
           last_enrichment_attempt_at?: string | null
+          last_extraction_completed_at?: string | null
+          last_extraction_deduped_ki_count?: number | null
+          last_extraction_duration_ms?: number | null
+          last_extraction_error?: string | null
+          last_extraction_model?: string | null
+          last_extraction_returned_ki_count?: number | null
+          last_extraction_run_id?: string | null
+          last_extraction_run_status?: string | null
+          last_extraction_saved_ki_count?: number | null
+          last_extraction_started_at?: string | null
           last_extraction_summary?: string | null
+          last_extraction_validated_ki_count?: number | null
           last_quality_score?: number | null
           last_quality_tier?: string | null
           last_reconciled_at?: string | null
