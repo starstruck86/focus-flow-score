@@ -271,6 +271,11 @@ async function fixNeedsExtraction(
         extractionMethod: r.extractionMethod,
         heuristicFallbackAttempted: r.heuristicFallbackAttempted,
         extractionTier: r.extractionTier,
+        edgeFunctionInvoked: r.edgeFunctionInvoked,
+        edgeFunctionName: r.edgeFunctionName,
+        edgeFunctionStatus: r.edgeFunctionStatus,
+        edgeFunctionError: r.edgeFunctionError,
+        edgeFunctionReturnedItems: r.edgeFunctionReturnedItems,
       });
       if (r.knowledgeExtracted > 0 || r.operationalized) {
         result.succeeded++;
