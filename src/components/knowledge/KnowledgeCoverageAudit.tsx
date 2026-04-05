@@ -28,6 +28,7 @@ import { useDeepReExtraction } from '@/hooks/useDeepReExtraction';
 import { VerificationQueue } from './VerificationQueue';
 import { ReExtractionQueue } from './ReExtractionQueue';
 import { ResourceAuditDrilldown } from './ResourceAuditDrilldown';
+import { RealBottleneckReview } from './RealBottleneckReview';
 import { toast } from 'sonner';
 
 type AuditFilter = 'all' | 'under_extracted' | 'shallow' | 'rich_weak' | 'zero_kis' | 'recently_extracted' | 'biggest_lift';
