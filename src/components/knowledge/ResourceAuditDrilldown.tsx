@@ -90,9 +90,11 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
             <MetricCard label="Content Length" value={`${(r.content_length / 1000).toFixed(1)}k chars`} />
             <MetricCard label="Total KIs" value={String(r.ki_count_total)} />
             <MetricCard label="Active KIs" value={String(r.ki_count_active)} highlight={r.ki_count_active < r.ki_count_total} />
+            <MetricCard label="KIs w/ Context" value={String(r.ki_with_context_count)} highlight={r.ki_with_context_count < r.ki_count_active} />
             <MetricCard label="KIs/1k Chars" value={String(r.kis_per_1k_chars)} />
             <MetricCard label="Extraction Mode" value={r.extraction_mode} />
             <MetricCard label="Method" value={r.extraction_method || 'unknown'} />
+            <MetricCard label="Attempts" value={String(r.extraction_attempt_count)} />
           </div>
 
           {/* Passes & Pipeline */}
