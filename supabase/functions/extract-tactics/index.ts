@@ -1170,7 +1170,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist } = body;
+    let { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist } = body;
 
     // Resolve userId
     if (!userId) userId = bodyUserId;
@@ -1178,6 +1178,31 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'userId required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // ── AUTO-FETCH: if resourceId provided but no content, fetch from DB ──
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    if (resourceId && (!content || content.length < 100)) {
+      console.log(`[extract-tactics] No content in body, fetching resource ${resourceId} from DB`);
+      const { data: resource, error: fetchErr } = await supabaseAdmin
+        .from('resources')
+        .select('title, content, description, tags, resource_type, content_length')
+        .eq('id', resourceId)
+        .single();
+
+      if (fetchErr || !resource) {
+        console.error('[extract-tactics] Failed to fetch resource:', fetchErr);
+        return new Response(JSON.stringify({ error: 'Resource not found' }), {
+          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      title = title || resource.title;
+      content = resource.content;
+      description = description || resource.description;
+      tags = tags || resource.tags;
+      resourceType = resourceType || resource.resource_type;
+      console.log(`[extract-tactics] Fetched resource: "${title}" | ${(content || '').length} chars`);
     }
 
     if (!content || content.length < 100) {
@@ -1199,6 +1224,22 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ── EXISTING KI AWARENESS: tell the model what already exists for this resource ──
+    let existingKiContext = '';
+    if (deepMode && resourceId) {
+      const { data: existingKIs } = await supabaseAdmin
+        .from('knowledge_items')
+        .select('title, tactic_summary')
+        .eq('source_resource_id', resourceId)
+        .eq('user_id', userId)
+        .limit(100);
+      if (existingKIs && existingKIs.length > 0) {
+        existingKiContext = `\n\nALREADY EXTRACTED (${existingKIs.length} KIs exist for this resource — do NOT repeat these, find NEW insights):\n` +
+          existingKIs.map((ki: any, i: number) => `${i + 1}. ${ki.title}`).join('\n') +
+          '\n\nFocus on concepts, frameworks, tactics, and insights NOT covered above. Go deeper into sections that were under-explored.\n';
+      }
+    }
+
     // Classify content category once, pass through entire pipeline
     const category = classifyContentCategory(content, title, resourceType);
 
@@ -1210,8 +1251,8 @@ Deno.serve(async (req) => {
       result = await extractLessonTwoStage(LOVABLE_API_KEY, cleanedContent, title, description, tags, resourceType);
     } else {
       const isTranscript = category === 'transcript';
-      console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} multi-pass | ${content.length} chars | deepMode=${!!deepMode}`);
-      result = await runMultiPassExtraction(LOVABLE_API_KEY, content, title, description, tags || [], resourceType, category, !!deepMode);
+      console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} multi-pass | ${content.length} chars | deepMode=${!!deepMode} | existingKIs=${existingKiContext ? 'yes' : 'no'}`);
+      result = await runMultiPassExtraction(LOVABLE_API_KEY, content, title, description, tags || [], resourceType, category, !!deepMode, existingKiContext);
     }
 
     // Server-side persistence when resourceId is provided
