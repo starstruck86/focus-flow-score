@@ -367,6 +367,7 @@ export function useDeepReExtraction() {
           if (liftStatus === 'no_lift') {
             noLiftCount++;
             if (noLiftReason) noLiftReasons.push(noLiftReason);
+            if (dominantBottleneck && dominantBottleneck !== 'none') bottlenecks.push(dominantBottleneck);
           }
         }
         preKisArr.push(item.pre_kis_per_1k);
