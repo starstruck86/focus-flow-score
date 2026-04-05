@@ -312,6 +312,7 @@ export async function autoOperationalizeResource(
       contentForExtraction, r.resource_type, r.title,
     );
     if (finalExtracted.length === 0 && (!isAudioType || isStructuredForFallback)) {
+      heuristicFallbackAttempted = true;
       finalExtracted = extractKnowledgeHeuristic(source);
       if (finalExtracted.length > 0) usedExtractionMethod = 'heuristic';
       log.info('Heuristic fallback result', { resourceId, count: finalExtracted.length, isStructuredForFallback });
