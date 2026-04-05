@@ -21,13 +21,23 @@ export interface ResourceAuditRow {
   kis_per_1k_chars: number;
   under_extracted_flag: boolean;
   extraction_depth_bucket: 'none' | 'shallow' | 'moderate' | 'strong';
-  // New multi-pass fields
+  // Multi-pass fields
   extraction_mode: string;
   extraction_passes_run: string[];
   raw_candidate_counts: Record<string, number>;
   merged_candidate_count: number;
   last_extraction_summary: string | null;
   extraction_method: string | null;
+  // Server-owned truth fields
+  last_extraction_run_id: string | null;
+  last_extraction_run_status: string | null;
+  last_extraction_returned_ki_count: number | null;
+  last_extraction_deduped_ki_count: number | null;
+  last_extraction_validated_ki_count: number | null;
+  last_extraction_saved_ki_count: number | null;
+  last_extraction_error: string | null;
+  last_extraction_duration_ms: number | null;
+  last_extraction_model: string | null;
 }
 
 export interface CoverageAuditSummary {
