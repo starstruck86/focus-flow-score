@@ -3,6 +3,7 @@
  * lift classification, no-lift diagnosis, and coverage lift summary.
  */
 import { useState } from 'react';
+import type { DominantBottleneck } from '@/hooks/useDeepReExtraction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -102,6 +103,44 @@ function formatNoLiftReason(reason: NoLiftReason): string {
     unknown: 'No lift — cause could not be determined',
   };
   return map[reason] || reason;
+}
+
+function formatBottleneck(b: DominantBottleneck): string {
+  const map: Record<DominantBottleneck, string> = {
+    extractor_weak_output: 'Extractor weak',
+    validation_too_strict: 'Validation strict',
+    dedup_too_aggressive: 'Dedup aggressive',
+    already_mined: 'Already mined',
+    unsuitable_content: 'Unsuitable content',
+    none: 'No bottleneck',
+    unknown: 'Unknown',
+  };
+  return map[b] || b;
+}
+
+function BottleneckBadge({ bottleneck }: { bottleneck?: DominantBottleneck }) {
+  if (!bottleneck || bottleneck === 'none') return null;
+  const cls = bottleneck === 'already_mined' ? 'border-muted-foreground/40 text-muted-foreground'
+    : bottleneck === 'extractor_weak_output' ? 'border-destructive/40 text-destructive'
+    : bottleneck === 'validation_too_strict' ? 'border-amber-500/40 text-amber-600'
+    : bottleneck === 'dedup_too_aggressive' ? 'border-blue-500/40 text-blue-600'
+    : 'border-muted-foreground/40 text-muted-foreground';
+  return <Badge variant="outline" className={cn("text-[8px]", cls)}>{formatBottleneck(bottleneck)}</Badge>;
+}
+
+function PipelineTooltip({ item }: { item: ReExtractQueueItem }) {
+  if (item.ef_returned_count == null) return null;
+  return (
+    <div className="text-[10px] space-y-0.5">
+      <div>Raw returned: <strong>{item.ef_returned_count}</strong></div>
+      <div>Validated: <strong>{item.ef_validated_count ?? '—'}</strong></div>
+      <div>Saved: <strong>{item.ef_saved_count ?? '—'}</strong></div>
+      <div>Dupes skipped: <strong>{item.duplicates_skipped ?? 0}</strong></div>
+      {item.dominant_bottleneck && item.dominant_bottleneck !== 'none' && (
+        <div className="pt-1 font-semibold">Bottleneck: {formatBottleneck(item.dominant_bottleneck)}</div>
+      )}
+    </div>
+  );
 }
 
 export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtraction, onRemove, onClear, onMarkExcluded }: Props) {
