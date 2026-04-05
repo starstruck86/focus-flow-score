@@ -467,6 +467,7 @@ export async function autoOperationalizeResource(
     undefined,
     undefined,
     usedExtractionMethod,
+    heuristicFallbackAttempted,
   );
 }
 
