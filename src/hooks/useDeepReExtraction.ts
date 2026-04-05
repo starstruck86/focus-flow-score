@@ -64,6 +64,10 @@ export interface ReExtractQueueItem {
   ef_returned_count?: number;
   ef_validated_count?: number;
   ef_saved_count?: number;
+  ef_dedup_details?: Record<string, number>;
+  ef_validation_rejections?: Record<string, number>;
+  // Bottleneck classification
+  dominant_bottleneck?: DominantBottleneck;
   // Exclusion flag
   excluded_from_future?: boolean;
 }
