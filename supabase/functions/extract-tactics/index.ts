@@ -997,7 +997,7 @@ async function serverSidePersist(
   // Run-level metrics (what THIS run produced)
   const runSavedKisPer1k = contentLength > 0 ? Math.round((savedCount * 1000 / contentLength) * 100) / 100 : 0;
 
-  const finalSummary = `${result.extractionMode}: ${result.passesRun.join('+')} | ${result.rawCount} raw → ${result.dedupeResult.kept.length} deduped → ${result.validatedCount} validated → ${savedCount} saved (${duplicatesSkipped} dupes skipped) | ${savedKisPer1k} KIs/1k | ${savedDepthBucket}`;
+  const finalSummary = `${result.extractionMode}: ${result.passesRun.join('+')} | ${result.rawCount} raw → ${result.dedupeResult.kept.length} deduped → ${result.validatedCount} validated → ${savedCount} saved (${duplicatesSkipped} dupes skipped) | resource total: ${totalKIs} KIs, ${currentKisPer1k} KIs/1k | ${currentDepthBucket}`;
 
   // Create extraction_run record
   try {
@@ -1020,9 +1020,9 @@ async function serverSidePersist(
       merged_candidate_count: result.dedupeResult.kept.length,
       validated_candidate_count: result.validatedCount,
       saved_candidate_count: savedCount,
-      kis_per_1k_chars: savedKisPer1k,
-      extraction_depth_bucket: savedDepthBucket,
-      under_extracted_flag: savedUnderExtracted,
+      kis_per_1k_chars: runSavedKisPer1k,
+      extraction_depth_bucket: currentDepthBucket,
+      under_extracted_flag: currentUnderExtracted,
       validation_rejection_counts: result.validationRejections,
       dedupe_merge_counts: result.dedupeResult.details,
       error_message: error,
@@ -1032,26 +1032,22 @@ async function serverSidePersist(
     console.error('[extract-tactics] Failed to create extraction_run:', runErr);
   }
 
-  // ── Update resource snapshot — enrichment_status based on quality ──
+  // ── Update resource snapshot ──
   try {
-    // Determine appropriate enrichment_status
-    // Do NOT blindly set deep_enriched. Only upgrade if save was meaningful.
     let enrichmentStatusUpdate: string | undefined;
     if (status === 'completed' && savedCount > 0) {
       enrichmentStatusUpdate = 'deep_enriched';
     } else if (status === 'partial' && savedCount > 0) {
-      // Partial: some saved, leave enrichment as-is or set enriched (not deep)
       enrichmentStatusUpdate = 'enriched';
     }
-    // failed or 0 saved: do NOT change enrichment_status
 
-    // Map run status to job status honestly
     let jobStatus: string;
     if (status === 'completed') jobStatus = 'succeeded';
-    else if (status === 'partial') jobStatus = 'partial'; // honest partial, NOT succeeded
+    else if (status === 'partial') jobStatus = 'partial';
     else jobStatus = 'failed';
 
     const resourceUpdate: Record<string, any> = {
+      // Last run metrics
       last_extraction_run_id: runId,
       last_extraction_run_status: status,
       last_extraction_returned_ki_count: result.rawCount,
@@ -1063,14 +1059,15 @@ async function serverSidePersist(
       last_extraction_completed_at: completedAt,
       last_extraction_duration_ms: durationMs,
       last_extraction_model: MODEL_NAME,
-      // Legacy metrics columns
+      // Current resource coverage (total truth)
+      current_resource_ki_count: totalKIs,
+      current_resource_kis_per_1k: currentKisPer1k,
+      // Depth and mode
       extraction_mode: result.extractionMode,
       extraction_passes_run: result.passesRun,
-      raw_candidate_counts: result.passMetrics,
-      merged_candidate_count: result.dedupeResult.kept.length,
-      kis_per_1k_chars: savedKisPer1k,
-      extraction_depth_bucket: savedDepthBucket,
-      under_extracted_flag: savedUnderExtracted,
+      kis_per_1k_chars: currentKisPer1k,
+      extraction_depth_bucket: currentDepthBucket,
+      under_extracted_flag: currentUnderExtracted,
       last_extraction_summary: finalSummary,
       extraction_method: 'llm',
       active_job_status: jobStatus,
@@ -1084,7 +1081,7 @@ async function serverSidePersist(
     console.error('[extract-tactics] Failed to update resource:', resErr);
   }
 
-  return { runId, savedCount, activeCount, status, error, duplicatesSkipped };
+  return { runId, savedCount, activeCount, status, error, duplicatesSkipped, currentResourceKiCount: totalKIs, currentKisPer1k };
 }
 
 // ══════════════════════════════════════════════════════
