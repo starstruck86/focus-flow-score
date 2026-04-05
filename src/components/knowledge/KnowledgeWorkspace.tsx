@@ -77,6 +77,10 @@ export function KnowledgeWorkspace() {
           </div>
         </TabsContent>
 
+        <TabsContent value="coverage" className="mt-3">
+          <KnowledgeCoverageAudit />
+        </TabsContent>
+
         <TabsContent value="audit" className="mt-3">
           <div className="space-y-4">
             {/* Resource Upside Queue — primary curation surface */}
