@@ -120,36 +120,43 @@ Return high-quality tactical plays as a JSON array. Only return the JSON array, 
 
 const PASS_MODIFIERS: Record<string, string> = {
   core: `Pass 1 — Core Tactics: Extract explicit tactical knowledge directly stated in the source.
-Focus on clear tactics, frameworks, sequences, checklists, objection handling, discovery strategy, qualification logic, and execution guidance.`,
+Focus on clear tactics, frameworks, sequences, checklists, objection handling, discovery strategy, qualification logic, and execution guidance.
+For each tactic, also consider: under what CONDITIONS does it apply? What FAILURE MODES exist? How does it VARY by deal size, persona, or stage?
+Generate separate KIs for distinct conditions, failure modes, or variations when they are meaningfully different.`,
 
   hidden: `Pass 2 — Hidden Insights: Extract non-obvious insights that were likely missed in a first-pass extraction.
 
 Look for:
-- implied decision rules
-- patterns behind examples
-- nuanced "why this works"
-- hidden constraints
-- sequencing logic
-- tradeoffs
-- judgment calls
+- implied decision rules ("if X then Y" logic buried in examples)
+- patterns behind examples (what made the example work?)
+- nuanced "why this works" (psychology, timing, leverage)
+- hidden constraints and prerequisites
+- sequencing logic (order matters — why?)
+- tradeoffs and judgment calls
 - signals of good vs bad execution
+- failure modes and recovery patterns
+- edge cases and boundary conditions
+- context-dependent variations (how does this change for enterprise vs SMB? For champions vs blockers?)
 
+For narrative content: convert every anecdote into a generalized reusable principle.
 Do not repeat items already captured in Pass 1.
 Favor deeper interpretation over restating the source.`,
 
   framework: `Pass 3 — Framework Synthesis: Convert the source into reusable playbooks, mental models, and frameworks.
 
 Look for:
-- operating systems
-- repeatable sales motions
-- diagnostic trees
-- prep frameworks
-- call structures
-- coaching models
-- execution sequences
-- "if this, then that" guidance
+- operating systems and repeatable sales motions
+- diagnostic trees and decision matrices
+- prep frameworks and call structures
+- coaching models and execution sequences
+- "if this, then that" guidance and branching logic
+- classification systems (tiers, categories, archetypes)
+- scoring models and prioritization criteria
+- escalation and de-escalation patterns
+- compound plays (sequencing multiple tactics)
 
 If the source implies a framework but does not name it explicitly, synthesize it as a reusable KI.
+Break complex frameworks into component KIs when each component is independently actionable.
 Do not duplicate prior items.`,
 };
 
