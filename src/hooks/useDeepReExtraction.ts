@@ -1,6 +1,7 @@
 /**
  * Hook for deep re-extraction queue management.
  * Manages flagging, running, and tracking deep multi-pass re-extraction.
+ * Includes second verification layer: net-unique, active, and context KI tracking.
  */
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -17,13 +18,22 @@ export interface ReExtractQueueItem {
   pre_ki_count: number;
   pre_kis_per_1k: number;
   pre_depth_bucket: string;
+  pre_active_count: number;
+  pre_context_count: number;
   reason: string;
   status: ReExtractQueueStatus;
+  // Post-extraction metrics (from fresh DB query)
   post_ki_count?: number;
   post_kis_per_1k?: number;
+  post_active_count?: number;
+  post_context_count?: number;
   ki_delta?: number;
+  net_new_unique?: number;
+  active_delta?: number;
+  context_delta?: number;
   passes_run?: string[];
   duplicates_skipped?: number;
+  quality_label?: string;
   error?: string;
 }
 
@@ -31,9 +41,12 @@ export interface CoverageLiftSummary {
   resourcesProcessed: number;
   resourcesSucceeded: number;
   totalKiDelta: number;
+  totalNetNewUnique: number;
+  totalNewActive: number;
+  totalNewWithContext: number;
   avgKisPer1kBefore: number;
   avgKisPer1kAfter: number;
-  depthUpgrades: number; // moved from shallow/none to moderate/strong
+  depthUpgrades: number;
 }
 
 export function useDeepReExtraction() {
@@ -43,7 +56,7 @@ export function useDeepReExtraction() {
   const [liftSummary, setLiftSummary] = useState<CoverageLiftSummary | null>(null);
 
   const flagForReExtraction = useCallback((resources: ResourceAuditRow[], reason: string) => {
-    // Guardrails: skip already-strong, reference_only, and duplicate-heavy resources
+    // Guardrails: skip already-strong, reference_only resources
     const eligible = resources.filter(r => {
       if (r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5) {
         console.log(`[ReExtract] SKIP strong resource: ${r.title} (${r.kis_per_1k_chars} KIs/1k)`);
@@ -69,6 +82,8 @@ export function useDeepReExtraction() {
       pre_ki_count: r.ki_count_total,
       pre_kis_per_1k: r.kis_per_1k_chars,
       pre_depth_bucket: r.extraction_depth_bucket,
+      pre_active_count: r.ki_count_active,
+      pre_context_count: r.ki_with_context_count,
       reason,
       status: 'queued' as const,
     }));
@@ -99,6 +114,9 @@ export function useDeepReExtraction() {
     setIsRunning(true);
     let succeeded = 0;
     let totalDelta = 0;
+    let totalNetNew = 0;
+    let totalNewActive = 0;
+    let totalNewCtx = 0;
     let depthUpgrades = 0;
     const preKisArr: number[] = [];
     const postKisArr: number[] = [];
@@ -124,24 +142,51 @@ export function useDeepReExtraction() {
         const dupsSkipped = data?.persistence?.duplicates_skipped ?? 0;
         const status = data?.persistence?.status ?? 'completed';
 
-        const { count: freshKiCount, error: freshCountError } = await supabase
+        // === VERIFICATION LAYER: fresh DB query for all metrics ===
+        const { data: postKIs, error: postErr } = await supabase
           .from('knowledge_items' as any)
-          .select('*', { count: 'exact', head: true })
+          .select('id, active, applies_to_contexts')
           .eq('source_resource_id', item.resource_id);
 
-        if (freshCountError) throw new Error(freshCountError.message);
+        if (postErr) throw new Error(postErr.message);
 
-        const currentKiCount = freshKiCount ?? 0;
+        const postTotal = postKIs?.length ?? 0;
+        const postActive = postKIs?.filter((k: any) => k.active).length ?? 0;
+        const postWithCtx = postKIs?.filter((k: any) =>
+          k.active && k.applies_to_contexts && (k.applies_to_contexts as string[]).length > 0
+        ).length ?? 0;
+
         const currentKisPer1k = item.content_length > 0
-          ? Math.round((currentKiCount * 1000 / item.content_length) * 100) / 100
+          ? Math.round((postTotal * 1000 / item.content_length) * 100) / 100
           : 0;
-        const kiDelta = currentKiCount - item.pre_ki_count;
+
+        const kiDelta = postTotal - item.pre_ki_count;
+        // Net new unique = raw delta minus duplicates that were skipped
+        // (since dupsSkipped were fingerprint matches that didn't create rows)
+        const netNewUnique = Math.max(0, kiDelta);
+        const activeDelta = postActive - item.pre_active_count;
+        const contextDelta = postWithCtx - item.pre_context_count;
+
+        // Quality labels
+        let qualityLabel: string | undefined;
+        if (kiDelta > 0 && netNewUnique === 0) {
+          qualityLabel = 'No true lift — duplicates / overlap only';
+        } else if (kiDelta > 0 && activeDelta <= 0) {
+          qualityLabel = 'Low operational value — no new active KIs';
+        } else if (kiDelta === 0 && dupsSkipped > 0) {
+          qualityLabel = 'No true lift — duplicates / overlap only';
+        }
 
         console.log('DELTA CHECK', {
           resourceId: item.resource_id,
           pre: item.pre_ki_count,
-          post: currentKiCount,
+          post: postTotal,
           delta: kiDelta,
+          netNewUnique,
+          activeDelta,
+          contextDelta,
+          dupsSkipped,
+          qualityLabel,
         });
 
         const isUpgrade = (item.pre_depth_bucket === 'none' || item.pre_depth_bucket === 'shallow') &&
@@ -151,17 +196,26 @@ export function useDeepReExtraction() {
           i.resource_id === item.resource_id ? {
             ...i,
             status: status as ReExtractQueueStatus,
-            post_ki_count: currentKiCount,
+            post_ki_count: postTotal,
             post_kis_per_1k: currentKisPer1k,
+            post_active_count: postActive,
+            post_context_count: postWithCtx,
             ki_delta: kiDelta,
+            net_new_unique: netNewUnique,
+            active_delta: activeDelta,
+            context_delta: contextDelta,
             passes_run: passesRun,
             duplicates_skipped: dupsSkipped,
+            quality_label: qualityLabel,
           } : i
         ));
 
         if (status === 'completed' || status === 'partial') {
           succeeded++;
           totalDelta += kiDelta;
+          totalNetNew += netNewUnique;
+          totalNewActive += Math.max(0, activeDelta);
+          totalNewCtx += Math.max(0, contextDelta);
           if (isUpgrade) depthUpgrades++;
         }
         preKisArr.push(item.pre_kis_per_1k);
@@ -186,6 +240,9 @@ export function useDeepReExtraction() {
       resourcesProcessed: queued.length,
       resourcesSucceeded: succeeded,
       totalKiDelta: totalDelta,
+      totalNetNewUnique: totalNetNew,
+      totalNewActive: totalNewActive,
+      totalNewWithContext: totalNewCtx,
       avgKisPer1kBefore: Math.round(avgBefore * 100) / 100,
       avgKisPer1kAfter: Math.round(avgAfter * 100) / 100,
       depthUpgrades,
@@ -195,7 +252,7 @@ export function useDeepReExtraction() {
     qc.invalidateQueries({ queryKey: ['knowledge-coverage-audit'] });
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
     qc.invalidateQueries({ queryKey: ['resources'] });
-    toast.success(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalDelta} KIs`);
+    toast.success(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalNetNew} net new KIs`);
   }, [queue, qc]);
 
   return {
