@@ -165,7 +165,12 @@ export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props
 
         let items = extractKnowledgeHeuristic(source, existingForDedup);
         if (items.length === 0 && (resource.content?.length ?? 0) >= 100) {
-          items = await extractKnowledgeLLMFallback(source, existingForDedup);
+          const llmResult = await extractKnowledgeLLMFallback(source, existingForDedup);
+          if (llmResult.serverPersisted) {
+            succeeded++;
+            continue;
+          }
+          items = llmResult.items;
         }
 
         if (items.length === 0) {

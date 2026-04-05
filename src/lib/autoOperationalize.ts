@@ -352,7 +352,7 @@ export async function autoOperationalizeResource(
     const { isStructuredCourseLesson: isStructuredForFallback } = getTranscriptPreparationState(
       contentForExtraction, r.resource_type, r.title,
     );
-    const serverAlreadySaved = (finalExtracted as any)?._serverPersisted === true;
+    const serverAlreadySaved = knowledgeExtracted > 0 && usedExtractionMethod === 'llm';
     if (!serverAlreadySaved && finalExtracted.length === 0 && (!isAudioType || isStructuredForFallback)) {
       heuristicFallbackAttempted = true;
       finalExtracted = extractKnowledgeHeuristic(source);
