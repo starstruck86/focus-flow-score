@@ -406,7 +406,10 @@ async function normalizeStaleStatuses(
       .single();
     const isStructuredLesson = !!(titleData as any)?.title && /\s>\s/.test((titleData as any).title);
     const authContentThreshold = isStructuredLesson ? 100 : 200;
-    const hasUsableContentForAuth = (contentInfo?.content_length ?? 0) >= authContentThreshold || contentInfo?.manual_content_present === true;
+    const hasUsableContentForAuth = effectiveContentLen >= authContentThreshold || contentInfo?.manual_content_present === true;
+
+    // Check if content_length field is stale (actual content longer than stored)
+    const needsContentLengthSync = contentInfo && contentInfo.actual_content_length > contentInfo.content_length;
     
     // Determine if this resource needs normalization
     const needsNormalization = 
@@ -415,7 +418,8 @@ async function normalizeStaleStatuses(
       (isFailedJob && ['deep_enriched', 'enriched', 'extracted', 'verified', 'content_ready'].includes(state.enrichment_status)) || // failed job on otherwise healthy status
       (isNeedsAuth && hasUsableContentForAuth) || // needs_auth misclassification: content exists, reclassify to enriched
       (isIdleJob) || // stale 'idle' job status should be cleared
-      (isStaleRunning); // stale 'running' job — extraction likely timed out or lost response
+      (isStaleRunning) || // stale 'running' job — extraction likely timed out or lost response
+      (needsContentLengthSync); // stale content_length field
 
     if (!needsNormalization) continue;
 
