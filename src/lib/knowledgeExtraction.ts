@@ -25,6 +25,17 @@ export interface EdgeFunctionExtractionDebug {
   edgeFunctionReturnedItems: number | null;
 }
 
+/** Typed result from LLM extraction — replaces the old array-with-metadata hack */
+export interface LLMExtractionResult {
+  items: KnowledgeItemInsert[];
+  serverPersisted: boolean;
+  serverSavedCount: number;
+  serverActiveCount: number;
+  serverRunId: string | null;
+  serverStatus: string | null;
+  serverDuplicatesSkipped: number;
+}
+
 const edgeFunctionExtractionDebug = new Map<string, EdgeFunctionExtractionDebug>();
 
 function setEdgeFunctionExtractionDebug(resourceId: string, debug: EdgeFunctionExtractionDebug) {
@@ -579,34 +590,27 @@ function buildContexts(chapter: string, type: string): string[] {
 export async function extractKnowledgeLLMFallback(
   source: ExtractionSource,
   existingItems: Array<{ title: string; tactic_summary?: string | null }> = []
-): Promise<KnowledgeItemInsert[]> {
+): Promise<LLMExtractionResult> {
+  const emptyResult: LLMExtractionResult = {
+    items: [], serverPersisted: false, serverSavedCount: 0,
+    serverActiveCount: 0, serverRunId: null, serverStatus: null, serverDuplicatesSkipped: 0,
+  };
+
   try {
-    log.info('Running LLM fallback extraction', { resourceId: source.resourceId, title: source.title });
+    log.info('Running LLM extraction', { resourceId: source.resourceId, title: source.title });
 
     const contentStr = source.content || '';
     const { isTranscriptResource, headingCount, hasLessonBody, transcriptReady } = getTranscriptPreparationState(
-      contentStr,
-      source.resourceType,
-      source.title,
+      contentStr, source.resourceType, source.title,
     );
 
-    // Pre-extraction gate: audio/transcript resources MUST have been preprocessed
-    // (indicated by ## section headings). Raw transcripts produce garbage KIs.
-    // Exception: course lesson videos with a substantial lesson body before the
-    // transcript marker are valid extraction sources as-is.
     if (isTranscriptResource && !transcriptReady) {
-      log.warn('Blocked KI extraction: transcript not preprocessed (missing ## headings)', {
-        resourceId: source.resourceId,
-        headingCount,
-        hasLessonBody,
-        contentLength: contentStr.length,
+      log.warn('Blocked KI extraction: transcript not preprocessed', {
+        resourceId: source.resourceId, headingCount, hasLessonBody, contentLength: contentStr.length,
       });
-      return [];
+      return emptyResult;
     }
 
-    // No client-side content cap — server-side extract-tactics handles chunking
-    // for arbitrarily long transcripts via section-aware splitting
-    // Pass resourceId + userId + persist=true so the server owns all truth
     const response = await authenticatedFetch({
       functionName: 'extract-tactics',
       body: {
@@ -618,16 +622,15 @@ export async function extractKnowledgeLLMFallback(
         tags: source.tags,
         resourceType: source.resourceType,
         deepMode: (source as any).deepMode ?? false,
-        persist: true, // Server saves KIs, creates run record, updates resource
+        persist: true,
       },
       componentName: 'KnowledgeExtraction',
       timeoutMs: isTranscriptResource ? 120_000 : 60_000,
     });
 
-    const payload = await response.json().catch(() => ({} as { items?: any[]; error?: string; extraction_metrics?: any; persistence?: any }));
+    const payload = await response.json().catch(() => ({} as any));
     const returnedItems = Array.isArray(payload?.items) ? payload.items.length : 0;
 
-    // Log server persistence proof
     if (payload?.persistence) {
       log.info('Server-side persistence result', {
         resourceId: source.resourceId,
@@ -635,15 +638,10 @@ export async function extractKnowledgeLLMFallback(
         savedCount: payload.persistence.saved_count,
         activeCount: payload.persistence.active_count,
         status: payload.persistence.status,
+        duplicatesSkipped: payload.persistence.duplicates_skipped,
         error: payload.persistence.error,
       });
     }
-
-    // NOTE: Metrics are NO LONGER persisted client-side.
-    // The server (extract-tactics edge function) owns all truth:
-    // - extraction_runs record
-    // - resource.last_extraction_* columns
-    // - resource extraction_mode/passes/depth columns
 
     setEdgeFunctionExtractionDebug(source.resourceId, {
       edgeFunctionInvoked: true,
@@ -655,15 +653,13 @@ export async function extractKnowledgeLLMFallback(
 
     if (!response.ok) {
       log.warn('extract-tactics returned non-OK response', {
-        resourceId: source.resourceId,
-        status: response.status,
+        resourceId: source.resourceId, status: response.status,
         error: payload?.error || `HTTP ${response.status}`,
       });
-      return [];
+      return emptyResult;
     }
 
-    // If server persisted KIs, return empty array with metadata marker
-    // so callers (autoOperationalize) skip client-side insert.
+    // If server persisted KIs, return typed result — no array marker hack
     if (payload?.persistence && payload.persistence.saved_count > 0) {
       log.info('Server persisted KIs — skipping client-side processing', {
         resourceId: source.resourceId,
@@ -671,19 +667,18 @@ export async function extractKnowledgeLLMFallback(
         activeCount: payload.persistence.active_count,
       });
 
-      // Return a special marker array: empty items but with metadata
-      // indicating server already saved. Callers check _serverPersisted.
-      const marker: KnowledgeItemInsert[] = [];
-      (marker as any)._serverPersisted = true;
-      (marker as any)._serverSavedCount = payload.persistence.saved_count;
-      (marker as any)._serverActiveCount = payload.persistence.active_count;
-      (marker as any)._serverRunId = payload.persistence.run_id;
-      (marker as any)._serverStatus = payload.persistence.status;
-      return marker;
+      return {
+        items: [],
+        serverPersisted: true,
+        serverSavedCount: payload.persistence.saved_count,
+        serverActiveCount: payload.persistence.active_count,
+        serverRunId: payload.persistence.run_id,
+        serverStatus: payload.persistence.status,
+        serverDuplicatesSkipped: payload.persistence.duplicates_skipped ?? 0,
+      };
     }
 
     // Fallback: server did not persist (persist=false or no resourceId).
-    // Process items client-side as before.
     if (payload?.items && Array.isArray(payload.items)) {
       const rawItems: KnowledgeItemInsert[] = [];
       for (const item of payload.items) {
@@ -693,22 +688,12 @@ export async function extractKnowledgeLLMFallback(
 
         const titleLooksLikeSentence = item.title.length > 60 && !/^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize)/i.test(item.title);
         const summaryIsSameAsTitle = item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 30));
-        if (titleLooksLikeSentence && summaryIsSameAsTitle) {
-          log.info('Rejected transcript-fragment KI', { title: item.title.slice(0, 50) });
-          continue;
-        }
+        if (titleLooksLikeSentence && summaryIsSameAsTitle) continue;
 
         const trust = validateTrust(
-          {
-            title: item.title,
-            tactic_summary: item.tactic_summary,
-            when_to_use: item.when_to_use,
-            example_usage: item.example_usage,
-            chapter: item.chapter || 'messaging',
-          },
+          { title: item.title, tactic_summary: item.tactic_summary, when_to_use: item.when_to_use, example_usage: item.example_usage, chapter: item.chapter || 'messaging' },
           existingItems
         );
-
         const autoActivate = trust.passed && trust.overall >= 0.4;
 
         const ki: KnowledgeItemInsert = {
@@ -743,88 +728,35 @@ export async function extractKnowledgeLLMFallback(
           framework: item.framework || null,
         };
 
-        // Conservative auto-attribution with provenance tracking
+        // Attribution auto-correction
         const WEAK_WHO = ['', 'unknown', 'host', 'speaker', 'host of podcast'];
         const WEAK_FRAMEWORK = ['', 'general', 'unknown'];
         const whoIsWeak = !ki.who || WEAK_WHO.includes((ki.who || '').toLowerCase().trim());
         const frameworkIsWeak = !ki.framework || WEAK_FRAMEWORK.includes((ki.framework || '').toLowerCase().trim());
 
-        const attributionProvenance: Record<string, string> = {
-          who_source: 'llm',
-          framework_source: 'llm',
-        };
-
         if (whoIsWeak || frameworkIsWeak) {
-          const strongSources: { label: string; text: string }[] = [
+          const strongSources = [
             { label: 'resource_title', text: source.title || '' },
             { label: 'resource_description', text: source.description || '' },
             { label: 'source_excerpt', text: item.source_excerpt || '' },
             { label: 'tactic_summary', text: item.tactic_summary || '' },
           ];
-
-          let detected: ReturnType<typeof detectFramework> = null;
-          let signalSource = '';
-
           for (const src of strongSources) {
             if (!src.text) continue;
             const match = detectFramework(src.text);
             if (match) {
-              detected = match;
-              signalSource = src.label;
+              if (whoIsWeak) ki.who = match.who;
+              if (frameworkIsWeak) ki.framework = match.framework;
               break;
-            }
-          }
-
-          if (detected) {
-            const oldWho = ki.who;
-            const oldFramework = ki.framework;
-            let changed = false;
-
-            if (whoIsWeak) {
-              ki.who = detected.who;
-              attributionProvenance.who_source = whoIsWeak && !oldWho ? 'framework_library_fill' : 'framework_library_override';
-              attributionProvenance.signal_source = signalSource;
-              changed = true;
-            }
-            if (frameworkIsWeak) {
-              ki.framework = detected.framework;
-              attributionProvenance.framework_source = frameworkIsWeak && !oldFramework ? 'framework_library_fill' : 'framework_library_override';
-              attributionProvenance.signal_source = signalSource;
-              changed = true;
-            }
-
-            if (changed) {
-              log.info('Attribution auto-corrected', {
-                title: ki.title,
-                oldWho,
-                newWho: ki.who,
-                oldFramework,
-                newFramework: ki.framework,
-                who_source: attributionProvenance.who_source,
-                framework_source: attributionProvenance.framework_source,
-                signalSource,
-              });
             }
           }
         }
 
-        (ki as any).activation_metadata = {
-          ...((ki as any).activation_metadata || {}),
-          attribution: attributionProvenance,
-        };
-
         rawItems.push(ki);
       }
 
-      const { kept, duplicates } = deduplicateKnowledgeItems(rawItems, existingItems);
-
-      log.info('LLM fallback extraction complete (client-side mode)', {
-        resourceId: source.resourceId,
-        extracted: kept.length,
-        duplicates_suppressed: duplicates.length,
-      });
-
-      return kept;
+      const { kept } = deduplicateKnowledgeItems(rawItems, existingItems);
+      return { items: kept, serverPersisted: false, serverSavedCount: 0, serverActiveCount: 0, serverRunId: null, serverStatus: null, serverDuplicatesSkipped: 0 };
     }
   } catch (err) {
     setEdgeFunctionExtractionDebug(source.resourceId, {
@@ -834,10 +766,10 @@ export async function extractKnowledgeLLMFallback(
       edgeFunctionError: err instanceof Error ? err.message : String(err),
       edgeFunctionReturnedItems: null,
     });
-    log.warn('LLM fallback extraction failed', { resourceId: source.resourceId, error: err });
+    log.warn('LLM extraction failed', { resourceId: source.resourceId, error: err });
   }
 
-  return [];
+  return emptyResult;
 }
 
 /**
@@ -850,8 +782,10 @@ export async function extractKnowledgeAI(
   // Always prefer LLM — heuristic produces low-quality sentence fragments
   if ((source.content?.length ?? 0) >= 100) {
     try {
-      const llmItems = await extractKnowledgeLLMFallback(source, existingItems);
-      if (llmItems.length > 0) return llmItems;
+      const llmResult = await extractKnowledgeLLMFallback(source, existingItems);
+      // If server persisted, return empty — caller should check via extractKnowledgeLLMFallback directly
+      if (llmResult.serverPersisted) return [];
+      if (llmResult.items.length > 0) return llmResult.items;
     } catch {
       // LLM failed, fall through to heuristic
     }

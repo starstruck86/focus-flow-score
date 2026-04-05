@@ -356,10 +356,11 @@ export async function executeKIBackfill(
         !group.some(groupItem => groupItem.id === item.id)
       );
 
-      const newItems = await extractKnowledgeLLMFallback(source, survivingItems);
+      const llmResult = await extractKnowledgeLLMFallback(source, survivingItems);
+      const newItems = llmResult.serverPersisted ? [] : llmResult.items;
       const hasExistingGoodCoverage = survivingItems.some(item => !isWeakItem(item) && ((item.tactic_summary ?? '').trim().length >= 20));
 
-      if (newItems.length > 0 || hasExistingGoodCoverage) {
+      if (newItems.length > 0 || llmResult.serverPersisted || hasExistingGoodCoverage) {
         const { error: staleErr } = await supabase
           .from(KI_TABLE)
           .update({

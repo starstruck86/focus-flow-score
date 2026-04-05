@@ -50,14 +50,17 @@ export default function BulkExtractRunner() {
     };
 
     try {
-      const items = await extractKnowledgeLLMFallback(source);
-      if (items.length === 0) {
+      const llmResult = await extractKnowledgeLLMFallback(source);
+      if (llmResult.serverPersisted) {
+        return { resourceId: r.id, title: r.title, extracted: llmResult.serverSavedCount, activated: llmResult.serverActiveCount, error: null };
+      }
+      if (llmResult.items.length === 0) {
         return { resourceId: r.id, title: r.title, extracted: 0, activated: 0, error: 'No items returned' };
       }
 
       const { data: inserted, error } = await supabase
         .from('knowledge_items' as any)
-        .insert(items as any)
+        .insert(llmResult.items as any)
         .select('id, active');
 
       if (error) {

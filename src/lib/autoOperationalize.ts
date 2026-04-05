@@ -308,7 +308,7 @@ export async function autoOperationalizeResource(
     if (contentForExtraction.length >= 100) {
       log.info('Running LLM extraction', { resourceId, resourceType: r.resource_type });
       try {
-        finalExtracted = await extractKnowledgeLLMFallback(source);
+        const llmResult = await extractKnowledgeLLMFallback(source);
         const edgeDebug = consumeEdgeFunctionExtractionDebug(resourceId);
         if (edgeDebug) {
           edgeFunctionInvoked = edgeDebug.edgeFunctionInvoked;
@@ -318,15 +318,16 @@ export async function autoOperationalizeResource(
           edgeFunctionReturnedItems = edgeDebug.edgeFunctionReturnedItems;
         }
 
-        // Check if server already persisted KIs (new server-owned truth model)
-        const serverPersisted = (finalExtracted as any)?._serverPersisted === true;
-        if (serverPersisted) {
-          knowledgeExtracted = (finalExtracted as any)._serverSavedCount || 0;
+        // Check if server already persisted KIs (typed result, no array hack)
+        if (llmResult.serverPersisted) {
+          knowledgeExtracted = llmResult.serverSavedCount;
           usedExtractionMethod = 'llm';
           log.info('Server-persisted extraction — skipping client-side insert', {
             resourceId, savedCount: knowledgeExtracted,
-            activeCount: (finalExtracted as any)._serverActiveCount,
-            runId: (finalExtracted as any)._serverRunId,
+            activeCount: llmResult.serverActiveCount,
+            runId: llmResult.serverRunId,
+            status: llmResult.serverStatus,
+            duplicatesSkipped: llmResult.serverDuplicatesSkipped,
           });
           // Re-fetch existing items to get server-saved KIs for activation stage
           const { data: freshKIs } = await supabase
@@ -338,6 +339,7 @@ export async function autoOperationalizeResource(
             existingItems.push(...(freshKIs as any[]));
           }
         } else {
+          finalExtracted = llmResult.items;
           if (finalExtracted.length > 0) usedExtractionMethod = 'llm';
           log.info('LLM extraction result', { resourceId, count: finalExtracted.length });
         }
@@ -350,7 +352,7 @@ export async function autoOperationalizeResource(
     const { isStructuredCourseLesson: isStructuredForFallback } = getTranscriptPreparationState(
       contentForExtraction, r.resource_type, r.title,
     );
-    const serverAlreadySaved = (finalExtracted as any)?._serverPersisted === true;
+    const serverAlreadySaved = knowledgeExtracted > 0 && usedExtractionMethod === 'llm';
     if (!serverAlreadySaved && finalExtracted.length === 0 && (!isAudioType || isStructuredForFallback)) {
       heuristicFallbackAttempted = true;
       finalExtracted = extractKnowledgeHeuristic(source);

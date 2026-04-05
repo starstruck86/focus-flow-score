@@ -174,7 +174,11 @@ export async function runEnrichmentOnly(resourceId: string): Promise<MethodResul
 
   if ((r.content?.length ?? 0) >= 100) {
     try {
-      items = await extractKnowledgeLLMFallback(source);
+      const llmResult = await extractKnowledgeLLMFallback(source);
+      if (llmResult.serverPersisted) {
+        return { success: true, contentLength: llmResult.serverSavedCount };
+      }
+      items = llmResult.items;
     } catch { /* LLM failed */ }
   }
 
