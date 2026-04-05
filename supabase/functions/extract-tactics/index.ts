@@ -367,7 +367,7 @@ interface DedupeResult {
 }
 
 function deduplicateItems(items: any[], isLesson = false): DedupeResult {
-  const OVERLAP_THRESHOLD = isLesson ? 0.85 : 0.6;
+  const OVERLAP_THRESHOLD = isLesson ? 0.85 : 0.75; // Relaxed from 0.6 to 0.75 to allow more distinct items
   const result: any[] = [];
   const details = { exact_summary: 0, similar_title_summary: 0, title_overlap: 0, substring: 0 };
 
@@ -390,13 +390,14 @@ function deduplicateItems(items: any[], isLesson = false): DedupeResult {
 
       if (normalize(item.tactic_summary || '') === normalize(result[i].tactic_summary || '') && (item.tactic_summary || '').length > 20) {
         isDupe = true; dupeReason = 'exact_summary';
-      } else if (overlapRatio > 0.7 && summaryOverlap > 0.7) {
+      } else if (overlapRatio > 0.8 && summaryOverlap > 0.8) {
+        // Tightened from 0.7/0.7 — only merge when VERY similar on both title and summary
         isDupe = true; dupeReason = 'similar_title_summary';
-      } else if (overlapRatio > OVERLAP_THRESHOLD) {
+      } else if (overlapRatio > OVERLAP_THRESHOLD && summaryOverlap > 0.6) {
+        // Require summary overlap too for title-based dedup (previously title-only at 0.6)
         isDupe = true; dupeReason = 'title_overlap';
-      } else if (!isLesson && (normalize(item.title).includes(normalize(result[i].title)) || normalize(result[i].title).includes(normalize(item.title)))) {
-        isDupe = true; dupeReason = 'substring';
       }
+      // Removed aggressive substring matching that was blocking related-but-distinct items
 
       if (isDupe) {
         const existingRichness = (result[i].how_to_execute?.length || 0) + (result[i].when_to_use?.length || 0) + (result[i].source_excerpt?.length || 0);
@@ -421,7 +422,7 @@ interface ValidationResult {
 }
 
 function validateItem(item: any, isTranscript: boolean, isLesson: boolean): ValidationResult {
-  const MIN_FIELD_LEN = 40;
+  const MIN_FIELD_LEN = 30; // Relaxed from 40 to allow more concise but valid items
   const HTML_PATTERN = /<[a-z][\s\S]*>/i;
 
   if (!item.title) return { passed: false, rejectionReason: 'missing_title' };
@@ -439,24 +440,26 @@ function validateItem(item: any, isTranscript: boolean, isLesson: boolean): Vali
     return { passed: true, rejectionReason: null };
   }
 
-  if (!item.framework || item.framework.trim() === '') return { passed: false, rejectionReason: 'missing_framework' };
-  if (!item.who || item.who.trim() === '') return { passed: false, rejectionReason: 'missing_who' };
-  if (!item.source_excerpt || item.source_excerpt.length < 20) return { passed: false, rejectionReason: 'missing_source_excerpt' };
-  if (!item.source_location || item.source_location.trim() === '') return { passed: false, rejectionReason: 'missing_source_location' };
-  if (!item.when_to_use || item.when_to_use.length < 20) return { passed: false, rejectionReason: 'short_when_to_use' };
+  // Auto-fill missing metadata fields to prevent validation rejection on otherwise good items
+  if (!item.framework || item.framework.trim() === '') item.framework = 'General';
+  if (!item.who || item.who.trim() === '') item.who = 'Unknown';
+  if (!item.source_location || item.source_location.trim() === '') item.source_location = 'Document content';
+
+  if (!item.source_excerpt || item.source_excerpt.length < 15) return { passed: false, rejectionReason: 'missing_source_excerpt' };
+  if (!item.when_to_use || item.when_to_use.length < 15) return { passed: false, rejectionReason: 'short_when_to_use' };
   if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return { passed: false, rejectionReason: 'short_macro_situation' };
   if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return { passed: false, rejectionReason: 'short_micro_strategy' };
   if (!item.how_to_execute || item.how_to_execute.length < MIN_FIELD_LEN) return { passed: false, rejectionReason: 'short_how_to_execute' };
-  if (example.length < 30) return { passed: false, rejectionReason: 'short_example_usage' };
+  if (example.length < 20) return { passed: false, rejectionReason: 'short_example_usage' };
 
   const allText = [item.title, item.tactic_summary, item.macro_situation, item.how_to_execute, example].join(' ');
   if (HTML_PATTERN.test(allText)) return { passed: false, rejectionReason: 'html_artifacts' };
 
   if (isTranscript) {
-    const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|de-escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|expose|surface|extract|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|invert|plant|seed|earn|secure|protect|defend|block|pre-empt|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|slow|speed|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i;
+    const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|de-escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|expose|surface|extract|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|invert|plant|seed|earn|secure|protect|defend|block|pre-empt|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|slow|speed|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome|diagnose|discover|distinguish|recognize|convert|transform|transition|shift|adopt|abandon|replace|supplement|integrate|prioritize)\b/i;
     if (!verbLedPattern.test(item.title.trim())) return { passed: false, rejectionReason: 'transcript_title_not_verb_led' };
     if (item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 25))) return { passed: false, rejectionReason: 'summary_mirrors_title' };
-    if (item.how_to_execute.length < 80) return { passed: false, rejectionReason: 'short_how_to_execute_transcript' };
+    if (item.how_to_execute.length < 50) return { passed: false, rejectionReason: 'short_how_to_execute_transcript' };
   }
 
   return { passed: true, rejectionReason: null };
@@ -562,6 +565,7 @@ async function runMultiPassExtraction(
   resourceType: string | undefined,
   category: ContentCategory,
   deepMode: boolean,
+  existingKiContext: string = '',
 ): Promise<MultiPassResult> {
   const isTranscript = category === 'transcript';
   const baseSystem = isTranscript ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM : BASE_SYSTEM_PROMPT;
@@ -609,7 +613,7 @@ ${description ? `Description: ${description}` : ''}
 Tags: ${(tags || []).join(', ')}
 ${chunkLabel ? `Position: ${chunkLabel}` : ''}
 ${sectionHeadings ? `Sections covered: ${sectionHeadings}` : ''}
-
+${existingKiContext}
 Source content:
 ${chunks[i]}`;
 
@@ -1170,7 +1174,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist } = body;
+    let { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist } = body;
 
     // Resolve userId
     if (!userId) userId = bodyUserId;
@@ -1178,6 +1182,31 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'userId required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // ── AUTO-FETCH: if resourceId provided but no content, fetch from DB ──
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    if (resourceId && (!content || content.length < 100)) {
+      console.log(`[extract-tactics] No content in body, fetching resource ${resourceId} from DB`);
+      const { data: resource, error: fetchErr } = await supabaseAdmin
+        .from('resources')
+        .select('title, content, description, tags, resource_type, content_length')
+        .eq('id', resourceId)
+        .single();
+
+      if (fetchErr || !resource) {
+        console.error('[extract-tactics] Failed to fetch resource:', fetchErr);
+        return new Response(JSON.stringify({ error: 'Resource not found' }), {
+          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      title = title || resource.title;
+      content = resource.content;
+      description = description || resource.description;
+      tags = tags || resource.tags;
+      resourceType = resourceType || resource.resource_type;
+      console.log(`[extract-tactics] Fetched resource: "${title}" | ${(content || '').length} chars`);
     }
 
     if (!content || content.length < 100) {
@@ -1199,6 +1228,22 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ── EXISTING KI AWARENESS: tell the model what already exists for this resource ──
+    let existingKiContext = '';
+    if (deepMode && resourceId) {
+      const { data: existingKIs } = await supabaseAdmin
+        .from('knowledge_items')
+        .select('title, tactic_summary')
+        .eq('source_resource_id', resourceId)
+        .eq('user_id', userId)
+        .limit(100);
+      if (existingKIs && existingKIs.length > 0) {
+        existingKiContext = `\n\nALREADY EXTRACTED (${existingKIs.length} KIs exist for this resource — do NOT repeat these, find NEW insights):\n` +
+          existingKIs.map((ki: any, i: number) => `${i + 1}. ${ki.title}`).join('\n') +
+          '\n\nFocus on concepts, frameworks, tactics, and insights NOT covered above. Go deeper into sections that were under-explored.\n';
+      }
+    }
+
     // Classify content category once, pass through entire pipeline
     const category = classifyContentCategory(content, title, resourceType);
 
@@ -1210,8 +1255,8 @@ Deno.serve(async (req) => {
       result = await extractLessonTwoStage(LOVABLE_API_KEY, cleanedContent, title, description, tags, resourceType);
     } else {
       const isTranscript = category === 'transcript';
-      console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} multi-pass | ${content.length} chars | deepMode=${!!deepMode}`);
-      result = await runMultiPassExtraction(LOVABLE_API_KEY, content, title, description, tags || [], resourceType, category, !!deepMode);
+      console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} multi-pass | ${content.length} chars | deepMode=${!!deepMode} | existingKIs=${existingKiContext ? 'yes' : 'no'}`);
+      result = await runMultiPassExtraction(LOVABLE_API_KEY, content, title, description, tags || [], resourceType, category, !!deepMode, existingKiContext);
     }
 
     // Server-side persistence when resourceId is provided
@@ -1219,7 +1264,7 @@ Deno.serve(async (req) => {
     let persistResult: PersistenceResult | null = null;
 
     if (shouldPersist) {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+      // supabaseAdmin already created above for resource fetch / existing KI query
       persistResult = await serverSidePersist(
         supabaseAdmin, resourceId, userId, result, content.length, startedAt,
       );

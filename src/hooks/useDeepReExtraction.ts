@@ -17,9 +17,20 @@ export type NoLiftReason =
   | 'already_dense'
   | 'duplicate_heavy'
   | 'extractor_returned_no_new_items'
+  | 'extractor_weak_output'
   | 'items_generated_but_filtered_out'
   | 'items_generated_but_deduped'
+  | 'validation_too_strict'
   | 'resource_not_suitable'
+  | 'unknown';
+
+export type DominantBottleneck =
+  | 'extractor_weak_output'
+  | 'validation_too_strict'
+  | 'dedup_too_aggressive'
+  | 'already_mined'
+  | 'unsuitable_content'
+  | 'none'
   | 'unknown';
 
 export interface ReExtractQueueItem {
@@ -53,6 +64,10 @@ export interface ReExtractQueueItem {
   ef_returned_count?: number;
   ef_validated_count?: number;
   ef_saved_count?: number;
+  ef_dedup_details?: Record<string, number>;
+  ef_validation_rejections?: Record<string, number>;
+  // Bottleneck classification
+  dominant_bottleneck?: DominantBottleneck;
   // Exclusion flag
   excluded_from_future?: boolean;
 }
@@ -88,14 +103,34 @@ function diagnoseNoLift(
   efSaved: number,
   contentLength: number,
 ): NoLiftReason | undefined {
-  if (kiDelta > 0) return undefined; // has lift, no diagnosis needed
+  if (kiDelta > 0) return undefined;
 
   if (preKisPer1k >= 1.5) return 'already_dense';
   if (efReturned === 0) return 'extractor_returned_no_new_items';
-  if (efReturned > 0 && efValidated === 0) return 'items_generated_but_filtered_out';
+  if (efReturned > 0 && efReturned < 3) return 'extractor_weak_output';
+  if (efReturned > 0 && efValidated === 0) return 'validation_too_strict';
+  if (efReturned > 0 && efValidated > 0 && efValidated < efReturned * 0.3) return 'validation_too_strict';
   if (efValidated > 0 && efSaved === 0 && dupsSkipped > 0) return 'items_generated_but_deduped';
   if (dupsSkipped > 0 && efSaved === 0) return 'duplicate_heavy';
+  if (efReturned > 0 && efValidated === 0) return 'items_generated_but_filtered_out';
   if (contentLength < 1500) return 'resource_not_suitable';
+  return 'unknown';
+}
+
+function classifyBottleneck(
+  efReturned: number,
+  efValidated: number,
+  efSaved: number,
+  dupsSkipped: number,
+  preKisPer1k: number,
+  kiDelta: number,
+): DominantBottleneck {
+  if (kiDelta > 0) return 'none';
+  if (preKisPer1k >= 1.5) return 'already_mined';
+  if (efReturned === 0) return 'extractor_weak_output';
+  if (efReturned > 0 && efValidated < efReturned * 0.3) return 'validation_too_strict';
+  if (efValidated > 0 && efSaved === 0 && dupsSkipped > 0) return 'dedup_too_aggressive';
+  if (efReturned < 3) return 'extractor_weak_output';
   return 'unknown';
 }
 
@@ -242,6 +277,13 @@ export function useDeepReExtraction() {
           kiDelta, item.pre_kis_per_1k, dupsSkipped,
           efReturned, efValidated, efSaved, item.content_length
         );
+        const dominantBottleneck = classifyBottleneck(
+          efReturned, efValidated, efSaved, dupsSkipped, item.pre_kis_per_1k, kiDelta
+        );
+
+        // Capture edge function diagnostic details
+        const efDedupDetails = data?.model_metrics?.dedupe_merge_counts ?? {};
+        const efValidationRejections = data?.model_metrics?.validation_rejection_counts ?? {};
 
         // Quality label (human-readable)
         let qualityLabel: string | undefined;
@@ -250,8 +292,10 @@ export function useDeepReExtraction() {
             already_dense: 'Already dense — resource well-mined',
             duplicate_heavy: 'No true lift — duplicates / overlap only',
             extractor_returned_no_new_items: 'Extractor returned no new items',
+            extractor_weak_output: 'Extractor produced too few candidates',
             items_generated_but_filtered_out: 'Items generated but failed validation',
             items_generated_but_deduped: 'Items generated but all were duplicates',
+            validation_too_strict: 'Validation rejected most candidates',
             resource_not_suitable: 'Resource not suitable for extraction',
             unknown: 'No lift — cause unknown',
           };
@@ -273,10 +317,13 @@ export function useDeepReExtraction() {
           postKisPer1k: postKisPer1k,
           liftStatus,
           noLiftReason,
+          dominantBottleneck,
           efReturned,
           efValidated,
           efSaved,
           dupsSkipped,
+          efDedupDetails,
+          efValidationRejections,
         });
 
         const isUpgrade = (item.pre_depth_bucket === 'none' || item.pre_depth_bucket === 'shallow') &&
@@ -302,6 +349,9 @@ export function useDeepReExtraction() {
             ef_returned_count: efReturned,
             ef_validated_count: efValidated,
             ef_saved_count: efSaved,
+            ef_dedup_details: efDedupDetails,
+            ef_validation_rejections: efValidationRejections,
+            dominant_bottleneck: dominantBottleneck,
           } : i
         ));
 
@@ -365,7 +415,13 @@ export function useDeepReExtraction() {
     qc.invalidateQueries({ queryKey: ['knowledge-coverage-audit'] });
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
     qc.invalidateQueries({ queryKey: ['resources'] });
-    toast.success(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalNetNew} net new KIs`);
+    if (totalNetNew > 0) {
+      toast.success(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalNetNew} net new KIs`);
+    } else if (noLiftCount === succeeded && succeeded > 0) {
+      toast.warning(`${succeeded}/${queued.length} runs completed, but produced no measurable coverage lift`);
+    } else {
+      toast.info(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalNetNew} net new KIs`);
+    }
   }, [queue, qc]);
 
   return {

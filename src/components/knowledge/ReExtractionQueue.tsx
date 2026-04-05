@@ -94,8 +94,10 @@ function formatNoLiftReason(reason: NoLiftReason): string {
     already_dense: 'Already dense — resource well-mined',
     duplicate_heavy: 'All new items were duplicates of existing KIs',
     extractor_returned_no_new_items: 'AI extractor returned no new items from this content',
+    extractor_weak_output: 'AI extractor produced too few candidates',
     items_generated_but_filtered_out: 'Items generated but failed quality validation',
     items_generated_but_deduped: 'Items generated but all matched existing fingerprints',
+    validation_too_strict: 'Validation rejected most candidates — may need threshold tuning',
     resource_not_suitable: 'Content too thin or not suitable for extraction',
     unknown: 'No lift — cause could not be determined',
   };
