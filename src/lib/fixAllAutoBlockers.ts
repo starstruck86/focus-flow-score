@@ -44,32 +44,29 @@ export interface FixResourceOutcome {
   rootCauseExplanation: string | null;
   resolutionOutcome: string | null;
   normalized: boolean;
-  /** Was this resource found during post-normalization rediscovery? */
   rediscovered: boolean;
-  /** Did extraction actually execute for this resource? */
   extractionRan: boolean;
   wrapperPageDetected: boolean;
   attachmentExtractionAttempted: boolean;
   attachmentExtractionOutcome: string | null;
   originalEnrichmentStatus: string | null;
   originalJobStatus: string | null;
-  /** Content length at time of processing */
   contentLength: number;
-  /** Extraction method used (llm, heuristic, none) */
   extractionMethod: string | null;
-  /** Was this resource in the original needs_extraction blocker group? */
   inOriginalExtractionGroup: boolean;
-  /** Was this resource included in the extraction batch sent to autoOperationalizeBatch? */
   batchIncluded: boolean;
-  /** Was heuristic fallback attempted after LLM? */
   heuristicFallbackAttempted: boolean;
-  /** Extraction tier from pipeline contract */
   extractionTier: string | null;
-  /** Post-run fresh DB state */
   postRunEnrichmentStatus: string | null;
   postRunJobStatus: string | null;
   postRunKiCount: number | null;
   postRunActiveKiCount: number | null;
+  /** Edge function invocation proof */
+  edgeFunctionInvoked: boolean;
+  edgeFunctionName: string | null;
+  edgeFunctionStatus: number | null;
+  edgeFunctionError: string | null;
+  edgeFunctionReturnedItems: number | null;
 }
 
 export interface BlockerDiff {
@@ -238,9 +235,9 @@ async function fixNeedsExtraction(
   onProgress?: (msg: string) => void,
   onResourcePhase?: (resourceId: string, phase: 'start' | 'done', result?: any) => void,
   callbacks?: FixAllCallbacks,
-): Promise<{ phaseResult: FixPhaseResult; resourceResults: Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string; heuristicFallbackAttempted?: boolean; extractionTier?: string }> }> {
+): Promise<{ phaseResult: FixPhaseResult; resourceResults: Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string; heuristicFallbackAttempted?: boolean; extractionTier?: string; edgeFunctionInvoked?: boolean; edgeFunctionName?: string | null; edgeFunctionStatus?: number | null; edgeFunctionError?: string | null; edgeFunctionReturnedItems?: number | null }> }> {
   const result: FixPhaseResult = { phase: 'extraction', attempted: resourceIds.length, succeeded: 0, failed: 0, errors: [] };
-  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string; heuristicFallbackAttempted?: boolean; extractionTier?: string }>();
+  const resourceResults = new Map<string, { kisCreated: number; kisActive: number; reason?: string; succeeded: boolean; extractionMethod?: string; heuristicFallbackAttempted?: boolean; extractionTier?: string; edgeFunctionInvoked?: boolean; edgeFunctionName?: string | null; edgeFunctionStatus?: number | null; edgeFunctionError?: string | null; edgeFunctionReturnedItems?: number | null }>();
 
   if (resourceIds.length === 0) return { phaseResult: result, resourceResults };
 
@@ -274,6 +271,11 @@ async function fixNeedsExtraction(
         extractionMethod: r.extractionMethod,
         heuristicFallbackAttempted: r.heuristicFallbackAttempted,
         extractionTier: r.extractionTier,
+        edgeFunctionInvoked: r.edgeFunctionInvoked,
+        edgeFunctionName: r.edgeFunctionName,
+        edgeFunctionStatus: r.edgeFunctionStatus,
+        edgeFunctionError: r.edgeFunctionError,
+        edgeFunctionReturnedItems: r.edgeFunctionReturnedItems,
       });
       if (r.knowledgeExtracted > 0 || r.operationalized) {
         result.succeeded++;
@@ -615,6 +617,11 @@ export async function runFixAllAutoBlockers(
         postRunJobStatus: null,
         postRunKiCount: null,
         postRunActiveKiCount: null,
+        edgeFunctionInvoked: false,
+        edgeFunctionName: null,
+        edgeFunctionStatus: null,
+        edgeFunctionError: null,
+        edgeFunctionReturnedItems: null,
       });
     }
   };
@@ -760,6 +767,11 @@ export async function runFixAllAutoBlockers(
         outcome.extractionMethod = detail.extractionMethod ?? null;
         outcome.heuristicFallbackAttempted = detail.heuristicFallbackAttempted ?? false;
         outcome.extractionTier = detail.extractionTier ?? null;
+        outcome.edgeFunctionInvoked = detail.edgeFunctionInvoked ?? false;
+        outcome.edgeFunctionName = detail.edgeFunctionName ?? null;
+        outcome.edgeFunctionStatus = detail.edgeFunctionStatus ?? null;
+        outcome.edgeFunctionError = detail.edgeFunctionError ?? null;
+        outcome.edgeFunctionReturnedItems = detail.edgeFunctionReturnedItems ?? null;
         
         // Track wrapper-page attachment handling
         if (outcome.wrapperPageDetected) {

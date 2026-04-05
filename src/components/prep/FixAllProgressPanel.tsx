@@ -255,6 +255,20 @@ export function FixAllProgressPanel({ progress, isRunning, result, onRetryStalle
                             not in extraction batch
                           </Badge>
                         ) : null}
+                        {/* Edge function invocation proof */}
+                        {o.edgeFunctionInvoked ? (
+                          <Badge variant="outline" className="text-[8px] h-3 px-1 border-blue-500/30 text-blue-700">
+                            edge fn invoked ({o.edgeFunctionStatus ?? '?'})
+                            {o.edgeFunctionReturnedItems != null && ` → ${o.edgeFunctionReturnedItems} items`}
+                          </Badge>
+                        ) : o.extractionRan && o.edgeFunctionInvoked === false ? (
+                          <Badge variant="outline" className="text-[8px] h-3 px-1 border-destructive/30 text-destructive">
+                            edge fn not invoked
+                          </Badge>
+                        ) : null}
+                        {o.edgeFunctionError && (
+                          <span className="text-destructive text-[8px] truncate max-w-[180px]">fn err: {o.edgeFunctionError}</span>
+                        )}
                         {o.heuristicFallbackAttempted && (
                           <Badge variant="outline" className="text-[8px] h-3 px-1 border-amber-500/20 text-amber-600/70">
                             heuristic tried
