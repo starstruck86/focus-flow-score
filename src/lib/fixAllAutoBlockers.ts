@@ -44,6 +44,10 @@ export interface FixResourceOutcome {
   rootCauseExplanation: string | null;
   resolutionOutcome: string | null;
   normalized: boolean;
+  /** Was this resource found during post-normalization rediscovery? */
+  rediscovered: boolean;
+  /** Did extraction actually execute for this resource? */
+  extractionRan: boolean;
   wrapperPageDetected: boolean;
   attachmentExtractionAttempted: boolean;
   attachmentExtractionOutcome: string | null;
