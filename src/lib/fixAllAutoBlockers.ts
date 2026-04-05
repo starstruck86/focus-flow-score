@@ -462,7 +462,13 @@ async function normalizeStaleStatuses(
         update.active_job_status = null;
         update.active_job_error = null;
         update.manual_input_required = false;
-        log.info('Reclassifying needs_auth → enriched (content exists)', { id, content_length: contentInfo?.content_length, threshold: authContentThreshold, isStructuredLesson });
+        log.info('Reclassifying needs_auth → enriched (content exists)', { id, content_length: effectiveContentLen, threshold: authContentThreshold, isStructuredLesson });
+      }
+
+      // Sync stale content_length field with actual content length
+      if (needsContentLengthSync && contentInfo) {
+        update.content_length = contentInfo.actual_content_length;
+        log.info('Syncing stale content_length', { id, old: contentInfo.content_length, new: contentInfo.actual_content_length });
       }
 
       const { error } = await supabase
