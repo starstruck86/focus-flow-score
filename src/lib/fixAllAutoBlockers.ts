@@ -574,6 +574,9 @@ export async function runFixAllAutoBlockers(
     }
   }
 
+  // Track which resources were in the original needs_extraction group
+  const originalExtractionIds = new Set(groupMap.get('needs_extraction') ?? []);
+
   const initOutcome = (id: string, phase: string, blockerType: string) => {
     if (!outcomeMap.has(id)) {
       const origState = originalStateMap.get(id);
@@ -602,6 +605,14 @@ export async function runFixAllAutoBlockers(
         originalJobStatus: origState?.active_job_status ?? null,
         contentLength: origState?.content?.length ?? 0,
         extractionMethod: null,
+        inOriginalExtractionGroup: originalExtractionIds.has(id),
+        batchIncluded: false,
+        heuristicFallbackAttempted: false,
+        extractionTier: null,
+        postRunEnrichmentStatus: null,
+        postRunJobStatus: null,
+        postRunKiCount: null,
+        postRunActiveKiCount: null,
       });
     }
   };
