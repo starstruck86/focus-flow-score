@@ -17,6 +17,7 @@ import { ResourceReadinessSheet } from '@/components/prep/ResourceReadinessSheet
 import { ResourceUpsideQueue } from './ResourceUpsideQueue';
 import { LowYieldReviewQueue } from './LowYieldReviewQueue';
 import { DuplicateReviewQueue } from './DuplicateReviewQueue';
+import { KnowledgeCoverageAudit } from './KnowledgeCoverageAudit';
 
 export function KnowledgeWorkspace() {
   const [subTab, setSubTab] = useState('overview');
