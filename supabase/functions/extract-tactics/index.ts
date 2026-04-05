@@ -422,7 +422,7 @@ interface ValidationResult {
 }
 
 function validateItem(item: any, isTranscript: boolean, isLesson: boolean): ValidationResult {
-  const MIN_FIELD_LEN = 40;
+  const MIN_FIELD_LEN = 30; // Relaxed from 40 to allow more concise but valid items
   const HTML_PATTERN = /<[a-z][\s\S]*>/i;
 
   if (!item.title) return { passed: false, rejectionReason: 'missing_title' };
@@ -440,24 +440,26 @@ function validateItem(item: any, isTranscript: boolean, isLesson: boolean): Vali
     return { passed: true, rejectionReason: null };
   }
 
-  if (!item.framework || item.framework.trim() === '') return { passed: false, rejectionReason: 'missing_framework' };
-  if (!item.who || item.who.trim() === '') return { passed: false, rejectionReason: 'missing_who' };
-  if (!item.source_excerpt || item.source_excerpt.length < 20) return { passed: false, rejectionReason: 'missing_source_excerpt' };
-  if (!item.source_location || item.source_location.trim() === '') return { passed: false, rejectionReason: 'missing_source_location' };
-  if (!item.when_to_use || item.when_to_use.length < 20) return { passed: false, rejectionReason: 'short_when_to_use' };
+  // Auto-fill missing metadata fields to prevent validation rejection on otherwise good items
+  if (!item.framework || item.framework.trim() === '') item.framework = 'General';
+  if (!item.who || item.who.trim() === '') item.who = 'Unknown';
+  if (!item.source_location || item.source_location.trim() === '') item.source_location = 'Document content';
+
+  if (!item.source_excerpt || item.source_excerpt.length < 15) return { passed: false, rejectionReason: 'missing_source_excerpt' };
+  if (!item.when_to_use || item.when_to_use.length < 15) return { passed: false, rejectionReason: 'short_when_to_use' };
   if (!item.macro_situation || item.macro_situation.length < MIN_FIELD_LEN) return { passed: false, rejectionReason: 'short_macro_situation' };
   if (!item.micro_strategy || item.micro_strategy.length < MIN_FIELD_LEN) return { passed: false, rejectionReason: 'short_micro_strategy' };
   if (!item.how_to_execute || item.how_to_execute.length < MIN_FIELD_LEN) return { passed: false, rejectionReason: 'short_how_to_execute' };
-  if (example.length < 30) return { passed: false, rejectionReason: 'short_example_usage' };
+  if (example.length < 20) return { passed: false, rejectionReason: 'short_example_usage' };
 
   const allText = [item.title, item.tactic_summary, item.macro_situation, item.how_to_execute, example].join(' ');
   if (HTML_PATTERN.test(allText)) return { passed: false, rejectionReason: 'html_artifacts' };
 
   if (isTranscript) {
-    const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|de-escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|expose|surface|extract|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|invert|plant|seed|earn|secure|protect|defend|block|pre-empt|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|slow|speed|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome)\b/i;
+    const verbLedPattern = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize|apply|deploy|establish|negotiate|prepare|structure|deliver|align|engage|trigger|introduce|propose|define|prioritize|execute|implement|develop|assess|evaluate|document|track|measure|monitor|adapt|adjust|escalate|de-escalate|simplify|clarify|articulate|illustrate|connect|link|uncover|reveal|expose|surface|extract|capture|name|label|restate|mirror|acknowledge|interrupt|pause|reset|redirect|flip|invert|plant|seed|earn|secure|protect|defend|block|pre-empt|anticipate|signal|flag|commit|lock|tie|bundle|unbundle|separate|isolate|stack|layer|combine|sequence|time|delay|accelerate|slow|speed|pace|control|manage|own|run|facilitate|orchestrate|coordinate|coach|mentor|advise|guide|steer|navigate|overcome|diagnose|discover|distinguish|recognize|convert|transform|transition|shift|adopt|abandon|replace|supplement|integrate|prioritize)\b/i;
     if (!verbLedPattern.test(item.title.trim())) return { passed: false, rejectionReason: 'transcript_title_not_verb_led' };
     if (item.tactic_summary.toLowerCase().startsWith(item.title.toLowerCase().slice(0, 25))) return { passed: false, rejectionReason: 'summary_mirrors_title' };
-    if (item.how_to_execute.length < 80) return { passed: false, rejectionReason: 'short_how_to_execute_transcript' };
+    if (item.how_to_execute.length < 50) return { passed: false, rejectionReason: 'short_how_to_execute_transcript' };
   }
 
   return { passed: true, rejectionReason: null };
