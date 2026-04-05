@@ -158,6 +158,14 @@ export function KnowledgeCoverageAudit() {
         onSelectResource={setSelectedResourceId}
       />
 
+      {/* Real Bottleneck Review */}
+      <RealBottleneckReview
+        resources={audit.resources}
+        queueResults={deepReExtract.queue}
+        onFlagForReExtraction={handleFlagForReExtraction}
+        onSelectResource={setSelectedResourceId}
+      />
+
       {/* Re-Extraction Queue */}
       <ReExtractionQueue
         queue={deepReExtract.queue}
