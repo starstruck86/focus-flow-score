@@ -621,8 +621,32 @@ export async function extractKnowledgeLLMFallback(
       timeoutMs: isTranscriptResource ? 120_000 : 60_000,
     });
 
-    const payload = await response.json().catch(() => ({} as { items?: any[]; error?: string }));
+    const payload = await response.json().catch(() => ({} as { items?: any[]; error?: string; extraction_metrics?: any }));
     const returnedItems = Array.isArray(payload?.items) ? payload.items.length : 0;
+
+    // Persist extraction metrics to resources table if returned
+    if (payload?.extraction_metrics && source.resourceId) {
+      try {
+        const metrics = payload.extraction_metrics;
+        const { supabase } = await import('@/integrations/supabase/client');
+        await supabase
+          .from('resources' as any)
+          .update({
+            extraction_mode: metrics.extraction_mode,
+            extraction_passes_run: metrics.extraction_passes_run,
+            raw_candidate_counts: metrics.raw_candidate_counts,
+            merged_candidate_count: metrics.merged_candidate_count,
+            kis_per_1k_chars: metrics.kis_per_1k_chars,
+            extraction_depth_bucket: metrics.extraction_depth_bucket,
+            under_extracted_flag: metrics.under_extracted_flag,
+            last_extraction_summary: metrics.last_extraction_summary,
+            extraction_method: 'llm',
+          } as any)
+          .eq('id', source.resourceId);
+      } catch (metricsErr) {
+        log.warn('Failed to persist extraction metrics', { resourceId: source.resourceId, error: metricsErr });
+      }
+    }
 
     setEdgeFunctionExtractionDebug(source.resourceId, {
       edgeFunctionInvoked: true,
