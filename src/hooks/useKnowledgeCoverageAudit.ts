@@ -148,6 +148,16 @@ export function useKnowledgeCoverageAudit() {
           merged_candidate_count: r.merged_candidate_count || 0,
           last_extraction_summary: r.last_extraction_summary || null,
           extraction_method: method,
+          // Server-owned truth fields
+          last_extraction_run_id: r.last_extraction_run_id || null,
+          last_extraction_run_status: r.last_extraction_run_status || null,
+          last_extraction_returned_ki_count: r.last_extraction_returned_ki_count ?? null,
+          last_extraction_deduped_ki_count: r.last_extraction_deduped_ki_count ?? null,
+          last_extraction_validated_ki_count: r.last_extraction_validated_ki_count ?? null,
+          last_extraction_saved_ki_count: r.last_extraction_saved_ki_count ?? null,
+          last_extraction_error: r.last_extraction_error || null,
+          last_extraction_duration_ms: r.last_extraction_duration_ms ?? null,
+          last_extraction_model: r.last_extraction_model || null,
         };
       });
 
