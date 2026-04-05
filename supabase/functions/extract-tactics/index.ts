@@ -915,10 +915,9 @@ async function serverSidePersist(
 
   try {
     if (kiRows.length === 0) {
-      // All items were duplicates or no items to save
       status = duplicatesSkipped > 0 ? 'completed' : (result.validatedCount > 0 ? 'failed' : 'completed');
     } else {
-      // Save KIs in batches of 50
+      // Save KIs in batches of 50 — DB unique index on (user_id, ki_fingerprint) is the final guard
       for (let i = 0; i < kiRows.length; i += 50) {
         const batch = kiRows.slice(i, i + 50);
         const { error: insertErr, data: inserted } = await supabaseAdmin
@@ -926,16 +925,35 @@ async function serverSidePersist(
           .insert(batch)
           .select('id');
         if (insertErr) {
-          console.error(`[extract-tactics] KI save batch error:`, insertErr);
-          error = insertErr.message;
-          status = savedCount > 0 ? 'partial' : 'failed';
-          break;
+          // Check if it's a unique constraint violation (DB-level duplicate catch)
+          if (insertErr.code === '23505' && insertErr.message?.includes('fingerprint')) {
+            console.log(`[extract-tactics] DB-level duplicate caught, falling back to one-by-one insert`);
+            // Insert one-by-one, skip DB-level duplicates
+            for (const row of batch) {
+              const { error: singleErr, data: singleInserted } = await supabaseAdmin
+                .from('knowledge_items')
+                .insert(row)
+                .select('id');
+              if (singleErr) {
+                if (singleErr.code === '23505') { duplicatesSkipped++; continue; }
+                console.error(`[extract-tactics] Single KI save error:`, singleErr);
+              } else {
+                savedCount += singleInserted?.length ?? 1;
+              }
+            }
+          } else {
+            console.error(`[extract-tactics] KI save batch error:`, insertErr);
+            error = insertErr.message;
+            status = savedCount > 0 ? 'partial' : 'failed';
+            break;
+          }
+        } else {
+          savedCount += inserted?.length ?? batch.length;
         }
-        savedCount += inserted?.length ?? batch.length;
       }
     }
 
-    // Activate high-quality items (new + existing non-user-edited)
+    // Activate high-quality items
     if (savedCount > 0) {
       const ACTIVATION_THRESHOLD = 0.6;
       const activatableIds = kiRows
@@ -964,11 +982,20 @@ async function serverSidePersist(
     error = err.message;
   }
 
-  // ── Compute saved-truth metrics using correct category ──
-  const totalSavedForResource = savedCount + (existingKIs?.filter((k: any) => !userEditedIds.has(k.id)).length ?? 0);
-  const savedKisPer1k = contentLength > 0 ? Math.round((savedCount * 1000 / contentLength) * 100) / 100 : 0;
-  const savedDepthBucket = computeDepthBucket(savedCount, contentLength, category);
-  const savedUnderExtracted = computeUnderExtracted(savedCount, contentLength, category);
+  // ── Compute CURRENT RESOURCE totals (not just this run) ──
+  const { count: currentResourceKiCount } = await supabaseAdmin
+    .from('knowledge_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('source_resource_id', resourceId)
+    .eq('user_id', userId);
+  
+  const totalKIs = currentResourceKiCount ?? 0;
+  const currentKisPer1k = contentLength > 0 ? Math.round((totalKIs * 1000 / contentLength) * 100) / 100 : 0;
+  const currentDepthBucket = computeDepthBucket(totalKIs, contentLength, category);
+  const currentUnderExtracted = computeUnderExtracted(totalKIs, contentLength, category);
+
+  // Run-level metrics (what THIS run produced)
+  const runSavedKisPer1k = contentLength > 0 ? Math.round((savedCount * 1000 / contentLength) * 100) / 100 : 0;
 
   const finalSummary = `${result.extractionMode}: ${result.passesRun.join('+')} | ${result.rawCount} raw → ${result.dedupeResult.kept.length} deduped → ${result.validatedCount} validated → ${savedCount} saved (${duplicatesSkipped} dupes skipped) | ${savedKisPer1k} KIs/1k | ${savedDepthBucket}`;
 
