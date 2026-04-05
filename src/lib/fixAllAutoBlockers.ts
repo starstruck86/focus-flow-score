@@ -254,6 +254,7 @@ async function fixNeedsExtraction(
         kisActive: r.knowledgeActivated,
         reason: r.reason,
         succeeded: r.knowledgeExtracted > 0 || r.operationalized,
+        extractionMethod: r.extractionMethod,
       });
       if (r.knowledgeExtracted > 0 || r.operationalized) {
         result.succeeded++;
