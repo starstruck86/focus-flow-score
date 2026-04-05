@@ -823,6 +823,10 @@ export async function runFixAllAutoBlockers(
       outcome.kisCreated = Math.max(outcome.kisCreated, post.kiCount);
       outcome.kisActive = Math.max(outcome.kisActive, post.activeKiCount);
       outcome.finalTruthState = post.enrichmentStatus;
+      outcome.postRunEnrichmentStatus = post.enrichmentStatus;
+      outcome.postRunJobStatus = post.jobStatus;
+      outcome.postRunKiCount = post.kiCount;
+      outcome.postRunActiveKiCount = post.activeKiCount;
       
       if (post.kiCount > 0) {
         outcome.succeeded = true;
