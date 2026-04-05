@@ -606,47 +606,44 @@ export async function extractKnowledgeLLMFallback(
 
     // No client-side content cap — server-side extract-tactics handles chunking
     // for arbitrarily long transcripts via section-aware splitting
+    // Pass resourceId + userId + persist=true so the server owns all truth
     const response = await authenticatedFetch({
       functionName: 'extract-tactics',
       body: {
         resourceId: source.resourceId,
+        userId: source.userId,
         title: source.title,
         content: source.content,
         description: source.description,
         tags: source.tags,
         resourceType: source.resourceType,
         deepMode: (source as any).deepMode ?? false,
+        persist: true, // Server saves KIs, creates run record, updates resource
       },
       componentName: 'KnowledgeExtraction',
       timeoutMs: isTranscriptResource ? 120_000 : 60_000,
     });
 
-    const payload = await response.json().catch(() => ({} as { items?: any[]; error?: string; extraction_metrics?: any }));
+    const payload = await response.json().catch(() => ({} as { items?: any[]; error?: string; extraction_metrics?: any; persistence?: any }));
     const returnedItems = Array.isArray(payload?.items) ? payload.items.length : 0;
 
-    // Persist extraction metrics to resources table if returned
-    if (payload?.extraction_metrics && source.resourceId) {
-      try {
-        const metrics = payload.extraction_metrics;
-        const { supabase } = await import('@/integrations/supabase/client');
-        await supabase
-          .from('resources' as any)
-          .update({
-            extraction_mode: metrics.extraction_mode,
-            extraction_passes_run: metrics.extraction_passes_run,
-            raw_candidate_counts: metrics.raw_candidate_counts,
-            merged_candidate_count: metrics.merged_candidate_count,
-            kis_per_1k_chars: metrics.kis_per_1k_chars,
-            extraction_depth_bucket: metrics.extraction_depth_bucket,
-            under_extracted_flag: metrics.under_extracted_flag,
-            last_extraction_summary: metrics.last_extraction_summary,
-            extraction_method: 'llm',
-          } as any)
-          .eq('id', source.resourceId);
-      } catch (metricsErr) {
-        log.warn('Failed to persist extraction metrics', { resourceId: source.resourceId, error: metricsErr });
-      }
+    // Log server persistence proof
+    if (payload?.persistence) {
+      log.info('Server-side persistence result', {
+        resourceId: source.resourceId,
+        runId: payload.persistence.run_id,
+        savedCount: payload.persistence.saved_count,
+        activeCount: payload.persistence.active_count,
+        status: payload.persistence.status,
+        error: payload.persistence.error,
+      });
     }
+
+    // NOTE: Metrics are NO LONGER persisted client-side.
+    // The server (extract-tactics edge function) owns all truth:
+    // - extraction_runs record
+    // - resource.last_extraction_* columns
+    // - resource extraction_mode/passes/depth columns
 
     setEdgeFunctionExtractionDebug(source.resourceId, {
       edgeFunctionInvoked: true,
