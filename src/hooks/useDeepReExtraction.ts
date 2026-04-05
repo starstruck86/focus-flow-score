@@ -277,6 +277,13 @@ export function useDeepReExtraction() {
           kiDelta, item.pre_kis_per_1k, dupsSkipped,
           efReturned, efValidated, efSaved, item.content_length
         );
+        const dominantBottleneck = classifyBottleneck(
+          efReturned, efValidated, efSaved, dupsSkipped, item.pre_kis_per_1k, kiDelta
+        );
+
+        // Capture edge function diagnostic details
+        const efDedupDetails = data?.model_metrics?.dedupe_merge_counts ?? {};
+        const efValidationRejections = data?.model_metrics?.validation_rejection_counts ?? {};
 
         // Quality label (human-readable)
         let qualityLabel: string | undefined;
@@ -310,10 +317,13 @@ export function useDeepReExtraction() {
           postKisPer1k: postKisPer1k,
           liftStatus,
           noLiftReason,
+          dominantBottleneck,
           efReturned,
           efValidated,
           efSaved,
           dupsSkipped,
+          efDedupDetails,
+          efValidationRejections,
         });
 
         const isUpgrade = (item.pre_depth_bucket === 'none' || item.pre_depth_bucket === 'shallow') &&
@@ -339,6 +349,9 @@ export function useDeepReExtraction() {
             ef_returned_count: efReturned,
             ef_validated_count: efValidated,
             ef_saved_count: efSaved,
+            ef_dedup_details: efDedupDetails,
+            ef_validation_rejections: efValidationRejections,
+            dominant_bottleneck: dominantBottleneck,
           } : i
         ));
 
