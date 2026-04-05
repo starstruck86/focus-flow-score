@@ -385,7 +385,8 @@ async function normalizeStaleStatuses(
     const isRetrying = state.enrichment_status === 'extraction_retrying';
     const isNeedsAuth = state.enrichment_status === 'needs_auth';
     const contentInfo = contentMap.get(id);
-    const hasUsableContent = (contentInfo?.content_length ?? 0) >= 200 || contentInfo?.manual_content_present === true;
+    const effectiveContentLen = Math.max(contentInfo?.content_length ?? 0, contentInfo?.actual_content_length ?? 0);
+    const hasUsableContent = effectiveContentLen >= 200 || contentInfo?.manual_content_present === true;
     const isIdleJob = state.active_job_status === 'idle';
     
   // Detect stale 'running' jobs (started > 10 min ago with no update)
