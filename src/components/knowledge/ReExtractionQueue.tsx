@@ -251,15 +251,30 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                       <TableCell className="text-[11px] text-right font-mono text-muted-foreground">
                         {item.duplicates_skipped != null ? item.duplicates_skipped : '—'}
                       </TableCell>
-                      <TableCell className="text-[10px] max-w-[100px]">
+                      <TableCell className="text-[10px] max-w-[130px]">
                         {item.status === 'queued' ? (
                           <span className="text-muted-foreground truncate text-[9px]">{item.reason}</span>
                         ) : (item.status === 'completed' || item.status === 'partial') ? (
-                          <LiftBadge
-                            liftStatus={item.lift_status}
-                            noLiftReason={item.no_lift_reason}
-                            qualityLabel={item.quality_label}
-                          />
+                          <div className="space-y-0.5">
+                            <LiftBadge
+                              liftStatus={item.lift_status}
+                              noLiftReason={item.no_lift_reason}
+                              qualityLabel={item.quality_label}
+                            />
+                            <BottleneckBadge bottleneck={item.dominant_bottleneck} />
+                            {item.ef_returned_count != null && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <div className="text-[8px] text-muted-foreground cursor-help">
+                                    {item.ef_returned_count}→{item.ef_validated_count ?? '?'}→{item.ef_saved_count ?? '?'}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent><PipelineTooltip item={item} /></TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        ) : item.status === 'failed' ? (
+                          <span className="text-[9px] text-destructive truncate">{item.error || 'Failed'}</span>
                         ) : null}
                       </TableCell>
                       <TableCell>
