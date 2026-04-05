@@ -44,6 +44,10 @@ export function KnowledgeWorkspace() {
             <ClipboardCheck className="h-3 w-3" />
             Review
           </TabsTrigger>
+          <TabsTrigger value="coverage" className={SHELL.tabs.triggerWithIcon}>
+            <Microscope className="h-3 w-3" />
+            Coverage
+          </TabsTrigger>
           <TabsTrigger value="audit" className={SHELL.tabs.triggerWithIcon}>
             <Shield className="h-3 w-3" />
             Audit
