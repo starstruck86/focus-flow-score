@@ -165,6 +165,7 @@ export function KnowledgeCoverageAudit() {
         onRunDeepExtraction={deepReExtract.runDeepExtraction}
         onRemove={deepReExtract.removeFromQueue}
         onClear={deepReExtract.clearQueue}
+        onMarkExcluded={deepReExtract.markExcluded}
       />
 
       {/* Under-Extracted Recovery */}
@@ -380,6 +381,9 @@ export function KnowledgeCoverageAudit() {
         open={!!selectedResourceId}
         onOpenChange={(open) => { if (!open) setSelectedResourceId(null); }}
         onReExtract={handleFlagSingle}
+        onMarkExcluded={deepReExtract.markExcluded}
+        isExcluded={selectedResourceId ? deepReExtract.excludedResourceIds.has(selectedResourceId) : false}
+        lastQueueResult={selectedResourceId ? deepReExtract.queue.find(q => q.resource_id === selectedResourceId) : undefined}
       />
     </div>
   );
