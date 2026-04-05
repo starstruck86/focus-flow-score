@@ -713,6 +713,7 @@ export async function runFixAllAutoBlockers(
       const outcome = outcomeMap.get(resourceId);
       if (outcome) {
         outcome.attempted = true;
+        outcome.extractionRan = true;
         outcome.succeeded = detail.succeeded;
         outcome.kisCreated = detail.kisCreated;
         outcome.kisActive = detail.kisActive;
