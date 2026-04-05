@@ -562,6 +562,7 @@ async function runMultiPassExtraction(
   resourceType: string | undefined,
   category: ContentCategory,
   deepMode: boolean,
+  existingKiContext: string = '',
 ): Promise<MultiPassResult> {
   const isTranscript = category === 'transcript';
   const baseSystem = isTranscript ? BASE_SYSTEM_PROMPT + TRANSCRIPT_ADDENDUM : BASE_SYSTEM_PROMPT;
