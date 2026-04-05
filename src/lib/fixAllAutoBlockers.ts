@@ -612,6 +612,11 @@ export async function runFixAllAutoBlockers(
         postRunJobStatus: null,
         postRunKiCount: null,
         postRunActiveKiCount: null,
+        edgeFunctionInvoked: false,
+        edgeFunctionName: null,
+        edgeFunctionStatus: null,
+        edgeFunctionError: null,
+        edgeFunctionReturnedItems: null,
       });
     }
   };
