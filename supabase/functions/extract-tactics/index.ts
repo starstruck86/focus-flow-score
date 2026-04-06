@@ -1761,8 +1761,8 @@ Deno.serve(async (req) => {
             await new Promise(r => setTimeout(r, 1000));
           }
         } catch (err: any) {
+          const isTimeout = err.message?.includes('timed out after');
           lastError = err.message;
-          consecutiveFailures++;
           console.error(`[JOB MODE] batch failure | ${batchIdx + 1}/${totalBatches} | error=${err.message}`);
 
           await supabaseAdmin.from('extraction_batches').upsert({
@@ -1773,6 +1773,15 @@ Deno.serve(async (req) => {
             completed_at: new Date().toISOString(),
           }, { onConflict: 'resource_id,batch_index' });
 
+          if (isTimeout) {
+            // Timeout means we've used most of our time budget.
+            // Don't count as consecutive failure — trigger watchdog so self-invoke fires.
+            console.log(`[JOB MODE] batch timeout → triggering watchdog for self-invoke`);
+            stoppedByWatchdog = true;
+            break;
+          }
+
+          consecutiveFailures++;
           if (consecutiveFailures >= 2) {
             console.log(`[JOB MODE] Stopping: 2 consecutive failures`);
             break;
