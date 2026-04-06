@@ -578,6 +578,16 @@ export function useDeepReExtraction() {
     for (let batchIdx = resumeFrom; batchIdx < slices.length; batchIdx++) {
       const slice = slices[batchIdx];
 
+      console.log('[ReExtract] EXECUTING BATCH', {
+        resourceId: item.resource_id,
+        batchIndex: batchIdx,
+        batchTotal,
+        charStart: slice.start,
+        charEnd: slice.end,
+        semanticStartMarker: slice.semanticStartMarker,
+        semanticEndMarker: slice.semanticEndMarker,
+      });
+
       if (isBatched) {
         setQueue(prev => prev.map(i =>
           i.resource_id === item.resource_id ? {
