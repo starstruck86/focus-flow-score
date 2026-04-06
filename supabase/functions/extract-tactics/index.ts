@@ -1566,6 +1566,7 @@ Deno.serve(async (req) => {
       let ledgerBatchTotal = 0;
 
       if (ledgerRows && ledgerRows.length > 0) {
+        // Build slices from existing ledger rows
         for (const b of ledgerRows) {
           slices.push({
             start: b.char_start,
@@ -1575,17 +1576,25 @@ Deno.serve(async (req) => {
           });
         }
         ledgerBatchTotal = Math.max(...ledgerRows.map((b: any) => b.batch_total || b.batch_index + 1));
+
+        // If ledger is incomplete (not all batches persisted yet), compute remaining
+        // slices using SEMANTIC chunking on the remaining content, not naive division.
         if (slices.length < ledgerBatchTotal) {
-          let pos = slices.length > 0 ? slices[slices.length - 1].end : 0;
-          for (let i = slices.length; i < ledgerBatchTotal && pos < fullLength; i++) {
-            const chunkSize = Math.ceil((fullLength - pos) / (ledgerBatchTotal - i));
-            slices.push({
-              start: pos,
-              end: Math.min(pos + chunkSize, fullLength),
-              semanticStartMarker: `(batch ${i + 1} start)`,
-              semanticEndMarker: `(batch ${i + 1} end)`,
-            });
-            pos += chunkSize;
+          const lastEnd = slices.length > 0 ? slices[slices.length - 1].end : 0;
+          const remainingContent = fullContent.slice(lastEnd);
+          if (remainingContent.length > 0) {
+            const remainingSlices = computeSemanticSlicesInline(remainingContent.length, remainingContent);
+            for (let i = 0; i < remainingSlices.length; i++) {
+              slices.push({
+                start: lastEnd + remainingSlices[i].start,
+                end: lastEnd + remainingSlices[i].end,
+                semanticStartMarker: remainingSlices[i].semanticStartMarker,
+                semanticEndMarker: remainingSlices[i].semanticEndMarker,
+              });
+            }
+            // Update total to match actual slices computed
+            ledgerBatchTotal = slices.length;
+            console.log(`[JOB MODE] Filled ${remainingSlices.length} remaining slices via semantic chunking (total now ${slices.length})`);
           }
         }
       } else {
