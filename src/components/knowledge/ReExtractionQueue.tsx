@@ -233,7 +233,11 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                         <div className="text-[11px] max-w-[120px] truncate">{item.title}</div>
                         <div className="text-[9px] text-muted-foreground">
                           {(item.content_length / 1000).toFixed(1)}k chars
+                          {item.is_batched && <span className="ml-1 text-primary">• batched</span>}
                         </div>
+                        {item.batch_status && item.status !== 'completed' && (
+                          <div className="text-[9px] font-mono text-primary">{item.batch_status}</div>
+                        )}
                       </TableCell>
                       <TableCell className="text-[11px] text-right font-mono">
                         {item.pre_ki_count}
