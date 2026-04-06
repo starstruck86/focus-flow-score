@@ -218,8 +218,11 @@ export function KnowledgeCoverageAudit() {
                         <TableCell className="text-[11px] font-mono">{r.extraction_batches_completed}/{r.extraction_batch_total}</TableCell>
                         <TableCell className="text-[11px] text-blue-600 font-medium">Batch {r.extraction_batches_completed + 1}</TableCell>
                         <TableCell>
-                          <Button variant="default" size="sm" className="h-6 text-[10px] gap-1" onClick={() => handleResumeSingle(r)} disabled={deepReExtract.isRunning}>
-                            <RotateCcw className="h-3 w-3" /> Resume
+                          <Button variant="default" size="sm" className="h-6 text-[10px] gap-1" onClick={() => {
+                              console.log('[RESUME CTA BUTTON] clicked from Resumable Extractions card', { resourceId: r.resource_id, title: r.title });
+                              handleResumeSingle(r);
+                            }} disabled={deepReExtract.isRunning}>
+                            <RotateCcw className="h-3 w-3" /> {deepReExtract.isRunning ? 'Running…' : 'Resume'}
                           </Button>
                         </TableCell>
                       </TableRow>
