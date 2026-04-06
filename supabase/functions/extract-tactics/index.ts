@@ -891,6 +891,7 @@ async function serverSidePersist(
   const completedAt = new Date().toISOString();
   const durationMs = Date.now() - startedAt;
   const category = result.category;
+  console.log(`[extract-tactics] PERSIST START: resource=${resourceId} | ${result.validatedCount} validated items | ${contentLength} chars`);
 
   // ── Step 1: Fetch existing KIs for this resource to check for duplicates ──
   const { data: existingKIs } = await supabaseAdmin
@@ -965,9 +966,12 @@ async function serverSidePersist(
   let status: 'completed' | 'partial' | 'failed' = 'completed';
   let error: string | null = null;
 
+  console.log(`[extract-tactics] PERSIST: ${kiRows.length} rows to save, ${duplicatesSkipped} pre-filtered as dupes`);
+
   try {
     if (kiRows.length === 0) {
       status = duplicatesSkipped > 0 ? 'completed' : (result.validatedCount > 0 ? 'failed' : 'completed');
+      console.log(`[extract-tactics] PERSIST: 0 rows to save (${duplicatesSkipped} dupes skipped)`);
     } else {
       // Save KIs in batches of 50 — DB unique index on (user_id, ki_fingerprint) is the final guard
       for (let i = 0; i < kiRows.length; i += 50) {
@@ -1001,6 +1005,7 @@ async function serverSidePersist(
           }
         } else {
           savedCount += inserted?.length ?? batch.length;
+          console.log(`[extract-tactics] PERSIST: batch saved ${inserted?.length ?? batch.length} KIs (total so far: ${savedCount})`);
         }
       }
     }
@@ -1050,6 +1055,7 @@ async function serverSidePersist(
   const runSavedKisPer1k = contentLength > 0 ? Math.round((savedCount * 1000 / contentLength) * 100) / 100 : 0;
 
   const finalSummary = `${result.extractionMode}: ${result.passesRun.join('+')} | ${result.rawCount} raw → ${result.dedupeResult.kept.length} deduped → ${result.validatedCount} validated → ${savedCount} saved (${duplicatesSkipped} dupes skipped) | resource total: ${totalKIs} KIs, ${currentKisPer1k} KIs/1k | ${currentDepthBucket}`;
+  console.log(`[extract-tactics] PERSIST COMPLETE: ${finalSummary}`);
 
   // Create extraction_run record
   try {
