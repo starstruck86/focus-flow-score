@@ -1262,16 +1262,77 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════
     // JOB MODE — server-side multi-batch orchestration
     // Processes ALL remaining batches in one invocation.
+    // Includes: heartbeat, stale-batch reconciliation,
+    // idempotency guard, self-invoke continuation, and
+    // resource snapshot reconciliation.
     // ══════════════════════════════════════════════════════
     if (jobMode && resourceId) {
-      console.log(`[extract-tactics] JOB MODE: starting server-side multi-batch for resource=${resourceId}`);
+      console.log(`[JOB MODE] start | resource=${resourceId}`);
       const JOB_WATCHDOG_MS = 4.5 * 60 * 1000; // 4.5 min cap (edge function limit ~5min)
+      const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 min = stale
       const jobStart = Date.now();
+
+      // ── IDEMPOTENCY GUARD ──
+      const { data: currentResource } = await supabaseAdmin
+        .from('resources')
+        .select('active_job_status, active_job_updated_at, active_job_started_at, title')
+        .eq('id', resourceId)
+        .single();
+
+      if (currentResource?.active_job_status === 'running') {
+        const lastUpdate = currentResource.active_job_updated_at
+          ? new Date(currentResource.active_job_updated_at).getTime()
+          : currentResource.active_job_started_at
+          ? new Date(currentResource.active_job_started_at).getTime()
+          : 0;
+        const staleness = Date.now() - lastUpdate;
+
+        if (staleness < STALE_THRESHOLD_MS) {
+          console.log(`[JOB MODE] IDEMPOTENCY REJECT: resource=${resourceId} already running (${Math.round(staleness / 1000)}s ago)`);
+          return new Response(JSON.stringify({
+            status: 'already_running',
+            resourceId,
+            message: 'Extraction already in progress',
+            stalenessMs: staleness,
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        } else {
+          console.log(`[JOB MODE] stale running reconciled | resource=${resourceId} | stale for ${Math.round(staleness / 1000)}s — clearing and continuing`);
+        }
+      }
+
+      // ── Heartbeat helper ──
+      const updateHeartbeat = async (statusNote: string) => {
+        await supabaseAdmin.from('resources').update({
+          active_job_updated_at: new Date().toISOString(),
+          extraction_batch_status: statusNote,
+        }).eq('id', resourceId);
+      };
 
       // Fetch full content
       const fullContent = content;
       const fullLength = fullContentLength || fullContent.length;
       const category = classifyContentCategory(fullContent, title, resourceType);
+
+      // ── STALE BATCH RECONCILIATION ──
+      // Before starting, reconcile any batches stuck in 'running'
+      const { data: staleRunningBatches } = await supabaseAdmin
+        .from('extraction_batches')
+        .select('batch_index, started_at')
+        .eq('resource_id', resourceId)
+        .eq('status', 'running');
+
+      if (staleRunningBatches && staleRunningBatches.length > 0) {
+        for (const staleBatch of staleRunningBatches) {
+          const batchAge = Date.now() - new Date(staleBatch.started_at || 0).getTime();
+          if (batchAge > STALE_THRESHOLD_MS) {
+            console.log(`[JOB MODE] stale running reconciled | batch ${staleBatch.batch_index} stuck for ${Math.round(batchAge / 1000)}s — marking pending`);
+            await supabaseAdmin.from('extraction_batches').update({
+              status: 'pending',
+              error: `Stale lock cleared after ${Math.round(batchAge / 1000)}s`,
+            }).eq('resource_id', resourceId).eq('batch_index', staleBatch.batch_index);
+          }
+        }
+      }
 
       // Get batch ledger from DB
       const { data: ledgerRows } = await supabaseAdmin
@@ -1341,9 +1402,58 @@ Deno.serve(async (req) => {
         (ledgerRows || []).filter((b: any) => b.status === 'completed').map((b: any) => b.batch_index)
       );
 
-      // Mark resource as running
+      // If all batches already done, skip
+      if (completedSet.size >= totalBatches) {
+        console.log(`[JOB MODE] All ${totalBatches} batches already complete — nothing to do`);
+
+        // Reconcile resource snapshot from durable truth
+        const { count: finalKiCount } = await supabaseAdmin
+          .from('knowledge_items')
+          .select('*', { count: 'exact', head: true })
+          .eq('source_resource_id', resourceId)
+          .eq('user_id', userId);
+        const finalTotal = finalKiCount ?? 0;
+        const finalKisPer1k = fullLength > 0 ? Math.round((finalTotal * 1000 / fullLength) * 100) / 100 : 0;
+
+        // Reconcile extraction_attempt_count
+        const { count: runCount } = await supabaseAdmin
+          .from('extraction_runs')
+          .select('*', { count: 'exact', head: true })
+          .eq('resource_id', resourceId);
+
+        await supabaseAdmin.from('resources').update({
+          active_job_status: 'succeeded',
+          extraction_batch_status: 'completed',
+          extraction_is_resumable: false,
+          extraction_batches_completed: totalBatches,
+          extraction_batch_total: totalBatches,
+          current_resource_ki_count: finalTotal,
+          current_resource_kis_per_1k: finalKisPer1k,
+          kis_per_1k_chars: finalKisPer1k,
+          extraction_depth_bucket: computeDepthBucket(finalTotal, fullLength, category),
+          under_extracted_flag: computeUnderExtracted(finalTotal, fullLength, category),
+          extraction_attempt_count: runCount ?? 0,
+        }).eq('id', resourceId);
+
+        return new Response(JSON.stringify({
+          jobMode: true,
+          allComplete: true,
+          batchesProcessedThisRun: 0,
+          totalBatches,
+          completedBatches: totalBatches,
+          totalSaved: 0,
+          currentResourceKiCount: finalTotal,
+          currentKisPer1k: finalKisPer1k,
+          stoppedByWatchdog: false,
+          error: null,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Mark resource as running with heartbeat
       await supabaseAdmin.from('resources').update({
         active_job_status: 'running',
+        active_job_started_at: new Date().toISOString(),
+        active_job_updated_at: new Date().toISOString(),
         extraction_batch_status: `job_mode_running`,
         extraction_is_resumable: true,
         extraction_batch_total: totalBatches,
@@ -1362,9 +1472,10 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Watchdog: check time budget
-        if (Date.now() - jobStart > JOB_WATCHDOG_MS) {
-          console.log(`[JOB MODE] Watchdog: approaching time limit after ${batchesProcessedThisJob} batches`);
+        // Watchdog: check time budget BEFORE starting the batch
+        const elapsed = Date.now() - jobStart;
+        if (elapsed > JOB_WATCHDOG_MS) {
+          console.log(`[JOB MODE] watchdog stop | ${batchesProcessedThisJob} batches in ${Math.round(elapsed / 1000)}s — will self-invoke`);
           stoppedByWatchdog = true;
           break;
         }
@@ -1373,12 +1484,13 @@ Deno.serve(async (req) => {
         const batchContent = fullContent.slice(slice.start, slice.end);
         if (batchContent.length < 50) {
           console.log(`[JOB MODE] Skipping batch ${batchIdx + 1} — content too short (${batchContent.length} chars)`);
+          completedSet.add(batchIdx);
           continue;
         }
 
-        console.log(`[JOB MODE] Processing batch ${batchIdx + 1}/${totalBatches} | chars ${slice.start}-${slice.end} (${batchContent.length} chars)`);
+        console.log(`[JOB MODE] batch started | ${batchIdx + 1}/${totalBatches} | chars ${slice.start}-${slice.end} (${batchContent.length} chars) | elapsed=${Math.round(elapsed / 1000)}s`);
 
-        // Mark batch as running
+        // Mark batch as running + heartbeat
         await supabaseAdmin.from('extraction_batches').upsert({
           resource_id: resourceId,
           user_id: userId,
@@ -1392,10 +1504,8 @@ Deno.serve(async (req) => {
           started_at: new Date().toISOString(),
         }, { onConflict: 'resource_id,batch_index' });
 
-        // Update resource progress
-        await supabaseAdmin.from('resources').update({
-          extraction_batch_status: `running_batch_${batchIdx + 1}_of_${totalBatches}`,
-        }).eq('id', resourceId);
+        // Heartbeat
+        await updateHeartbeat(`running_batch_${batchIdx + 1}_of_${totalBatches}`);
 
         try {
           // Refresh existing KI context before each batch
@@ -1450,17 +1560,19 @@ Deno.serve(async (req) => {
           totalSaved += batchPersist.savedCount;
           consecutiveFailures = 0;
 
-          // Update resource progress snapshot after each batch
+          // Heartbeat + progress update
           await supabaseAdmin.from('resources').update({
+            active_job_updated_at: new Date().toISOString(),
             extraction_batches_completed: completedSet.size,
             current_resource_ki_count: batchPersist.currentResourceKiCount,
             current_resource_kis_per_1k: batchPersist.currentKisPer1k,
             kis_per_1k_chars: batchPersist.currentKisPer1k,
             extraction_depth_bucket: computeDepthBucket(batchPersist.currentResourceKiCount, fullLength, category),
             under_extracted_flag: computeUnderExtracted(batchPersist.currentResourceKiCount, fullLength, category),
+            extraction_batch_status: `running_batch_${batchIdx + 2}_of_${totalBatches}`,
           }).eq('id', resourceId);
 
-          console.log(`[JOB MODE] Batch ${batchIdx + 1}/${totalBatches} complete: saved=${batchPersist.savedCount}, total=${batchPersist.currentResourceKiCount}`);
+          console.log(`[JOB MODE] batch completed | ${batchIdx + 1}/${totalBatches} | saved=${batchPersist.savedCount} total=${batchPersist.currentResourceKiCount}`);
 
           // Brief pause between batches to avoid rate limits
           if (batchIdx < slices.length - 1) {
@@ -1492,12 +1604,8 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Final resource update
+      // ── FINAL RESOURCE SNAPSHOT RECONCILIATION ──
       const allComplete = completedSet.size >= totalBatches;
-      const finalJobStatus = allComplete ? 'completed'
-        : stoppedByWatchdog ? 'partial_complete_resumable'
-        : consecutiveFailures >= 2 ? 'partial_complete_resumable'
-        : 'partial_complete_resumable';
 
       const { count: finalKiCount } = await supabaseAdmin
         .from('knowledge_items')
@@ -1507,8 +1615,21 @@ Deno.serve(async (req) => {
       const finalTotal = finalKiCount ?? 0;
       const finalKisPer1k = fullLength > 0 ? Math.round((finalTotal * 1000 / fullLength) * 100) / 100 : 0;
 
+      // Reconcile extraction_attempt_count from durable truth
+      const { count: totalRunCount } = await supabaseAdmin
+        .from('extraction_runs')
+        .select('*', { count: 'exact', head: true })
+        .eq('resource_id', resourceId);
+
+      const finalJobStatus = allComplete ? 'completed'
+        : stoppedByWatchdog ? 'partial_complete_resumable'
+        : consecutiveFailures >= 2 ? 'partial_complete_resumable'
+        : 'partial_complete_resumable';
+
       await supabaseAdmin.from('resources').update({
         active_job_status: allComplete ? 'succeeded' : 'partial',
+        active_job_updated_at: new Date().toISOString(),
+        active_job_finished_at: allComplete ? new Date().toISOString() : null,
         last_extraction_run_status: finalJobStatus,
         extraction_batches_completed: completedSet.size,
         extraction_batch_total: totalBatches,
@@ -1519,17 +1640,20 @@ Deno.serve(async (req) => {
         kis_per_1k_chars: finalKisPer1k,
         extraction_depth_bucket: computeDepthBucket(finalTotal, fullLength, category),
         under_extracted_flag: computeUnderExtracted(finalTotal, fullLength, category),
+        extraction_attempt_count: totalRunCount ?? 0,
         last_extraction_summary: allComplete
           ? `Job mode complete: ${totalBatches} batches, ${finalTotal} KIs, ${finalKisPer1k} KIs/1k`
           : `Job mode partial: ${completedSet.size}/${totalBatches} batches, ${finalTotal} KIs. ${stoppedByWatchdog ? 'Stopped by watchdog.' : `Error: ${lastError}`}`,
       }).eq('id', resourceId);
 
-      // If watchdog stopped us and there are remaining batches, self-invoke for continuation
-      if (stoppedByWatchdog && !allComplete) {
-        console.log(`[JOB MODE] Self-invoking continuation for remaining batches`);
+      console.log(`[JOB MODE] DONE: ${completedSet.size}/${totalBatches} batches, ${batchesProcessedThisJob} processed this run, ${totalSaved} saved, allComplete=${allComplete}`);
+
+      // If not all complete, self-invoke for continuation
+      if (!allComplete) {
+        console.log(`[JOB MODE] self-invoke: ${totalBatches - completedSet.size} batches remaining`);
         try {
           const selfUrl = `${supabaseUrl}/functions/v1/extract-tactics`;
-          fetch(selfUrl, {
+          const selfResp = await fetch(selfUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -1537,17 +1661,19 @@ Deno.serve(async (req) => {
             },
             body: JSON.stringify({
               resourceId,
+              userId,
               deepMode: true,
               persist: true,
               jobMode: true,
             }),
-          }).catch(e => console.error('[JOB MODE] Self-invoke failed:', e));
-        } catch (e) {
-          console.error('[JOB MODE] Self-invoke error:', e);
+          });
+          console.log(`[JOB MODE] self-invoke ${selfResp.ok ? 'success' : 'failure'} | status=${selfResp.status}`);
+          // Consume response body to prevent resource leak
+          await selfResp.text();
+        } catch (e: any) {
+          console.error(`[JOB MODE] self-invoke failure:`, e.message);
         }
       }
-
-      console.log(`[JOB MODE] DONE: ${completedSet.size}/${totalBatches} batches, ${batchesProcessedThisJob} processed this run, ${totalSaved} saved, allComplete=${allComplete}`);
 
       return new Response(JSON.stringify({
         jobMode: true,
