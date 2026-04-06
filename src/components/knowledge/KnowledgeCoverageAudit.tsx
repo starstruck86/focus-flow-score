@@ -464,7 +464,14 @@ export function KnowledgeCoverageAudit() {
         resource={selectedResource}
         open={!!selectedResourceId}
         onOpenChange={(open) => { if (!open) setSelectedResourceId(null); }}
-        onReExtract={handleFlagSingle}
+        onReExtract={(r) => {
+          const isResumableResource = isResumable(r);
+          if (isResumableResource) {
+            handleResumeSingle(r);
+          } else {
+            handleFlagSingle(r);
+          }
+        }}
         onMarkExcluded={deepReExtract.markExcluded}
         isExcluded={selectedResourceId ? deepReExtract.excludedResourceIds.has(selectedResourceId) : false}
         lastQueueResult={selectedResourceId ? deepReExtract.queue.find(q => q.resource_id === selectedResourceId) : undefined}
