@@ -80,7 +80,11 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
 
   if (!r) return null;
 
-  const needsDeepReExtract = !isExcluded && (r.under_extracted_flag || r.extraction_depth_bucket === 'shallow' || r.extraction_depth_bucket === 'none');
+  const canManualReExtract = !isExcluded
+    && r.resource_type !== 'reference_only'
+    && r.content_length >= 1500
+    && !(r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5);
+  const isLargeDocRecoveryCandidate = r.content_length >= 40000 && r.kis_per_1k_chars < 1.5;
   const qr = lastQueueResult;
 
   return (
@@ -272,17 +276,19 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
 
           {/* Actions */}
           <div className="pt-2 space-y-2">
-            {needsDeepReExtract && (
+            {canManualReExtract && (
               <>
                 <Button
                   className="w-full gap-2"
                   onClick={() => { onReExtract(r); onOpenChange(false); }}
                 >
                   <Zap className="h-4 w-4" />
-                  Re-Extract This Resource (Deep Mode)
+                  {isLargeDocRecoveryCandidate ? 'Re-Extract / Resume This Resource (Deep Mode)' : 'Re-Extract This Resource (Deep Mode)'}
                 </Button>
                 <p className="text-[10px] text-muted-foreground text-center">
-                  Runs 3-pass deep extraction: Core → Hidden → Framework
+                  {isLargeDocRecoveryCandidate
+                    ? 'Large-document recovery will re-queue this resource and resume chunked extraction if prior batch progress exists.'
+                    : 'Runs 3-pass deep extraction: Core → Hidden → Framework'}
                 </p>
               </>
             )}
