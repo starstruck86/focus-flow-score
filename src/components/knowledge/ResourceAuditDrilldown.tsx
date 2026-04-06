@@ -1,6 +1,6 @@
 /**
  * Resource-level audit drilldown sheet.
- * Shows full extraction history, metrics, no-lift diagnosis, and re-extract action.
+ * Shows full extraction history, batch ledger, resume status, and re-extract action.
  */
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, Zap, Clock, FileText, CheckCircle2, AlertTriangle, XCircle, Ban } from 'lucide-react';
+import { Loader2, Zap, Clock, FileText, CheckCircle2, AlertTriangle, XCircle, Ban, RotateCcw, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
 
@@ -19,7 +19,6 @@ interface Props {
   onReExtract: (resource: ResourceAuditRow) => void;
   onMarkExcluded?: (resourceId: string) => void;
   isExcluded?: boolean;
-  /** Last queue result for this resource (if available) */
   lastQueueResult?: {
     ki_delta?: number;
     net_new_unique?: number;
@@ -58,6 +57,43 @@ function useExtractionRuns(resourceId: string | null) {
   });
 }
 
+function useBatchLedger(resourceId: string | null) {
+  return useQuery({
+    queryKey: ['extraction-batches', resourceId],
+    queryFn: async () => {
+      if (!resourceId) return [];
+      const { data, error } = await supabase
+        .from('extraction_batches' as any)
+        .select('*')
+        .eq('resource_id', resourceId)
+        .order('batch_index', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!resourceId,
+  });
+}
+
+/** Reconcile resource snapshot from run history */
+function useReconciledSnapshot(resourceId: string | null, runs: any[], batches: any[]) {
+  const attemptCount = runs.length;
+  const completedBatches = batches.filter((b: any) => b.status === 'completed').length;
+  const totalBatches = batches.length > 0 ? (batches[0] as any)?.batch_total ?? batches.length : 0;
+  const hasIncompleteBatches = totalBatches > 0 && completedBatches < totalBatches;
+  const nextBatch = hasIncompleteBatches
+    ? batches.find((b: any) => b.status !== 'completed')
+    : null;
+
+  return {
+    attemptCount,
+    completedBatches,
+    totalBatches,
+    hasIncompleteBatches,
+    nextBatchIndex: nextBatch ? (nextBatch as any).batch_index : null,
+    isResumable: hasIncompleteBatches,
+  };
+}
+
 function RunStatusIcon({ status }: { status: string }) {
   if (status === 'completed') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />;
   if (status === 'partial') return <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />;
@@ -74,18 +110,33 @@ function DepthBadge({ bucket }: { bucket: string }) {
   return <Badge variant={variant} className="text-[9px]">{bucket}</Badge>;
 }
 
+function BatchStatusBadge({ status }: { status: string }) {
+  if (status === 'completed') return <Badge variant="default" className="text-[8px] bg-emerald-600">✓</Badge>;
+  if (status === 'failed') return <Badge variant="destructive" className="text-[8px]">✗</Badge>;
+  return <Badge variant="outline" className="text-[8px]">—</Badge>;
+}
+
 export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtract, onMarkExcluded, isExcluded, lastQueueResult }: Props) {
   const { data: runs = [], isLoading: runsLoading } = useExtractionRuns(resource?.resource_id ?? null);
+  const { data: batches = [] } = useBatchLedger(resource?.resource_id ?? null);
   const r = resource;
 
   if (!r) return null;
 
+  const snapshot = useReconciledSnapshot(r.resource_id, runs, batches);
+  const isLargeDoc = r.content_length >= 40000;
+  const hasBatches = batches.length > 0;
+
+  // Always show rerun if: not excluded, not reference_only, has content, and either incomplete batches or density < 1.5
   const canManualReExtract = !isExcluded
     && r.resource_type !== 'reference_only'
     && r.content_length >= 1500
-    && !(r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5);
-  const isLargeDocRecoveryCandidate = r.content_length >= 40000 && r.kis_per_1k_chars < 1.5;
+    && (snapshot.hasIncompleteBatches || !(r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5));
+
   const qr = lastQueueResult;
+
+  // Use reconciled attempt count instead of potentially stale resource field
+  const displayAttemptCount = snapshot.attemptCount > 0 ? snapshot.attemptCount : r.extraction_attempt_count;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -107,10 +158,47 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
               <DepthBadge bucket={r.extraction_depth_bucket} />
               {r.under_extracted_flag && <Badge variant="destructive" className="text-[9px]">Under-Extracted</Badge>}
               {isExcluded && <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600">Excluded</Badge>}
+              {snapshot.isResumable && <Badge variant="outline" className="text-[9px] border-blue-500/40 text-blue-600">Resumable</Badge>}
             </div>
           </div>
 
           <Separator />
+
+          {/* Resume Status Card — for large docs with batch progress */}
+          {isLargeDoc && hasBatches && (
+            <>
+              <div className="border border-border rounded-md p-3 bg-muted/30">
+                <div className="flex items-center gap-2 text-xs font-medium mb-2">
+                  <Layers className="h-3.5 w-3.5" />
+                  Batch Extraction Status
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="text-center">
+                    <div className="font-bold text-lg">{snapshot.completedBatches}</div>
+                    <div className="text-[10px] text-muted-foreground">Completed</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-bold text-lg">{snapshot.totalBatches}</div>
+                    <div className="text-[10px] text-muted-foreground">Total Batches</div>
+                  </div>
+                  <div className="text-center">
+                    <div className={cn("font-bold text-lg", snapshot.hasIncompleteBatches ? "text-amber-500" : "text-emerald-600")}>
+                      {snapshot.hasIncompleteBatches ? snapshot.nextBatchIndex! + 1 : '✓'}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {snapshot.hasIncompleteBatches ? 'Next Batch' : 'All Done'}
+                    </div>
+                  </div>
+                </div>
+                {snapshot.hasIncompleteBatches && (
+                  <div className="mt-2 text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded px-2 py-1">
+                    {snapshot.totalBatches - snapshot.completedBatches} batch(es) remaining. Re-extraction will resume from batch {snapshot.nextBatchIndex! + 1}.
+                  </div>
+                )}
+              </div>
+              <Separator />
+            </>
+          )}
 
           {/* Metrics Grid */}
           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -121,8 +209,50 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
             <MetricCard label="KIs/1k Chars" value={String(r.kis_per_1k_chars)} />
             <MetricCard label="Extraction Mode" value={r.extraction_mode} />
             <MetricCard label="Method" value={r.extraction_method || 'unknown'} />
-            <MetricCard label="Attempts" value={String(r.extraction_attempt_count)} />
+            <MetricCard label="Attempts" value={String(displayAttemptCount)} highlight={displayAttemptCount !== r.extraction_attempt_count} />
           </div>
+
+          {/* Batch Ledger Table */}
+          {hasBatches && (
+            <>
+              <Separator />
+              <div>
+                <div className="text-xs text-muted-foreground font-medium mb-2">Batch Ledger</div>
+                <div className="border border-border rounded-md overflow-hidden">
+                  <table className="w-full text-[10px]">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-1.5 py-1 text-left">#</th>
+                        <th className="px-1.5 py-1 text-left">Range</th>
+                        <th className="px-1.5 py-1 text-right">Raw</th>
+                        <th className="px-1.5 py-1 text-right">Valid</th>
+                        <th className="px-1.5 py-1 text-right">Saved</th>
+                        <th className="px-1.5 py-1 text-right">Dupes</th>
+                        <th className="px-1.5 py-1 text-right">Cum.</th>
+                        <th className="px-1.5 py-1 text-center">St.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(batches as any[]).map((b: any) => (
+                        <tr key={b.batch_index} className="border-t border-border/50">
+                          <td className="px-1.5 py-1 font-mono">{b.batch_index + 1}</td>
+                          <td className="px-1.5 py-1 truncate max-w-[80px]" title={b.semantic_start_marker || `${b.char_start}-${b.char_end}`}>
+                            {b.semantic_start_marker ? b.semantic_start_marker.slice(0, 20) + '…' : `${(b.char_start / 1000).toFixed(0)}k-${(b.char_end / 1000).toFixed(0)}k`}
+                          </td>
+                          <td className="px-1.5 py-1 text-right font-mono">{b.raw_count ?? 0}</td>
+                          <td className="px-1.5 py-1 text-right font-mono">{b.validated_count ?? 0}</td>
+                          <td className="px-1.5 py-1 text-right font-mono">{b.saved_count ?? 0}</td>
+                          <td className="px-1.5 py-1 text-right font-mono">{b.duplicates_skipped ?? 0}</td>
+                          <td className="px-1.5 py-1 text-right font-mono">{b.cumulative_resource_ki_count ?? '—'}</td>
+                          <td className="px-1.5 py-1 text-center"><BatchStatusBadge status={b.status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Last Re-Extraction Result (from queue) */}
           {qr && (
@@ -167,7 +297,6 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
                     </Badge>
                   </div>
                 )}
-                {/* Validation rejection breakdown */}
                 {qr.ef_validation_rejections && Object.keys(qr.ef_validation_rejections).length > 0 && (
                   <div className="mt-2 text-[10px]">
                     <div className="text-muted-foreground font-medium mb-1">Validation Rejections</div>
@@ -178,7 +307,6 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
                     </div>
                   </div>
                 )}
-                {/* Dedup breakdown */}
                 {qr.ef_dedup_details && Object.values(qr.ef_dedup_details).some(v => v > 0) && (
                   <div className="mt-2 text-[10px]">
                     <div className="text-muted-foreground font-medium mb-1">Dedup Details</div>
@@ -241,7 +369,7 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
 
           {/* Extraction History */}
           <div>
-            <div className="text-xs text-muted-foreground font-medium mb-2">Extraction History</div>
+            <div className="text-xs text-muted-foreground font-medium mb-2">Extraction History ({runs.length} runs)</div>
             {runsLoading ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" /> Loading runs…
@@ -282,12 +410,17 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
                   className="w-full gap-2"
                   onClick={() => { onReExtract(r); onOpenChange(false); }}
                 >
-                  <Zap className="h-4 w-4" />
-                  {isLargeDocRecoveryCandidate ? 'Re-Extract / Resume This Resource (Deep Mode)' : 'Re-Extract This Resource (Deep Mode)'}
+                  {snapshot.hasIncompleteBatches ? (
+                    <><RotateCcw className="h-4 w-4" /> Resume Re-Extraction (Batch {snapshot.nextBatchIndex! + 1} of {snapshot.totalBatches})</>
+                  ) : (
+                    <><Zap className="h-4 w-4" /> {isLargeDoc ? 'Re-Extract (Semantic Batched, Deep Mode)' : 'Re-Extract This Resource (Deep Mode)'}</>
+                  )}
                 </Button>
                 <p className="text-[10px] text-muted-foreground text-center">
-                  {isLargeDocRecoveryCandidate
-                    ? 'Large-document recovery will re-queue this resource and resume chunked extraction if prior batch progress exists.'
+                  {snapshot.hasIncompleteBatches
+                    ? `${snapshot.completedBatches} of ${snapshot.totalBatches} batches already completed. Will resume from next unfinished batch.`
+                    : isLargeDoc
+                    ? 'Splits content at semantic boundaries (headings, sections). Each batch persists independently.'
                     : 'Runs 3-pass deep extraction: Core → Hidden → Framework'}
                 </p>
               </>
