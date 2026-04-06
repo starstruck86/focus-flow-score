@@ -669,8 +669,12 @@ export function useDeepReExtraction() {
               lastError = 'Server-side job failed';
               break;
             }
-            // If resource no longer running and no longer resumable (partial without self-invoke)
-            if (rData.active_job_status !== 'running' && !rData.extraction_is_resumable) {
+            // If resource is partial (continuation failed) or no longer resumable, treat as terminal
+            if (rData.active_job_status === 'partial' && !rData.extraction_is_resumable) {
+              console.log('[JOB MODE CLIENT] Server set partial (non-resumable) — treating as terminal');
+              break;
+            }
+            if (rData.active_job_status !== 'running' && rData.active_job_status !== 'partial') {
               break;
             }
           }
