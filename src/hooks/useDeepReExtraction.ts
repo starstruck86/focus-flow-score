@@ -9,7 +9,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
 
-export type ReExtractQueueStatus = 'queued' | 'running' | 'completed' | 'partial' | 'failed';
+export type ReExtractQueueStatus = 'queued' | 'running' | 'completed' | 'partial' | 'failed'
+  | 'running_batched' | 'partial_complete_resumable';
 
 export type LiftStatus = 'meaningful_lift' | 'minor_lift' | 'no_lift' | 'regression';
 
