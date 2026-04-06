@@ -1483,11 +1483,20 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════
     if (jobMode && resourceId) {
       console.log(`[JOB MODE] start | resource=${resourceId} | isContinuation=${!!isContinuation}`);
-      const JOB_WATCHDOG_MS = 90 * 1000; // 90s — don't START a new batch after this
-      const BATCH_TIMEOUT_MS = 150 * 1000; // 150s — single batch AI call cap; platform kills ~200s so leaves ~40s for reconcile+self-invoke
+      const PLATFORM_BUDGET_MS = 180 * 1000; // Conservative platform wall-clock budget (real kill ~200s)
+      const RECONCILE_BUFFER_MS = 25 * 1000; // Time reserved for reconciliation + self-invoke dispatch
+      const JOB_WATCHDOG_MS = 90 * 1000; // Don't START a new batch after this unless there's enough remaining budget
       const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 min = stale (faster recovery)
       const MAX_BATCH_RETRIES = 3; // skip a batch after this many failures
+      const MIN_BATCH_TIMEOUT_MS = 30 * 1000; // Minimum time to give a batch (below this, don't start)
       const jobStart = Date.now();
+
+      // Dynamic batch timeout: never exceed remaining platform budget minus reconcile buffer
+      const getBatchTimeoutMs = () => {
+        const elapsed = Date.now() - jobStart;
+        const remaining = PLATFORM_BUDGET_MS - elapsed - RECONCILE_BUFFER_MS;
+        return Math.max(MIN_BATCH_TIMEOUT_MS, remaining);
+      };
 
       // ── IDEMPOTENCY GUARD (skipped for self-invoke continuations) ──
       if (!isContinuation) {
@@ -1683,6 +1692,14 @@ Deno.serve(async (req) => {
           break;
         }
 
+        // Budget check: is there enough remaining time for a meaningful batch attempt?
+        const batchTimeoutMs = getBatchTimeoutMs();
+        if (batchTimeoutMs <= MIN_BATCH_TIMEOUT_MS) {
+          console.log(`[JOB MODE] watchdog stop (budget exhausted) | only ${Math.round(batchTimeoutMs / 1000)}s left — will self-invoke`);
+          stoppedByWatchdog = true;
+          break;
+        }
+
         const slice = slices[batchIdx];
         const batchContent = fullContent.slice(slice.start, slice.end);
         if (batchContent.length < 50) {
@@ -1691,7 +1708,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        console.log(`[JOB MODE] batch started | ${batchIdx + 1}/${totalBatches} | chars ${slice.start}-${slice.end} (${batchContent.length} chars) | elapsed=${Math.round(elapsed / 1000)}s`);
+        console.log(`[JOB MODE] batch started | ${batchIdx + 1}/${totalBatches} | chars ${slice.start}-${slice.end} (${batchContent.length} chars) | elapsed=${Math.round(elapsed / 1000)}s | timeout=${Math.round(batchTimeoutMs / 1000)}s`);
 
         // Mark batch as running + heartbeat
         await supabaseAdmin.from('extraction_batches').upsert({
@@ -1719,15 +1736,17 @@ Deno.serve(async (req) => {
               existingKIs.map((ki: any, i: number) => `${i + 1}. ${ki.title}`).join('\n') + '\n';
           }
 
-          // Wrap extraction in a timeout so a single slow AI call doesn't
-          // consume the entire platform budget and prevent self-invoke.
+          // Dynamic timeout: never exceed remaining platform budget minus reconcile buffer
+          const currentBatchTimeout = getBatchTimeoutMs();
+          console.log(`[JOB MODE] batch ${batchIdx + 1} AI call timeout: ${Math.round(currentBatchTimeout / 1000)}s`);
+
           const batchResult = await Promise.race([
             runMultiPassExtraction(
               LOVABLE_API_KEY, batchContent, title, description, tags || [],
               resourceType, category, false, batchExistingKiContext,
             ),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(`Batch ${batchIdx + 1} timed out after ${BATCH_TIMEOUT_MS / 1000}s`)), BATCH_TIMEOUT_MS)
+              setTimeout(() => reject(new Error(`Batch ${batchIdx + 1} timed out after ${Math.round(currentBatchTimeout / 1000)}s`)), currentBatchTimeout)
             ),
           ]);
 
