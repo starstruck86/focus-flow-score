@@ -152,11 +152,11 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
   const isLargeDoc = r.content_length >= 40000;
   const hasBatches = batches.length > 0;
 
-  // Always show rerun if: not excluded, not reference_only, has content, and either incomplete batches or density < 1.5
+  // Always show rerun if: not excluded, not reference_only, has content, and either resumable, incomplete batches, or density < 1.5
   const canManualReExtract = !isExcluded
     && r.resource_type !== 'reference_only'
     && r.content_length >= 1500
-    && (snapshot.hasIncompleteBatches || !(r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5));
+    && (snapshot.isResumable || snapshot.hasIncompleteBatches || !(r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5));
 
   const qr = lastQueueResult;
 

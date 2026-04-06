@@ -121,11 +121,12 @@ export function KnowledgeCoverageAudit() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             <MiniStat label="Fully Mined" value={audit.resourcesFullyMined} color="text-emerald-600" />
             <MiniStat label="Shallow" value={audit.resourcesShallowlyMined} color="text-amber-500" />
             <MiniStat label="Under-Extracted" value={audit.resourcesUnderExtracted} color="text-destructive" />
             <MiniStat label="Zero KIs" value={audit.resourcesZeroKIs} color="text-muted-foreground" />
+            <MiniStat label="Resumable" value={resumableResources.length} color="text-blue-600" />
           </div>
 
           <div className="flex items-center gap-3 text-xs">
