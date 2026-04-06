@@ -217,8 +217,8 @@ export function useDeepReExtraction() {
 
   // ── CHUNKED EXTRACTION: split large resources into multiple edge function calls ──
   const LARGE_DOC_THRESHOLD = 40000; // chars
-  const BATCH_SLICE_SIZE = 30000; // chars per batch (with overlap)
-  const BATCH_OVERLAP = 1500; // overlap between batches
+  const BATCH_SLICE_SIZE = 15000; // chars per batch — kept small so each edge function call completes within timeout
+  const BATCH_OVERLAP = 1000; // overlap between batches
 
   const computeSlices = (contentLength: number): { start: number; end: number }[] => {
     if (contentLength <= LARGE_DOC_THRESHOLD) return [{ start: 0, end: contentLength }];
