@@ -1517,6 +1517,8 @@ Deno.serve(async (req) => {
       let consecutiveFailures = 0;
       let stoppedByWatchdog = false;
 
+      // Wrap entire batch loop in try/catch so reconciliation ALWAYS runs
+      try {
       for (let batchIdx = 0; batchIdx < slices.length; batchIdx++) {
         if (completedSet.has(batchIdx)) {
           console.log(`[JOB MODE] Skipping batch ${batchIdx + 1}/${totalBatches} — already completed`);
@@ -1636,6 +1638,11 @@ Deno.serve(async (req) => {
             break;
           }
         }
+      }
+      } catch (outerErr: any) {
+        // Catch unexpected crashes so reconciliation still runs
+        console.error(`[JOB MODE] UNEXPECTED ERROR in batch loop: ${outerErr.message}`);
+        lastError = outerErr.message;
       }
 
       // ── FINAL SNAPSHOT RECONCILIATION (DB-authoritative) ──
