@@ -215,6 +215,232 @@ export function useDeepReExtraction() {
     toast.success('Resource excluded from future re-extraction queues');
   }, []);
 
+  // ── CHUNKED EXTRACTION: split large resources into multiple edge function calls ──
+  const LARGE_DOC_THRESHOLD = 40000; // chars
+  const BATCH_SLICE_SIZE = 30000; // chars per batch (with overlap)
+  const BATCH_OVERLAP = 1500; // overlap between batches
+
+  const computeSlices = (contentLength: number): { start: number; end: number }[] => {
+    if (contentLength <= LARGE_DOC_THRESHOLD) return [{ start: 0, end: contentLength }];
+    const slices: { start: number; end: number }[] = [];
+    let start = 0;
+    while (start < contentLength) {
+      const end = Math.min(start + BATCH_SLICE_SIZE, contentLength);
+      slices.push({ start, end });
+      if (end >= contentLength) break;
+      start = end - BATCH_OVERLAP;
+    }
+    return slices;
+  };
+
+  const runSingleExtraction = async (item: ReExtractQueueItem): Promise<void> => {
+    const isBatched = item.content_length > LARGE_DOC_THRESHOLD;
+    const slices = computeSlices(item.content_length);
+    const batchTotal = slices.length;
+
+    if (isBatched) {
+      setQueue(prev => prev.map(i =>
+        i.resource_id === item.resource_id ? {
+          ...i,
+          status: 'running_batched' as const,
+          is_batched: true,
+          batch_total: batchTotal,
+          batches_completed: 0,
+          batch_status: `running_batch_1_of_${batchTotal}`,
+        } : i
+      ));
+      console.log(`[ReExtract] BATCHED: "${item.title}" | ${item.content_length} chars → ${batchTotal} batches`);
+    } else {
+      setQueue(prev => prev.map(i =>
+        i.resource_id === item.resource_id ? { ...i, status: 'running' as const } : i
+      ));
+    }
+
+    let totalEfReturned = 0;
+    let totalEfValidated = 0;
+    let totalEfSaved = 0;
+    let totalDupsSkipped = 0;
+    let allPassesRun: string[] = [];
+    let lastError: string | null = null;
+    let batchesCompleted = 0;
+
+    for (let batchIdx = 0; batchIdx < slices.length; batchIdx++) {
+      const slice = slices[batchIdx];
+
+      if (isBatched) {
+        setQueue(prev => prev.map(i =>
+          i.resource_id === item.resource_id ? {
+            ...i,
+            batches_completed: batchIdx,
+            batch_status: `running_batch_${batchIdx + 1}_of_${batchTotal}`,
+          } : i
+        ));
+      }
+
+      try {
+        const bodyPayload: Record<string, any> = {
+          resourceId: item.resource_id,
+          deepMode: true,
+          persist: true,
+        };
+
+        if (isBatched) {
+          bodyPayload.contentSliceStart = slice.start;
+          bodyPayload.contentSliceEnd = slice.end;
+          bodyPayload.batchIndex = batchIdx;
+          bodyPayload.batchTotal = batchTotal;
+        }
+
+        const { data, error } = await supabase.functions.invoke('extract-tactics', {
+          body: bodyPayload,
+        });
+
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+
+        const efReturned = data?.model_metrics?.raw_count ?? 0;
+        const efValidated = data?.model_metrics?.validated_count ?? 0;
+        const efSaved = data?.persistence?.saved_count ?? 0;
+        const dupsSkipped = data?.persistence?.duplicates_skipped ?? 0;
+        const passesRun = data?.model_metrics?.extraction_passes_run ?? [];
+
+        totalEfReturned += efReturned;
+        totalEfValidated += efValidated;
+        totalEfSaved += efSaved;
+        totalDupsSkipped += dupsSkipped;
+        allPassesRun = [...new Set([...allPassesRun, ...passesRun])];
+        batchesCompleted++;
+
+        console.log(`[ReExtract] Batch ${batchIdx + 1}/${batchTotal} complete: ${efReturned} raw → ${efValidated} valid → ${efSaved} saved`);
+
+        if (isBatched) {
+          setQueue(prev => prev.map(i =>
+            i.resource_id === item.resource_id ? {
+              ...i,
+              batches_completed: batchIdx + 1,
+              batch_status: (batchIdx + 1) >= batchTotal
+                ? 'all_batches_done'
+                : `running_batch_${batchIdx + 2}_of_${batchTotal}`,
+            } : i
+          ));
+        }
+
+        // Small delay between batches to avoid rate limits
+        if (batchIdx < slices.length - 1) {
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      } catch (err: any) {
+        lastError = err.message;
+        console.error(`[ReExtract] Batch ${batchIdx + 1}/${batchTotal} failed:`, err.message);
+        // For batched: continue to next batch, don't abort
+        if (!isBatched) throw err;
+      }
+    }
+
+    // === VERIFICATION LAYER: fresh DB query for all metrics ===
+    const { data: postKIs, error: postErr } = await supabase
+      .from('knowledge_items' as any)
+      .select('id, active, applies_to_contexts')
+      .eq('source_resource_id', item.resource_id);
+
+    if (postErr) throw new Error(postErr.message);
+
+    const postTotal = postKIs?.length ?? 0;
+    const postActive = postKIs?.filter((k: any) => k.active).length ?? 0;
+    const postWithCtx = postKIs?.filter((k: any) =>
+      k.active && k.applies_to_contexts && (k.applies_to_contexts as string[]).length > 0
+    ).length ?? 0;
+
+    const postKisPer1k = item.content_length > 0
+      ? Math.round((postTotal * 1000 / item.content_length) * 100) / 100
+      : 0;
+
+    const kiDelta = postTotal - item.pre_ki_count;
+    const netNewUnique = Math.max(0, kiDelta);
+    const activeDelta = postActive - item.pre_active_count;
+    const contextDelta = postWithCtx - item.pre_context_count;
+
+    const liftStatus = classifyLift(kiDelta, item.pre_kis_per_1k, postKisPer1k);
+    const noLiftReason = diagnoseNoLift(
+      kiDelta, item.pre_kis_per_1k, totalDupsSkipped,
+      totalEfReturned, totalEfValidated, totalEfSaved, item.content_length
+    );
+    const dominantBottleneck = classifyBottleneck(
+      totalEfReturned, totalEfValidated, totalEfSaved, totalDupsSkipped, item.pre_kis_per_1k, kiDelta
+    );
+
+    let qualityLabel: string | undefined;
+    if (liftStatus === 'no_lift' && noLiftReason) {
+      const reasonLabels: Record<NoLiftReason, string> = {
+        already_dense: 'Already dense — resource well-mined',
+        duplicate_heavy: 'No true lift — duplicates / overlap only',
+        extractor_returned_no_new_items: 'Extractor returned no new items',
+        extractor_weak_output: 'Extractor produced too few candidates',
+        items_generated_but_filtered_out: 'Items generated but failed validation',
+        items_generated_but_deduped: 'Items generated but all were duplicates',
+        validation_too_strict: 'Validation rejected most candidates',
+        resource_not_suitable: 'Resource not suitable for extraction',
+        unknown: 'No lift — cause unknown',
+      };
+      qualityLabel = reasonLabels[noLiftReason];
+    }
+
+    const finalStatus: ReExtractQueueStatus =
+      batchesCompleted === 0 ? 'failed'
+      : isBatched && batchesCompleted < batchTotal && batchesCompleted > 0 ? 'partial_complete_resumable'
+      : lastError && batchesCompleted > 0 ? 'partial'
+      : 'completed';
+
+    console.log('REEXTRACT DELTA CHECK', {
+      resourceId: item.resource_id,
+      title: item.title,
+      batched: isBatched,
+      batchesCompleted,
+      batchTotal,
+      preTotal: item.pre_ki_count,
+      postTotal,
+      rawDelta: kiDelta,
+      netNewUnique,
+      totalEfReturned,
+      totalEfValidated,
+      totalEfSaved,
+      totalDupsSkipped,
+      liftStatus,
+      dominantBottleneck,
+    });
+
+    setQueue(prev => prev.map(i =>
+      i.resource_id === item.resource_id ? {
+        ...i,
+        status: finalStatus,
+        post_ki_count: postTotal,
+        post_kis_per_1k: postKisPer1k,
+        post_active_count: postActive,
+        post_context_count: postWithCtx,
+        ki_delta: kiDelta,
+        net_new_unique: netNewUnique,
+        active_delta: activeDelta,
+        context_delta: contextDelta,
+        passes_run: allPassesRun,
+        duplicates_skipped: totalDupsSkipped,
+        quality_label: qualityLabel,
+        lift_status: liftStatus,
+        no_lift_reason: noLiftReason,
+        ef_returned_count: totalEfReturned,
+        ef_validated_count: totalEfValidated,
+        ef_saved_count: totalEfSaved,
+        dominant_bottleneck: dominantBottleneck,
+        batch_total: isBatched ? batchTotal : undefined,
+        batches_completed: isBatched ? batchesCompleted : undefined,
+        batch_status: isBatched ? (batchesCompleted >= batchTotal ? 'completed' : 'partial') : undefined,
+        is_batched: isBatched,
+        error: lastError || undefined,
+      } : i
+    ));
+
+    return { kiDelta, netNewUnique, activeDelta, contextDelta, postKisPer1k, liftStatus, noLiftReason, dominantBottleneck, finalStatus };
+  };
+
   const runDeepExtraction = useCallback(async () => {
     const queued = queue.filter(i => i.status === 'queued');
     if (queued.length === 0) return;
@@ -233,151 +459,26 @@ export function useDeepReExtraction() {
     const postKisArr: number[] = [];
 
     for (const item of queued) {
-      setQueue(prev => prev.map(i =>
-        i.resource_id === item.resource_id ? { ...i, status: 'running' as const } : i
-      ));
-
       try {
-        const { data, error } = await supabase.functions.invoke('extract-tactics', {
-          body: {
-            resourceId: item.resource_id,
-            deepMode: true,
-            persist: true,
-          },
-        });
+        const result = await runSingleExtraction(item) as any;
 
-        if (error) throw new Error(error.message);
-        if (data?.error) throw new Error(data.error);
-
-        const passesRun = data?.model_metrics?.extraction_passes_run ?? [];
-        const dupsSkipped = data?.persistence?.duplicates_skipped ?? 0;
-        const status = data?.persistence?.status ?? 'completed';
-        const efReturned = data?.model_metrics?.raw_count ?? 0;
-        const efValidated = data?.model_metrics?.validated_count ?? 0;
-        const efSaved = data?.persistence?.saved_count ?? 0;
-
-        // === VERIFICATION LAYER: fresh DB query for all metrics ===
-        const { data: postKIs, error: postErr } = await supabase
-          .from('knowledge_items' as any)
-          .select('id, active, applies_to_contexts')
-          .eq('source_resource_id', item.resource_id);
-
-        if (postErr) throw new Error(postErr.message);
-
-        const postTotal = postKIs?.length ?? 0;
-        const postActive = postKIs?.filter((k: any) => k.active).length ?? 0;
-        const postWithCtx = postKIs?.filter((k: any) =>
-          k.active && k.applies_to_contexts && (k.applies_to_contexts as string[]).length > 0
-        ).length ?? 0;
-
-        const postKisPer1k = item.content_length > 0
-          ? Math.round((postTotal * 1000 / item.content_length) * 100) / 100
-          : 0;
-
-        const kiDelta = postTotal - item.pre_ki_count;
-        const netNewUnique = Math.max(0, kiDelta);
-        const activeDelta = postActive - item.pre_active_count;
-        const contextDelta = postWithCtx - item.pre_context_count;
-
-        // Lift classification
-        const liftStatus = classifyLift(kiDelta, item.pre_kis_per_1k, postKisPer1k);
-        const noLiftReason = diagnoseNoLift(
-          kiDelta, item.pre_kis_per_1k, dupsSkipped,
-          efReturned, efValidated, efSaved, item.content_length
-        );
-        const dominantBottleneck = classifyBottleneck(
-          efReturned, efValidated, efSaved, dupsSkipped, item.pre_kis_per_1k, kiDelta
-        );
-
-        // Capture edge function diagnostic details
-        const efDedupDetails = data?.model_metrics?.dedupe_merge_counts ?? {};
-        const efValidationRejections = data?.model_metrics?.validation_rejection_counts ?? {};
-
-        // Quality label (human-readable)
-        let qualityLabel: string | undefined;
-        if (liftStatus === 'no_lift' && noLiftReason) {
-          const reasonLabels: Record<NoLiftReason, string> = {
-            already_dense: 'Already dense — resource well-mined',
-            duplicate_heavy: 'No true lift — duplicates / overlap only',
-            extractor_returned_no_new_items: 'Extractor returned no new items',
-            extractor_weak_output: 'Extractor produced too few candidates',
-            items_generated_but_filtered_out: 'Items generated but failed validation',
-            items_generated_but_deduped: 'Items generated but all were duplicates',
-            validation_too_strict: 'Validation rejected most candidates',
-            resource_not_suitable: 'Resource not suitable for extraction',
-            unknown: 'No lift — cause unknown',
-          };
-          qualityLabel = reasonLabels[noLiftReason];
-        } else if (liftStatus === 'regression') {
-          qualityLabel = 'Regression — KI count decreased';
-        } else if (kiDelta > 0 && activeDelta <= 0) {
-          qualityLabel = 'Low operational value — no new active KIs';
-        }
-
-        console.log('REEXTRACT DELTA CHECK', {
-          resourceId: item.resource_id,
-          title: item.title,
-          preTotal: item.pre_ki_count,
-          postTotal,
-          rawDelta: kiDelta,
-          netNewUnique,
-          preKisPer1k: item.pre_kis_per_1k,
-          postKisPer1k: postKisPer1k,
-          liftStatus,
-          noLiftReason,
-          dominantBottleneck,
-          efReturned,
-          efValidated,
-          efSaved,
-          dupsSkipped,
-          efDedupDetails,
-          efValidationRejections,
-        });
-
-        const isUpgrade = (item.pre_depth_bucket === 'none' || item.pre_depth_bucket === 'shallow') &&
-          postKisPer1k >= 0.75;
-
-        setQueue(prev => prev.map(i =>
-          i.resource_id === item.resource_id ? {
-            ...i,
-            status: status as ReExtractQueueStatus,
-            post_ki_count: postTotal,
-            post_kis_per_1k: postKisPer1k,
-            post_active_count: postActive,
-            post_context_count: postWithCtx,
-            ki_delta: kiDelta,
-            net_new_unique: netNewUnique,
-            active_delta: activeDelta,
-            context_delta: contextDelta,
-            passes_run: passesRun,
-            duplicates_skipped: dupsSkipped,
-            quality_label: qualityLabel,
-            lift_status: liftStatus,
-            no_lift_reason: noLiftReason,
-            ef_returned_count: efReturned,
-            ef_validated_count: efValidated,
-            ef_saved_count: efSaved,
-            ef_dedup_details: efDedupDetails,
-            ef_validation_rejections: efValidationRejections,
-            dominant_bottleneck: dominantBottleneck,
-          } : i
-        ));
-
-        if (status === 'completed' || status === 'partial') {
+        if (result.finalStatus === 'completed' || result.finalStatus === 'partial' || result.finalStatus === 'partial_complete_resumable') {
           succeeded++;
-          totalDelta += kiDelta;
-          totalNetNew += netNewUnique;
-          totalNewActive += Math.max(0, activeDelta);
-          totalNewCtx += Math.max(0, contextDelta);
+          totalDelta += result.kiDelta;
+          totalNetNew += result.netNewUnique;
+          totalNewActive += Math.max(0, result.activeDelta);
+          totalNewCtx += Math.max(0, result.contextDelta);
+          const isUpgrade = (item.pre_depth_bucket === 'none' || item.pre_depth_bucket === 'shallow') &&
+            result.postKisPer1k >= 0.75;
           if (isUpgrade) depthUpgrades++;
-          if (liftStatus === 'no_lift') {
+          if (result.liftStatus === 'no_lift') {
             noLiftCount++;
-            if (noLiftReason) noLiftReasons.push(noLiftReason);
-            if (dominantBottleneck && dominantBottleneck !== 'none') bottlenecks.push(dominantBottleneck);
+            if (result.noLiftReason) noLiftReasons.push(result.noLiftReason);
+            if (result.dominantBottleneck && result.dominantBottleneck !== 'none') bottlenecks.push(result.dominantBottleneck);
           }
         }
         preKisArr.push(item.pre_kis_per_1k);
-        postKisArr.push(postKisPer1k);
+        postKisArr.push(result.postKisPer1k);
       } catch (err: any) {
         setQueue(prev => prev.map(i =>
           i.resource_id === item.resource_id ? {
