@@ -150,6 +150,12 @@ function classifyBottleneck(
 // ── STALE JOB DETECTION ──
 const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
+// ── MULTI-BATCH RUNNER SAFETY LIMITS ──
+const MAX_BATCHES_PER_RUN = 4;
+const MAX_RUN_TIME_MS = 120_000; // 2 minutes
+
+export type BatchStopReason = 'all_complete' | 'max_batches' | 'time_budget' | 'blocking_error';
+
 function isStaleTimestamp(timestamp?: string | null): boolean {
   if (!timestamp) return false;
   return Date.now() - new Date(timestamp).getTime() > STALE_THRESHOLD_MS;
