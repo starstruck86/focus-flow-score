@@ -1782,8 +1782,10 @@ Deno.serve(async (req) => {
         let selfInvokeDispatched = false;
         try {
           const selfUrl = `${supabaseUrl}/functions/v1/extract-tactics`;
+          // Fire-and-forget: use AbortController to detach after confirming dispatch.
+          // We abort after 5s — just enough to confirm HTTP connection was accepted.
           const abortCtrl = new AbortController();
-          const abortTimeout = setTimeout(() => abortCtrl.abort(), 8000);
+          const abortTimeout = setTimeout(() => abortCtrl.abort(), 5000);
           try {
             const selfResp = await fetch(selfUrl, {
               method: 'POST',
@@ -1802,14 +1804,18 @@ Deno.serve(async (req) => {
               }),
               signal: abortCtrl.signal,
             });
+            // If we get here, the server responded (e.g. already_running short-circuit).
+            // Read status but do NOT await full body — abort immediately to release.
             clearTimeout(abortTimeout);
-            const selfBody = await selfResp.text();
-            console.log(`[JOB MODE] self-invoke success | status=${selfResp.status} | body=${selfBody.slice(0, 200)}`);
-            selfInvokeDispatched = true;
+            console.log(`[JOB MODE] self-invoke dispatched | status=${selfResp.status}`);
+            selfInvokeDispatched = selfResp.status < 500;
+            // Consume body to prevent resource leak, but don't block
+            selfResp.text().catch(() => {});
           } catch (fetchErr: any) {
             clearTimeout(abortTimeout);
             if (fetchErr.name === 'AbortError') {
-              console.log(`[JOB MODE] self-invoke dispatched (response pending — continuation running independently)`);
+              // Abort means the request was dispatched and the continuation is running
+              console.log(`[JOB MODE] self-invoke dispatched (aborted after 5s — continuation running independently)`);
               selfInvokeDispatched = true;
             } else {
               throw fetchErr;
