@@ -150,6 +150,12 @@ function classifyBottleneck(
 // ── STALE JOB DETECTION ──
 const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
+// ── MULTI-BATCH RUNNER SAFETY LIMITS ──
+const MAX_BATCHES_PER_RUN = 4;
+const MAX_RUN_TIME_MS = 120_000; // 2 minutes
+
+export type BatchStopReason = 'all_complete' | 'max_batches' | 'time_budget' | 'blocking_error';
+
 function isStaleTimestamp(timestamp?: string | null): boolean {
   if (!timestamp) return false;
   return Date.now() - new Date(timestamp).getTime() > STALE_THRESHOLD_MS;
@@ -575,24 +581,68 @@ export function useDeepReExtraction() {
       });
     }
 
+    // ── MULTI-BATCH RUNNER ──
+    const runStartTime = Date.now();
+    let batchesProcessedThisRun = 0;
+    let stopReason: BatchStopReason = 'all_complete';
+
+    console.log('[MULTI-BATCH RUNNER] start', {
+      resource: item.title,
+      resourceId: item.resource_id,
+      resumeFrom,
+      batchTotal,
+      maxBatchesPerRun: MAX_BATCHES_PER_RUN,
+      maxRunTimeMs: MAX_RUN_TIME_MS,
+    });
+
     for (let batchIdx = resumeFrom; batchIdx < slices.length; batchIdx++) {
+      // Safety limit: max batches per click
+      if (batchesProcessedThisRun >= MAX_BATCHES_PER_RUN) {
+        stopReason = 'max_batches';
+        console.log('[MULTI-BATCH RUNNER] stopping reason=max_batches', {
+          resourceId: item.resource_id,
+          processedThisRun: batchesProcessedThisRun,
+          remainingBatches: batchTotal - batchesCompleted,
+        });
+        break;
+      }
+
+      // Safety limit: time budget
+      if (Date.now() - runStartTime > MAX_RUN_TIME_MS) {
+        stopReason = 'time_budget';
+        console.log('[MULTI-BATCH RUNNER] stopping reason=time_budget', {
+          resourceId: item.resource_id,
+          elapsedMs: Date.now() - runStartTime,
+          processedThisRun: batchesProcessedThisRun,
+          remainingBatches: batchTotal - batchesCompleted,
+        });
+        break;
+      }
+
+      // Skip already-completed batches (durable ledger truth)
+      const existingEntry = existingLedger.find(e => e.batchIndex === batchIdx && e.status === 'completed');
+      if (existingEntry) {
+        console.log(`[MULTI-BATCH RUNNER] skipping batch ${batchIdx + 1}/${batchTotal} — already completed in ledger`);
+        continue;
+      }
+
       const slice = slices[batchIdx];
 
-      console.log('[ReExtract] EXECUTING BATCH', {
+      console.log(`[MULTI-BATCH RUNNER] running batch ${batchIdx + 1}/${batchTotal}`, {
         resourceId: item.resource_id,
-        batchIndex: batchIdx,
-        batchTotal,
         charStart: slice.start,
         charEnd: slice.end,
         semanticStartMarker: slice.semanticStartMarker,
         semanticEndMarker: slice.semanticEndMarker,
+        batchesProcessedThisRun,
+        elapsedMs: Date.now() - runStartTime,
       });
 
       if (isBatched) {
         setQueue(prev => prev.map(i =>
           i.resource_id === item.resource_id ? {
             ...i,
-            batches_completed: batchIdx,
+            batches_completed: batchesCompleted,
             batch_status: `running_batch_${batchIdx + 1}_of_${batchTotal}`,
           } : i
         ));
@@ -640,6 +690,7 @@ export function useDeepReExtraction() {
         totalDupsSkipped += dupsSkipped;
         allPassesRun = [...new Set([...allPassesRun, ...passesRun])];
         batchesCompleted++;
+        batchesProcessedThisRun++;
 
         const entry: BatchLedgerEntry = {
           batchIndex: batchIdx,
@@ -661,7 +712,16 @@ export function useDeepReExtraction() {
         if (existingIdx >= 0) batchLedger[existingIdx] = entry;
         else batchLedger.push(entry);
 
-        console.log(`[ReExtract] Batch ${batchIdx + 1}/${batchTotal} complete: ${efReturned} raw → ${efValidated} valid → ${efSaved} saved | cumulative: ${cumulativeTotal} KIs`);
+        console.log(`[MULTI-BATCH RUNNER] batch ${batchIdx + 1}/${batchTotal} complete`, {
+          resourceId: item.resource_id,
+          raw: efReturned,
+          validated: efValidated,
+          saved: efSaved,
+          cumulativeKIs: cumulativeTotal,
+          processedThisRun: batchesProcessedThisRun,
+          totalCompletedAfterRun: batchesCompleted,
+          remainingBatches: batchTotal - batchesCompleted,
+        });
 
         if (isBatched) {
           await reconcileResourceSnapshot(item.resource_id, item, {
@@ -677,33 +737,34 @@ export function useDeepReExtraction() {
           setQueue(prev => prev.map(i =>
             i.resource_id === item.resource_id ? {
               ...i,
-              batches_completed: batchIdx + 1,
+              batches_completed: batchesCompleted,
               batch_ledger: [...batchLedger],
-              batch_status: (batchIdx + 1) >= batchTotal
+              batch_status: batchesCompleted >= batchTotal
                 ? 'all_batches_done'
-                : `running_batch_${batchIdx + 2}_of_${batchTotal}`,
+                : `completed_${batchesProcessedThisRun}_this_run_batch_${batchIdx + 2}_of_${batchTotal}_next`,
             } : i
           ));
         }
 
         // Delay between batches
-        if (batchIdx < slices.length - 1) {
+        if (batchIdx < slices.length - 1 && batchesProcessedThisRun < MAX_BATCHES_PER_RUN) {
           await new Promise(r => setTimeout(r, 3000));
         }
       } catch (err: any) {
         lastError = err.message;
-        console.error(`[ReExtract] Batch ${batchIdx + 1}/${batchTotal} failed:`, err.message);
+        console.error(`[MULTI-BATCH RUNNER] batch ${batchIdx + 1}/${batchTotal} failed:`, err.message);
 
         if (isBatched) {
           const resumeAfterError = await getResumeInfo(item.resource_id);
           const persistedBatch = resumeAfterError.ledger.find(entry => entry.batchIndex === batchIdx && entry.status === 'completed');
 
           if (persistedBatch) {
-            console.log(`[ReExtract] Response lost after batch ${batchIdx + 1}; DB ledger shows completion, resuming from durable truth`);
+            console.log(`[MULTI-BATCH RUNNER] Response lost after batch ${batchIdx + 1}; DB ledger shows completion, continuing`);
             const persistedIdx = batchLedger.findIndex(entry => entry.batchIndex === batchIdx);
             if (persistedIdx >= 0) batchLedger[persistedIdx] = persistedBatch;
             else batchLedger.push(persistedBatch);
             batchesCompleted = resumeAfterError.completedCount;
+            batchesProcessedThisRun++;
             continue;
           }
         }
@@ -720,12 +781,49 @@ export function useDeepReExtraction() {
           error: err.message,
         };
 
-        const existingIdx = batchLedger.findIndex(e => e.batchIndex === batchIdx);
-        if (existingIdx >= 0) batchLedger[existingIdx] = errorEntry;
+        const failedIdx = batchLedger.findIndex(e => e.batchIndex === batchIdx);
+        if (failedIdx >= 0) batchLedger[failedIdx] = errorEntry;
         else batchLedger.push(errorEntry);
 
-        // For batched: continue to next batch, don't abort entirely
-        if (!isBatched) throw err;
+        // For batched: a single batch failure is not blocking — continue to next
+        if (!isBatched) {
+          stopReason = 'blocking_error';
+          throw err;
+        }
+        // But if we hit 2+ consecutive failures, treat as blocking
+        const prevEntry = batchLedger.find(e => e.batchIndex === batchIdx - 1);
+        if (prevEntry?.status === 'failed') {
+          stopReason = 'blocking_error';
+          console.log('[MULTI-BATCH RUNNER] stopping reason=blocking_error (2 consecutive failures)', {
+            resourceId: item.resource_id,
+            processedThisRun: batchesProcessedThisRun,
+          });
+          break;
+        }
+      }
+    }
+
+    // If we exited the loop naturally (no break), all remaining were done
+    if (stopReason === 'all_complete' && batchesCompleted >= batchTotal) {
+      console.log('[MULTI-BATCH RUNNER] completed all batches', {
+        resourceId: item.resource_id,
+        totalCompletedAfterRun: batchesCompleted,
+        processedThisRun: batchesProcessedThisRun,
+        totalNetNewKisThisRun: totalEfSaved,
+      });
+    }
+
+    // Show user-facing toast with multi-batch summary
+    if (isBatched && batchesProcessedThisRun > 0) {
+      const remaining = batchTotal - batchesCompleted;
+      if (remaining === 0) {
+        toast.success(`All ${batchTotal} batches complete for "${item.title}".`);
+      } else if (stopReason === 'max_batches') {
+        toast.info(`Processed ${batchesProcessedThisRun} batches this run. ${remaining} batches remain. Click again to continue.`);
+      } else if (stopReason === 'time_budget') {
+        toast.info(`Paused at time limit. Processed ${batchesProcessedThisRun} batches. Resume from batch ${batchesCompleted + 1} of ${batchTotal}.`);
+      } else if (stopReason === 'blocking_error') {
+        toast.warning(`Stopped after error. Processed ${batchesProcessedThisRun} batches. ${remaining} remain.`);
       }
     }
 
@@ -761,9 +859,11 @@ export function useDeepReExtraction() {
       totalEfReturned, totalEfValidated, totalEfSaved, totalDupsSkipped, item.pre_kis_per_1k, kiDelta
     );
 
+    // Determine final status: if stopped by safety limits (not error), stay resumable
     const finalStatus: ReExtractQueueStatus =
       batchesCompleted === 0 ? 'failed'
-      : isBatched && batchesCompleted < batchTotal && batchesCompleted > 0 ? 'partial_complete_resumable'
+      : isBatched && batchesCompleted < batchTotal ? 'partial_complete_resumable'
+      : lastError && batchesCompleted > 0 && batchesCompleted < batchTotal ? 'partial_complete_resumable'
       : lastError && batchesCompleted > 0 ? 'partial'
       : 'completed';
 
