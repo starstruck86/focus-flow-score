@@ -233,7 +233,11 @@ export function useDeepReExtraction() {
     return slices;
   };
 
-  const runSingleExtraction = async (item: ReExtractQueueItem): Promise<void> => {
+  const runSingleExtraction = async (item: ReExtractQueueItem): Promise<{
+    kiDelta: number; netNewUnique: number; activeDelta: number; contextDelta: number;
+    postKisPer1k: number; liftStatus: LiftStatus; noLiftReason?: NoLiftReason;
+    dominantBottleneck: DominantBottleneck; finalStatus: ReExtractQueueStatus;
+  }> => {
     const isBatched = item.content_length > LARGE_DOC_THRESHOLD;
     const slices = computeSlices(item.content_length);
     const batchTotal = slices.length;
