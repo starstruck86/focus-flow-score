@@ -71,6 +71,11 @@ export interface ReExtractQueueItem {
   dominant_bottleneck?: DominantBottleneck;
   // Exclusion flag
   excluded_from_future?: boolean;
+  // Batch tracking
+  batch_total?: number;
+  batches_completed?: number;
+  batch_status?: string;
+  is_batched?: boolean;
 }
 
 export interface CoverageLiftSummary {
