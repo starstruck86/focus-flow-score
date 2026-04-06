@@ -1783,11 +1783,10 @@ Deno.serve(async (req) => {
 
            console.log(`[JOB MODE] batch completed | ${batchIdx + 1}/${totalBatches} | saved=${batchPersist.savedCount} total=${batchPersist.currentResourceKiCount}`);
 
-          // Post-batch watchdog: if we're past the time budget after completing this batch,
-          // break immediately so self-invoke can fire before platform kill.
-          const postBatchElapsed = Date.now() - jobStart;
-          if (postBatchElapsed > JOB_WATCHDOG_MS && batchIdx < slices.length - 1) {
-            console.log(`[JOB MODE] watchdog stop (post-batch) | ${batchesProcessedThisJob} batches in ${Math.round(postBatchElapsed / 1000)}s — will self-invoke`);
+          // Post-batch watchdog: if not enough time for another batch, break for self-invoke
+          const postBatchRemaining = getRemainingBudgetMs();
+          if (postBatchRemaining < MIN_BATCH_TIMEOUT_MS && batchIdx < slices.length - 1) {
+            console.log(`[JOB MODE] watchdog stop (post-batch) | ${batchesProcessedThisJob} batches in ${Math.round((Date.now() - jobStart) / 1000)}s | ${Math.round(postBatchRemaining / 1000)}s left — will self-invoke`);
             stoppedByWatchdog = true;
             break;
           }
