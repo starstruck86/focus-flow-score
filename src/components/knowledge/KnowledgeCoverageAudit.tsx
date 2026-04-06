@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select';
 import {
   Brain, AlertTriangle, CheckCircle2, ChevronDown, BarChart3,
-  Search, Zap, Loader2, RefreshCw, TrendingUp, Filter,
+  Search, Zap, Loader2, RefreshCw, TrendingUp, Filter, RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useKnowledgeCoverageAudit, type ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
@@ -161,6 +161,61 @@ export function KnowledgeCoverageAudit() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Resumable Extractions */}
+      {resumableResources.length > 0 && (
+        <Card className="border-blue-500/30 bg-blue-50/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <RotateCcw className="h-4 w-4 text-blue-500" />
+              Resumable Extractions ({resumableResources.length})
+              <Badge className="text-[9px] bg-blue-600">ACTION NEEDED</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              These resources have partially completed batch extraction. Resume to finish remaining batches.
+            </p>
+            <div className="border border-border rounded-md overflow-hidden">
+              <div className="max-h-[300px] overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-[10px]">Resource</TableHead>
+                      <TableHead className="text-[10px] text-right">Content</TableHead>
+                      <TableHead className="text-[10px] text-right">KIs</TableHead>
+                      <TableHead className="text-[10px] text-right">KIs/1k</TableHead>
+                      <TableHead className="text-[10px]">Batches</TableHead>
+                      <TableHead className="text-[10px]">Next</TableHead>
+                      <TableHead className="text-[10px]">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resumableResources.map(r => (
+                      <TableRow key={r.resource_id} className="cursor-pointer hover:bg-accent/50">
+                        <TableCell className="text-[11px] max-w-[140px] truncate" onClick={() => setSelectedResourceId(r.resource_id)}>
+                          {r.title}
+                          <Badge className="ml-1 text-[8px] bg-blue-600">RESUMABLE</Badge>
+                        </TableCell>
+                        <TableCell className="text-[11px] text-right font-mono">{(r.content_length / 1000).toFixed(1)}k</TableCell>
+                        <TableCell className="text-[11px] text-right font-mono">{r.ki_count_total}</TableCell>
+                        <TableCell className="text-[11px] text-right font-mono">{r.kis_per_1k_chars}</TableCell>
+                        <TableCell className="text-[11px] font-mono">{r.extraction_batches_completed}/{r.extraction_batch_total}</TableCell>
+                        <TableCell className="text-[11px] text-blue-600 font-medium">Batch {r.extraction_batches_completed + 1}</TableCell>
+                        <TableCell>
+                          <Button variant="default" size="sm" className="h-6 text-[10px] gap-1" onClick={() => handleFlagSingle(r)}>
+                            <RotateCcw className="h-3 w-3" /> Resume
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Verification Queue */}
       <VerificationQueue
