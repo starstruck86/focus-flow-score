@@ -2,7 +2,7 @@
  * Re-Extraction Queue — shows flagged resources with status tracking,
  * lift classification, no-lift diagnosis, batch ledger, and coverage lift summary.
  */
-import { useState } from 'react';
+import React, { useState } from 'react';
 import type { DominantBottleneck, BatchLedgerEntry } from '@/hooks/useDeepReExtraction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
