@@ -1232,6 +1232,11 @@ async function reconcileResourceSnapshot(
     update.last_extraction_summary = `Job mode partial: ${actualCompleted}/${totalBatches} batches, ${finalTotal} KIs. ${stoppedByWatchdog ? 'Watchdog stopped — will attempt continuation.' : `Error: ${lastError || 'unknown'}`}`;
   }
 
+  // NEVER leave last_extraction_run_status null
+  if (!update.last_extraction_run_status) {
+    update.last_extraction_run_status = allComplete ? 'completed' : 'partial_complete_resumable';
+  }
+
   await supabaseAdmin.from('resources').update(update).eq('id', resourceId);
   console.log(`[SNAPSHOT RECONCILE] done | KIs=${finalTotal} | KIs/1k=${finalKisPer1k} | runs=${totalRunCount} | batches=${actualCompleted}/${totalBatches} | status=${update.active_job_status}`);
 }
@@ -1499,7 +1504,7 @@ Deno.serve(async (req) => {
           const staleness = Date.now() - lastUpdate;
 
           if (staleness < STALE_THRESHOLD_MS) {
-            console.log(`[IDEMPOTENCY] REJECT: resource=${resourceId} already running (${Math.round(staleness / 1000)}s ago)`);
+            console.log(`[IDEMPOTENCY] already running short-circuit | resource=${resourceId} | ${Math.round(staleness / 1000)}s since last update`);
             return new Response(JSON.stringify({
               status: 'already_running',
               resourceId,
@@ -1509,11 +1514,11 @@ Deno.serve(async (req) => {
               totalBatches: currentResource.extraction_batch_total,
             }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
           } else {
-            console.log(`[IDEMPOTENCY] stale running reconciled | resource=${resourceId} | stale for ${Math.round(staleness / 1000)}s — clearing and continuing`);
+            console.log(`[IDEMPOTENCY] stale run cleared | resource=${resourceId} | stale for ${Math.round(staleness / 1000)}s — clearing and continuing`);
           }
         }
       } else {
-        console.log(`[JOB MODE] continuation picked up | resource=${resourceId}`);
+        console.log(`[IDEMPOTENCY] continuation allowed | resource=${resourceId}`);
       }
 
       // ── Heartbeat helper ──
@@ -1761,7 +1766,7 @@ Deno.serve(async (req) => {
       console.log(`[JOB MODE] DONE: ${completedSet.size}/${totalBatches} batches, ${batchesProcessedThisJob} processed this run, ${totalSaved} saved, allComplete=${allComplete}`);
 
       // ── SELF-INVOKE CONTINUATION (if not all complete) ──
-      if (!allComplete && consecutiveFailures < 2) {
+      if (!allComplete && (stoppedByWatchdog || consecutiveFailures < 2)) {
         // Use service role key for self-invoke (user JWT may expire during long runs)
         const remaining = totalBatches - completedSet.size;
         console.log(`[JOB MODE] self-invoke: ${remaining} batches remaining`);
