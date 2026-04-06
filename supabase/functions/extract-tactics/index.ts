@@ -1698,7 +1698,9 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        console.log(`[JOB MODE] batch started | ${batchIdx + 1}/${totalBatches} | chars ${slice.start}-${slice.end} (${batchContent.length} chars) | elapsed=${Math.round(elapsed / 1000)}s | timeout=${Math.round(batchTimeoutMs / 1000)}s`);
+        const elapsedSec = Math.round((Date.now() - jobStart) / 1000);
+        const batchTimeoutSec = Math.round(getBatchTimeoutMs() / 1000);
+        console.log(`[JOB MODE] batch started | ${batchIdx + 1}/${totalBatches} | chars ${slice.start}-${slice.end} (${batchContent.length} chars) | elapsed=${elapsedSec}s | timeout=${batchTimeoutSec}s`);
 
         // Mark batch as running + heartbeat
         await supabaseAdmin.from('extraction_batches').upsert({
