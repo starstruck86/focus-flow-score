@@ -6,6 +6,7 @@
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { toast } from 'sonner';
 import type { ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
 
@@ -217,8 +218,8 @@ export function useDeepReExtraction() {
 
   // ── CHUNKED EXTRACTION: split large resources into multiple edge function calls ──
   const LARGE_DOC_THRESHOLD = 40000; // chars
-  const BATCH_SLICE_SIZE = 30000; // chars per batch (with overlap)
-  const BATCH_OVERLAP = 1500; // overlap between batches
+  const BATCH_SLICE_SIZE = 15000; // chars per batch — kept small so each edge function call completes within timeout
+  const BATCH_OVERLAP = 1000; // overlap between batches
 
   const computeSlices = (contentLength: number): { start: number; end: number }[] => {
     if (contentLength <= LARGE_DOC_THRESHOLD) return [{ start: 0, end: contentLength }];
@@ -295,11 +296,17 @@ export function useDeepReExtraction() {
           bodyPayload.batchTotal = batchTotal;
         }
 
-        const { data, error } = await supabase.functions.invoke('extract-tactics', {
+        // Use authenticatedFetch with 150s timeout for extraction calls
+        const response = await authenticatedFetch({
+          functionName: 'extract-tactics',
           body: bodyPayload,
+          componentName: 'useDeepReExtraction',
+          timeoutMs: 150_000, // 150s — edge functions can run up to ~150s
         });
+        const data = await response.json();
+        const error = !response.ok ? (data?.error || `HTTP ${response.status}`) : null;
 
-        if (error) throw new Error(error.message);
+        if (error) throw new Error(typeof error === 'string' ? error : JSON.stringify(error));
         if (data?.error) throw new Error(data.error);
 
         const efReturned = data?.model_metrics?.raw_count ?? 0;
