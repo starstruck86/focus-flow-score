@@ -56,12 +56,6 @@ function buildQueue(resources: ResourceAuditRow[]): QueueEntry[] {
   // Guardrail: exclude reference_only and already-strong resources
   const eligible = resources.filter(r => !isExcluded(r) && !isAlreadyStrong(r));
 
-  // Bucket 0 — Resumable extractions always get top priority
-  eligible
-    .filter(r => isResumable(r))
-    .sort((a, b) => b.content_length - a.content_length)
-    .forEach(r => add(r, `Resumable — batch ${r.extraction_batches_completed + 1} of ${r.extraction_batch_total}`, 0));
-
   const add = (r: ResourceAuditRow, reason: string, priority: number) => {
     if (seen.has(r.resource_id)) return;
     seen.add(r.resource_id);
@@ -69,6 +63,12 @@ function buildQueue(resources: ResourceAuditRow[]): QueueEntry[] {
     const typeBoost = TYPE_PRIORITY[r.resource_type] ?? 1;
     entries.push({ resource: r, reason, priority: priority - (typeBoost * 0.1) });
   };
+
+  // Bucket 0 — Resumable extractions always get top priority
+  eligible
+    .filter(r => isResumable(r))
+    .sort((a, b) => b.content_length - a.content_length)
+    .forEach(r => add(r, `Resumable — batch ${r.extraction_batches_completed + 1} of ${r.extraction_batch_total}`, 0));
 
   // Bucket A — High value + under-extracted (content_length ≥ 1500)
   eligible
