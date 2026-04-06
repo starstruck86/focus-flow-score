@@ -1483,9 +1483,10 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════
     if (jobMode && resourceId) {
       console.log(`[JOB MODE] start | resource=${resourceId} | isContinuation=${!!isContinuation}`);
-      const JOB_WATCHDOG_MS = 90 * 1000; // 90s — leaves ~110s for batch + reconcile + self-invoke before platform kill at ~200s
-      const BATCH_TIMEOUT_MS = 75 * 1000; // 75s — single batch AI call cap, must be < watchdog
+      const JOB_WATCHDOG_MS = 90 * 1000; // 90s — don't START a new batch after this
+      const BATCH_TIMEOUT_MS = 150 * 1000; // 150s — single batch AI call cap; platform kills ~200s so leaves ~40s for reconcile+self-invoke
       const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 min = stale (faster recovery)
+      const MAX_BATCH_RETRIES = 3; // skip a batch after this many failures
       const jobStart = Date.now();
 
       // ── IDEMPOTENCY GUARD (skipped for self-invoke continuations) ──
