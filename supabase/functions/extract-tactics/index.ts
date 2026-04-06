@@ -1616,42 +1616,28 @@ Deno.serve(async (req) => {
         (ledgerRows || []).filter((b: any) => b.status === 'completed').map((b: any) => b.batch_index)
       );
 
-      // Build retry count from ledger: count how many times each batch has been attempted
-      // A batch with status='failed' and a completed_at means it was attempted and failed.
-      // We track this via a simple heuristic: if a failed batch has error containing 'timed out',
-      // count it. On each continuation, failed batches get retried — but we cap retries.
-      const batchRetryCounts = new Map<number, number>();
+      // Parse retry counts from failed batch error messages (durable across invocations)
+      // Error format: "... (attempt N/MAX)"
+      const getAttemptCount = (error: string | null): number => {
+        if (!error) return 0;
+        const match = error.match(/\(attempt (\d+)\//);
+        return match ? parseInt(match[1], 10) : 1; // If failed without count, it was attempt 1
+      };
+
+      // Skip permanently-failed batches (exceeded retry limit)
       for (const b of (ledgerRows || [])) {
         if (b.status === 'failed') {
-          // Each failed entry is one attempt. Estimate retry count from error messages.
-          batchRetryCounts.set(b.batch_index, (batchRetryCounts.get(b.batch_index) || 0) + 1);
-        }
-      }
-
-      // Skip batches that have exceeded retry limit
-      const skippedSet = new Set<number>();
-      for (const [batchIdx, retries] of batchRetryCounts) {
-        if (retries >= MAX_BATCH_RETRIES) {
-          console.log(`[JOB MODE] Skipping batch ${batchIdx + 1}/${totalBatches} — exceeded ${MAX_BATCH_RETRIES} retries`);
-          completedSet.add(batchIdx); // Treat as "done" so it's not retried
-          skippedSet.add(batchIdx);
-          // Mark in ledger as permanently skipped
-          await supabaseAdmin.from('extraction_batches').update({
-            status: 'completed',
-            error: `Skipped after ${retries} failed attempts`,
-            saved_count: 0,
-            completed_at: new Date().toISOString(),
-          }).eq('resource_id', resourceId).eq('batch_index', batchIdx);
-        }
-      }
-
-      // Reset failed (but retryable) batches to pending so loop picks them up
-      for (const b of (ledgerRows || [])) {
-        if (b.status === 'failed' && !skippedSet.has(b.batch_index)) {
-          console.log(`[JOB MODE] Resetting failed batch ${b.batch_index + 1} to pending for retry`);
-          await supabaseAdmin.from('extraction_batches').update({
-            status: 'pending',
-          }).eq('resource_id', resourceId).eq('batch_index', b.batch_index);
+          const attempts = getAttemptCount(b.error);
+          if (attempts >= MAX_BATCH_RETRIES) {
+            console.log(`[JOB MODE] Skipping batch ${b.batch_index + 1}/${totalBatches} — failed ${attempts} times, marking as permanently skipped`);
+            completedSet.add(b.batch_index);
+            await supabaseAdmin.from('extraction_batches').update({
+              status: 'completed',
+              error: `Permanently skipped after ${attempts} failed attempts`,
+              saved_count: 0,
+              completed_at: new Date().toISOString(),
+            }).eq('resource_id', resourceId).eq('batch_index', b.batch_index);
+          }
         }
       }
 
