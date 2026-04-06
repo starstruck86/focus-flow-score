@@ -98,14 +98,24 @@ export function KnowledgeCoverageAudit() {
   const fullyMinedPct = audit.resources.length > 0 ? Math.round((audit.resourcesFullyMined / audit.resources.length) * 100) : 0;
 
   const handleFlagForReExtraction = (resources: ResourceAuditRow[], reason: string) => {
+    console.log('[QUEUE PATH] handleFlagForReExtraction called', { count: resources.length, reason });
     void deepReExtract.flagForReExtraction(resources, reason);
   };
 
   const handleFlagSingle = (resource: ResourceAuditRow) => {
+    console.log('[QUEUE PATH] handleFlagSingle called', { resourceId: resource.resource_id, title: resource.title });
     void deepReExtract.flagForReExtraction([resource], 'Manual — single resource re-extract');
   };
 
   const handleResumeSingle = (resource: ResourceAuditRow) => {
+    console.log('[RESUME HANDLER] handleResumeSingle called', {
+      resourceId: resource.resource_id,
+      title: resource.title,
+      isResumable: isResumable(resource),
+      batchProgress: `${resource.extraction_batches_completed ?? '?'}/${resource.extraction_batch_total ?? '?'}`,
+      sourceCTA: 'handleResumeSingle',
+    });
+    console.log('[RESUME PATH] calling resumeAndRunSingle');
     void deepReExtract.resumeAndRunSingle(resource);
   };
 
@@ -465,10 +475,20 @@ export function KnowledgeCoverageAudit() {
         open={!!selectedResourceId}
         onOpenChange={(open) => { if (!open) setSelectedResourceId(null); }}
         onReExtract={(r) => {
-          const isResumableResource = isResumable(r);
-          if (isResumableResource) {
+          const resumable = isResumable(r);
+          console.log('[DRAWER CTA] onReExtract fired', {
+            resourceId: r.resource_id,
+            title: r.title,
+            isResumable: resumable,
+            extraction_is_resumable: r.extraction_is_resumable,
+            batches: `${r.extraction_batches_completed ?? 0}/${r.extraction_batch_total ?? 0}`,
+            last_status: r.last_extraction_run_status,
+          });
+          if (resumable) {
+            console.log('[DRAWER CTA] routing to RESUME path');
             handleResumeSingle(r);
           } else {
+            console.log('[DRAWER CTA] routing to QUEUE path');
             handleFlagSingle(r);
           }
         }}
