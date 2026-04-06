@@ -1220,15 +1220,16 @@ async function reconcileResourceSnapshot(
     update.last_extraction_run_status = 'completed';
     update.last_extraction_summary = `Job mode complete: ${totalBatches} batches, ${finalTotal} KIs, ${finalKisPer1k} KIs/1k`;
   } else {
-    // Still incomplete — mark as partial/resumable but NOT running
-    // (running state is only for active processing within an invocation)
-    update.active_job_status = stoppedByWatchdog ? 'running' : 'partial'; // keep running if continuation expected
+    // Still incomplete — mark as partial/resumable.
+    // Do NOT set 'running' here — the self-invoke dispatch section handles that separately.
+    // This prevents zombie 'running' states if reconciliation runs but continuation fails.
+    update.active_job_status = 'partial';
     update.extraction_is_resumable = true;
     update.extraction_batch_status = nextIncompleteBatch != null
       ? `resume_from_batch_${nextIncompleteBatch + 1}_of_${totalBatches}`
       : `partial_${actualCompleted}_of_${totalBatches}`;
     update.last_extraction_run_status = 'partial_complete_resumable';
-    update.last_extraction_summary = `Job mode partial: ${actualCompleted}/${totalBatches} batches, ${finalTotal} KIs. ${stoppedByWatchdog ? 'Watchdog stopped — continuation dispatched.' : `Error: ${lastError || 'unknown'}`}`;
+    update.last_extraction_summary = `Job mode partial: ${actualCompleted}/${totalBatches} batches, ${finalTotal} KIs. ${stoppedByWatchdog ? 'Watchdog stopped — will attempt continuation.' : `Error: ${lastError || 'unknown'}`}`;
   }
 
   await supabaseAdmin.from('resources').update(update).eq('id', resourceId);
