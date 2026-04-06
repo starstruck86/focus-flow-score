@@ -886,8 +886,110 @@ export function useDeepReExtraction() {
     }
   }, [queue, qc]);
 
+  /**
+   * Resume and immediately run extraction for a single resource.
+   * This is the "Resume" CTA handler — flags + runs in one action.
+   */
+  const resumeAndRunSingle = useCallback(async (resource: ResourceAuditRow) => {
+    // Guard: already running
+    const existing = queue.find(q => q.resource_id === resource.resource_id);
+    if (existing?.status === 'running' || existing?.status === 'running_batched') {
+      toast.info('Extraction already in progress for this resource');
+      return;
+    }
+
+    console.log('[RESUME CTA] clicked', { resourceId: resource.resource_id, title: resource.title });
+
+    // Hydrate durable resume state
+    const resumeInfo = await getResumeInfo(resource.resource_id);
+    console.log('[RESUME CTA] hydrated durable state', {
+      nextBatchIndex: resumeInfo.nextBatchIndex,
+      completedCount: resumeInfo.completedCount,
+      batchTotal: resumeInfo.batchTotal,
+      hasIncompleteBatches: resumeInfo.hasIncompleteBatches,
+    });
+
+    // Build the queue item with resume info baked in
+    const isBatched = resource.content_length > LARGE_DOC_THRESHOLD;
+    const item: ReExtractQueueItem = {
+      resource_id: resource.resource_id,
+      title: resource.title,
+      resource_type: resource.resource_type,
+      content_length: resource.content_length,
+      pre_ki_count: resource.ki_count_total,
+      pre_kis_per_1k: resource.kis_per_1k_chars,
+      pre_depth_bucket: resource.extraction_depth_bucket,
+      pre_active_count: resource.ki_count_active,
+      pre_context_count: resource.ki_with_context_count,
+      reason: 'Resume — direct CTA',
+      status: isBatched ? 'running_batched' : 'running',
+      is_batched: isBatched,
+      batch_total: resumeInfo.batchTotal || undefined,
+      batches_completed: resumeInfo.completedCount || undefined,
+      batch_status: resumeInfo.hasIncompleteBatches
+        ? formatResumeBatchStatus(summarizeBatchLedger(resumeInfo.ledger, resumeInfo.batchTotal))
+        : undefined,
+      batch_ledger: resumeInfo.ledger.length > 0 ? resumeInfo.ledger : undefined,
+    };
+
+    // Add to queue in running state immediately
+    setQueue(prev => {
+      const merged = new Map(prev.map(q => [q.resource_id, q]));
+      merged.set(item.resource_id, item);
+      return Array.from(merged.values());
+    });
+
+    const nextBatch = (resumeInfo.nextBatchIndex ?? 0) + 1;
+    const total = resumeInfo.batchTotal || '?';
+    toast.info(`Resuming "${resource.title}" from batch ${nextBatch} of ${total}…`);
+
+    console.log('[RESUME CTA] starting resource', {
+      resourceId: resource.resource_id,
+      nextBatchIndex: resumeInfo.nextBatchIndex,
+      completed: resumeInfo.completedCount,
+      total: resumeInfo.batchTotal,
+    });
+
+    setIsRunning(true);
+
+    try {
+      const result = await runSingleExtraction(item);
+
+      setQueue(prev => prev.map(i =>
+        i.resource_id === item.resource_id ? {
+          ...i,
+          status: result.finalStatus,
+          post_ki_count: item.pre_ki_count + result.kiDelta,
+          post_kis_per_1k: result.postKisPer1k,
+          ki_delta: result.kiDelta,
+          net_new_unique: result.netNewUnique,
+          lift_status: result.liftStatus,
+          no_lift_reason: result.noLiftReason,
+          dominant_bottleneck: result.dominantBottleneck,
+        } : i
+      ));
+
+      if (result.netNewUnique > 0) {
+        toast.success(`Extraction complete for "${resource.title}": +${result.netNewUnique} net new KIs`);
+      } else {
+        toast.info(`Extraction complete for "${resource.title}": no new KIs found`);
+      }
+    } catch (err: any) {
+      setQueue(prev => prev.map(i =>
+        i.resource_id === item.resource_id ? { ...i, status: 'failed', error: err.message } : i
+      ));
+      toast.error(`Extraction failed for "${resource.title}": ${err.message}`);
+    }
+
+    setIsRunning(false);
+    qc.invalidateQueries({ queryKey: ['knowledge-coverage-audit'] });
+    qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+    qc.invalidateQueries({ queryKey: ['resources'] });
+  }, [queue, qc]);
+
   return {
     queue, isRunning, liftSummary, excludedResourceIds,
     flagForReExtraction, removeFromQueue, clearQueue, runDeepExtraction, markExcluded,
+    resumeAndRunSingle,
   };
 }
