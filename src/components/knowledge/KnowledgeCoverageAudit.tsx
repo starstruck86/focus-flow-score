@@ -31,7 +31,7 @@ import { ResourceAuditDrilldown } from './ResourceAuditDrilldown';
 import { RealBottleneckReview } from './RealBottleneckReview';
 import { toast } from 'sonner';
 
-type AuditFilter = 'all' | 'under_extracted' | 'shallow' | 'rich_weak' | 'zero_kis' | 'recently_extracted' | 'biggest_lift';
+type AuditFilter = 'all' | 'resumable' | 'under_extracted' | 'shallow' | 'rich_weak' | 'zero_kis' | 'recently_extracted' | 'biggest_lift';
 
 export function KnowledgeCoverageAudit() {
   const { data: audit, isLoading, refetch } = useKnowledgeCoverageAudit();
@@ -48,10 +48,21 @@ export function KnowledgeCoverageAudit() {
     return audit.resources.find(r => r.resource_id === selectedResourceId) ?? null;
   }, [selectedResourceId, audit]);
 
+  const isResumable = (x: ResourceAuditRow) =>
+    x.extraction_is_resumable
+    || (x.extraction_batches_completed > 0 && x.extraction_batches_completed < x.extraction_batch_total)
+    || x.last_extraction_run_status === 'partial_complete_resumable';
+
+  const resumableResources = useMemo(() => {
+    if (!audit) return [];
+    return audit.resources.filter(isResumable);
+  }, [audit]);
+
   const filteredResources = useMemo(() => {
     if (!audit) return [];
     const r = audit.resources;
     switch (auditFilter) {
+      case 'resumable': return r.filter(isResumable);
       case 'under_extracted': return r.filter(x => x.under_extracted_flag);
       case 'shallow': return r.filter(x => x.extraction_depth_bucket === 'shallow');
       case 'rich_weak': return r.filter(x => x.content_length >= 3000 && x.kis_per_1k_chars < 1.0);
