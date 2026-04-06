@@ -859,9 +859,11 @@ export function useDeepReExtraction() {
       totalEfReturned, totalEfValidated, totalEfSaved, totalDupsSkipped, item.pre_kis_per_1k, kiDelta
     );
 
+    // Determine final status: if stopped by safety limits (not error), stay resumable
     const finalStatus: ReExtractQueueStatus =
       batchesCompleted === 0 ? 'failed'
-      : isBatched && batchesCompleted < batchTotal && batchesCompleted > 0 ? 'partial_complete_resumable'
+      : isBatched && batchesCompleted < batchTotal ? 'partial_complete_resumable'
+      : lastError && batchesCompleted > 0 && batchesCompleted < batchTotal ? 'partial_complete_resumable'
       : lastError && batchesCompleted > 0 ? 'partial'
       : 'completed';
 
