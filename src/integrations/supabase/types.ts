@@ -1824,6 +1824,75 @@ export type Database = {
         }
         Relationships: []
       }
+      extraction_batches: {
+        Row: {
+          batch_index: number
+          batch_total: number
+          char_end: number
+          char_start: number
+          completed_at: string | null
+          created_at: string
+          cumulative_resource_ki_count: number | null
+          duplicates_skipped: number | null
+          error: string | null
+          extraction_run_id: string | null
+          id: string
+          raw_count: number | null
+          resource_id: string
+          saved_count: number | null
+          semantic_end_marker: string | null
+          semantic_start_marker: string | null
+          started_at: string | null
+          status: string
+          user_id: string
+          validated_count: number | null
+        }
+        Insert: {
+          batch_index: number
+          batch_total: number
+          char_end: number
+          char_start: number
+          completed_at?: string | null
+          created_at?: string
+          cumulative_resource_ki_count?: number | null
+          duplicates_skipped?: number | null
+          error?: string | null
+          extraction_run_id?: string | null
+          id?: string
+          raw_count?: number | null
+          resource_id: string
+          saved_count?: number | null
+          semantic_end_marker?: string | null
+          semantic_start_marker?: string | null
+          started_at?: string | null
+          status?: string
+          user_id: string
+          validated_count?: number | null
+        }
+        Update: {
+          batch_index?: number
+          batch_total?: number
+          char_end?: number
+          char_start?: number
+          completed_at?: string | null
+          created_at?: string
+          cumulative_resource_ki_count?: number | null
+          duplicates_skipped?: number | null
+          error?: string | null
+          extraction_run_id?: string | null
+          id?: string
+          raw_count?: number | null
+          resource_id?: string
+          saved_count?: number | null
+          semantic_end_marker?: string | null
+          semantic_start_marker?: string | null
+          started_at?: string | null
+          status?: string
+          user_id?: string
+          validated_count?: number | null
+        }
+        Relationships: []
+      }
       extraction_pipeline_jobs: {
         Row: {
           cancelled_at: string | null

@@ -1297,10 +1297,34 @@ Deno.serve(async (req) => {
         supabaseAdmin, resourceId, userId, result, fullContentLength || content.length, startedAt,
       );
 
-      // For chunked extraction: update batch progress but skip full resource snapshot update
-      // (the client will trigger a final resource update after all batches complete)
+      // For chunked extraction: persist batch ledger + update resource progress
       if (batchIndex != null && batchTotal != null) {
         try {
+          // Persist batch record to extraction_batches table
+          const semanticStartMarker = body.semanticStartMarker || `char ${contentSliceStart}`;
+          const semanticEndMarker = body.semanticEndMarker || `char ${contentSliceEnd}`;
+          await supabaseAdmin.from('extraction_batches').upsert({
+            resource_id: resourceId,
+            user_id: userId,
+            extraction_run_id: persistResult?.runId || null,
+            batch_index: batchIndex,
+            batch_total: batchTotal,
+            char_start: contentSliceStart ?? 0,
+            char_end: contentSliceEnd ?? 0,
+            semantic_start_marker: semanticStartMarker,
+            semantic_end_marker: semanticEndMarker,
+            status: persistResult?.status === 'completed' ? 'completed' : 'failed',
+            raw_count: result.rawCount,
+            validated_count: result.validatedCount,
+            saved_count: persistResult?.savedCount ?? 0,
+            duplicates_skipped: persistResult?.duplicatesSkipped ?? 0,
+            cumulative_resource_ki_count: persistResult?.currentResourceKiCount ?? 0,
+            started_at: new Date(startedAt).toISOString(),
+            completed_at: new Date().toISOString(),
+            error: persistResult?.error || null,
+          }, { onConflict: 'resource_id,batch_index' });
+
+          // Update resource-level batch progress
           const updatePayload: Record<string, any> = {
             extraction_batches_completed: batchIndex + 1,
             extraction_batch_total: batchTotal,
@@ -1310,7 +1334,7 @@ Deno.serve(async (req) => {
             extraction_is_resumable: (batchIndex + 1) < batchTotal,
           };
           await supabaseAdmin.from('resources').update(updatePayload).eq('id', resourceId);
-          console.log(`[extract-tactics] Batch ${batchIndex + 1}/${batchTotal} progress saved`);
+          console.log(`[extract-tactics] Batch ${batchIndex + 1}/${batchTotal} progress + ledger saved`);
         } catch (e) {
           console.error('[extract-tactics] Failed to update batch progress:', e);
         }

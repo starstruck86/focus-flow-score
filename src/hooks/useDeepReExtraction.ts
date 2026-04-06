@@ -2,13 +2,14 @@
  * Hook for deep re-extraction queue management.
  * Manages flagging, running, and tracking deep multi-pass re-extraction.
  * Includes lift_status classification, no_lift_reason diagnosis, and verification layer.
- * Supports resumable batched extraction for large documents.
+ * Supports resumable batched extraction for large documents with server-side batch ledger.
  */
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { toast } from 'sonner';
+import { computeSemanticSlices, LARGE_DOC_THRESHOLD, type SemanticSlice } from '@/lib/semanticChunking';
 import type { ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
 
 export type ReExtractQueueStatus = 'queued' | 'running' | 'completed' | 'partial' | 'failed'
@@ -40,13 +41,17 @@ export interface BatchLedgerEntry {
   batchIndex: number;
   charStart: number;
   charEnd: number;
+  semanticStartMarker?: string;
+  semanticEndMarker?: string;
   raw: number;
   validated: number;
   saved: number;
   dupsSkipped: number;
   cumulativeKiTotal: number;
-  status: 'completed' | 'failed' | 'skipped_resume';
+  status: 'completed' | 'failed' | 'skipped_resume' | 'pending';
   error?: string;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface ReExtractQueueItem {
@@ -60,7 +65,6 @@ export interface ReExtractQueueItem {
   pre_context_count: number;
   reason: string;
   status: ReExtractQueueStatus;
-  // Post-extraction metrics (from fresh DB query)
   post_ki_count?: number;
   post_kis_per_1k?: number;
   post_active_count?: number;
@@ -73,25 +77,19 @@ export interface ReExtractQueueItem {
   duplicates_skipped?: number;
   quality_label?: string;
   error?: string;
-  // Lift classification
   lift_status?: LiftStatus;
   no_lift_reason?: NoLiftReason;
-  // Edge function raw metrics for diagnosis
   ef_returned_count?: number;
   ef_validated_count?: number;
   ef_saved_count?: number;
   ef_dedup_details?: Record<string, number>;
   ef_validation_rejections?: Record<string, number>;
-  // Bottleneck classification
   dominant_bottleneck?: DominantBottleneck;
-  // Exclusion flag
   excluded_from_future?: boolean;
-  // Batch tracking
   batch_total?: number;
   batches_completed?: number;
   batch_status?: string;
   is_batched?: boolean;
-  // Batch ledger — per-batch results
   batch_ledger?: BatchLedgerEntry[];
 }
 
@@ -148,22 +146,64 @@ function classifyBottleneck(
   return 'unknown';
 }
 
-// ── CHUNKED EXTRACTION CONSTANTS ──
-const LARGE_DOC_THRESHOLD = 40000;
-const BATCH_SLICE_SIZE = 15000;
-const BATCH_OVERLAP = 1000;
+// ── STALE JOB DETECTION ──
+const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
-function computeSlices(contentLength: number): { start: number; end: number }[] {
-  if (contentLength <= LARGE_DOC_THRESHOLD) return [{ start: 0, end: contentLength }];
-  const slices: { start: number; end: number }[] = [];
-  let start = 0;
-  while (start < contentLength) {
-    const end = Math.min(start + BATCH_SLICE_SIZE, contentLength);
-    slices.push({ start, end });
-    if (end >= contentLength) break;
-    start = end - BATCH_OVERLAP;
+/** Query the DB batch ledger for resume state */
+async function getResumeInfo(resourceId: string): Promise<{
+  completedBatches: number[];
+  batchTotal: number;
+  isResumable: boolean;
+  isStale: boolean;
+  ledger: BatchLedgerEntry[];
+}> {
+  // Check resource-level state
+  const { data: resource } = await supabase
+    .from('resources' as any)
+    .select('extraction_batches_completed, extraction_batch_total, extraction_is_resumable, extraction_batch_status, active_job_status, updated_at')
+    .eq('id', resourceId)
+    .single();
+
+  const rData = resource as any;
+  const batchTotal = rData?.extraction_batch_total ?? 0;
+  const isResumable = rData?.extraction_is_resumable ?? false;
+
+  // Check for stale running state
+  const isRunning = rData?.active_job_status === 'running' || (rData?.extraction_batch_status || '').startsWith('running');
+  const lastUpdate = rData?.updated_at ? new Date(rData.updated_at).getTime() : 0;
+  const isStale = isRunning && (Date.now() - lastUpdate > STALE_THRESHOLD_MS);
+
+  // Query actual batch ledger from DB
+  const { data: batches } = await supabase
+    .from('extraction_batches' as any)
+    .select('*')
+    .eq('resource_id', resourceId)
+    .order('batch_index', { ascending: true });
+
+  const completedBatches: number[] = [];
+  const ledger: BatchLedgerEntry[] = [];
+
+  for (const b of (batches || []) as any[]) {
+    ledger.push({
+      batchIndex: b.batch_index,
+      charStart: b.char_start,
+      charEnd: b.char_end,
+      semanticStartMarker: b.semantic_start_marker,
+      semanticEndMarker: b.semantic_end_marker,
+      raw: b.raw_count ?? 0,
+      validated: b.validated_count ?? 0,
+      saved: b.saved_count ?? 0,
+      dupsSkipped: b.duplicates_skipped ?? 0,
+      cumulativeKiTotal: b.cumulative_resource_ki_count ?? 0,
+      status: b.status === 'completed' ? 'completed' : b.status === 'failed' ? 'failed' : 'pending',
+      error: b.error,
+      startedAt: b.started_at,
+      completedAt: b.completed_at,
+    });
+    if (b.status === 'completed') completedBatches.push(b.batch_index);
   }
-  return slices;
+
+  return { completedBatches, batchTotal, isResumable: isResumable || completedBatches.length > 0, isStale, ledger };
 }
 
 export function useDeepReExtraction() {
@@ -183,7 +223,7 @@ export function useDeepReExtraction() {
     });
 
     if (eligible.length === 0) {
-      toast.info('No eligible resources to re-extract (all strong, excluded, or too thin)');
+      toast.info('No eligible resources to re-extract');
       return;
     }
 
@@ -228,40 +268,54 @@ export function useDeepReExtraction() {
     toast.success('Resource excluded from future re-extraction queues');
   }, []);
 
-  // ── Query DB for resume state (how many batches already completed) ──
-  const getResumeStartIndex = async (resourceId: string, totalBatches: number): Promise<number> => {
-    try {
-      const { data } = await supabase
-        .from('resources' as any)
-        .select('extraction_batches_completed, extraction_batch_total, extraction_is_resumable')
-        .eq('id', resourceId)
-        .single();
-      if (data && (data as any).extraction_is_resumable && (data as any).extraction_batches_completed > 0) {
-        const completed = (data as any).extraction_batches_completed as number;
-        const prevTotal = (data as any).extraction_batch_total as number;
-        // Only resume if the batch config matches (same total)
-        if (prevTotal === totalBatches && completed < totalBatches) {
-          console.log(`[ReExtract] RESUME: skipping ${completed} already-completed batches`);
-          return completed;
-        }
-      }
-    } catch {
-      // ignore — start from 0
-    }
-    return 0;
-  };
-
   const runSingleExtraction = async (item: ReExtractQueueItem): Promise<{
     kiDelta: number; netNewUnique: number; activeDelta: number; contextDelta: number;
     postKisPer1k: number; liftStatus: LiftStatus; noLiftReason?: NoLiftReason;
     dominantBottleneck: DominantBottleneck; finalStatus: ReExtractQueueStatus;
   }> => {
     const isBatched = item.content_length > LARGE_DOC_THRESHOLD;
-    const slices = computeSlices(item.content_length);
-    const batchTotal = slices.length;
 
-    // Resume support: check if some batches already completed
-    const resumeFrom = isBatched ? await getResumeStartIndex(item.resource_id, batchTotal) : 0;
+    // For batched: fetch content for semantic slicing, then get resume info
+    let slices: SemanticSlice[] = [{ start: 0, end: item.content_length, semanticStartMarker: '(start)', semanticEndMarker: '(end)' }];
+    let resumeFrom = 0;
+    let existingLedger: BatchLedgerEntry[] = [];
+
+    if (isBatched) {
+      // Fetch resource content for semantic boundary detection
+      const { data: resourceData } = await supabase
+        .from('resources' as any)
+        .select('content')
+        .eq('id', item.resource_id)
+        .single();
+      const content = (resourceData as any)?.content || '';
+      slices = computeSemanticSlices(item.content_length, content);
+
+      // Get resume info from DB batch ledger
+      const resumeInfo = await getResumeInfo(item.resource_id);
+      existingLedger = resumeInfo.ledger;
+
+      // If stale, clear the stale lock first
+      if (resumeInfo.isStale) {
+        console.log(`[ReExtract] Clearing stale lock for "${item.title}"`);
+        await supabase.from('resources' as any).update({
+          active_job_status: 'stale_cleared',
+          extraction_batch_status: 'stale_cleared',
+        } as any).eq('id', item.resource_id);
+      }
+
+      // Determine which batches to skip (already completed in DB)
+      // Only skip if the batch config matches (same total)
+      if (resumeInfo.batchTotal === slices.length && resumeInfo.completedBatches.length > 0) {
+        resumeFrom = Math.max(...resumeInfo.completedBatches) + 1;
+        if (resumeFrom >= slices.length) {
+          // All batches already done — nothing to do
+          console.log(`[ReExtract] All ${slices.length} batches already completed for "${item.title}"`);
+          // Still run verification
+        }
+      }
+    }
+
+    const batchTotal = slices.length;
 
     if (isBatched) {
       setQueue(prev => prev.map(i =>
@@ -274,10 +328,10 @@ export function useDeepReExtraction() {
           batch_status: resumeFrom > 0
             ? `resuming_from_batch_${resumeFrom + 1}_of_${batchTotal}`
             : `running_batch_1_of_${batchTotal}`,
-          batch_ledger: [],
+          batch_ledger: existingLedger.length > 0 ? existingLedger : [],
         } : i
       ));
-      console.log(`[ReExtract] BATCHED: "${item.title}" | ${item.content_length} chars → ${batchTotal} batches${resumeFrom > 0 ? ` (resuming from batch ${resumeFrom + 1})` : ''}`);
+      console.log(`[ReExtract] BATCHED: "${item.title}" | ${item.content_length} chars → ${batchTotal} semantic batches${resumeFrom > 0 ? ` (resuming from batch ${resumeFrom + 1})` : ''}`);
     } else {
       setQueue(prev => prev.map(i =>
         i.resource_id === item.resource_id ? { ...i, status: 'running' as const } : i
@@ -291,16 +345,16 @@ export function useDeepReExtraction() {
     let allPassesRun: string[] = [];
     let lastError: string | null = null;
     let batchesCompleted = resumeFrom;
-    const batchLedger: BatchLedgerEntry[] = [];
+    const batchLedger: BatchLedgerEntry[] = [...existingLedger];
 
-    // Add skipped-resume entries for already-completed batches
-    for (let i = 0; i < resumeFrom; i++) {
+    // Add skipped-resume entries for batches already in DB
+    for (let i = existingLedger.length; i < resumeFrom; i++) {
       batchLedger.push({
         batchIndex: i,
-        charStart: slices[i].start,
-        charEnd: slices[i].end,
+        charStart: slices[i]?.start ?? 0,
+        charEnd: slices[i]?.end ?? 0,
         raw: 0, validated: 0, saved: 0, dupsSkipped: 0,
-        cumulativeKiTotal: 0, // unknown for resumed batches
+        cumulativeKiTotal: 0,
         status: 'skipped_resume',
       });
     }
@@ -330,6 +384,8 @@ export function useDeepReExtraction() {
           bodyPayload.contentSliceEnd = slice.end;
           bodyPayload.batchIndex = batchIdx;
           bodyPayload.batchTotal = batchTotal;
+          bodyPayload.semanticStartMarker = slice.semanticStartMarker;
+          bodyPayload.semanticEndMarker = slice.semanticEndMarker;
         }
 
         const response = await authenticatedFetch({
@@ -358,17 +414,25 @@ export function useDeepReExtraction() {
         allPassesRun = [...new Set([...allPassesRun, ...passesRun])];
         batchesCompleted++;
 
-        batchLedger.push({
+        const entry: BatchLedgerEntry = {
           batchIndex: batchIdx,
           charStart: slice.start,
           charEnd: slice.end,
+          semanticStartMarker: slice.semanticStartMarker,
+          semanticEndMarker: slice.semanticEndMarker,
           raw: efReturned,
           validated: efValidated,
           saved: efSaved,
           dupsSkipped,
           cumulativeKiTotal: cumulativeTotal,
           status: 'completed',
-        });
+          completedAt: new Date().toISOString(),
+        };
+
+        // Replace or add ledger entry
+        const existingIdx = batchLedger.findIndex(e => e.batchIndex === batchIdx);
+        if (existingIdx >= 0) batchLedger[existingIdx] = entry;
+        else batchLedger.push(entry);
 
         console.log(`[ReExtract] Batch ${batchIdx + 1}/${batchTotal} complete: ${efReturned} raw → ${efValidated} valid → ${efSaved} saved | cumulative: ${cumulativeTotal} KIs`);
 
@@ -393,7 +457,7 @@ export function useDeepReExtraction() {
         lastError = err.message;
         console.error(`[ReExtract] Batch ${batchIdx + 1}/${batchTotal} failed:`, err.message);
 
-        batchLedger.push({
+        const errorEntry: BatchLedgerEntry = {
           batchIndex: batchIdx,
           charStart: slice.start,
           charEnd: slice.end,
@@ -401,7 +465,11 @@ export function useDeepReExtraction() {
           cumulativeKiTotal: 0,
           status: 'failed',
           error: err.message,
-        });
+        };
+
+        const existingIdx = batchLedger.findIndex(e => e.batchIndex === batchIdx);
+        if (existingIdx >= 0) batchLedger[existingIdx] = errorEntry;
+        else batchLedger.push(errorEntry);
 
         // For batched: continue to next batch, don't abort entirely
         if (!isBatched) throw err;
@@ -445,6 +513,28 @@ export function useDeepReExtraction() {
       : isBatched && batchesCompleted < batchTotal && batchesCompleted > 0 ? 'partial_complete_resumable'
       : lastError && batchesCompleted > 0 ? 'partial'
       : 'completed';
+
+    // Reconcile resource snapshot from actual run history
+    if (isBatched) {
+      try {
+        const { count: runCount } = await supabase
+          .from('extraction_runs' as any)
+          .select('*', { count: 'exact', head: true })
+          .eq('resource_id', item.resource_id);
+
+        await supabase.from('resources' as any).update({
+          extraction_attempt_count: runCount ?? 0,
+          current_resource_ki_count: postTotal,
+          current_resource_kis_per_1k: postKisPer1k,
+          extraction_is_resumable: batchesCompleted < batchTotal,
+          extraction_batches_completed: batchesCompleted,
+          extraction_batch_total: batchTotal,
+          active_job_status: finalStatus === 'completed' ? 'succeeded' : finalStatus === 'partial_complete_resumable' ? 'partial' : 'failed',
+        } as any).eq('id', item.resource_id);
+      } catch (e) {
+        console.error('[ReExtract] Snapshot reconciliation failed:', e);
+      }
+    }
 
     console.log('REEXTRACT DELTA CHECK', {
       resourceId: item.resource_id, title: item.title,
