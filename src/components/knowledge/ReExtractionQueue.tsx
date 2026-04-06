@@ -162,7 +162,7 @@ function BatchLedgerView({ ledger }: { ledger: BatchLedgerEntry[] }) {
         <thead>
           <tr className="bg-muted/50">
             <th className="px-1.5 py-0.5 text-left font-medium">Batch</th>
-            <th className="px-1.5 py-0.5 text-left font-medium">Range</th>
+            <th className="px-1.5 py-0.5 text-left font-medium">Range / Markers</th>
             <th className="px-1.5 py-0.5 text-right font-medium">Raw</th>
             <th className="px-1.5 py-0.5 text-right font-medium">Valid</th>
             <th className="px-1.5 py-0.5 text-right font-medium">Saved</th>
@@ -179,7 +179,11 @@ function BatchLedgerView({ ledger }: { ledger: BatchLedgerEntry[] }) {
               b.status === 'skipped_resume' && "bg-muted/30 text-muted-foreground"
             )}>
               <td className="px-1.5 py-0.5 font-mono">{b.batchIndex + 1}</td>
-              <td className="px-1.5 py-0.5 font-mono">{(b.charStart / 1000).toFixed(0)}k–{(b.charEnd / 1000).toFixed(0)}k</td>
+              <td className="px-1.5 py-0.5">
+                <div className="font-mono">{(b.charStart / 1000).toFixed(1)}k–{(b.charEnd / 1000).toFixed(1)}k</div>
+                <div className="truncate max-w-[150px]">{b.semanticStartMarker || '—'}</div>
+                <div className="truncate max-w-[150px] text-muted-foreground">→ {b.semanticEndMarker || '—'}</div>
+              </td>
               <td className="px-1.5 py-0.5 text-right font-mono">{b.status === 'skipped_resume' ? '—' : b.raw}</td>
               <td className="px-1.5 py-0.5 text-right font-mono">{b.status === 'skipped_resume' ? '—' : b.validated}</td>
               <td className="px-1.5 py-0.5 text-right font-mono">{b.status === 'skipped_resume' ? '—' : b.saved}</td>
@@ -190,6 +194,7 @@ function BatchLedgerView({ ledger }: { ledger: BatchLedgerEntry[] }) {
               <td className="px-1.5 py-0.5 text-center">
                 {b.status === 'completed' && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600 inline" />}
                 {b.status === 'failed' && <XCircle className="h-2.5 w-2.5 text-destructive inline" />}
+                {b.status === 'running' && <Loader2 className="h-2.5 w-2.5 text-primary inline animate-spin" />}
                 {b.status === 'skipped_resume' && <span className="text-muted-foreground">↩</span>}
               </td>
             </tr>

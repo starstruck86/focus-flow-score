@@ -5,9 +5,12 @@
  */
 
 const NOMINAL_CHUNK_SIZE = 13000;
-const MIN_CHUNK_SIZE = 8000;
-const MAX_CHUNK_SIZE = 18000;
-const OVERLAP_CHARS = 600;
+const MIN_CHUNK_SIZE = 9000;
+const MAX_CHUNK_SIZE = 15000;
+const OVERLAP_CHARS = 450;
+const FORWARD_SEARCH_CHARS = 2200;
+const BACKWARD_SEARCH_CHARS = 2800;
+const OVERLAP_SEARCH_CHARS = 300;
 
 export interface SemanticSlice {
   start: number;
@@ -16,51 +19,137 @@ export interface SemanticSlice {
   semanticEndMarker: string;
 }
 
+interface BoundaryPattern {
+  kind: 'heading' | 'section' | 'paragraph' | 'sentence';
+  regex: RegExp;
+}
+
 /** Priority-ordered boundary patterns */
-const BOUNDARY_PATTERNS = [
-  /^#{1,3}\s+.+$/gm,           // Markdown headings
-  /^---+$/gm,                   // Horizontal rules
-  /\n\n(?=[A-Z])/g,             // Blank line before uppercase start (section boundary)
-  /\n\n/g,                      // Double newline (paragraph boundary)
-  /\.\s+(?=[A-Z])/g,           // Sentence boundary (period + space + uppercase)
+const BOUNDARY_PATTERNS: BoundaryPattern[] = [
+  { kind: 'heading', regex: /^#{1,6}\s+.+$/gm },
+  { kind: 'section', regex: /^\s*(?:---+|===+|\*\*\*+)\s*$/gm },
+  { kind: 'section', regex: /\n\n(?=[A-Z][^\n]{0,120}\n)/g },
+  { kind: 'paragraph', regex: /\n\n+/g },
+  { kind: 'sentence', regex: /(?<=[.!?]["')\]]?)\s+(?=[A-Z0-9])/g },
 ];
 
-function findNearestBoundary(content: string, target: number, searchRange: number): number {
-  const searchStart = Math.max(0, target - searchRange);
-  const searchEnd = Math.min(content.length, target + searchRange);
-  const searchWindow = content.slice(searchStart, searchEnd);
-  
-  let bestPos = -1;
-  let bestDist = Infinity;
-  
-  for (const pattern of BOUNDARY_PATTERNS) {
-    const regex = new RegExp(pattern.source, pattern.flags);
-    let match;
-    while ((match = regex.exec(searchWindow)) !== null) {
-      const absPos = searchStart + match.index + match[0].length;
-      const dist = Math.abs(absPos - target);
-      if (dist < bestDist && absPos > MIN_CHUNK_SIZE) {
-        bestDist = dist;
-        bestPos = absPos;
+const OVERLAP_PATTERNS: BoundaryPattern[] = [
+  { kind: 'paragraph', regex: /\n\n+/g },
+  { kind: 'sentence', regex: /(?<=[.!?]["')\]]?)\s+(?=[A-Z0-9])/g },
+];
+
+function collectBoundaryPositions(
+  content: string,
+  start: number,
+  end: number,
+  pattern: RegExp,
+): number[] {
+  const safeStart = Math.max(0, start);
+  const safeEnd = Math.min(content.length, end);
+  if (safeEnd <= safeStart) return [];
+
+  const searchWindow = content.slice(safeStart, safeEnd);
+  const regex = new RegExp(pattern.source, pattern.flags);
+  const positions: number[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(searchWindow)) !== null) {
+    positions.push(safeStart + match.index + match[0].length);
+    if (match.index === regex.lastIndex) regex.lastIndex++;
+  }
+
+  return positions;
+}
+
+function findBoundaryInDirection(
+  content: string,
+  target: number,
+  minPos: number,
+  maxPos: number,
+  direction: 'forward' | 'backward',
+  patterns: BoundaryPattern[] = BOUNDARY_PATTERNS,
+): number {
+  for (const pattern of patterns) {
+    const positions = collectBoundaryPositions(content, minPos, maxPos, pattern.regex)
+      .filter(pos => pos >= minPos && pos <= maxPos);
+    if (positions.length === 0) continue;
+
+    if (direction === 'forward') {
+      const candidate = positions.find(pos => pos >= target);
+      if (candidate != null) return candidate;
+    } else {
+      for (let i = positions.length - 1; i >= 0; i--) {
+        if (positions[i] <= target) return positions[i];
       }
     }
-    // If we found a good boundary at this priority level, use it
-    if (bestPos >= 0 && bestDist < searchRange * 0.8) break;
   }
-  
-  return bestPos;
+
+  return -1;
+}
+
+function findBestSplitBoundary(content: string, chunkStart: number): number {
+  const target = chunkStart + NOMINAL_CHUNK_SIZE;
+  const minPos = chunkStart + MIN_CHUNK_SIZE;
+  const maxPos = Math.min(content.length, chunkStart + MAX_CHUNK_SIZE);
+
+  const forwardBoundary = findBoundaryInDirection(
+    content,
+    target,
+    Math.max(target, minPos),
+    Math.min(maxPos, target + FORWARD_SEARCH_CHARS),
+    'forward',
+  );
+  if (forwardBoundary >= minPos && forwardBoundary <= maxPos) return forwardBoundary;
+
+  const backwardBoundary = findBoundaryInDirection(
+    content,
+    target,
+    Math.max(minPos, target - BACKWARD_SEARCH_CHARS),
+    maxPos,
+    'backward',
+  );
+  if (backwardBoundary >= minPos && backwardBoundary <= maxPos) return backwardBoundary;
+
+  const nearestForward = findBoundaryInDirection(content, target, minPos, maxPos, 'forward');
+  if (nearestForward >= minPos && nearestForward <= maxPos) return nearestForward;
+
+  const nearestBackward = findBoundaryInDirection(content, target, minPos, maxPos, 'backward');
+  if (nearestBackward >= minPos && nearestBackward <= maxPos) return nearestBackward;
+
+  return Math.min(maxPos, target);
+}
+
+function alignOverlapStart(content: string, nextStart: number, lowerBound: number): number {
+  const minPos = Math.max(lowerBound, nextStart - OVERLAP_SEARCH_CHARS);
+  const maxPos = Math.min(content.length, nextStart + OVERLAP_SEARCH_CHARS);
+
+  const forward = findBoundaryInDirection(content, nextStart, minPos, maxPos, 'forward', OVERLAP_PATTERNS);
+  if (forward >= lowerBound && forward < nextStart + OVERLAP_SEARCH_CHARS) return forward;
+
+  const backward = findBoundaryInDirection(content, nextStart, minPos, maxPos, 'backward', OVERLAP_PATTERNS);
+  if (backward >= lowerBound) return backward;
+
+  return Math.max(lowerBound, nextStart);
 }
 
 function extractMarker(content: string, pos: number, direction: 'start' | 'end'): string {
-  const lineStart = content.lastIndexOf('\n', pos) + 1;
-  const lineEnd = content.indexOf('\n', pos);
-  const line = content.slice(lineStart, lineEnd > 0 ? lineEnd : pos + 80).trim();
-  
-  // Prefer heading as marker
-  if (/^#{1,3}\s+/.test(line)) return line.slice(0, 80);
-  
-  // Otherwise use first 60 chars of the line
-  return line.slice(0, 60) + (line.length > 60 ? '…' : '');
+  const clampedPos = Math.max(0, Math.min(content.length - 1, pos));
+  const lineStart = content.lastIndexOf('\n', clampedPos) + 1;
+  const lineEnd = content.indexOf('\n', clampedPos);
+  const primaryLine = content.slice(lineStart, lineEnd > 0 ? lineEnd : clampedPos + 120).trim();
+
+  if (/^#{1,6}\s+/.test(primaryLine)) return primaryLine.slice(0, 96);
+
+  const searchStart = direction === 'start'
+    ? Math.max(0, clampedPos - 250)
+    : clampedPos;
+  const searchEnd = direction === 'start'
+    ? clampedPos + 40
+    : Math.min(content.length, clampedPos + 250);
+  const nearbyHeading = content.slice(searchStart, searchEnd).match(/^#{1,6}\s+.+$/m)?.[0]?.trim();
+  if (nearbyHeading) return nearbyHeading.slice(0, 96);
+
+  return primaryLine.slice(0, 72) + (primaryLine.length > 72 ? '…' : '');
 }
 
 export function computeSemanticSlices(contentLength: number, content?: string): SemanticSlice[] {
@@ -80,7 +169,6 @@ export function computeSemanticSlices(contentLength: number, content?: string): 
 
   const slices: SemanticSlice[] = [];
   let pos = 0;
-  const searchRange = 3000; // Search ±3k chars for a good boundary
 
   while (pos < contentLength) {
     const remaining = contentLength - pos;
@@ -96,14 +184,7 @@ export function computeSemanticSlices(contentLength: number, content?: string): 
       break;
     }
 
-    // Find best split point near NOMINAL_CHUNK_SIZE from current pos
-    const targetEnd = pos + NOMINAL_CHUNK_SIZE;
-    let splitAt = findNearestBoundary(content, targetEnd, searchRange);
-    
-    // Fallback: raw char cutoff at target
-    if (splitAt < 0 || splitAt <= pos + MIN_CHUNK_SIZE || splitAt > pos + MAX_CHUNK_SIZE) {
-      splitAt = targetEnd;
-    }
+    const splitAt = findBestSplitBoundary(content, pos);
 
     slices.push({
       start: pos,
@@ -112,9 +193,8 @@ export function computeSemanticSlices(contentLength: number, content?: string): 
       semanticEndMarker: extractMarker(content, splitAt - 1, 'end'),
     });
 
-    // Advance with small overlap for continuity
-    pos = splitAt - OVERLAP_CHARS;
-    if (pos < 0) pos = 0;
+    const overlapTarget = Math.max(pos + 1, splitAt - OVERLAP_CHARS);
+    pos = alignOverlapStart(content, overlapTarget, pos + 1);
   }
 
   return slices;

@@ -87,11 +87,11 @@ export function KnowledgeCoverageAudit() {
   const fullyMinedPct = audit.resources.length > 0 ? Math.round((audit.resourcesFullyMined / audit.resources.length) * 100) : 0;
 
   const handleFlagForReExtraction = (resources: ResourceAuditRow[], reason: string) => {
-    deepReExtract.flagForReExtraction(resources, reason);
+    void deepReExtract.flagForReExtraction(resources, reason);
   };
 
   const handleFlagSingle = (resource: ResourceAuditRow) => {
-    deepReExtract.flagForReExtraction([resource], 'Manual — single resource re-extract');
+    void deepReExtract.flagForReExtraction([resource], 'Manual — single resource re-extract');
   };
 
   return (

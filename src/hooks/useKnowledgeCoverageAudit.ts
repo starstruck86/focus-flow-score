@@ -13,11 +13,15 @@ export interface ResourceAuditRow {
   resource_type: string;
   enrichment_status: string;
   active_job_status: string | null;
+  extraction_batch_status: string | null;
   content_length: number;
   ki_count_total: number;
   ki_count_active: number;
   ki_with_context_count: number;
   extraction_attempt_count: number;
+  extraction_batches_completed: number;
+  extraction_batch_total: number;
+  extraction_is_resumable: boolean;
   kis_per_1k_chars: number;
   under_extracted_flag: boolean;
   extraction_depth_bucket: 'none' | 'shallow' | 'moderate' | 'strong';
@@ -82,9 +86,37 @@ export function useKnowledgeCoverageAudit() {
     queryFn: async () => {
       const { data: resources, error: rErr } = await supabase
         .from('resources' as any)
-        .select('id, title, resource_type, enrichment_status, active_job_status, content_length, extraction_attempt_count, extraction_mode, extraction_passes_run, raw_candidate_counts, merged_candidate_count, kis_per_1k_chars, extraction_depth_bucket, under_extracted_flag, last_extraction_summary, extraction_method, last_extraction_run_id, last_extraction_run_status, last_extraction_returned_ki_count, last_extraction_deduped_ki_count, last_extraction_validated_ki_count, last_extraction_saved_ki_count, last_extraction_error, last_extraction_duration_ms, last_extraction_model, current_resource_ki_count, current_resource_kis_per_1k')
+        .select('id, title, resource_type, enrichment_status, active_job_status, extraction_batch_status, extraction_batches_completed, extraction_batch_total, extraction_is_resumable, content_length, extraction_attempt_count, extraction_mode, extraction_passes_run, raw_candidate_counts, merged_candidate_count, kis_per_1k_chars, extraction_depth_bucket, under_extracted_flag, last_extraction_summary, extraction_method, last_extraction_run_id, last_extraction_run_status, last_extraction_returned_ki_count, last_extraction_deduped_ki_count, last_extraction_validated_ki_count, last_extraction_saved_ki_count, last_extraction_error, last_extraction_duration_ms, last_extraction_model, current_resource_ki_count, current_resource_kis_per_1k')
         .order('content_length', { ascending: false });
       if (rErr) throw rErr;
+
+      let allRuns: any[] = [];
+      let runsFrom = 0;
+      while (true) {
+        const { data: runs, error: runsErr } = await supabase
+          .from('extraction_runs' as any)
+          .select('resource_id, status, started_at, completed_at')
+          .range(runsFrom, runsFrom + PAGE_SIZE - 1);
+        if (runsErr) throw runsErr;
+        if (!runs || runs.length === 0) break;
+        allRuns = allRuns.concat(runs);
+        if (runs.length < PAGE_SIZE) break;
+        runsFrom += PAGE_SIZE;
+      }
+
+      let allBatches: any[] = [];
+      let batchesFrom = 0;
+      while (true) {
+        const { data: batches, error: batchesErr } = await supabase
+          .from('extraction_batches' as any)
+          .select('resource_id, batch_index, batch_total, status, started_at, completed_at, error')
+          .range(batchesFrom, batchesFrom + PAGE_SIZE - 1);
+        if (batchesErr) throw batchesErr;
+        if (!batches || batches.length === 0) break;
+        allBatches = allBatches.concat(batches);
+        if (batches.length < PAGE_SIZE) break;
+        batchesFrom += PAGE_SIZE;
+      }
 
       // Paginate KIs — include extraction_method for method mix
       const PAGE_SIZE = 1000;
@@ -103,8 +135,29 @@ export function useKnowledgeCoverageAudit() {
       }
 
       const kiMap = new Map<string, { total: number; active: number; withCtx: number }>();
+      const runCountMap = new Map<string, number>();
+      const latestRunMap = new Map<string, { status: string; started_at: string | null; completed_at: string | null }>();
+      const batchMap = new Map<string, any[]>();
       // Method mix from KIs (source of truth)
       const methodMix = { llm: 0, heuristic: 0, hybrid: 0, unknown: 0 };
+
+      for (const run of allRuns) {
+        if (!run.resource_id) continue;
+        runCountMap.set(run.resource_id, (runCountMap.get(run.resource_id) || 0) + 1);
+        const existing = latestRunMap.get(run.resource_id);
+        const existingTs = existing?.completed_at || existing?.started_at || '';
+        const nextTs = run.completed_at || run.started_at || '';
+        if (!existing || nextTs > existingTs) {
+          latestRunMap.set(run.resource_id, run);
+        }
+      }
+
+      for (const batch of allBatches) {
+        if (!batch.resource_id) continue;
+        const rows = batchMap.get(batch.resource_id) || [];
+        rows.push(batch);
+        batchMap.set(batch.resource_id, rows);
+      }
 
       for (const ki of allKIs) {
         const rid = ki.source_resource_id;
@@ -129,6 +182,16 @@ export function useKnowledgeCoverageAudit() {
 
       const rows: ResourceAuditRow[] = (resources ?? []).map((r: any) => {
         const ki = kiMap.get(r.id) ?? { total: 0, active: 0, withCtx: 0 };
+        const resourceBatches = batchMap.get(r.id) || [];
+        const dedupedBatches = new Map<number, any>();
+        for (const batch of resourceBatches) {
+          const existing = dedupedBatches.get(batch.batch_index);
+          const rank = { completed: 5, running: 4, failed: 3, pending: 2 } as const;
+          if (!existing || (rank[batch.status as keyof typeof rank] ?? 0) >= (rank[existing.status as keyof typeof rank] ?? 0)) {
+            dedupedBatches.set(batch.batch_index, batch);
+          }
+        }
+        const batchEntries = Array.from(dedupedBatches.values()).sort((a, b) => a.batch_index - b.batch_index);
         const cl = Number(r.content_length) || 0;
 
         // Use server-persisted current_resource_ki_count if available, else use counted KIs
@@ -153,18 +216,41 @@ export function useKnowledgeCoverageAudit() {
         const dbDepth = computeDepthBucket(finalKisPer1k, kiTotal);
         const dbUnderExtracted = computeUnderExtracted(cl, kiTotal, r.resource_type);
         const method = r.extraction_method || null;
+        const batchTotal = batchEntries.reduce((max, batch) => Math.max(max, Number(batch.batch_total) || 0, batch.batch_index + 1), Number(r.extraction_batch_total) || 0);
+        const completedBatches = batchEntries.filter(batch => batch.status === 'completed').length;
+        const runningBatch = batchEntries.find(batch => batch.status === 'running');
+        const staleRunning = !!runningBatch && !!runningBatch.started_at && (Date.now() - new Date(runningBatch.started_at).getTime() > 10 * 60 * 1000);
+        const hasIncompleteBatches = batchTotal > 0 && completedBatches < batchTotal;
+        const latestRunStatus = latestRunMap.get(r.id)?.status || r.last_extraction_run_status || null;
+        const reconciledRunStatus = hasIncompleteBatches
+          ? staleRunning
+            ? 'partial_complete_resumable'
+            : runningBatch
+              ? 'running_batched'
+              : 'partial_complete_resumable'
+          : latestRunStatus;
 
         return {
           resource_id: r.id,
           title: r.title ?? '(untitled)',
           resource_type: r.resource_type ?? 'unknown',
           enrichment_status: r.enrichment_status ?? 'unknown',
-          active_job_status: r.active_job_status,
+          active_job_status: hasIncompleteBatches ? 'partial' : r.active_job_status,
+          extraction_batch_status: hasIncompleteBatches
+            ? staleRunning
+              ? 'stale_resumable'
+              : runningBatch
+                ? `running_batch_${runningBatch.batch_index + 1}_of_${batchTotal}`
+                : `resume_from_batch_${completedBatches + 1}_of_${batchTotal}`
+            : r.extraction_batch_status,
           content_length: cl,
           ki_count_total: kiTotal,
           ki_count_active: ki.active,
           ki_with_context_count: ki.withCtx,
-          extraction_attempt_count: r.extraction_attempt_count ?? 0,
+          extraction_attempt_count: runCountMap.get(r.id) ?? r.extraction_attempt_count ?? 0,
+          extraction_batches_completed: completedBatches,
+          extraction_batch_total: batchTotal,
+          extraction_is_resumable: hasIncompleteBatches,
           kis_per_1k_chars: finalKisPer1k,
           under_extracted_flag: dbUnderExtracted,
           extraction_depth_bucket: dbDepth,
@@ -176,7 +262,7 @@ export function useKnowledgeCoverageAudit() {
           extraction_method: method,
           // Server-owned truth fields
           last_extraction_run_id: r.last_extraction_run_id || null,
-          last_extraction_run_status: r.last_extraction_run_status || null,
+          last_extraction_run_status: reconciledRunStatus,
           last_extraction_returned_ki_count: r.last_extraction_returned_ki_count ?? null,
           last_extraction_deduped_ki_count: r.last_extraction_deduped_ki_count ?? null,
           last_extraction_validated_ki_count: r.last_extraction_validated_ki_count ?? null,

@@ -48,7 +48,7 @@ export interface BatchLedgerEntry {
   saved: number;
   dupsSkipped: number;
   cumulativeKiTotal: number;
-  status: 'completed' | 'failed' | 'skipped_resume' | 'pending';
+  status: 'completed' | 'failed' | 'skipped_resume' | 'pending' | 'running';
   error?: string;
   startedAt?: string;
   completedAt?: string;
@@ -57,6 +57,7 @@ export interface BatchLedgerEntry {
 export interface ReExtractQueueItem {
   resource_id: string;
   title: string;
+  resource_type?: string;
   content_length: number;
   pre_ki_count: number;
   pre_kis_per_1k: number;
@@ -149,6 +150,134 @@ function classifyBottleneck(
 // ── STALE JOB DETECTION ──
 const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
+function isStaleTimestamp(timestamp?: string | null): boolean {
+  if (!timestamp) return false;
+  return Date.now() - new Date(timestamp).getTime() > STALE_THRESHOLD_MS;
+}
+
+function computeDepthBucket(kiCount: number, contentLength: number): 'none' | 'shallow' | 'moderate' | 'strong' {
+  if (kiCount === 0) return 'none';
+  const kisPer1k = contentLength > 0 ? (kiCount * 1000) / contentLength : 0;
+  if (kisPer1k < 0.75) return 'shallow';
+  if (kisPer1k < 1.5) return 'moderate';
+  return 'strong';
+}
+
+function computeUnderExtracted(kiCount: number, contentLength: number, resourceType?: string): boolean {
+  if (contentLength < 500) return false;
+  if (contentLength >= 10000 && kiCount <= 6) return true;
+  if (contentLength >= 5000 && kiCount <= 4) return true;
+  if (contentLength >= 3000 && kiCount <= 3) return true;
+  if (contentLength >= 1500 && kiCount <= 2) return true;
+  const kisPer1k = contentLength > 0 ? (kiCount * 1000) / contentLength : 0;
+  const isTranscript = ['transcript', 'podcast', 'audio', 'podcast_episode'].includes((resourceType || '').toLowerCase());
+  return kiCount > 0 && kisPer1k < (isTranscript ? 0.5 : 0.75);
+}
+
+function summarizeBatchLedger(ledger: BatchLedgerEntry[], fallbackTotal = 0) {
+  const deduped = new Map<number, BatchLedgerEntry>();
+  for (const entry of ledger) {
+    const existing = deduped.get(entry.batchIndex);
+    if (!existing) {
+      deduped.set(entry.batchIndex, entry);
+      continue;
+    }
+    const rank = { completed: 5, running: 4, failed: 3, skipped_resume: 2, pending: 1 } as const;
+    if (rank[entry.status] >= rank[existing.status]) deduped.set(entry.batchIndex, entry);
+  }
+
+  const entries = Array.from(deduped.values()).sort((a, b) => a.batchIndex - b.batchIndex);
+  const inferredTotal = entries.reduce((max, entry) => Math.max(max, entry.batchIndex + 1), 0);
+  const batchTotal = entries.reduce((max, entry) => Math.max(max, entry.batchIndex + 1, fallbackTotal), inferredTotal);
+  const completed = entries.filter(entry => entry.status === 'completed');
+  const running = entries.filter(entry => entry.status === 'running');
+  const staleRunning = running.filter(entry => isStaleTimestamp(entry.startedAt));
+  const activeRunning = running.filter(entry => !isStaleTimestamp(entry.startedAt));
+
+  let nextBatchIndex: number | null = null;
+  for (let index = 0; index < batchTotal; index++) {
+    if (!completed.some(entry => entry.batchIndex === index)) {
+      nextBatchIndex = index;
+      break;
+    }
+  }
+
+  const hasIncompleteBatches = batchTotal > 0 && completed.length < batchTotal;
+  const state: 'not_started' | 'active' | 'stale' | 'resumable' | 'completed' = !batchTotal
+    ? 'not_started'
+    : !hasIncompleteBatches
+      ? 'completed'
+      : activeRunning.length > 0
+        ? 'active'
+        : staleRunning.length > 0
+          ? 'stale'
+          : 'resumable';
+
+  return {
+    entries,
+    batchTotal,
+    completedCount: completed.length,
+    completedIndices: completed.map(entry => entry.batchIndex),
+    nextBatchIndex,
+    hasIncompleteBatches,
+    state,
+    activeRunning,
+    staleRunning,
+  };
+}
+
+function formatResumeBatchStatus(
+  summary: ReturnType<typeof summarizeBatchLedger>,
+): string | undefined {
+  if (!summary.batchTotal) return undefined;
+  if (!summary.hasIncompleteBatches) return 'completed';
+  if (summary.nextBatchIndex == null) return undefined;
+  if (summary.state === 'active') return `running_batch_${summary.nextBatchIndex + 1}_of_${summary.batchTotal}`;
+  if (summary.state === 'stale') return `stale_resume_from_batch_${summary.nextBatchIndex + 1}_of_${summary.batchTotal}`;
+  return `resume_from_batch_${summary.nextBatchIndex + 1}_of_${summary.batchTotal}`;
+}
+
+async function reconcileResourceSnapshot(resourceId: string, item: ReExtractQueueItem, totals?: { postTotal?: number; postKisPer1k?: number }) {
+  const [resumeInfo, latestRunResult, runCountResult] = await Promise.all([
+    getResumeInfo(resourceId),
+    supabase
+      .from('extraction_runs' as any)
+      .select('status, started_at')
+      .eq('resource_id', resourceId)
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('extraction_runs' as any)
+      .select('*', { count: 'exact', head: true })
+      .eq('resource_id', resourceId),
+  ]);
+
+  const latestRun = latestRunResult.data as any;
+  const postTotal = totals?.postTotal ?? resumeInfo.ledger.reduce((max, entry) => Math.max(max, entry.cumulativeKiTotal || 0), 0);
+  const postKisPer1k = totals?.postKisPer1k ?? (item.content_length > 0 ? Math.round((postTotal * 1000 / item.content_length) * 100) / 100 : 0);
+  const derivedStatus = resumeInfo.hasIncompleteBatches
+    ? 'partial_complete_resumable'
+    : latestRun?.status || 'completed';
+
+  await supabase.from('resources' as any).update({
+    extraction_attempt_count: runCountResult.count ?? 0,
+    extraction_batches_completed: resumeInfo.completedCount,
+    extraction_batch_total: resumeInfo.batchTotal,
+    extraction_is_resumable: resumeInfo.hasIncompleteBatches,
+    extraction_batch_status: formatResumeBatchStatus(summarizeBatchLedger(resumeInfo.ledger, resumeInfo.batchTotal)) ?? (resumeInfo.hasIncompleteBatches ? 'partial_complete_resumable' : 'completed'),
+    last_extraction_run_status: derivedStatus,
+    current_resource_ki_count: postTotal,
+    current_resource_kis_per_1k: postKisPer1k,
+    kis_per_1k_chars: postKisPer1k,
+    extraction_depth_bucket: computeDepthBucket(postTotal, item.content_length),
+    under_extracted_flag: computeUnderExtracted(postTotal, item.content_length, item.resource_type),
+    active_job_status: resumeInfo.hasIncompleteBatches ? 'partial' : latestRun?.status === 'failed' ? 'failed' : 'succeeded',
+  } as any).eq('id', resourceId);
+
+  return resumeInfo;
+}
+
 /** Query the DB batch ledger for resume state */
 async function getResumeInfo(resourceId: string): Promise<{
   completedBatches: number[];
@@ -156,6 +285,10 @@ async function getResumeInfo(resourceId: string): Promise<{
   isResumable: boolean;
   isStale: boolean;
   ledger: BatchLedgerEntry[];
+  completedCount: number;
+  hasIncompleteBatches: boolean;
+  nextBatchIndex: number | null;
+  state: 'not_started' | 'active' | 'stale' | 'resumable' | 'completed';
 }> {
   // Check resource-level state
   const { data: resource } = await supabase
@@ -180,7 +313,6 @@ async function getResumeInfo(resourceId: string): Promise<{
     .eq('resource_id', resourceId)
     .order('batch_index', { ascending: true });
 
-  const completedBatches: number[] = [];
   const ledger: BatchLedgerEntry[] = [];
 
   for (const b of (batches || []) as any[]) {
@@ -195,15 +327,33 @@ async function getResumeInfo(resourceId: string): Promise<{
       saved: b.saved_count ?? 0,
       dupsSkipped: b.duplicates_skipped ?? 0,
       cumulativeKiTotal: b.cumulative_resource_ki_count ?? 0,
-      status: b.status === 'completed' ? 'completed' : b.status === 'failed' ? 'failed' : 'pending',
+      status: b.status === 'completed'
+        ? 'completed'
+        : b.status === 'failed'
+          ? 'failed'
+          : b.status === 'running'
+            ? 'running'
+            : 'pending',
       error: b.error,
       startedAt: b.started_at,
       completedAt: b.completed_at,
     });
-    if (b.status === 'completed') completedBatches.push(b.batch_index);
   }
 
-  return { completedBatches, batchTotal, isResumable: isResumable || completedBatches.length > 0, isStale, ledger };
+  const summary = summarizeBatchLedger(ledger, batchTotal);
+  const completedBatches = summary.completedIndices;
+
+  return {
+    completedBatches,
+    batchTotal: summary.batchTotal,
+    isResumable: summary.hasIncompleteBatches || isResumable || completedBatches.length > 0,
+    isStale: summary.state === 'stale' || (isRunning && isStale),
+    ledger: summary.entries,
+    completedCount: summary.completedCount,
+    hasIncompleteBatches: summary.hasIncompleteBatches,
+    nextBatchIndex: summary.nextBatchIndex,
+    state: summary.state,
+  };
 }
 
 export function useDeepReExtraction() {
@@ -213,9 +363,10 @@ export function useDeepReExtraction() {
   const [liftSummary, setLiftSummary] = useState<CoverageLiftSummary | null>(null);
   const [excludedResourceIds, setExcludedResourceIds] = useState<Set<string>>(new Set());
 
-  const flagForReExtraction = useCallback((resources: ResourceAuditRow[], reason: string) => {
+  const flagForReExtraction = useCallback(async (resources: ResourceAuditRow[], reason: string) => {
     const eligible = resources.filter(r => {
-      if (r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5) return false;
+      const hasIncompleteBatches = !!r.extraction_is_resumable || ((r.extraction_batch_total ?? 0) > 0 && (r.extraction_batches_completed ?? 0) < (r.extraction_batch_total ?? 0));
+      if (!hasIncompleteBatches && r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5) return false;
       if (r.resource_type === 'reference_only') return false;
       if (r.content_length < 1500) return false;
       if (excludedResourceIds.has(r.resource_id)) return false;
@@ -228,22 +379,52 @@ export function useDeepReExtraction() {
     }
 
     const skipped = resources.length - eligible.length;
-    const newItems: ReExtractQueueItem[] = eligible.map(r => ({
-      resource_id: r.resource_id,
-      title: r.title,
-      content_length: r.content_length,
-      pre_ki_count: r.ki_count_total,
-      pre_kis_per_1k: r.kis_per_1k_chars,
-      pre_depth_bucket: r.extraction_depth_bucket,
-      pre_active_count: r.ki_count_active,
-      pre_context_count: r.ki_with_context_count,
-      reason,
-      status: 'queued' as const,
+    const newItems: ReExtractQueueItem[] = await Promise.all(eligible.map(async (r) => {
+      const base: ReExtractQueueItem = {
+        resource_id: r.resource_id,
+        title: r.title,
+        resource_type: r.resource_type,
+        content_length: r.content_length,
+        pre_ki_count: r.ki_count_total,
+        pre_kis_per_1k: r.kis_per_1k_chars,
+        pre_depth_bucket: r.extraction_depth_bucket,
+        pre_active_count: r.ki_count_active,
+        pre_context_count: r.ki_with_context_count,
+        reason,
+        status: 'queued',
+      };
+
+      if (r.content_length <= LARGE_DOC_THRESHOLD) return base;
+
+      const resumeInfo = await getResumeInfo(r.resource_id);
+      if (!resumeInfo.hasIncompleteBatches) {
+        return {
+          ...base,
+          is_batched: resumeInfo.batchTotal > 0,
+          batch_total: resumeInfo.batchTotal || undefined,
+          batches_completed: resumeInfo.completedCount || undefined,
+          batch_ledger: resumeInfo.ledger.length > 0 ? resumeInfo.ledger : undefined,
+        };
+      }
+
+      return {
+        ...base,
+        status: 'partial_complete_resumable',
+        is_batched: true,
+        batch_total: resumeInfo.batchTotal,
+        batches_completed: resumeInfo.completedCount,
+        batch_status: formatResumeBatchStatus(summarizeBatchLedger(resumeInfo.ledger, resumeInfo.batchTotal)),
+        batch_ledger: resumeInfo.ledger,
+      };
     }));
+
     setQueue(prev => {
-      const existingIds = new Set(prev.map(i => i.resource_id));
-      const unique = newItems.filter(i => !existingIds.has(i.resource_id));
-      return [...prev, ...unique];
+      const merged = new Map(prev.map(item => [item.resource_id, item]));
+      for (const item of newItems) {
+        const existing = merged.get(item.resource_id);
+        merged.set(item.resource_id, { ...existing, ...item });
+      }
+      return Array.from(merged.values());
     });
     const msg = skipped > 0
       ? `${newItems.length} flagged for re-extraction (${skipped} skipped)`
@@ -305,8 +486,8 @@ export function useDeepReExtraction() {
 
       // Determine which batches to skip (already completed in DB)
       // Only skip if the batch config matches (same total)
-      if (resumeInfo.batchTotal === slices.length && resumeInfo.completedBatches.length > 0) {
-        resumeFrom = Math.max(...resumeInfo.completedBatches) + 1;
+      if (resumeInfo.batchTotal === slices.length && resumeInfo.hasIncompleteBatches && resumeInfo.nextBatchIndex != null) {
+        resumeFrom = resumeInfo.nextBatchIndex;
         if (resumeFrom >= slices.length) {
           // All batches already done — nothing to do
           console.log(`[ReExtract] All ${slices.length} batches already completed for "${item.title}"`);
@@ -377,6 +558,7 @@ export function useDeepReExtraction() {
           resourceId: item.resource_id,
           deepMode: true,
           persist: true,
+            skipPersistResourceUpdate: isBatched,
         };
 
         if (isBatched) {
@@ -437,6 +619,16 @@ export function useDeepReExtraction() {
         console.log(`[ReExtract] Batch ${batchIdx + 1}/${batchTotal} complete: ${efReturned} raw → ${efValidated} valid → ${efSaved} saved | cumulative: ${cumulativeTotal} KIs`);
 
         if (isBatched) {
+          await reconcileResourceSnapshot(item.resource_id, item, {
+            postTotal: cumulativeTotal,
+            postKisPer1k: item.content_length > 0
+              ? Math.round((cumulativeTotal * 1000 / item.content_length) * 100) / 100
+              : 0,
+          });
+          qc.invalidateQueries({ queryKey: ['knowledge-coverage-audit'] });
+          qc.invalidateQueries({ queryKey: ['resources'] });
+          qc.invalidateQueries({ queryKey: ['extraction-batches', item.resource_id] });
+
           setQueue(prev => prev.map(i =>
             i.resource_id === item.resource_id ? {
               ...i,
@@ -457,10 +649,26 @@ export function useDeepReExtraction() {
         lastError = err.message;
         console.error(`[ReExtract] Batch ${batchIdx + 1}/${batchTotal} failed:`, err.message);
 
+        if (isBatched) {
+          const resumeAfterError = await getResumeInfo(item.resource_id);
+          const persistedBatch = resumeAfterError.ledger.find(entry => entry.batchIndex === batchIdx && entry.status === 'completed');
+
+          if (persistedBatch) {
+            console.log(`[ReExtract] Response lost after batch ${batchIdx + 1}; DB ledger shows completion, resuming from durable truth`);
+            const persistedIdx = batchLedger.findIndex(entry => entry.batchIndex === batchIdx);
+            if (persistedIdx >= 0) batchLedger[persistedIdx] = persistedBatch;
+            else batchLedger.push(persistedBatch);
+            batchesCompleted = resumeAfterError.completedCount;
+            continue;
+          }
+        }
+
         const errorEntry: BatchLedgerEntry = {
           batchIndex: batchIdx,
           charStart: slice.start,
           charEnd: slice.end,
+          semanticStartMarker: slice.semanticStartMarker,
+          semanticEndMarker: slice.semanticEndMarker,
           raw: 0, validated: 0, saved: 0, dupsSkipped: 0,
           cumulativeKiTotal: 0,
           status: 'failed',
@@ -514,26 +722,10 @@ export function useDeepReExtraction() {
       : lastError && batchesCompleted > 0 ? 'partial'
       : 'completed';
 
-    // Reconcile resource snapshot from actual run history
-    if (isBatched) {
-      try {
-        const { count: runCount } = await supabase
-          .from('extraction_runs' as any)
-          .select('*', { count: 'exact', head: true })
-          .eq('resource_id', item.resource_id);
-
-        await supabase.from('resources' as any).update({
-          extraction_attempt_count: runCount ?? 0,
-          current_resource_ki_count: postTotal,
-          current_resource_kis_per_1k: postKisPer1k,
-          extraction_is_resumable: batchesCompleted < batchTotal,
-          extraction_batches_completed: batchesCompleted,
-          extraction_batch_total: batchTotal,
-          active_job_status: finalStatus === 'completed' ? 'succeeded' : finalStatus === 'partial_complete_resumable' ? 'partial' : 'failed',
-        } as any).eq('id', item.resource_id);
-      } catch (e) {
-        console.error('[ReExtract] Snapshot reconciliation failed:', e);
-      }
+    try {
+      await reconcileResourceSnapshot(item.resource_id, item, { postTotal, postKisPer1k });
+    } catch (e) {
+      console.error('[ReExtract] Snapshot reconciliation failed:', e);
     }
 
     console.log('REEXTRACT DELTA CHECK', {
