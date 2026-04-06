@@ -1566,6 +1566,7 @@ Deno.serve(async (req) => {
       let ledgerBatchTotal = 0;
 
       if (ledgerRows && ledgerRows.length > 0) {
+        // Build slices from existing ledger rows
         for (const b of ledgerRows) {
           slices.push({
             start: b.char_start,
@@ -1575,17 +1576,25 @@ Deno.serve(async (req) => {
           });
         }
         ledgerBatchTotal = Math.max(...ledgerRows.map((b: any) => b.batch_total || b.batch_index + 1));
+
+        // If ledger is incomplete (not all batches persisted yet), compute remaining
+        // slices using SEMANTIC chunking on the remaining content, not naive division.
         if (slices.length < ledgerBatchTotal) {
-          let pos = slices.length > 0 ? slices[slices.length - 1].end : 0;
-          for (let i = slices.length; i < ledgerBatchTotal && pos < fullLength; i++) {
-            const chunkSize = Math.ceil((fullLength - pos) / (ledgerBatchTotal - i));
-            slices.push({
-              start: pos,
-              end: Math.min(pos + chunkSize, fullLength),
-              semanticStartMarker: `(batch ${i + 1} start)`,
-              semanticEndMarker: `(batch ${i + 1} end)`,
-            });
-            pos += chunkSize;
+          const lastEnd = slices.length > 0 ? slices[slices.length - 1].end : 0;
+          const remainingContent = fullContent.slice(lastEnd);
+          if (remainingContent.length > 0) {
+            const remainingSlices = computeSemanticSlicesInline(remainingContent.length, remainingContent);
+            for (let i = 0; i < remainingSlices.length; i++) {
+              slices.push({
+                start: lastEnd + remainingSlices[i].start,
+                end: lastEnd + remainingSlices[i].end,
+                semanticStartMarker: remainingSlices[i].semanticStartMarker,
+                semanticEndMarker: remainingSlices[i].semanticEndMarker,
+              });
+            }
+            // Update total to match actual slices computed
+            ledgerBatchTotal = slices.length;
+            console.log(`[JOB MODE] Filled ${remainingSlices.length} remaining slices via semantic chunking (total now ${slices.length})`);
           }
         }
       } else {
@@ -1773,8 +1782,10 @@ Deno.serve(async (req) => {
         let selfInvokeDispatched = false;
         try {
           const selfUrl = `${supabaseUrl}/functions/v1/extract-tactics`;
+          // Fire-and-forget: use AbortController to detach after confirming dispatch.
+          // We abort after 5s — just enough to confirm HTTP connection was accepted.
           const abortCtrl = new AbortController();
-          const abortTimeout = setTimeout(() => abortCtrl.abort(), 8000);
+          const abortTimeout = setTimeout(() => abortCtrl.abort(), 5000);
           try {
             const selfResp = await fetch(selfUrl, {
               method: 'POST',
@@ -1793,14 +1804,18 @@ Deno.serve(async (req) => {
               }),
               signal: abortCtrl.signal,
             });
+            // If we get here, the server responded (e.g. already_running short-circuit).
+            // Read status but do NOT await full body — abort immediately to release.
             clearTimeout(abortTimeout);
-            const selfBody = await selfResp.text();
-            console.log(`[JOB MODE] self-invoke success | status=${selfResp.status} | body=${selfBody.slice(0, 200)}`);
-            selfInvokeDispatched = true;
+            console.log(`[JOB MODE] self-invoke dispatched | status=${selfResp.status}`);
+            selfInvokeDispatched = selfResp.status < 500;
+            // Consume body to prevent resource leak, but don't block
+            selfResp.text().catch(() => {});
           } catch (fetchErr: any) {
             clearTimeout(abortTimeout);
             if (fetchErr.name === 'AbortError') {
-              console.log(`[JOB MODE] self-invoke dispatched (response pending — continuation running independently)`);
+              // Abort means the request was dispatched and the continuation is running
+              console.log(`[JOB MODE] self-invoke dispatched (aborted after 5s — continuation running independently)`);
               selfInvokeDispatched = true;
             } else {
               throw fetchErr;

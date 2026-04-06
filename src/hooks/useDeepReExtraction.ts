@@ -674,7 +674,12 @@ export function useDeepReExtraction() {
               console.log('[JOB MODE CLIENT] Server set partial (non-resumable) — treating as terminal');
               break;
             }
-            if (rData.active_job_status !== 'running' && rData.active_job_status !== 'partial') {
+            // If partial+resumable, continuation likely failed — stop polling, user can resume manually
+            if (rData.active_job_status === 'partial' && rData.extraction_is_resumable) {
+              console.log('[JOB MODE CLIENT] Server set partial+resumable — continuation did not advance. Stopping poll.');
+              break;
+            }
+            if (rData.active_job_status !== 'running') {
               break;
             }
           }
