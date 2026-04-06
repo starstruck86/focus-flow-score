@@ -1272,16 +1272,20 @@ Deno.serve(async (req) => {
     // Classify content category once, pass through entire pipeline
     const category = classifyContentCategory(content, title, resourceType);
 
+    // For batch slices: force single-pass core-only to stay within edge function timeout
+    const isBatchSlice = typeof contentSliceStart === 'number' && typeof contentSliceEnd === 'number';
+    const effectiveDeepMode = isBatchSlice ? false : !!deepMode;
+
     let result: MultiPassResult;
 
-    if (category === 'lesson') {
+    if (category === 'lesson' && !isBatchSlice) {
       const cleanedContent = prepareLessonContent(content, title);
       console.log(`[extract-tactics] LESSON: "${title}" | ${cleanedContent.length} chars`);
       result = await extractLessonTwoStage(LOVABLE_API_KEY, cleanedContent, title, description, tags, resourceType);
     } else {
       const isTranscript = category === 'transcript';
-      console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} multi-pass | ${content.length} chars | deepMode=${!!deepMode} | existingKIs=${existingKiContext ? 'yes' : 'no'}`);
-      result = await runMultiPassExtraction(LOVABLE_API_KEY, content, title, description, tags || [], resourceType, category, !!deepMode, existingKiContext);
+      console.log(`[extract-tactics] ${isTranscript ? 'TRANSCRIPT' : 'DOCUMENT'} ${isBatchSlice ? 'BATCH-SLICE single-pass' : 'multi-pass'} | ${content.length} chars | deepMode=${effectiveDeepMode} | existingKIs=${existingKiContext ? 'yes' : 'no'}`);
+      result = await runMultiPassExtraction(LOVABLE_API_KEY, content, title, description, tags || [], resourceType, category, effectiveDeepMode, existingKiContext);
     }
 
     // Server-side persistence when resourceId is provided
