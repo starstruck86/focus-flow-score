@@ -154,12 +154,59 @@ function PipelineTooltip({ item }: { item: ReExtractQueueItem }) {
   );
 }
 
+function BatchLedgerView({ ledger }: { ledger: BatchLedgerEntry[] }) {
+  if (!ledger || ledger.length === 0) return null;
+  return (
+    <div className="mt-1 border border-border rounded-md overflow-hidden">
+      <table className="w-full text-[9px]">
+        <thead>
+          <tr className="bg-muted/50">
+            <th className="px-1.5 py-0.5 text-left font-medium">Batch</th>
+            <th className="px-1.5 py-0.5 text-left font-medium">Range</th>
+            <th className="px-1.5 py-0.5 text-right font-medium">Raw</th>
+            <th className="px-1.5 py-0.5 text-right font-medium">Valid</th>
+            <th className="px-1.5 py-0.5 text-right font-medium">Saved</th>
+            <th className="px-1.5 py-0.5 text-right font-medium">Dupes</th>
+            <th className="px-1.5 py-0.5 text-right font-medium">Total</th>
+            <th className="px-1.5 py-0.5 text-center font-medium">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ledger.map(b => (
+            <tr key={b.batchIndex} className={cn(
+              "border-t border-border/50",
+              b.status === 'failed' && "bg-destructive/5",
+              b.status === 'skipped_resume' && "bg-muted/30 text-muted-foreground"
+            )}>
+              <td className="px-1.5 py-0.5 font-mono">{b.batchIndex + 1}</td>
+              <td className="px-1.5 py-0.5 font-mono">{(b.charStart / 1000).toFixed(0)}k–{(b.charEnd / 1000).toFixed(0)}k</td>
+              <td className="px-1.5 py-0.5 text-right font-mono">{b.status === 'skipped_resume' ? '—' : b.raw}</td>
+              <td className="px-1.5 py-0.5 text-right font-mono">{b.status === 'skipped_resume' ? '—' : b.validated}</td>
+              <td className="px-1.5 py-0.5 text-right font-mono">{b.status === 'skipped_resume' ? '—' : b.saved}</td>
+              <td className="px-1.5 py-0.5 text-right font-mono">{b.status === 'skipped_resume' ? '—' : b.dupsSkipped}</td>
+              <td className="px-1.5 py-0.5 text-right font-mono font-bold">
+                {b.cumulativeKiTotal > 0 ? b.cumulativeKiTotal : '—'}
+              </td>
+              <td className="px-1.5 py-0.5 text-center">
+                {b.status === 'completed' && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600 inline" />}
+                {b.status === 'failed' && <XCircle className="h-2.5 w-2.5 text-destructive inline" />}
+                {b.status === 'skipped_resume' && <span className="text-muted-foreground">↩</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtraction, onRemove, onClear, onMarkExcluded }: Props) {
   const [showConfirm, setShowConfirm] = useState(false);
+  const [expandedLedger, setExpandedLedger] = useState<Set<string>>(new Set());
 
   if (queue.length === 0) return null;
 
-  const queued = queue.filter(i => i.status === 'queued');
+  const queued = queue.filter(i => i.status === 'queued' || i.status === 'partial_complete_resumable');
   const completed = queue.filter(i => i.status === 'completed' || i.status === 'partial');
   const failed = queue.filter(i => i.status === 'failed');
   const avgContentLength = Math.round(queue.reduce((s, i) => s + i.content_length, 0) / queue.length);
