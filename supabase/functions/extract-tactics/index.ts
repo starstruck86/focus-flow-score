@@ -1692,6 +1692,14 @@ Deno.serve(async (req) => {
           break;
         }
 
+        // Budget check: is there enough remaining time for a meaningful batch attempt?
+        const batchTimeoutMs = getBatchTimeoutMs();
+        if (batchTimeoutMs <= MIN_BATCH_TIMEOUT_MS) {
+          console.log(`[JOB MODE] watchdog stop (budget exhausted) | only ${Math.round(batchTimeoutMs / 1000)}s left — will self-invoke`);
+          stoppedByWatchdog = true;
+          break;
+        }
+
         const slice = slices[batchIdx];
         const batchContent = fullContent.slice(slice.start, slice.end);
         if (batchContent.length < 50) {
@@ -1700,7 +1708,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        console.log(`[JOB MODE] batch started | ${batchIdx + 1}/${totalBatches} | chars ${slice.start}-${slice.end} (${batchContent.length} chars) | elapsed=${Math.round(elapsed / 1000)}s`);
+        console.log(`[JOB MODE] batch started | ${batchIdx + 1}/${totalBatches} | chars ${slice.start}-${slice.end} (${batchContent.length} chars) | elapsed=${Math.round(elapsed / 1000)}s | timeout=${Math.round(batchTimeoutMs / 1000)}s`);
 
         // Mark batch as running + heartbeat
         await supabaseAdmin.from('extraction_batches').upsert({
@@ -1728,15 +1736,17 @@ Deno.serve(async (req) => {
               existingKIs.map((ki: any, i: number) => `${i + 1}. ${ki.title}`).join('\n') + '\n';
           }
 
-          // Wrap extraction in a timeout so a single slow AI call doesn't
-          // consume the entire platform budget and prevent self-invoke.
+          // Dynamic timeout: never exceed remaining platform budget minus reconcile buffer
+          const currentBatchTimeout = getBatchTimeoutMs();
+          console.log(`[JOB MODE] batch ${batchIdx + 1} AI call timeout: ${Math.round(currentBatchTimeout / 1000)}s`);
+
           const batchResult = await Promise.race([
             runMultiPassExtraction(
               LOVABLE_API_KEY, batchContent, title, description, tags || [],
               resourceType, category, false, batchExistingKiContext,
             ),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(`Batch ${batchIdx + 1} timed out after ${BATCH_TIMEOUT_MS / 1000}s`)), BATCH_TIMEOUT_MS)
+              setTimeout(() => reject(new Error(`Batch ${batchIdx + 1} timed out after ${Math.round(currentBatchTimeout / 1000)}s`)), currentBatchTimeout)
             ),
           ]);
 
