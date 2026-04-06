@@ -105,6 +105,10 @@ export function KnowledgeCoverageAudit() {
     void deepReExtract.flagForReExtraction([resource], 'Manual — single resource re-extract');
   };
 
+  const handleResumeSingle = (resource: ResourceAuditRow) => {
+    void deepReExtract.resumeAndRunSingle(resource);
+  };
+
   return (
     <div className="space-y-4">
       {/* Knowledge Coverage Summary */}
@@ -204,7 +208,7 @@ export function KnowledgeCoverageAudit() {
                         <TableCell className="text-[11px] font-mono">{r.extraction_batches_completed}/{r.extraction_batch_total}</TableCell>
                         <TableCell className="text-[11px] text-blue-600 font-medium">Batch {r.extraction_batches_completed + 1}</TableCell>
                         <TableCell>
-                          <Button variant="default" size="sm" className="h-6 text-[10px] gap-1" onClick={() => handleFlagSingle(r)}>
+                          <Button variant="default" size="sm" className="h-6 text-[10px] gap-1" onClick={() => handleResumeSingle(r)} disabled={deepReExtract.isRunning}>
                             <RotateCcw className="h-3 w-3" /> Resume
                           </Button>
                         </TableCell>
@@ -460,7 +464,14 @@ export function KnowledgeCoverageAudit() {
         resource={selectedResource}
         open={!!selectedResourceId}
         onOpenChange={(open) => { if (!open) setSelectedResourceId(null); }}
-        onReExtract={handleFlagSingle}
+        onReExtract={(r) => {
+          const isResumableResource = isResumable(r);
+          if (isResumableResource) {
+            handleResumeSingle(r);
+          } else {
+            handleFlagSingle(r);
+          }
+        }}
         onMarkExcluded={deepReExtract.markExcluded}
         isExcluded={selectedResourceId ? deepReExtract.excludedResourceIds.has(selectedResourceId) : false}
         lastQueueResult={selectedResourceId ? deepReExtract.queue.find(q => q.resource_id === selectedResourceId) : undefined}
