@@ -1660,9 +1660,6 @@ Deno.serve(async (req) => {
         let selfInvokeDispatched = false;
         try {
           const selfUrl = `${supabaseUrl}/functions/v1/extract-tactics`;
-          // Use AbortController with short timeout — we just need to confirm
-          // the request was DISPATCHED, not wait for the continuation to finish.
-          // The continuation runs in its own invocation and will complete independently.
           const abortCtrl = new AbortController();
           const abortTimeout = setTimeout(() => abortCtrl.abort(), 8000);
           try {
@@ -1684,33 +1681,29 @@ Deno.serve(async (req) => {
               signal: abortCtrl.signal,
             });
             clearTimeout(abortTimeout);
-            // If we got here quickly, the continuation already returned (fast path)
             const selfBody = await selfResp.text();
             console.log(`[JOB MODE] self-invoke success | status=${selfResp.status} | body=${selfBody.slice(0, 200)}`);
             selfInvokeDispatched = true;
           } catch (fetchErr: any) {
             clearTimeout(abortTimeout);
             if (fetchErr.name === 'AbortError') {
-              // Abort means the request was dispatched but the response hasn't
-              // come back within 8s — expected for long-running continuations.
-              // The continuation is running independently on the server.
               console.log(`[JOB MODE] self-invoke dispatched (response pending — continuation running independently)`);
               selfInvokeDispatched = true;
             } else {
-              throw fetchErr; // re-throw real errors
+              throw fetchErr;
             }
           }
         } catch (e: any) {
           console.error(`[JOB MODE] self-invoke failure: ${e.message}`);
-          // Mark resource as resumable since continuation failed
-          await supabaseAdmin.from('resources').update({
-            active_job_status: 'partial',
-            extraction_is_resumable: true,
-            last_extraction_summary: `Partial: ${completedSet.size}/${totalBatches} batches. Self-invoke failed: ${e.message}`,
-          }).eq('id', resourceId);
+          // Reconciliation already set 'partial' — resource is honestly resumable
         }
         if (selfInvokeDispatched) {
-          console.log(`[JOB MODE] continuation dispatched — returning control. Resource stays 'running'.`);
+          // NOW set running since continuation was actually dispatched
+          await supabaseAdmin.from('resources').update({
+            active_job_status: 'running',
+            active_job_updated_at: new Date().toISOString(),
+          }).eq('id', resourceId);
+          console.log(`[JOB MODE] continuation dispatched — resource set to 'running'.`);
         }
       } else if (!allComplete && consecutiveFailures >= 2) {
         console.log(`[JOB MODE] NOT self-invoking: stopped due to ${consecutiveFailures} consecutive failures`);
