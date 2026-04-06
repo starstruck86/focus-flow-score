@@ -1192,6 +1192,8 @@ Deno.serve(async (req) => {
     let { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist,
       // Chunked extraction params
       contentSliceStart, contentSliceEnd, batchIndex, batchTotal, skipPersistResourceUpdate,
+      // Job mode: server-side multi-batch orchestration
+      jobMode,
     } = body;
 
     // Resolve userId
