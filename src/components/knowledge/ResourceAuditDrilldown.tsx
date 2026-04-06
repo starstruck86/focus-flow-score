@@ -71,26 +71,51 @@ function useBatchLedger(resourceId: string | null) {
       return data || [];
     },
     enabled: !!resourceId,
+    refetchOnMount: 'always',
+    refetchInterval: 3000,
   });
 }
 
 /** Reconcile resource snapshot from run history */
 function useReconciledSnapshot(resourceId: string | null, runs: any[], batches: any[]) {
   const attemptCount = runs.length;
-  const completedBatches = batches.filter((b: any) => b.status === 'completed').length;
-  const totalBatches = batches.length > 0 ? (batches[0] as any)?.batch_total ?? batches.length : 0;
+  const deduped = new Map<number, any>();
+  for (const batch of batches) {
+    const existing = deduped.get(batch.batch_index);
+    const rank = { completed: 5, running: 4, failed: 3, pending: 2 } as const;
+    if (!existing || (rank[batch.status as keyof typeof rank] ?? 0) >= (rank[existing.status as keyof typeof rank] ?? 0)) {
+      deduped.set(batch.batch_index, batch);
+    }
+  }
+
+  const entries = Array.from(deduped.values()).sort((a, b) => a.batch_index - b.batch_index);
+  const completedBatches = entries.filter((b: any) => b.status === 'completed').length;
+  const totalBatches = entries.reduce((max, batch: any) => Math.max(max, batch.batch_total ?? 0, batch.batch_index + 1), 0);
   const hasIncompleteBatches = totalBatches > 0 && completedBatches < totalBatches;
-  const nextBatch = hasIncompleteBatches
-    ? batches.find((b: any) => b.status !== 'completed')
-    : null;
+  const runningBatch = entries.find((b: any) => b.status === 'running');
+  const staleRunning = !!runningBatch?.started_at && (Date.now() - new Date(runningBatch.started_at).getTime() > 10 * 60 * 1000);
+  let nextBatchIndex: number | null = null;
+  for (let index = 0; index < totalBatches; index++) {
+    if (!entries.some((batch: any) => batch.batch_index === index && batch.status === 'completed')) {
+      nextBatchIndex = index;
+      break;
+    }
+  }
 
   return {
     attemptCount,
     completedBatches,
     totalBatches,
     hasIncompleteBatches,
-    nextBatchIndex: nextBatch ? (nextBatch as any).batch_index : null,
+    nextBatchIndex,
     isResumable: hasIncompleteBatches,
+    resumeState: !totalBatches
+      ? 'not_started'
+      : !hasIncompleteBatches
+        ? 'completed'
+        : runningBatch
+          ? (staleRunning ? 'stale' : 'active')
+          : 'runnable',
   };
 }
 
@@ -113,6 +138,7 @@ function DepthBadge({ bucket }: { bucket: string }) {
 function BatchStatusBadge({ status }: { status: string }) {
   if (status === 'completed') return <Badge variant="default" className="text-[8px] bg-emerald-600">✓</Badge>;
   if (status === 'failed') return <Badge variant="destructive" className="text-[8px]">✗</Badge>;
+  if (status === 'running') return <Badge variant="secondary" className="text-[8px]">…</Badge>;
   return <Badge variant="outline" className="text-[8px]">—</Badge>;
 }
 
@@ -170,6 +196,15 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
                 <div className="flex items-center gap-2 text-xs font-medium mb-2">
                   <Layers className="h-3.5 w-3.5" />
                   Batch Extraction Status
+                  <Badge variant="outline" className="text-[9px] ml-auto">
+                    {snapshot.resumeState === 'active'
+                      ? 'active'
+                      : snapshot.resumeState === 'stale'
+                        ? 'stale-cleared'
+                        : snapshot.resumeState === 'runnable'
+                          ? 'resumable'
+                          : 'complete'}
+                  </Badge>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div className="text-center">
@@ -182,7 +217,7 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
                   </div>
                   <div className="text-center">
                     <div className={cn("font-bold text-lg", snapshot.hasIncompleteBatches ? "text-amber-500" : "text-emerald-600")}>
-                      {snapshot.hasIncompleteBatches ? snapshot.nextBatchIndex! + 1 : '✓'}
+                      {snapshot.hasIncompleteBatches && snapshot.nextBatchIndex != null ? snapshot.nextBatchIndex + 1 : '✓'}
                     </div>
                     <div className="text-[10px] text-muted-foreground">
                       {snapshot.hasIncompleteBatches ? 'Next Batch' : 'All Done'}
@@ -191,7 +226,7 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
                 </div>
                 {snapshot.hasIncompleteBatches && (
                   <div className="mt-2 text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded px-2 py-1">
-                    {snapshot.totalBatches - snapshot.completedBatches} batch(es) remaining. Re-extraction will resume from batch {snapshot.nextBatchIndex! + 1}.
+                    {snapshot.totalBatches - snapshot.completedBatches} batch(es) remaining. Re-extraction will resume from batch {(snapshot.nextBatchIndex ?? 0) + 1}.
                   </div>
                 )}
               </div>
@@ -233,10 +268,12 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
                     </thead>
                     <tbody>
                       {(batches as any[]).map((b: any) => (
-                        <tr key={b.batch_index} className="border-t border-border/50">
+                         <tr key={b.batch_index} className="border-t border-border/50 align-top">
                           <td className="px-1.5 py-1 font-mono">{b.batch_index + 1}</td>
-                          <td className="px-1.5 py-1 truncate max-w-[80px]" title={b.semantic_start_marker || `${b.char_start}-${b.char_end}`}>
-                            {b.semantic_start_marker ? b.semantic_start_marker.slice(0, 20) + '…' : `${(b.char_start / 1000).toFixed(0)}k-${(b.char_end / 1000).toFixed(0)}k`}
+                           <td className="px-1.5 py-1 max-w-[120px]" title={`${b.semantic_start_marker || '—'} → ${b.semantic_end_marker || '—'}`}>
+                             <div className="font-mono text-[9px] text-muted-foreground">{(b.char_start / 1000).toFixed(1)}k–{(b.char_end / 1000).toFixed(1)}k</div>
+                             <div className="truncate">{b.semantic_start_marker || '—'}</div>
+                             <div className="truncate text-muted-foreground">→ {b.semantic_end_marker || '—'}</div>
                           </td>
                           <td className="px-1.5 py-1 text-right font-mono">{b.raw_count ?? 0}</td>
                           <td className="px-1.5 py-1 text-right font-mono">{b.validated_count ?? 0}</td>
@@ -410,14 +447,14 @@ export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtra
                   onClick={() => { onReExtract(r); onOpenChange(false); }}
                 >
                   {snapshot.hasIncompleteBatches ? (
-                    <><RotateCcw className="h-4 w-4" /> Resume Re-Extraction (Batch {snapshot.nextBatchIndex! + 1} of {snapshot.totalBatches})</>
+                    <><RotateCcw className="h-4 w-4" /> Resume Re-Extraction (Batch {(snapshot.nextBatchIndex ?? 0) + 1} of {snapshot.totalBatches})</>
                   ) : (
                     <><Zap className="h-4 w-4" /> {isLargeDoc ? 'Re-Extract (Semantic Batched, Deep Mode)' : 'Re-Extract This Resource (Deep Mode)'}</>
                   )}
                 </Button>
                 <p className="text-[10px] text-muted-foreground text-center">
                   {snapshot.hasIncompleteBatches
-                    ? `${snapshot.completedBatches} of ${snapshot.totalBatches} batches already completed. Will resume from next unfinished batch.`
+                    ? `${snapshot.completedBatches} of ${snapshot.totalBatches} batches already completed. Will resume from next unfinished batch using the durable batch ledger.`
                     : isLargeDoc
                     ? 'Splits content at semantic boundaries (headings, sections). Each batch persists independently.'
                     : 'Runs 3-pass deep extraction: Core → Hidden → Framework'}

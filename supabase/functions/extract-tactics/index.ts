@@ -886,6 +886,7 @@ async function serverSidePersist(
   result: MultiPassResult,
   contentLength: number,
   startedAt: number,
+  skipResourceSnapshotUpdate = false,
 ): Promise<PersistenceResult> {
   const runId = crypto.randomUUID();
   const completedAt = new Date().toISOString();
@@ -1091,52 +1092,54 @@ async function serverSidePersist(
   }
 
   // ── Update resource snapshot ──
-  try {
-    let enrichmentStatusUpdate: string | undefined;
-    if (status === 'completed' && savedCount > 0) {
-      enrichmentStatusUpdate = 'deep_enriched';
-    } else if (status === 'partial' && savedCount > 0) {
-      enrichmentStatusUpdate = 'enriched';
+  if (!skipResourceSnapshotUpdate) {
+    try {
+      let enrichmentStatusUpdate: string | undefined;
+      if (status === 'completed' && savedCount > 0) {
+        enrichmentStatusUpdate = 'deep_enriched';
+      } else if (status === 'partial' && savedCount > 0) {
+        enrichmentStatusUpdate = 'enriched';
+      }
+
+      let jobStatus: string;
+      if (status === 'completed') jobStatus = 'succeeded';
+      else if (status === 'partial') jobStatus = 'partial';
+      else jobStatus = 'failed';
+
+      const resourceUpdate: Record<string, any> = {
+        // Last run metrics
+        last_extraction_run_id: runId,
+        last_extraction_run_status: status,
+        last_extraction_returned_ki_count: result.rawCount,
+        last_extraction_deduped_ki_count: result.dedupeResult.kept.length,
+        last_extraction_validated_ki_count: result.validatedCount,
+        last_extraction_saved_ki_count: savedCount,
+        last_extraction_error: error,
+        last_extraction_started_at: new Date(startedAt).toISOString(),
+        last_extraction_completed_at: completedAt,
+        last_extraction_duration_ms: durationMs,
+        last_extraction_model: MODEL_NAME,
+        // Current resource coverage (total truth)
+        current_resource_ki_count: totalKIs,
+        current_resource_kis_per_1k: currentKisPer1k,
+        // Depth and mode
+        extraction_mode: result.extractionMode,
+        extraction_passes_run: result.passesRun,
+        kis_per_1k_chars: currentKisPer1k,
+        extraction_depth_bucket: currentDepthBucket,
+        under_extracted_flag: currentUnderExtracted,
+        last_extraction_summary: finalSummary,
+        extraction_method: 'llm',
+        active_job_status: jobStatus,
+      };
+      if (enrichmentStatusUpdate) {
+        resourceUpdate.enrichment_status = enrichmentStatusUpdate;
+      }
+
+      await supabaseAdmin.from('resources').update(resourceUpdate).eq('id', resourceId);
+    } catch (resErr) {
+      console.error('[extract-tactics] Failed to update resource:', resErr);
     }
-
-    let jobStatus: string;
-    if (status === 'completed') jobStatus = 'succeeded';
-    else if (status === 'partial') jobStatus = 'partial';
-    else jobStatus = 'failed';
-
-    const resourceUpdate: Record<string, any> = {
-      // Last run metrics
-      last_extraction_run_id: runId,
-      last_extraction_run_status: status,
-      last_extraction_returned_ki_count: result.rawCount,
-      last_extraction_deduped_ki_count: result.dedupeResult.kept.length,
-      last_extraction_validated_ki_count: result.validatedCount,
-      last_extraction_saved_ki_count: savedCount,
-      last_extraction_error: error,
-      last_extraction_started_at: new Date(startedAt).toISOString(),
-      last_extraction_completed_at: completedAt,
-      last_extraction_duration_ms: durationMs,
-      last_extraction_model: MODEL_NAME,
-      // Current resource coverage (total truth)
-      current_resource_ki_count: totalKIs,
-      current_resource_kis_per_1k: currentKisPer1k,
-      // Depth and mode
-      extraction_mode: result.extractionMode,
-      extraction_passes_run: result.passesRun,
-      kis_per_1k_chars: currentKisPer1k,
-      extraction_depth_bucket: currentDepthBucket,
-      under_extracted_flag: currentUnderExtracted,
-      last_extraction_summary: finalSummary,
-      extraction_method: 'llm',
-      active_job_status: jobStatus,
-    };
-    if (enrichmentStatusUpdate) {
-      resourceUpdate.enrichment_status = enrichmentStatusUpdate;
-    }
-
-    await supabaseAdmin.from('resources').update(resourceUpdate).eq('id', resourceId);
-  } catch (resErr) {
-    console.error('[extract-tactics] Failed to update resource:', resErr);
   }
 
   return { runId, savedCount, activeCount, status, error, duplicatesSkipped, currentResourceKiCount: totalKIs, currentKisPer1k };
@@ -1292,9 +1295,38 @@ Deno.serve(async (req) => {
     const shouldPersist = persist !== false && resourceId;
     let persistResult: PersistenceResult | null = null;
 
+    const isBatchSlice = typeof contentSliceStart === 'number' && typeof contentSliceEnd === 'number';
+
     if (shouldPersist) {
+      if (batchIndex != null && batchTotal != null) {
+        const semanticStartMarker = body.semanticStartMarker || `char ${contentSliceStart}`;
+        const semanticEndMarker = body.semanticEndMarker || `char ${contentSliceEnd}`;
+        await supabaseAdmin.from('extraction_batches').upsert({
+          resource_id: resourceId,
+          user_id: userId,
+          extraction_run_id: null,
+          batch_index: batchIndex,
+          batch_total: batchTotal,
+          char_start: contentSliceStart ?? 0,
+          char_end: contentSliceEnd ?? 0,
+          semantic_start_marker: semanticStartMarker,
+          semantic_end_marker: semanticEndMarker,
+          status: 'running',
+          started_at: new Date(startedAt).toISOString(),
+          completed_at: null,
+          error: null,
+        }, { onConflict: 'resource_id,batch_index' });
+
+        await supabaseAdmin.from('resources').update({
+          extraction_batch_total: batchTotal,
+          extraction_batch_status: `running_batch_${batchIndex + 1}_of_${batchTotal}`,
+          extraction_is_resumable: true,
+          active_job_status: 'running',
+        }).eq('id', resourceId);
+      }
+
       persistResult = await serverSidePersist(
-        supabaseAdmin, resourceId, userId, result, fullContentLength || content.length, startedAt,
+        supabaseAdmin, resourceId, userId, result, fullContentLength || content.length, startedAt, isBatchSlice,
       );
 
       // For chunked extraction: persist batch ledger + update resource progress
@@ -1324,16 +1356,62 @@ Deno.serve(async (req) => {
             error: persistResult?.error || null,
           }, { onConflict: 'resource_id,batch_index' });
 
-          // Update resource-level batch progress
-          const updatePayload: Record<string, any> = {
-            extraction_batches_completed: batchIndex + 1,
+          const { data: persistedBatches } = await supabaseAdmin
+            .from('extraction_batches')
+            .select('batch_index, batch_total, status, started_at')
+            .eq('resource_id', resourceId)
+            .order('batch_index', { ascending: true });
+
+          const completedCount = (persistedBatches || []).filter((batch: any) => batch.status === 'completed').length;
+          const nextBatchIndex = (() => {
+            for (let index = 0; index < batchTotal; index++) {
+              if (!(persistedBatches || []).some((batch: any) => batch.batch_index === index && batch.status === 'completed')) {
+                return index;
+              }
+            }
+            return null;
+          })();
+          const hasIncompleteBatches = completedCount < batchTotal;
+          const lastBatchStatus = hasIncompleteBatches
+            ? `resume_from_batch_${(nextBatchIndex ?? completedCount) + 1}_of_${batchTotal}`
+            : 'completed';
+
+          const runStatus = hasIncompleteBatches
+            ? 'partial_complete_resumable'
+            : (persistResult?.status === 'completed' ? 'completed' : persistResult?.status || 'failed');
+
+          const resourceUpdate: Record<string, any> = {
+            last_extraction_run_id: persistResult?.runId || null,
+            last_extraction_run_status: runStatus,
+            last_extraction_returned_ki_count: result.rawCount,
+            last_extraction_deduped_ki_count: result.dedupeResult.kept.length,
+            last_extraction_validated_ki_count: result.validatedCount,
+            last_extraction_saved_ki_count: persistResult?.savedCount ?? 0,
+            last_extraction_error: persistResult?.error || null,
+            last_extraction_started_at: new Date(startedAt).toISOString(),
+            last_extraction_completed_at: new Date().toISOString(),
+            last_extraction_duration_ms: Date.now() - startedAt,
+            last_extraction_model: MODEL_NAME,
+            current_resource_ki_count: persistResult?.currentResourceKiCount ?? 0,
+            current_resource_kis_per_1k: persistResult?.currentKisPer1k ?? 0,
+            kis_per_1k_chars: persistResult?.currentKisPer1k ?? 0,
+            extraction_mode: result.extractionMode,
+            extraction_passes_run: result.passesRun,
+            extraction_depth_bucket: computeDepthBucket(persistResult?.currentResourceKiCount ?? 0, fullContentLength || content.length, category),
+            under_extracted_flag: computeUnderExtracted(persistResult?.currentResourceKiCount ?? 0, fullContentLength || content.length, category),
+            last_extraction_summary: hasIncompleteBatches
+              ? `Partial resumable batch progress: ${completedCount}/${batchTotal} complete. Next batch ${((nextBatchIndex ?? completedCount) + 1)}.`
+              : result.summary,
+            extraction_method: 'llm',
+            extraction_batches_completed: completedCount,
             extraction_batch_total: batchTotal,
-            extraction_batch_status: (batchIndex + 1) >= batchTotal
-              ? 'completed'
-              : `running_batch_${batchIndex + 2}_of_${batchTotal}`,
-            extraction_is_resumable: (batchIndex + 1) < batchTotal,
+            extraction_batch_status: lastBatchStatus,
+            extraction_is_resumable: hasIncompleteBatches,
+            active_job_status: hasIncompleteBatches ? 'partial' : (persistResult?.status === 'failed' ? 'failed' : 'succeeded'),
           };
-          await supabaseAdmin.from('resources').update(updatePayload).eq('id', resourceId);
+
+          // Update resource-level batch progress
+          await supabaseAdmin.from('resources').update(resourceUpdate).eq('id', resourceId);
           console.log(`[extract-tactics] Batch ${batchIndex + 1}/${batchTotal} progress + ledger saved`);
         } catch (e) {
           console.error('[extract-tactics] Failed to update batch progress:', e);
