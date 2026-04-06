@@ -1483,20 +1483,18 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════
     if (jobMode && resourceId) {
       console.log(`[JOB MODE] start | resource=${resourceId} | isContinuation=${!!isContinuation}`);
-      const PLATFORM_BUDGET_MS = 180 * 1000; // Conservative platform wall-clock budget (real kill ~200s)
-      const RECONCILE_BUFFER_MS = 25 * 1000; // Time reserved for reconciliation + self-invoke dispatch
-      const JOB_WATCHDOG_MS = 90 * 1000; // Don't START a new batch after this unless there's enough remaining budget
+      const PLATFORM_BUDGET_MS = 190 * 1000; // Conservative platform wall-clock budget (real kill ~200-210s)
+      const RECONCILE_BUFFER_MS = 20 * 1000; // Time reserved for reconciliation + self-invoke dispatch
       const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 min = stale (faster recovery)
       const MAX_BATCH_RETRIES = 3; // skip a batch after this many failures
       const MIN_BATCH_TIMEOUT_MS = 30 * 1000; // Minimum time to give a batch (below this, don't start)
       const jobStart = Date.now();
 
-      // Dynamic batch timeout: never exceed remaining platform budget minus reconcile buffer
-      const getBatchTimeoutMs = () => {
-        const elapsed = Date.now() - jobStart;
-        const remaining = PLATFORM_BUDGET_MS - elapsed - RECONCILE_BUFFER_MS;
-        return Math.max(MIN_BATCH_TIMEOUT_MS, remaining);
-      };
+      // Dynamic: how much time remains for batches (excluding reconcile buffer)
+      const getRemainingBudgetMs = () => PLATFORM_BUDGET_MS - (Date.now() - jobStart) - RECONCILE_BUFFER_MS;
+
+      // Dynamic batch timeout: never exceed remaining budget
+      const getBatchTimeoutMs = () => Math.max(MIN_BATCH_TIMEOUT_MS, getRemainingBudgetMs());
 
       // ── IDEMPOTENCY GUARD (skipped for self-invoke continuations) ──
       if (!isContinuation) {
