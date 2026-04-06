@@ -1240,6 +1240,122 @@ async function reconcileResourceSnapshot(
 // MAIN HANDLER
 // ══════════════════════════════════════════════════════
 
+
+// ══════════════════════════════════════════════════════════════
+// SEMANTIC CHUNKING — boundary-aware slicing for KI integrity
+// Splits at headings > section breaks > paragraphs > sentences.
+// Never cuts in the middle of a knowledge unit.
+// ══════════════════════════════════════════════════════════════
+
+const SEMANTIC_NOMINAL = 13000;
+const SEMANTIC_MIN = 9000;
+const SEMANTIC_MAX = 15000;
+const SEMANTIC_OVERLAP = 450;
+const SEMANTIC_FWD_SEARCH = 2200;
+const SEMANTIC_BWD_SEARCH = 2800;
+
+interface SemanticSliceResult {
+  start: number;
+  end: number;
+  semanticStartMarker: string;
+  semanticEndMarker: string;
+}
+
+const BOUNDARY_REGEXES = [
+  /^#{1,6}\s+.+$/gm,                              // headings
+  /^\s*(?:---+|===+|\*\*\*+)\s*$/gm,              // section breaks
+  /\n\n(?=[A-Z][^\n]{0,120}\n)/g,                  // section-like breaks
+  /\n\n+/g,                                         // paragraph breaks
+  /(?<=[.!?]["')\]]?)\s+(?=[A-Z0-9])/g,            // sentence breaks
+];
+
+function findBoundaryNear(content: string, target: number, minPos: number, maxPos: number, direction: 'forward' | 'backward'): number {
+  for (const pattern of BOUNDARY_REGEXES) {
+    const regex = new RegExp(pattern.source, pattern.flags);
+    const window = content.slice(minPos, maxPos);
+    const positions: number[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(window)) !== null) {
+      const pos = minPos + match.index + match[0].length;
+      if (pos >= minPos && pos <= maxPos) positions.push(pos);
+      if (match.index === regex.lastIndex) regex.lastIndex++;
+    }
+    if (positions.length === 0) continue;
+    if (direction === 'forward') {
+      const c = positions.find(p => p >= target);
+      if (c != null) return c;
+    } else {
+      for (let i = positions.length - 1; i >= 0; i--) {
+        if (positions[i] <= target) return positions[i];
+      }
+    }
+  }
+  return -1;
+}
+
+function extractSemanticMarker(content: string, pos: number): string {
+  const cPos = Math.max(0, Math.min(content.length - 1, pos));
+  const lineStart = content.lastIndexOf('\n', cPos) + 1;
+  const lineEnd = content.indexOf('\n', cPos);
+  const line = content.slice(lineStart, lineEnd > 0 ? lineEnd : cPos + 120).trim();
+  if (/^#{1,6}\s+/.test(line)) return line.slice(0, 96);
+  // Search nearby for heading
+  const searchStart = Math.max(0, cPos - 250);
+  const searchEnd = Math.min(content.length, cPos + 250);
+  const heading = content.slice(searchStart, searchEnd).match(/^#{1,6}\s+.+$/m)?.[0]?.trim();
+  if (heading) return heading.slice(0, 96);
+  return line.slice(0, 72) + (line.length > 72 ? '…' : '');
+}
+
+function computeSemanticSlicesInline(contentLength: number, content: string): SemanticSliceResult[] {
+  if (contentLength <= SEMANTIC_MAX) {
+    return [{ start: 0, end: contentLength, semanticStartMarker: '(start)', semanticEndMarker: '(end)' }];
+  }
+
+  const slices: SemanticSliceResult[] = [];
+  let pos = 0;
+
+  while (pos < contentLength) {
+    const remaining = contentLength - pos;
+    if (remaining <= SEMANTIC_MAX) {
+      slices.push({
+        start: pos, end: contentLength,
+        semanticStartMarker: extractSemanticMarker(content, pos),
+        semanticEndMarker: '(end)',
+      });
+      break;
+    }
+
+    const target = pos + SEMANTIC_NOMINAL;
+    const minP = pos + SEMANTIC_MIN;
+    const maxP = Math.min(contentLength, pos + SEMANTIC_MAX);
+
+    // Try forward from target
+    let splitAt = findBoundaryNear(content, target, Math.max(target, minP), Math.min(maxP, target + SEMANTIC_FWD_SEARCH), 'forward');
+    if (splitAt < minP || splitAt > maxP) {
+      // Try backward
+      splitAt = findBoundaryNear(content, target, Math.max(minP, target - SEMANTIC_BWD_SEARCH), maxP, 'backward');
+    }
+    if (splitAt < minP || splitAt > maxP) {
+      splitAt = Math.min(maxP, target);
+    }
+
+    slices.push({
+      start: pos, end: splitAt,
+      semanticStartMarker: extractSemanticMarker(content, pos),
+      semanticEndMarker: extractSemanticMarker(content, splitAt - 1),
+    });
+
+    // Overlap: step back slightly for continuity
+    const overlapTarget = Math.max(pos + 1, splitAt - SEMANTIC_OVERLAP);
+    // Try to align overlap start to paragraph/sentence boundary
+    const oFwd = findBoundaryNear(content, overlapTarget, Math.max(pos + 1, overlapTarget - 300), Math.min(contentLength, overlapTarget + 300), 'forward');
+    pos = (oFwd >= pos + 1 && oFwd < overlapTarget + 300) ? oFwd : Math.max(pos + 1, overlapTarget);
+  }
+
+  return slices;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -1468,23 +1584,15 @@ Deno.serve(async (req) => {
           }
         }
       } else {
-        const isTranscript = category === 'transcript';
-        const chunks = chunkContent(fullContent, isTranscript);
-        let pos = 0;
-        for (let i = 0; i < chunks.length; i++) {
-          const chunkLen = chunks[i].length;
-          const startIdx = fullContent.indexOf(chunks[i].slice(0, 100), Math.max(0, pos - 200));
-          const actualStart = startIdx >= 0 ? startIdx : pos;
-          const actualEnd = Math.min(actualStart + chunkLen, fullLength);
-          slices.push({
-            start: actualStart,
-            end: actualEnd,
-            semanticStartMarker: `(batch ${i + 1} start)`,
-            semanticEndMarker: `(batch ${i + 1} end)`,
-          });
-          pos = actualEnd;
-        }
+        // FRESH JOB: use semantic boundary-aware chunking for KI integrity
+        console.log(`[JOB MODE] Computing semantic slices for fresh job | ${fullLength} chars`);
+        slices = computeSemanticSlicesInline(fullLength, fullContent);
         ledgerBatchTotal = slices.length;
+        console.log(`[JOB MODE] Semantic slicing: ${slices.length} slices`, slices.map((s, i) => ({
+          batch: i + 1,
+          chars: `${s.start}-${s.end} (${s.end - s.start})`,
+          startMarker: s.semanticStartMarker?.slice(0, 60),
+        })));
       }
 
       const totalBatches = Math.max(ledgerBatchTotal, slices.length);
@@ -1653,7 +1761,7 @@ Deno.serve(async (req) => {
       console.log(`[JOB MODE] DONE: ${completedSet.size}/${totalBatches} batches, ${batchesProcessedThisJob} processed this run, ${totalSaved} saved, allComplete=${allComplete}`);
 
       // ── SELF-INVOKE CONTINUATION (if not all complete) ──
-      if (!allComplete && !consecutiveFailures) {
+      if (!allComplete && consecutiveFailures < 2) {
         // Use service role key for self-invoke (user JWT may expire during long runs)
         const remaining = totalBatches - completedSet.size;
         console.log(`[JOB MODE] self-invoke: ${remaining} batches remaining`);
