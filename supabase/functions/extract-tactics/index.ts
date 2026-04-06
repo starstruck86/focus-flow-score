@@ -1746,10 +1746,19 @@ Deno.serve(async (req) => {
             extraction_batch_status: `completed_batch_${batchIdx + 1}_of_${totalBatches}`,
           }).eq('id', resourceId);
 
-          console.log(`[JOB MODE] batch completed | ${batchIdx + 1}/${totalBatches} | saved=${batchPersist.savedCount} total=${batchPersist.currentResourceKiCount}`);
+           console.log(`[JOB MODE] batch completed | ${batchIdx + 1}/${totalBatches} | saved=${batchPersist.savedCount} total=${batchPersist.currentResourceKiCount}`);
+
+          // Post-batch watchdog: if we're past the time budget after completing this batch,
+          // break immediately so self-invoke can fire before platform kill.
+          const postBatchElapsed = Date.now() - jobStart;
+          if (postBatchElapsed > JOB_WATCHDOG_MS && batchIdx < slices.length - 1) {
+            console.log(`[JOB MODE] watchdog stop (post-batch) | ${batchesProcessedThisJob} batches in ${Math.round(postBatchElapsed / 1000)}s — will self-invoke`);
+            stoppedByWatchdog = true;
+            break;
+          }
 
           if (batchIdx < slices.length - 1) {
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 1000));
           }
         } catch (err: any) {
           lastError = err.message;
