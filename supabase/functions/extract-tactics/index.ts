@@ -1192,6 +1192,8 @@ Deno.serve(async (req) => {
     let { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist,
       // Chunked extraction params
       contentSliceStart, contentSliceEnd, batchIndex, batchTotal, skipPersistResourceUpdate,
+      // Job mode: server-side multi-batch orchestration
+      jobMode,
     } = body;
 
     // Resolve userId
@@ -1255,6 +1257,315 @@ Deno.serve(async (req) => {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+
+    // ══════════════════════════════════════════════════════
+    // JOB MODE — server-side multi-batch orchestration
+    // Processes ALL remaining batches in one invocation.
+    // ══════════════════════════════════════════════════════
+    if (jobMode && resourceId) {
+      console.log(`[extract-tactics] JOB MODE: starting server-side multi-batch for resource=${resourceId}`);
+      const JOB_WATCHDOG_MS = 4.5 * 60 * 1000; // 4.5 min cap (edge function limit ~5min)
+      const jobStart = Date.now();
+
+      // Fetch full content
+      const fullContent = content;
+      const fullLength = fullContentLength || fullContent.length;
+      const category = classifyContentCategory(fullContent, title, resourceType);
+
+      // Get batch ledger from DB
+      const { data: ledgerRows } = await supabaseAdmin
+        .from('extraction_batches')
+        .select('*')
+        .eq('resource_id', resourceId)
+        .order('batch_index', { ascending: true });
+
+      // If no ledger exists, we need semantic slices — compute them
+      let slices: { start: number; end: number; semanticStartMarker: string; semanticEndMarker: string }[] = [];
+      let ledgerBatchTotal = 0;
+
+      if (ledgerRows && ledgerRows.length > 0) {
+        // Reconstruct from ledger
+        for (const b of ledgerRows) {
+          slices.push({
+            start: b.char_start,
+            end: b.char_end,
+            semanticStartMarker: b.semantic_start_marker || `(batch ${b.batch_index + 1} start)`,
+            semanticEndMarker: b.semantic_end_marker || `(batch ${b.batch_index + 1} end)`,
+          });
+        }
+        ledgerBatchTotal = Math.max(...ledgerRows.map((b: any) => b.batch_total || b.batch_index + 1));
+        // If ledger has fewer entries than batchTotal, compute remaining from content
+        if (slices.length < ledgerBatchTotal) {
+          const isTranscript = category === 'transcript';
+          const allChunks = isTranscript
+            ? chunkTranscriptBySections(fullContent, TRANSCRIPT_CHUNK_SIZE, TRANSCRIPT_CHUNK_OVERLAP)
+            : chunkByParagraphs(fullContent, DOC_CHUNK_SIZE, DOC_CHUNK_OVERLAP);
+          // Build position-based slices for remaining
+          let pos = slices.length > 0 ? slices[slices.length - 1].end : 0;
+          for (let i = slices.length; i < ledgerBatchTotal && pos < fullLength; i++) {
+            const chunkSize = Math.ceil((fullLength - pos) / (ledgerBatchTotal - i));
+            slices.push({
+              start: pos,
+              end: Math.min(pos + chunkSize, fullLength),
+              semanticStartMarker: `(batch ${i + 1} start)`,
+              semanticEndMarker: `(batch ${i + 1} end)`,
+            });
+            pos += chunkSize;
+          }
+        }
+      } else {
+        // No ledger — compute fresh semantic slices
+        const isTranscript = category === 'transcript';
+        const chunks = chunkContent(fullContent, isTranscript);
+        let pos = 0;
+        for (let i = 0; i < chunks.length; i++) {
+          const chunkLen = chunks[i].length;
+          // Find actual position in content
+          const startIdx = fullContent.indexOf(chunks[i].slice(0, 100), Math.max(0, pos - 200));
+          const actualStart = startIdx >= 0 ? startIdx : pos;
+          const actualEnd = Math.min(actualStart + chunkLen, fullLength);
+          slices.push({
+            start: actualStart,
+            end: actualEnd,
+            semanticStartMarker: `(batch ${i + 1} start)`,
+            semanticEndMarker: `(batch ${i + 1} end)`,
+          });
+          pos = actualEnd;
+        }
+        ledgerBatchTotal = slices.length;
+      }
+
+      const totalBatches = Math.max(ledgerBatchTotal, slices.length);
+      const completedSet = new Set(
+        (ledgerRows || []).filter((b: any) => b.status === 'completed').map((b: any) => b.batch_index)
+      );
+
+      // Mark resource as running
+      await supabaseAdmin.from('resources').update({
+        active_job_status: 'running',
+        extraction_batch_status: `job_mode_running`,
+        extraction_is_resumable: true,
+        extraction_batch_total: totalBatches,
+      }).eq('id', resourceId);
+
+      let batchesProcessedThisJob = 0;
+      let totalSaved = 0;
+      let lastError: string | null = null;
+      let consecutiveFailures = 0;
+      let stoppedByWatchdog = false;
+
+      for (let batchIdx = 0; batchIdx < slices.length; batchIdx++) {
+        // Skip completed batches
+        if (completedSet.has(batchIdx)) {
+          console.log(`[JOB MODE] Skipping batch ${batchIdx + 1}/${totalBatches} — already completed`);
+          continue;
+        }
+
+        // Watchdog: check time budget
+        if (Date.now() - jobStart > JOB_WATCHDOG_MS) {
+          console.log(`[JOB MODE] Watchdog: approaching time limit after ${batchesProcessedThisJob} batches`);
+          stoppedByWatchdog = true;
+          break;
+        }
+
+        const slice = slices[batchIdx];
+        const batchContent = fullContent.slice(slice.start, slice.end);
+        if (batchContent.length < 50) {
+          console.log(`[JOB MODE] Skipping batch ${batchIdx + 1} — content too short (${batchContent.length} chars)`);
+          continue;
+        }
+
+        console.log(`[JOB MODE] Processing batch ${batchIdx + 1}/${totalBatches} | chars ${slice.start}-${slice.end} (${batchContent.length} chars)`);
+
+        // Mark batch as running
+        await supabaseAdmin.from('extraction_batches').upsert({
+          resource_id: resourceId,
+          user_id: userId,
+          batch_index: batchIdx,
+          batch_total: totalBatches,
+          char_start: slice.start,
+          char_end: slice.end,
+          semantic_start_marker: slice.semanticStartMarker,
+          semantic_end_marker: slice.semanticEndMarker,
+          status: 'running',
+          started_at: new Date().toISOString(),
+        }, { onConflict: 'resource_id,batch_index' });
+
+        // Update resource progress
+        await supabaseAdmin.from('resources').update({
+          extraction_batch_status: `running_batch_${batchIdx + 1}_of_${totalBatches}`,
+        }).eq('id', resourceId);
+
+        try {
+          // Refresh existing KI context before each batch
+          let batchExistingKiContext = '';
+          const { data: existingKIs } = await supabaseAdmin
+            .from('knowledge_items')
+            .select('title')
+            .eq('source_resource_id', resourceId)
+            .eq('user_id', userId)
+            .limit(150);
+          if (existingKIs && existingKIs.length > 0) {
+            batchExistingKiContext = `\n\nALREADY EXTRACTED (${existingKIs.length} KIs — do NOT repeat):\n` +
+              existingKIs.map((ki: any, i: number) => `${i + 1}. ${ki.title}`).join('\n') + '\n';
+          }
+
+          // Run extraction on this slice
+          const batchResult = await runMultiPassExtraction(
+            LOVABLE_API_KEY, batchContent, title, description, tags || [],
+            resourceType, category, false, batchExistingKiContext,
+          );
+
+          // Persist KIs
+          const batchPersist = await serverSidePersist(
+            supabaseAdmin, resourceId, userId!, batchResult,
+            fullLength, Date.now(), true, // skipResourceSnapshotUpdate for intermediate batches
+          );
+
+          // Update batch ledger
+          await supabaseAdmin.from('extraction_batches').upsert({
+            resource_id: resourceId,
+            user_id: userId,
+            extraction_run_id: batchPersist.runId,
+            batch_index: batchIdx,
+            batch_total: totalBatches,
+            char_start: slice.start,
+            char_end: slice.end,
+            semantic_start_marker: slice.semanticStartMarker,
+            semantic_end_marker: slice.semanticEndMarker,
+            status: batchPersist.status === 'completed' ? 'completed' : 'failed',
+            raw_count: batchResult.rawCount,
+            validated_count: batchResult.validatedCount,
+            saved_count: batchPersist.savedCount,
+            duplicates_skipped: batchPersist.duplicatesSkipped,
+            cumulative_resource_ki_count: batchPersist.currentResourceKiCount,
+            started_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+            error: batchPersist.error,
+          }, { onConflict: 'resource_id,batch_index' });
+
+          completedSet.add(batchIdx);
+          batchesProcessedThisJob++;
+          totalSaved += batchPersist.savedCount;
+          consecutiveFailures = 0;
+
+          // Update resource progress snapshot after each batch
+          await supabaseAdmin.from('resources').update({
+            extraction_batches_completed: completedSet.size,
+            current_resource_ki_count: batchPersist.currentResourceKiCount,
+            current_resource_kis_per_1k: batchPersist.currentKisPer1k,
+            kis_per_1k_chars: batchPersist.currentKisPer1k,
+            extraction_depth_bucket: computeDepthBucket(batchPersist.currentResourceKiCount, fullLength, category),
+            under_extracted_flag: computeUnderExtracted(batchPersist.currentResourceKiCount, fullLength, category),
+          }).eq('id', resourceId);
+
+          console.log(`[JOB MODE] Batch ${batchIdx + 1}/${totalBatches} complete: saved=${batchPersist.savedCount}, total=${batchPersist.currentResourceKiCount}`);
+
+          // Brief pause between batches to avoid rate limits
+          if (batchIdx < slices.length - 1) {
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        } catch (err: any) {
+          lastError = err.message;
+          consecutiveFailures++;
+          console.error(`[JOB MODE] Batch ${batchIdx + 1}/${totalBatches} failed:`, err.message);
+
+          await supabaseAdmin.from('extraction_batches').upsert({
+            resource_id: resourceId,
+            user_id: userId,
+            batch_index: batchIdx,
+            batch_total: totalBatches,
+            char_start: slice.start,
+            char_end: slice.end,
+            semantic_start_marker: slice.semanticStartMarker,
+            semantic_end_marker: slice.semanticEndMarker,
+            status: 'failed',
+            error: err.message,
+            completed_at: new Date().toISOString(),
+          }, { onConflict: 'resource_id,batch_index' });
+
+          if (consecutiveFailures >= 2) {
+            console.log(`[JOB MODE] Stopping: 2 consecutive failures`);
+            break;
+          }
+        }
+      }
+
+      // Final resource update
+      const allComplete = completedSet.size >= totalBatches;
+      const finalJobStatus = allComplete ? 'completed'
+        : stoppedByWatchdog ? 'partial_complete_resumable'
+        : consecutiveFailures >= 2 ? 'partial_complete_resumable'
+        : 'partial_complete_resumable';
+
+      const { count: finalKiCount } = await supabaseAdmin
+        .from('knowledge_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('source_resource_id', resourceId)
+        .eq('user_id', userId);
+      const finalTotal = finalKiCount ?? 0;
+      const finalKisPer1k = fullLength > 0 ? Math.round((finalTotal * 1000 / fullLength) * 100) / 100 : 0;
+
+      await supabaseAdmin.from('resources').update({
+        active_job_status: allComplete ? 'succeeded' : 'partial',
+        last_extraction_run_status: finalJobStatus,
+        extraction_batches_completed: completedSet.size,
+        extraction_batch_total: totalBatches,
+        extraction_is_resumable: !allComplete,
+        extraction_batch_status: allComplete ? 'completed' : `resume_from_batch_${(Array.from({ length: totalBatches }, (_, i) => i).find(i => !completedSet.has(i)) ?? completedSet.size) + 1}_of_${totalBatches}`,
+        current_resource_ki_count: finalTotal,
+        current_resource_kis_per_1k: finalKisPer1k,
+        kis_per_1k_chars: finalKisPer1k,
+        extraction_depth_bucket: computeDepthBucket(finalTotal, fullLength, category),
+        under_extracted_flag: computeUnderExtracted(finalTotal, fullLength, category),
+        last_extraction_summary: allComplete
+          ? `Job mode complete: ${totalBatches} batches, ${finalTotal} KIs, ${finalKisPer1k} KIs/1k`
+          : `Job mode partial: ${completedSet.size}/${totalBatches} batches, ${finalTotal} KIs. ${stoppedByWatchdog ? 'Stopped by watchdog.' : `Error: ${lastError}`}`,
+      }).eq('id', resourceId);
+
+      // If watchdog stopped us and there are remaining batches, self-invoke for continuation
+      if (stoppedByWatchdog && !allComplete) {
+        console.log(`[JOB MODE] Self-invoking continuation for remaining batches`);
+        try {
+          const selfUrl = `${supabaseUrl}/functions/v1/extract-tactics`;
+          fetch(selfUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: JSON.stringify({
+              resourceId,
+              deepMode: true,
+              persist: true,
+              jobMode: true,
+            }),
+          }).catch(e => console.error('[JOB MODE] Self-invoke failed:', e));
+        } catch (e) {
+          console.error('[JOB MODE] Self-invoke error:', e);
+        }
+      }
+
+      console.log(`[JOB MODE] DONE: ${completedSet.size}/${totalBatches} batches, ${batchesProcessedThisJob} processed this run, ${totalSaved} saved, allComplete=${allComplete}`);
+
+      return new Response(JSON.stringify({
+        jobMode: true,
+        allComplete,
+        batchesProcessedThisRun: batchesProcessedThisJob,
+        totalBatches,
+        completedBatches: completedSet.size,
+        totalSaved,
+        currentResourceKiCount: finalTotal,
+        currentKisPer1k: finalKisPer1k,
+        stoppedByWatchdog,
+        error: lastError,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ══════════════════════════════════════════════════════
+    // STANDARD MODE — single batch/extraction (existing behavior)
+    // ══════════════════════════════════════════════════════
 
     // ── EXISTING KI AWARENESS: tell the model what already exists for this resource ──
     let existingKiContext = '';
