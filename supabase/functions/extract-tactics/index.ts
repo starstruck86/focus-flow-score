@@ -1468,23 +1468,15 @@ Deno.serve(async (req) => {
           }
         }
       } else {
-        const isTranscript = category === 'transcript';
-        const chunks = chunkContent(fullContent, isTranscript);
-        let pos = 0;
-        for (let i = 0; i < chunks.length; i++) {
-          const chunkLen = chunks[i].length;
-          const startIdx = fullContent.indexOf(chunks[i].slice(0, 100), Math.max(0, pos - 200));
-          const actualStart = startIdx >= 0 ? startIdx : pos;
-          const actualEnd = Math.min(actualStart + chunkLen, fullLength);
-          slices.push({
-            start: actualStart,
-            end: actualEnd,
-            semanticStartMarker: `(batch ${i + 1} start)`,
-            semanticEndMarker: `(batch ${i + 1} end)`,
-          });
-          pos = actualEnd;
-        }
+        // FRESH JOB: use semantic boundary-aware chunking for KI integrity
+        console.log(`[JOB MODE] Computing semantic slices for fresh job | ${fullLength} chars`);
+        slices = computeSemanticSlicesInline(fullLength, fullContent);
         ledgerBatchTotal = slices.length;
+        console.log(`[JOB MODE] Semantic slicing: ${slices.length} slices`, slices.map((s, i) => ({
+          batch: i + 1,
+          chars: `${s.start}-${s.end} (${s.end - s.start})`,
+          startMarker: s.semanticStartMarker?.slice(0, 60),
+        })));
       }
 
       const totalBatches = Math.max(ledgerBatchTotal, slices.length);
@@ -1653,7 +1645,7 @@ Deno.serve(async (req) => {
       console.log(`[JOB MODE] DONE: ${completedSet.size}/${totalBatches} batches, ${batchesProcessedThisJob} processed this run, ${totalSaved} saved, allComplete=${allComplete}`);
 
       // ── SELF-INVOKE CONTINUATION (if not all complete) ──
-      if (!allComplete && !consecutiveFailures) {
+      if (!allComplete && consecutiveFailures < 2) {
         // Use service role key for self-invoke (user JWT may expire during long runs)
         const remaining = totalBatches - completedSet.size;
         console.log(`[JOB MODE] self-invoke: ${remaining} batches remaining`);
