@@ -1483,9 +1483,10 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════
     if (jobMode && resourceId) {
       console.log(`[JOB MODE] start | resource=${resourceId} | isContinuation=${!!isContinuation}`);
-      const JOB_WATCHDOG_MS = 90 * 1000; // 90s — leaves ~110s for batch + reconcile + self-invoke before platform kill at ~200s
-      const BATCH_TIMEOUT_MS = 75 * 1000; // 75s — single batch AI call cap, must be < watchdog
+      const JOB_WATCHDOG_MS = 90 * 1000; // 90s — don't START a new batch after this
+      const BATCH_TIMEOUT_MS = 150 * 1000; // 150s — single batch AI call cap; platform kills ~200s so leaves ~40s for reconcile+self-invoke
       const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 min = stale (faster recovery)
+      const MAX_BATCH_RETRIES = 3; // skip a batch after this many failures
       const jobStart = Date.now();
 
       // ── IDEMPOTENCY GUARD (skipped for self-invoke continuations) ──
@@ -1614,6 +1615,31 @@ Deno.serve(async (req) => {
       const completedSet = new Set(
         (ledgerRows || []).filter((b: any) => b.status === 'completed').map((b: any) => b.batch_index)
       );
+
+      // Parse retry counts from failed batch error messages (durable across invocations)
+      // Error format: "... (attempt N/MAX)"
+      const getAttemptCount = (error: string | null): number => {
+        if (!error) return 0;
+        const match = error.match(/\(attempt (\d+)\//);
+        return match ? parseInt(match[1], 10) : 1; // If failed without count, it was attempt 1
+      };
+
+      // Skip permanently-failed batches (exceeded retry limit)
+      for (const b of (ledgerRows || [])) {
+        if (b.status === 'failed') {
+          const attempts = getAttemptCount(b.error);
+          if (attempts >= MAX_BATCH_RETRIES) {
+            console.log(`[JOB MODE] Skipping batch ${b.batch_index + 1}/${totalBatches} — failed ${attempts} times, marking as permanently skipped`);
+            completedSet.add(b.batch_index);
+            await supabaseAdmin.from('extraction_batches').update({
+              status: 'completed',
+              error: `Permanently skipped after ${attempts} failed attempts`,
+              saved_count: 0,
+              completed_at: new Date().toISOString(),
+            }).eq('resource_id', resourceId).eq('batch_index', b.batch_index);
+          }
+        }
+      }
 
       // If all batches already done, reconcile and return
       if (completedSet.size >= totalBatches) {
@@ -1763,27 +1789,34 @@ Deno.serve(async (req) => {
         } catch (err: any) {
           const isTimeout = err.message?.includes('timed out after');
           lastError = err.message;
-          console.error(`[JOB MODE] batch failure | ${batchIdx + 1}/${totalBatches} | error=${err.message}`);
+
+          // Parse previous attempt count from existing ledger row error
+          const existingRow = (ledgerRows || []).find((b: any) => b.batch_index === batchIdx);
+          const prevAttempts = existingRow?.status === 'failed' ? getAttemptCount(existingRow.error) : 0;
+          const thisAttempt = prevAttempts + 1;
+          const errorMsg = `${err.message} (attempt ${thisAttempt}/${MAX_BATCH_RETRIES})`;
+
+          console.error(`[JOB MODE] batch failure | ${batchIdx + 1}/${totalBatches} | attempt ${thisAttempt}/${MAX_BATCH_RETRIES} | error=${err.message}`);
 
           await supabaseAdmin.from('extraction_batches').upsert({
             resource_id: resourceId, user_id: userId,
             batch_index: batchIdx, batch_total: totalBatches,
             char_start: slice.start, char_end: slice.end,
-            status: 'failed', error: err.message,
+            status: 'failed', error: errorMsg,
             completed_at: new Date().toISOString(),
           }, { onConflict: 'resource_id,batch_index' });
 
           if (isTimeout) {
-            // Timeout means we've used most of our time budget.
-            // Don't count as consecutive failure — trigger watchdog so self-invoke fires.
-            console.log(`[JOB MODE] batch timeout → triggering watchdog for self-invoke`);
-            stoppedByWatchdog = true;
-            break;
+            // Timeout: DON'T break — skip this batch and continue to the next one.
+            // The watchdog check at the top of the next iteration will handle time budget.
+            console.log(`[JOB MODE] batch timeout → continuing to next batch (watchdog will check time budget)`);
+            // Don't increment consecutiveFailures for timeouts
+            continue;
           }
 
           consecutiveFailures++;
           if (consecutiveFailures >= 2) {
-            console.log(`[JOB MODE] Stopping: 2 consecutive failures`);
+            console.log(`[JOB MODE] Stopping: 2 consecutive non-timeout failures`);
             break;
           }
         }
