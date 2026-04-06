@@ -386,6 +386,7 @@ export function KnowledgeCoverageAudit() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Resources</SelectItem>
+                <SelectItem value="resumable">Resumable Only</SelectItem>
                 <SelectItem value="under_extracted">Under-Extracted Only</SelectItem>
                 <SelectItem value="shallow">Shallow Only</SelectItem>
                 <SelectItem value="rich_weak">Rich Content, Weak Density</SelectItem>
