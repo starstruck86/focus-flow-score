@@ -438,6 +438,9 @@ export function KnowledgeCoverageAudit() {
                       </TableCell>
                       <TableCell className="text-[10px] text-muted-foreground">{r.extraction_method || '—'}</TableCell>
                       <TableCell>
+                        {isResumable(r) && (
+                          <Badge className="text-[8px] bg-blue-600 mr-1">RESUMABLE</Badge>
+                        )}
                         {r.under_extracted_flag && (
                           <Badge variant="destructive" className="text-[9px]">Under</Badge>
                         )}
