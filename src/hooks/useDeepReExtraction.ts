@@ -637,6 +637,10 @@ export function useDeepReExtraction() {
           // Poll resource status until complete
           const pollStart = Date.now();
           const MAX_POLL_TIME = 10 * 60 * 1000; // 10 min max poll
+          let consecutivePartialPolls = 0;
+          let lastSeenBatches = data.completedBatches ?? 0;
+          const PARTIAL_GRACE_POLLS = 5; // allow 5 polls (~15s) for continuation to flip back to 'running'
+
           while (Date.now() - pollStart < MAX_POLL_TIME) {
             await new Promise(r => setTimeout(r, JOB_POLL_INTERVAL_MS));
             const { data: resource } = await supabase
@@ -674,14 +678,39 @@ export function useDeepReExtraction() {
               console.log('[JOB MODE CLIENT] Server set partial (non-resumable) — treating as terminal');
               break;
             }
-            // If partial+resumable, continuation likely failed — stop polling, user can resume manually
+
+            // RACE CONDITION FIX: Between continuation watchdog and self-invoke dispatch,
+            // status briefly flips to 'partial + resumable'. Don't exit immediately —
+            // wait PARTIAL_GRACE_POLLS cycles to see if it returns to 'running'.
             if (rData.active_job_status === 'partial' && rData.extraction_is_resumable) {
-              console.log('[JOB MODE CLIENT] Server set partial+resumable — continuation did not advance. Stopping poll.');
-              break;
+              // If batches advanced since we last saw 'partial', reset grace counter
+              if (batchesCompleted > lastSeenBatches) {
+                consecutivePartialPolls = 0;
+                lastSeenBatches = batchesCompleted;
+                console.log(`[JOB MODE CLIENT] Batches advanced to ${batchesCompleted} — resetting grace window`);
+              } else {
+                consecutivePartialPolls++;
+                console.log(`[JOB MODE CLIENT] partial+resumable poll ${consecutivePartialPolls}/${PARTIAL_GRACE_POLLS} — waiting for continuation to resume`);
+              }
+              if (consecutivePartialPolls >= PARTIAL_GRACE_POLLS) {
+                console.log('[JOB MODE CLIENT] Continuation did not resume after grace period — stopping poll');
+                break;
+              }
+              continue; // Don't fall through to the running check
             }
-            if (rData.active_job_status !== 'running') {
-              break;
+
+            // Reset grace counter if status is 'running' (continuation picked up)
+            if (rData.active_job_status === 'running') {
+              if (consecutivePartialPolls > 0) {
+                console.log('[JOB MODE CLIENT] Continuation resumed (status back to running)');
+              }
+              consecutivePartialPolls = 0;
+              lastSeenBatches = batchesCompleted;
+              continue;
             }
+
+            // Unknown non-running status — exit
+            break;
           }
         }
 
