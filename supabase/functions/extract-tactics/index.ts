@@ -1483,7 +1483,7 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════
     if (jobMode && resourceId) {
       console.log(`[JOB MODE] start | resource=${resourceId} | isContinuation=${!!isContinuation}`);
-      const JOB_WATCHDOG_MS = 4.5 * 60 * 1000; // 4.5 min cap
+      const JOB_WATCHDOG_MS = 2 * 60 * 1000; // 2 min cap — platform kills at ~200s, must self-invoke before that
       const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 min = stale
       const jobStart = Date.now();
 
