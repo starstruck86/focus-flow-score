@@ -1483,20 +1483,18 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════
     if (jobMode && resourceId) {
       console.log(`[JOB MODE] start | resource=${resourceId} | isContinuation=${!!isContinuation}`);
-      const PLATFORM_BUDGET_MS = 180 * 1000; // Conservative platform wall-clock budget (real kill ~200s)
-      const RECONCILE_BUFFER_MS = 25 * 1000; // Time reserved for reconciliation + self-invoke dispatch
-      const JOB_WATCHDOG_MS = 90 * 1000; // Don't START a new batch after this unless there's enough remaining budget
+      const PLATFORM_BUDGET_MS = 190 * 1000; // Conservative platform wall-clock budget (real kill ~200-210s)
+      const RECONCILE_BUFFER_MS = 20 * 1000; // Time reserved for reconciliation + self-invoke dispatch
       const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 min = stale (faster recovery)
       const MAX_BATCH_RETRIES = 3; // skip a batch after this many failures
       const MIN_BATCH_TIMEOUT_MS = 30 * 1000; // Minimum time to give a batch (below this, don't start)
       const jobStart = Date.now();
 
-      // Dynamic batch timeout: never exceed remaining platform budget minus reconcile buffer
-      const getBatchTimeoutMs = () => {
-        const elapsed = Date.now() - jobStart;
-        const remaining = PLATFORM_BUDGET_MS - elapsed - RECONCILE_BUFFER_MS;
-        return Math.max(MIN_BATCH_TIMEOUT_MS, remaining);
-      };
+      // Dynamic: how much time remains for batches (excluding reconcile buffer)
+      const getRemainingBudgetMs = () => PLATFORM_BUDGET_MS - (Date.now() - jobStart) - RECONCILE_BUFFER_MS;
+
+      // Dynamic batch timeout: never exceed remaining budget
+      const getBatchTimeoutMs = () => Math.max(MIN_BATCH_TIMEOUT_MS, getRemainingBudgetMs());
 
       // ── IDEMPOTENCY GUARD (skipped for self-invoke continuations) ──
       if (!isContinuation) {
@@ -1684,18 +1682,10 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Watchdog: check time budget BEFORE starting batch
-        const elapsed = Date.now() - jobStart;
-        if (elapsed > JOB_WATCHDOG_MS) {
-          console.log(`[JOB MODE] watchdog stop | ${batchesProcessedThisJob} batches in ${Math.round(elapsed / 1000)}s — will self-invoke`);
-          stoppedByWatchdog = true;
-          break;
-        }
-
-        // Budget check: is there enough remaining time for a meaningful batch attempt?
-        const batchTimeoutMs = getBatchTimeoutMs();
-        if (batchTimeoutMs <= MIN_BATCH_TIMEOUT_MS) {
-          console.log(`[JOB MODE] watchdog stop (budget exhausted) | only ${Math.round(batchTimeoutMs / 1000)}s left — will self-invoke`);
+        // Watchdog: check remaining time budget BEFORE starting batch
+        const remainingBudget = getRemainingBudgetMs();
+        if (remainingBudget < MIN_BATCH_TIMEOUT_MS) {
+          console.log(`[JOB MODE] watchdog stop | ${batchesProcessedThisJob} batches in ${Math.round((Date.now() - jobStart) / 1000)}s | only ${Math.round(remainingBudget / 1000)}s left — will self-invoke`);
           stoppedByWatchdog = true;
           break;
         }
@@ -1793,11 +1783,10 @@ Deno.serve(async (req) => {
 
            console.log(`[JOB MODE] batch completed | ${batchIdx + 1}/${totalBatches} | saved=${batchPersist.savedCount} total=${batchPersist.currentResourceKiCount}`);
 
-          // Post-batch watchdog: if we're past the time budget after completing this batch,
-          // break immediately so self-invoke can fire before platform kill.
-          const postBatchElapsed = Date.now() - jobStart;
-          if (postBatchElapsed > JOB_WATCHDOG_MS && batchIdx < slices.length - 1) {
-            console.log(`[JOB MODE] watchdog stop (post-batch) | ${batchesProcessedThisJob} batches in ${Math.round(postBatchElapsed / 1000)}s — will self-invoke`);
+          // Post-batch watchdog: if not enough time for another batch, break for self-invoke
+          const postBatchRemaining = getRemainingBudgetMs();
+          if (postBatchRemaining < MIN_BATCH_TIMEOUT_MS && batchIdx < slices.length - 1) {
+            console.log(`[JOB MODE] watchdog stop (post-batch) | ${batchesProcessedThisJob} batches in ${Math.round((Date.now() - jobStart) / 1000)}s | ${Math.round(postBatchRemaining / 1000)}s left — will self-invoke`);
             stoppedByWatchdog = true;
             break;
           }
