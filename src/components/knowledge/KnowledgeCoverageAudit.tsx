@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select';
 import {
   Brain, AlertTriangle, CheckCircle2, ChevronDown, BarChart3,
-  Search, Zap, Loader2, RefreshCw, TrendingUp, Filter,
+  Search, Zap, Loader2, RefreshCw, TrendingUp, Filter, RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useKnowledgeCoverageAudit, type ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
@@ -31,7 +31,7 @@ import { ResourceAuditDrilldown } from './ResourceAuditDrilldown';
 import { RealBottleneckReview } from './RealBottleneckReview';
 import { toast } from 'sonner';
 
-type AuditFilter = 'all' | 'under_extracted' | 'shallow' | 'rich_weak' | 'zero_kis' | 'recently_extracted' | 'biggest_lift';
+type AuditFilter = 'all' | 'resumable' | 'under_extracted' | 'shallow' | 'rich_weak' | 'zero_kis' | 'recently_extracted' | 'biggest_lift';
 
 export function KnowledgeCoverageAudit() {
   const { data: audit, isLoading, refetch } = useKnowledgeCoverageAudit();
@@ -48,10 +48,21 @@ export function KnowledgeCoverageAudit() {
     return audit.resources.find(r => r.resource_id === selectedResourceId) ?? null;
   }, [selectedResourceId, audit]);
 
+  const isResumable = (x: ResourceAuditRow) =>
+    x.extraction_is_resumable
+    || (x.extraction_batches_completed > 0 && x.extraction_batches_completed < x.extraction_batch_total)
+    || x.last_extraction_run_status === 'partial_complete_resumable';
+
+  const resumableResources = useMemo(() => {
+    if (!audit) return [];
+    return audit.resources.filter(isResumable);
+  }, [audit]);
+
   const filteredResources = useMemo(() => {
     if (!audit) return [];
     const r = audit.resources;
     switch (auditFilter) {
+      case 'resumable': return r.filter(isResumable);
       case 'under_extracted': return r.filter(x => x.under_extracted_flag);
       case 'shallow': return r.filter(x => x.extraction_depth_bucket === 'shallow');
       case 'rich_weak': return r.filter(x => x.content_length >= 3000 && x.kis_per_1k_chars < 1.0);
@@ -110,11 +121,12 @@ export function KnowledgeCoverageAudit() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             <MiniStat label="Fully Mined" value={audit.resourcesFullyMined} color="text-emerald-600" />
             <MiniStat label="Shallow" value={audit.resourcesShallowlyMined} color="text-amber-500" />
             <MiniStat label="Under-Extracted" value={audit.resourcesUnderExtracted} color="text-destructive" />
             <MiniStat label="Zero KIs" value={audit.resourcesZeroKIs} color="text-muted-foreground" />
+            <MiniStat label="Resumable" value={resumableResources.length} color="text-blue-600" />
           </div>
 
           <div className="flex items-center gap-3 text-xs">
@@ -150,6 +162,61 @@ export function KnowledgeCoverageAudit() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Resumable Extractions */}
+      {resumableResources.length > 0 && (
+        <Card className="border-blue-500/30 bg-blue-50/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <RotateCcw className="h-4 w-4 text-blue-500" />
+              Resumable Extractions ({resumableResources.length})
+              <Badge className="text-[9px] bg-blue-600">ACTION NEEDED</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              These resources have partially completed batch extraction. Resume to finish remaining batches.
+            </p>
+            <div className="border border-border rounded-md overflow-hidden">
+              <div className="max-h-[300px] overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-[10px]">Resource</TableHead>
+                      <TableHead className="text-[10px] text-right">Content</TableHead>
+                      <TableHead className="text-[10px] text-right">KIs</TableHead>
+                      <TableHead className="text-[10px] text-right">KIs/1k</TableHead>
+                      <TableHead className="text-[10px]">Batches</TableHead>
+                      <TableHead className="text-[10px]">Next</TableHead>
+                      <TableHead className="text-[10px]">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resumableResources.map(r => (
+                      <TableRow key={r.resource_id} className="cursor-pointer hover:bg-accent/50">
+                        <TableCell className="text-[11px] max-w-[140px] truncate" onClick={() => setSelectedResourceId(r.resource_id)}>
+                          {r.title}
+                          <Badge className="ml-1 text-[8px] bg-blue-600">RESUMABLE</Badge>
+                        </TableCell>
+                        <TableCell className="text-[11px] text-right font-mono">{(r.content_length / 1000).toFixed(1)}k</TableCell>
+                        <TableCell className="text-[11px] text-right font-mono">{r.ki_count_total}</TableCell>
+                        <TableCell className="text-[11px] text-right font-mono">{r.kis_per_1k_chars}</TableCell>
+                        <TableCell className="text-[11px] font-mono">{r.extraction_batches_completed}/{r.extraction_batch_total}</TableCell>
+                        <TableCell className="text-[11px] text-blue-600 font-medium">Batch {r.extraction_batches_completed + 1}</TableCell>
+                        <TableCell>
+                          <Button variant="default" size="sm" className="h-6 text-[10px] gap-1" onClick={() => handleFlagSingle(r)}>
+                            <RotateCcw className="h-3 w-3" /> Resume
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Verification Queue */}
       <VerificationQueue
@@ -320,6 +387,7 @@ export function KnowledgeCoverageAudit() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Resources</SelectItem>
+                <SelectItem value="resumable">Resumable Only</SelectItem>
                 <SelectItem value="under_extracted">Under-Extracted Only</SelectItem>
                 <SelectItem value="shallow">Shallow Only</SelectItem>
                 <SelectItem value="rich_weak">Rich Content, Weak Density</SelectItem>
@@ -371,6 +439,9 @@ export function KnowledgeCoverageAudit() {
                       </TableCell>
                       <TableCell className="text-[10px] text-muted-foreground">{r.extraction_method || '—'}</TableCell>
                       <TableCell>
+                        {isResumable(r) && (
+                          <Badge className="text-[8px] bg-blue-600 mr-1">RESUMABLE</Badge>
+                        )}
                         {r.under_extracted_flag && (
                           <Badge variant="destructive" className="text-[9px]">Under</Badge>
                         )}

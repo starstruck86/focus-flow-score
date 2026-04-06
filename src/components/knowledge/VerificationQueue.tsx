@@ -38,7 +38,15 @@ function isExcluded(r: ResourceAuditRow): boolean {
   return r.resource_type === 'reference_only';
 }
 
+function isResumable(r: ResourceAuditRow): boolean {
+  return r.extraction_is_resumable
+    || (r.extraction_batches_completed > 0 && r.extraction_batches_completed < r.extraction_batch_total)
+    || r.last_extraction_run_status === 'partial_complete_resumable';
+}
+
 function isAlreadyStrong(r: ResourceAuditRow): boolean {
+  // Resumable resources are NEVER considered "already strong" — they have unfinished work
+  if (isResumable(r)) return false;
   return r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5;
 }
 
@@ -47,6 +55,12 @@ function buildQueue(resources: ResourceAuditRow[]): QueueEntry[] {
   const entries: QueueEntry[] = [];
   // Guardrail: exclude reference_only and already-strong resources
   const eligible = resources.filter(r => !isExcluded(r) && !isAlreadyStrong(r));
+
+  // Bucket 0 — Resumable extractions always get top priority
+  eligible
+    .filter(r => isResumable(r))
+    .sort((a, b) => b.content_length - a.content_length)
+    .forEach(r => add(r, `Resumable — batch ${r.extraction_batches_completed + 1} of ${r.extraction_batch_total}`, 0));
 
   const add = (r: ResourceAuditRow, reason: string, priority: number) => {
     if (seen.has(r.resource_id)) return;
