@@ -228,7 +228,7 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                 <TableBody>
                   {queue.map(item => (
                     <TableRow key={item.resource_id}>
-                      <TableCell><StatusIcon status={item.status} /></TableCell>
+                      <TableCell><StatusIcon status={item.status} batchInfo={item.is_batched ? { completed: item.batches_completed, total: item.batch_total } : undefined} /></TableCell>
                       <TableCell>
                         <div className="text-[11px] max-w-[120px] truncate">{item.title}</div>
                         <div className="text-[9px] text-muted-foreground">
