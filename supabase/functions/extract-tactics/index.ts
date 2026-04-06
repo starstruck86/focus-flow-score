@@ -1483,8 +1483,9 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════
     if (jobMode && resourceId) {
       console.log(`[JOB MODE] start | resource=${resourceId} | isContinuation=${!!isContinuation}`);
-      const JOB_WATCHDOG_MS = 2 * 60 * 1000; // 2 min cap — platform kills at ~200s, must self-invoke before that
-      const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 min = stale
+      const JOB_WATCHDOG_MS = 90 * 1000; // 90s — leaves ~110s for batch + reconcile + self-invoke before platform kill at ~200s
+      const BATCH_TIMEOUT_MS = 75 * 1000; // 75s — single batch AI call cap, must be < watchdog
+      const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 min = stale (faster recovery)
       const jobStart = Date.now();
 
       // ── IDEMPOTENCY GUARD (skipped for self-invoke continuations) ──
@@ -1692,10 +1693,17 @@ Deno.serve(async (req) => {
               existingKIs.map((ki: any, i: number) => `${i + 1}. ${ki.title}`).join('\n') + '\n';
           }
 
-          const batchResult = await runMultiPassExtraction(
-            LOVABLE_API_KEY, batchContent, title, description, tags || [],
-            resourceType, category, false, batchExistingKiContext,
-          );
+          // Wrap extraction in a timeout so a single slow AI call doesn't
+          // consume the entire platform budget and prevent self-invoke.
+          const batchResult = await Promise.race([
+            runMultiPassExtraction(
+              LOVABLE_API_KEY, batchContent, title, description, tags || [],
+              resourceType, category, false, batchExistingKiContext,
+            ),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`Batch ${batchIdx + 1} timed out after ${BATCH_TIMEOUT_MS / 1000}s`)), BATCH_TIMEOUT_MS)
+            ),
+          ]);
 
           const batchPersist = await serverSidePersist(
             supabaseAdmin, resourceId, userId!, batchResult,
@@ -1738,14 +1746,23 @@ Deno.serve(async (req) => {
             extraction_batch_status: `completed_batch_${batchIdx + 1}_of_${totalBatches}`,
           }).eq('id', resourceId);
 
-          console.log(`[JOB MODE] batch completed | ${batchIdx + 1}/${totalBatches} | saved=${batchPersist.savedCount} total=${batchPersist.currentResourceKiCount}`);
+           console.log(`[JOB MODE] batch completed | ${batchIdx + 1}/${totalBatches} | saved=${batchPersist.savedCount} total=${batchPersist.currentResourceKiCount}`);
+
+          // Post-batch watchdog: if we're past the time budget after completing this batch,
+          // break immediately so self-invoke can fire before platform kill.
+          const postBatchElapsed = Date.now() - jobStart;
+          if (postBatchElapsed > JOB_WATCHDOG_MS && batchIdx < slices.length - 1) {
+            console.log(`[JOB MODE] watchdog stop (post-batch) | ${batchesProcessedThisJob} batches in ${Math.round(postBatchElapsed / 1000)}s — will self-invoke`);
+            stoppedByWatchdog = true;
+            break;
+          }
 
           if (batchIdx < slices.length - 1) {
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 1000));
           }
         } catch (err: any) {
+          const isTimeout = err.message?.includes('timed out after');
           lastError = err.message;
-          consecutiveFailures++;
           console.error(`[JOB MODE] batch failure | ${batchIdx + 1}/${totalBatches} | error=${err.message}`);
 
           await supabaseAdmin.from('extraction_batches').upsert({
@@ -1756,6 +1773,15 @@ Deno.serve(async (req) => {
             completed_at: new Date().toISOString(),
           }, { onConflict: 'resource_id,batch_index' });
 
+          if (isTimeout) {
+            // Timeout means we've used most of our time budget.
+            // Don't count as consecutive failure — trigger watchdog so self-invoke fires.
+            console.log(`[JOB MODE] batch timeout → triggering watchdog for self-invoke`);
+            stoppedByWatchdog = true;
+            break;
+          }
+
+          consecutiveFailures++;
           if (consecutiveFailures >= 2) {
             console.log(`[JOB MODE] Stopping: 2 consecutive failures`);
             break;
