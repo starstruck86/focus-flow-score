@@ -462,16 +462,7 @@ export function useDeepReExtraction() {
     let existingLedger: BatchLedgerEntry[] = [];
 
     if (isBatched) {
-      // Fetch resource content for semantic boundary detection
-      const { data: resourceData } = await supabase
-        .from('resources' as any)
-        .select('content')
-        .eq('id', item.resource_id)
-        .single();
-      const content = (resourceData as any)?.content || '';
-      slices = computeSemanticSlices(item.content_length, content);
-
-      // Get resume info from DB batch ledger
+      // Get resume info from DB batch ledger FIRST
       const resumeInfo = await getResumeInfo(item.resource_id);
       existingLedger = resumeInfo.ledger;
 
@@ -484,16 +475,60 @@ export function useDeepReExtraction() {
         } as any).eq('id', item.resource_id);
       }
 
-      // Determine which batches to skip (already completed in DB)
-      // Only skip if the batch config matches (same total)
-      if (resumeInfo.batchTotal === slices.length && resumeInfo.hasIncompleteBatches && resumeInfo.nextBatchIndex != null) {
-        resumeFrom = resumeInfo.nextBatchIndex;
-        if (resumeFrom >= slices.length) {
-          // All batches already done — nothing to do
-          console.log(`[ReExtract] All ${slices.length} batches already completed for "${item.title}"`);
-          // Still run verification
+      // RESUME RULE: If a persisted batch ledger exists, it IS the source of truth.
+      // Never recompute semantic slices — use the persisted char boundaries exactly.
+      if (resumeInfo.ledger.length > 0) {
+        slices = resumeInfo.ledger
+          .sort((a, b) => a.batchIndex - b.batchIndex)
+          .map(b => ({
+            start: b.charStart,
+            end: b.charEnd,
+            semanticStartMarker: b.semanticStartMarker ?? `(batch ${b.batchIndex + 1} start)`,
+            semanticEndMarker: b.semanticEndMarker ?? `(batch ${b.batchIndex + 1} end)`,
+          }));
+
+        // If ledger has fewer entries than batchTotal (pending batches not yet in DB),
+        // we need to fill remaining slices from content
+        const ledgerBatchTotal = resumeInfo.batchTotal || slices.length;
+        if (slices.length < ledgerBatchTotal) {
+          // Fetch content to compute remaining slices only
+          const { data: resourceData } = await supabase
+            .from('resources' as any)
+            .select('content')
+            .eq('id', item.resource_id)
+            .single();
+          const content = (resourceData as any)?.content || '';
+          const fullSlices = computeSemanticSlices(item.content_length, content);
+          // Append any slices beyond what the ledger covers
+          for (let i = slices.length; i < fullSlices.length; i++) {
+            slices.push(fullSlices[i]);
+          }
         }
+
+        resumeFrom = resumeInfo.nextBatchIndex ?? 0;
+        if (resumeFrom >= slices.length) {
+          console.log(`[ReExtract] All ${slices.length} batches already completed for "${item.title}"`);
+        }
+      } else {
+        // No existing ledger — fresh extraction, compute semantic slices
+        const { data: resourceData } = await supabase
+          .from('resources' as any)
+          .select('content')
+          .eq('id', item.resource_id)
+          .single();
+        const content = (resourceData as any)?.content || '';
+        slices = computeSemanticSlices(item.content_length, content);
+        resumeFrom = 0;
       }
+
+      console.log('[ReExtract] RESUME DECISION', {
+        resourceId: item.resource_id,
+        hasLedger: resumeInfo.ledger.length > 0,
+        batchTotal: slices.length,
+        completedBatches: resumeInfo.completedBatches,
+        nextBatchIndex: resumeFrom,
+        sourceOfTruth: resumeInfo.ledger.length > 0 ? 'ledger' : 'fresh_semantic_plan',
+      });
     }
 
     const batchTotal = slices.length;
