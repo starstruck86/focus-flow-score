@@ -2,6 +2,7 @@
  * Hook for deep re-extraction queue management.
  * Manages flagging, running, and tracking deep multi-pass re-extraction.
  * Includes lift_status classification, no_lift_reason diagnosis, and verification layer.
+ * Supports resumable batched extraction for large documents.
  */
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -35,6 +36,19 @@ export type DominantBottleneck =
   | 'none'
   | 'unknown';
 
+export interface BatchLedgerEntry {
+  batchIndex: number;
+  charStart: number;
+  charEnd: number;
+  raw: number;
+  validated: number;
+  saved: number;
+  dupsSkipped: number;
+  cumulativeKiTotal: number;
+  status: 'completed' | 'failed' | 'skipped_resume';
+  error?: string;
+}
+
 export interface ReExtractQueueItem {
   resource_id: string;
   title: string;
@@ -59,7 +73,7 @@ export interface ReExtractQueueItem {
   duplicates_skipped?: number;
   quality_label?: string;
   error?: string;
-  // New: lift classification
+  // Lift classification
   lift_status?: LiftStatus;
   no_lift_reason?: NoLiftReason;
   // Edge function raw metrics for diagnosis
@@ -77,6 +91,8 @@ export interface ReExtractQueueItem {
   batches_completed?: number;
   batch_status?: string;
   is_batched?: boolean;
+  // Batch ledger — per-batch results
+  batch_ledger?: BatchLedgerEntry[];
 }
 
 export interface CoverageLiftSummary {
@@ -99,20 +115,14 @@ function classifyLift(kiDelta: number, preKisPer1k: number, postKisPer1k: number
   if (kiDelta < 0) return 'regression';
   if (kiDelta === 0) return 'no_lift';
   if (kiDelta >= 3 || (postKisPer1k - preKisPer1k) >= 0.25) return 'meaningful_lift';
-  return 'minor_lift'; // delta 1-2
+  return 'minor_lift';
 }
 
 function diagnoseNoLift(
-  kiDelta: number,
-  preKisPer1k: number,
-  dupsSkipped: number,
-  efReturned: number,
-  efValidated: number,
-  efSaved: number,
-  contentLength: number,
+  kiDelta: number, preKisPer1k: number, dupsSkipped: number,
+  efReturned: number, efValidated: number, efSaved: number, contentLength: number,
 ): NoLiftReason | undefined {
   if (kiDelta > 0) return undefined;
-
   if (preKisPer1k >= 1.5) return 'already_dense';
   if (efReturned === 0) return 'extractor_returned_no_new_items';
   if (efReturned > 0 && efReturned < 3) return 'extractor_weak_output';
@@ -126,12 +136,8 @@ function diagnoseNoLift(
 }
 
 function classifyBottleneck(
-  efReturned: number,
-  efValidated: number,
-  efSaved: number,
-  dupsSkipped: number,
-  preKisPer1k: number,
-  kiDelta: number,
+  efReturned: number, efValidated: number, efSaved: number,
+  dupsSkipped: number, preKisPer1k: number, kiDelta: number,
 ): DominantBottleneck {
   if (kiDelta > 0) return 'none';
   if (preKisPer1k >= 1.5) return 'already_mined';
@@ -140,6 +146,24 @@ function classifyBottleneck(
   if (efValidated > 0 && efSaved === 0 && dupsSkipped > 0) return 'dedup_too_aggressive';
   if (efReturned < 3) return 'extractor_weak_output';
   return 'unknown';
+}
+
+// ── CHUNKED EXTRACTION CONSTANTS ──
+const LARGE_DOC_THRESHOLD = 40000;
+const BATCH_SLICE_SIZE = 15000;
+const BATCH_OVERLAP = 1000;
+
+function computeSlices(contentLength: number): { start: number; end: number }[] {
+  if (contentLength <= LARGE_DOC_THRESHOLD) return [{ start: 0, end: contentLength }];
+  const slices: { start: number; end: number }[] = [];
+  let start = 0;
+  while (start < contentLength) {
+    const end = Math.min(start + BATCH_SLICE_SIZE, contentLength);
+    slices.push({ start, end });
+    if (end >= contentLength) break;
+    start = end - BATCH_OVERLAP;
+  }
+  return slices;
 }
 
 export function useDeepReExtraction() {
@@ -151,22 +175,10 @@ export function useDeepReExtraction() {
 
   const flagForReExtraction = useCallback((resources: ResourceAuditRow[], reason: string) => {
     const eligible = resources.filter(r => {
-      if (r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5) {
-        console.log(`[ReExtract] SKIP strong resource: ${r.title} (${r.kis_per_1k_chars} KIs/1k)`);
-        return false;
-      }
-      if (r.resource_type === 'reference_only') {
-        console.log(`[ReExtract] SKIP reference_only: ${r.title}`);
-        return false;
-      }
-      if (r.content_length < 1500) {
-        console.log(`[ReExtract] SKIP thin content (<1500): ${r.title} (${r.content_length} chars)`);
-        return false;
-      }
-      if (excludedResourceIds.has(r.resource_id)) {
-        console.log(`[ReExtract] SKIP excluded: ${r.title}`);
-        return false;
-      }
+      if (r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5) return false;
+      if (r.resource_type === 'reference_only') return false;
+      if (r.content_length < 1500) return false;
+      if (excludedResourceIds.has(r.resource_id)) return false;
       return true;
     });
 
@@ -194,7 +206,7 @@ export function useDeepReExtraction() {
       return [...prev, ...unique];
     });
     const msg = skipped > 0
-      ? `${newItems.length} flagged for re-extraction (${skipped} skipped — already strong, excluded, or too thin)`
+      ? `${newItems.length} flagged for re-extraction (${skipped} skipped)`
       : `${newItems.length} resources flagged for deep re-extraction`;
     toast.success(msg);
   }, [excludedResourceIds]);
@@ -216,22 +228,27 @@ export function useDeepReExtraction() {
     toast.success('Resource excluded from future re-extraction queues');
   }, []);
 
-  // ── CHUNKED EXTRACTION: split large resources into multiple edge function calls ──
-  const LARGE_DOC_THRESHOLD = 40000; // chars
-  const BATCH_SLICE_SIZE = 15000; // chars per batch — kept small so each edge function call completes within timeout
-  const BATCH_OVERLAP = 1000; // overlap between batches
-
-  const computeSlices = (contentLength: number): { start: number; end: number }[] => {
-    if (contentLength <= LARGE_DOC_THRESHOLD) return [{ start: 0, end: contentLength }];
-    const slices: { start: number; end: number }[] = [];
-    let start = 0;
-    while (start < contentLength) {
-      const end = Math.min(start + BATCH_SLICE_SIZE, contentLength);
-      slices.push({ start, end });
-      if (end >= contentLength) break;
-      start = end - BATCH_OVERLAP;
+  // ── Query DB for resume state (how many batches already completed) ──
+  const getResumeStartIndex = async (resourceId: string, totalBatches: number): Promise<number> => {
+    try {
+      const { data } = await supabase
+        .from('resources' as any)
+        .select('extraction_batches_completed, extraction_batch_total, extraction_is_resumable')
+        .eq('id', resourceId)
+        .single();
+      if (data && (data as any).extraction_is_resumable && (data as any).extraction_batches_completed > 0) {
+        const completed = (data as any).extraction_batches_completed as number;
+        const prevTotal = (data as any).extraction_batch_total as number;
+        // Only resume if the batch config matches (same total)
+        if (prevTotal === totalBatches && completed < totalBatches) {
+          console.log(`[ReExtract] RESUME: skipping ${completed} already-completed batches`);
+          return completed;
+        }
+      }
+    } catch {
+      // ignore — start from 0
     }
-    return slices;
+    return 0;
   };
 
   const runSingleExtraction = async (item: ReExtractQueueItem): Promise<{
@@ -243,6 +260,9 @@ export function useDeepReExtraction() {
     const slices = computeSlices(item.content_length);
     const batchTotal = slices.length;
 
+    // Resume support: check if some batches already completed
+    const resumeFrom = isBatched ? await getResumeStartIndex(item.resource_id, batchTotal) : 0;
+
     if (isBatched) {
       setQueue(prev => prev.map(i =>
         i.resource_id === item.resource_id ? {
@@ -250,11 +270,14 @@ export function useDeepReExtraction() {
           status: 'running_batched' as const,
           is_batched: true,
           batch_total: batchTotal,
-          batches_completed: 0,
-          batch_status: `running_batch_1_of_${batchTotal}`,
+          batches_completed: resumeFrom,
+          batch_status: resumeFrom > 0
+            ? `resuming_from_batch_${resumeFrom + 1}_of_${batchTotal}`
+            : `running_batch_1_of_${batchTotal}`,
+          batch_ledger: [],
         } : i
       ));
-      console.log(`[ReExtract] BATCHED: "${item.title}" | ${item.content_length} chars → ${batchTotal} batches`);
+      console.log(`[ReExtract] BATCHED: "${item.title}" | ${item.content_length} chars → ${batchTotal} batches${resumeFrom > 0 ? ` (resuming from batch ${resumeFrom + 1})` : ''}`);
     } else {
       setQueue(prev => prev.map(i =>
         i.resource_id === item.resource_id ? { ...i, status: 'running' as const } : i
@@ -267,9 +290,22 @@ export function useDeepReExtraction() {
     let totalDupsSkipped = 0;
     let allPassesRun: string[] = [];
     let lastError: string | null = null;
-    let batchesCompleted = 0;
+    let batchesCompleted = resumeFrom;
+    const batchLedger: BatchLedgerEntry[] = [];
 
-    for (let batchIdx = 0; batchIdx < slices.length; batchIdx++) {
+    // Add skipped-resume entries for already-completed batches
+    for (let i = 0; i < resumeFrom; i++) {
+      batchLedger.push({
+        batchIndex: i,
+        charStart: slices[i].start,
+        charEnd: slices[i].end,
+        raw: 0, validated: 0, saved: 0, dupsSkipped: 0,
+        cumulativeKiTotal: 0, // unknown for resumed batches
+        status: 'skipped_resume',
+      });
+    }
+
+    for (let batchIdx = resumeFrom; batchIdx < slices.length; batchIdx++) {
       const slice = slices[batchIdx];
 
       if (isBatched) {
@@ -296,12 +332,11 @@ export function useDeepReExtraction() {
           bodyPayload.batchTotal = batchTotal;
         }
 
-        // Use authenticatedFetch with 150s timeout for extraction calls
         const response = await authenticatedFetch({
           functionName: 'extract-tactics',
           body: bodyPayload,
           componentName: 'useDeepReExtraction',
-          timeoutMs: 150_000, // 150s — edge functions can run up to ~150s
+          timeoutMs: 150_000,
         });
         const data = await response.json();
         const error = !response.ok ? (data?.error || `HTTP ${response.status}`) : null;
@@ -314,6 +349,7 @@ export function useDeepReExtraction() {
         const efSaved = data?.persistence?.saved_count ?? 0;
         const dupsSkipped = data?.persistence?.duplicates_skipped ?? 0;
         const passesRun = data?.model_metrics?.extraction_passes_run ?? [];
+        const cumulativeTotal = data?.persistence?.current_resource_ki_count ?? 0;
 
         totalEfReturned += efReturned;
         totalEfValidated += efValidated;
@@ -322,13 +358,26 @@ export function useDeepReExtraction() {
         allPassesRun = [...new Set([...allPassesRun, ...passesRun])];
         batchesCompleted++;
 
-        console.log(`[ReExtract] Batch ${batchIdx + 1}/${batchTotal} complete: ${efReturned} raw → ${efValidated} valid → ${efSaved} saved`);
+        batchLedger.push({
+          batchIndex: batchIdx,
+          charStart: slice.start,
+          charEnd: slice.end,
+          raw: efReturned,
+          validated: efValidated,
+          saved: efSaved,
+          dupsSkipped,
+          cumulativeKiTotal: cumulativeTotal,
+          status: 'completed',
+        });
+
+        console.log(`[ReExtract] Batch ${batchIdx + 1}/${batchTotal} complete: ${efReturned} raw → ${efValidated} valid → ${efSaved} saved | cumulative: ${cumulativeTotal} KIs`);
 
         if (isBatched) {
           setQueue(prev => prev.map(i =>
             i.resource_id === item.resource_id ? {
               ...i,
               batches_completed: batchIdx + 1,
+              batch_ledger: [...batchLedger],
               batch_status: (batchIdx + 1) >= batchTotal
                 ? 'all_batches_done'
                 : `running_batch_${batchIdx + 2}_of_${batchTotal}`,
@@ -336,14 +385,25 @@ export function useDeepReExtraction() {
           ));
         }
 
-        // Small delay between batches to avoid rate limits
+        // Delay between batches
         if (batchIdx < slices.length - 1) {
-          await new Promise(r => setTimeout(r, 2000));
+          await new Promise(r => setTimeout(r, 3000));
         }
       } catch (err: any) {
         lastError = err.message;
         console.error(`[ReExtract] Batch ${batchIdx + 1}/${batchTotal} failed:`, err.message);
-        // For batched: continue to next batch, don't abort
+
+        batchLedger.push({
+          batchIndex: batchIdx,
+          charStart: slice.start,
+          charEnd: slice.end,
+          raw: 0, validated: 0, saved: 0, dupsSkipped: 0,
+          cumulativeKiTotal: 0,
+          status: 'failed',
+          error: err.message,
+        });
+
+        // For batched: continue to next batch, don't abort entirely
         if (!isBatched) throw err;
       }
     }
@@ -380,22 +440,6 @@ export function useDeepReExtraction() {
       totalEfReturned, totalEfValidated, totalEfSaved, totalDupsSkipped, item.pre_kis_per_1k, kiDelta
     );
 
-    let qualityLabel: string | undefined;
-    if (liftStatus === 'no_lift' && noLiftReason) {
-      const reasonLabels: Record<NoLiftReason, string> = {
-        already_dense: 'Already dense — resource well-mined',
-        duplicate_heavy: 'No true lift — duplicates / overlap only',
-        extractor_returned_no_new_items: 'Extractor returned no new items',
-        extractor_weak_output: 'Extractor produced too few candidates',
-        items_generated_but_filtered_out: 'Items generated but failed validation',
-        items_generated_but_deduped: 'Items generated but all were duplicates',
-        validation_too_strict: 'Validation rejected most candidates',
-        resource_not_suitable: 'Resource not suitable for extraction',
-        unknown: 'No lift — cause unknown',
-      };
-      qualityLabel = reasonLabels[noLiftReason];
-    }
-
     const finalStatus: ReExtractQueueStatus =
       batchesCompleted === 0 ? 'failed'
       : isBatched && batchesCompleted < batchTotal && batchesCompleted > 0 ? 'partial_complete_resumable'
@@ -403,21 +447,12 @@ export function useDeepReExtraction() {
       : 'completed';
 
     console.log('REEXTRACT DELTA CHECK', {
-      resourceId: item.resource_id,
-      title: item.title,
-      batched: isBatched,
-      batchesCompleted,
-      batchTotal,
-      preTotal: item.pre_ki_count,
-      postTotal,
-      rawDelta: kiDelta,
-      netNewUnique,
-      totalEfReturned,
-      totalEfValidated,
-      totalEfSaved,
-      totalDupsSkipped,
-      liftStatus,
-      dominantBottleneck,
+      resourceId: item.resource_id, title: item.title,
+      batched: isBatched, batchesCompleted, batchTotal, resumedFrom: resumeFrom,
+      preTotal: item.pre_ki_count, postTotal,
+      rawDelta: kiDelta, netNewUnique,
+      totalEfReturned, totalEfValidated, totalEfSaved, totalDupsSkipped,
+      liftStatus, dominantBottleneck,
     });
 
     setQueue(prev => prev.map(i =>
@@ -434,7 +469,6 @@ export function useDeepReExtraction() {
         context_delta: contextDelta,
         passes_run: allPassesRun,
         duplicates_skipped: totalDupsSkipped,
-        quality_label: qualityLabel,
         lift_status: liftStatus,
         no_lift_reason: noLiftReason,
         ef_returned_count: totalEfReturned,
@@ -445,6 +479,7 @@ export function useDeepReExtraction() {
         batches_completed: isBatched ? batchesCompleted : undefined,
         batch_status: isBatched ? (batchesCompleted >= batchTotal ? 'completed' : 'partial') : undefined,
         is_batched: isBatched,
+        batch_ledger: batchLedger.length > 0 ? batchLedger : undefined,
         error: lastError || undefined,
       } : i
     ));
@@ -453,7 +488,7 @@ export function useDeepReExtraction() {
   };
 
   const runDeepExtraction = useCallback(async () => {
-    const queued = queue.filter(i => i.status === 'queued');
+    const queued = queue.filter(i => i.status === 'queued' || i.status === 'partial_complete_resumable');
     if (queued.length === 0) return;
 
     setIsRunning(true);
@@ -492,11 +527,7 @@ export function useDeepReExtraction() {
         postKisArr.push(result.postKisPer1k);
       } catch (err: any) {
         setQueue(prev => prev.map(i =>
-          i.resource_id === item.resource_id ? {
-            ...i,
-            status: 'failed' as const,
-            error: err.message,
-          } : i
+          i.resource_id === item.resource_id ? { ...i, status: 'failed' as const, error: err.message } : i
         ));
         preKisArr.push(item.pre_kis_per_1k);
         postKisArr.push(item.pre_kis_per_1k);
@@ -506,22 +537,16 @@ export function useDeepReExtraction() {
     const avgBefore = preKisArr.length > 0 ? preKisArr.reduce((a, b) => a + b, 0) / preKisArr.length : 0;
     const avgAfter = postKisArr.length > 0 ? postKisArr.reduce((a, b) => a + b, 0) / postKisArr.length : 0;
 
-    // Find top no-lift reason
     const reasonCounts = new Map<NoLiftReason, number>();
-    for (const r of noLiftReasons) {
-      reasonCounts.set(r, (reasonCounts.get(r) || 0) + 1);
-    }
+    for (const r of noLiftReasons) reasonCounts.set(r, (reasonCounts.get(r) || 0) + 1);
     let topNoLiftReason: NoLiftReason | null = null;
     let topCount = 0;
     for (const [reason, count] of reasonCounts) {
       if (count > topCount) { topNoLiftReason = reason; topCount = count; }
     }
 
-    // Find top bottleneck
     const bnCounts = new Map<DominantBottleneck, number>();
-    for (const b of bottlenecks) {
-      bnCounts.set(b, (bnCounts.get(b) || 0) + 1);
-    }
+    for (const b of bottlenecks) bnCounts.set(b, (bnCounts.get(b) || 0) + 1);
     let topBottleneck: DominantBottleneck | null = null;
     let topBnCount = 0;
     for (const [bn, count] of bnCounts) {
@@ -529,18 +554,12 @@ export function useDeepReExtraction() {
     }
 
     setLiftSummary({
-      resourcesProcessed: queued.length,
-      resourcesSucceeded: succeeded,
-      totalKiDelta: totalDelta,
-      totalNetNewUnique: totalNetNew,
-      totalNewActive: totalNewActive,
-      totalNewWithContext: totalNewCtx,
+      resourcesProcessed: queued.length, resourcesSucceeded: succeeded,
+      totalKiDelta: totalDelta, totalNetNewUnique: totalNetNew,
+      totalNewActive: totalNewActive, totalNewWithContext: totalNewCtx,
       avgKisPer1kBefore: Math.round(avgBefore * 100) / 100,
       avgKisPer1kAfter: Math.round(avgAfter * 100) / 100,
-      depthUpgrades,
-      noLiftCount,
-      topNoLiftReason,
-      topBottleneck,
+      depthUpgrades, noLiftCount, topNoLiftReason, topBottleneck,
       successRate: queued.length > 0 ? Math.round((succeeded / queued.length) * 100) : 0,
     });
 
@@ -558,14 +577,7 @@ export function useDeepReExtraction() {
   }, [queue, qc]);
 
   return {
-    queue,
-    isRunning,
-    liftSummary,
-    excludedResourceIds,
-    flagForReExtraction,
-    removeFromQueue,
-    clearQueue,
-    runDeepExtraction,
-    markExcluded,
+    queue, isRunning, liftSummary, excludedResourceIds,
+    flagForReExtraction, removeFromQueue, clearQueue, runDeepExtraction, markExcluded,
   };
 }
