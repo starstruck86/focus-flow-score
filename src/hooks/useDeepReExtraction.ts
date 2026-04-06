@@ -296,11 +296,17 @@ export function useDeepReExtraction() {
           bodyPayload.batchTotal = batchTotal;
         }
 
-        const { data, error } = await supabase.functions.invoke('extract-tactics', {
+        // Use authenticatedFetch with 150s timeout for extraction calls
+        const response = await authenticatedFetch({
+          functionName: 'extract-tactics',
           body: bodyPayload,
+          componentName: 'useDeepReExtraction',
+          timeoutMs: 150_000, // 150s — edge functions can run up to ~150s
         });
+        const data = await response.json();
+        const error = !response.ok ? (data?.error || `HTTP ${response.status}`) : null;
 
-        if (error) throw new Error(error.message);
+        if (error) throw new Error(typeof error === 'string' ? error : JSON.stringify(error));
         if (data?.error) throw new Error(data.error);
 
         const efReturned = data?.model_metrics?.raw_count ?? 0;
