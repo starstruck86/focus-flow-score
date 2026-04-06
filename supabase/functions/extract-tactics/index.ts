@@ -1647,27 +1647,51 @@ Deno.serve(async (req) => {
       // ── SELF-INVOKE CONTINUATION (if not all complete) ──
       if (!allComplete && !consecutiveFailures) {
         // Use service role key for self-invoke (user JWT may expire during long runs)
-        console.log(`[JOB MODE] self-invoke: ${totalBatches - completedSet.size} batches remaining`);
+        const remaining = totalBatches - completedSet.size;
+        console.log(`[JOB MODE] self-invoke: ${remaining} batches remaining`);
+        let selfInvokeDispatched = false;
         try {
           const selfUrl = `${supabaseUrl}/functions/v1/extract-tactics`;
-          const selfResp = await fetch(selfUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${serviceRoleKey}`,
-              'x-batch-key': serviceRoleKey,
-            },
-            body: JSON.stringify({
-              resourceId,
-              userId,
-              deepMode: true,
-              persist: true,
-              jobMode: true,
-              isContinuation: true,
-            }),
-          });
-          const selfBody = await selfResp.text();
-          console.log(`[JOB MODE] self-invoke ${selfResp.ok ? 'success' : 'failure'} | status=${selfResp.status} | body=${selfBody.slice(0, 200)}`);
+          // Use AbortController with short timeout — we just need to confirm
+          // the request was DISPATCHED, not wait for the continuation to finish.
+          // The continuation runs in its own invocation and will complete independently.
+          const abortCtrl = new AbortController();
+          const abortTimeout = setTimeout(() => abortCtrl.abort(), 8000);
+          try {
+            const selfResp = await fetch(selfUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serviceRoleKey}`,
+                'x-batch-key': serviceRoleKey,
+              },
+              body: JSON.stringify({
+                resourceId,
+                userId,
+                deepMode: true,
+                persist: true,
+                jobMode: true,
+                isContinuation: true,
+              }),
+              signal: abortCtrl.signal,
+            });
+            clearTimeout(abortTimeout);
+            // If we got here quickly, the continuation already returned (fast path)
+            const selfBody = await selfResp.text();
+            console.log(`[JOB MODE] self-invoke success | status=${selfResp.status} | body=${selfBody.slice(0, 200)}`);
+            selfInvokeDispatched = true;
+          } catch (fetchErr: any) {
+            clearTimeout(abortTimeout);
+            if (fetchErr.name === 'AbortError') {
+              // Abort means the request was dispatched but the response hasn't
+              // come back within 8s — expected for long-running continuations.
+              // The continuation is running independently on the server.
+              console.log(`[JOB MODE] self-invoke dispatched (response pending — continuation running independently)`);
+              selfInvokeDispatched = true;
+            } else {
+              throw fetchErr; // re-throw real errors
+            }
+          }
         } catch (e: any) {
           console.error(`[JOB MODE] self-invoke failure: ${e.message}`);
           // Mark resource as resumable since continuation failed
@@ -1676,6 +1700,9 @@ Deno.serve(async (req) => {
             extraction_is_resumable: true,
             last_extraction_summary: `Partial: ${completedSet.size}/${totalBatches} batches. Self-invoke failed: ${e.message}`,
           }).eq('id', resourceId);
+        }
+        if (selfInvokeDispatched) {
+          console.log(`[JOB MODE] continuation dispatched — returning control. Resource stays 'running'.`);
         }
       } else if (!allComplete && consecutiveFailures >= 2) {
         console.log(`[JOB MODE] NOT self-invoking: stopped due to ${consecutiveFailures} consecutive failures`);
