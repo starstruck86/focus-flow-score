@@ -1186,7 +1186,10 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    let { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist } = body;
+    let { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist,
+      // Chunked extraction params
+      contentSliceStart, contentSliceEnd, batchIndex, batchTotal, skipPersistResourceUpdate,
+    } = body;
 
     // Resolve userId
     if (!userId) userId = bodyUserId;
@@ -1198,6 +1201,7 @@ Deno.serve(async (req) => {
 
     // ── AUTO-FETCH: if resourceId provided but no content, fetch from DB ──
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    let fullContentLength = 0; // track total resource length for density calc
     if (resourceId && (!content || content.length < 100)) {
       console.log(`[extract-tactics] No content in body, fetching resource ${resourceId} from DB`);
       const { data: resource, error: fetchErr } = await supabaseAdmin
@@ -1215,10 +1219,19 @@ Deno.serve(async (req) => {
 
       title = title || resource.title;
       content = resource.content;
+      fullContentLength = (content || '').length;
       description = description || resource.description;
       tags = tags || resource.tags;
       resourceType = resourceType || resource.resource_type;
-      console.log(`[extract-tactics] Fetched resource: "${title}" | ${(content || '').length} chars`);
+      console.log(`[extract-tactics] Fetched resource: "${title}" | ${fullContentLength} chars`);
+
+      // ── CONTENT SLICING for chunked extraction ──
+      if (typeof contentSliceStart === 'number' && typeof contentSliceEnd === 'number' && content) {
+        content = content.slice(contentSliceStart, contentSliceEnd);
+        console.log(`[extract-tactics] BATCH ${batchIndex ?? '?'}/${batchTotal ?? '?'}: sliced chars ${contentSliceStart}-${contentSliceEnd} (${content.length} chars)`);
+      }
+    } else {
+      fullContentLength = (content || '').length;
     }
 
     if (!content || content.length < 100) {
