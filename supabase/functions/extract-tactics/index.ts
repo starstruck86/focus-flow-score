@@ -1483,11 +1483,20 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════
     if (jobMode && resourceId) {
       console.log(`[JOB MODE] start | resource=${resourceId} | isContinuation=${!!isContinuation}`);
-      const JOB_WATCHDOG_MS = 90 * 1000; // 90s — don't START a new batch after this
-      const BATCH_TIMEOUT_MS = 150 * 1000; // 150s — single batch AI call cap; platform kills ~200s so leaves ~40s for reconcile+self-invoke
+      const PLATFORM_BUDGET_MS = 180 * 1000; // Conservative platform wall-clock budget (real kill ~200s)
+      const RECONCILE_BUFFER_MS = 25 * 1000; // Time reserved for reconciliation + self-invoke dispatch
+      const JOB_WATCHDOG_MS = 90 * 1000; // Don't START a new batch after this unless there's enough remaining budget
       const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 min = stale (faster recovery)
       const MAX_BATCH_RETRIES = 3; // skip a batch after this many failures
+      const MIN_BATCH_TIMEOUT_MS = 30 * 1000; // Minimum time to give a batch (below this, don't start)
       const jobStart = Date.now();
+
+      // Dynamic batch timeout: never exceed remaining platform budget minus reconcile buffer
+      const getBatchTimeoutMs = () => {
+        const elapsed = Date.now() - jobStart;
+        const remaining = PLATFORM_BUDGET_MS - elapsed - RECONCILE_BUFFER_MS;
+        return Math.max(MIN_BATCH_TIMEOUT_MS, remaining);
+      };
 
       // ── IDEMPOTENCY GUARD (skipped for self-invoke continuations) ──
       if (!isContinuation) {
