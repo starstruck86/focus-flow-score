@@ -1146,6 +1146,96 @@ async function serverSidePersist(
 }
 
 // ══════════════════════════════════════════════════════
+// DB-AUTHORITATIVE RESOURCE SNAPSHOT RECONCILIATION
+// Used at end of every job-mode invocation to ensure
+// resource fields reflect durable truth.
+// ══════════════════════════════════════════════════════
+
+async function reconcileResourceSnapshot(
+  supabaseAdmin: any,
+  resourceId: string,
+  userId: string,
+  fullLength: number,
+  totalBatches: number,
+  category: ContentCategory,
+  allComplete: boolean,
+  stoppedByWatchdog = false,
+  lastError: string | null = null,
+): Promise<void> {
+  console.log(`[SNAPSHOT RECONCILE] start | resource=${resourceId} | allComplete=${allComplete}`);
+
+  // Count actual KIs from knowledge_items table
+  const { count: finalKiCount } = await supabaseAdmin
+    .from('knowledge_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('source_resource_id', resourceId)
+    .eq('user_id', userId);
+  const finalTotal = finalKiCount ?? 0;
+  const finalKisPer1k = fullLength > 0 ? Math.round((finalTotal * 1000 / fullLength) * 100) / 100 : 0;
+
+  // Count actual extraction_runs
+  const { count: totalRunCount } = await supabaseAdmin
+    .from('extraction_runs')
+    .select('*', { count: 'exact', head: true })
+    .eq('resource_id', resourceId);
+
+  // Count completed batches from extraction_batches
+  const { count: completedBatchCount } = await supabaseAdmin
+    .from('extraction_batches')
+    .select('*', { count: 'exact', head: true })
+    .eq('resource_id', resourceId)
+    .eq('status', 'completed');
+  const actualCompleted = completedBatchCount ?? 0;
+
+  // Find next incomplete batch
+  const { data: incompleteBatches } = await supabaseAdmin
+    .from('extraction_batches')
+    .select('batch_index')
+    .eq('resource_id', resourceId)
+    .neq('status', 'completed')
+    .order('batch_index', { ascending: true })
+    .limit(1);
+  const nextIncompleteBatch = incompleteBatches?.[0]?.batch_index;
+
+  const depthBucket = computeDepthBucket(finalTotal, fullLength, category);
+  const underExtracted = computeUnderExtracted(finalTotal, fullLength, category);
+
+  const update: Record<string, any> = {
+    active_job_updated_at: new Date().toISOString(),
+    current_resource_ki_count: finalTotal,
+    current_resource_kis_per_1k: finalKisPer1k,
+    kis_per_1k_chars: finalKisPer1k,
+    extraction_depth_bucket: depthBucket,
+    under_extracted_flag: underExtracted,
+    extraction_attempt_count: totalRunCount ?? 0,
+    extraction_batches_completed: actualCompleted,
+    extraction_batch_total: totalBatches,
+  };
+
+  if (allComplete) {
+    update.active_job_status = 'succeeded';
+    update.active_job_finished_at = new Date().toISOString();
+    update.extraction_is_resumable = false;
+    update.extraction_batch_status = 'completed';
+    update.last_extraction_run_status = 'completed';
+    update.last_extraction_summary = `Job mode complete: ${totalBatches} batches, ${finalTotal} KIs, ${finalKisPer1k} KIs/1k`;
+  } else {
+    // Still incomplete — mark as partial/resumable but NOT running
+    // (running state is only for active processing within an invocation)
+    update.active_job_status = stoppedByWatchdog ? 'running' : 'partial'; // keep running if continuation expected
+    update.extraction_is_resumable = true;
+    update.extraction_batch_status = nextIncompleteBatch != null
+      ? `resume_from_batch_${nextIncompleteBatch + 1}_of_${totalBatches}`
+      : `partial_${actualCompleted}_of_${totalBatches}`;
+    update.last_extraction_run_status = 'partial_complete_resumable';
+    update.last_extraction_summary = `Job mode partial: ${actualCompleted}/${totalBatches} batches, ${finalTotal} KIs. ${stoppedByWatchdog ? 'Watchdog stopped — continuation dispatched.' : `Error: ${lastError || 'unknown'}`}`;
+  }
+
+  await supabaseAdmin.from('resources').update(update).eq('id', resourceId);
+  console.log(`[SNAPSHOT RECONCILE] done | KIs=${finalTotal} | KIs/1k=${finalKisPer1k} | runs=${totalRunCount} | batches=${actualCompleted}/${totalBatches} | status=${update.active_job_status}`);
+}
+
+// ══════════════════════════════════════════════════════
 // MAIN HANDLER
 // ══════════════════════════════════════════════════════
 
