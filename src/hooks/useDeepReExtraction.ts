@@ -373,6 +373,18 @@ export function useDeepReExtraction() {
       titles: resources.map(r => r.title).slice(0, 3),
     });
 
+    // Safeguard: warn if resumable resources are hitting the queue-only path
+    const resumableInBatch = resources.filter(r =>
+      r.extraction_is_resumable ||
+      ((r.extraction_batch_total ?? 0) > 0 && (r.extraction_batches_completed ?? 0) < (r.extraction_batch_total ?? 0))
+    );
+    if (resumableInBatch.length > 0) {
+      console.warn('[BUG] resumable resource was routed to queue-only path', {
+        resumableCount: resumableInBatch.length,
+        titles: resumableInBatch.map(r => r.title),
+      });
+    }
+
     const eligible = resources.filter(r => {
       const hasIncompleteBatches = !!r.extraction_is_resumable || ((r.extraction_batch_total ?? 0) > 0 && (r.extraction_batches_completed ?? 0) < (r.extraction_batch_total ?? 0));
       if (!hasIncompleteBatches && r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5) return false;
