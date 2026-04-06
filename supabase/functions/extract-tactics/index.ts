@@ -1789,27 +1789,34 @@ Deno.serve(async (req) => {
         } catch (err: any) {
           const isTimeout = err.message?.includes('timed out after');
           lastError = err.message;
-          console.error(`[JOB MODE] batch failure | ${batchIdx + 1}/${totalBatches} | error=${err.message}`);
+
+          // Parse previous attempt count from existing ledger row error
+          const existingRow = (ledgerRows || []).find((b: any) => b.batch_index === batchIdx);
+          const prevAttempts = existingRow?.status === 'failed' ? getAttemptCount(existingRow.error) : 0;
+          const thisAttempt = prevAttempts + 1;
+          const errorMsg = `${err.message} (attempt ${thisAttempt}/${MAX_BATCH_RETRIES})`;
+
+          console.error(`[JOB MODE] batch failure | ${batchIdx + 1}/${totalBatches} | attempt ${thisAttempt}/${MAX_BATCH_RETRIES} | error=${err.message}`);
 
           await supabaseAdmin.from('extraction_batches').upsert({
             resource_id: resourceId, user_id: userId,
             batch_index: batchIdx, batch_total: totalBatches,
             char_start: slice.start, char_end: slice.end,
-            status: 'failed', error: err.message,
+            status: 'failed', error: errorMsg,
             completed_at: new Date().toISOString(),
           }, { onConflict: 'resource_id,batch_index' });
 
           if (isTimeout) {
-            // Timeout means we've used most of our time budget.
-            // Don't count as consecutive failure — trigger watchdog so self-invoke fires.
-            console.log(`[JOB MODE] batch timeout → triggering watchdog for self-invoke`);
-            stoppedByWatchdog = true;
-            break;
+            // Timeout: DON'T break — skip this batch and continue to the next one.
+            // The watchdog check at the top of the next iteration will handle time budget.
+            console.log(`[JOB MODE] batch timeout → continuing to next batch (watchdog will check time budget)`);
+            // Don't increment consecutiveFailures for timeouts
+            continue;
           }
 
           consecutiveFailures++;
           if (consecutiveFailures >= 2) {
-            console.log(`[JOB MODE] Stopping: 2 consecutive failures`);
+            console.log(`[JOB MODE] Stopping: 2 consecutive non-timeout failures`);
             break;
           }
         }
