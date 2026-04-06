@@ -1682,18 +1682,10 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Watchdog: check time budget BEFORE starting batch
-        const elapsed = Date.now() - jobStart;
-        if (elapsed > JOB_WATCHDOG_MS) {
-          console.log(`[JOB MODE] watchdog stop | ${batchesProcessedThisJob} batches in ${Math.round(elapsed / 1000)}s — will self-invoke`);
-          stoppedByWatchdog = true;
-          break;
-        }
-
-        // Budget check: is there enough remaining time for a meaningful batch attempt?
-        const batchTimeoutMs = getBatchTimeoutMs();
-        if (batchTimeoutMs <= MIN_BATCH_TIMEOUT_MS) {
-          console.log(`[JOB MODE] watchdog stop (budget exhausted) | only ${Math.round(batchTimeoutMs / 1000)}s left — will self-invoke`);
+        // Watchdog: check remaining time budget BEFORE starting batch
+        const remainingBudget = getRemainingBudgetMs();
+        if (remainingBudget < MIN_BATCH_TIMEOUT_MS) {
+          console.log(`[JOB MODE] watchdog stop | ${batchesProcessedThisJob} batches in ${Math.round((Date.now() - jobStart) / 1000)}s | only ${Math.round(remainingBudget / 1000)}s left — will self-invoke`);
           stoppedByWatchdog = true;
           break;
         }
