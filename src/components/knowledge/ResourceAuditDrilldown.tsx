@@ -119,11 +119,10 @@ function BatchStatusBadge({ status }: { status: string }) {
 export function ResourceAuditDrilldown({ resource, open, onOpenChange, onReExtract, onMarkExcluded, isExcluded, lastQueueResult }: Props) {
   const { data: runs = [], isLoading: runsLoading } = useExtractionRuns(resource?.resource_id ?? null);
   const { data: batches = [] } = useBatchLedger(resource?.resource_id ?? null);
+  const snapshot = useReconciledSnapshot(resource?.resource_id ?? null, runs, batches);
   const r = resource;
 
   if (!r) return null;
-
-  const snapshot = useReconciledSnapshot(r.resource_id, runs, batches);
   const isLargeDoc = r.content_length >= 40000;
   const hasBatches = batches.length > 0;
 
