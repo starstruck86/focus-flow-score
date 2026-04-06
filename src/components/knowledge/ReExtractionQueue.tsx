@@ -1,9 +1,9 @@
 /**
  * Re-Extraction Queue — shows flagged resources with status tracking,
- * lift classification, no-lift diagnosis, and coverage lift summary.
+ * lift classification, no-lift diagnosis, batch ledger, and coverage lift summary.
  */
 import { useState } from 'react';
-import type { DominantBottleneck } from '@/hooks/useDeepReExtraction';
+import type { DominantBottleneck, BatchLedgerEntry } from '@/hooks/useDeepReExtraction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,10 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  Zap, Loader2, CheckCircle2, XCircle, AlertTriangle, TrendingUp, Trash2, Info, Ban, TrendingDown,
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  Zap, Loader2, CheckCircle2, XCircle, AlertTriangle, TrendingUp, Trash2, Info, Ban, TrendingDown, ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ReExtractQueueItem, CoverageLiftSummary, LiftStatus, NoLiftReason } from '@/hooks/useDeepReExtraction';
