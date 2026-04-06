@@ -1,9 +1,9 @@
 /**
  * Re-Extraction Queue — shows flagged resources with status tracking,
- * lift classification, no-lift diagnosis, and coverage lift summary.
+ * lift classification, no-lift diagnosis, batch ledger, and coverage lift summary.
  */
-import { useState } from 'react';
-import type { DominantBottleneck } from '@/hooks/useDeepReExtraction';
+import React, { useState } from 'react';
+import type { DominantBottleneck, BatchLedgerEntry } from '@/hooks/useDeepReExtraction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,10 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  Zap, Loader2, CheckCircle2, XCircle, AlertTriangle, TrendingUp, Trash2, Info, Ban, TrendingDown,
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  Zap, Loader2, CheckCircle2, XCircle, AlertTriangle, TrendingUp, Trash2, Info, Ban, TrendingDown, ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ReExtractQueueItem, CoverageLiftSummary, LiftStatus, NoLiftReason } from '@/hooks/useDeepReExtraction';
@@ -151,12 +154,59 @@ function PipelineTooltip({ item }: { item: ReExtractQueueItem }) {
   );
 }
 
+function BatchLedgerView({ ledger }: { ledger: BatchLedgerEntry[] }) {
+  if (!ledger || ledger.length === 0) return null;
+  return (
+    <div className="mt-1 border border-border rounded-md overflow-hidden">
+      <table className="w-full text-[9px]">
+        <thead>
+          <tr className="bg-muted/50">
+            <th className="px-1.5 py-0.5 text-left font-medium">Batch</th>
+            <th className="px-1.5 py-0.5 text-left font-medium">Range</th>
+            <th className="px-1.5 py-0.5 text-right font-medium">Raw</th>
+            <th className="px-1.5 py-0.5 text-right font-medium">Valid</th>
+            <th className="px-1.5 py-0.5 text-right font-medium">Saved</th>
+            <th className="px-1.5 py-0.5 text-right font-medium">Dupes</th>
+            <th className="px-1.5 py-0.5 text-right font-medium">Total</th>
+            <th className="px-1.5 py-0.5 text-center font-medium">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ledger.map(b => (
+            <tr key={b.batchIndex} className={cn(
+              "border-t border-border/50",
+              b.status === 'failed' && "bg-destructive/5",
+              b.status === 'skipped_resume' && "bg-muted/30 text-muted-foreground"
+            )}>
+              <td className="px-1.5 py-0.5 font-mono">{b.batchIndex + 1}</td>
+              <td className="px-1.5 py-0.5 font-mono">{(b.charStart / 1000).toFixed(0)}k–{(b.charEnd / 1000).toFixed(0)}k</td>
+              <td className="px-1.5 py-0.5 text-right font-mono">{b.status === 'skipped_resume' ? '—' : b.raw}</td>
+              <td className="px-1.5 py-0.5 text-right font-mono">{b.status === 'skipped_resume' ? '—' : b.validated}</td>
+              <td className="px-1.5 py-0.5 text-right font-mono">{b.status === 'skipped_resume' ? '—' : b.saved}</td>
+              <td className="px-1.5 py-0.5 text-right font-mono">{b.status === 'skipped_resume' ? '—' : b.dupsSkipped}</td>
+              <td className="px-1.5 py-0.5 text-right font-mono font-bold">
+                {b.cumulativeKiTotal > 0 ? b.cumulativeKiTotal : '—'}
+              </td>
+              <td className="px-1.5 py-0.5 text-center">
+                {b.status === 'completed' && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600 inline" />}
+                {b.status === 'failed' && <XCircle className="h-2.5 w-2.5 text-destructive inline" />}
+                {b.status === 'skipped_resume' && <span className="text-muted-foreground">↩</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtraction, onRemove, onClear, onMarkExcluded }: Props) {
   const [showConfirm, setShowConfirm] = useState(false);
+  const [expandedLedger, setExpandedLedger] = useState<Set<string>>(new Set());
 
   if (queue.length === 0) return null;
 
-  const queued = queue.filter(i => i.status === 'queued');
+  const queued = queue.filter(i => i.status === 'queued' || i.status === 'partial_complete_resumable');
   const completed = queue.filter(i => i.status === 'completed' || i.status === 'partial');
   const failed = queue.filter(i => i.status === 'failed');
   const avgContentLength = Math.round(queue.reduce((s, i) => s + i.content_length, 0) / queue.length);
@@ -226,90 +276,121 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {queue.map(item => (
-                    <TableRow key={item.resource_id}>
-                      <TableCell><StatusIcon status={item.status} batchInfo={item.is_batched ? { completed: item.batches_completed, total: item.batch_total } : undefined} /></TableCell>
-                      <TableCell>
-                        <div className="text-[11px] max-w-[120px] truncate">{item.title}</div>
-                        <div className="text-[9px] text-muted-foreground">
-                          {(item.content_length / 1000).toFixed(1)}k chars
-                          {item.is_batched && <span className="ml-1 text-primary">• batched</span>}
-                        </div>
-                        {item.batch_status && item.status !== 'completed' && (
-                          <div className="text-[9px] font-mono text-primary">{item.batch_status}</div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-[11px] text-right font-mono">
-                        {item.pre_ki_count}
-                        <div className="text-[9px] text-muted-foreground">{item.pre_kis_per_1k}/1k</div>
-                      </TableCell>
-                      <TableCell className="text-[11px] text-right font-mono">
-                        {item.post_ki_count != null ? (
-                          <>
-                            {item.post_ki_count}
-                            <div className="text-[9px] text-muted-foreground">{item.post_kis_per_1k}/1k</div>
-                          </>
-                        ) : '—'}
-                      </TableCell>
-                      <TableCell className="text-[11px] text-right">
-                        <DeltaCell value={item.ki_delta} />
-                      </TableCell>
-                      <TableCell className="text-[11px] text-right">
-                        <DeltaCell value={item.net_new_unique} />
-                      </TableCell>
-                      <TableCell className="text-[11px] text-right">
-                        <DeltaCell value={item.active_delta} />
-                      </TableCell>
-                      <TableCell className="text-[11px] text-right font-mono text-muted-foreground">
-                        {item.duplicates_skipped != null ? item.duplicates_skipped : '—'}
-                      </TableCell>
-                      <TableCell className="text-[10px] max-w-[130px]">
-                        {item.status === 'queued' ? (
-                          <span className="text-muted-foreground truncate text-[9px]">{item.reason}</span>
-                        ) : (item.status === 'completed' || item.status === 'partial') ? (
-                          <div className="space-y-0.5">
-                            <LiftBadge
-                              liftStatus={item.lift_status}
-                              noLiftReason={item.no_lift_reason}
-                              qualityLabel={item.quality_label}
-                            />
-                            <BottleneckBadge bottleneck={item.dominant_bottleneck} />
-                            {item.ef_returned_count != null && (
+                {queue.map(item => {
+                  const hasLedger = item.batch_ledger && item.batch_ledger.length > 0;
+                  const isExpanded = expandedLedger.has(item.resource_id);
+                  return (
+                    <React.Fragment key={item.resource_id}>
+                      <TableRow>
+                        <TableCell><StatusIcon status={item.status} batchInfo={item.is_batched ? { completed: item.batches_completed, total: item.batch_total } : undefined} /></TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <div className="text-[11px] max-w-[120px] truncate">{item.title}</div>
+                            {hasLedger && (
+                              <button
+                                onClick={() => setExpandedLedger(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(item.resource_id)) next.delete(item.resource_id);
+                                  else next.add(item.resource_id);
+                                  return next;
+                                })}
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <ChevronDown className={cn("h-3 w-3 transition-transform", isExpanded && "rotate-180")} />
+                              </button>
+                            )}
+                          </div>
+                          <div className="text-[9px] text-muted-foreground">
+                            {(item.content_length / 1000).toFixed(1)}k chars
+                            {item.is_batched && <span className="ml-1 text-primary">• {item.batch_total} batches</span>}
+                            {item.status === 'partial_complete_resumable' && (
+                              <span className="ml-1 text-amber-500">• resumable</span>
+                            )}
+                          </div>
+                          {item.batch_status && (item.status === 'running' || item.status === 'running_batched') && (
+                            <div className="text-[9px] font-mono text-primary">{item.batch_status}</div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-[11px] text-right font-mono">
+                          {item.pre_ki_count}
+                          <div className="text-[9px] text-muted-foreground">{item.pre_kis_per_1k}/1k</div>
+                        </TableCell>
+                        <TableCell className="text-[11px] text-right font-mono">
+                          {item.post_ki_count != null ? (
+                            <>
+                              {item.post_ki_count}
+                              <div className="text-[9px] text-muted-foreground">{item.post_kis_per_1k}/1k</div>
+                            </>
+                          ) : '—'}
+                        </TableCell>
+                        <TableCell className="text-[11px] text-right">
+                          <DeltaCell value={item.ki_delta} />
+                        </TableCell>
+                        <TableCell className="text-[11px] text-right">
+                          <DeltaCell value={item.net_new_unique} />
+                        </TableCell>
+                        <TableCell className="text-[11px] text-right">
+                          <DeltaCell value={item.active_delta} />
+                        </TableCell>
+                        <TableCell className="text-[11px] text-right font-mono text-muted-foreground">
+                          {item.duplicates_skipped != null ? item.duplicates_skipped : '—'}
+                        </TableCell>
+                        <TableCell className="text-[10px] max-w-[130px]">
+                          {(item.status === 'queued' || item.status === 'partial_complete_resumable') ? (
+                            <span className="text-muted-foreground truncate text-[9px]">
+                              {item.status === 'partial_complete_resumable'
+                                ? `Resume (${item.batches_completed}/${item.batch_total})`
+                                : item.reason}
+                            </span>
+                          ) : (item.status === 'completed' || item.status === 'partial') ? (
+                            <div className="space-y-0.5">
+                              <LiftBadge liftStatus={item.lift_status} noLiftReason={item.no_lift_reason} qualityLabel={item.quality_label} />
+                              <BottleneckBadge bottleneck={item.dominant_bottleneck} />
+                              {item.ef_returned_count != null && (
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <div className="text-[8px] text-muted-foreground cursor-help">
+                                      {item.ef_returned_count}→{item.ef_validated_count ?? '?'}→{item.ef_saved_count ?? '?'}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent><PipelineTooltip item={item} /></TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
+                          ) : item.status === 'failed' ? (
+                            <span className="text-[9px] text-destructive truncate">{item.error || 'Failed'}</span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-0.5">
+                            {(item.status === 'queued' || item.status === 'partial_complete_resumable') && !isRunning && (
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onRemove(item.resource_id)}>
+                                <XCircle className="h-3 w-3 text-muted-foreground" />
+                              </Button>
+                            )}
+                            {item.lift_status === 'no_lift' && onMarkExcluded && !item.excluded_from_future && (
                               <Tooltip>
-                                <TooltipTrigger>
-                                  <div className="text-[8px] text-muted-foreground cursor-help">
-                                    {item.ef_returned_count}→{item.ef_validated_count ?? '?'}→{item.ef_saved_count ?? '?'}
-                                  </div>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onMarkExcluded(item.resource_id)}>
+                                    <Ban className="h-3 w-3 text-muted-foreground" />
+                                  </Button>
                                 </TooltipTrigger>
-                                <TooltipContent><PipelineTooltip item={item} /></TooltipContent>
+                                <TooltipContent className="text-xs">Exclude from future re-extraction</TooltipContent>
                               </Tooltip>
                             )}
                           </div>
-                        ) : item.status === 'failed' ? (
-                          <span className="text-[9px] text-destructive truncate">{item.error || 'Failed'}</span>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-0.5">
-                          {item.status === 'queued' && !isRunning && (
-                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onRemove(item.resource_id)}>
-                              <XCircle className="h-3 w-3 text-muted-foreground" />
-                            </Button>
-                          )}
-                          {item.lift_status === 'no_lift' && onMarkExcluded && !item.excluded_from_future && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onMarkExcluded(item.resource_id)}>
-                                  <Ban className="h-3 w-3 text-muted-foreground" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="text-xs">Exclude from future re-extraction</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                      {hasLedger && isExpanded && (
+                        <TableRow>
+                          <TableCell colSpan={10} className="p-0 px-2 pb-2">
+                            <BatchLedgerView ledger={item.batch_ledger!} />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
                 </TableBody>
               </Table>
             </div>
