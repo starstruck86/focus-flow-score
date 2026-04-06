@@ -1240,116 +1240,6 @@ async function reconcileResourceSnapshot(
 // MAIN HANDLER
 // ══════════════════════════════════════════════════════
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const startedAt = Date.now();
-
-  try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-
-    // Auth check
-    const batchKey = req.headers.get('x-batch-key');
-    const isServiceRole = batchKey != null && batchKey === serviceRoleKey;
-    let userId: string | null = null;
-
-    if (isServiceRole) {
-      // Service role — userId must come from body
-    } else {
-      const userClient = createClient(supabaseUrl, anonKey, {
-        global: { headers: { Authorization: authHeader } },
-      });
-      const { data: { user } } = await userClient.auth.getUser();
-      if (!user) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      userId = user.id;
-    }
-
-    const body = await req.json();
-    let { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist,
-      // Chunked extraction params
-      contentSliceStart, contentSliceEnd, batchIndex, batchTotal, skipPersistResourceUpdate,
-      // Job mode: server-side multi-batch orchestration
-      jobMode,
-      // Continuation token: set by self-invoke to bypass idempotency guard
-      isContinuation,
-    } = body;
-
-    // Resolve userId
-    if (!userId) userId = bodyUserId;
-    if (!userId) {
-      return new Response(JSON.stringify({ error: 'userId required' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ── AUTO-FETCH: if resourceId provided but no content, fetch from DB ──
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-    let fullContentLength = 0; // track total resource length for density calc
-    if (resourceId && (!content || content.length < 100)) {
-      console.log(`[extract-tactics] No content in body, fetching resource ${resourceId} from DB`);
-      const { data: resource, error: fetchErr } = await supabaseAdmin
-        .from('resources')
-        .select('title, content, description, tags, resource_type, content_length')
-        .eq('id', resourceId)
-        .single();
-
-      if (fetchErr || !resource) {
-        console.error('[extract-tactics] Failed to fetch resource:', fetchErr);
-        return new Response(JSON.stringify({ error: 'Resource not found' }), {
-          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      title = title || resource.title;
-      content = resource.content;
-      fullContentLength = (content || '').length;
-      description = description || resource.description;
-      tags = tags || resource.tags;
-      resourceType = resourceType || resource.resource_type;
-      console.log(`[extract-tactics] Fetched resource: "${title}" | ${fullContentLength} chars`);
-
-      // ── CONTENT SLICING for chunked extraction ──
-      if (typeof contentSliceStart === 'number' && typeof contentSliceEnd === 'number' && content) {
-        content = content.slice(contentSliceStart, contentSliceEnd);
-        console.log(`[extract-tactics] BATCH ${batchIndex ?? '?'}/${batchTotal ?? '?'}: sliced chars ${contentSliceStart}-${contentSliceEnd} (${content.length} chars)`);
-      }
-    } else {
-      fullContentLength = (content || '').length;
-    }
-
-    if (!content || content.length < 100) {
-      return new Response(JSON.stringify({
-        items: [],
-        chunks_total: 0,
-        chunks_processed: 0,
-        chunks_failed: 0,
-        model_metrics: { raw_count: 0, deduped_count: 0, validated_count: 0 },
-        saved_metrics: null,
-        persistence: null,
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: 'AI not configured' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
 
 // ══════════════════════════════════════════════════════════════
 // SEMANTIC CHUNKING — boundary-aware slicing for KI integrity
@@ -1465,6 +1355,118 @@ function computeSemanticSlicesInline(contentLength: number, content: string): Se
 
   return slices;
 }
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const startedAt = Date.now();
+
+  try {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+    // Auth check
+    const batchKey = req.headers.get('x-batch-key');
+    const isServiceRole = batchKey != null && batchKey === serviceRoleKey;
+    let userId: string | null = null;
+
+    if (isServiceRole) {
+      // Service role — userId must come from body
+    } else {
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      userId = user.id;
+    }
+
+    const body = await req.json();
+    let { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist,
+      // Chunked extraction params
+      contentSliceStart, contentSliceEnd, batchIndex, batchTotal, skipPersistResourceUpdate,
+      // Job mode: server-side multi-batch orchestration
+      jobMode,
+      // Continuation token: set by self-invoke to bypass idempotency guard
+      isContinuation,
+    } = body;
+
+    // Resolve userId
+    if (!userId) userId = bodyUserId;
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'userId required' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ── AUTO-FETCH: if resourceId provided but no content, fetch from DB ──
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    let fullContentLength = 0; // track total resource length for density calc
+    if (resourceId && (!content || content.length < 100)) {
+      console.log(`[extract-tactics] No content in body, fetching resource ${resourceId} from DB`);
+      const { data: resource, error: fetchErr } = await supabaseAdmin
+        .from('resources')
+        .select('title, content, description, tags, resource_type, content_length')
+        .eq('id', resourceId)
+        .single();
+
+      if (fetchErr || !resource) {
+        console.error('[extract-tactics] Failed to fetch resource:', fetchErr);
+        return new Response(JSON.stringify({ error: 'Resource not found' }), {
+          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      title = title || resource.title;
+      content = resource.content;
+      fullContentLength = (content || '').length;
+      description = description || resource.description;
+      tags = tags || resource.tags;
+      resourceType = resourceType || resource.resource_type;
+      console.log(`[extract-tactics] Fetched resource: "${title}" | ${fullContentLength} chars`);
+
+      // ── CONTENT SLICING for chunked extraction ──
+      if (typeof contentSliceStart === 'number' && typeof contentSliceEnd === 'number' && content) {
+        content = content.slice(contentSliceStart, contentSliceEnd);
+        console.log(`[extract-tactics] BATCH ${batchIndex ?? '?'}/${batchTotal ?? '?'}: sliced chars ${contentSliceStart}-${contentSliceEnd} (${content.length} chars)`);
+      }
+    } else {
+      fullContentLength = (content || '').length;
+    }
+
+    if (!content || content.length < 100) {
+      return new Response(JSON.stringify({
+        items: [],
+        chunks_total: 0,
+        chunks_processed: 0,
+        chunks_failed: 0,
+        model_metrics: { raw_count: 0, deduped_count: 0, validated_count: 0 },
+        saved_metrics: null,
+        persistence: null,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      return new Response(JSON.stringify({ error: 'AI not configured' }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
 
     // ══════════════════════════════════════════════════════
     // JOB MODE — server-side multi-batch orchestration
