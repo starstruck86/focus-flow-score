@@ -4184,8 +4184,12 @@ export type Database = {
           extraction_attempt_count: number
           extraction_attempt_history: Json | null
           extraction_audit_summary: Json | null
+          extraction_batch_status: string | null
+          extraction_batch_total: number | null
+          extraction_batches_completed: number | null
           extraction_depth_bucket: string | null
           extraction_failure_type: string | null
+          extraction_is_resumable: boolean | null
           extraction_method: string | null
           extraction_mode: string | null
           extraction_passes_run: Json | null
@@ -4303,8 +4307,12 @@ export type Database = {
           extraction_attempt_count?: number
           extraction_attempt_history?: Json | null
           extraction_audit_summary?: Json | null
+          extraction_batch_status?: string | null
+          extraction_batch_total?: number | null
+          extraction_batches_completed?: number | null
           extraction_depth_bucket?: string | null
           extraction_failure_type?: string | null
+          extraction_is_resumable?: boolean | null
           extraction_method?: string | null
           extraction_mode?: string | null
           extraction_passes_run?: Json | null
@@ -4422,8 +4430,12 @@ export type Database = {
           extraction_attempt_count?: number
           extraction_attempt_history?: Json | null
           extraction_audit_summary?: Json | null
+          extraction_batch_status?: string | null
+          extraction_batch_total?: number | null
+          extraction_batches_completed?: number | null
           extraction_depth_bucket?: string | null
           extraction_failure_type?: string | null
+          extraction_is_resumable?: boolean | null
           extraction_method?: string | null
           extraction_mode?: string | null
           extraction_passes_run?: Json | null

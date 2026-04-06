@@ -33,10 +33,18 @@ interface Props {
   onMarkExcluded?: (resourceId: string) => void;
 }
 
-function StatusIcon({ status }: { status: string }) {
+function StatusIcon({ status, batchInfo }: { status: string; batchInfo?: { completed?: number; total?: number } }) {
+  if (status === 'running_batched') return (
+    <div className="flex items-center gap-1">
+      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+      {batchInfo?.completed != null && batchInfo?.total != null && (
+        <span className="text-[10px] font-mono text-primary">{batchInfo.completed}/{batchInfo.total}</span>
+      )}
+    </div>
+  );
   if (status === 'running') return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />;
   if (status === 'completed') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />;
-  if (status === 'partial') return <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />;
+  if (status === 'partial' || status === 'partial_complete_resumable') return <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />;
   if (status === 'failed') return <XCircle className="h-3.5 w-3.5 text-destructive" />;
   return <div className="h-3.5 w-3.5 rounded-full border-2 border-muted-foreground/30" />;
 }
@@ -220,12 +228,16 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                 <TableBody>
                   {queue.map(item => (
                     <TableRow key={item.resource_id}>
-                      <TableCell><StatusIcon status={item.status} /></TableCell>
+                      <TableCell><StatusIcon status={item.status} batchInfo={item.is_batched ? { completed: item.batches_completed, total: item.batch_total } : undefined} /></TableCell>
                       <TableCell>
                         <div className="text-[11px] max-w-[120px] truncate">{item.title}</div>
                         <div className="text-[9px] text-muted-foreground">
                           {(item.content_length / 1000).toFixed(1)}k chars
+                          {item.is_batched && <span className="ml-1 text-primary">• batched</span>}
                         </div>
+                        {item.batch_status && item.status !== 'completed' && (
+                          <div className="text-[9px] font-mono text-primary">{item.batch_status}</div>
+                        )}
                       </TableCell>
                       <TableCell className="text-[11px] text-right font-mono">
                         {item.pre_ki_count}

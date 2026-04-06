@@ -166,7 +166,12 @@ export function RealBottleneckReview({ resources, queueResults, onFlagForReExtra
                       className="cursor-pointer hover:bg-accent/50"
                       onClick={() => onSelectResource(r.resource_id)}
                     >
-                      <TableCell className="text-[11px] max-w-[130px] truncate">{r.title}</TableCell>
+                      <TableCell>
+                        <div className="text-[11px] max-w-[130px] truncate">{r.title}</div>
+                        {r.content_length >= 40000 && (
+                          <div className="text-[8px] text-primary font-medium">📦 large doc • chunked extraction</div>
+                        )}
+                      </TableCell>
                       <TableCell className="text-[10px] text-muted-foreground">{r.resource_type}</TableCell>
                       <TableCell className="text-[11px] text-right font-mono">{(r.content_length / 1000).toFixed(1)}k</TableCell>
                       <TableCell className="text-[11px] text-right font-mono">{r.ki_count_total}</TableCell>
