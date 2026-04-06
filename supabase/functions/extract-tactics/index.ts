@@ -1194,6 +1194,8 @@ Deno.serve(async (req) => {
       contentSliceStart, contentSliceEnd, batchIndex, batchTotal, skipPersistResourceUpdate,
       // Job mode: server-side multi-batch orchestration
       jobMode,
+      // Continuation token: set by self-invoke to bypass idempotency guard
+      isContinuation,
     } = body;
 
     // Resolve userId
