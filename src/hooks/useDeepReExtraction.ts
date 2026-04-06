@@ -6,6 +6,7 @@
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { toast } from 'sonner';
 import type { ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
 
