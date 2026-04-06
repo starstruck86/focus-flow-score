@@ -1693,10 +1693,17 @@ Deno.serve(async (req) => {
               existingKIs.map((ki: any, i: number) => `${i + 1}. ${ki.title}`).join('\n') + '\n';
           }
 
-          const batchResult = await runMultiPassExtraction(
-            LOVABLE_API_KEY, batchContent, title, description, tags || [],
-            resourceType, category, false, batchExistingKiContext,
-          );
+          // Wrap extraction in a timeout so a single slow AI call doesn't
+          // consume the entire platform budget and prevent self-invoke.
+          const batchResult = await Promise.race([
+            runMultiPassExtraction(
+              LOVABLE_API_KEY, batchContent, title, description, tags || [],
+              resourceType, category, false, batchExistingKiContext,
+            ),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`Batch ${batchIdx + 1} timed out after ${BATCH_TIMEOUT_MS / 1000}s`)), BATCH_TIMEOUT_MS)
+            ),
+          ]);
 
           const batchPersist = await serverSidePersist(
             supabaseAdmin, resourceId, userId!, batchResult,
