@@ -64,6 +64,12 @@ function buildQueue(resources: ResourceAuditRow[]): QueueEntry[] {
     entries.push({ resource: r, reason, priority: priority - (typeBoost * 0.1) });
   };
 
+  // Bucket 0 — Resumable extractions always get top priority
+  eligible
+    .filter(r => isResumable(r))
+    .sort((a, b) => b.content_length - a.content_length)
+    .forEach(r => add(r, `Resumable — batch ${r.extraction_batches_completed + 1} of ${r.extraction_batch_total}`, 0));
+
   // Bucket A — High value + under-extracted (content_length ≥ 1500)
   eligible
     .filter(r => r.under_extracted_flag && r.content_length >= 1500)
