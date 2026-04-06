@@ -1289,10 +1289,28 @@ Deno.serve(async (req) => {
     let persistResult: PersistenceResult | null = null;
 
     if (shouldPersist) {
-      // supabaseAdmin already created above for resource fetch / existing KI query
       persistResult = await serverSidePersist(
-        supabaseAdmin, resourceId, userId, result, content.length, startedAt,
+        supabaseAdmin, resourceId, userId, result, fullContentLength || content.length, startedAt,
       );
+
+      // For chunked extraction: update batch progress but skip full resource snapshot update
+      // (the client will trigger a final resource update after all batches complete)
+      if (batchIndex != null && batchTotal != null) {
+        try {
+          const updatePayload: Record<string, any> = {
+            extraction_batches_completed: batchIndex + 1,
+            extraction_batch_total: batchTotal,
+            extraction_batch_status: (batchIndex + 1) >= batchTotal
+              ? 'completed'
+              : `running_batch_${batchIndex + 2}_of_${batchTotal}`,
+            extraction_is_resumable: (batchIndex + 1) < batchTotal,
+          };
+          await supabaseAdmin.from('resources').update(updatePayload).eq('id', resourceId);
+          console.log(`[extract-tactics] Batch ${batchIndex + 1}/${batchTotal} progress saved`);
+        } catch (e) {
+          console.error('[extract-tactics] Failed to update batch progress:', e);
+        }
+      }
     }
 
     // ── Build response with CLEAR separation of model vs saved metrics ──
