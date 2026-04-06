@@ -544,13 +544,11 @@ export function useDeepReExtraction() {
           is_batched: true,
           batch_total: batchTotal,
           batches_completed: resumeFrom,
-          batch_status: resumeFrom > 0
-            ? `resuming_from_batch_${resumeFrom + 1}_of_${batchTotal}`
-            : `running_batch_1_of_${batchTotal}`,
+          batch_status: `processing_all_batches`,
           batch_ledger: existingLedger.length > 0 ? existingLedger : [],
         } : i
       ));
-      console.log(`[ReExtract] BATCHED: "${item.title}" | ${item.content_length} chars → ${batchTotal} semantic batches${resumeFrom > 0 ? ` (resuming from batch ${resumeFrom + 1})` : ''}`);
+      console.log(`[ReExtract] JOB MODE: "${item.title}" | ${item.content_length} chars → ${batchTotal} batches${resumeFrom > 0 ? ` (resuming from batch ${resumeFrom + 1})` : ''}`);
     } else {
       setQueue(prev => prev.map(i =>
         i.resource_id === item.resource_id ? { ...i, status: 'running' as const } : i
@@ -566,261 +564,149 @@ export function useDeepReExtraction() {
     let batchesCompleted = resumeFrom;
     const batchLedger: BatchLedgerEntry[] = [...existingLedger];
 
-    // Add skipped-resume entries for batches already in DB
-    for (let i = existingLedger.length; i < resumeFrom; i++) {
-      batchLedger.push({
-        batchIndex: i,
-        charStart: slices[i]?.start ?? 0,
-        charEnd: slices[i]?.end ?? 0,
-        raw: 0, validated: 0, saved: 0, dupsSkipped: 0,
-        cumulativeKiTotal: 0,
-        status: 'skipped_resume',
-      });
-    }
-
-    // ── MULTI-BATCH RUNNER ──
-    const runStartTime = Date.now();
-    let batchesProcessedThisRun = 0;
-    let stopReason: BatchStopReason = 'all_complete';
-
-    console.log('[MULTI-BATCH RUNNER] start', {
-      resource: item.title,
-      resourceId: item.resource_id,
-      resumeFrom,
-      batchTotal,
-      maxBatchesPerRun: MAX_BATCHES_PER_RUN,
-      maxRunTimeMs: MAX_RUN_TIME_MS,
-    });
-
-    for (let batchIdx = resumeFrom; batchIdx < slices.length; batchIdx++) {
-      // Safety limit: max batches per click
-      if (batchesProcessedThisRun >= MAX_BATCHES_PER_RUN) {
-        stopReason = 'max_batches';
-        console.log('[MULTI-BATCH RUNNER] stopping reason=max_batches', {
-          resourceId: item.resource_id,
-          processedThisRun: batchesProcessedThisRun,
-          remainingBatches: batchTotal - batchesCompleted,
-        });
-        break;
-      }
-
-      // Safety limit: time budget
-      if (Date.now() - runStartTime > MAX_RUN_TIME_MS) {
-        stopReason = 'time_budget';
-        console.log('[MULTI-BATCH RUNNER] stopping reason=time_budget', {
-          resourceId: item.resource_id,
-          elapsedMs: Date.now() - runStartTime,
-          processedThisRun: batchesProcessedThisRun,
-          remainingBatches: batchTotal - batchesCompleted,
-        });
-        break;
-      }
-
-      // Skip already-completed batches (durable ledger truth)
-      const existingEntry = existingLedger.find(e => e.batchIndex === batchIdx && e.status === 'completed');
-      if (existingEntry) {
-        console.log(`[MULTI-BATCH RUNNER] skipping batch ${batchIdx + 1}/${batchTotal} — already completed in ledger`);
-        continue;
-      }
-
-      const slice = slices[batchIdx];
-
-      console.log(`[MULTI-BATCH RUNNER] running batch ${batchIdx + 1}/${batchTotal}`, {
+    if (isBatched) {
+      // ── JOB MODE: single server call processes all remaining batches ──
+      console.log('[JOB MODE CLIENT] Sending single jobMode request', {
         resourceId: item.resource_id,
-        charStart: slice.start,
-        charEnd: slice.end,
-        semanticStartMarker: slice.semanticStartMarker,
-        semanticEndMarker: slice.semanticEndMarker,
-        batchesProcessedThisRun,
-        elapsedMs: Date.now() - runStartTime,
+        batchTotal,
+        completedBefore: resumeFrom,
       });
-
-      if (isBatched) {
-        setQueue(prev => prev.map(i =>
-          i.resource_id === item.resource_id ? {
-            ...i,
-            batches_completed: batchesCompleted,
-            batch_status: `running_batch_${batchIdx + 1}_of_${batchTotal}`,
-          } : i
-        ));
-      }
 
       try {
-        const bodyPayload: Record<string, any> = {
-          resourceId: item.resource_id,
-          deepMode: true,
-          persist: true,
-            skipPersistResourceUpdate: isBatched,
-        };
-
-        if (isBatched) {
-          bodyPayload.contentSliceStart = slice.start;
-          bodyPayload.contentSliceEnd = slice.end;
-          bodyPayload.batchIndex = batchIdx;
-          bodyPayload.batchTotal = batchTotal;
-          bodyPayload.semanticStartMarker = slice.semanticStartMarker;
-          bodyPayload.semanticEndMarker = slice.semanticEndMarker;
-        }
-
         const response = await authenticatedFetch({
           functionName: 'extract-tactics',
-          body: bodyPayload,
+          body: {
+            resourceId: item.resource_id,
+            deepMode: true,
+            persist: true,
+            jobMode: true,
+          },
+          componentName: 'useDeepReExtraction-jobMode',
+          timeoutMs: 300_000, // 5 minute timeout for full job
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || `HTTP ${response.status}`);
+        }
+
+        totalEfSaved = data?.totalSaved ?? 0;
+        batchesCompleted = data?.completedBatches ?? batchesCompleted;
+        lastError = data?.error ?? null;
+
+        console.log('[JOB MODE CLIENT] Response', {
+          resourceId: item.resource_id,
+          allComplete: data?.allComplete,
+          batchesProcessedThisRun: data?.batchesProcessedThisRun,
+          completedBatches: data?.completedBatches,
+          totalBatches: data?.totalBatches,
+          totalSaved: data?.totalSaved,
+          stoppedByWatchdog: data?.stoppedByWatchdog,
+        });
+
+        // If watchdog stopped, the server self-invokes continuation.
+        // Poll for completion.
+        if (data?.stoppedByWatchdog && !data?.allComplete) {
+          console.log('[JOB MODE CLIENT] Server continuing via self-invoke, polling for completion...');
+          setQueue(prev => prev.map(i =>
+            i.resource_id === item.resource_id ? {
+              ...i,
+              batch_status: `server_processing_${data.completedBatches}_of_${data.totalBatches}_done`,
+            } : i
+          ));
+
+          // Poll resource status until complete
+          const pollStart = Date.now();
+          const MAX_POLL_TIME = 10 * 60 * 1000; // 10 min max poll
+          while (Date.now() - pollStart < MAX_POLL_TIME) {
+            await new Promise(r => setTimeout(r, JOB_POLL_INTERVAL_MS));
+            const { data: resource } = await supabase
+              .from('resources' as any)
+              .select('active_job_status, extraction_batches_completed, extraction_batch_total, extraction_is_resumable, current_resource_ki_count, current_resource_kis_per_1k, extraction_batch_status')
+              .eq('id', item.resource_id)
+              .single();
+
+            const rData = resource as any;
+            if (!rData) continue;
+
+            batchesCompleted = rData.extraction_batches_completed ?? batchesCompleted;
+
+            setQueue(prev => prev.map(i =>
+              i.resource_id === item.resource_id ? {
+                ...i,
+                batches_completed: batchesCompleted,
+                batch_status: rData.extraction_batch_status || `processing`,
+              } : i
+            ));
+
+            // Check for terminal state
+            if (rData.active_job_status === 'succeeded' || rData.extraction_batch_status === 'completed') {
+              console.log('[JOB MODE CLIENT] Server completed all batches');
+              totalEfSaved = rData.current_resource_ki_count - item.pre_ki_count;
+              batchesCompleted = rData.extraction_batch_total ?? batchesCompleted;
+              break;
+            }
+            if (rData.active_job_status === 'failed') {
+              lastError = 'Server-side job failed';
+              break;
+            }
+            // If resource no longer running and no longer resumable (partial without self-invoke)
+            if (rData.active_job_status !== 'running' && !rData.extraction_is_resumable) {
+              break;
+            }
+          }
+        }
+
+        // Update batch total from server response
+        if (data?.totalBatches) {
+          setQueue(prev => prev.map(i =>
+            i.resource_id === item.resource_id ? {
+              ...i,
+              batch_total: data.totalBatches,
+              batches_completed: data.completedBatches ?? batchesCompleted,
+              batch_status: data.allComplete ? 'all_batches_done' : `${data.completedBatches}/${data.totalBatches} done`,
+            } : i
+          ));
+        }
+      } catch (err: any) {
+        lastError = err.message;
+        console.error('[JOB MODE CLIENT] Error:', err.message);
+      }
+
+      // Show toast
+      if (batchesCompleted >= batchTotal && !lastError) {
+        toast.success(`All ${batchTotal} batches complete for "${item.title}".`);
+      } else if (lastError) {
+        toast.warning(`Processing stopped for "${item.title}": ${lastError}. ${batchesCompleted}/${batchTotal} batches done.`);
+      } else {
+        toast.info(`Processed ${batchesCompleted}/${batchTotal} batches for "${item.title}". Server may still be processing.`);
+      }
+    } else {
+      // ── NON-BATCHED: single extraction call (unchanged) ──
+      try {
+        const response = await authenticatedFetch({
+          functionName: 'extract-tactics',
+          body: {
+            resourceId: item.resource_id,
+            deepMode: true,
+            persist: true,
+          },
           componentName: 'useDeepReExtraction',
           timeoutMs: 150_000,
         });
         const data = await response.json();
         const error = !response.ok ? (data?.error || `HTTP ${response.status}`) : null;
-
         if (error) throw new Error(typeof error === 'string' ? error : JSON.stringify(error));
         if (data?.error) throw new Error(data.error);
 
-        const efReturned = data?.model_metrics?.raw_count ?? 0;
-        const efValidated = data?.model_metrics?.validated_count ?? 0;
-        const efSaved = data?.persistence?.saved_count ?? 0;
-        const dupsSkipped = data?.persistence?.duplicates_skipped ?? 0;
-        const passesRun = data?.model_metrics?.extraction_passes_run ?? [];
-        const cumulativeTotal = data?.persistence?.current_resource_ki_count ?? 0;
-
-        totalEfReturned += efReturned;
-        totalEfValidated += efValidated;
-        totalEfSaved += efSaved;
-        totalDupsSkipped += dupsSkipped;
-        allPassesRun = [...new Set([...allPassesRun, ...passesRun])];
-        batchesCompleted++;
-        batchesProcessedThisRun++;
-
-        const entry: BatchLedgerEntry = {
-          batchIndex: batchIdx,
-          charStart: slice.start,
-          charEnd: slice.end,
-          semanticStartMarker: slice.semanticStartMarker,
-          semanticEndMarker: slice.semanticEndMarker,
-          raw: efReturned,
-          validated: efValidated,
-          saved: efSaved,
-          dupsSkipped,
-          cumulativeKiTotal: cumulativeTotal,
-          status: 'completed',
-          completedAt: new Date().toISOString(),
-        };
-
-        // Replace or add ledger entry
-        const existingIdx = batchLedger.findIndex(e => e.batchIndex === batchIdx);
-        if (existingIdx >= 0) batchLedger[existingIdx] = entry;
-        else batchLedger.push(entry);
-
-        console.log(`[MULTI-BATCH RUNNER] batch ${batchIdx + 1}/${batchTotal} complete`, {
-          resourceId: item.resource_id,
-          raw: efReturned,
-          validated: efValidated,
-          saved: efSaved,
-          cumulativeKIs: cumulativeTotal,
-          processedThisRun: batchesProcessedThisRun,
-          totalCompletedAfterRun: batchesCompleted,
-          remainingBatches: batchTotal - batchesCompleted,
-        });
-
-        if (isBatched) {
-          await reconcileResourceSnapshot(item.resource_id, item, {
-            postTotal: cumulativeTotal,
-            postKisPer1k: item.content_length > 0
-              ? Math.round((cumulativeTotal * 1000 / item.content_length) * 100) / 100
-              : 0,
-          });
-          qc.invalidateQueries({ queryKey: ['knowledge-coverage-audit'] });
-          qc.invalidateQueries({ queryKey: ['resources'] });
-          qc.invalidateQueries({ queryKey: ['extraction-batches', item.resource_id] });
-
-          setQueue(prev => prev.map(i =>
-            i.resource_id === item.resource_id ? {
-              ...i,
-              batches_completed: batchesCompleted,
-              batch_ledger: [...batchLedger],
-              batch_status: batchesCompleted >= batchTotal
-                ? 'all_batches_done'
-                : `completed_${batchesProcessedThisRun}_this_run_batch_${batchIdx + 2}_of_${batchTotal}_next`,
-            } : i
-          ));
-        }
-
-        // Delay between batches
-        if (batchIdx < slices.length - 1 && batchesProcessedThisRun < MAX_BATCHES_PER_RUN) {
-          await new Promise(r => setTimeout(r, 3000));
-        }
+        totalEfReturned = data?.model_metrics?.raw_count ?? 0;
+        totalEfValidated = data?.model_metrics?.validated_count ?? 0;
+        totalEfSaved = data?.persistence?.saved_count ?? 0;
+        totalDupsSkipped = data?.persistence?.duplicates_skipped ?? 0;
+        allPassesRun = data?.model_metrics?.extraction_passes_run ?? [];
       } catch (err: any) {
         lastError = err.message;
-        console.error(`[MULTI-BATCH RUNNER] batch ${batchIdx + 1}/${batchTotal} failed:`, err.message);
-
-        if (isBatched) {
-          const resumeAfterError = await getResumeInfo(item.resource_id);
-          const persistedBatch = resumeAfterError.ledger.find(entry => entry.batchIndex === batchIdx && entry.status === 'completed');
-
-          if (persistedBatch) {
-            console.log(`[MULTI-BATCH RUNNER] Response lost after batch ${batchIdx + 1}; DB ledger shows completion, continuing`);
-            const persistedIdx = batchLedger.findIndex(entry => entry.batchIndex === batchIdx);
-            if (persistedIdx >= 0) batchLedger[persistedIdx] = persistedBatch;
-            else batchLedger.push(persistedBatch);
-            batchesCompleted = resumeAfterError.completedCount;
-            batchesProcessedThisRun++;
-            continue;
-          }
-        }
-
-        const errorEntry: BatchLedgerEntry = {
-          batchIndex: batchIdx,
-          charStart: slice.start,
-          charEnd: slice.end,
-          semanticStartMarker: slice.semanticStartMarker,
-          semanticEndMarker: slice.semanticEndMarker,
-          raw: 0, validated: 0, saved: 0, dupsSkipped: 0,
-          cumulativeKiTotal: 0,
-          status: 'failed',
-          error: err.message,
-        };
-
-        const failedIdx = batchLedger.findIndex(e => e.batchIndex === batchIdx);
-        if (failedIdx >= 0) batchLedger[failedIdx] = errorEntry;
-        else batchLedger.push(errorEntry);
-
-        // For batched: a single batch failure is not blocking — continue to next
-        if (!isBatched) {
-          stopReason = 'blocking_error';
-          throw err;
-        }
-        // But if we hit 2+ consecutive failures, treat as blocking
-        const prevEntry = batchLedger.find(e => e.batchIndex === batchIdx - 1);
-        if (prevEntry?.status === 'failed') {
-          stopReason = 'blocking_error';
-          console.log('[MULTI-BATCH RUNNER] stopping reason=blocking_error (2 consecutive failures)', {
-            resourceId: item.resource_id,
-            processedThisRun: batchesProcessedThisRun,
-          });
-          break;
-        }
-      }
-    }
-
-    // If we exited the loop naturally (no break), all remaining were done
-    if (stopReason === 'all_complete' && batchesCompleted >= batchTotal) {
-      console.log('[MULTI-BATCH RUNNER] completed all batches', {
-        resourceId: item.resource_id,
-        totalCompletedAfterRun: batchesCompleted,
-        processedThisRun: batchesProcessedThisRun,
-        totalNetNewKisThisRun: totalEfSaved,
-      });
-    }
-
-    // Show user-facing toast with multi-batch summary
-    if (isBatched && batchesProcessedThisRun > 0) {
-      const remaining = batchTotal - batchesCompleted;
-      if (remaining === 0) {
-        toast.success(`All ${batchTotal} batches complete for "${item.title}".`);
-      } else if (stopReason === 'max_batches') {
-        toast.info(`Processed ${batchesProcessedThisRun} batches this run. ${remaining} batches remain. Click again to continue.`);
-      } else if (stopReason === 'time_budget') {
-        toast.info(`Paused at time limit. Processed ${batchesProcessedThisRun} batches. Resume from batch ${batchesCompleted + 1} of ${batchTotal}.`);
-      } else if (stopReason === 'blocking_error') {
-        toast.warning(`Stopped after error. Processed ${batchesProcessedThisRun} batches. ${remaining} remain.`);
+        throw err;
       }
     }
 
