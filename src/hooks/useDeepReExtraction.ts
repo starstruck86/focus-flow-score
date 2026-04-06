@@ -367,6 +367,12 @@ export function useDeepReExtraction() {
   const [excludedResourceIds, setExcludedResourceIds] = useState<Set<string>>(new Set());
 
   const flagForReExtraction = useCallback(async (resources: ResourceAuditRow[], reason: string) => {
+    console.log('[QUEUE PATH] flagForReExtraction called', {
+      count: resources.length,
+      reason,
+      titles: resources.map(r => r.title).slice(0, 3),
+    });
+
     const eligible = resources.filter(r => {
       const hasIncompleteBatches = !!r.extraction_is_resumable || ((r.extraction_batch_total ?? 0) > 0 && (r.extraction_batches_completed ?? 0) < (r.extraction_batch_total ?? 0));
       if (!hasIncompleteBatches && r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5) return false;
@@ -432,6 +438,7 @@ export function useDeepReExtraction() {
     const msg = skipped > 0
       ? `${newItems.length} flagged for re-extraction (${skipped} skipped)`
       : `${newItems.length} resources flagged for deep re-extraction`;
+    console.log('[QUEUE PATH] showing flagged toast', { msg });
     toast.success(msg);
   }, [excludedResourceIds]);
 
@@ -889,16 +896,27 @@ export function useDeepReExtraction() {
   /**
    * Resume and immediately run extraction for a single resource.
    * This is the "Resume" CTA handler — flags + runs in one action.
+   * NEVER calls flagForReExtraction. NEVER shows "flagged" toast.
    */
   const resumeAndRunSingle = useCallback(async (resource: ResourceAuditRow) => {
+    console.log('[RESUME CTA BUTTON] clicked', {
+      resourceId: resource.resource_id,
+      title: resource.title,
+      batchProgress: `${resource.extraction_batches_completed ?? '?'}/${resource.extraction_batch_total ?? '?'}`,
+    });
+
     // Guard: already running
     const existing = queue.find(q => q.resource_id === resource.resource_id);
     if (existing?.status === 'running' || existing?.status === 'running_batched') {
       toast.info('Extraction already in progress for this resource');
+      console.log('[RESUME CTA BUTTON] blocked — already running');
       return;
     }
 
-    console.log('[RESUME CTA] clicked', { resourceId: resource.resource_id, title: resource.title });
+    console.log('[RESUME PATH] calling resumeAndRunSingle', {
+      resourceId: resource.resource_id,
+      title: resource.title,
+    });
 
     // Hydrate durable resume state
     const resumeInfo = await getResumeInfo(resource.resource_id);
@@ -953,6 +971,11 @@ export function useDeepReExtraction() {
     setIsRunning(true);
 
     try {
+      console.log('[RUNNER] runSingleExtraction invoked', {
+        resourceId: item.resource_id,
+        title: item.title,
+        sourceCTA: 'resumeAndRunSingle',
+      });
       const result = await runSingleExtraction(item);
 
       setQueue(prev => prev.map(i =>
