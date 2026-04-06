@@ -105,6 +105,10 @@ export function KnowledgeCoverageAudit() {
     void deepReExtract.flagForReExtraction([resource], 'Manual — single resource re-extract');
   };
 
+  const handleResumeSingle = (resource: ResourceAuditRow) => {
+    void deepReExtract.resumeAndRunSingle(resource);
+  };
+
   return (
     <div className="space-y-4">
       {/* Knowledge Coverage Summary */}
