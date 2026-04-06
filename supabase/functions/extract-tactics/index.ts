@@ -1295,7 +1295,7 @@ Deno.serve(async (req) => {
     const shouldPersist = persist !== false && resourceId;
     let persistResult: PersistenceResult | null = null;
 
-    const isBatchSlice = typeof contentSliceStart === 'number' && typeof contentSliceEnd === 'number';
+    // isBatchSlice already declared above
 
     if (shouldPersist) {
       if (batchIndex != null && batchTotal != null) {
