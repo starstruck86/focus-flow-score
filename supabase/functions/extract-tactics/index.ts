@@ -1137,6 +1137,39 @@ async function serverSidePersist(
       }
 
       await supabaseAdmin.from('resources').update(resourceUpdate).eq('id', resourceId);
+
+      // ── SERVER-SIDE TERMINAL RESOLUTION for background_jobs (non-batched path) ──
+      if (jobStatus === 'succeeded' || jobStatus === 'failed') {
+        try {
+          const bjStatus = jobStatus === 'succeeded' ? 'completed' : 'failed';
+          const bjLabel = jobStatus === 'succeeded'
+            ? `${totalKIs} KIs extracted`
+            : `Failed: ${error || 'unknown'}`;
+
+          const { data: bgJob } = await supabaseAdmin
+            .from('background_jobs')
+            .select('id, status')
+            .eq('entity_id', resourceId)
+            .in('status', ['queued', 'running'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (bgJob) {
+            await supabaseAdmin.from('background_jobs').update({
+              status: bjStatus,
+              completed_at: new Date().toISOString(),
+              progress_percent: bjStatus === 'completed' ? 100 : undefined,
+              step_label: bjLabel,
+              error: bjStatus === 'failed' ? (error || 'Extraction failed') : null,
+              substatus: null,
+            }).eq('id', bgJob.id);
+            console.log(`[extract-tactics] background_jobs "${bgJob.id}" → ${bjStatus} (non-batched)`);
+          }
+        } catch (bjErr) {
+          console.warn(`[extract-tactics] failed to update background_jobs (non-batched):`, bjErr);
+        }
+      }
     } catch (resErr) {
       console.error('[extract-tactics] Failed to update resource:', resErr);
     }
