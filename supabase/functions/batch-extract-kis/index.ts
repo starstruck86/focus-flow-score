@@ -1193,6 +1193,191 @@ async function hasExistingValidKIs(supabase: any, resourceId: string, minFloor: 
 }
 
 // ═══════════════════════════════════════════
+// Depth/coverage classification (mirrors extract-tactics)
+// ═══════════════════════════════════════════
+
+type ContentCategory = 'lesson' | 'transcript' | 'document';
+
+const DEPTH_THRESHOLDS: Record<ContentCategory, { shallowBelow: number; moderateBelow: number; underExtracted: (ki: number, cl: number) => boolean }> = {
+  lesson: {
+    shallowBelow: 1.0, moderateBelow: 2.0,
+    underExtracted: (ki, cl) => {
+      if (cl >= 5000 && ki <= 8) return true;
+      if (cl >= 3000 && ki <= 5) return true;
+      if (cl >= 1500 && ki <= 3) return true;
+      return cl > 0 && (ki * 1000 / cl) < 1.0;
+    },
+  },
+  transcript: {
+    shallowBelow: 0.5, moderateBelow: 1.0,
+    underExtracted: (ki, cl) => {
+      if (cl >= 10000 && ki <= 4) return true;
+      if (cl >= 5000 && ki <= 2) return true;
+      return cl > 0 && (ki * 1000 / cl) < 0.5;
+    },
+  },
+  document: {
+    shallowBelow: 0.75, moderateBelow: 1.5,
+    underExtracted: (ki, cl) => {
+      if (cl >= 5000 && ki <= 6) return true;
+      if (cl >= 3000 && ki <= 4) return true;
+      if (cl >= 1500 && ki <= 2) return true;
+      return cl > 0 && (ki * 1000 / cl) < 1.0;
+    },
+  },
+};
+
+function computeDepthBucket(kiCount: number, contentLength: number, category: ContentCategory): string {
+  if (kiCount === 0) return 'none';
+  const kisPer1k = contentLength > 0 ? (kiCount * 1000) / contentLength : 0;
+  const t = DEPTH_THRESHOLDS[category] || DEPTH_THRESHOLDS.document;
+  if (kisPer1k < t.shallowBelow) return 'shallow';
+  if (kisPer1k < t.moderateBelow) return 'moderate';
+  return 'strong';
+}
+
+function computeUnderExtracted(kiCount: number, contentLength: number, category: ContentCategory): boolean {
+  const t = DEPTH_THRESHOLDS[category] || DEPTH_THRESHOLDS.document;
+  return t.underExtracted(kiCount, contentLength);
+}
+
+function classifyContentCategory(resourceType: string | undefined, isLesson: boolean): ContentCategory {
+  if (isLesson) return 'lesson';
+  if (isTranscriptType(resourceType)) return 'transcript';
+  return 'document';
+}
+
+// ═══════════════════════════════════════════
+// Durable Run & Reconciliation
+// ═══════════════════════════════════════════
+
+/**
+ * Create an extraction_runs audit row AND reconcile resource snapshot fields
+ * from durable DB truth. Called on EVERY exit path (success, failure, no-op).
+ */
+async function recordRunAndReconcile(
+  supabase: any,
+  opts: {
+    resourceId: string;
+    userId: string;
+    startedAt: string;
+    durationMs: number;
+    status: 'completed' | 'failed' | 'partial';
+    rawCount: number;
+    validatedCount: number;
+    savedCount: number;
+    duplicatesSkipped: number;
+    model: string;
+    strategy: string;
+    error?: string;
+    summary: string;
+    contentLength: number;
+    resourceType?: string;
+    isLesson: boolean;
+    enrichmentStatus?: string;
+  },
+): Promise<void> {
+  const runId = crypto.randomUUID();
+  const completedAt = new Date().toISOString();
+  const category = classifyContentCategory(opts.resourceType, opts.isLesson);
+
+  // 1. Create extraction_runs row
+  try {
+    const kisPer1k = opts.contentLength > 0
+      ? Math.round((opts.savedCount * 1000 / opts.contentLength) * 100) / 100
+      : 0;
+    await supabase.from('extraction_runs').insert({
+      id: runId,
+      resource_id: opts.resourceId,
+      user_id: opts.userId,
+      started_at: opts.startedAt,
+      completed_at: completedAt,
+      duration_ms: opts.durationMs,
+      status: opts.status,
+      extraction_method: 'llm',
+      extraction_mode: 'single_pass',
+      model: opts.model,
+      raw_candidate_counts: { standard: opts.rawCount },
+      validated_candidate_count: opts.validatedCount,
+      saved_candidate_count: opts.savedCount,
+      kis_per_1k_chars: kisPer1k,
+      error_message: opts.error || null,
+      summary: opts.summary,
+    });
+    console.log(`[batch-extract-kis] ✅ extraction_runs row created: ${runId} status=${opts.status}`);
+  } catch (err: any) {
+    console.error(`[batch-extract-kis] Failed to create extraction_runs row: ${err?.message}`);
+  }
+
+  // 2. Reconcile from durable DB truth
+  try {
+    // Actual KI count
+    const { count: actualKIs } = await supabase
+      .from('knowledge_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('source_resource_id', opts.resourceId);
+    const kiCount = actualKIs ?? 0;
+
+    // Actual extraction_runs count
+    const { count: actualRuns } = await supabase
+      .from('extraction_runs')
+      .select('id', { count: 'exact', head: true })
+      .eq('resource_id', opts.resourceId);
+    const runCount = actualRuns ?? 0;
+
+    const kisPer1k = opts.contentLength > 0
+      ? Math.round((kiCount * 1000 / opts.contentLength) * 100) / 100
+      : 0;
+    const depthBucket = computeDepthBucket(kiCount, opts.contentLength, category);
+    const underExtracted = computeUnderExtracted(kiCount, opts.contentLength, category);
+
+    // Determine terminal job status
+    let activeJobStatus: string;
+    if (opts.status === 'completed' && kiCount > 0) activeJobStatus = 'succeeded';
+    else if (opts.status === 'completed' && kiCount === 0) activeJobStatus = 'succeeded';
+    else if (opts.status === 'failed') activeJobStatus = 'failed';
+    else activeJobStatus = 'partial';
+
+    const reconcileUpdate: Record<string, any> = {
+      current_resource_ki_count: kiCount,
+      current_resource_kis_per_1k: kisPer1k,
+      kis_per_1k_chars: kisPer1k,
+      extraction_depth_bucket: depthBucket,
+      under_extracted_flag: underExtracted,
+      extraction_attempt_count: runCount,
+      // Non-batched: always terminal
+      extraction_is_resumable: false,
+      extraction_batches_completed: 0,
+      // Last run fields
+      last_extraction_run_id: runId,
+      last_extraction_run_status: opts.status,
+      last_extraction_started_at: opts.startedAt,
+      last_extraction_completed_at: completedAt,
+      last_extraction_duration_ms: opts.durationMs,
+      last_extraction_summary: opts.summary,
+      last_extraction_model: opts.model,
+      last_extraction_saved_ki_count: opts.savedCount,
+      last_extraction_returned_ki_count: opts.rawCount,
+      last_extraction_validated_ki_count: opts.validatedCount,
+      last_extraction_error: opts.error || null,
+      active_job_status: activeJobStatus,
+      active_job_updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Also set enrichment_status if provided
+    if (opts.enrichmentStatus) {
+      reconcileUpdate.enrichment_status = opts.enrichmentStatus;
+    }
+
+    await supabase.from('resources').update(reconcileUpdate).eq('id', opts.resourceId);
+    console.log(`[batch-extract-kis] 🔄 RECONCILED: KIs=${kiCount} runs=${runCount} kisPer1k=${kisPer1k} depth=${depthBucket} under=${underExtracted} jobStatus=${activeJobStatus}`);
+  } catch (err: any) {
+    console.error(`[batch-extract-kis] Reconciliation failed: ${err?.message}`);
+  }
+}
+
+// ═══════════════════════════════════════════
 // DB helpers
 // ═══════════════════════════════════════════
 
@@ -1200,7 +1385,6 @@ async function updateExtractionStatus(supabase: any, resourceId: string, status:
   let finalStatus = status;
 
   // ── Guard: protect existing successful extraction from degradation ──
-  // Covers ALL failure/retry transitions including extraction_retrying
   if (['extraction_requires_review', 'extraction_failed', 'extraction_retrying'].includes(status)) {
     const { hasKIs, count } = await hasExistingValidKIs(supabase, resourceId, 1);
     if (hasKIs) {
@@ -1210,13 +1394,12 @@ async function updateExtractionStatus(supabase: any, resourceId: string, status:
         extraFields.extraction_failure_type = null;
         extraFields.extraction_retry_eligible = false;
 
-        // Rebuild audit from last successful attempt, not the failed one
         const history = await fetchAttemptHistory(supabase, resourceId);
         const lastSuccess = [...history].reverse().find(a => a.status === 'extracted' && a.floor_met);
         if (lastSuccess) {
           const { data: res } = await supabase.from('resources').select('content, resource_type, title').eq('id', resourceId).single();
           const contentLen = res?.content?.length ?? 0;
-          const isLesson = res ? isStructuredLesson(res.content || '', res.title, res.resource_type) : false;
+          const isLessonCheck = res ? isStructuredLesson(res.content || '', res.title, res.resource_type) : false;
           const successHistory = history.filter(a => a.attempt_number <= lastSuccess.attempt_number);
           const strategies = [...new Set(successHistory.map(a => a.strategy))];
           const totalElapsed = successHistory.reduce((sum, a) => sum + a.duration_ms, 0);
@@ -1237,7 +1420,7 @@ async function updateExtractionStatus(supabase: any, resourceId: string, status:
             final_failure_type: null,
             total_elapsed_ms: totalElapsed,
             content_length: contentLen,
-            is_structured_lesson: isLesson,
+            is_structured_lesson: isLessonCheck,
             completed_at: new Date().toISOString(),
             validation_loss_pct: valLoss,
             dedup_loss_pct: dedLoss,
@@ -1447,6 +1630,16 @@ Deno.serve(async (req) => {
         }
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
 
+        // Durable run + reconciliation
+        await recordRunAndReconcile(supabase, {
+          resourceId, userId: resource.user_id, startedAt, durationMs: Date.now() - startTime,
+          status: 'failed', rawCount: 0, validatedCount: 0, savedCount: 0, duplicatesSkipped: 0,
+          model: 'google/gemini-2.5-flash', strategy, error: aiErr.message,
+          summary: `AI error on attempt ${attemptNumber}: ${aiErr.message}`,
+          contentLength: resource.content.length, resourceType: resource.resource_type,
+          isLesson, enrichmentStatus: newStatus,
+        });
+
         // Auto-retry: fire-and-forget next attempt
         if (retryEligible) {
           scheduleRetry(supabase, supabaseUrl, serviceRoleKey, resourceId, attemptNumber);
@@ -1607,6 +1800,17 @@ Deno.serve(async (req) => {
         await saveExtractionLog(supabase, log);
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
 
+        // Durable run + reconciliation
+        await recordRunAndReconcile(supabase, {
+          resourceId, userId: resource.user_id, startedAt, durationMs,
+          status: retryEligible ? 'failed' : 'completed', rawCount: rawItems.length, validatedCount: validated.length,
+          savedCount: 0, duplicatesSkipped: 0,
+          model: 'google/gemini-2.5-flash', strategy,
+          summary: `Below threshold: 0 items on attempt ${attemptNumber}`,
+          contentLength: resource.content.length, resourceType: resource.resource_type,
+          isLesson, enrichmentStatus: newStatus,
+        });
+
         // Auto-retry: fire-and-forget next attempt
         if (retryEligible) {
           scheduleRetry(supabase, supabaseUrl, serviceRoleKey, resourceId, attemptNumber);
@@ -1640,6 +1844,17 @@ Deno.serve(async (req) => {
             extraction_retry_eligible: false,
             next_retry_at: null, retry_scheduled_at: null,
           });
+
+          // Durable run + reconciliation
+          await recordRunAndReconcile(supabase, {
+            resourceId, userId: resource.user_id, startedAt, durationMs,
+            status: 'completed', rawCount: rawItems.length, validatedCount: validated.length,
+            savedCount: 0, duplicatesSkipped: 0,
+            model: 'google/gemini-2.5-flash', strategy,
+            summary: `Summary-first rejected: degraded quality on attempt ${attemptNumber}`,
+            contentLength: resource.content.length, resourceType: resource.resource_type,
+            isLesson, enrichmentStatus: 'extraction_requires_review',
+          });
         }
         return respond({ resourceId, title: resource.title, kis: 0, error: 'Summary-first output rejected (degraded quality)', attemptNumber, strategy, log });
       }
@@ -1671,6 +1886,18 @@ Deno.serve(async (req) => {
             next_retry_at: null, retry_scheduled_at: null,
             ...(audit ? { extraction_audit_summary: audit } : {}),
           });
+
+          // Durable run + reconciliation
+          await recordRunAndReconcile(supabase, {
+            resourceId, userId: resource.user_id, startedAt, durationMs,
+            status: 'completed', rawCount: rawItems.length, validatedCount: validated.length,
+            savedCount: 0, duplicatesSkipped: 0,
+            model: 'google/gemini-2.5-flash', strategy,
+            summary: `No improvement over previous best on attempt ${attemptNumber}`,
+            contentLength: resource.content.length, resourceType: resource.resource_type,
+            isLesson, enrichmentStatus: 'extraction_requires_review',
+          });
+
           return respond({ resourceId, title: resource.title, kis: 0, error: 'No improvement over previous best — stopped retries', attemptNumber, strategy, log });
         }
       }
@@ -1719,6 +1946,17 @@ Deno.serve(async (req) => {
         }
         await saveExtractionLog(supabase, log);
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
+
+        // Durable run + reconciliation
+        await recordRunAndReconcile(supabase, {
+          resourceId, userId: resource.user_id, startedAt, durationMs,
+          status: retryEligible ? 'failed' : 'completed', rawCount: rawItems.length, validatedCount: validated.length,
+          savedCount: 0, duplicatesSkipped: validated.length - deduped.length,
+          model: 'google/gemini-2.5-flash', strategy, error: invariantMsg,
+          summary: `Under floor: ${deduped.length}/${minKiFloor} on attempt ${attemptNumber}`,
+          contentLength: resource.content.length, resourceType: resource.resource_type,
+          isLesson, enrichmentStatus: newStatus,
+        });
 
         // Auto-retry: fire-and-forget next attempt
         if (retryEligible) {
@@ -1825,6 +2063,18 @@ Deno.serve(async (req) => {
         retry_scheduled_at: null,
         ...(audit ? { extraction_audit_summary: audit } : {}),
       });
+
+      // Durable run + reconciliation
+      await recordRunAndReconcile(supabase, {
+        resourceId, userId: resource.user_id, startedAt, durationMs,
+        status: 'failed', rawCount: rawItems.length, validatedCount: validated.length,
+        savedCount: 0, duplicatesSkipped: 0,
+        model: 'google/gemini-2.5-flash', strategy, error: insertError.message,
+        summary: `Insert failed on attempt ${attemptNumber}: ${insertError.message}`,
+        contentLength: resource.content.length, resourceType: resource.resource_type,
+        isLesson, enrichmentStatus: 'extraction_failed',
+      });
+
       return respond({ resourceId, title: resource.title, kis: 0, error: `Insert failed: ${insertError.message}`, log });
     }
 
@@ -1865,6 +2115,17 @@ Deno.serve(async (req) => {
       next_retry_at: null,
       retry_scheduled_at: null,
       ...(successAudit ? { extraction_audit_summary: successAudit } : {}),
+    });
+
+    // Durable run + reconciliation (SUCCESS path)
+    await recordRunAndReconcile(supabase, {
+      resourceId, userId: resource.user_id, startedAt, durationMs,
+      status: 'completed', rawCount: rawItems.length, validatedCount: validated.length,
+      savedCount: rows.length, duplicatesSkipped: validated.length - deduped.length,
+      model: 'google/gemini-2.5-flash', strategy,
+      summary: `Success: ${rows.length} KIs inserted, ${canonicalKiCount} total on attempt ${attemptNumber}`,
+      contentLength: resource.content.length, resourceType: resource.resource_type,
+      isLesson, enrichmentStatus: 'extracted',
     });
 
     logTelemetry({
