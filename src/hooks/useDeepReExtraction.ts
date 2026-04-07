@@ -742,7 +742,8 @@ export function useDeepReExtraction() {
         toast.info(`Processed ${batchesCompleted}/${batchTotal} batches for "${item.title}". Server may still be processing.`);
       }
     } else {
-      // ── NON-BATCHED: single extraction call (unchanged) ──
+      // Dead path — all re-extractions now route through jobMode above.
+      // Kept as safety fallback in case isBatched is ever dynamically false.
       try {
         const response = await authenticatedFetch({
           functionName: 'extract-tactics',
@@ -750,9 +751,10 @@ export function useDeepReExtraction() {
             resourceId: item.resource_id,
             deepMode: true,
             persist: true,
+            jobMode: true, // Always use jobMode for durability
           },
-          componentName: 'useDeepReExtraction',
-          timeoutMs: 150_000,
+          componentName: 'useDeepReExtraction-fallback',
+          timeoutMs: 300_000,
         });
         const data = await response.json();
         const error = !response.ok ? (data?.error || `HTTP ${response.status}`) : null;
@@ -761,7 +763,7 @@ export function useDeepReExtraction() {
 
         totalEfReturned = data?.model_metrics?.raw_count ?? 0;
         totalEfValidated = data?.model_metrics?.validated_count ?? 0;
-        totalEfSaved = data?.persistence?.saved_count ?? 0;
+        totalEfSaved = data?.persistence?.saved_count ?? data?.totalSaved ?? 0;
         totalDupsSkipped = data?.persistence?.duplicates_skipped ?? 0;
         allPassesRun = data?.model_metrics?.extraction_passes_run ?? [];
       } catch (err: any) {
