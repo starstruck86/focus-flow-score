@@ -31,6 +31,7 @@ import { useWakeWord } from '@/hooks/useWakeWord';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/BottomNav';
 import { SHELL } from '@/lib/layout';
+import { GlobalRefreshButton } from '@/components/GlobalRefreshButton';
 
 
 
