@@ -1,6 +1,8 @@
 /**
- * BackgroundJobDrawer — slide-up drawer showing all background jobs.
+ * BackgroundJobDrawer — slide-up drawer showing all background jobs with
+ * real progress, elapsed time, step labels, and auto-cleanup.
  */
+import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
   useBackgroundJobs,
@@ -8,6 +10,8 @@ import {
   selectReviewJobs,
   selectFailedJobs,
   selectCompletedJobs,
+  getJobPercent,
+  formatElapsed,
   type BackgroundJob,
   type JobStatus,
 } from '@/store/useBackgroundJobs';
@@ -49,10 +53,9 @@ function JobRow({ job }: { job: BackgroundJob }) {
   const removeJob = useBackgroundJobs((s) => s.removeJob);
   const meta = STATUS_META[job.status];
   const Icon = meta.icon;
-  const pct =
-    job.progress && job.progress.total > 0
-      ? Math.round((job.progress.current / job.progress.total) * 100)
-      : undefined;
+  const pct = getJobPercent(job);
+  const isDeterminate = job.progressMode === 'determinate' && pct != null;
+  const isRunning = job.status === 'running' || job.status === 'queued';
 
   return (
     <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-3">
@@ -71,17 +74,36 @@ function JobRow({ job }: { job: BackgroundJob }) {
           </Badge>
         </div>
 
-        {job.substatus && (
-          <span className="text-[11px] text-muted-foreground capitalize">
-            {job.substatus.replace(/_/g, ' ')}
-          </span>
-        )}
+        {/* Step label + elapsed */}
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          {job.substatus && (
+            <span className="capitalize">{job.substatus.replace(/_/g, ' ')}</span>
+          )}
+          {job.stepLabel && (
+            <span className="truncate">{job.stepLabel}</span>
+          )}
+          <span className="ml-auto shrink-0">{formatElapsed(job.createdAt)}</span>
+        </div>
 
-        {pct !== undefined && job.status === 'running' && (
+        {/* Progress bar */}
+        {isRunning && isDeterminate && (
           <div className="flex items-center gap-2">
             <Progress value={pct} className="h-1.5 flex-1" />
             <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
           </div>
+        )}
+        {isRunning && !isDeterminate && (
+          <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden">
+            <div className="h-full w-1/3 rounded-full bg-primary/60"
+              style={{ animation: 'indeterminate-slide 1.5s ease-in-out infinite' }} />
+          </div>
+        )}
+
+        {/* Progress counts */}
+        {job.progress && job.progress.total > 0 && (
+          <span className="text-[10px] text-muted-foreground">
+            {job.progress.current} / {job.progress.total}
+          </span>
         )}
 
         {job.error && (
@@ -95,7 +117,7 @@ function JobRow({ job }: { job: BackgroundJob }) {
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={() => updateJob(job.id, { status: 'cancelled' })}
+            onClick={(e) => { e.stopPropagation(); updateJob(job.id, { status: 'cancelled' }); }}
             title="Cancel"
           >
             <Ban className="h-3.5 w-3.5" />
@@ -106,7 +128,7 @@ function JobRow({ job }: { job: BackgroundJob }) {
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={() => updateJob(job.id, { status: 'queued', error: undefined })}
+            onClick={(e) => { e.stopPropagation(); updateJob(job.id, { status: 'queued', error: undefined }); }}
             title="Retry"
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -117,7 +139,7 @@ function JobRow({ job }: { job: BackgroundJob }) {
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={() => removeJob(job.id)}
+            onClick={(e) => { e.stopPropagation(); removeJob(job.id); }}
             title="Dismiss"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -150,6 +172,14 @@ export function BackgroundJobDrawer() {
   const review = useBackgroundJobs(useShallow(selectReviewJobs));
   const failed = useBackgroundJobs(useShallow(selectFailedJobs));
   const completed = useBackgroundJobs(useShallow(selectCompletedJobs));
+
+  // Tick for elapsed time updates
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [open]);
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
