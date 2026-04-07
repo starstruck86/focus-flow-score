@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAllResources } from '@/hooks/useResources';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { useBackgroundJobs } from '@/store/useBackgroundJobs';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 export type ReExtractStatus = 'idle' | 'running' | 'succeeded' | 'failed';
@@ -71,6 +72,7 @@ const TABLE = 'resources' as any;
 
 export function useReExtractResource() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const { data: resources = [] } = useAllResources();
   const [localOverrides, setLocalOverrides] = useState<Record<string, ReExtractStatus>>({});
   const [resultMap, setResultMap] = useState<Record<string, ReExtractResult>>({});
