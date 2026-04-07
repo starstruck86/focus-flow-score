@@ -800,8 +800,10 @@ export function useDeepReExtraction() {
     );
 
     // Determine final status: if stopped by safety limits (not error), stay resumable
+    // For non-batched runs, batchesCompleted stays 0 — use lastError + kiDelta to determine outcome
     const finalStatus: ReExtractQueueStatus =
-      batchesCompleted === 0 ? 'failed'
+      isBatched && batchesCompleted === 0 && lastError ? 'failed'
+      : !isBatched && lastError ? 'failed'
       : isBatched && batchesCompleted < batchTotal ? 'partial_complete_resumable'
       : lastError && batchesCompleted > 0 && batchesCompleted < batchTotal ? 'partial_complete_resumable'
       : lastError && batchesCompleted > 0 ? 'partial'
