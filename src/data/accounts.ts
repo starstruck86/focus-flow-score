@@ -5,15 +5,20 @@
  * ═══════════════════════════════════════════════════════════════════
  * All user-facing account reads MUST exclude soft-deleted rows.
  *
+ * DB-LEVEL ENFORCEMENT: The `active_accounts` Postgres view
+ * (SELECT * FROM accounts WHERE deleted_at IS NULL) is the canonical
+ * read source. All read helpers below use this view.
+ *
  * USE THESE HELPERS instead of raw `supabase.from('accounts').select(...)`:
- *   - activeAccounts()       → base query builder with deleted_at IS NULL
+ *   - activeAccounts()       → base query builder (via active_accounts view)
  *   - getAccounts()          → full list of active accounts
  *   - getAccountById()       → single account by ID (active only)
  *   - findAccountByName()    → lookup by name (active only)
  *   - resolveAccountByName() → Dave/tool pattern: user_id + ilike match
  *
- * If you MUST bypass soft-delete (admin/reconciliation), use rawAccounts()
- * and document why.
+ * WRITES go to `accounts` table directly (insert, update, soft-delete).
+ * If you MUST bypass soft-delete for reads (admin/reconciliation),
+ * use rawAccounts() and document why.
  * ═══════════════════════════════════════════════════════════════════
  */
 import { supabase } from '@/integrations/supabase/client';
@@ -27,24 +32,25 @@ export type { AccountRow, AccountInsert, AccountUpdate };
 
 // ─── View helper ───────────────────────────────────────────────────
 // The active_accounts view is a DB-level filter (WHERE deleted_at IS NULL).
-// Since it's not in the generated types, we cast through the base table type.
+// Since views aren't in generated Supabase types, we use the accounts
+// table type and cast. The view has identical columns.
 
-function fromActiveAccounts() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return supabase.from('active_accounts' as any) as unknown as ReturnType<typeof supabase.from<'accounts'>>;
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const ACTIVE_VIEW = 'active_accounts' as any;
+
+function fromView() {
+  return supabase.from(ACTIVE_VIEW);
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ─── Core query builders ───────────────────────────────────────────
 
 /**
  * Returns a Supabase query builder for active (non-deleted) accounts.
  * Backed by the active_accounts DB view — soft-delete is enforced at the DB layer.
- *
- * Usage:
- *   const { data } = await activeAccounts().select('id, name').eq('user_id', uid);
  */
 export function activeAccounts() {
-  return fromActiveAccounts().select();
+  return fromView().select();
 }
 
 /**
@@ -59,70 +65,63 @@ export function rawAccounts() {
 // ─── Convenience read helpers ──────────────────────────────────────
 
 export async function getAccounts(): Promise<AccountRow[]> {
-  const { data, error } = await activeAccounts().order('name');
+  const { data, error } = await fromView().select('*').order('name');
   if (error) throw error;
-  return data;
+  return (data ?? []) as unknown as AccountRow[];
 }
 
 export async function getAccountById(id: string): Promise<AccountRow | null> {
-  const { data, error } = await supabase
-    .from('active_accounts' as any)
+  const { data, error } = await fromView()
     .select('*')
     .eq('id', id)
     .maybeSingle();
   if (error) throw error;
-  return data;
+  return (data ?? null) as unknown as AccountRow | null;
 }
 
 export async function findAccountBySalesforceId(sfId: string): Promise<{ id: string } | null> {
-  const { data } = await supabase
-    .from('active_accounts' as any)
+  const { data } = await fromView()
     .select('id')
     .eq('salesforce_id', sfId)
     .maybeSingle();
-  return data;
+  return (data ?? null) as unknown as { id: string } | null;
 }
 
 export async function findAccountByWebsite(domain: string): Promise<{ id: string } | null> {
-  const { data } = await supabase
-    .from('active_accounts' as any)
+  const { data } = await fromView()
     .select('id, website')
     .ilike('website', `%${domain}%`)
     .maybeSingle();
-  return data;
+  return (data ?? null) as unknown as { id: string } | null;
 }
 
 export async function findAccountByName(name: string): Promise<{ id: string } | null> {
-  const { data } = await supabase
-    .from('active_accounts' as any)
+  const { data } = await fromView()
     .select('id')
     .ilike('name', name.trim())
     .maybeSingle();
-  return data;
+  return (data ?? null) as unknown as { id: string } | null;
 }
 
 /**
  * Dave/tool-safe account resolution: finds an active account by fuzzy name
  * match within a user's scope. Returns null if not found or soft-deleted.
- *
- * This is the canonical pattern for Dave tools that need to resolve
- * an account from a user-provided name string.
  */
 export async function resolveAccountByName(
   userId: string,
   accountName: string,
   selectFields = 'id, name'
 ): Promise<Record<string, any> | null> {
-  const { data } = await supabase
-    .from('active_accounts' as any)
+  const { data } = await fromView()
     .select(selectFields)
     .eq('user_id', userId)
     .ilike('name', `%${accountName}%`)
     .limit(1);
-  return data?.[0] ?? null;
+  const rows = (data ?? []) as unknown as Record<string, any>[];
+  return rows[0] ?? null;
 }
 
-// ─── Write helpers ─────────────────────────────────────────────────
+// ─── Write helpers (always use accounts table, not view) ──────────
 
 export async function insertAccount(payload: AccountInsert): Promise<AccountRow> {
   const { data, error } = await supabase
