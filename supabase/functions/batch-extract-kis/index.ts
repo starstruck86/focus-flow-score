@@ -1372,6 +1372,39 @@ async function recordRunAndReconcile(
 
     await supabase.from('resources').update(reconcileUpdate).eq('id', opts.resourceId);
     console.log(`[batch-extract-kis] 🔄 RECONCILED: KIs=${kiCount} runs=${runCount} kisPer1k=${kisPer1k} depth=${depthBucket} under=${underExtracted} jobStatus=${activeJobStatus}`);
+
+    // ── SERVER-SIDE TERMINAL RESOLUTION: update background_jobs row ──
+    // This makes re-extract terminal status durable — no client polling needed.
+    if (activeJobStatus === 'succeeded' || activeJobStatus === 'failed') {
+      try {
+        const bjStatus = activeJobStatus === 'succeeded' ? 'completed' : 'failed';
+        const { data: bgJob } = await supabase
+          .from('background_jobs')
+          .select('id, status')
+          .eq('entity_id', opts.resourceId)
+          .eq('user_id', opts.userId)
+          .in('status', ['running', 'queued'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (bgJob) {
+          await supabase.from('background_jobs').update({
+            status: bjStatus,
+            completed_at: completedAt,
+            progress_percent: bjStatus === 'completed' ? 100 : undefined,
+            step_label: bjStatus === 'completed'
+              ? `Done — ${kiCount} KIs (${kisPer1k}/1k)`
+              : `Failed: ${opts.error || 'extraction error'}`,
+            error: bjStatus === 'failed' ? (opts.error || 'extraction failed') : null,
+            substatus: null,
+          }).eq('id', bgJob.id);
+          console.log(`[batch-extract-kis] background_jobs "${bgJob.id}" → ${bjStatus}`);
+        }
+      } catch (bjErr: any) {
+        console.warn(`[batch-extract-kis] failed to update background_jobs:`, bjErr?.message);
+      }
+    }
   } catch (err: any) {
     console.error(`[batch-extract-kis] Reconciliation failed: ${err?.message}`);
   }
