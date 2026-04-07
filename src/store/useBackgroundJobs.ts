@@ -94,8 +94,7 @@ interface BackgroundJobsActions {
 
 export type BackgroundJobsStore = BackgroundJobsState & BackgroundJobsActions;
 
-// Track auto-remove timers
-const autoRemoveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// Auto-remove timers removed — terminal jobs persist in UI until manual dismiss or session end
 
 // Throttle DB progress writes (at most once per 2s per job)
 const lastDbWrite = new Map<string, number>();
@@ -115,10 +114,6 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
 
   addJob: (job) => {
     const now = Date.now();
-    if (autoRemoveTimers.has(job.id)) {
-      clearTimeout(autoRemoveTimers.get(job.id)!);
-      autoRemoveTimers.delete(job.id);
-    }
 
     const existing = get().jobs.find(j => j.id === job.id);
     if (existing && TERMINAL_STATUSES.includes(existing.status) && !TERMINAL_STATUSES.includes(job.status)) {
@@ -207,18 +202,7 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
       }
     }
 
-    // Schedule auto-removal for terminal states
-    if (isTerminal) {
-      if (!autoRemoveTimers.has(id)) {
-        console.info(`[BACKGROUND JOBS] auto-dismiss scheduled for "${id}" in ${AUTO_REMOVE_DELAY_MS}ms`);
-        const timer = setTimeout(() => {
-          console.info(`[BACKGROUND JOBS] auto-dismiss: removing "${id}"`);
-          set((s) => ({ jobs: s.jobs.filter(j => j.id !== id) }));
-          autoRemoveTimers.delete(id);
-        }, AUTO_REMOVE_DELAY_MS);
-        autoRemoveTimers.set(id, timer);
-      }
-    }
+    // Terminal jobs stay in the store — user can dismiss manually via drawer
   },
 
   retryJob: (id) => {
@@ -226,10 +210,6 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
     if (!current) return;
     if (!TERMINAL_STATUSES.includes(current.status)) return;
 
-    if (autoRemoveTimers.has(id)) {
-      clearTimeout(autoRemoveTimers.get(id)!);
-      autoRemoveTimers.delete(id);
-    }
     console.info(`[BACKGROUND JOBS] retryJob: "${id}" ${current.status} → queued`);
     set((s) => ({
       jobs: s.jobs.map((j) =>
@@ -251,10 +231,6 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
   },
 
   removeJob: (id) => {
-    if (autoRemoveTimers.has(id)) {
-      clearTimeout(autoRemoveTimers.get(id)!);
-      autoRemoveTimers.delete(id);
-    }
     console.info(`[BACKGROUND JOBS] removeJob: "${id}"`);
     set((s) => ({ jobs: s.jobs.filter((j) => j.id !== id) }));
     // Note: we don't delete the DB row — it serves as history
@@ -271,24 +247,13 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
   rehydrateJobs: (jobs) => {
     console.info(`[BACKGROUND JOBS] rehydrated ${jobs.length} jobs from DB`);
     set({ jobs, rehydrated: true });
-
-    // Schedule auto-dismiss for any terminal jobs that were rehydrated
-    for (const job of jobs) {
-      if (TERMINAL_STATUSES.includes(job.status) && !autoRemoveTimers.has(job.id)) {
-        const timer = setTimeout(() => {
-          set((s) => ({ jobs: s.jobs.filter(j => j.id !== job.id) }));
-          autoRemoveTimers.delete(job.id);
-        }, AUTO_REMOVE_DELAY_MS);
-        autoRemoveTimers.set(job.id, timer);
-      }
-    }
+    // Terminal jobs stay — user dismisses manually or they age out on next reload
   },
 
   syncJobFromDB: (job) => {
     set((s) => {
       const exists = s.jobs.find(j => j.id === job.id);
       if (exists) {
-        // Only update if DB is newer
         if (job.updatedAt >= exists.updatedAt) {
           return { jobs: s.jobs.map(j => j.id === job.id ? job : j) };
         }
@@ -296,15 +261,6 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
       }
       return { jobs: [job, ...s.jobs] };
     });
-
-    // Auto-dismiss terminal
-    if (TERMINAL_STATUSES.includes(job.status) && !autoRemoveTimers.has(job.id)) {
-      const timer = setTimeout(() => {
-        set((s) => ({ jobs: s.jobs.filter(j => j.id !== job.id) }));
-        autoRemoveTimers.delete(job.id);
-      }, AUTO_REMOVE_DELAY_MS);
-      autoRemoveTimers.set(job.id, timer);
-    }
   },
 }));
 
