@@ -158,7 +158,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
           mode: effectiveMode,
         });
 
-        // Also add to local store for immediate UI feedback
+        // Add to local store for immediate UI feedback (no userId = skip DB write, already persisted)
         addJob({
           id: jobId,
           type: effectiveMode === 'deep_enrich' ? 'deep_enrich' : 're_enrichment',
@@ -169,7 +169,6 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
           progressPercent: 0,
           stepLabel: `Queued: ${resourceIds.length} resources`,
           substatus: 'enriching',
-          userId: user.id,
         });
 
         // Close the modal — work continues server-side
