@@ -227,9 +227,15 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
   },
 
   removeJob: (id) => {
-    console.info(`[BACKGROUND JOBS] removeJob: "${id}"`);
+    const current = get().jobs.find(j => j.id === id);
+    console.info(`[BACKGROUND JOBS] removeJob: "${id}" (was ${current?.status})`);
+
+    // If the job is running, mark it as cancelled in DB so the backend stops
+    if (current && (current.status === 'running' || current.status === 'queued')) {
+      finalizeDurableJob(id, 'cancelled', { stepLabel: 'Cancelled by user' }).catch(() => {});
+    }
+
     set((s) => ({ jobs: s.jobs.filter((j) => j.id !== id) }));
-    // Note: we don't delete the DB row — it serves as history
   },
 
   clearCompleted: () =>
