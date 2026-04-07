@@ -1,8 +1,17 @@
 /**
  * useBackgroundJobs — global Zustand store for tracking all long-running background jobs.
- * NOW: a UI cache layer on top of the durable `background_jobs` table.
- * Any part of the app can add/update/remove jobs. The global indicator + drawer read from here.
- * On app load, jobs are rehydrated from the DB. Realtime subscription keeps them in sync.
+ *
+ * ARCHITECTURE:
+ * - The `background_jobs` DB table is the DURABLE source of truth.
+ * - This store is a UI CACHE / PROJECTION. It never owns state independently.
+ * - Two paths to create a job:
+ *   1. DURABLE (preferred): call `createDurableJob()` externally, then `addJob()` WITHOUT userId
+ *      to populate the UI cache. The DB row already exists.
+ *   2. INLINE: call `addJob()` WITH userId — this creates the DB row AND the UI cache entry.
+ *      Use only for simple jobs that don't need external orchestration setup.
+ *   NEVER do both — that causes duplicate DB writes.
+ * - On app load, jobs are rehydrated from DB via `rehydrateJobs()`.
+ * - Realtime subscription keeps them in sync via `syncJobFromDB()`.
  */
 import { create } from 'zustand';
 import {
@@ -60,12 +69,6 @@ export interface BackgroundJob {
   meta?: Record<string, unknown>;
 }
 
-/**
- * Auto-remove is DISABLED. Terminal jobs stay in the UI cache
- * for the lifetime of the session. The DB rehydration window (30 min)
- * controls what shows after refresh. Users can dismiss manually.
- */
-
 const TERMINAL_STATUSES: JobStatus[] = ['completed', 'failed', 'cancelled'];
 
 interface BackgroundJobsState {
@@ -76,13 +79,28 @@ interface BackgroundJobsState {
 }
 
 interface BackgroundJobsActions {
-  /** Add a job to the UI cache. If userId is provided, also persists to DB. Omit userId when the DB row was already created externally (e.g. by startDurableEnrichment). */
+  /**
+   * Add a job to the UI cache.
+   *
+   * CONTRACT:
+   * - If `userId` is provided → also creates the DB row (inline path).
+   * - If `userId` is omitted → UI-only cache entry. The DB row MUST already exist
+   *   (created via `createDurableJob()` or `startDurableEnrichment()`).
+   * - NEVER provide userId when the DB row was already created externally.
+   */
   addJob: (job: Omit<BackgroundJob, 'createdAt' | 'updatedAt'> & { userId?: string }) => void;
   /** Update a job in the UI cache AND persist progress to DB. */
   updateJob: (id: string, patch: Partial<Omit<BackgroundJob, 'id' | 'createdAt'>>) => void;
-  /** Retry a terminal job back to queued. */
+  /**
+   * Retry a terminal job: resets DB row to queued AND dispatches real backend work.
+   * For enrichment: re-invokes run-enrichment-job edge function.
+   * For re-extraction: re-invokes batch-extract-kis edge function.
+   */
   retryJob: (id: string) => void;
-  /** Remove a job from UI cache. */
+  /**
+   * Remove/cancel a job.
+   * If the job is running/queued, marks it as 'cancelled' in DB so backend workers exit.
+   */
   removeJob: (id: string) => void;
   clearCompleted: () => void;
   setDrawerOpen: (open: boolean) => void;
@@ -94,8 +112,6 @@ interface BackgroundJobsActions {
 }
 
 export type BackgroundJobsStore = BackgroundJobsState & BackgroundJobsActions;
-
-// Auto-remove timers removed — terminal jobs persist in UI until manual dismiss or session end
 
 // Throttle DB progress writes (at most once per 2s per job)
 const lastDbWrite = new Map<string, number>();
@@ -116,21 +132,23 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
   addJob: (job) => {
     const now = Date.now();
 
+    // Deduplicate: if job already exists with same or newer state, skip
     const existing = get().jobs.find(j => j.id === job.id);
-    if (existing && TERMINAL_STATUSES.includes(existing.status) && !TERMINAL_STATUSES.includes(job.status)) {
-      console.info(`[BACKGROUND JOBS] Re-adding job "${job.id}" (was ${existing.status}, now ${job.status})`);
+    if (existing && !TERMINAL_STATUSES.includes(existing.status) && existing.status === job.status) {
+      console.info(`[BACKGROUND JOBS] addJob: "${job.id}" already exists with status=${existing.status}, skipping`);
+      return;
     }
 
-    console.info(`[BACKGROUND JOBS] addJob: "${job.id}" type=${job.type} status=${job.status}`);
+    console.info(`[BACKGROUND JOBS] addJob: "${job.id}" type=${job.type} status=${job.status} durable=${!!job.userId}`);
 
-    // Strip userId before storing in memory
+    // Strip userId before storing in memory — it's only used for the DB write decision
     const { userId, ...jobData } = job;
 
     set((s) => ({
       jobs: [{ ...jobData, createdAt: now, updatedAt: now }, ...s.jobs.filter(j => j.id !== job.id)],
     }));
 
-    // Persist to DB (fire-and-forget)
+    // Persist to DB only if userId provided (inline path)
     if (userId) {
       createDurableJob({
         id: job.id,
@@ -178,14 +196,12 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
     // Persist to DB
     const isTerminal = patch.status && TERMINAL_STATUSES.includes(patch.status);
     if (isTerminal) {
-      // Terminal: always write immediately
       finalizeDurableJob(id, patch.status as 'completed' | 'failed' | 'cancelled', {
         error: patch.error ?? undefined,
         stepLabel: patch.stepLabel ?? undefined,
         progressPercent: patch.progressPercent,
       }).catch((err) => console.error(`[BACKGROUND JOBS] DB finalize failed:`, err));
     } else if (!shouldThrottleDbWrite(id)) {
-      // Progress: throttled
       const dbPatch: Record<string, unknown> = {};
       if (patch.status) dbPatch.status = patch.status;
       if (patch.substatus !== undefined) dbPatch.substatus = patch.substatus;
@@ -202,8 +218,6 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
         updateDurableJob(id, dbPatch as any).catch(() => {});
       }
     }
-
-    // Terminal jobs stay in the store — user can dismiss manually via drawer
   },
 
   retryJob: (id) => {
@@ -230,7 +244,7 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
     const current = get().jobs.find(j => j.id === id);
     console.info(`[BACKGROUND JOBS] removeJob: "${id}" (was ${current?.status})`);
 
-    // If the job is running, mark it as cancelled in DB so the backend stops
+    // If the job is active, mark it as cancelled in DB so the backend stops
     if (current && (current.status === 'running' || current.status === 'queued')) {
       finalizeDurableJob(id, 'cancelled', { stepLabel: 'Cancelled by user' }).catch(() => {});
     }
@@ -249,13 +263,13 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
   rehydrateJobs: (jobs) => {
     console.info(`[BACKGROUND JOBS] rehydrated ${jobs.length} jobs from DB`);
     set({ jobs, rehydrated: true });
-    // Terminal jobs stay — user dismisses manually or they age out on next reload
   },
 
   syncJobFromDB: (job) => {
     set((s) => {
       const exists = s.jobs.find(j => j.id === job.id);
       if (exists) {
+        // DB is authoritative — always accept if updatedAt is >= local
         if (job.updatedAt >= exists.updatedAt) {
           return { jobs: s.jobs.map(j => j.id === job.id ? job : j) };
         }
