@@ -11,7 +11,6 @@ const JOB_ID = 'enrichment-batch'; // Legacy client-side enrichment — no DB pe
 
 export function EnrichmentJobBridge() {
   const enrichState = useEnrichmentJobStore((s) => s.state);
-  const enrichState = useEnrichmentJobStore((s) => s.state);
   const addJob = useBackgroundJobs((s) => s.addJob);
   const updateJob = useBackgroundJobs((s) => s.updateJob);
   const removeJob = useBackgroundJobs((s) => s.removeJob);
