@@ -1886,6 +1886,18 @@ Deno.serve(async (req) => {
             next_retry_at: null, retry_scheduled_at: null,
             ...(audit ? { extraction_audit_summary: audit } : {}),
           });
+
+          // Durable run + reconciliation
+          await recordRunAndReconcile(supabase, {
+            resourceId, userId: resource.user_id, startedAt, durationMs,
+            status: 'completed', rawCount: rawItems.length, validatedCount: validated.length,
+            savedCount: 0, duplicatesSkipped: 0,
+            model: 'google/gemini-2.5-flash', strategy,
+            summary: `No improvement over previous best on attempt ${attemptNumber}`,
+            contentLength: resource.content.length, resourceType: resource.resource_type,
+            isLesson, enrichmentStatus: 'extraction_requires_review',
+          });
+
           return respond({ resourceId, title: resource.title, kis: 0, error: 'No improvement over previous best — stopped retries', attemptNumber, strategy, log });
         }
       }
