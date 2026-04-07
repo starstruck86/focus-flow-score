@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
 import { supabase } from '@/integrations/supabase/client';
+import { dbAccountToStore } from '@/hooks/useDataSync';
 
 /**
  * Smart soft-refresh: reconciles store + query cache with DB truth.
@@ -30,11 +31,9 @@ export function GlobalRefreshButton() {
         .order('name');
 
       if (freshAccounts) {
-        // Dynamic import to avoid circular deps
-        const { dbAccountToStore } = await import('@/hooks/useDataSync');
         const mapped = freshAccounts.map(dbAccountToStore);
         useStore.setState({ accounts: mapped });
-        console.log(`[GlobalRefresh] Reconciled ${mapped.length} accounts (${freshAccounts.length} from DB)`);
+        console.log(`[GlobalRefresh] Reconciled ${mapped.length} accounts`);
       }
 
       // 2. Invalidate all query caches so derived views re-fetch
