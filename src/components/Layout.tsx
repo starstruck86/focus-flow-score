@@ -294,6 +294,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <GlobalSearch className="flex-1 min-w-0 max-w-xs sm:max-w-sm lg:max-w-md" />
         <div className="flex items-center gap-1.5 shrink-0">
           <BostonClock />
+          <GlobalRefreshButton />
           <TerritoryCopilot />
           {!isReviewMode && (
             <Tooltip>
