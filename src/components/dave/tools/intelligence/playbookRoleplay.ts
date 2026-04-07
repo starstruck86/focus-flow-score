@@ -8,6 +8,7 @@
  * escalating difficulty, direct coaching feedback.
  */
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import type { ToolContext } from '../../toolTypes';
 import type { Playbook } from '@/hooks/usePlaybooks';
 import { selectPlaybook, type WorkflowContext } from '@/hooks/usePlaybookRecommendation';
@@ -183,10 +184,8 @@ export async function startPlaybookRoleplay(
   // Look up account context if provided
   let industry: string | undefined;
   if (params.accountName) {
-    const { data: acct } = await supabase
-      .from('accounts')
+    const { data: acct } = await fromActiveAccounts()
       .select('industry')
-      .is('deleted_at', null)
       .ilike('name', `%${params.accountName}%`)
       .limit(1)
       .single();

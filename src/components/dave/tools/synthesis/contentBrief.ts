@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import { toast } from 'sonner';
 import { formatTimeETLabel } from '@/lib/timeFormat';
 import type { ToolContext } from '../../toolTypes';
@@ -13,7 +14,7 @@ export async function generateContent(ctx: ToolContext, params: { contentType: s
   let methodologyContext = '';
 
   if (params.accountName) {
-    const { data: accounts } = await supabase.from('accounts').select('id, name, industry, notes').eq('user_id', userId).is('deleted_at', null).ilike('name', `%${params.accountName}%`).limit(1);
+    const { data: accounts } = await fromActiveAccounts().select('id, name, industry, notes').eq('user_id', userId).ilike('name', `%${params.accountName}%`).limit(1);
     if (accounts?.length) {
       accountContext = accounts[0];
       const { data: transcripts } = await supabase.from('call_transcripts').select('summary, call_date, call_type').eq('user_id', userId).eq('account_id', accountContext.id).order('call_date', { ascending: false }).limit(2);
@@ -79,7 +80,7 @@ export async function meetingBrief(ctx: ToolContext, params: { meetingTitle?: st
     if (match) target = match;
   }
 
-  const { data: accounts } = await supabase.from('accounts').select('id, name, industry, tier, notes, last_touch_date, account_status').eq('user_id', userId).is('deleted_at', null);
+  const { data: accounts } = await fromActiveAccounts().select('id, name, industry, tier, notes, last_touch_date, account_status').eq('user_id', userId);
 
   type MatchedAccount = { id: string; name: string; industry: string | null; tier: string | null; account_status: string | null };
   const matchedAccount = (accounts || []).find((a: MatchedAccount) =>

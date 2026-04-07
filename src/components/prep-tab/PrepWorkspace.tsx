@@ -16,6 +16,7 @@ import { Sparkles, Loader2, ChevronDown, Eye, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { OutputType, ExecutionTemplate, ExecutionOutput } from '@/lib/executionTemplateTypes';
@@ -65,11 +66,9 @@ export function PrepWorkspace() {
     queryKey: ['accounts-for-prep', user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase
-        .from('accounts')
+      const { data } = await fromActiveAccounts()
         .select('id, name')
         .eq('user_id', user!.id)
-        .is('deleted_at', null)
         .order('name');
       return data || [];
     },

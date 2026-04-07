@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { fromActiveAccounts } from '@/data/accounts';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { ResourceJobStatus as ResourceJobStatusComponent } from '@/components/ResourceJobStatus';
 import { Button } from '@/components/ui/button';
@@ -150,7 +151,7 @@ export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEdi
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts-select', user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('accounts').select('id, name, industry').is('deleted_at', null).order('name');
+      const { data } = await fromActiveAccounts().select('id, name, industry').order('name');
       return data || [];
     },
     enabled: !!user,

@@ -4,6 +4,7 @@
  * or detailed item-by-item walkthroughs for any major entity.
  */
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import type { ToolContext } from '../../toolTypes';
 
 // ── Shared filter model ─────────────────────────────────────────
@@ -574,7 +575,7 @@ export async function queryTasks(ctx: ToolContext, params: { question?: string; 
   const accountIds = [...new Set(tasks.map(t => t.linked_account_id).filter(Boolean))] as string[];
   let accountMap: Record<string, string> = {};
   if (accountIds.length) {
-    const { data: accts } = await supabase.from('accounts').select('id, name').is('deleted_at', null).in('id', accountIds);
+    const { data: accts } = await fromActiveAccounts().select('id, name').in('id', accountIds);
     if (accts) accountMap = Object.fromEntries(accts.map(a => [a.id, a.name]));
   }
 

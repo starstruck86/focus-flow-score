@@ -1,6 +1,7 @@
 // Account Health Pulse — unified score combining ICP fit + timing + stakeholder coverage + signals
 import { useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 
@@ -30,7 +31,7 @@ export function useAccountHealthPulse(motionFilter?: 'new-logo' | 'renewal') {
     queryFn: async (): Promise<AccountHealthPulse[]> => {
       if (!user) return [];
       // Fetch accounts + contacts + recent digest items in parallel (explicit user_id for defense-in-depth)
-      let accountsQuery = supabase.from('accounts').select('id, name, icp_fit_score, timing_score, last_touch_date, trigger_events, marketing_platform_detected, last_enriched_at, tier, motion').eq('user_id', user.id).is('deleted_at', null);
+      let accountsQuery = fromActiveAccounts().select('id, name, icp_fit_score, timing_score, last_touch_date, trigger_events, marketing_platform_detected, last_enriched_at, tier, motion').eq('user_id', user.id);
       if (motionFilter) {
         accountsQuery = accountsQuery.eq('motion', motionFilter);
       }

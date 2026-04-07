@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import { toast } from 'sonner';
 import { emitDataChanged } from '@/lib/daveEvents';
 import { parseDueDate, parseTime } from '../toolTypes';
@@ -118,7 +119,7 @@ export function createTaskTools(ctx: ToolContext): ToolMap {
       const accountIds = [...new Set(tasks.map(t => t.linked_account_id).filter(Boolean))] as string[];
       let accountMap: Record<string, string> = {};
       if (accountIds.length) {
-        const { data: accts } = await supabase.from('accounts').select('id, name').is('deleted_at', null).in('id', accountIds);
+        const { data: accts } = await fromActiveAccounts().select('id, name').in('id', accountIds);
         if (accts) accountMap = Object.fromEntries(accts.map(a => [a.id, a.name]));
       }
 
