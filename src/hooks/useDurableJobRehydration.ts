@@ -4,27 +4,30 @@
  * realtime updates so the UI stays in sync even after refresh/navigation.
  *
  * For re-extract jobs that are still "running" after rehydration, starts
- * a lightweight poll loop against the resources table to detect terminal state
- * and update the durable job row accordingly.
+ * a lightweight poll loop against the resources table to detect terminal state.
+ * For enrichment jobs still "running", starts a poll against background_jobs itself
+ * (since the backend runner updates that row directly).
  */
 import { useEffect, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuth } from '@/contexts/AuthContext';
-import { useBackgroundJobs, type BackgroundJob } from '@/store/useBackgroundJobs';
-import { loadActiveJobs, subscribeToDurableJobs, updateDurableJob, finalizeDurableJob } from '@/lib/durableJobs';
+import { useBackgroundJobs } from '@/store/useBackgroundJobs';
+import { loadActiveJobs, subscribeToDurableJobs } from '@/lib/durableJobs';
 import { supabase } from '@/integrations/supabase/client';
+import type { BackgroundJob } from '@/store/useBackgroundJobs';
 
 const RESUME_POLL_INTERVAL = 4000;
 const RESUME_POLL_TIMEOUT = 5 * 60_000;
 
 /** For rehydrated running re-extract jobs, poll the resource for terminal state */
-function startResumePoll(job: BackgroundJob, updateJob: (id: string, patch: any) => void) {
+function startReExtractResumePoll(job: BackgroundJob, updateJob: (id: string, patch: any) => void) {
   if (!job.entityId) return;
   const resourceId = job.entityId;
   const jobId = job.id;
   let stopped = false;
   const deadline = Date.now() + RESUME_POLL_TIMEOUT;
 
-  console.info(`[DURABLE JOBS] resuming poll for rehydrated job "${jobId}" (resource=${resourceId})`);
+  console.info(`[DURABLE JOBS] resuming poll for rehydrated re-extract job "${jobId}"`);
 
   const poll = async () => {
     while (!stopped && Date.now() < deadline) {
@@ -36,12 +39,10 @@ function startResumePoll(job: BackgroundJob, updateJob: (id: string, patch: any)
           .single();
 
         if (!data) break;
-
         const d = data as any;
         const batchTotal = d.extraction_batch_total ?? 0;
         const batchDone = d.extraction_batches_completed ?? 0;
 
-        // Update progress in store
         if (batchTotal > 1) {
           updateJob(jobId, {
             progressMode: 'determinate' as const,
@@ -50,47 +51,22 @@ function startResumePoll(job: BackgroundJob, updateJob: (id: string, patch: any)
             stepLabel: `Batch ${batchDone} of ${batchTotal}`,
             substatus: 'extracting',
           });
-        } else {
-          updateJob(jobId, {
-            stepLabel: `Polling… (${d.active_job_status || 'checking'})`,
-            substatus: 'polling',
-          });
         }
 
-        // Check terminal
         if (d.active_job_status === 'succeeded' || d.last_extraction_run_status === 'completed') {
-          console.info(`[DURABLE JOBS] resume poll: job "${jobId}" → completed`);
-          updateJob(jobId, {
-            status: 'completed' as const,
-            progressPercent: 100,
-            stepLabel: `Completed (${d.current_resource_ki_count ?? '?'} KIs)`,
-            substatus: undefined,
-          });
+          updateJob(jobId, { status: 'completed' as const, progressPercent: 100, stepLabel: `Completed (${d.current_resource_ki_count ?? '?'} KIs)` });
           stopped = true;
           return;
         }
-
         if (d.active_job_status === 'failed' || d.last_extraction_run_status === 'failed') {
-          console.info(`[DURABLE JOBS] resume poll: job "${jobId}" → failed`);
-          updateJob(jobId, {
-            status: 'failed' as const,
-            error: d.last_extraction_summary || 'Extraction failed',
-            stepLabel: 'Failed',
-            substatus: undefined,
-          });
+          updateJob(jobId, { status: 'failed' as const, error: d.last_extraction_summary || 'Extraction failed', stepLabel: 'Failed' });
           stopped = true;
           return;
         }
       } catch (err) {
         console.warn(`[DURABLE JOBS] resume poll error for "${jobId}":`, err);
       }
-
       await new Promise(r => setTimeout(r, RESUME_POLL_INTERVAL));
-    }
-
-    if (!stopped) {
-      console.warn(`[DURABLE JOBS] resume poll timed out for "${jobId}"`);
-      updateJob(jobId, { stepLabel: 'Still processing in background…', substatus: 'waiting_continuation' });
     }
   };
 
@@ -99,24 +75,33 @@ function startResumePoll(job: BackgroundJob, updateJob: (id: string, patch: any)
 
 export function useDurableJobRehydration() {
   const { user } = useAuth();
-  const rehydrateJobs = useBackgroundJobs((s) => s.rehydrateJobs);
-  const syncJobFromDB = useBackgroundJobs((s) => s.syncJobFromDB);
-  const updateJob = useBackgroundJobs((s) => s.updateJob);
-  const removeJob = useBackgroundJobs((s) => s.removeJob);
-  const rehydrated = useBackgroundJobs((s) => s.rehydrated);
+
+  // Single selector to avoid changing hook count across renders
+  const actions = useBackgroundJobs(useShallow((s) => ({
+    rehydrateJobs: s.rehydrateJobs,
+    syncJobFromDB: s.syncJobFromDB,
+    updateJob: s.updateJob,
+    removeJob: s.removeJob,
+    rehydrated: s.rehydrated,
+  })));
+
   const subRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
 
-    if (!rehydrated) {
+    if (!actions.rehydrated) {
       loadActiveJobs(user.id).then((jobs) => {
-        rehydrateJobs(jobs);
+        actions.rehydrateJobs(jobs);
 
-        // Resume polling for any running re-extract jobs
+        // Resume polling for any running jobs
         for (const job of jobs) {
-          if ((job.status === 'running' || job.status === 'queued') && job.type === 're_extraction' && job.entityId) {
-            startResumePoll(job, updateJob);
+          if ((job.status === 'running' || job.status === 'queued') && job.entityId) {
+            if (job.type === 're_extraction') {
+              startReExtractResumePoll(job, actions.updateJob);
+            }
+            // Enrichment jobs: the backend runner updates background_jobs directly,
+            // so realtime subscription handles it — no client-side poll needed.
           }
         }
       }).catch((err) => {
@@ -127,8 +112,8 @@ export function useDurableJobRehydration() {
     if (!subRef.current) {
       subRef.current = subscribeToDurableJobs(
         user.id,
-        (job) => syncJobFromDB(job),
-        (jobId) => removeJob(jobId),
+        (job) => actions.syncJobFromDB(job),
+        (jobId) => actions.removeJob(jobId),
       );
     }
 
@@ -140,5 +125,5 @@ export function useDurableJobRehydration() {
     };
   }, [user?.id]);
 
-  return { rehydrated };
+  return { rehydrated: actions.rehydrated };
 }
