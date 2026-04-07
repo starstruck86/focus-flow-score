@@ -59,8 +59,11 @@ export interface BackgroundJob {
   meta?: Record<string, unknown>;
 }
 
-/** Auto-remove delay for completed/failed jobs (ms) */
-const AUTO_REMOVE_DELAY_MS = 8_000;
+/**
+ * Auto-remove is DISABLED. Terminal jobs stay in the UI cache
+ * for the lifetime of the session. The DB rehydration window (30 min)
+ * controls what shows after refresh. Users can dismiss manually.
+ */
 
 const TERMINAL_STATUSES: JobStatus[] = ['completed', 'failed', 'cancelled'];
 
