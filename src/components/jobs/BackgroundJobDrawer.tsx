@@ -117,7 +117,7 @@ function JobRow({ job }: { job: BackgroundJob }) {
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={(e) => { e.stopPropagation(); updateJob(job.id, { status: 'cancelled' }); }}
+            onClick={(e) => { e.stopPropagation(); removeJob(job.id); }}
             title="Cancel"
           >
             <Ban className="h-3.5 w-3.5" />
@@ -129,7 +129,7 @@ function JobRow({ job }: { job: BackgroundJob }) {
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              onClick={(e) => { e.stopPropagation(); updateJob(job.id, { status: 'queued', error: undefined, __retry: true } as any); }}
+              onClick={(e) => { e.stopPropagation(); retryJob(job.id); }}
               title="Retry"
             >
               <RefreshCw className="h-3.5 w-3.5" />
