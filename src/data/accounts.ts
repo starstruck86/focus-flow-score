@@ -80,6 +80,10 @@ export async function updateAccount(id: string, updates: AccountUpdate): Promise
 }
 
 export async function deleteAccount(id: string): Promise<void> {
-  const { error } = await supabase.from('accounts').delete().eq('id', id);
+  console.log('[AccountDelete] Soft-deleting account:', id);
+  const { error } = await supabase
+    .from('accounts')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) throw error;
 }
