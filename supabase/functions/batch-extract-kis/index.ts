@@ -2117,6 +2117,17 @@ Deno.serve(async (req) => {
       ...(successAudit ? { extraction_audit_summary: successAudit } : {}),
     });
 
+    // Durable run + reconciliation (SUCCESS path)
+    await recordRunAndReconcile(supabase, {
+      resourceId, userId: resource.user_id, startedAt, durationMs,
+      status: 'completed', rawCount: rawItems.length, validatedCount: validated.length,
+      savedCount: rows.length, duplicatesSkipped: validated.length - deduped.length,
+      model: 'google/gemini-2.5-flash', strategy,
+      summary: `Success: ${rows.length} KIs inserted, ${canonicalKiCount} total on attempt ${attemptNumber}`,
+      contentLength: resource.content.length, resourceType: resource.resource_type,
+      isLesson, enrichmentStatus: 'extracted',
+    });
+
     logTelemetry({
       resource_id: resourceId, title: resource.title, content_length: resource.content.length,
       is_structured_lesson: isLesson, ki_count: canonicalKiCount, min_ki_floor: minKiFloor,
