@@ -3,7 +3,7 @@
  * Persists status to the resources table so it survives refresh/navigation.
  * Feeds progress into the global BackgroundJobs store for real-time UI.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAllResources } from '@/hooks/useResources';
@@ -28,7 +28,6 @@ interface DurableReExtractState {
   last_extraction_started_at: string | null;
   last_extraction_summary: string | null;
   next_retry_at: string | null;
-  // Batch fields for determinate progress
   extraction_batches_completed?: number | null;
   extraction_batch_total?: number | null;
 }
@@ -75,6 +74,7 @@ export function useReExtractResource() {
   const { data: resources = [] } = useAllResources();
   const [localOverrides, setLocalOverrides] = useState<Record<string, ReExtractStatus>>({});
   const [resultMap, setResultMap] = useState<Record<string, ReExtractResult>>({});
+  const activePolls = useRef(new Set<string>());
 
   // Background jobs store
   const addJob = useBackgroundJobs((s) => s.addJob);
@@ -102,7 +102,14 @@ export function useReExtractResource() {
     let latest: DurableReExtractState | null = null;
     let pollCount = 0;
 
+    console.info(`[RE-EXTRACT JOB] poll started for "${jobId}"`);
+
     while (Date.now() < deadline) {
+      if (!activePolls.current.has(jobId)) {
+        console.info(`[RE-EXTRACT JOB] poll cancelled for "${jobId}"`);
+        return { terminal: null, latest };
+      }
+
       latest = await readDurableState(resourceId);
       pollCount++;
 
@@ -120,7 +127,6 @@ export function useReExtractResource() {
           substatus: 'extracting',
         });
       } else {
-        // Non-batched: indeterminate with durable status
         const durableStatus = latest.active_job_status || latest.last_extraction_run_status;
         const stepLabel = durableStatus === 'running' ? 'Running extraction…'
           : latest.extraction_retry_eligible ? 'Waiting for retry…'
@@ -147,16 +153,19 @@ export function useReExtractResource() {
       }
 
       if (latest.active_job_status === 'succeeded' || latest.last_extraction_run_status === 'completed') {
+        console.info(`[RE-EXTRACT JOB] poll resolved: succeeded for "${jobId}" after ${pollCount} polls`);
         return { terminal: 'succeeded', latest };
       }
 
       if (latest.active_job_status === 'failed' || latest.last_extraction_run_status === 'failed') {
+        console.info(`[RE-EXTRACT JOB] poll resolved: failed for "${jobId}" after ${pollCount} polls`);
         return { terminal: 'failed', latest };
       }
 
       await sleep(POLL_INTERVAL_MS);
     }
 
+    console.warn(`[RE-EXTRACT JOB] poll timed out for "${jobId}" after ${pollCount} polls`);
     return { terminal: null, latest };
   }, [readDurableState, updateJob]);
 
@@ -182,13 +191,22 @@ export function useReExtractResource() {
   };
 
   const reExtract = useCallback(async (resourceId: string, resourceTitle: string) => {
+    const jobId = `re-extract-${resourceId}`;
+
+    // Guard: don't start a duplicate extraction for the same resource
+    if (activePolls.current.has(jobId)) {
+      console.warn(`[RE-EXTRACT JOB] duplicate blocked for "${jobId}"`);
+      toast.info(`Re-extraction already in progress for "${resourceTitle}"`);
+      return;
+    }
+
     const existing = resources.find(r => r.id === resourceId) as any;
     const beforeKiCount = existing?.current_resource_ki_count ?? 0;
     const baselineAttemptCount = existing?.extraction_attempt_count ?? 0;
     const startedAt = new Date().toISOString();
-    const jobId = `re-extract-${resourceId}`;
 
     // Register in global background jobs
+    console.info(`[RE-EXTRACT JOB] starting for "${resourceTitle}" (${resourceId})`);
     addJob({
       id: jobId,
       type: 're_extraction',
@@ -200,6 +218,7 @@ export function useReExtractResource() {
       entityId: resourceId,
     });
 
+    activePolls.current.add(jobId);
     setLocalOverrides(prev => ({ ...prev, [resourceId]: 'running' }));
     await persistStatus(resourceId, 'running');
 
@@ -263,7 +282,6 @@ export function useReExtractResource() {
       setLocalOverrides(prev => ({ ...prev, [resourceId]: 'succeeded' }));
       await persistStatus(resourceId, 'succeeded');
 
-      // Update background job to completed
       updateJob(jobId, {
         status: 'completed',
         progressMode: 'determinate',
@@ -286,6 +304,7 @@ export function useReExtractResource() {
       setLocalOverrides(prev => ({ ...prev, [resourceId]: 'failed' }));
       await persistStatus(resourceId, 'failed');
 
+      console.error(`[RE-EXTRACT JOB] failed for "${resourceTitle}":`, err.message);
       updateJob(jobId, {
         status: 'failed',
         error: err.message,
@@ -294,6 +313,8 @@ export function useReExtractResource() {
       });
 
       toast.error(`Re-extract failed for "${resourceTitle}": ${err.message}`);
+    } finally {
+      activePolls.current.delete(jobId);
     }
   }, [addJob, updateJob, pollForTerminalState, qc, resources]);
 

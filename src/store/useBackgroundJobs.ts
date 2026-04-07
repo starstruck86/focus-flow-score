@@ -60,6 +60,8 @@ export interface BackgroundJob {
 /** Auto-remove delay for completed/failed jobs (ms) */
 const AUTO_REMOVE_DELAY_MS = 8_000;
 
+const TERMINAL_STATUSES: JobStatus[] = ['completed', 'failed', 'cancelled'];
+
 interface BackgroundJobsState {
   jobs: BackgroundJob[];
   drawerOpen: boolean;
@@ -90,22 +92,56 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
       clearTimeout(autoRemoveTimers.get(job.id)!);
       autoRemoveTimers.delete(job.id);
     }
+
+    // Guard: don't re-add a job that is already terminal
+    const existing = get().jobs.find(j => j.id === job.id);
+    if (existing && TERMINAL_STATUSES.includes(existing.status) && !TERMINAL_STATUSES.includes(job.status)) {
+      // Allow overriding terminal with a new run
+      console.info(`[BACKGROUND JOBS] Re-adding job "${job.id}" (was ${existing.status}, now ${job.status})`);
+    }
+
+    console.info(`[BACKGROUND JOBS] addJob: "${job.id}" type=${job.type} status=${job.status}`);
+
     set((s) => ({
       jobs: [{ ...job, createdAt: now, updatedAt: now }, ...s.jobs.filter(j => j.id !== job.id)],
     }));
   },
 
   updateJob: (id, patch) => {
+    const current = get().jobs.find(j => j.id === id);
+    if (!current) {
+      console.warn(`[BACKGROUND JOBS] updateJob: job "${id}" not found, ignoring`);
+      return;
+    }
+
+    // Guard: don't let a late update overwrite a terminal state with a non-terminal state
+    if (TERMINAL_STATUSES.includes(current.status) && patch.status && !TERMINAL_STATUSES.includes(patch.status)) {
+      console.warn(`[BACKGROUND JOBS] updateJob: blocked non-terminal update on terminal job "${id}" (${current.status} → ${patch.status})`);
+      return;
+    }
+
+    // Guard: don't let progress percent go backward
+    if (patch.progressPercent != null && current.progressPercent != null && patch.progressPercent < current.progressPercent) {
+      console.warn(`[BACKGROUND JOBS] updateJob: progress regression blocked for "${id}" (${current.progressPercent}% → ${patch.progressPercent}%)`);
+      patch = { ...patch, progressPercent: current.progressPercent };
+    }
+
+    if (patch.status && patch.status !== current.status) {
+      console.info(`[BACKGROUND JOBS] updateJob: "${id}" status ${current.status} → ${patch.status}`);
+    }
+
     set((s) => ({
       jobs: s.jobs.map((j) =>
         j.id === id ? { ...j, ...patch, updatedAt: Date.now() } : j,
       ),
     }));
+
     // Schedule auto-removal for terminal states
-    const terminalStatuses: JobStatus[] = ['completed', 'failed', 'cancelled'];
-    if (patch.status && terminalStatuses.includes(patch.status)) {
+    if (patch.status && TERMINAL_STATUSES.includes(patch.status)) {
       if (!autoRemoveTimers.has(id)) {
+        console.info(`[BACKGROUND JOBS] auto-dismiss scheduled for "${id}" in ${AUTO_REMOVE_DELAY_MS}ms`);
         const timer = setTimeout(() => {
+          console.info(`[BACKGROUND JOBS] auto-dismiss: removing "${id}"`);
           set((s) => ({ jobs: s.jobs.filter(j => j.id !== id) }));
           autoRemoveTimers.delete(id);
         }, AUTO_REMOVE_DELAY_MS);
@@ -119,6 +155,7 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
       clearTimeout(autoRemoveTimers.get(id)!);
       autoRemoveTimers.delete(id);
     }
+    console.info(`[BACKGROUND JOBS] removeJob: "${id}"`);
     set((s) => ({ jobs: s.jobs.filter((j) => j.id !== id) }));
   },
 
