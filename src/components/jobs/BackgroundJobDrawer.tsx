@@ -124,15 +124,26 @@ function JobRow({ job }: { job: BackgroundJob }) {
           </Button>
         )}
         {job.status === 'failed' && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={(e) => { e.stopPropagation(); updateJob(job.id, { status: 'queued', error: undefined }); }}
-            title="Retry"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={(e) => { e.stopPropagation(); updateJob(job.id, { status: 'queued', error: undefined, __retry: true } as any); }}
+              title="Retry"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={(e) => { e.stopPropagation(); removeJob(job.id); }}
+              title="Dismiss"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </>
         )}
         {(job.status === 'completed' || job.status === 'cancelled') && (
           <Button

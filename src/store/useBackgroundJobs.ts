@@ -115,9 +115,19 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
     }
 
     // Guard: don't let a late update overwrite a terminal state with a non-terminal state
+    // Exception: allow explicit retry (failed → queued/running) via meta flag
     if (TERMINAL_STATUSES.includes(current.status) && patch.status && !TERMINAL_STATUSES.includes(patch.status)) {
-      console.warn(`[BACKGROUND JOBS] updateJob: blocked non-terminal update on terminal job "${id}" (${current.status} → ${patch.status})`);
-      return;
+      if ((patch as any).__retry) {
+        console.info(`[BACKGROUND JOBS] updateJob: retry allowed for "${id}" (${current.status} → ${patch.status})`);
+        // Clear the auto-remove timer since the job is being retried
+        if (autoRemoveTimers.has(id)) {
+          clearTimeout(autoRemoveTimers.get(id)!);
+          autoRemoveTimers.delete(id);
+        }
+      } else {
+        console.warn(`[BACKGROUND JOBS] updateJob: blocked non-terminal update on terminal job "${id}" (${current.status} → ${patch.status})`);
+        return;
+      }
     }
 
     // Guard: don't let progress percent go backward
