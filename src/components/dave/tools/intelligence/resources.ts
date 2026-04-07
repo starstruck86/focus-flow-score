@@ -29,7 +29,7 @@ export async function lookupTranscript(ctx: ToolContext, params: { accountName: 
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
-  const { data: accts } = await supabase.from('accounts').select('id, name').eq('user_id', userId).is('deleted_at', null).ilike('name', `%${params.accountName}%`).limit(1);
+  const { data: accts } = await supabase.from('active_accounts' as any).select('id, name').eq('user_id', userId).ilike('name', `%${params.accountName}%`).limit(1);
   if (!accts?.length) return `Account "${params.accountName}" not found`;
 
   const { data: transcripts } = await supabase.from('call_transcripts').select('title, call_date, call_type, summary, participants, duration_minutes').eq('account_id', accts[0].id).order('call_date', { ascending: false }).limit(5);

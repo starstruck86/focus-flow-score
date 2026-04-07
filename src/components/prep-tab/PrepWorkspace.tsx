@@ -66,10 +66,9 @@ export function PrepWorkspace() {
     enabled: !!user,
     queryFn: async () => {
       const { data } = await supabase
-        .from('accounts')
+        .from('active_accounts' as any)
         .select('id, name')
         .eq('user_id', user!.id)
-        .is('deleted_at', null)
         .order('name');
       return data || [];
     },

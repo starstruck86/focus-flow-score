@@ -150,7 +150,7 @@ export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEdi
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts-select', user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('accounts').select('id, name, industry').is('deleted_at', null).order('name');
+      const { data } = await supabase.from('active_accounts' as any).select('id, name, industry').order('name');
       return data || [];
     },
     enabled: !!user,

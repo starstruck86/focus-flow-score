@@ -30,7 +30,7 @@ export function useAccountHealthPulse(motionFilter?: 'new-logo' | 'renewal') {
     queryFn: async (): Promise<AccountHealthPulse[]> => {
       if (!user) return [];
       // Fetch accounts + contacts + recent digest items in parallel (explicit user_id for defense-in-depth)
-      let accountsQuery = supabase.from('accounts').select('id, name, icp_fit_score, timing_score, last_touch_date, trigger_events, marketing_platform_detected, last_enriched_at, tier, motion').eq('user_id', user.id).is('deleted_at', null);
+      let accountsQuery = supabase.from('active_accounts' as any).select('id, name, icp_fit_score, timing_score, last_touch_date, trigger_events, marketing_platform_detected, last_enriched_at, tier, motion').eq('user_id', user.id);
       if (motionFilter) {
         accountsQuery = accountsQuery.eq('motion', motionFilter);
       }
