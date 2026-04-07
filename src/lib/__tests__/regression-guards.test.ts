@@ -48,6 +48,17 @@ describe('isWarningEligible — regression lock', () => {
     expect(isWarningEligible({ status: null })).toBe(true);
     expect(isWarningEligible({ accountStatus: null })).toBe(true);
   });
+
+  it('soft-deleted entity with active-looking status is still excluded', () => {
+    expect(isWarningEligible({ status: 'active', deleted_at: '2025-06-01' })).toBe(false);
+    expect(isWarningEligible({ status: 'open', deletedAt: '2025-06-01' })).toBe(false);
+  });
+
+  it('handles whitespace and case variants', () => {
+    expect(isWarningEligible({ status: ' Churned ' })).toBe(false);
+    expect(isWarningEligible({ status: 'INACTIVE' })).toBe(false);
+    expect(isWarningEligible({ accountStatus: ' Dead ' })).toBe(false);
+  });
 });
 
 describe('filterWarningEligible — batch helper', () => {
@@ -61,6 +72,20 @@ describe('filterWarningEligible — batch helper', () => {
     ];
     const result = filterWarningEligible(items);
     expect(result.map(r => r.name)).toEqual(['Good Deal', 'Open Deal']);
+  });
+
+  it('returns empty array when all items are ineligible', () => {
+    const items = [
+      { status: 'closed-lost' },
+      { accountStatus: 'churned' },
+      { deleted_at: '2025-01-01' },
+    ];
+    expect(filterWarningEligible(items)).toEqual([]);
+  });
+
+  it('returns all items when all are eligible', () => {
+    const items = [{ status: 'active' }, { status: 'open' }, {}];
+    expect(filterWarningEligible(items)).toHaveLength(3);
   });
 });
 
