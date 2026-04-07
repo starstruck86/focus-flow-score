@@ -37,6 +37,7 @@ export function createAccountExecutionTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('id, name')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .ilike('name', params.accountName)
         .limit(1);
       const account = accounts?.[0];
@@ -60,6 +61,7 @@ export function createAccountExecutionTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('id, name')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .ilike('name', params.accountName)
         .limit(1);
       const account = accounts?.[0];
