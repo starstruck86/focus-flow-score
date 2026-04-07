@@ -15,6 +15,7 @@ import { OfflineBanner } from "@/components/OfflineBanner";
 import { ReviewModeBanner } from "@/components/ReviewModeBanner";
 import { BackgroundJobIndicator } from "@/components/jobs/BackgroundJobIndicator";
 import { BackgroundJobDrawer } from "@/components/jobs/BackgroundJobDrawer";
+import { EnrichmentJobBridge } from "@/components/jobs/EnrichmentJobBridge";
 import Dashboard from "./pages/Dashboard";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
 import Renewals from "./pages/Renewals";
