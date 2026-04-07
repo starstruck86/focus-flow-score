@@ -17,7 +17,7 @@ export interface DurableEnrichmentParams {
 
 export async function startDurableEnrichment(params: DurableEnrichmentParams): Promise<string> {
   const { userId, resourceIds, mode, title } = params;
-  const jobId = `enrich-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const jobId = crypto.randomUUID();
   const modeLabel = mode === 'deep_enrich' ? 'Deep Enrich' : 'Re-enrich';
   const jobTitle = title || `${modeLabel}: ${resourceIds.length} resources`;
 
