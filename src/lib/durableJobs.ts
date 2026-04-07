@@ -159,7 +159,7 @@ export async function loadActiveJobs(userId: string): Promise<BackgroundJob[]> {
     .order('completed_at', { ascending: false })
     .limit(20);
 
-  const allRows = [...(activeRows || []), ...(recentRows || [])] as DurableJobRow[];
+  const allRows = [...(activeRows || []), ...(recentRows || [])] as unknown as DurableJobRow[];
   const jobs = allRows.map(rowToJob);
 
   console.info(`[DURABLE JOBS] rehydrated ${jobs.length} jobs (${activeRows?.length ?? 0} active, ${recentRows?.length ?? 0} recent terminal)`);
