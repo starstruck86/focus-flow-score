@@ -311,11 +311,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2">
-        <div className="flex items-start gap-4">
-          <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-4 flex-wrap">
+          <div className="flex-1 min-w-0 basis-[200px]">
             <GlobalWeekStrip />
           </div>
-          <ActivityRings />
+          <div className="shrink-0">
+            <ActivityRings />
+          </div>
         </div>
         <DayTimeline />
       </div>
