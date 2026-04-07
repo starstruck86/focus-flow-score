@@ -25,18 +25,26 @@ type AccountUpdate = Database['public']['Tables']['accounts']['Update'];
 
 export type { AccountRow, AccountInsert, AccountUpdate };
 
+// ─── View helper ───────────────────────────────────────────────────
+// The active_accounts view is a DB-level filter (WHERE deleted_at IS NULL).
+// Since it's not in the generated types, we cast through the base table type.
+
+function fromActiveAccounts() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return supabase.from('active_accounts' as any) as unknown as ReturnType<typeof supabase.from<'accounts'>>;
+}
+
 // ─── Core query builders ───────────────────────────────────────────
 
 /**
- * Returns a Supabase query builder for accounts with soft-delete
- * filtering already applied. Use this as the base for ALL user-facing
- * account queries.
+ * Returns a Supabase query builder for active (non-deleted) accounts.
+ * Backed by the active_accounts DB view — soft-delete is enforced at the DB layer.
  *
  * Usage:
  *   const { data } = await activeAccounts().select('id, name').eq('user_id', uid);
  */
 export function activeAccounts() {
-  return supabase.from('active_accounts' as any).select();
+  return fromActiveAccounts().select();
 }
 
 /**
