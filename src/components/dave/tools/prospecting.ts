@@ -13,7 +13,7 @@ export function createProspectingTools(ctx: ToolContext): ToolMap {
 
       const [accountsRes, contactsRes, journalRes] = await Promise.all([
         supabase.from('accounts').select('id, name, created_at, tier, icp_fit_score, outreach_status, account_status')
-          .eq('user_id', userId).order('created_at', { ascending: false }),
+          .eq('user_id', userId).is('deleted_at', null).order('created_at', { ascending: false }),
         supabase.from('contacts').select('id, created_at').eq('user_id', userId),
         supabase.from('daily_journal_entries').select('date, prospects_added, conversations')
           .eq('user_id', userId).order('date', { ascending: false }).limit(7),
