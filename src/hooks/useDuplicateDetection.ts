@@ -182,7 +182,9 @@ export function useDuplicateDetection() {
       await supabase.from('account_contacts').update({ account_id: keepId }).eq('account_id', removeId);
       await supabase.from('call_transcripts').update({ account_id: keepId }).eq('account_id', removeId);
       await supabase.from('resources').update({ account_id: keepId }).eq('account_id', removeId);
-      await supabase.from('accounts').delete().eq('id', removeId);
+      // Soft-delete instead of hard delete for durability
+      console.log('[DuplicateMerge] Soft-deleting account:', removeId);
+      await supabase.from('accounts').update({ deleted_at: new Date().toISOString() }).eq('id', removeId);
       const store = useStore.getState();
       if (typeof store.deleteAccount === 'function') store.deleteAccount(removeId);
     }
