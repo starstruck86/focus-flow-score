@@ -76,7 +76,7 @@ interface BackgroundJobsState {
 }
 
 interface BackgroundJobsActions {
-  /** Add a job to the UI cache AND persist to DB. Requires userId for DB writes. */
+  /** Add a job to the UI cache. If userId is provided, also persists to DB. Omit userId when the DB row was already created externally (e.g. by startDurableEnrichment). */
   addJob: (job: Omit<BackgroundJob, 'createdAt' | 'updatedAt'> & { userId?: string }) => void;
   /** Update a job in the UI cache AND persist progress to DB. */
   updateJob: (id: string, patch: Partial<Omit<BackgroundJob, 'id' | 'createdAt'>>) => void;
