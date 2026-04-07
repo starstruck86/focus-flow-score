@@ -1,7 +1,13 @@
 /**
- * Hook to trigger single-resource KI re-extraction via the stabilized edge function.
- * Persists status to the resources table so it survives refresh/navigation.
- * Feeds progress into the global BackgroundJobs store for real-time UI.
+ * useReExtractResource — triggers single-resource KI re-extraction.
+ *
+ * DURABILITY CONTRACT:
+ * - The edge function (batch-extract-kis) writes terminal status (completed/failed)
+ *   directly to `background_jobs`. The server owns correctness.
+ * - Client polling here is UX-ONLY: it provides live progress updates, toasts, and
+ *   local status overrides for immediate feedback. If the browser closes mid-run,
+ *   the job still completes server-side and rehydrates on next load.
+ * - The `updateJob` calls during polling are idempotent with what the server writes.
  */
 import { useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
