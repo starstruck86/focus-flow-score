@@ -1,15 +1,17 @@
 /**
  * EnrichmentJobBridge — syncs useEnrichmentJobStore state into the global
  * useBackgroundJobs store so the unified indicator/drawer shows enrichment progress.
- * Mount once in App.tsx alongside the other global components.
+ * Now persists to the durable background_jobs table via userId.
  */
 import { useEffect, useRef } from 'react';
 import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
 import { useBackgroundJobs } from '@/store/useBackgroundJobs';
+import { useAuth } from '@/contexts/AuthContext';
 
 const JOB_ID = 'enrichment-batch';
 
 export function EnrichmentJobBridge() {
+  const { user } = useAuth();
   const enrichState = useEnrichmentJobStore((s) => s.state);
   const addJob = useBackgroundJobs((s) => s.addJob);
   const updateJob = useBackgroundJobs((s) => s.updateJob);
@@ -35,6 +37,7 @@ export function EnrichmentJobBridge() {
           progressPercent: totalItems > 0 ? Math.round((processedCount / totalItems) * 100) : 0,
           stepLabel: `Batch ${currentBatch} of ${totalBatches}`,
           substatus: 'enriching',
+          userId: user?.id,
         });
         bridged.current = true;
       }
