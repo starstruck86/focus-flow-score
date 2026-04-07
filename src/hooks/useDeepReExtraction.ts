@@ -985,7 +985,7 @@ export function useDeepReExtraction() {
     });
 
     // Build the queue item with resume info baked in
-    const isBatched = resource.content_length > LARGE_DOC_THRESHOLD;
+    const isBatched = true; // All re-extractions use jobMode
     const item: ReExtractQueueItem = {
       resource_id: resource.resource_id,
       title: resource.title,
