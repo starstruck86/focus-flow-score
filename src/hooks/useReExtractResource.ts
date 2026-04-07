@@ -2,10 +2,11 @@
  * Hook to trigger single-resource KI re-extraction via the stabilized edge function.
  * Persists status to the resources table so it survives refresh/navigation.
  */
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAllResources } from '@/hooks/useResources';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { toast } from 'sonner';
 
 export type ReExtractStatus = 'idle' | 'running' | 'succeeded' | 'failed';
@@ -14,6 +15,24 @@ export interface ReExtractResult {
   kis: number;
   preservedUserEdited: number;
   error?: string;
+}
+
+interface DurableReExtractState {
+  active_job_status: string | null;
+  current_resource_ki_count: number | null;
+  extraction_attempt_count: number | null;
+  extraction_retry_eligible: boolean | null;
+  last_extraction_run_status: string | null;
+  last_extraction_started_at: string | null;
+  last_extraction_summary: string | null;
+  next_retry_at: string | null;
+}
+
+const POLL_INTERVAL_MS = 2500;
+const POLL_TIMEOUT_MS = 4 * 60_000;
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /** Returns a status that accounts for staleness — if resource was updated after re_extract_at, treat succeeded as stale */
@@ -55,6 +74,56 @@ export function useReExtractResource() {
   const [localOverrides, setLocalOverrides] = useState<Record<string, ReExtractStatus>>({});
   const [resultMap, setResultMap] = useState<Record<string, ReExtractResult>>({});
 
+  const readDurableState = useCallback(async (resourceId: string): Promise<DurableReExtractState> => {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('active_job_status, current_resource_ki_count, extraction_attempt_count, extraction_retry_eligible, last_extraction_run_status, last_extraction_started_at, last_extraction_summary, next_retry_at')
+      .eq('id', resourceId)
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data as DurableReExtractState;
+  }, []);
+
+  const pollForTerminalState = useCallback(async (
+    resourceId: string,
+    baselineAttemptCount: number,
+    startedAt: string,
+  ): Promise<{ terminal: 'succeeded' | 'failed' | null; latest: DurableReExtractState | null }> => {
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+    const startedAtMs = new Date(startedAt).getTime() - 1000;
+    let latest: DurableReExtractState | null = null;
+
+    while (Date.now() < deadline) {
+      latest = await readDurableState(resourceId);
+
+      const hasFreshRun = (latest.extraction_attempt_count ?? 0) > baselineAttemptCount
+        || (!!latest.last_extraction_started_at && new Date(latest.last_extraction_started_at).getTime() >= startedAtMs);
+
+      if (!hasFreshRun) {
+        await sleep(POLL_INTERVAL_MS);
+        continue;
+      }
+
+      if (latest.extraction_retry_eligible) {
+        await sleep(POLL_INTERVAL_MS);
+        continue;
+      }
+
+      if (latest.active_job_status === 'succeeded' || latest.last_extraction_run_status === 'completed') {
+        return { terminal: 'succeeded', latest };
+      }
+
+      if (latest.active_job_status === 'failed' || latest.last_extraction_run_status === 'failed') {
+        return { terminal: 'failed', latest };
+      }
+
+      await sleep(POLL_INTERVAL_MS);
+    }
+
+    return { terminal: null, latest };
+  }, [readDurableState]);
+
   const getStatus = useCallback((resourceId: string): ReExtractStatus => {
     // Prefer local in-flight override, then fall back to persisted DB value
     if (localOverrides[resourceId]) return localOverrides[resourceId];
@@ -78,27 +147,67 @@ export function useReExtractResource() {
   };
 
   const reExtract = useCallback(async (resourceId: string, resourceTitle: string) => {
+    const existing = resources.find(r => r.id === resourceId) as any;
+    const beforeKiCount = existing?.current_resource_ki_count ?? 0;
+    const baselineAttemptCount = existing?.extraction_attempt_count ?? 0;
+    const startedAt = new Date().toISOString();
+
     setLocalOverrides(prev => ({ ...prev, [resourceId]: 'running' }));
     await persistStatus(resourceId, 'running');
 
     try {
-      const { data, error } = await supabase.functions.invoke('batch-extract-kis', {
-        body: { resourceId },
-      });
+      let payload: any = null;
+      let immediateError: string | null = null;
 
-      if (error) throw new Error(error.message || 'Edge function error');
-      if (data?.error) throw new Error(data.error);
+      try {
+        const response = await authenticatedFetch({
+          functionName: 'batch-extract-kis',
+          body: { resourceId },
+          componentName: 'useReExtractResource',
+          timeoutMs: 180_000,
+          retry: false,
+        });
 
+        payload = await response.json().catch(() => null);
+
+        if (!response.ok && response.status < 500 && !payload?.retryEligible) {
+          throw new Error(payload?.error || `HTTP ${response.status}`);
+        }
+      } catch (err: any) {
+        immediateError = err.message || 'Edge function error';
+      }
+
+      const terminalState = await pollForTerminalState(resourceId, baselineAttemptCount, startedAt);
+
+      if (terminalState.terminal === 'failed') {
+        throw new Error(
+          terminalState.latest?.last_extraction_summary
+            || immediateError
+            || payload?.error
+            || 'Re-extraction failed'
+        );
+      }
+
+      if (terminalState.terminal !== 'succeeded') {
+        throw new Error(immediateError || payload?.error || 'Timed out waiting for re-extraction to finish');
+      }
+
+      const afterKiCount = terminalState.latest?.current_resource_ki_count ?? beforeKiCount;
       const result: ReExtractResult = {
-        kis: data?.kis ?? 0,
-        preservedUserEdited: data?.preservedUserEdited ?? 0,
+        kis: Math.max(0, afterKiCount - beforeKiCount),
+        preservedUserEdited: payload?.preservedUserEdited ?? 0,
+        error: payload?.error,
       };
 
       setResultMap(prev => ({ ...prev, [resourceId]: result }));
       setLocalOverrides(prev => ({ ...prev, [resourceId]: 'succeeded' }));
       await persistStatus(resourceId, 'succeeded');
 
-      toast.success(`Re-extracted "${resourceTitle}": ${result.kis} KIs`);
+      if (result.kis > 0) {
+        toast.success(`Re-extracted "${resourceTitle}": ${result.kis} KIs`);
+      } else {
+        toast.success(`Re-extraction completed for "${resourceTitle}"`);
+      }
 
       qc.invalidateQueries({ queryKey: ['knowledge-items'] });
       qc.invalidateQueries({ queryKey: ['resources'] });
@@ -109,7 +218,7 @@ export function useReExtractResource() {
       await persistStatus(resourceId, 'failed');
       toast.error(`Re-extract failed for "${resourceTitle}": ${err.message}`);
     }
-  }, [qc]);
+  }, [pollForTerminalState, qc, resources]);
 
   return { reExtract, getStatus, getResult };
 }
