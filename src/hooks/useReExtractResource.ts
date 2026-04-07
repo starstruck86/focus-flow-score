@@ -318,7 +318,7 @@ export function useReExtractResource() {
 
       toast.error(`Re-extract failed for "${resourceTitle}": ${err.message}`);
     } finally {
-      activePolls.current.delete(jobId);
+      activePolls.current.delete(pollKey);
     }
   }, [addJob, updateJob, pollForTerminalState, qc, resources]);
 
