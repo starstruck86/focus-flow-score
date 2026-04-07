@@ -36,7 +36,7 @@ export type { AccountRow, AccountInsert, AccountUpdate };
  *   const { data } = await activeAccounts().select('id, name').eq('user_id', uid);
  */
 export function activeAccounts() {
-  return supabase.from('accounts').select().is('deleted_at', null);
+  return supabase.from('active_accounts' as any).select();
 }
 
 /**
@@ -58,10 +58,9 @@ export async function getAccounts(): Promise<AccountRow[]> {
 
 export async function getAccountById(id: string): Promise<AccountRow | null> {
   const { data, error } = await supabase
-    .from('accounts')
+    .from('active_accounts' as any)
     .select('*')
     .eq('id', id)
-    .is('deleted_at', null)
     .maybeSingle();
   if (error) throw error;
   return data;
@@ -69,30 +68,27 @@ export async function getAccountById(id: string): Promise<AccountRow | null> {
 
 export async function findAccountBySalesforceId(sfId: string): Promise<{ id: string } | null> {
   const { data } = await supabase
-    .from('accounts')
+    .from('active_accounts' as any)
     .select('id')
     .eq('salesforce_id', sfId)
-    .is('deleted_at', null)
     .maybeSingle();
   return data;
 }
 
 export async function findAccountByWebsite(domain: string): Promise<{ id: string } | null> {
   const { data } = await supabase
-    .from('accounts')
+    .from('active_accounts' as any)
     .select('id, website')
     .ilike('website', `%${domain}%`)
-    .is('deleted_at', null)
     .maybeSingle();
   return data;
 }
 
 export async function findAccountByName(name: string): Promise<{ id: string } | null> {
   const { data } = await supabase
-    .from('accounts')
+    .from('active_accounts' as any)
     .select('id')
     .ilike('name', name.trim())
-    .is('deleted_at', null)
     .maybeSingle();
   return data;
 }
@@ -110,10 +106,9 @@ export async function resolveAccountByName(
   selectFields = 'id, name'
 ): Promise<Record<string, any> | null> {
   const { data } = await supabase
-    .from('accounts')
+    .from('active_accounts' as any)
     .select(selectFields)
     .eq('user_id', userId)
-    .is('deleted_at', null)
     .ilike('name', `%${accountName}%`)
     .limit(1);
   return data?.[0] ?? null;
