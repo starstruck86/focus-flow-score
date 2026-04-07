@@ -7,6 +7,8 @@ import { Zap, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } f
 import { BulkIngestionPanel } from './BulkIngestionPanel';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
+import { startDurableEnrichment } from '@/lib/startDurableEnrichment';
+import { useBackgroundJobs } from '@/store/useBackgroundJobs';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getEligibleResources,
@@ -114,13 +116,16 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
     || processingBreakdown.MANUAL_REQUIRED.length > 0
     || processingBreakdown.METADATA_ONLY.length > 0;
 
+  const addJob = useBackgroundJobs((s) => s.addJob);
+
   const handleStart = useCallback(
-    (
+    async (
       requestedItems: Array<{ resourceId?: string; url: string; title: string; enrichMode?: EnrichMode }>,
       opts?: { retryFailedOnly?: boolean },
     ) => {
       if (!user) return;
 
+      // For retry-failed, still use the client store for the local modal UX
       if (opts?.retryFailedOnly) {
         store.start(user.id, requestedItems, opts);
         return;
@@ -142,10 +147,40 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
         return;
       }
 
-      store.setMode(effectiveMode);
-      store.start(user.id, toEligibleResourceItems(selectedResources, effectiveMode), opts);
+      // Extract resource IDs for durable backend execution
+      const resourceIds = selectedResources.map(r => r.id).filter(Boolean);
+
+      if (resourceIds.length > 0) {
+        // Create durable job and dispatch to backend
+        const jobId = await startDurableEnrichment({
+          userId: user.id,
+          resourceIds,
+          mode: effectiveMode,
+        });
+
+        // Also add to local store for immediate UI feedback
+        addJob({
+          id: jobId,
+          type: effectiveMode === 'deep_enrich' ? 'deep_enrich' : 're_enrichment',
+          title: `${effectiveMode === 'deep_enrich' ? 'Deep Enrich' : 'Re-enrich'}: ${resourceIds.length} resources`,
+          status: 'queued',
+          progressMode: 'determinate',
+          progress: { current: 0, total: resourceIds.length },
+          progressPercent: 0,
+          stepLabel: `Queued: ${resourceIds.length} resources`,
+          substatus: 'enriching',
+          userId: user.id,
+        });
+
+        // Close the modal — work continues server-side
+        onOpenChange(false);
+      } else {
+        // Fallback to client-side for URL-based ingestion (no resource IDs)
+        store.setMode(effectiveMode);
+        store.start(user.id, toEligibleResourceItems(selectedResources, effectiveMode), opts);
+      }
     },
-    [store, effectiveMode, scopedResources, sourceItems.length, state.batchSize, user],
+    [store, addJob, effectiveMode, scopedResources, sourceItems.length, state.batchSize, user, onOpenChange],
   );
 
   const handleClose = useCallback(() => {
