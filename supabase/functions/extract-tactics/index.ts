@@ -2125,6 +2125,41 @@ Deno.serve(async (req) => {
           // Update resource-level batch progress
           await supabaseAdmin.from('resources').update(resourceUpdate).eq('id', resourceId);
           console.log(`[extract-tactics] Batch ${batchIndex + 1}/${batchTotal} progress + ledger saved`);
+
+          // ── SERVER-SIDE TERMINAL RESOLUTION for background_jobs ──
+          const isTerminalBatch = !hasIncompleteBatches;
+          const isFailed = persistResult?.status === 'failed';
+          if (isTerminalBatch || isFailed) {
+            try {
+              const bjStatus = isFailed ? 'failed' : 'completed';
+              const bjLabel = isFailed
+                ? `Failed: ${persistResult?.error || 'unknown'}`
+                : `${persistResult?.currentResourceKiCount ?? 0} KIs (${completedCount} batches)`;
+
+              const { data: bgJob } = await supabaseAdmin
+                .from('background_jobs')
+                .select('id, status')
+                .eq('entity_id', resourceId)
+                .in('status', ['queued', 'running'])
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (bgJob) {
+                await supabaseAdmin.from('background_jobs').update({
+                  status: bjStatus,
+                  completed_at: new Date().toISOString(),
+                  progress_percent: isFailed ? undefined : 100,
+                  step_label: bjLabel,
+                  error: isFailed ? (persistResult?.error || 'Extraction failed') : null,
+                  substatus: null,
+                }).eq('id', bgJob.id);
+                console.log(`[extract-tactics] background_jobs "${bgJob.id}" → ${bjStatus}`);
+              }
+            } catch (bjErr) {
+              console.warn(`[extract-tactics] failed to update background_jobs:`, bjErr);
+            }
+          }
         } catch (e) {
           console.error('[extract-tactics] Failed to update batch progress:', e);
         }
