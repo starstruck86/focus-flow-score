@@ -1630,6 +1630,16 @@ Deno.serve(async (req) => {
         }
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
 
+        // Durable run + reconciliation
+        await recordRunAndReconcile(supabase, {
+          resourceId, userId: resource.user_id, startedAt, durationMs: Date.now() - startTime,
+          status: 'failed', rawCount: 0, validatedCount: 0, savedCount: 0, duplicatesSkipped: 0,
+          model: 'google/gemini-2.5-flash', strategy, error: aiErr.message,
+          summary: `AI error on attempt ${attemptNumber}: ${aiErr.message}`,
+          contentLength: resource.content.length, resourceType: resource.resource_type,
+          isLesson, enrichmentStatus: newStatus,
+        });
+
         // Auto-retry: fire-and-forget next attempt
         if (retryEligible) {
           scheduleRetry(supabase, supabaseUrl, serviceRoleKey, resourceId, attemptNumber);
