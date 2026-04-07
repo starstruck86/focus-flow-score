@@ -1800,6 +1800,17 @@ Deno.serve(async (req) => {
         await saveExtractionLog(supabase, log);
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
 
+        // Durable run + reconciliation
+        await recordRunAndReconcile(supabase, {
+          resourceId, userId: resource.user_id, startedAt, durationMs,
+          status: retryEligible ? 'failed' : 'completed', rawCount: rawItems.length, validatedCount: validated.length,
+          savedCount: 0, duplicatesSkipped: 0,
+          model: 'google/gemini-2.5-flash', strategy,
+          summary: `Below threshold: 0 items on attempt ${attemptNumber}`,
+          contentLength: resource.content.length, resourceType: resource.resource_type,
+          isLesson, enrichmentStatus: newStatus,
+        });
+
         // Auto-retry: fire-and-forget next attempt
         if (retryEligible) {
           scheduleRetry(supabase, supabaseUrl, serviceRoleKey, resourceId, attemptNumber);
