@@ -193,7 +193,7 @@ export function useReExtractResource() {
   };
 
   const reExtract = useCallback(async (resourceId: string, resourceTitle: string) => {
-    const jobId = `re-extract-${resourceId}`;
+    const jobId = crypto.randomUUID();
 
     // Guard: don't start a duplicate extraction for the same resource
     if (activePolls.current.has(jobId)) {
