@@ -1239,6 +1239,43 @@ async function reconcileResourceSnapshot(
 
   await supabaseAdmin.from('resources').update(update).eq('id', resourceId);
   console.log(`[SNAPSHOT RECONCILE] done | KIs=${finalTotal} | KIs/1k=${finalKisPer1k} | runs=${totalRunCount} | batches=${actualCompleted}/${totalBatches} | status=${update.active_job_status}`);
+
+  // ── SERVER-SIDE TERMINAL RESOLUTION: update background_jobs row ──
+  // This makes re-extract terminal status durable — no client polling needed.
+  if (allComplete || (!stoppedByWatchdog && lastError)) {
+    try {
+      const terminalStatus = allComplete ? 'completed' : 'failed';
+      const terminalLabel = allComplete
+        ? `${finalTotal} KIs extracted (${actualCompleted} batches)`
+        : `Failed: ${lastError || 'unknown error'}`;
+
+      // Find the background_jobs row for this resource
+      const { data: bgJob } = await supabaseAdmin
+        .from('background_jobs')
+        .select('id, status')
+        .eq('entity_id', resourceId)
+        .in('status', ['queued', 'running'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (bgJob) {
+        await supabaseAdmin.from('background_jobs').update({
+          status: terminalStatus,
+          completed_at: new Date().toISOString(),
+          progress_percent: allComplete ? 100 : undefined,
+          step_label: terminalLabel,
+          error: allComplete ? null : (lastError || 'Extraction failed'),
+          substatus: null,
+          progress_current: actualCompleted,
+          progress_total: totalBatches,
+        }).eq('id', bgJob.id);
+        console.log(`[SNAPSHOT RECONCILE] background_jobs "${bgJob.id}" → ${terminalStatus}`);
+      }
+    } catch (bjErr) {
+      console.warn(`[SNAPSHOT RECONCILE] failed to update background_jobs:`, bjErr);
+    }
+  }
 }
 
 // ══════════════════════════════════════════════════════

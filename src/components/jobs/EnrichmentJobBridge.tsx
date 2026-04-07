@@ -1,19 +1,19 @@
 /**
  * EnrichmentJobBridge — LEGACY CLIENT-SIDE PATH ONLY.
  *
- * This bridge syncs the legacy useEnrichmentJobStore (client-side batch loop)
+ * ⚠️  DEPRECATED: This bridge is DISABLED by default.
+ *
+ * The preferred path for ALL enrichment (including URL-based) is
+ * `startDurableEnrichment()` which creates a durable DB row and dispatches
+ * to the `run-enrichment-job` edge function.
+ *
+ * This bridge exists ONLY for explicit legacy/dev usage gated behind
+ * the `VITE_ENABLE_LEGACY_ENRICHMENT_BRIDGE` env var.
+ *
+ * It syncs the legacy useEnrichmentJobStore (client-side batch loop)
  * into the global useBackgroundJobs store for UI display.
  *
  * IMPORTANT: This path is BROWSER-DEPENDENT. If the tab is closed, the job dies.
- * The preferred path for enrichment is `startDurableEnrichment()` which creates
- * a durable DB row and dispatches to the `run-enrichment-job` edge function.
- *
- * This bridge exists ONLY for:
- * - URL-based ingestion (no resource IDs, can't use backend orchestrator)
- * - Retry-failed-only flows from the DeepEnrichModal
- *
- * It uses a non-UUID local ID since these jobs are NOT persisted to the
- * background_jobs table. The addJob() call omits userId, so no DB write occurs.
  */
 import { useEffect, useRef } from 'react';
 import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
@@ -21,6 +21,9 @@ import { useBackgroundJobs } from '@/store/useBackgroundJobs';
 
 /** Non-UUID sentinel — intentionally NOT a valid UUID to prevent accidental DB writes */
 const LEGACY_JOB_ID = 'legacy-enrichment-client-only';
+
+/** Gate: only active if explicitly enabled via env var */
+const LEGACY_BRIDGE_ENABLED = import.meta.env.VITE_ENABLE_LEGACY_ENRICHMENT_BRIDGE === 'true';
 
 export function EnrichmentJobBridge() {
   const enrichState = useEnrichmentJobStore((s) => s.state);
@@ -31,12 +34,15 @@ export function EnrichmentJobBridge() {
   const bridged = useRef(false);
 
   useEffect(() => {
+    // If the legacy bridge is not enabled, do nothing
+    if (!LEGACY_BRIDGE_ENABLED) return;
+
     const { status, mode, totalItems, processedCount, successCount, failedCount, currentBatch, totalBatches } = enrichState;
     const modeLabel = mode === 'deep_enrich' ? 'Deep Enrich' : 'Re-enrich';
 
     if (status === 'running' && prevStatus.current !== 'running') {
       if (!bridged.current) {
-        console.info(`[ENRICHMENT BRIDGE] LEGACY path: starting "${modeLabel}" — ${totalItems} resources (browser-dependent)`);
+        console.warn(`[ENRICHMENT BRIDGE] ⚠️ LEGACY path active: "${modeLabel}" — ${totalItems} resources (browser-dependent)`);
         // No userId → no DB write. This is intentional for the legacy path.
         addJob({
           id: LEGACY_JOB_ID,
