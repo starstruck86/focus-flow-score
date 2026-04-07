@@ -189,6 +189,18 @@ export function useReExtractResource() {
       }
 
       if (terminalState.terminal !== 'succeeded') {
+        // If DB is still non-terminal (running/retrying), show neutral background state
+        const latestStatus = terminalState.latest?.active_job_status;
+        if (!terminalState.terminal && latestStatus && !['failed'].includes(latestStatus)) {
+          // Still processing in background — don't mark as failed
+          setLocalOverrides(prev => ({ ...prev, [resourceId]: 'running' }));
+          toast.info(`"${resourceTitle}" is still processing in the background`, {
+            description: 'Check back shortly — progress will update automatically.',
+            duration: 6000,
+          });
+          qc.invalidateQueries({ queryKey: ['resources'] });
+          return;
+        }
         throw new Error(immediateError || payload?.error || 'Timed out waiting for re-extraction to finish');
       }
 
