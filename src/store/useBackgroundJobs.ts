@@ -1,8 +1,15 @@
 /**
  * useBackgroundJobs — global Zustand store for tracking all long-running background jobs.
+ * NOW: a UI cache layer on top of the durable `background_jobs` table.
  * Any part of the app can add/update/remove jobs. The global indicator + drawer read from here.
+ * On app load, jobs are rehydrated from the DB. Realtime subscription keeps them in sync.
  */
 import { create } from 'zustand';
+import {
+  createDurableJob,
+  updateDurableJob,
+  finalizeDurableJob,
+} from '@/lib/durableJobs';
 
 export type JobStatus = 'queued' | 'running' | 'awaiting_review' | 'completed' | 'failed' | 'cancelled';
 
@@ -41,19 +48,14 @@ export interface BackgroundJob {
   title: string;
   status: JobStatus;
   substatus?: JobSubstatus;
-  /** 'determinate' when we know exact progress, 'indeterminate' for unknown */
   progressMode?: ProgressMode;
   progress?: { current: number; total: number };
-  /** Pre-computed percent (0–100); computed from progress if not set */
   progressPercent?: number;
-  /** Human-readable step label, e.g. "Batch 3 of 7", "Polling durable state" */
   stepLabel?: string;
   error?: string;
   createdAt: number;
   updatedAt: number;
-  /** Optional ID to link back to the originating resource/entity */
   entityId?: string;
-  /** Optional metadata for job-specific UI */
   meta?: Record<string, unknown>;
 }
 
@@ -65,48 +67,85 @@ const TERMINAL_STATUSES: JobStatus[] = ['completed', 'failed', 'cancelled'];
 interface BackgroundJobsState {
   jobs: BackgroundJob[];
   drawerOpen: boolean;
+  /** Whether we've loaded from DB at least once */
+  rehydrated: boolean;
 }
 
 interface BackgroundJobsActions {
-  addJob: (job: Omit<BackgroundJob, 'createdAt' | 'updatedAt'>) => void;
+  /** Add a job to the UI cache AND persist to DB. Requires userId for DB writes. */
+  addJob: (job: Omit<BackgroundJob, 'createdAt' | 'updatedAt'> & { userId?: string }) => void;
+  /** Update a job in the UI cache AND persist progress to DB. */
   updateJob: (id: string, patch: Partial<Omit<BackgroundJob, 'id' | 'createdAt'>>) => void;
-  /** Explicitly retry a terminal (failed/cancelled) job back to queued */
+  /** Retry a terminal job back to queued. */
   retryJob: (id: string) => void;
+  /** Remove a job from UI cache. */
   removeJob: (id: string) => void;
   clearCompleted: () => void;
   setDrawerOpen: (open: boolean) => void;
   toggleDrawer: () => void;
+  /** Bulk-set jobs from DB rehydration (replaces current state). */
+  rehydrateJobs: (jobs: BackgroundJob[]) => void;
+  /** Upsert a single job from realtime/DB (does not write back to DB). */
+  syncJobFromDB: (job: BackgroundJob) => void;
 }
 
 export type BackgroundJobsStore = BackgroundJobsState & BackgroundJobsActions;
 
-// Track auto-remove timers to avoid duplicates
+// Track auto-remove timers
 const autoRemoveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+// Throttle DB progress writes (at most once per 2s per job)
+const lastDbWrite = new Map<string, number>();
+const DB_WRITE_THROTTLE_MS = 2000;
+
+function shouldThrottleDbWrite(jobId: string): boolean {
+  const last = lastDbWrite.get(jobId) ?? 0;
+  if (Date.now() - last < DB_WRITE_THROTTLE_MS) return true;
+  lastDbWrite.set(jobId, Date.now());
+  return false;
+}
 
 export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
   jobs: [],
   drawerOpen: false,
+  rehydrated: false,
 
   addJob: (job) => {
     const now = Date.now();
-    // Clear any existing auto-remove timer for this job id
     if (autoRemoveTimers.has(job.id)) {
       clearTimeout(autoRemoveTimers.get(job.id)!);
       autoRemoveTimers.delete(job.id);
     }
 
-    // Guard: don't re-add a job that is already terminal
     const existing = get().jobs.find(j => j.id === job.id);
     if (existing && TERMINAL_STATUSES.includes(existing.status) && !TERMINAL_STATUSES.includes(job.status)) {
-      // Allow overriding terminal with a new run
       console.info(`[BACKGROUND JOBS] Re-adding job "${job.id}" (was ${existing.status}, now ${job.status})`);
     }
 
     console.info(`[BACKGROUND JOBS] addJob: "${job.id}" type=${job.type} status=${job.status}`);
 
+    // Strip userId before storing in memory
+    const { userId, ...jobData } = job;
+
     set((s) => ({
-      jobs: [{ ...job, createdAt: now, updatedAt: now }, ...s.jobs.filter(j => j.id !== job.id)],
+      jobs: [{ ...jobData, createdAt: now, updatedAt: now }, ...s.jobs.filter(j => j.id !== job.id)],
     }));
+
+    // Persist to DB (fire-and-forget)
+    if (userId) {
+      createDurableJob({
+        id: job.id,
+        userId,
+        type: job.type,
+        title: job.title,
+        status: job.status,
+        entityId: job.entityId,
+        progressMode: job.progressMode,
+        stepLabel: job.stepLabel,
+        substatus: job.substatus,
+        metadata: job.meta,
+      }).catch((err) => console.error(`[BACKGROUND JOBS] DB create failed:`, err));
+    }
   },
 
   updateJob: (id, patch) => {
@@ -116,25 +155,14 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
       return;
     }
 
-    // Guard: don't let a late update overwrite a terminal state with a non-terminal state
-    // Exception: allow explicit retry (failed → queued/running) via meta flag
+    // Guard: don't overwrite terminal with non-terminal
     if (TERMINAL_STATUSES.includes(current.status) && patch.status && !TERMINAL_STATUSES.includes(patch.status)) {
-      if ((patch as any).__retry) {
-        console.info(`[BACKGROUND JOBS] updateJob: retry allowed for "${id}" (${current.status} → ${patch.status})`);
-        // Clear the auto-remove timer since the job is being retried
-        if (autoRemoveTimers.has(id)) {
-          clearTimeout(autoRemoveTimers.get(id)!);
-          autoRemoveTimers.delete(id);
-        }
-      } else {
-        console.warn(`[BACKGROUND JOBS] updateJob: blocked non-terminal update on terminal job "${id}" (${current.status} → ${patch.status})`);
-        return;
-      }
+      console.warn(`[BACKGROUND JOBS] updateJob: blocked non-terminal update on terminal job "${id}" (${current.status} → ${patch.status})`);
+      return;
     }
 
     // Guard: don't let progress percent go backward
     if (patch.progressPercent != null && current.progressPercent != null && patch.progressPercent < current.progressPercent) {
-      console.warn(`[BACKGROUND JOBS] updateJob: progress regression blocked for "${id}" (${current.progressPercent}% → ${patch.progressPercent}%)`);
       patch = { ...patch, progressPercent: current.progressPercent };
     }
 
@@ -148,8 +176,36 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
       ),
     }));
 
+    // Persist to DB
+    const isTerminal = patch.status && TERMINAL_STATUSES.includes(patch.status);
+    if (isTerminal) {
+      // Terminal: always write immediately
+      finalizeDurableJob(id, patch.status as 'completed' | 'failed' | 'cancelled', {
+        error: patch.error ?? undefined,
+        stepLabel: patch.stepLabel ?? undefined,
+        progressPercent: patch.progressPercent,
+      }).catch((err) => console.error(`[BACKGROUND JOBS] DB finalize failed:`, err));
+    } else if (!shouldThrottleDbWrite(id)) {
+      // Progress: throttled
+      const dbPatch: Record<string, unknown> = {};
+      if (patch.status) dbPatch.status = patch.status;
+      if (patch.substatus !== undefined) dbPatch.substatus = patch.substatus;
+      if (patch.progressMode) dbPatch.progress_mode = patch.progressMode;
+      if (patch.progress) {
+        dbPatch.progress_current = patch.progress.current;
+        dbPatch.progress_total = patch.progress.total;
+      }
+      if (patch.progressPercent != null) dbPatch.progress_percent = patch.progressPercent;
+      if (patch.stepLabel !== undefined) dbPatch.step_label = patch.stepLabel;
+      if (patch.error !== undefined) dbPatch.error = patch.error;
+
+      if (Object.keys(dbPatch).length > 0) {
+        updateDurableJob(id, dbPatch as any).catch(() => {});
+      }
+    }
+
     // Schedule auto-removal for terminal states
-    if (patch.status && TERMINAL_STATUSES.includes(patch.status)) {
+    if (isTerminal) {
       if (!autoRemoveTimers.has(id)) {
         console.info(`[BACKGROUND JOBS] auto-dismiss scheduled for "${id}" in ${AUTO_REMOVE_DELAY_MS}ms`);
         const timer = setTimeout(() => {
@@ -164,15 +220,9 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
 
   retryJob: (id) => {
     const current = get().jobs.find(j => j.id === id);
-    if (!current) {
-      console.warn(`[BACKGROUND JOBS] retryJob: job "${id}" not found`);
-      return;
-    }
-    if (!TERMINAL_STATUSES.includes(current.status)) {
-      console.warn(`[BACKGROUND JOBS] retryJob: job "${id}" is not terminal (${current.status}), ignoring`);
-      return;
-    }
-    // Clear any pending auto-remove timer
+    if (!current) return;
+    if (!TERMINAL_STATUSES.includes(current.status)) return;
+
     if (autoRemoveTimers.has(id)) {
       clearTimeout(autoRemoveTimers.get(id)!);
       autoRemoveTimers.delete(id);
@@ -185,6 +235,16 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
           : j,
       ),
     }));
+
+    // Persist retry to DB
+    updateDurableJob(id, {
+      status: 'queued',
+      error: null,
+      progress_percent: 0,
+      substatus: null,
+      step_label: 'Queued for retry',
+      completed_at: null,
+    } as any).catch(() => {});
   },
 
   removeJob: (id) => {
@@ -194,6 +254,7 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
     }
     console.info(`[BACKGROUND JOBS] removeJob: "${id}"`);
     set((s) => ({ jobs: s.jobs.filter((j) => j.id !== id) }));
+    // Note: we don't delete the DB row — it serves as history
   },
 
   clearCompleted: () =>
@@ -203,6 +264,45 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
 
   setDrawerOpen: (open) => set({ drawerOpen: open }),
   toggleDrawer: () => set((s) => ({ drawerOpen: !s.drawerOpen })),
+
+  rehydrateJobs: (jobs) => {
+    console.info(`[BACKGROUND JOBS] rehydrated ${jobs.length} jobs from DB`);
+    set({ jobs, rehydrated: true });
+
+    // Schedule auto-dismiss for any terminal jobs that were rehydrated
+    for (const job of jobs) {
+      if (TERMINAL_STATUSES.includes(job.status) && !autoRemoveTimers.has(job.id)) {
+        const timer = setTimeout(() => {
+          set((s) => ({ jobs: s.jobs.filter(j => j.id !== job.id) }));
+          autoRemoveTimers.delete(job.id);
+        }, AUTO_REMOVE_DELAY_MS);
+        autoRemoveTimers.set(job.id, timer);
+      }
+    }
+  },
+
+  syncJobFromDB: (job) => {
+    set((s) => {
+      const exists = s.jobs.find(j => j.id === job.id);
+      if (exists) {
+        // Only update if DB is newer
+        if (job.updatedAt >= exists.updatedAt) {
+          return { jobs: s.jobs.map(j => j.id === job.id ? job : j) };
+        }
+        return s;
+      }
+      return { jobs: [job, ...s.jobs] };
+    });
+
+    // Auto-dismiss terminal
+    if (TERMINAL_STATUSES.includes(job.status) && !autoRemoveTimers.has(job.id)) {
+      const timer = setTimeout(() => {
+        set((s) => ({ jobs: s.jobs.filter(j => j.id !== job.id) }));
+        autoRemoveTimers.delete(job.id);
+      }, AUTO_REMOVE_DELAY_MS);
+      autoRemoveTimers.set(job.id, timer);
+    }
+  },
 }));
 
 // ── Selectors ──
