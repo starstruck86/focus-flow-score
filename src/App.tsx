@@ -78,6 +78,7 @@ const App = () => (
               <OfflineBanner />
               <BackgroundJobIndicator />
               <BackgroundJobDrawer />
+              <EnrichmentJobBridge />
               <BrowserRouter>
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
