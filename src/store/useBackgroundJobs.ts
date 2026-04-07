@@ -70,6 +70,8 @@ interface BackgroundJobsState {
 interface BackgroundJobsActions {
   addJob: (job: Omit<BackgroundJob, 'createdAt' | 'updatedAt'>) => void;
   updateJob: (id: string, patch: Partial<Omit<BackgroundJob, 'id' | 'createdAt'>>) => void;
+  /** Explicitly retry a terminal (failed/cancelled) job back to queued */
+  retryJob: (id: string) => void;
   removeJob: (id: string) => void;
   clearCompleted: () => void;
   setDrawerOpen: (open: boolean) => void;
