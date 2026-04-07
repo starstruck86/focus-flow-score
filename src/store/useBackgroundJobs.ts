@@ -162,6 +162,31 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
     }
   },
 
+  retryJob: (id) => {
+    const current = get().jobs.find(j => j.id === id);
+    if (!current) {
+      console.warn(`[BACKGROUND JOBS] retryJob: job "${id}" not found`);
+      return;
+    }
+    if (!TERMINAL_STATUSES.includes(current.status)) {
+      console.warn(`[BACKGROUND JOBS] retryJob: job "${id}" is not terminal (${current.status}), ignoring`);
+      return;
+    }
+    // Clear any pending auto-remove timer
+    if (autoRemoveTimers.has(id)) {
+      clearTimeout(autoRemoveTimers.get(id)!);
+      autoRemoveTimers.delete(id);
+    }
+    console.info(`[BACKGROUND JOBS] retryJob: "${id}" ${current.status} → queued`);
+    set((s) => ({
+      jobs: s.jobs.map((j) =>
+        j.id === id
+          ? { ...j, status: 'queued' as const, error: undefined, progressPercent: undefined, substatus: undefined, stepLabel: 'Queued for retry', updatedAt: Date.now() }
+          : j,
+      ),
+    }));
+  },
+
   removeJob: (id) => {
     if (autoRemoveTimers.has(id)) {
       clearTimeout(autoRemoveTimers.get(id)!);

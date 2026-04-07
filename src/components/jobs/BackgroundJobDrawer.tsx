@@ -49,7 +49,7 @@ const STATUS_META: Record<JobStatus, { icon: typeof Clock; color: string; label:
 };
 
 function JobRow({ job }: { job: BackgroundJob }) {
-  const updateJob = useBackgroundJobs((s) => s.updateJob);
+  const retryJob = useBackgroundJobs((s) => s.retryJob);
   const removeJob = useBackgroundJobs((s) => s.removeJob);
   const meta = STATUS_META[job.status];
   const Icon = meta.icon;
