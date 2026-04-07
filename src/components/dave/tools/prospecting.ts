@@ -12,7 +12,7 @@ export function createProspectingTools(ctx: ToolContext): ToolMap {
       if (!userId) return 'Not authenticated';
 
       const [accountsRes, contactsRes, journalRes] = await Promise.all([
-        supabase.from('active_accounts' as any).select('id, name, created_at, tier, icp_fit_score, outreach_status, account_status')
+        fromActiveAccounts().select('id, name, created_at, tier, icp_fit_score, outreach_status, account_status')
           .eq('user_id', userId).order('created_at', { ascending: false }),
         supabase.from('contacts').select('id, created_at').eq('user_id', userId),
         supabase.from('daily_journal_entries').select('date, prospects_added, conversations')

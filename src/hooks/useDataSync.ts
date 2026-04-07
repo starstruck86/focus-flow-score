@@ -355,7 +355,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
       _isHydrating = true;
       try {
         const [accountsRes, oppsRes, renewalsRes, contactsRes, tasksRes] = await Promise.all([
-          supabase.from('active_accounts' as any).select('*').order('name'),
+          fromActiveAccounts().select('*').order('name'),
           supabase.from('opportunities').select('*').order('created_at', { ascending: false }),
           supabase.from('renewals').select('*').order('renewal_due'),
           supabase.from('contacts').select('*').order('name'),
@@ -562,7 +562,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
       _isHydrating = true;
       try {
         if (table === 'accounts') {
-          const { data } = await supabase.from('active_accounts' as any).select('*').order('name');
+          const { data } = await fromActiveAccounts().select('*').order('name');
           if (data) {
             const mapped = data.map(dbAccountToStore);
             useStore.setState({ accounts: mapped });

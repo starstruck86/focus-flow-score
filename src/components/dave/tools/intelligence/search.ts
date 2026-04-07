@@ -7,7 +7,7 @@ export async function searchCrm(ctx: ToolContext, params: { query: string }): Pr
 
   const q = `%${params.query}%`;
   const [accts, opps, contacts, transcripts] = await Promise.all([
-    supabase.from('active_accounts' as any).select('name, tier, account_status').eq('user_id', userId).or(`name.ilike.${q},notes.ilike.${q},industry.ilike.${q}`).limit(5),
+    fromActiveAccounts().select('name, tier, account_status').eq('user_id', userId).or(`name.ilike.${q},notes.ilike.${q},industry.ilike.${q}`).limit(5),
     supabase.from('opportunities').select('name, stage, arr').eq('user_id', userId).or(`name.ilike.${q},notes.ilike.${q},next_step.ilike.${q}`).limit(5),
     supabase.from('contacts').select('name, title, email').eq('user_id', userId).or(`name.ilike.${q},title.ilike.${q},email.ilike.${q}`).limit(5),
     supabase.from('call_transcripts').select('title, call_date, summary').eq('user_id', userId).or(`title.ilike.${q},content.ilike.${q},summary.ilike.${q}`).limit(5),
@@ -30,7 +30,7 @@ export async function competitiveIntel(ctx: ToolContext, params: { query: string
   const searchTerm = params.query.toLowerCase();
 
   const { data: transcripts } = await supabase.from('call_transcripts').select('id, title, call_date, account_id, content').eq('user_id', userId).ilike('content', `%${params.query}%`).order('call_date', { ascending: false }).limit(10);
-  const { data: accounts } = await supabase.from('active_accounts' as any).select('id, name, notes').eq('user_id', userId).ilike('notes', `%${params.query}%`).limit(10);
+  const { data: accounts } = await fromActiveAccounts().select('id, name, notes').eq('user_id', userId).ilike('notes', `%${params.query}%`).limit(10);
   const { data: opps } = await supabase.from('opportunities').select('id, name, notes, account_id').eq('user_id', userId).ilike('notes', `%${params.query}%`).limit(10);
   const { data: grades } = await supabase.from('transcript_grades').select('transcript_id, competitors_mentioned').eq('user_id', userId).not('competitors_mentioned', 'is', null).limit(50);
 
@@ -41,7 +41,7 @@ export async function competitiveIntel(ctx: ToolContext, params: { query: string
   const accountIds = [...new Set((transcripts || []).map((t: { account_id: string | null }) => t.account_id).filter(Boolean))];
   let accountMap: Record<string, string> = {};
   if (accountIds.length) {
-    const { data: accts } = await supabase.from('active_accounts' as any).select('id, name').in('id', accountIds as string[]);
+    const { data: accts } = await fromActiveAccounts().select('id, name').in('id', accountIds as string[]);
     accountMap = Object.fromEntries((accts || []).map((a: { id: string; name: string }) => [a.id, a.name]));
   }
 

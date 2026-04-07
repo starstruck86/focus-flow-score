@@ -63,8 +63,7 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
     queryKey: ['accounts-for-prep', user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase
-        .from('active_accounts' as any)
+      const { data } = await fromActiveAccounts()
         .select('id, name')
         .eq('user_id', user!.id)
         .order('name');

@@ -183,8 +183,7 @@ export async function startPlaybookRoleplay(
   // Look up account context if provided
   let industry: string | undefined;
   if (params.accountName) {
-    const { data: acct } = await supabase
-      .from('active_accounts' as any)
+    const { data: acct } = await fromActiveAccounts()
       .select('industry')
       .ilike('name', `%${params.accountName}%`)
       .limit(1)
