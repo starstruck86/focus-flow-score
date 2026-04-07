@@ -36,14 +36,14 @@ export type { AccountRow, AccountInsert, AccountUpdate };
 // Supabase types, we tell TypeScript to treat it as the accounts table.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-type AccountsFrom = ReturnType<typeof supabase.from<'accounts'>>;
+
 
 /**
  * Returns a typed Supabase query builder pointing at the `active_accounts` view.
  * Use this for ALL user-facing account reads — soft-delete is enforced at DB level.
  * Exported so other modules can use it directly instead of raw supabase.from('accounts').
  */
-export function fromActiveAccounts(): AccountsFrom {
+export function fromActiveAccounts() {
   return supabase.from('active_accounts' as any) as any;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -55,7 +55,7 @@ export function fromActiveAccounts(): AccountsFrom {
  * Backed by the active_accounts DB view — soft-delete is enforced at the DB layer.
  */
 export function activeAccounts() {
-  return fromView().select();
+  return fromActiveAccounts().select();
 }
 
 /**
@@ -70,13 +70,13 @@ export function rawAccounts() {
 // ─── Convenience read helpers ──────────────────────────────────────
 
 export async function getAccounts(): Promise<AccountRow[]> {
-  const { data, error } = await fromView().select('*').order('name');
+  const { data, error } = await fromActiveAccounts().select('*').order('name');
   if (error) throw error;
   return (data ?? []) as unknown as AccountRow[];
 }
 
 export async function getAccountById(id: string): Promise<AccountRow | null> {
-  const { data, error } = await fromView()
+  const { data, error } = await fromActiveAccounts()
     .select('*')
     .eq('id', id)
     .maybeSingle();
@@ -85,7 +85,7 @@ export async function getAccountById(id: string): Promise<AccountRow | null> {
 }
 
 export async function findAccountBySalesforceId(sfId: string): Promise<{ id: string } | null> {
-  const { data } = await fromView()
+  const { data } = await fromActiveAccounts()
     .select('id')
     .eq('salesforce_id', sfId)
     .maybeSingle();
@@ -93,7 +93,7 @@ export async function findAccountBySalesforceId(sfId: string): Promise<{ id: str
 }
 
 export async function findAccountByWebsite(domain: string): Promise<{ id: string } | null> {
-  const { data } = await fromView()
+  const { data } = await fromActiveAccounts()
     .select('id, website')
     .ilike('website', `%${domain}%`)
     .maybeSingle();
@@ -101,7 +101,7 @@ export async function findAccountByWebsite(domain: string): Promise<{ id: string
 }
 
 export async function findAccountByName(name: string): Promise<{ id: string } | null> {
-  const { data } = await fromView()
+  const { data } = await fromActiveAccounts()
     .select('id')
     .ilike('name', name.trim())
     .maybeSingle();
@@ -117,7 +117,7 @@ export async function resolveAccountByName(
   accountName: string,
   selectFields = 'id, name'
 ): Promise<Record<string, any> | null> {
-  const { data } = await fromView()
+  const { data } = await fromActiveAccounts()
     .select(selectFields)
     .eq('user_id', userId)
     .ilike('name', `%${accountName}%`)
