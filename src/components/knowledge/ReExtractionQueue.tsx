@@ -287,7 +287,7 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                   return (
                     <React.Fragment key={item.resource_id}>
                       <TableRow>
-                        <TableCell><StatusIcon status={item.status} batchInfo={item.is_batched ? { completed: item.batches_completed, total: item.batch_total } : undefined} /></TableCell>
+                        <TableCell><StatusIcon status={item.status} batchInfo={item.is_batched && (item.batch_total ?? 0) > 1 ? { completed: item.batches_completed, total: item.batch_total } : undefined} /></TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <div className="text-[11px] max-w-[120px] truncate">{item.title}</div>
@@ -307,7 +307,7 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                           </div>
                           <div className="text-[9px] text-muted-foreground">
                             {(item.content_length / 1000).toFixed(1)}k chars
-                            {item.is_batched && <span className="ml-1 text-primary">• {item.batch_total} batches</span>}
+                            {item.is_batched && (item.batch_total ?? 0) > 1 && <span className="ml-1 text-primary">• {item.batch_total} batches</span>}
                             {item.status === 'partial_complete_resumable' && (
                               <span className="ml-1 text-amber-500">• resumable</span>
                             )}
