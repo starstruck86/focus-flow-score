@@ -37,7 +37,7 @@ export function EnrichmentJobBridge() {
           progressPercent: totalItems > 0 ? Math.round((processedCount / totalItems) * 100) : 0,
           stepLabel: `Batch ${currentBatch} of ${totalBatches}`,
           substatus: 'enriching',
-          userId: user?.id,
+          // No userId — this is the legacy client-side path, not durable
         });
         bridged.current = true;
       }
