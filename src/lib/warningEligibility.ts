@@ -1,6 +1,25 @@
 /**
- * Centralized predicate for determining if an entity should surface warnings/risk alerts.
- * Reuse this everywhere warnings are generated — DO NOT duplicate this logic.
+ * ═══════════════════════════════════════════════════════════════════
+ * REGRESSION-LOCKED INVARIANT: Centralized warning eligibility
+ * ═══════════════════════════════════════════════════════════════════
+ * This is the SINGLE source of truth for determining if an entity
+ * should surface warnings, risk alerts, coaching prompts, or
+ * stale-deal indicators.
+ *
+ * ALL warning-producing components and hooks MUST call
+ * isWarningEligible() instead of reimplementing status checks.
+ *
+ * Current consumers (keep this list updated):
+ *   - DealRiskAlerts.tsx
+ *   - Next45DaysRisk.tsx
+ *   - DealIntelligenceCard.tsx
+ *   - CoachingFeed.tsx
+ *   - usePlaybookRecommendation.ts
+ *   - useTimeAllocation.ts
+ *
+ * If you need to add a new warning/risk surface, import and use
+ * isWarningEligible(). Do NOT create local status-check logic.
+ * ═══════════════════════════════════════════════════════════════════
  */
 
 /** Statuses that should never show warnings */
@@ -32,7 +51,10 @@ export interface WarningEntity {
 
 /**
  * Returns true if the entity is eligible for warnings/risk alerts.
- * Returns false for closed-lost deals, churned/inactive accounts, deleted entities, etc.
+ * Returns false for closed-lost deals, churned/inactive accounts,
+ * deleted entities, etc.
+ *
+ * This is the ONLY function that should decide warning eligibility.
  */
 export function isWarningEligible(entity: WarningEntity): boolean {
   // Soft-deleted entities are never eligible
@@ -56,4 +78,13 @@ export function isWarningEligible(entity: WarningEntity): boolean {
   }
 
   return true;
+}
+
+/**
+ * Convenience: filter an array to only warning-eligible items.
+ * Use this to pre-filter opportunity/account lists before computing
+ * warning UI, instead of filtering inline in each component.
+ */
+export function filterWarningEligible<T extends WarningEntity>(items: T[]): T[] {
+  return items.filter(isWarningEligible);
 }
