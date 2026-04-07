@@ -310,6 +310,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
+      {/*
+        ═══════════════════════════════════════════════════════════
+        REGRESSION-LOCKED INVARIANT: Header / KPI / Journal layout
+        ═══════════════════════════════════════════════════════════
+        The GlobalWeekStrip and ActivityRings MUST NOT overlap.
+        This layout uses flex-wrap so rings wrap below the week
+        strip on narrow viewports. Critical rules:
+          - flex-wrap on container
+          - basis-[180px] + min-w-0 on week strip (allows shrink)
+          - shrink-0 + overflow-x-auto on rings (prevents collapse)
+          - overflow-hidden on outer container (prevents bleed)
+        DO NOT replace with absolute positioning or fixed widths.
+        Test at 320px, 402px, zoomed, and with large KPI numbers.
+        ═══════════════════════════════════════════════════════════
+      */}
       <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2 overflow-hidden">
         <div className="flex items-start gap-3 sm:gap-4 flex-wrap">
           <div className="flex-1 min-w-0 basis-[180px] overflow-hidden">
