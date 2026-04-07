@@ -184,6 +184,7 @@ export function createTaskTools(ctx: ToolContext): ToolMap {
           .from('accounts')
           .select('id')
           .eq('user_id', userId)
+          .is('deleted_at', null)
           .ilike('name', `%${params.accountName}%`)
           .limit(1);
         linkedAccountId = accts?.[0]?.id ?? null;
@@ -220,6 +221,7 @@ export function createTaskTools(ctx: ToolContext): ToolMap {
           .from('accounts')
           .select('id, name, notes')
           .eq('user_id', userId)
+          .is('deleted_at', null)
           .ilike('name', `%${params.accountName}%`)
           .limit(1);
         if (accounts?.length) {

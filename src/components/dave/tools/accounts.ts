@@ -15,6 +15,7 @@ export function createAccountTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('id, name')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .eq('name', params.name)
         .limit(1);
 
@@ -45,6 +46,7 @@ export function createAccountTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('id, name')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .ilike('name', `%${params.accountName}%`)
         .limit(1);
 
@@ -69,6 +71,7 @@ export function createAccountTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('*')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .ilike('name', `%${params.accountName}%`)
         .limit(1);
 
@@ -111,6 +114,7 @@ export function createAccountTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('id, name, website, industry')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .ilike('name', `%${params.accountName}%`)
         .limit(1);
 
@@ -145,6 +149,7 @@ export function createAccountTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('id, name, notes, touches_this_week')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .ilike('name', `%${params.accountName}%`)
         .limit(1);
 
@@ -180,6 +185,7 @@ export function createAccountTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('id, name, notes')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .ilike('name', `%${params.accountName}%`)
         .limit(1);
 
@@ -210,6 +216,7 @@ export function createAccountTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('id, name, notes')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .ilike('name', `%${params.accountName}%`)
         .limit(1);
 
@@ -244,6 +251,7 @@ export function createAccountTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('id, name, notes')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .ilike('name', `%${params.accountName}%`)
         .limit(1);
 
@@ -308,6 +316,7 @@ export function createAccountTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('name, tier, motion, account_status, last_touch_date, touches_this_week, priority_score, icp_fit_score')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .eq('account_status', 'active')
         .limit(200);
 

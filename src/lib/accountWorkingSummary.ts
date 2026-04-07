@@ -94,6 +94,7 @@ export async function buildAccountWorkingSummary(
     .select('*')
     .eq('id', accountId)
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .maybeSingle();
 
   if (!account) return null;
@@ -182,7 +183,8 @@ export async function buildAllWorkingSummaries(
     .from('accounts')
     .select('*')
     .in('id', accountIds)
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .is('deleted_at', null);
 
   // Batch fetch opportunities
   const { data: allOpps } = await supabase
