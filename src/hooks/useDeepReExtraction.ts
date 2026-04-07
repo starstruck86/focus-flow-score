@@ -476,7 +476,10 @@ export function useDeepReExtraction() {
     postKisPer1k: number; liftStatus: LiftStatus; noLiftReason?: NoLiftReason;
     dominantBottleneck: DominantBottleneck; finalStatus: ReExtractQueueStatus;
   }> => {
-    const isBatched = item.content_length > LARGE_DOC_THRESHOLD;
+    // ALL re-extractions now use jobMode for durability — small resources were
+    // timing out on the synchronous 150s fetch path because multi-pass deep
+    // extraction (core+hidden+framework) can exceed that budget.
+    const isBatched = true;
 
     // For batched: fetch content for semantic slicing, then get resume info
     let slices: SemanticSlice[] = [{ start: 0, end: item.content_length, semanticStartMarker: '(start)', semanticEndMarker: '(end)' }];
