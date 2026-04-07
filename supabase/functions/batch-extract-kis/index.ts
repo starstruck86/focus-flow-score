@@ -2063,6 +2063,18 @@ Deno.serve(async (req) => {
         retry_scheduled_at: null,
         ...(audit ? { extraction_audit_summary: audit } : {}),
       });
+
+      // Durable run + reconciliation
+      await recordRunAndReconcile(supabase, {
+        resourceId, userId: resource.user_id, startedAt, durationMs,
+        status: 'failed', rawCount: rawItems.length, validatedCount: validated.length,
+        savedCount: 0, duplicatesSkipped: 0,
+        model: 'google/gemini-2.5-flash', strategy, error: insertError.message,
+        summary: `Insert failed on attempt ${attemptNumber}: ${insertError.message}`,
+        contentLength: resource.content.length, resourceType: resource.resource_type,
+        isLesson, enrichmentStatus: 'extraction_failed',
+      });
+
       return respond({ resourceId, title: resource.title, kis: 0, error: `Insert failed: ${insertError.message}`, log });
     }
 
