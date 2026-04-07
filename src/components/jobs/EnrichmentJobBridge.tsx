@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 const JOB_ID = 'enrichment-batch';
 
 export function EnrichmentJobBridge() {
+  const { user } = useAuth();
   const enrichState = useEnrichmentJobStore((s) => s.state);
   const addJob = useBackgroundJobs((s) => s.addJob);
   const updateJob = useBackgroundJobs((s) => s.updateJob);
@@ -36,6 +37,7 @@ export function EnrichmentJobBridge() {
           progressPercent: totalItems > 0 ? Math.round((processedCount / totalItems) * 100) : 0,
           stepLabel: `Batch ${currentBatch} of ${totalBatches}`,
           substatus: 'enriching',
+          userId: user?.id,
         });
         bridged.current = true;
       }
