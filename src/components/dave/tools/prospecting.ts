@@ -64,6 +64,7 @@ export function createProspectingTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('name, tier, icp_fit_score, account_status, priority_score')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .in('account_status', ['researching', 'prepped'])
         .order('priority_score', { ascending: false })
         .limit(5);
@@ -100,6 +101,7 @@ export function createProspectingTools(ctx: ToolContext): ToolMap {
         .from('accounts')
         .select('name, account_status, outreach_status, contact_status')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .order('updated_at', { ascending: false })
         .limit(1);
 

@@ -74,6 +74,7 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
             .from('accounts')
             .select('id, motion')
             .eq('user_id', user.id)
+            .is('deleted_at', null)
             .in('id', accountIds as string[]);
           const validIds = new Set((accounts || []).filter(a => a.motion === motionFilter).map(a => a.id));
           items = items.filter(i => i.account_id && validIds.has(i.account_id));
