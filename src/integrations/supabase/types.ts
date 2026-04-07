@@ -54,6 +54,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "account_contacts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "account_contacts_renewal_id_fkey"
             columns: ["renewal_id"]
             isOneToOne: false
@@ -773,6 +780,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "call_transcripts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "call_transcripts_opportunity_id_fkey"
             columns: ["opportunity_id"]
             isOneToOne: false
@@ -936,6 +950,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -1162,6 +1183,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_digest_items_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -2208,6 +2236,13 @@ export type Database = {
             referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "icp_sourced_accounts_promoted_account_id_fkey"
+            columns: ["promoted_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       import_account_aliases: {
@@ -2241,6 +2276,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_account_aliases_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -2859,6 +2901,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunities_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -3685,6 +3734,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "renewals_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "renewals_linked_opportunity_id_fkey"
             columns: ["linked_opportunity_id"]
             isOneToOne: false
@@ -4190,6 +4246,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "resource_links_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "resource_links_opportunity_id_fkey"
             columns: ["opportunity_id"]
             isOneToOne: false
@@ -4652,6 +4715,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "resources_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "resources_folder_id_fkey"
             columns: ["folder_id"]
             isOneToOne: false
@@ -5111,6 +5181,13 @@ export type Database = {
             columns: ["linked_account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
             referencedColumns: ["id"]
           },
           {
@@ -5722,7 +5799,174 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      active_accounts: {
+        Row: {
+          account_status: string | null
+          cadence_name: string | null
+          category_complexity: boolean | null
+          confidence_score: number | null
+          contact_status: string | null
+          created_at: string | null
+          crm_lifecycle_team_size: number | null
+          current_agreement_link: string | null
+          deleted_at: string | null
+          direct_ecommerce: boolean | null
+          ecommerce: string | null
+          email_sms_capture: boolean | null
+          enrichment_evidence: Json | null
+          enrichment_source_summary: string | null
+          high_probability_buyer: boolean | null
+          icp_fit_score: number | null
+          icp_score_override: number | null
+          id: string | null
+          industry: string | null
+          last_enriched_at: string | null
+          last_touch_date: string | null
+          last_touch_type: string | null
+          lifecycle_override: boolean | null
+          lifecycle_override_reason: string | null
+          lifecycle_tier: string | null
+          loyalty_membership: boolean | null
+          mar_tech: string | null
+          marketing_platform_detected: string | null
+          mobile_app: boolean | null
+          motion: string | null
+          name: string | null
+          next_step: string | null
+          next_touch_due: string | null
+          notes: string | null
+          outreach_status: string | null
+          planhat_link: string | null
+          priority: string | null
+          priority_score: number | null
+          salesforce_id: string | null
+          salesforce_link: string | null
+          tags: string[] | null
+          tech_fit_flag: string | null
+          tech_stack: string[] | null
+          tech_stack_notes: string | null
+          tier: string | null
+          tier_override: string | null
+          timing_score: number | null
+          touches_this_week: number | null
+          trigger_events: Json | null
+          triggered_account: boolean | null
+          updated_at: string | null
+          user_id: string | null
+          website: string | null
+        }
+        Insert: {
+          account_status?: string | null
+          cadence_name?: string | null
+          category_complexity?: boolean | null
+          confidence_score?: number | null
+          contact_status?: string | null
+          created_at?: string | null
+          crm_lifecycle_team_size?: number | null
+          current_agreement_link?: string | null
+          deleted_at?: string | null
+          direct_ecommerce?: boolean | null
+          ecommerce?: string | null
+          email_sms_capture?: boolean | null
+          enrichment_evidence?: Json | null
+          enrichment_source_summary?: string | null
+          high_probability_buyer?: boolean | null
+          icp_fit_score?: number | null
+          icp_score_override?: number | null
+          id?: string | null
+          industry?: string | null
+          last_enriched_at?: string | null
+          last_touch_date?: string | null
+          last_touch_type?: string | null
+          lifecycle_override?: boolean | null
+          lifecycle_override_reason?: string | null
+          lifecycle_tier?: string | null
+          loyalty_membership?: boolean | null
+          mar_tech?: string | null
+          marketing_platform_detected?: string | null
+          mobile_app?: boolean | null
+          motion?: string | null
+          name?: string | null
+          next_step?: string | null
+          next_touch_due?: string | null
+          notes?: string | null
+          outreach_status?: string | null
+          planhat_link?: string | null
+          priority?: string | null
+          priority_score?: number | null
+          salesforce_id?: string | null
+          salesforce_link?: string | null
+          tags?: string[] | null
+          tech_fit_flag?: string | null
+          tech_stack?: string[] | null
+          tech_stack_notes?: string | null
+          tier?: string | null
+          tier_override?: string | null
+          timing_score?: number | null
+          touches_this_week?: number | null
+          trigger_events?: Json | null
+          triggered_account?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+          website?: string | null
+        }
+        Update: {
+          account_status?: string | null
+          cadence_name?: string | null
+          category_complexity?: boolean | null
+          confidence_score?: number | null
+          contact_status?: string | null
+          created_at?: string | null
+          crm_lifecycle_team_size?: number | null
+          current_agreement_link?: string | null
+          deleted_at?: string | null
+          direct_ecommerce?: boolean | null
+          ecommerce?: string | null
+          email_sms_capture?: boolean | null
+          enrichment_evidence?: Json | null
+          enrichment_source_summary?: string | null
+          high_probability_buyer?: boolean | null
+          icp_fit_score?: number | null
+          icp_score_override?: number | null
+          id?: string | null
+          industry?: string | null
+          last_enriched_at?: string | null
+          last_touch_date?: string | null
+          last_touch_type?: string | null
+          lifecycle_override?: boolean | null
+          lifecycle_override_reason?: string | null
+          lifecycle_tier?: string | null
+          loyalty_membership?: boolean | null
+          mar_tech?: string | null
+          marketing_platform_detected?: string | null
+          mobile_app?: boolean | null
+          motion?: string | null
+          name?: string | null
+          next_step?: string | null
+          next_touch_due?: string | null
+          notes?: string | null
+          outreach_status?: string | null
+          planhat_link?: string | null
+          priority?: string | null
+          priority_score?: number | null
+          salesforce_id?: string | null
+          salesforce_link?: string | null
+          tags?: string[] | null
+          tech_fit_flag?: string | null
+          tech_stack?: string[] | null
+          tech_stack_notes?: string | null
+          tier?: string | null
+          tier_override?: string | null
+          timing_score?: number | null
+          touches_this_week?: number | null
+          trigger_events?: Json | null
+          triggered_account?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+          website?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       claim_podcast_queue_items: {
