@@ -41,7 +41,7 @@ export async function competitiveIntel(ctx: ToolContext, params: { query: string
   const accountIds = [...new Set((transcripts || []).map((t: { account_id: string | null }) => t.account_id).filter(Boolean))];
   let accountMap: Record<string, string> = {};
   if (accountIds.length) {
-    const { data: accts } = await supabase.from('accounts').select('id, name').in('id', accountIds as string[]);
+    const { data: accts } = await supabase.from('accounts').select('id, name').is('deleted_at', null).in('id', accountIds as string[]);
     accountMap = Object.fromEntries((accts || []).map((a: { id: string; name: string }) => [a.id, a.name]));
   }
 
