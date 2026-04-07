@@ -31,15 +31,20 @@ type AccountUpdate = Database['public']['Tables']['accounts']['Update'];
 export type { AccountRow, AccountInsert, AccountUpdate };
 
 // ─── View helper ───────────────────────────────────────────────────
-// The active_accounts view is a DB-level filter (WHERE deleted_at IS NULL).
-// Since views aren't in generated Supabase types, we use the accounts
-// table type and cast. The view has identical columns.
+// The active_accounts view has identical columns to accounts but only
+// returns rows where deleted_at IS NULL. Since it's not in generated
+// Supabase types, we tell TypeScript to treat it as the accounts table.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-const ACTIVE_VIEW = 'active_accounts' as any;
+type AccountsFrom = ReturnType<typeof supabase.from<'accounts'>>;
 
-function fromView() {
-  return supabase.from(ACTIVE_VIEW);
+/**
+ * Returns a typed Supabase query builder pointing at the `active_accounts` view.
+ * Use this for ALL user-facing account reads — soft-delete is enforced at DB level.
+ * Exported so other modules can use it directly instead of raw supabase.from('accounts').
+ */
+export function fromActiveAccounts(): AccountsFrom {
+  return supabase.from('active_accounts' as any) as any;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
