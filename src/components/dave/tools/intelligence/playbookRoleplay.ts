@@ -186,6 +186,7 @@ export async function startPlaybookRoleplay(
     const { data: acct } = await supabase
       .from('accounts')
       .select('industry')
+      .is('deleted_at', null)
       .ilike('name', `%${params.accountName}%`)
       .limit(1)
       .single();
