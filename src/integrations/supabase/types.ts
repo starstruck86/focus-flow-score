@@ -72,6 +72,7 @@ export type Database = {
           created_at: string
           crm_lifecycle_team_size: number | null
           current_agreement_link: string | null
+          deleted_at: string | null
           direct_ecommerce: boolean | null
           ecommerce: string | null
           email_sms_capture: boolean | null
@@ -126,6 +127,7 @@ export type Database = {
           created_at?: string
           crm_lifecycle_team_size?: number | null
           current_agreement_link?: string | null
+          deleted_at?: string | null
           direct_ecommerce?: boolean | null
           ecommerce?: string | null
           email_sms_capture?: boolean | null
@@ -180,6 +182,7 @@ export type Database = {
           created_at?: string
           crm_lifecycle_team_size?: number | null
           current_agreement_link?: string | null
+          deleted_at?: string | null
           direct_ecommerce?: boolean | null
           ecommerce?: string | null
           email_sms_capture?: boolean | null

@@ -7,6 +7,7 @@ import { useDbOpportunities } from '@/hooks/useAccountsData';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { differenceInDays, parseISO } from 'date-fns';
+import { isWarningEligible } from '@/lib/warningEligibility';
 
 interface DealRisk {
   oppId: string;
@@ -27,10 +28,15 @@ export function DealRiskAlerts() {
     const results: DealRisk[] = [];
 
     for (const opp of dbOpps) {
-      if (opp.status === 'closed-won' || opp.status === 'closed-lost') continue;
+      if (opp.status === 'closed-won') continue;
+      
+      const account = accounts.find(a => a.id === opp.account_id);
+      
+      // Centralized eligibility check — excludes closed-lost, churned, inactive, deleted
+      if (!isWarningEligible(opp)) continue;
+      if (account && !isWarningEligible({ accountStatus: account.accountStatus })) continue;
 
       const risks: { label: string; severity: 'high' | 'medium' }[] = [];
-      const account = accounts.find(a => a.id === opp.account_id);
 
       // Stale activity
       if (opp.last_touch_date) {
