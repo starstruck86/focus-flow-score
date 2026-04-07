@@ -82,7 +82,7 @@ export function useReExtractResource() {
       .single();
 
     if (error) throw new Error(error.message);
-    return data as DurableReExtractState;
+    return data as unknown as DurableReExtractState;
   }, []);
 
   const pollForTerminalState = useCallback(async (
