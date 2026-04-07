@@ -1844,6 +1844,17 @@ Deno.serve(async (req) => {
             extraction_retry_eligible: false,
             next_retry_at: null, retry_scheduled_at: null,
           });
+
+          // Durable run + reconciliation
+          await recordRunAndReconcile(supabase, {
+            resourceId, userId: resource.user_id, startedAt, durationMs,
+            status: 'completed', rawCount: rawItems.length, validatedCount: validated.length,
+            savedCount: 0, duplicatesSkipped: 0,
+            model: 'google/gemini-2.5-flash', strategy,
+            summary: `Summary-first rejected: degraded quality on attempt ${attemptNumber}`,
+            contentLength: resource.content.length, resourceType: resource.resource_type,
+            isLesson, enrichmentStatus: 'extraction_requires_review',
+          });
         }
         return respond({ resourceId, title: resource.title, kis: 0, error: 'Summary-first output rejected (degraded quality)', attemptNumber, strategy, log });
       }
