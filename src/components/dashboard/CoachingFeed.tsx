@@ -1,4 +1,5 @@
 // Coaching Feed — Unified stream of AI coaching alerts, nudges, and insights
+import { isWarningEligible } from '@/lib/warningEligibility';
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
