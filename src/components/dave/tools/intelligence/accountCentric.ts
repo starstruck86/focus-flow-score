@@ -21,6 +21,7 @@ async function resolveAccount(ctx: ToolContext, accountName: string) {
     .from('accounts')
     .select('id, name')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .ilike('name', `%${accountName}%`)
     .limit(1);
   return data?.[0] ? { ...data[0], userId } : null;

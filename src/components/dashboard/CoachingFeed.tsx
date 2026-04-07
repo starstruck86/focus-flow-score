@@ -105,6 +105,7 @@ export function CoachingFeed() {
     // Stale deal check
     const staleDeals = opportunities.filter(o => {
       if (o.status !== 'active') return false;
+      if (!isWarningEligible({ status: o.status })) return false;
       if (!o.lastTouchDate) return true;
       return differenceInDays(today, parseISO(o.lastTouchDate)) > 14;
     });
