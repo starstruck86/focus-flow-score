@@ -310,12 +310,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2">
-        <div className="flex items-start gap-4 flex-wrap">
-          <div className="flex-1 min-w-0 basis-[200px]">
+      <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2 overflow-hidden">
+        <div className="flex items-start gap-3 sm:gap-4 flex-wrap">
+          <div className="flex-1 min-w-0 basis-[180px] overflow-hidden">
             <GlobalWeekStrip />
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 max-w-full overflow-x-auto">
             <ActivityRings />
           </div>
         </div>

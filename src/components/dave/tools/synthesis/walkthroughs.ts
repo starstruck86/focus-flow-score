@@ -574,7 +574,7 @@ export async function queryTasks(ctx: ToolContext, params: { question?: string; 
   const accountIds = [...new Set(tasks.map(t => t.linked_account_id).filter(Boolean))] as string[];
   let accountMap: Record<string, string> = {};
   if (accountIds.length) {
-    const { data: accts } = await supabase.from('accounts').select('id, name').in('id', accountIds);
+    const { data: accts } = await supabase.from('accounts').select('id, name').is('deleted_at', null).in('id', accountIds);
     if (accts) accountMap = Object.fromEntries(accts.map(a => [a.id, a.name]));
   }
 

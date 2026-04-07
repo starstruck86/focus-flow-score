@@ -61,6 +61,7 @@ export function PrepDealMode() {
         .from('accounts')
         .select('id, name')
         .eq('user_id', user!.id)
+        .is('deleted_at', null)
         .order('name');
       return data || [];
     },

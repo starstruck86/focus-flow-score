@@ -4,6 +4,7 @@ import { useStore } from '@/store/useStore';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { differenceInDays, differenceInHours, parseISO, format, startOfDay } from 'date-fns';
 import type { Account, Opportunity, Renewal } from '@/types';
+import { isWarningEligible } from '@/lib/warningEligibility';
 
 export type WorkItemType = 'account' | 'opportunity' | 'renewal';
 export type WorkItemUrgency = 'critical' | 'high' | 'medium' | 'low';
@@ -118,7 +119,7 @@ function scoreAccount(account: Account, calendarAccountNames: Set<string>): Work
 
 // Score an opportunity for work priority
 function scoreOpportunity(opp: Opportunity, accounts: Account[]): WorkItem | null {
-  if (opp.status === 'closed-won' || opp.status === 'closed-lost') return null;
+  if (opp.status === 'closed-won' || !isWarningEligible({ status: opp.status })) return null;
 
   let score = 0;
   const reasons: string[] = [];

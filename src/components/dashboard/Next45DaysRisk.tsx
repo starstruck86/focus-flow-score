@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, Calendar, ExternalLink, FileText, Link2 } from 'lucide-react';
 import { format, differenceInDays, parseISO, addDays, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { isWarningEligible } from '@/lib/warningEligibility';
 import { ClickableName } from '@/components/ClickableName';
 import { formatCurrency } from '@/lib/commissionCalculations';
 import { Badge } from '@/components/ui/badge';
@@ -82,7 +83,7 @@ function OpportunitiesTable({ opportunities }: { opportunities: Opportunity[] })
   const filtered = opportunities
     .filter(o => 
       o.status !== 'closed-won' && 
-      o.status !== 'closed-lost' && 
+      isWarningEligible({ status: o.status }) &&
       o.closeDate
     )
     .filter(o => {
@@ -353,7 +354,7 @@ export function Next45DaysRisk({ opportunities, renewals }: Next45DaysRiskProps)
   const fortyFiveDaysFromNow = addDays(today, 45);
   
   const oppsCount = opportunities.filter(o => {
-    if (o.status === 'closed-won' || o.status === 'closed-lost') return false;
+    if (o.status === 'closed-won' || !isWarningEligible({ status: o.status })) return false;
     const closeDate = parseIsoDateSafe(o.closeDate);
     return closeDate ? closeDate <= fortyFiveDaysFromNow && closeDate >= today : false;
   }).length;

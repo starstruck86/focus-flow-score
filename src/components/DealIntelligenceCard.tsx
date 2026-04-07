@@ -4,6 +4,7 @@ import { useStore } from '@/store/useStore';
 import { useOppPlaybookRecommendation } from '@/hooks/usePlaybookRecommendation';
 import { useOpportunityMethodology } from '@/hooks/useOpportunityMethodology';
 import { cn } from '@/lib/utils';
+import { isWarningEligible } from '@/lib/warningEligibility';
 
 interface DealIntelligenceCardProps {
   opportunityId: string;
@@ -24,7 +25,7 @@ export function DealIntelligenceCard({ opportunityId }: DealIntelligenceCardProp
 
   const signals = useMemo<DealSignals | null>(() => {
     if (!opp) return null;
-    if (opp.status === 'closed-won' || opp.status === 'closed-lost') return null;
+    if (opp.status === 'closed-won' || !isWarningEligible({ status: opp.status })) return null;
 
     const oppContacts = opp.accountId
       ? contacts.filter(c => c.accountId === opp.accountId)

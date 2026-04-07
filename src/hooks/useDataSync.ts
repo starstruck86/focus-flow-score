@@ -34,7 +34,7 @@ function notifySyncListeners() { _syncListeners.forEach(fn => fn()); }
 
 // ── DB → Zustand mappers ─────────────────────────────────
 
-function dbAccountToStore(db: AccountRow): Account {
+export function dbAccountToStore(db: AccountRow): Account {
   return {
     id: db.id,
     name: db.name,

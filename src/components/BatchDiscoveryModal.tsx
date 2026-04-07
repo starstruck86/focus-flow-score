@@ -55,6 +55,7 @@ export function BatchDiscoveryModal({ children }: { children: React.ReactNode })
       const { data, error } = await supabase
         .from('accounts')
         .select('id, name, industry, website, tier, priority')
+        .is('deleted_at', null)
         .order('name');
       if (error) throw error;
       return data || [];

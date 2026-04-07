@@ -46,7 +46,7 @@ export function GlobalSearch({ className }: { className?: string }) {
     const lower = q.toLowerCase();
 
     const [accountsRes, oppsRes, renewalsRes, contactsRes, tasksRes] = await Promise.all([
-      supabase.from('accounts').select('id, name, industry, outreach_status').ilike('name', `%${lower}%`).limit(4),
+      supabase.from('accounts').select('id, name, industry, outreach_status').is('deleted_at', null).ilike('name', `%${lower}%`).limit(4),
       supabase.from('opportunities').select('id, name, stage, arr, deal_type').ilike('name', `%${lower}%`).limit(4),
       supabase.from('renewals').select('id, account_name, arr, renewal_stage').ilike('account_name', `%${lower}%`).limit(4),
       supabase.from('contacts').select('id, name, title, email').ilike('name', `%${lower}%`).limit(4),

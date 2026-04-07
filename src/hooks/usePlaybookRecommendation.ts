@@ -9,6 +9,7 @@
 import { useMemo, useRef } from 'react';
 import { usePlaybooks, type Playbook } from './usePlaybooks';
 import { useStore } from '@/store/useStore';
+import { isWarningEligible } from '@/lib/warningEligibility';
 
 export interface WorkflowContext {
   blockType?: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep' | 'build' | 'roleplay';
@@ -237,7 +238,7 @@ export function useOppPlaybookRecommendation(oppId?: string) {
   const ctx = useMemo<WorkflowContext>(() => {
     if (!opp) return {};
     // Suppress for closed deals — no recommendation needed
-    if (opp.status === 'closed-won' || opp.status === 'closed-lost') return {};
+    if (opp.status === 'closed-won' || !isWarningEligible({ status: opp.status })) return {};
     const daysSinceTouch = opp.lastTouchDate
       ? Math.floor((Date.now() - new Date(opp.lastTouchDate).getTime()) / 86400000)
       : null;

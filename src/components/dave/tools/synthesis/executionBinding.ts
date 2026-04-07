@@ -104,6 +104,7 @@ async function findTargetAccount(
       .from('accounts')
       .select('id, name, tier, icp_fit_score, outreach_status, priority_score')
       .eq('user_id', userId)
+      .is('deleted_at', null)
       .in('outreach_status', ['in-progress', 'working', 'not-started'])
       .order('priority_score', { ascending: false })
       .limit(1);
@@ -116,6 +117,7 @@ async function findTargetAccount(
       .from('accounts')
       .select('id, name, tier, icp_fit_score')
       .eq('user_id', userId)
+      .is('deleted_at', null)
       .order('icp_fit_score', { ascending: false })
       .limit(1);
 
@@ -128,6 +130,7 @@ async function findTargetAccount(
     .from('accounts')
     .select('id, name, tier, icp_fit_score, account_status')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .in('account_status', ['meeting booked', 'meeting held', 'researching'])
     .order('icp_fit_score', { ascending: false })
     .limit(1);
