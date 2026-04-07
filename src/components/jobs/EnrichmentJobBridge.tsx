@@ -8,7 +8,7 @@ import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
 import { useBackgroundJobs } from '@/store/useBackgroundJobs';
 import { useAuth } from '@/contexts/AuthContext';
 
-const JOB_ID = 'enrichment-batch';
+const JOB_ID = 'enrichment-batch'; // Legacy client-side enrichment — no DB persistence (not UUID)
 
 export function EnrichmentJobBridge() {
   const { user } = useAuth();
