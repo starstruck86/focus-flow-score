@@ -1,17 +1,15 @@
 /**
  * EnrichmentJobBridge — syncs useEnrichmentJobStore state into the global
  * useBackgroundJobs store so the unified indicator/drawer shows enrichment progress.
- * Now persists to the durable background_jobs table via userId.
+ * This is the LEGACY client-side path. Durable enrichment uses startDurableEnrichment instead.
  */
 import { useEffect, useRef } from 'react';
 import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
 import { useBackgroundJobs } from '@/store/useBackgroundJobs';
-import { useAuth } from '@/contexts/AuthContext';
 
-const JOB_ID = 'enrichment-batch';
+const JOB_ID = 'enrichment-batch'; // Legacy client-side enrichment — no DB persistence (not UUID)
 
 export function EnrichmentJobBridge() {
-  const { user } = useAuth();
   const enrichState = useEnrichmentJobStore((s) => s.state);
   const addJob = useBackgroundJobs((s) => s.addJob);
   const updateJob = useBackgroundJobs((s) => s.updateJob);
@@ -37,7 +35,7 @@ export function EnrichmentJobBridge() {
           progressPercent: totalItems > 0 ? Math.round((processedCount / totalItems) * 100) : 0,
           stepLabel: `Batch ${currentBatch} of ${totalBatches}`,
           substatus: 'enriching',
-          userId: user?.id,
+          // No userId — this is the legacy client-side path, not durable
         });
         bridged.current = true;
       }

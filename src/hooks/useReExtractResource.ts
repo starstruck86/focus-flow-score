@@ -193,15 +193,16 @@ export function useReExtractResource() {
   };
 
   const reExtract = useCallback(async (resourceId: string, resourceTitle: string) => {
-    const jobId = `re-extract-${resourceId}`;
+    const pollKey = `re-extract-${resourceId}`;
 
     // Guard: don't start a duplicate extraction for the same resource
-    if (activePolls.current.has(jobId)) {
-      console.warn(`[RE-EXTRACT JOB] duplicate blocked for "${jobId}"`);
+    if (activePolls.current.has(pollKey)) {
+      console.warn(`[RE-EXTRACT JOB] duplicate blocked for "${pollKey}"`);
       toast.info(`Re-extraction already in progress for "${resourceTitle}"`);
       return;
     }
 
+    const jobId = crypto.randomUUID();
     const existing = resources.find(r => r.id === resourceId) as any;
     const beforeKiCount = existing?.current_resource_ki_count ?? 0;
     const baselineAttemptCount = existing?.extraction_attempt_count ?? 0;
@@ -221,7 +222,7 @@ export function useReExtractResource() {
       userId: user?.id,
     });
 
-    activePolls.current.add(jobId);
+    activePolls.current.add(pollKey);
     setLocalOverrides(prev => ({ ...prev, [resourceId]: 'running' }));
     await persistStatus(resourceId, 'running');
 
@@ -317,7 +318,7 @@ export function useReExtractResource() {
 
       toast.error(`Re-extract failed for "${resourceTitle}": ${err.message}`);
     } finally {
-      activePolls.current.delete(jobId);
+      activePolls.current.delete(pollKey);
     }
   }, [addJob, updateJob, pollForTerminalState, qc, resources]);
 
