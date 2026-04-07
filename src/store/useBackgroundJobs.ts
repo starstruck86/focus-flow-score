@@ -10,6 +10,7 @@ import {
   updateDurableJob,
   finalizeDurableJob,
 } from '@/lib/durableJobs';
+import { retryDurableJob } from '@/lib/startDurableEnrichment';
 
 export type JobStatus = 'queued' | 'running' | 'awaiting_review' | 'completed' | 'failed' | 'cancelled';
 
@@ -210,7 +211,7 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
     if (!current) return;
     if (!TERMINAL_STATUSES.includes(current.status)) return;
 
-    console.info(`[BACKGROUND JOBS] retryJob: "${id}" ${current.status} → queued`);
+    console.info(`[BACKGROUND JOBS] retryJob: "${id}" ${current.status} → queued (dispatching to backend)`);
     set((s) => ({
       jobs: s.jobs.map((j) =>
         j.id === id
@@ -219,15 +220,10 @@ export const useBackgroundJobs = create<BackgroundJobsStore>((set, get) => ({
       ),
     }));
 
-    // Persist retry to DB
-    updateDurableJob(id, {
-      status: 'queued',
-      error: null,
-      progress_percent: 0,
-      substatus: null,
-      step_label: 'Queued for retry',
-      completed_at: null,
-    } as any).catch(() => {});
+    // Persist retry to DB AND dispatch real backend work
+    retryDurableJob(id).catch((err) => {
+      console.error(`[BACKGROUND JOBS] retry dispatch failed for "${id}":`, err);
+    });
   },
 
   removeJob: (id) => {
