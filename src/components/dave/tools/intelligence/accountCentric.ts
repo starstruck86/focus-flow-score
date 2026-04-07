@@ -12,19 +12,13 @@ import { getAccountState } from '@/lib/accountExecutionState';
 import { buildAccountWorkingSummary } from '@/lib/accountWorkingSummary';
 import { getPostActionRecommendation, evaluateOpportunityEscalation } from '@/lib/accountPostAction';
 import { getRecentEvents, getTimelineSummary } from '@/lib/accountTimeline';
+import { resolveAccountByName } from '@/data/accounts';
 
 async function resolveAccount(ctx: ToolContext, accountName: string) {
   const userId = await ctx.getUserId();
   if (!userId) return null;
-  const { supabase } = await import('@/integrations/supabase/client');
-  const { data } = await supabase
-    .from('accounts')
-    .select('id, name')
-    .eq('user_id', userId)
-    .is('deleted_at', null)
-    .ilike('name', `%${accountName}%`)
-    .limit(1);
-  return data?.[0] ? { ...data[0], userId } : null;
+  const acct = await resolveAccountByName(userId, accountName);
+  return acct ? { ...acct, userId } : null;
 }
 
 export function createAccountCentricTools(ctx: ToolContext): ToolMap {
