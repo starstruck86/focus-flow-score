@@ -2,18 +2,37 @@
 # ═══════════════════════════════════════════════════════════════
 # Regression guardrail: detect hard reload usage
 # ═══════════════════════════════════════════════════════════════
-# Run: npm run guard:no-hard-reload  (or bash scripts/guard-no-hard-reload.sh)
+# Run: bash scripts/guard-no-hard-reload.sh
 #
-# Fails if any source file contains window.location.reload() or
-# location.reload(). The app MUST use performSoftRefresh() from
-# src/lib/softRefresh.ts instead.
+# Fails if any source file (outside known exceptions) contains
+# window.location.reload() or location.reload().
+#
+# Known exceptions (intentional hard reloads):
+#   - ErrorBoundary.tsx    — crash recovery, last resort
+#   - useAppFreshness.ts   — build-version update, intentional
+#   - main.tsx             — boot crash fallback
+#   - softRefresh.ts       — contract comment (not actual usage)
+#   - warningEligibility   — contract comment
+#   - test files           — test assertions
+#
+# The app's DATA REFRESH must use performSoftRefresh() from
+# src/lib/softRefresh.ts.
 
 set -euo pipefail
 
-VIOLATIONS=$(grep -rn 'window\.location\.reload\|location\.reload' src/ --include='*.ts' --include='*.tsx' || true)
+VIOLATIONS=$(grep -rn 'window\.location\.reload\|location\.reload' src/ \
+  --include='*.ts' --include='*.tsx' \
+  | grep -v 'ErrorBoundary' \
+  | grep -v 'useAppFreshness' \
+  | grep -v 'main\.tsx' \
+  | grep -v '__tests__' \
+  | grep -v '\.test\.' \
+  | grep -v 'NEVER.*reload' \
+  | grep -v 'not.*contain.*reload' \
+  || true)
 
 if [ -n "$VIOLATIONS" ]; then
-  echo "❌ REGRESSION: Hard reload detected in source files!"
+  echo "❌ REGRESSION: Unexpected hard reload detected!"
   echo ""
   echo "$VIOLATIONS"
   echo ""
@@ -21,4 +40,4 @@ if [ -n "$VIOLATIONS" ]; then
   exit 1
 fi
 
-echo "✅ No hard reload usage found."
+echo "✅ No unexpected hard reload usage found."
