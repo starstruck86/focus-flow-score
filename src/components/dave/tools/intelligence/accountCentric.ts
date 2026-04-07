@@ -14,11 +14,11 @@ import { getPostActionRecommendation, evaluateOpportunityEscalation } from '@/li
 import { getRecentEvents, getTimelineSummary } from '@/lib/accountTimeline';
 import { resolveAccountByName } from '@/data/accounts';
 
-async function resolveAccount(ctx: ToolContext, accountName: string) {
+async function resolveAccount(ctx: ToolContext, accountName: string): Promise<{ id: string; name: string; userId: string } | null> {
   const userId = await ctx.getUserId();
   if (!userId) return null;
-  const acct = await resolveAccountByName(userId, accountName);
-  return acct ? { ...acct, userId } : null;
+  const acct = await resolveAccountByName(userId, accountName) as { id: string; name: string } | null;
+  return acct ? { id: acct.id, name: acct.name, userId } : null;
 }
 
 export function createAccountCentricTools(ctx: ToolContext): ToolMap {
