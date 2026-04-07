@@ -15,7 +15,7 @@ import { OfflineBanner } from "@/components/OfflineBanner";
 import { ReviewModeBanner } from "@/components/ReviewModeBanner";
 import { BackgroundJobIndicator } from "@/components/jobs/BackgroundJobIndicator";
 import { BackgroundJobDrawer } from "@/components/jobs/BackgroundJobDrawer";
-import { EnrichmentJobBridge } from "@/components/jobs/EnrichmentJobBridge";
+
 import { DurableJobRehydrator } from "@/components/jobs/DurableJobRehydrator";
 import Dashboard from "./pages/Dashboard";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
@@ -80,7 +80,7 @@ const App = () => (
               <DurableJobRehydrator />
               <BackgroundJobIndicator />
               <BackgroundJobDrawer />
-              <EnrichmentJobBridge />
+              
               <BrowserRouter>
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
