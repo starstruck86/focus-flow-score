@@ -461,6 +461,69 @@ export type Database = {
         }
         Relationships: []
       }
+      background_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          entity_id: string | null
+          error: string | null
+          id: string
+          metadata: Json | null
+          progress_current: number | null
+          progress_mode: string | null
+          progress_percent: number | null
+          progress_total: number | null
+          started_at: string | null
+          status: string
+          step_label: string | null
+          substatus: string | null
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          entity_id?: string | null
+          error?: string | null
+          id?: string
+          metadata?: Json | null
+          progress_current?: number | null
+          progress_mode?: string | null
+          progress_percent?: number | null
+          progress_total?: number | null
+          started_at?: string | null
+          status?: string
+          step_label?: string | null
+          substatus?: string | null
+          title: string
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          entity_id?: string | null
+          error?: string | null
+          id?: string
+          metadata?: Json | null
+          progress_current?: number | null
+          progress_mode?: string | null
+          progress_percent?: number | null
+          progress_total?: number | null
+          started_at?: string | null
+          status?: string
+          step_label?: string | null
+          substatus?: string | null
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       badges_earned: {
         Row: {
           badge_name: string
