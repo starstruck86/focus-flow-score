@@ -24,7 +24,7 @@ export function DealIntelligenceCard({ opportunityId }: DealIntelligenceCardProp
 
   const signals = useMemo<DealSignals | null>(() => {
     if (!opp) return null;
-    if (opp.status === 'closed-won' || opp.status === 'closed-lost') return null;
+    if (opp.status === 'closed-won' || !isWarningEligible({ status: opp.status })) return null;
 
     const oppContacts = opp.accountId
       ? contacts.filter(c => c.accountId === opp.accountId)
