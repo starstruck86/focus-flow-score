@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import { toast } from 'sonner';
 import { emitDataChanged } from '@/lib/daveEvents';
 import { parseDueDate, parseTime } from '../toolTypes';

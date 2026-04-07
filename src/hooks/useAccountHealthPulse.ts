@@ -1,6 +1,7 @@
 // Account Health Pulse — unified score combining ICP fit + timing + stakeholder coverage + signals
 import { useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 

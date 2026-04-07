@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import type { Account, Contact, Renewal, Opportunity, Task, ChurnRisk } from '@/types';

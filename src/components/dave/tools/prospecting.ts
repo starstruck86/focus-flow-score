@@ -3,6 +3,7 @@
  * Surfaces cycle state, suggests next accounts, and guides step-by-step workflow.
  */
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import type { ToolContext, ToolMap } from '../toolTypes';
 
 export function createProspectingTools(ctx: ToolContext): ToolMap {

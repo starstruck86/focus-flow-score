@@ -4,6 +4,7 @@
  * or detailed item-by-item walkthroughs for any major entity.
  */
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import type { ToolContext } from '../../toolTypes';
 
 // ── Shared filter model ─────────────────────────────────────────

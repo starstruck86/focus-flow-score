@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { fromActiveAccounts } from '@/data/accounts';
 import type { ToolContext } from '../../toolTypes';
 
 export async function readResource(ctx: ToolContext, params: { title: string }): Promise<string> {
