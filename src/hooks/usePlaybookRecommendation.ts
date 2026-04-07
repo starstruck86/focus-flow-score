@@ -9,6 +9,7 @@
 import { useMemo, useRef } from 'react';
 import { usePlaybooks, type Playbook } from './usePlaybooks';
 import { useStore } from '@/store/useStore';
+import { isWarningEligible } from '@/lib/warningEligibility';
 
 export interface WorkflowContext {
   blockType?: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep' | 'build' | 'roleplay';

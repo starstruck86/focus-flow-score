@@ -4,6 +4,7 @@ import { useStore } from '@/store/useStore';
 import { useOppPlaybookRecommendation } from '@/hooks/usePlaybookRecommendation';
 import { useOpportunityMethodology } from '@/hooks/useOpportunityMethodology';
 import { cn } from '@/lib/utils';
+import { isWarningEligible } from '@/lib/warningEligibility';
 
 interface DealIntelligenceCardProps {
   opportunityId: string;

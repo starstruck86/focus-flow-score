@@ -4,6 +4,7 @@ import { useStore } from '@/store/useStore';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { differenceInDays, differenceInHours, parseISO, format, startOfDay } from 'date-fns';
 import type { Account, Opportunity, Renewal } from '@/types';
+import { isWarningEligible } from '@/lib/warningEligibility';
 
 export type WorkItemType = 'account' | 'opportunity' | 'renewal';
 export type WorkItemUrgency = 'critical' | 'high' | 'medium' | 'low';
