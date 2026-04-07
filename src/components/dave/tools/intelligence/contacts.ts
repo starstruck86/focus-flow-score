@@ -8,7 +8,7 @@ export async function lookupContact(ctx: ToolContext, params: { accountName: str
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
-  const { data: accts } = await supabase.from('accounts').select('id, name').eq('user_id', userId).is('deleted_at', null).ilike('name', `%${params.accountName}%`).limit(1);
+  const { data: accts } = await fromActiveAccounts().select('id, name').eq('user_id', userId).ilike('name', `%${params.accountName}%`).limit(1);
   if (!accts?.length) return `Account "${params.accountName}" not found`;
 
   const { data: contacts } = await supabase.from('contacts').select('name, title, email, buyer_role, influence_level, department, status').eq('account_id', accts[0].id).limit(20);
@@ -25,7 +25,7 @@ export async function addContact(ctx: ToolContext, params: { name: string; title
 
   let accountId: string | null = null;
   if (params.accountName) {
-    const { data: accts } = await supabase.from('accounts').select('id').eq('user_id', userId).is('deleted_at', null).ilike('name', `%${params.accountName}%`).limit(1);
+    const { data: accts } = await fromActiveAccounts().select('id').eq('user_id', userId).ilike('name', `%${params.accountName}%`).limit(1);
     accountId = accts?.[0]?.id ?? null;
   }
 
@@ -49,7 +49,7 @@ export async function stakeholderQuery(ctx: ToolContext, params: { accountName: 
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
-  const { data: accts } = await supabase.from('accounts').select('id, name').eq('user_id', userId).is('deleted_at', null).ilike('name', `%${params.accountName}%`).limit(1);
+  const { data: accts } = await fromActiveAccounts().select('id, name').eq('user_id', userId).ilike('name', `%${params.accountName}%`).limit(1);
   if (!accts?.length) return `Account "${params.accountName}" not found`;
 
   let query = supabase.from('contacts').select('name, title, department, buyer_role, influence_level, email, reporting_to, status, seniority').eq('account_id', accts[0].id);
