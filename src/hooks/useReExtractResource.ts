@@ -218,6 +218,7 @@ export function useReExtractResource() {
       stepLabel: 'Starting extraction…',
       substatus: 'extracting',
       entityId: resourceId,
+      userId: user?.id,
     });
 
     activePolls.current.add(jobId);
