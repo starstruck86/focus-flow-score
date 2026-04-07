@@ -562,7 +562,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
       _isHydrating = true;
       try {
         if (table === 'accounts') {
-          const { data } = await supabase.from('accounts').select('*').order('name');
+          const { data } = await supabase.from('accounts').select('*').is('deleted_at', null).order('name');
           if (data) {
             const mapped = data.map(dbAccountToStore);
             useStore.setState({ accounts: mapped });
