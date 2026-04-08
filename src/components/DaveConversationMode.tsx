@@ -13,7 +13,9 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { createClientTools } from './dave/clientTools';
 import { DaveDiagnosticsPanel, type DiagnosticData } from './dave/DaveDiagnosticsPanel';
+import { DaveConnectionBanner } from './dave/DaveConnectionBanner';
 import { classifyMicrophoneAccessError, releaseMicrophoneStream, requestMicrophoneAccess } from '@/lib/microphoneAccess';
+import { useDaveConnectionManager } from '@/hooks/useDaveConnectionManager';
 
 interface Props {
   isOpen: boolean;
@@ -81,6 +83,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     failInteraction, getRecoverableInteraction, incrementRetry, dismissRecovery,
     getConversationContext,
   } = useDaveConversation();
+
+  // ── Connection Manager (single source of truth) ──
+  const connMgr = useDaveConnectionManager();
+
   const [isConnecting, setIsConnecting] = useState(false);
   const [needsTap, setNeedsTap] = useState(true);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -99,6 +105,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
   const lastMessageTypeRef = useRef<string | null>(null);
   const lastMessageAtRef = useRef<number | null>(null);
   const errorHistoryRef = useRef<string[]>([]);
+  const cleanDisconnectRef = useRef(false);
 
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const diagTapCountRef = useRef(0);
@@ -178,6 +185,14 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       connectedAtRef.current = Date.now();
       setGreetingStatus('waiting');
 
+      // ── Connection Manager: mark connected ──
+      connMgr.dispatch({ type: 'CONNECT_SUCCESS', sessionId: sessionData.token.substring(0, 16) });
+      
+      // ── Start heartbeat: check if conversation status is still connected ──
+      connMgr.startHeartbeat(async () => {
+        return conversation.status === 'connected';
+      });
+
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
@@ -196,6 +211,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
         if (!messageReceivedRef.current && isOpenRef.current) {
           logStatus('🔄 Greeting timeout — requesting retry-via-remount');
           setGreetingStatus('retrying');
+          cleanDisconnectRef.current = true;
           try { conversation.endSession(); } catch (_) {}
           onRetry();
         }
@@ -203,26 +219,39 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     },
     onDisconnect: () => {
       releasePreflightStream();
+      connMgr.stopHeartbeat();
       const uptime = connectedAtRef.current ? Date.now() - connectedAtRef.current : 0;
       logStatus(`❌ Disconnected (uptime: ${uptime}ms, msgs: ${messagesReceivedCountRef.current})`);
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
-      // Detect unexpected disconnect — auto-retry once if we had an active interaction
+      const wasClean = cleanDisconnectRef.current;
+      cleanDisconnectRef.current = false;
+
+      // ── Connection Manager: mark disconnected ──
+      connMgr.dispatch({
+        type: 'DISCONNECT',
+        reason: wasClean ? 'user_initiated' : `uptime=${uptime}ms msgs=${messagesReceivedCountRef.current}`,
+        wasClean,
+      });
+
+      if (wasClean) return;
+
+      // Detect unexpected disconnect — auto-retry via connection manager
       const wasActive = uptime > 2000 && messagesReceivedCountRef.current > 0;
       const reqId = currentRequestIdRef.current;
       if (wasActive && reqId && !autoRetryingRef.current) {
         failInteraction(reqId);
         const recoverable = getRecoverableInteraction();
         if (recoverable && recoverable.retryCount < 1) {
-          logStatus('🔄 Unexpected disconnect — auto-retrying...');
+          logStatus('🔄 Unexpected disconnect — auto-retrying via connection manager...');
           autoRetryingRef.current = true;
           incrementRetry(reqId);
           toast.info('Dave got interrupted — reconnecting...', { duration: 3000 });
-          setTimeout(() => {
+          connMgr.scheduleReconnect(async () => {
             autoRetryingRef.current = false;
             onRetry();
-          }, 1500);
+          });
           return;
         }
       }
@@ -255,7 +284,6 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
         const text = message.agent_response_event.agent_response;
         setTranscript(prev => [...prev, { role: 'agent', text }]);
         addDaveResponse(text);
-        // Track partial response for recovery
         if (currentRequestIdRef.current) {
           appendPartialResponse(currentRequestIdRef.current, text);
         }
@@ -267,8 +295,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       errorHistoryRef.current = [...errorHistoryRef.current.slice(-4), msg];
       console.error('[Dave] Full error object:', err);
       releasePreflightStream();
+      connMgr.stopHeartbeat();
       const friendlyMessage = classifyDaveStartupError(err);
       setError(friendlyMessage);
+      connMgr.dispatch({ type: 'CONNECT_FAILURE', error: friendlyMessage });
       if (currentRequestIdRef.current) failInteraction(currentRequestIdRef.current);
       toast.error('Dave connection error', { description: friendlyMessage });
     },
@@ -298,7 +328,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     if (startingRef.current) return;
     startingRef.current = true;
     setIsConnecting(true);
-    setError(null);
+    connMgr.dispatch({ type: 'CONNECT_START' });
     setGreetingStatus('waiting');
     setTranscript([]);
 
@@ -386,6 +416,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     }
     dismissRecovery();
 
+    // ── Connection Manager: clean disconnect ──
+    cleanDisconnectRef.current = true;
+    connMgr.cleanup();
+
     const currentTranscript = transcriptRef.current;
     if (currentTranscript.length > 0) {
       const durationSeconds = Math.round((Date.now() - sessionStartRef.current) / 1000);
@@ -405,7 +439,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
     await conversation.endSession();
     onClose();
-  }, [conversation, onClose, completeInteraction, dismissRecovery]);
+  }, [conversation, onClose, completeInteraction, dismissRecovery, connMgr]);
 
   useLayoutEffect(() => {
     // Auto-start when mic permission was pre-acquired during the tap gesture (both desktop and mobile).
@@ -421,7 +455,9 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
       releasePreflightStream();
+      connMgr.cleanup();
       if (conversation.status === 'connected') {
+        cleanDisconnectRef.current = true;
         conversation.endSession();
       }
     };
@@ -575,6 +611,13 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
             />
           )}
         </div>
+
+        {/* Connection status banner */}
+        <DaveConnectionBanner
+          meta={connMgr.meta}
+          onRetry={onRetry}
+          className="mx-3 mb-1"
+        />
 
         {/* Status bar */}
         <div className="flex items-center justify-center gap-2 px-3 pb-2">

@@ -18,6 +18,8 @@ import { GlobalSearch } from '@/components/GlobalSearch';
 import { TerritoryCopilot } from '@/components/TerritoryCopilot';
 import { DaveMicFAB } from '@/components/DaveMicFAB';
 import { DaveConversationMode } from '@/components/DaveConversationMode';
+import { DaveDebugPanel } from '@/components/dave/DaveDebugPanel';
+import { useDaveConnectionManager } from '@/hooks/useDaveConnectionManager';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BackToToday } from '@/components/BackToToday';
 import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
@@ -90,6 +92,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [daveBlockedByTab, setDaveBlockedByTab] = useState(false);
   const { getSession: getDaveSession, invalidateCache: invalidateDaveCache, isFetching: isFetchingDaveSession } = useDaveContext();
   const daveDrift = useGroupDrift('dave');
+  const daveConnMgr = useDaveConnectionManager();
   const daveChannelRef = useRef<BroadcastChannel | null>(null);
   useVoiceReminders();
 
@@ -389,6 +392,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
           preacquiredMicStream={preacquiredMicStream}
         />
       )}
+
+      {/* Dave Debug Panel — Ctrl+Shift+D to toggle */}
+      <DaveDebugPanel
+        meta={daveConnMgr.meta}
+        extraInfo={{
+          daveOpen,
+          daveMinimized,
+          retryCount: daveRetryCount,
+          blockedByTab: daveBlockedByTab,
+        }}
+      />
     </div>
   );
 }
