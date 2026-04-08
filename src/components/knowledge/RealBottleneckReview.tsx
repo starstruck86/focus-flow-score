@@ -111,14 +111,20 @@ export function RealBottleneckReview({ resources, queueResults, onFlagForReExtra
     // Only show resources whose post-extraction state routes to 'bottleneck_review'
     const candidates = filterByPanel(resources, 'bottleneck_review')
       .sort((a, b) => a.kis_per_1k_chars - b.kis_per_1k_chars)
-      .slice(0, 15);
+      .slice(0, 30);
 
     return candidates.map(r => {
       const qr = queueResults.find(q => q.resource_id === r.resource_id) ?? null;
       const canonical = derivePostExtractionState(r);
       const { rec, explanation, priority } = computeRecommendation(r, qr);
       return { resource: r, queueResult: qr, recommendation: rec, explanation: `[${canonical.label}] ${explanation}`, priority };
-    }).sort((a, b) => b.priority - a.priority);
+    })
+    // ── PANEL INTEGRITY: exclude done-equivalent rows ──
+    // "already well mined" and "not worth re-extracting" are terminal conclusions.
+    // They must not appear in a bottleneck review panel — if canonical routing
+    // placed them here, the recommendation overrides them out.
+    .filter(row => row.recommendation !== 'already well mined' && row.recommendation !== 'not worth re-extracting')
+    .sort((a, b) => b.priority - a.priority);
   }, [resources, queueResults]);
 
   const actionable = reviewRows.filter(r => r.recommendation === 're-extract again' || r.recommendation === 'needs first deep extraction');
@@ -132,7 +138,10 @@ export function RealBottleneckReview({ resources, queueResults, onFlagForReExtra
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Microscope className="h-4 w-4 text-primary" />
-              Real Bottleneck Review ({reviewRows.length})
+              Real Bottleneck Review
+              <span className="text-xs font-normal text-muted-foreground">
+                {reviewRows.length} reviewed · {actionable.length} actionable
+              </span>
             </CardTitle>
             {actionable.length > 0 && (
               <Button
@@ -145,7 +154,7 @@ export function RealBottleneckReview({ resources, queueResults, onFlagForReExtra
                 }}
               >
                 <Zap className="h-3 w-3" />
-                Flag {actionable.length} for Re-Extraction
+                Flag {actionable.length} Actionable for Re-Extraction
               </Button>
             )}
           </div>
