@@ -562,7 +562,7 @@ function deduplicateItems(items: any[], isLesson = false): DedupeResult {
       else if (!isLesson) {
         const itemCoreWords = corePhrase(item.title || '').split(/\s+/).filter(w => w.length > 0);
         const existCoreWords = corePhrase(result[i].title || '').split(/\s+/).filter(w => w.length > 0);
-        if (itemCoreWords.length >= 2 && existCoreWords.length >= 2) {
+        if (itemCoreWords.length >= 3 && existCoreWords.length >= 3) {
           const itemVerb = normalizedWords(item.title || '')[0];
           const existVerb = normalizedWords(result[i].title || '')[0];
           const coreInter = itemCoreWords.filter(w => existCoreWords.includes(w));
