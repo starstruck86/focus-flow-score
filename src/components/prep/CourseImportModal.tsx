@@ -466,7 +466,63 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
             </Button>
           </div>
 
-          {lessons.length > 0 && !importing && (
+          {/* Auth error banner */}
+          {authError && (
+            <div className="flex items-start gap-2 p-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-sm text-destructive flex-shrink-0">
+              <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          {/* Optional per-import credentials */}
+          <Collapsible open={showCreds} onOpenChange={setShowCreds} className="flex-shrink-0">
+            <CollapsibleTrigger asChild>
+              <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full">
+                <KeyRound className="h-3 w-3" />
+                <span>Course platform credentials</span>
+                <ChevronDown className={`h-3 w-3 transition-transform ${showCreds ? 'rotate-180' : ''}`} />
+                {credEmail && <Badge variant="outline" className="text-[9px] h-4 ml-auto">credentials set</Badge>}
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 space-y-2">
+              <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground p-2 rounded bg-muted/50">
+                <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                <span>Optional — only used for this import attempt. Not saved anywhere. Leave blank to use stored credentials.</span>
+              </div>
+              <Input
+                type="email"
+                value={credEmail}
+                onChange={e => setCredEmail(e.target.value)}
+                placeholder="Email for this course platform"
+                disabled={fetching || importing}
+                className="h-8 text-sm"
+              />
+              <Input
+                type="password"
+                value={credPassword}
+                onChange={e => setCredPassword(e.target.value)}
+                placeholder="Password"
+                disabled={fetching || importing}
+                className="h-8 text-sm"
+              />
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Discovery metadata */}
+          {discoverMeta && !importing && (
+            <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground flex-shrink-0">
+              <Badge variant="outline" className="text-[9px] h-4">{discoverMeta.domain}</Badge>
+              <Badge variant={discoverMeta.auth_status === 'authenticated' ? 'default' : 'destructive'} className="text-[9px] h-4">
+                {discoverMeta.auth_status === 'authenticated' ? '✓ Authenticated' : '✗ Auth failed'}
+              </Badge>
+              {discoverMeta.used_request_credentials && (
+                <Badge variant="outline" className="text-[9px] h-4">using typed credentials</Badge>
+              )}
+              <span>{discoverMeta.lessons_discovered} lessons found</span>
+            </div>
+          )}
+
+
             <>
               <div className="flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-2">
