@@ -522,7 +522,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
             </div>
           )}
 
-
+          {lessons.length > 0 && !importing && (
             <>
               <div className="flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-2">
