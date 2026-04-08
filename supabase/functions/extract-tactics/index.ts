@@ -770,8 +770,6 @@ ${chunks[i]}`;
 
   // Surface chunk errors in summary for diagnostics
   const chunkErrors = getAndClearChunkErrors();
-  // chunksProcessed should never go negative — it's per-unique-chunk, not per-pass
-  // chunksFailed counts across all passes, so cap chunksProcessed at 0
   const effectiveChunksProcessed = Math.max(0, chunks.length * passesRun.length - chunksFailed);
   const totalChunkCalls = chunks.length * passesRun.length;
   const allCallsFailed = chunksFailed >= totalChunkCalls && totalChunkCalls > 0;
@@ -782,7 +780,137 @@ ${chunks[i]}`;
   // Re-push errors so serverSidePersist can also read them
   for (const e of chunkErrors) _lastChunkErrors.push(e);
 
-  const summary = `${extractionMode}: ${passesRun.join('+')} | ${allCandidates.length} raw → ${dedupeResult.kept.length} deduped → ${validated.length} validated | ${modelKisPer1k} KIs/1k | ${modelDepthBucket}${errorSuffix}`;
+  // ══════════════════════════════════════════════════════
+  // FALLBACK EXTRACTION LADDER
+  // Triggered when primary returns true zero on meaningful content
+  // (NOT when API failed — that's a different problem)
+  // ══════════════════════════════════════════════════════
+  let fallbackTier: FallbackTier = 'primary_extractor';
+
+  if (validated.length === 0 && !allCallsFailed && contentLength > 1500) {
+    console.log(`[extract-tactics] FALLBACK LADDER: primary returned 0 validated on ${contentLength} chars — trying aggressive fallback`);
+
+    // ── Pass B: Aggressive Fallback ──
+    try {
+      await new Promise(r => setTimeout(r, 2000));
+      const aggressiveSystem = AGGRESSIVE_FALLBACK_PROMPT + '\n\n' + BASE_SYSTEM_PROMPT.split('QUALITY GATES')[0]; // Use base prompt minus strict quality gates
+      const aggressiveUser = `FORCE-EXTRACT tactical sales knowledge from this content. Return at least 3 items.\n\nTitle: ${title}\nType: ${resourceType || 'document'}\n${description ? `Description: ${description}` : ''}\nTags: ${(tags || []).join(', ')}\n${existingKiContext}\n\nContent:\n${content}`;
+
+      const aggressiveResult = await requestExtraction(apiKey, aggressiveSystem, aggressiveUser, MAX_TOKENS);
+      const aggressiveItems = parseAiResponse(aggressiveResult);
+      passMetrics.fallback_aggressive = aggressiveItems.length;
+      passesRun.push('fallback_aggressive');
+
+      if (aggressiveItems.length > 0) {
+        // Validate with RELAXED rules for aggressive fallback
+        for (const item of aggressiveItems) {
+          item._pass = 'fallback_aggressive';
+          // Relaxed validation: only require title + tactic_summary
+          if (!item.title || !item.tactic_summary || item.tactic_summary.length < 10) continue;
+          // Auto-fill missing fields
+          if (!item.framework) item.framework = 'General';
+          if (!item.who) item.who = 'Unknown';
+          if (!item.source_location) item.source_location = 'Fallback extraction';
+          if (!item.source_excerpt) item.source_excerpt = item.tactic_summary;
+          if (!item.when_to_use) item.when_to_use = 'When this situation arises in sales conversations.';
+          if (!item.when_not_to_use) item.when_not_to_use = 'When the context does not apply.';
+          if (!item.macro_situation) item.macro_situation = item.when_to_use;
+          if (!item.micro_strategy) item.micro_strategy = item.tactic_summary;
+          if (!item.how_to_execute) item.how_to_execute = item.tactic_summary;
+          if (!item.example_usage) item.example_usage = 'Apply this technique in relevant sales conversations.';
+          if (!item.why_it_matters) item.why_it_matters = item.tactic_summary;
+          allCandidates.push(item);
+          validated.push(normalizeItem(item, title));
+        }
+      }
+
+      if (validated.length > 0) {
+        fallbackTier = 'fallback_aggressive';
+        console.log(`[extract-tactics] FALLBACK AGGRESSIVE: ${validated.length} items recovered`);
+      }
+    } catch (fbErr: any) {
+      console.warn(`[extract-tactics] Aggressive fallback failed: ${fbErr.message}`);
+      _lastChunkErrors.push(fbErr.message || String(fbErr));
+    }
+
+    // ── Pass C: Segmented Fallback ──
+    if (validated.length === 0 && contentLength > 1500) {
+      console.log(`[extract-tactics] FALLBACK LADDER: aggressive returned 0 — trying segmented decomposition`);
+
+      try {
+        await new Promise(r => setTimeout(r, 2000));
+        // Split content into segments by sections/paragraphs/speaker turns
+        const segments = splitIntoSegments(content);
+        const segmentItems: any[] = [];
+        passesRun.push('fallback_segmented');
+
+        for (let si = 0; si < Math.min(segments.length, 8); si++) {
+          const seg = segments[si];
+          if (seg.length < 200) continue;
+
+          try {
+            const segUser = `Extract tactical knowledge from this segment (${si + 1}/${segments.length}).\n\nTitle: ${title}\nSegment:\n${seg}`;
+            const segResult = await requestExtraction(apiKey, SEGMENTED_FALLBACK_PROMPT + '\n\n' + BASE_SYSTEM_PROMPT.split('QUALITY GATES')[0], segUser, 4096);
+            const segParsed = parseAiResponse(segResult);
+            passMetrics.fallback_segmented = (passMetrics.fallback_segmented || 0) + segParsed.length;
+
+            for (const item of segParsed) {
+              item._pass = 'fallback_segmented';
+              item.source_location = `Segment ${si + 1}/${segments.length}`;
+              if (!item.framework) item.framework = 'General';
+              if (!item.who) item.who = 'Unknown';
+              if (!item.source_excerpt) item.source_excerpt = item.tactic_summary || '';
+              if (!item.when_to_use) item.when_to_use = 'When this situation arises.';
+              if (!item.when_not_to_use) item.when_not_to_use = 'When context does not apply.';
+              if (!item.macro_situation) item.macro_situation = item.when_to_use;
+              if (!item.micro_strategy) item.micro_strategy = item.tactic_summary || '';
+              if (!item.how_to_execute) item.how_to_execute = item.tactic_summary || '';
+              if (!item.example_usage) item.example_usage = 'Apply in relevant situations.';
+              if (!item.why_it_matters) item.why_it_matters = item.tactic_summary || '';
+              segmentItems.push(item);
+            }
+
+            if (si < segments.length - 1) await new Promise(r => setTimeout(r, 1000));
+          } catch (segErr: any) {
+            console.warn(`[extract-tactics] Segmented fallback segment ${si + 1} failed: ${segErr.message}`);
+          }
+        }
+
+        if (segmentItems.length > 0) {
+          // Dedupe segment results against each other
+          const segDeduped = deduplicateItems(segmentItems, false);
+          for (const item of segDeduped.kept) {
+            if (item.title && item.tactic_summary && item.tactic_summary.length >= 10) {
+              allCandidates.push(item);
+              validated.push(normalizeItem(item, title));
+            }
+          }
+        }
+
+        if (validated.length > 0) {
+          fallbackTier = 'fallback_segmented';
+          console.log(`[extract-tactics] FALLBACK SEGMENTED: ${validated.length} items recovered from ${segments.length} segments`);
+        } else {
+          fallbackTier = 'true_zero_after_fallbacks';
+          console.log(`[extract-tactics] FALLBACK LADDER EXHAUSTED: true zero after all tiers on ${contentLength} chars`);
+        }
+      } catch (segErr: any) {
+        console.warn(`[extract-tactics] Segmented fallback failed entirely: ${segErr.message}`);
+        fallbackTier = 'true_zero_after_fallbacks';
+      }
+    }
+  }
+
+  // Recompute metrics after fallback
+  const finalModelKisPer1k = contentLength > 0 ? Math.round((validated.length * 1000 / contentLength) * 100) / 100 : 0;
+  const finalModelDepthBucket = computeDepthBucket(validated.length, contentLength, category);
+  const finalModelUnderExtracted = computeUnderExtracted(validated.length, contentLength, category);
+  const finalDedupeResult = validated.length > 0 && fallbackTier !== 'primary_extractor'
+    ? deduplicateItems(allCandidates, false)
+    : dedupeResult;
+
+  const tierSuffix = fallbackTier !== 'primary_extractor' ? ` | tier=${fallbackTier}` : '';
+  const summary = `${extractionMode}: ${passesRun.join('+')} | ${allCandidates.length} raw → ${finalDedupeResult.kept.length} deduped → ${validated.length} validated | ${finalModelKisPer1k} KIs/1k | ${finalModelDepthBucket}${errorSuffix}${tierSuffix}`;
   console.log(`[extract-tactics] FINAL: ${summary}`);
 
   return {
@@ -790,18 +918,19 @@ ${chunks[i]}`;
     category,
     rawCount: allCandidates.length,
     passMetrics,
-    dedupeResult,
+    dedupeResult: finalDedupeResult,
     validatedCount: validated.length,
     validationRejections,
     extractionMode,
     passesRun,
-    modelDepthBucket,
-    modelUnderExtracted,
-    modelKisPer1k,
+    modelDepthBucket: finalModelDepthBucket,
+    modelUnderExtracted: finalModelUnderExtracted,
+    modelKisPer1k: finalModelKisPer1k,
     summary,
     chunksTotal: chunks.length,
     chunksProcessed: effectiveChunksProcessed,
     chunksFailed,
+    fallbackTier,
   };
 }
 
