@@ -107,7 +107,7 @@ export function useKnowledgeCoverageAudit() {
       while (true) {
         const { data: runs, error: runsErr } = await supabase
           .from('extraction_runs' as any)
-          .select('resource_id, status, started_at, completed_at, chunks_failed, chunks_total, extraction_mode')
+          .select('resource_id, status, started_at, completed_at, chunks_failed, chunks_total, extraction_mode, raw_candidate_counts, saved_candidate_count, validated_candidate_count, merged_candidate_count, error_message')
           .range(runsFrom, runsFrom + PAGE_SIZE - 1);
         if (runsErr) throw runsErr;
         if (!runs || runs.length === 0) break;
@@ -147,7 +147,7 @@ export function useKnowledgeCoverageAudit() {
 
       const kiMap = new Map<string, { total: number; active: number; withCtx: number }>();
       const runCountMap = new Map<string, number>();
-      const latestRunMap = new Map<string, { status: string; started_at: string | null; completed_at: string | null; chunks_failed?: number | null; chunks_total?: number | null; extraction_mode?: string | null }>();
+      const latestRunMap = new Map<string, { status: string; started_at: string | null; completed_at: string | null; chunks_failed?: number | null; chunks_total?: number | null; extraction_mode?: string | null; raw_candidate_counts?: any; saved_candidate_count?: number | null; validated_candidate_count?: number | null; merged_candidate_count?: number | null; error_message?: string | null }>();
       const batchMap = new Map<string, any[]>();
       // Method mix from KIs (source of truth)
       const methodMix = { llm: 0, heuristic: 0, hybrid: 0, unknown: 0 };
