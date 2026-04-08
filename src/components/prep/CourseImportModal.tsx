@@ -132,18 +132,46 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     setFetching(true);
     setLessons([]);
     setCourseTitle('');
-    setLessonResults([]);
+    setAuthError(null);
+    setDiscoverMeta(null);
     try {
       const { data, error } = await trackedInvoke<any>('import-course', {
-        body: { url: url.trim(), action: 'discover' },
+        body: { url: url.trim(), action: 'discover', ...getCredsBody() },
         timeoutMs: 120_000,
       });
       if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Failed to fetch course');
+      if (!data?.success) {
+        const errMsg = data?.error || 'Failed to fetch course';
+        // Classify the error
+        if (/credentials|password|email/i.test(errMsg)) {
+          setAuthError('Invalid credentials — please check email and password.');
+        } else if (/authentication required|login/i.test(errMsg)) {
+          setAuthError('Login required — enter your course platform credentials below.');
+          if (!showCreds) setShowCreds(true);
+        } else if (/mfa|two.?factor|captcha|bot|recaptcha/i.test(errMsg)) {
+          setAuthError('This platform uses MFA or bot protection. Automated import is blocked.');
+        } else {
+          setAuthError(errMsg);
+        }
+        throw new Error(errMsg);
+      }
+
+      // Store metadata
+      if (data.meta) setDiscoverMeta(data.meta);
+
+      // Check auth-failed state (authenticated but redirected back to login)
+      if (data.meta?.auth_status === 'auth_failed') {
+        setAuthError('Authentication failed — check your credentials or try entering them below.');
+        if (!showCreds) setShowCreds(true);
+      }
       
       const items: LessonItem[] = data.lessons || [];
       if (items.length === 0) {
-        toast.error('No lessons found in this course');
+        if (data.meta?.auth_status === 'auth_failed') {
+          toast.error('Login failed — no lessons accessible');
+        } else {
+          toast.error('Authenticated but no lessons found in this course');
+        }
         return;
       }
       setCourseTitle(data.title || 'Untitled Course');
@@ -155,7 +183,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     } finally {
       setFetching(false);
     }
-  }, [url]);
+  }, [url, credEmail, credPassword, showCreds]);
 
   const toggleLesson = (index: number) => {
     setSelected(prev => {
