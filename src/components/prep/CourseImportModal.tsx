@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, BookOpen, ExternalLink, Video, FileText, HelpCircle, CheckCircle2, XCircle, AlertTriangle, KeyRound, ChevronDown, Info } from 'lucide-react';
+import { Loader2, BookOpen, ExternalLink, Video, FileText, HelpCircle, CheckCircle2, XCircle, AlertTriangle, KeyRound, ChevronDown, Info, Download } from 'lucide-react';
 import { useClassifyResource, useAddUrlResource } from '@/hooks/useResourceUpload';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -373,11 +373,20 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         classification.resource_type = isVideoLesson ? 'video' : 'article';
         if (metadataOnly) {
           (classification as any).content_status = 'metadata_only';
+          classification.tags = Array.from(new Set([...classification.tags, 'needs-transcript']));
         }
         classification.tags = Array.from(new Set([...(classification.tags || []), 'course', courseTitle].filter(Boolean)));
 
         const resource = await addUrl.mutateAsync({ url: lesson.url, classification });
         const resourceId = resource?.id || null;
+
+        // Flag metadata-only resources so enrichment flows skip them until content arrives
+        if (metadataOnly && resourceId) {
+          await supabase.from('resources').update({
+            enrichment_status: 'incomplete',
+            content_status: 'metadata_only',
+          } as any).eq('id', resourceId);
+        }
 
         await writeLineageRow({
           resourceId,
