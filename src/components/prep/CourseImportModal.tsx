@@ -284,7 +284,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       let lessonData: any = null;
       try {
         const { data, error } = await trackedInvoke<any>('import-course', {
-          body: { url: url.trim(), action: 'fetch_lesson', lesson_url: lesson.url },
+          body: { url: url.trim(), action: 'fetch_lesson', lesson_url: lesson.url, ...getCredsBody() },
           timeoutMs: 60_000,
         });
         if (error) throw error;
