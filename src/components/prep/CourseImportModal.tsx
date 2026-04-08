@@ -26,11 +26,24 @@ type LessonItem = {
 
 type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 'saving_resource' | 'transcribing' | 'complete' | 'failed';
 
+type LessonQualityReport = {
+  content_length: number;
+  content_type: string;
+  has_login_wall: boolean;
+  has_redirect: boolean;
+  redirect_url?: string;
+  word_count: number;
+  video_embeds_found: number;
+  issues: string[];
+};
+
 type LessonImportResult = {
   lessonIndex: number;
   status: LessonImportStatus;
   error?: string;
   resourceId?: string;
+  quality?: LessonQualityReport;
+  lessonUrl?: string;
 };
 
 interface CourseImportModalProps {
