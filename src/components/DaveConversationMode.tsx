@@ -83,6 +83,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     failInteraction, getRecoverableInteraction, incrementRetry, dismissRecovery,
     getConversationContext,
   } = useDaveConversation();
+
+  // ── Connection Manager (single source of truth) ──
+  const connMgr = useDaveConnectionManager();
+
   const [isConnecting, setIsConnecting] = useState(false);
   const [needsTap, setNeedsTap] = useState(true);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -101,6 +105,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
   const lastMessageTypeRef = useRef<string | null>(null);
   const lastMessageAtRef = useRef<number | null>(null);
   const errorHistoryRef = useRef<string[]>([]);
+  const cleanDisconnectRef = useRef(false);
 
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const diagTapCountRef = useRef(0);
