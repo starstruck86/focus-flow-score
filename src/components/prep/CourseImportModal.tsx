@@ -108,6 +108,21 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0, current: '' });
   const [lessonResults, setLessonResults] = useState<LessonImportResult[]>([]);
 
+  // Per-import credentials (never persisted)
+  const [credEmail, setCredEmail] = useState('');
+  const [credPassword, setCredPassword] = useState('');
+  const [showCreds, setShowCreds] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [discoverMeta, setDiscoverMeta] = useState<Record<string, any> | null>(null);
+
+  const clearCredPassword = () => setCredPassword('');
+  const getCredsBody = () => {
+    if (credEmail.trim() && credPassword) {
+      return { email: credEmail.trim(), password: credPassword };
+    }
+    return {};
+  };
+
   const { user } = useAuth();
   const classify = useClassifyResource();
   const addUrl = useAddUrlResource();
