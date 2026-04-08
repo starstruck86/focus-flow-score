@@ -750,7 +750,7 @@ ${chunks[i]}`;
     modelKisPer1k,
     summary,
     chunksTotal: chunks.length,
-    chunksProcessed: chunks.length - chunksFailed,
+    chunksProcessed: effectiveChunksProcessed,
     chunksFailed,
   };
 }
