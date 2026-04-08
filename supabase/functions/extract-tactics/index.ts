@@ -1348,7 +1348,14 @@ async function reconcileResourceSnapshot(
     console.warn(`[SNAPSHOT RECONCILE] WARNING: no extraction_runs found for resource=${resourceId} — telemetry fields will be null`);
   }
 
-  if (allComplete) {
+  // ── Detect if latest run was actually a silent failure (all chunks failed) ──
+  const latestRunActuallyFailed = latestRun && latestRun.status === 'failed';
+  const latestRunSilentFailure = latestRun && latestRun.chunks_failed > 0 
+    && latestRun.chunks_failed >= latestRun.chunks_total 
+    && (latestRun.saved_candidate_count ?? 0) === 0 
+    && (latestRun.validated_candidate_count ?? 0) === 0;
+
+  if (allComplete && !latestRunActuallyFailed && !latestRunSilentFailure) {
     update.active_job_status = 'succeeded';
     update.active_job_finished_at = new Date().toISOString();
     update.extraction_is_resumable = false;
@@ -1359,6 +1366,20 @@ async function reconcileResourceSnapshot(
     update.active_job_progress_current = totalBatches;
     update.active_job_progress_total = totalBatches;
     update.active_job_progress_pct = 100;
+  } else if (allComplete && (latestRunActuallyFailed || latestRunSilentFailure)) {
+    // Job "completed" its loop, but the actual extraction failed — do NOT mark as succeeded
+    update.active_job_status = 'failed';
+    update.active_job_finished_at = new Date().toISOString();
+    update.extraction_is_resumable = false;
+    update.extraction_batch_status = 'failed';
+    update.last_extraction_run_status = 'failed';
+    update.extraction_failure_type = latestRun?.error_message?.includes('402') ? 'api_credits_exhausted' 
+      : latestRun?.error_message?.includes('429') ? 'api_rate_limited' 
+      : 'api_failure';
+    update.last_extraction_summary = `Job mode failed: all extraction calls failed. ${latestRun?.error_message || 'Unknown API error'}`;
+    update.active_job_step_label = null;
+    update.active_job_progress_pct = null;
+    console.warn(`[SNAPSHOT RECONCILE] SILENT FAILURE DETECTED: run=${latestRun?.id} chunks_failed=${latestRun?.chunks_failed} — marking as failed`);
   } else {
     // Still incomplete — mark as partial/resumable.
     // Do NOT set 'running' here — the self-invoke dispatch section handles that separately.
