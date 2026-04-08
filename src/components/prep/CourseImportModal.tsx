@@ -752,17 +752,18 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                         size="sm"
                         className="h-6 text-[10px] gap-1"
                         onClick={() => {
+                          const sanitize = (s: string) => s.replace(/[\t\r\n]+/g, ' ').trim();
                           const toImport = lessons.filter((_, i) => selected.has(i));
                           const failedRows = lessonResults
                             .filter(r => r.status === 'failed')
                             .map(r => {
                               const lesson = toImport[r.lessonIndex];
                               return {
-                                title: lesson?.title || 'Unknown',
-                                url: r.lessonUrl || lesson?.url || '',
-                                error: r.error || 'Unknown error',
-                                content_type: r.quality?.content_type || '',
-                                issues: r.quality?.issues?.join('; ') || '',
+                                title: sanitize(lesson?.title || 'Unknown'),
+                                url: sanitize(r.lessonUrl || lesson?.url || ''),
+                                error: sanitize(r.error || 'Unknown error'),
+                                content_type: sanitize(r.quality?.content_type || ''),
+                                issues: sanitize(r.quality?.issues?.join('; ') || ''),
                               };
                             });
                           const header = 'Title\tURL\tError\tContent Type\tIssues';
