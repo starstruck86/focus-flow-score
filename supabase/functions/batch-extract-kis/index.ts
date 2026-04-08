@@ -1363,6 +1363,12 @@ async function recordRunAndReconcile(
       active_job_status: activeJobStatus,
       active_job_updated_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      // Terminal cleanup: clear progress fields so stale bars never persist
+      active_job_step_label: activeJobStatus === 'succeeded' ? 'completed' : null,
+      active_job_progress_current: null,
+      active_job_progress_total: null,
+      active_job_progress_pct: activeJobStatus === 'succeeded' ? 100 : null,
+      active_job_finished_at: (activeJobStatus === 'succeeded' || activeJobStatus === 'failed') ? new Date().toISOString() : undefined,
     };
 
     // Also set enrichment_status if provided

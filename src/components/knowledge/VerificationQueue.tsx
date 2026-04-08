@@ -147,7 +147,7 @@ export function VerificationQueue({ resources, onFlagForReExtraction, onSelectRe
             </TableHeader>
             <TableBody>
               {queue.map(({ resource: r, reason }) => {
-                const hasActiveOp = r.active_job_status === 'running' || r.active_job_status === 'queued';
+                const hasActiveOp = r.active_job_status === 'running' || r.active_job_status === 'queued' || r.active_job_status === 'partial';
                 return (
                 <TableRow
                   key={r.resource_id}

@@ -1131,6 +1131,13 @@ async function serverSidePersist(
         last_extraction_summary: finalSummary,
         extraction_method: 'llm',
         active_job_status: jobStatus,
+        // Terminal cleanup: clear progress fields so stale bars never persist
+        active_job_step_label: jobStatus === 'succeeded' ? 'completed' : null,
+        active_job_progress_current: null,
+        active_job_progress_total: null,
+        active_job_progress_pct: jobStatus === 'succeeded' ? 100 : null,
+        active_job_finished_at: (jobStatus === 'succeeded' || jobStatus === 'failed') ? new Date().toISOString() : undefined,
+        active_job_updated_at: new Date().toISOString(),
       };
       if (enrichmentStatusUpdate) {
         resourceUpdate.enrichment_status = enrichmentStatusUpdate;
@@ -2172,6 +2179,14 @@ Deno.serve(async (req) => {
             extraction_batch_status: lastBatchStatus,
             extraction_is_resumable: hasIncompleteBatches,
             active_job_status: hasIncompleteBatches ? 'partial' : (persistResult?.status === 'failed' ? 'failed' : 'succeeded'),
+            // Terminal cleanup: clear progress fields on terminal batched runs
+            ...(!hasIncompleteBatches ? {
+              active_job_step_label: persistResult?.status === 'failed' ? null : 'completed',
+              active_job_progress_pct: persistResult?.status === 'failed' ? null : 100,
+              active_job_progress_current: null,
+              active_job_progress_total: null,
+              active_job_finished_at: new Date().toISOString(),
+            } : {}),
           };
 
           // Update resource-level batch progress
