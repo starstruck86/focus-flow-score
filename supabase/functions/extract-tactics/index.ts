@@ -616,6 +616,8 @@ function computeUnderExtracted(kiCount: number, contentLength: number, category:
 // MULTI-PASS EXTRACTION ENGINE
 // ══════════════════════════════════════════════════════
 
+type FallbackTier = 'primary_extractor' | 'fallback_aggressive' | 'fallback_segmented' | 'true_zero_after_fallbacks';
+
 interface MultiPassResult {
   items: any[];
   category: ContentCategory;
@@ -634,6 +636,8 @@ interface MultiPassResult {
   chunksTotal: number;
   chunksProcessed: number;
   chunksFailed: number;
+  /** Which extraction tier succeeded */
+  fallbackTier: FallbackTier;
 }
 
 async function runMultiPassExtraction(
