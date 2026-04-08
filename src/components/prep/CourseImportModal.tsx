@@ -7,7 +7,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, BookOpen, ExternalLink, Video, FileText, HelpCircle, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Loader2, BookOpen, ExternalLink, Video, FileText, HelpCircle, CheckCircle2, XCircle, AlertTriangle, KeyRound, ChevronDown, Info } from 'lucide-react';
 import { useClassifyResource, useAddUrlResource } from '@/hooks/useResourceUpload';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -107,6 +108,21 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0, current: '' });
   const [lessonResults, setLessonResults] = useState<LessonImportResult[]>([]);
 
+  // Per-import credentials (never persisted)
+  const [credEmail, setCredEmail] = useState('');
+  const [credPassword, setCredPassword] = useState('');
+  const [showCreds, setShowCreds] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [discoverMeta, setDiscoverMeta] = useState<Record<string, any> | null>(null);
+
+  const clearCredPassword = () => setCredPassword('');
+  const getCredsBody = () => {
+    if (credEmail.trim() && credPassword) {
+      return { email: credEmail.trim(), password: credPassword };
+    }
+    return {};
+  };
+
   const { user } = useAuth();
   const classify = useClassifyResource();
   const addUrl = useAddUrlResource();
@@ -116,18 +132,46 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     setFetching(true);
     setLessons([]);
     setCourseTitle('');
-    setLessonResults([]);
+    setAuthError(null);
+    setDiscoverMeta(null);
     try {
       const { data, error } = await trackedInvoke<any>('import-course', {
-        body: { url: url.trim(), action: 'discover' },
+        body: { url: url.trim(), action: 'discover', ...getCredsBody() },
         timeoutMs: 120_000,
       });
       if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Failed to fetch course');
+      if (!data?.success) {
+        const errMsg = data?.error || 'Failed to fetch course';
+        // Classify the error
+        if (/credentials|password|email/i.test(errMsg)) {
+          setAuthError('Invalid credentials — please check email and password.');
+        } else if (/authentication required|login/i.test(errMsg)) {
+          setAuthError('Login required — enter your course platform credentials below.');
+          if (!showCreds) setShowCreds(true);
+        } else if (/mfa|two.?factor|captcha|bot|recaptcha/i.test(errMsg)) {
+          setAuthError('This platform uses MFA or bot protection. Automated import is blocked.');
+        } else {
+          setAuthError(errMsg);
+        }
+        throw new Error(errMsg);
+      }
+
+      // Store metadata
+      if (data.meta) setDiscoverMeta(data.meta);
+
+      // Check auth-failed state (authenticated but redirected back to login)
+      if (data.meta?.auth_status === 'auth_failed') {
+        setAuthError('Authentication failed — check your credentials or try entering them below.');
+        if (!showCreds) setShowCreds(true);
+      }
       
       const items: LessonItem[] = data.lessons || [];
       if (items.length === 0) {
-        toast.error('No lessons found in this course');
+        if (data.meta?.auth_status === 'auth_failed') {
+          toast.error('Login failed — no lessons accessible');
+        } else {
+          toast.error('Authenticated but no lessons found in this course');
+        }
         return;
       }
       setCourseTitle(data.title || 'Untitled Course');
@@ -139,7 +183,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     } finally {
       setFetching(false);
     }
-  }, [url]);
+  }, [url, credEmail, credPassword, showCreds]);
 
   const toggleLesson = (index: number) => {
     setSelected(prev => {
@@ -240,7 +284,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       let lessonData: any = null;
       try {
         const { data, error } = await trackedInvoke<any>('import-course', {
-          body: { url: url.trim(), action: 'fetch_lesson', lesson_url: lesson.url },
+          body: { url: url.trim(), action: 'fetch_lesson', lesson_url: lesson.url, ...getCredsBody() },
           timeoutMs: 60_000,
         });
         if (error) throw error;
@@ -370,7 +414,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       toast.success(`Imported ${successCount} of ${toImport.length} lessons`);
     }
     setImporting(false);
-  }, [lessons, selected, classify, addUrl, url, courseTitle, platform, user]);
+    clearCredPassword();
+  }, [lessons, selected, classify, addUrl, url, courseTitle, platform, user, credEmail, credPassword]);
 
   const selectedCount = selected.size;
   const progressPct = importProgress.total > 0 ? (importProgress.done / importProgress.total) * 100 : 0;
@@ -420,6 +465,62 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
               {fetching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Scan'}
             </Button>
           </div>
+
+          {/* Auth error banner */}
+          {authError && (
+            <div className="flex items-start gap-2 p-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-sm text-destructive flex-shrink-0">
+              <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          {/* Optional per-import credentials */}
+          <Collapsible open={showCreds} onOpenChange={setShowCreds} className="flex-shrink-0">
+            <CollapsibleTrigger asChild>
+              <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full">
+                <KeyRound className="h-3 w-3" />
+                <span>Course platform credentials</span>
+                <ChevronDown className={`h-3 w-3 transition-transform ${showCreds ? 'rotate-180' : ''}`} />
+                {credEmail && <Badge variant="outline" className="text-[9px] h-4 ml-auto">credentials set</Badge>}
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 space-y-2">
+              <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground p-2 rounded bg-muted/50">
+                <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                <span>Optional — only used for this import attempt. Not saved anywhere. Leave blank to use stored credentials.</span>
+              </div>
+              <Input
+                type="email"
+                value={credEmail}
+                onChange={e => setCredEmail(e.target.value)}
+                placeholder="Email for this course platform"
+                disabled={fetching || importing}
+                className="h-8 text-sm"
+              />
+              <Input
+                type="password"
+                value={credPassword}
+                onChange={e => setCredPassword(e.target.value)}
+                placeholder="Password"
+                disabled={fetching || importing}
+                className="h-8 text-sm"
+              />
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Discovery metadata */}
+          {discoverMeta && !importing && (
+            <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground flex-shrink-0">
+              <Badge variant="outline" className="text-[9px] h-4">{discoverMeta.domain}</Badge>
+              <Badge variant={discoverMeta.auth_status === 'authenticated' ? 'default' : 'destructive'} className="text-[9px] h-4">
+                {discoverMeta.auth_status === 'authenticated' ? '✓ Authenticated' : '✗ Auth failed'}
+              </Badge>
+              {discoverMeta.used_request_credentials && (
+                <Badge variant="outline" className="text-[9px] h-4">using typed credentials</Badge>
+              )}
+              <span>{discoverMeta.lessons_discovered} lessons found</span>
+            </div>
+          )}
 
           {lessons.length > 0 && !importing && (
             <>
