@@ -420,6 +420,7 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
 
 interface LessonQuality {
   content_length: number;
+  cleaned_text_length: number;
   content_type: 'text' | 'transcript' | 'video_only' | 'html_junk' | 'login_page' | 'empty' | 'mixed';
   has_login_wall: boolean;
   has_redirect: boolean;
@@ -427,12 +428,16 @@ interface LessonQuality {
   word_count: number;
   video_embeds_found: number;
   issues: string[];
+  usable_content: boolean;
 }
 
 function classifyLessonContent(text: string, html: string, finalUrl: string, lessonUrl: string): LessonQuality {
   const issues: string[] = [];
   const trimmed = text.trim();
-  const wordCount = trimmed.split(/\s+/).filter(w => w.length > 2).length;
+  // cleaned_text_length = text after stripping any residual HTML tags
+  const cleanedText = trimmed.replace(/<[^>]+>/g, '').trim();
+  const cleanedTextLength = cleanedText.length;
+  const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 2).length;
 
   // Redirect detection
   const hasRedirect = finalUrl !== lessonUrl && new URL(finalUrl).pathname !== new URL(lessonUrl).pathname;
@@ -471,11 +476,15 @@ function classifyLessonContent(text: string, html: string, finalUrl: string, les
     contentType = 'video_only';
     if (wordCount < 10) issues.push('Video-only page with no substantial text');
   } else if (/<div[\s>]|<span[\s>]|font-family\s*:|class="/i.test(trimmed)) {
+    // Tightened html_junk classifier: require MANY raw tags AND low text ratio
+    // to avoid misclassifying valid rich-text lessons that have occasional inline HTML
     const htmlTagCount = (trimmed.match(/<[a-z]+[\s>]/gi) || []).length;
-    const textRatio = trimmed.replace(/<[^>]+>/g, '').length / trimmed.length;
-    if (htmlTagCount > 10 && textRatio < 0.5) {
+    const textRatio = cleanedTextLength / trimmed.length;
+    // Only flag as html_junk if: many tags (>20), text ratio below 40%, AND
+    // the cleaned text itself is short (real lessons have long cleaned text even with HTML)
+    if (htmlTagCount > 20 && textRatio < 0.4 && cleanedTextLength < 500) {
       contentType = 'html_junk';
-      issues.push('Content contains raw HTML fragments — extraction likely failed');
+      issues.push(`Content contains raw HTML fragments (${htmlTagCount} tags, ${Math.round(textRatio * 100)}% text) — extraction likely failed`);
     }
   } else if (videoEmbeds > 0 && wordCount > 20) {
     contentType = 'mixed';
@@ -486,8 +495,13 @@ function classifyLessonContent(text: string, html: string, finalUrl: string, les
     issues.push(`Very low word count (${wordCount} words)`);
   }
 
+  // Compute usable_content: server-side boolean so client doesn't have to infer
+  const BLOCKED_TYPES: Set<string> = new Set(['login_page', 'empty', 'html_junk']);
+  const usableContent = !BLOCKED_TYPES.has(contentType) && !hasLoginWall && !loginRedirect && wordCount >= 5;
+
   return {
     content_length: trimmed.length,
+    cleaned_text_length: cleanedTextLength,
     content_type: contentType,
     has_login_wall: hasLoginWall || loginRedirect,
     has_redirect: hasRedirect,
@@ -495,6 +509,7 @@ function classifyLessonContent(text: string, html: string, finalUrl: string, les
     word_count: wordCount,
     video_embeds_found: videoEmbeds,
     issues,
+    usable_content: usableContent,
   };
 }
 
