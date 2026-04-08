@@ -185,6 +185,14 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       connectedAtRef.current = Date.now();
       setGreetingStatus('waiting');
 
+      // ── Connection Manager: mark connected ──
+      connMgr.dispatch({ type: 'CONNECT_SUCCESS', sessionId: sessionData.token.substring(0, 16) });
+      
+      // ── Start heartbeat: check if conversation status is still connected ──
+      connMgr.startHeartbeat(async () => {
+        return conversation.status === 'connected';
+      });
+
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
@@ -203,6 +211,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
         if (!messageReceivedRef.current && isOpenRef.current) {
           logStatus('🔄 Greeting timeout — requesting retry-via-remount');
           setGreetingStatus('retrying');
+          cleanDisconnectRef.current = true;
           try { conversation.endSession(); } catch (_) {}
           onRetry();
         }
