@@ -427,8 +427,14 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                 content: updated,
                 content_length: updated.length,
                 content_status: 'transcript',
-                enrichment_status: 'enriched',
+                enrichment_status: 'not_enriched',
               } as any).eq('id', resourceId);
+              // Remove needs-transcript tag now that content exists
+              const { data: tagRow } = await supabase.from('resources').select('tags').eq('id', resourceId).single();
+              if (tagRow?.tags) {
+                const cleaned = (tagRow.tags as string[]).filter(t => t !== 'needs-transcript');
+                await supabase.from('resources').update({ tags: cleaned } as any).eq('id', resourceId);
+              }
               await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete', transcript_text: txData.transcript });
               console.log(`Transcribed video for ${lesson.title}: ${txData.transcript.length} chars`);
             } else {
