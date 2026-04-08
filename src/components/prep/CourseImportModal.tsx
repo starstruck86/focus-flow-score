@@ -24,7 +24,7 @@ type LessonItem = {
   type?: string;
 };
 
-type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 'saving_resource' | 'transcribing' | 'complete' | 'failed';
+type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 'saving_resource' | 'transcribing' | 'complete' | 'metadata_only' | 'failed';
 
 type LessonQualityReport = {
   content_length: number;
@@ -433,7 +433,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete' });
         }
 
-        updateLessonResult(i, { status: 'complete', resourceId: resourceId || undefined, quality, lessonUrl: lesson.url, requestedUrl, finalUrl, metadataOnly });
+        const finalStatus: LessonImportStatus = metadataOnly ? 'metadata_only' : 'complete';
+        updateLessonResult(i, { status: finalStatus, resourceId: resourceId || undefined, quality, lessonUrl: lesson.url, requestedUrl, finalUrl, metadataOnly });
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to save resource';
         updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url, requestedUrl, finalUrl });
@@ -443,11 +444,20 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       setImportProgress({ done: i + 1, total: toImport.length, current: '' });
     }
 
-    const failedCount = toImport.length - successCount;
+    // Compute summary counts
+    const fullCount = lessonResults.filter(r => r.status === 'complete').length;
+    const metaCount = lessonResults.filter(r => r.status === 'metadata_only').length;
+    const failedCount = toImport.length - fullCount - metaCount;
+
+    const parts: string[] = [];
+    if (fullCount > 0) parts.push(`${fullCount} full`);
+    if (metaCount > 0) parts.push(`${metaCount} metadata-only`);
+    if (failedCount > 0) parts.push(`${failedCount} failed`);
+
     if (failedCount > 0) {
-      toast.warning(`Imported ${successCount} of ${toImport.length} lessons (${failedCount} failed)`);
+      toast.warning(`Import complete: ${parts.join(', ')}`);
     } else {
-      toast.success(`Imported ${successCount} of ${toImport.length} lessons`);
+      toast.success(`Import complete: ${parts.join(', ')}`);
     }
     setImporting(false);
     clearCredPassword();
@@ -655,24 +665,29 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                       const lesson = toImport[r.lessonIndex];
                       if (!lesson) return null;
                       const StatusIcon = r.status === 'complete' ? CheckCircle2
+                        : r.status === 'metadata_only' ? Info
                         : r.status === 'failed' ? XCircle
                         : null;
                       const q = r.quality;
+                      const statusColor = r.status === 'complete' ? 'text-green-500'
+                        : r.status === 'metadata_only' ? 'text-amber-500'
+                        : r.status === 'failed' ? 'text-destructive'
+                        : 'text-muted-foreground';
                       return (
                         <div key={idx} className="space-y-0.5">
                           <div className="flex items-center gap-2 text-[11px]">
                             {StatusIcon ? (
-                              <StatusIcon className={`h-3 w-3 flex-shrink-0 ${r.status === 'complete' ? 'text-green-500' : 'text-destructive'}`} />
+                              <StatusIcon className={`h-3 w-3 flex-shrink-0 ${statusColor}`} />
                             ) : (
                               <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
                             )}
                             <span className="truncate flex-1">{lesson.title}</span>
-                            {r.status !== 'complete' && r.status !== 'failed' && r.status !== 'queued' && (
+                            {r.status !== 'complete' && r.status !== 'metadata_only' && r.status !== 'failed' && r.status !== 'queued' && (
                               <Badge variant="outline" className="text-[9px] h-4">{r.status.replace('_', ' ')}</Badge>
                             )}
                           </div>
                           {/* Quality report row */}
-                          {q && (r.status === 'complete' || r.status === 'failed') && (
+                          {q && (r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (
                             <div className="flex items-center gap-1.5 pl-5 flex-wrap text-[10px] text-muted-foreground">
                               <Badge variant={q.usable_content ? 'outline' : 'destructive'} className="text-[9px] h-4">{q.content_type}</Badge>
                               {r.metadataOnly && <Badge variant="secondary" className="text-[9px] h-4">metadata only</Badge>}
@@ -690,7 +705,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                             </div>
                           )}
                           {/* Issues */}
-                          {q && q.issues.length > 0 && (r.status === 'complete' || r.status === 'failed') && (
+                          {q && q.issues.length > 0 && (r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (
                             <div className="pl-5 text-[10px] text-destructive">
                               {q.issues.map((issue, j) => <div key={j}>⚠ {issue}</div>)}
                             </div>
@@ -704,6 +719,19 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                   </div>
                 </ScrollArea>
               )}
+              {/* Import summary */}
+              {!importing && lessonResults.length > 0 && lessonResults.every(r => r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (() => {
+                const full = lessonResults.filter(r => r.status === 'complete').length;
+                const meta = lessonResults.filter(r => r.status === 'metadata_only').length;
+                const fail = lessonResults.filter(r => r.status === 'failed').length;
+                return (
+                  <div className="flex items-center gap-3 text-xs mt-2 p-2 rounded-md bg-muted/50">
+                    {full > 0 && <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" />{full} full</span>}
+                    {meta > 0 && <span className="flex items-center gap-1"><Info className="h-3 w-3 text-amber-500" />{meta} metadata-only</span>}
+                    {fail > 0 && <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" />{fail} failed</span>}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
