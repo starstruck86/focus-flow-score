@@ -160,6 +160,52 @@ Break complex frameworks into component KIs when each component is independently
 Do not duplicate prior items.`,
 };
 
+// ══════════════════════════════════════════════════════
+// FALLBACK EXTRACTION LADDER — aggressive + segmented
+// Triggered when primary extraction returns true zero
+// on meaningful content (not API failure).
+// ══════════════════════════════════════════════════════
+
+const AGGRESSIVE_FALLBACK_PROMPT = `You are extracting tactical sales knowledge from content that a standard extractor missed.
+
+This content IS valuable sales/training material. Your job is to FORCE extraction of at least 3-5 tactical insights.
+
+EXTRACTION BIASES — prioritize these categories:
+- Objection handling moves and reframes
+- Discovery questions and qualification techniques
+- Talk tracks and conversational patterns
+- Negotiation tactics and anchoring strategies
+- Coaching principles and rep development insights
+- Examples and scenarios that teach repeatable lessons
+- Pipeline management and deal progression patterns
+- Stakeholder navigation and multi-threading approaches
+
+RULES:
+1. Treat transcripts, lessons, frameworks, and short training clips as HIGHLY extractable by default
+2. If you see a conversation, extract the TECHNIQUE being demonstrated, not a summary of the conversation
+3. If you see advice, extract the SPECIFIC ACTION a rep should take
+4. If you see an example, extract the UNDERLYING PRINCIPLE that makes it work
+5. Lower your quality threshold slightly — a useful-but-imperfect KI is better than zero KIs
+6. Do NOT return zero items unless the content is truly empty or non-sales (e.g. a copyright notice)
+
+You MUST return at least 3 items for any content over 1000 characters. Force extraction.`;
+
+const SEGMENTED_FALLBACK_PROMPT = `You are extracting tactical knowledge from a SINGLE SEGMENT of sales content.
+
+Previous extraction attempts on the full document returned zero results. This segment-by-segment approach is the last resort.
+
+For THIS SEGMENT ONLY, extract every tactical insight you can find. Even small, narrow insights count.
+
+Focus on:
+- Any specific technique, method, or approach mentioned
+- Any decision rule or "if X then Y" logic
+- Any framework, process, or sequence
+- Any example that teaches a lesson
+- Any warning, anti-pattern, or failure mode
+
+Return at least 1 item if there is ANY actionable content in this segment. Be aggressive.`;
+
+
 const TRANSCRIPT_ADDENDUM = `
 
 TRANSCRIPT-SPECIFIC INSTRUCTIONS:
