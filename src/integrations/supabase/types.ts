@@ -4342,9 +4342,13 @@ export type Database = {
           account_id: string | null
           active_job_error: string | null
           active_job_finished_at: string | null
+          active_job_progress_current: number | null
+          active_job_progress_pct: number | null
+          active_job_progress_total: number | null
           active_job_result_summary: string | null
           active_job_started_at: string | null
           active_job_status: string | null
+          active_job_step_label: string | null
           active_job_type: string | null
           active_job_updated_at: string | null
           advanced_extraction_attempts: number | null
@@ -4465,9 +4469,13 @@ export type Database = {
           account_id?: string | null
           active_job_error?: string | null
           active_job_finished_at?: string | null
+          active_job_progress_current?: number | null
+          active_job_progress_pct?: number | null
+          active_job_progress_total?: number | null
           active_job_result_summary?: string | null
           active_job_started_at?: string | null
           active_job_status?: string | null
+          active_job_step_label?: string | null
           active_job_type?: string | null
           active_job_updated_at?: string | null
           advanced_extraction_attempts?: number | null
@@ -4588,9 +4596,13 @@ export type Database = {
           account_id?: string | null
           active_job_error?: string | null
           active_job_finished_at?: string | null
+          active_job_progress_current?: number | null
+          active_job_progress_pct?: number | null
+          active_job_progress_total?: number | null
           active_job_result_summary?: string | null
           active_job_started_at?: string | null
           active_job_status?: string | null
+          active_job_step_label?: string | null
           active_job_type?: string | null
           active_job_updated_at?: string | null
           advanced_extraction_attempts?: number | null
