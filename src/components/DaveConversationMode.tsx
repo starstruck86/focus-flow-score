@@ -416,6 +416,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     }
     dismissRecovery();
 
+    // ── Connection Manager: clean disconnect ──
+    cleanDisconnectRef.current = true;
+    connMgr.cleanup();
+
     const currentTranscript = transcriptRef.current;
     if (currentTranscript.length > 0) {
       const durationSeconds = Math.round((Date.now() - sessionStartRef.current) / 1000);
@@ -435,7 +439,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
     await conversation.endSession();
     onClose();
-  }, [conversation, onClose, completeInteraction, dismissRecovery]);
+  }, [conversation, onClose, completeInteraction, dismissRecovery, connMgr]);
 
   useLayoutEffect(() => {
     // Auto-start when mic permission was pre-acquired during the tap gesture (both desktop and mobile).
