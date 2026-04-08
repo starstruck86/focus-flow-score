@@ -705,7 +705,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                           {q && (r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (
                             <div className="flex items-center gap-1.5 pl-5 flex-wrap text-[10px] text-muted-foreground">
                               <Badge variant={q.usable_content ? 'outline' : 'destructive'} className="text-[9px] h-4">{q.content_type}</Badge>
-                              {r.metadataOnly && <Badge variant="secondary" className="text-[9px] h-4">metadata only</Badge>}
+                              {r.metadataOnly && <Badge variant="secondary" className="text-[9px] h-4 cursor-help" title="Needs transcript or manual content before enrichment">metadata only</Badge>}
                               <span>{q.content_length.toLocaleString()} chars</span>
                               <span>·</span>
                               <span>{q.cleaned_text_length.toLocaleString()} cleaned</span>
