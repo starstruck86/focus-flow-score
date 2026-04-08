@@ -108,13 +108,13 @@ async function resolveWistiaMediaUrl(videoId: string, debug: string[]): Promise<
   }
 }
 
-async function kajabiLogin(baseUrl: string, jar: CookieJar): Promise<{ success: boolean; debug: string[] }> {
-  const email = Deno.env.get('COURSE_PLATFORM_EMAIL');
-  const password = Deno.env.get('COURSE_PLATFORM_PASSWORD');
+async function kajabiLogin(baseUrl: string, jar: CookieJar, creds?: { email?: string; password?: string }): Promise<{ success: boolean; debug: string[] }> {
+  const email = creds?.email || Deno.env.get('COURSE_PLATFORM_EMAIL');
+  const password = creds?.password || Deno.env.get('COURSE_PLATFORM_PASSWORD');
   const debug: string[] = [];
 
   if (!email || !password) {
-    throw new Error('Course platform credentials not configured');
+    throw new Error('Course platform credentials not configured. Please enter your email and password for this course platform.');
   }
 
   const origin = new URL(baseUrl).origin;
@@ -327,11 +327,11 @@ function parseCurriculum(html: string, baseOrigin: string): LessonInfo[] {
   return lessons;
 }
 
-async function discoverCurriculum(courseUrl: string): Promise<{ platform: string; title: string; lessons: LessonInfo[]; debug: string[] }> {
+async function discoverCurriculum(courseUrl: string, creds?: { email?: string; password?: string }): Promise<{ platform: string; title: string; lessons: LessonInfo[]; debug: string[] }> {
   const jar = createCookieJar();
   const origin = new URL(courseUrl).origin;
   
-  const { success: loggedIn, debug } = await kajabiLogin(courseUrl, jar);
+  const { success: loggedIn, debug } = await kajabiLogin(courseUrl, jar, creds);
   
   if (!loggedIn) {
     debug.push('Login failed — attempting course page fetch anyway');
@@ -418,11 +418,11 @@ async function discoverCurriculum(courseUrl: string): Promise<{ platform: string
   return { platform, title: courseTitle, lessons, debug };
 }
 
-async function fetchLessonContent(courseUrl: string, lessonUrl: string): Promise<{ title: string; content: string; type: string; debug: string[] }> {
+async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: { email?: string; password?: string }): Promise<{ title: string; content: string; type: string; debug: string[] }> {
   const jar = createCookieJar();
   const debug: string[] = [];
   
-  const { success: loggedIn, debug: loginDebug } = await kajabiLogin(courseUrl, jar);
+  const { success: loggedIn, debug: loginDebug } = await kajabiLogin(courseUrl, jar, creds);
   debug.push(...loginDebug);
   
   if (!loggedIn) {
@@ -759,7 +759,8 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { url, action, lesson_url } = body;
+    const { url, action, lesson_url, email: reqEmail, password: reqPassword } = body;
+    const creds = (reqEmail && reqPassword) ? { email: reqEmail, password: reqPassword } : undefined;
 
     if (!url) {
       return new Response(
@@ -775,7 +776,7 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      const result = await fetchLessonContent(url, lesson_url);
+      const result = await fetchLessonContent(url, lesson_url, creds);
       return new Response(
         JSON.stringify({ success: true, ...result }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -784,7 +785,7 @@ Deno.serve(async (req) => {
 
     if (action === 'debug_login') {
       const jar = createCookieJar();
-      const { success, debug } = await kajabiLogin(url, jar);
+      const { success, debug } = await kajabiLogin(url, jar, creds);
       return new Response(
         JSON.stringify({ success, debug, cookies: [...jar.cookies.keys()] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -792,7 +793,7 @@ Deno.serve(async (req) => {
     }
 
     // Default: discover
-    const result = await discoverCurriculum(url);
+    const result = await discoverCurriculum(url, creds);
     return new Response(
       JSON.stringify({ success: true, ...result }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
