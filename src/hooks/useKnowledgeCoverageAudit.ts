@@ -204,6 +204,7 @@ export function useKnowledgeCoverageAudit() {
         }
         const batchEntries = Array.from(dedupedBatches.values()).sort((a, b) => a.batch_index - b.batch_index);
         const cl = Number(r.content_length) || 0;
+        const latestRun = latestRunMap.get(r.id) ?? null;
 
         // Use server-persisted current_resource_ki_count if available, else use counted KIs
         const kiTotal = (r.current_resource_ki_count != null && Number(r.current_resource_ki_count) > 0)
