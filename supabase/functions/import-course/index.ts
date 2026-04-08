@@ -877,28 +877,52 @@ Deno.serve(async (req) => {
       }
       const result = await fetchLessonContent(url, lesson_url, creds);
       
-      // Fail loudly on login walls or empty content
-      if (result.quality.has_login_wall) {
+      // Build standardized lesson result envelope
+      const lessonResult = {
+        requested_lesson_url: lesson_url,
+        final_url: result.debug.find(d => d.startsWith('Lesson page:'))?.includes('final URL:') ? result.debug.find(d => d.includes('final URL:'))?.split('final URL: ')[1] : lesson_url,
+        content_length: result.quality.content_length,
+        cleaned_text_length: result.quality.cleaned_text_length,
+        word_count: result.quality.word_count,
+        quality: result.quality,
+      };
+
+      // ── BLOCK: login_page, empty, html_junk — never persist ──
+      const BLOCKED_TYPES = new Set(['login_page', 'empty', 'html_junk']);
+      if (BLOCKED_TYPES.has(result.quality.content_type) || !result.quality.usable_content) {
+        const errorMessages: Record<string, string> = {
+          login_page: 'Lesson page returned a login wall — authentication failed or expired',
+          empty: 'Lesson page returned empty content — nothing to import',
+          html_junk: 'Lesson page returned raw HTML fragments — content extraction failed',
+        };
         return new Response(
-          JSON.stringify({ success: false, error: 'Lesson page returned a login wall — authentication failed or expired', quality: result.quality, debug: result.debug }),
+          JSON.stringify({
+            success: false,
+            error: errorMessages[result.quality.content_type] || 'Content quality too low to import',
+            ...lessonResult,
+            debug: result.debug,
+          }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      if (result.quality.content_type === 'empty') {
+
+      // ── POLICY: video_only → import as metadata-only, not fully extracted ──
+      if (result.quality.content_type === 'video_only') {
         return new Response(
-          JSON.stringify({ success: false, error: 'Lesson page returned empty content — nothing to import', quality: result.quality, debug: result.debug }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      if (result.quality.content_type === 'html_junk') {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Lesson page returned raw HTML fragments — content extraction failed', quality: result.quality, debug: result.debug }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({
+            success: true,
+            ...result,
+            ...lessonResult,
+            metadata_only: true,
+            content: '', // strip thin content — not real lesson text
+            _note: 'Video-only lesson imported as metadata stub. Transcription required for full content.',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
       return new Response(
-        JSON.stringify({ success: true, ...result }),
+        JSON.stringify({ success: true, ...result, ...lessonResult }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
