@@ -293,6 +293,7 @@ export function useKnowledgeCoverageAudit() {
           last_extraction_chunks_failed: latestRun?.chunks_failed ?? null,
           last_extraction_chunks_total: latestRun?.chunks_total ?? null,
           last_extraction_mode: latestRun?.extraction_mode ?? r.extraction_mode ?? null,
+          extraction_failure_type: r.extraction_failure_type || null,
           // Per-resource operation progress
           active_job_type: r.active_job_type || null,
           active_job_step_label: r.active_job_step_label || null,
