@@ -147,7 +147,7 @@ export function useKnowledgeCoverageAudit() {
 
       const kiMap = new Map<string, { total: number; active: number; withCtx: number }>();
       const runCountMap = new Map<string, number>();
-      const latestRunMap = new Map<string, { status: string; started_at: string | null; completed_at: string | null }>();
+      const latestRunMap = new Map<string, { status: string; started_at: string | null; completed_at: string | null; chunks_failed?: number | null; chunks_total?: number | null; extraction_mode?: string | null }>();
       const batchMap = new Map<string, any[]>();
       // Method mix from KIs (source of truth)
       const methodMix = { llm: 0, heuristic: 0, hybrid: 0, unknown: 0 };
