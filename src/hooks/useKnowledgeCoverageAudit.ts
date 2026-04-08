@@ -275,10 +275,17 @@ export function useKnowledgeCoverageAudit() {
           // Server-owned truth fields
           last_extraction_run_id: r.last_extraction_run_id || null,
           last_extraction_run_status: reconciledRunStatus,
-          last_extraction_returned_ki_count: r.last_extraction_returned_ki_count ?? null,
+          last_extraction_returned_ki_count: r.last_extraction_returned_ki_count ?? latestRun?.saved_candidate_count != null ? (
+            // If resource field is null but we have a run row, compute raw from run's raw_candidate_counts
+            r.last_extraction_returned_ki_count ?? (() => {
+              const rc = latestRun?.raw_candidate_counts;
+              if (!rc || typeof rc !== 'object') return null;
+              return Object.values(rc as Record<string, number>).reduce((s: number, v: any) => s + (typeof v === 'number' ? v : 0), 0);
+            })()
+          ) : null,
           last_extraction_deduped_ki_count: r.last_extraction_deduped_ki_count ?? null,
-          last_extraction_validated_ki_count: r.last_extraction_validated_ki_count ?? null,
-          last_extraction_saved_ki_count: r.last_extraction_saved_ki_count ?? null,
+          last_extraction_validated_ki_count: r.last_extraction_validated_ki_count ?? latestRun?.validated_candidate_count ?? null,
+          last_extraction_saved_ki_count: r.last_extraction_saved_ki_count ?? latestRun?.saved_candidate_count ?? null,
           last_extraction_error: r.last_extraction_error || null,
           last_extraction_duration_ms: r.last_extraction_duration_ms ?? null,
           last_extraction_model: r.last_extraction_model || null,

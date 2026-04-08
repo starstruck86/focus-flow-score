@@ -55,6 +55,7 @@ export type PostExtractionState =
   | 'api_failure_review'
   | 'legacy_pipeline_rejection'
   | 'extractor_weak_review'
+  | 'needs_rerun'
   | 'validator_review'
   | 'dedup_review'
   | 'needs_enrichment'
@@ -90,6 +91,7 @@ export const STATE_LABELS: Record<PostExtractionState, string> = {
   api_failure_review: 'API Failure',
   legacy_pipeline_rejection: 'Legacy Rejection',
   extractor_weak_review: 'Extractor Weak',
+  needs_rerun: 'Needs Rerun',
   validator_review: 'Validator Review',
   dedup_review: 'Dedup Review',
   needs_enrichment: 'Needs Enrichment',
@@ -112,6 +114,7 @@ const STATE_PANELS: Record<PostExtractionState, PostExtractionPanel[]> = {
   api_failure_review:            ['bottleneck_review'],
   legacy_pipeline_rejection:     ['bottleneck_review'],
   extractor_weak_review:         ['bottleneck_review'],
+  needs_rerun:                   ['under_extracted'],
   validator_review:              ['bottleneck_review'],
   dedup_review:                  ['bottleneck_review'],
   needs_enrichment:              ['none'],
@@ -128,6 +131,7 @@ const STATE_PANELS: Record<PostExtractionState, PostExtractionPanel[]> = {
 export const VERIFICATION_QUEUE_STATES: PostExtractionState[] = [
   'under_extracted_candidate',
   'needs_first_extraction',
+  'needs_rerun',
   'reextract_completed_no_lift',
 ];
 
@@ -195,6 +199,20 @@ export function derivePostExtractionState(r: ResourceAuditRow): PostExtractionSt
     const raw = r.last_extraction_returned_ki_count ?? 0;
     const validated = r.last_extraction_validated_ki_count ?? 0;
     const saved = r.last_extraction_saved_ki_count ?? 0;
+
+    // ── TELEMETRY INTEGRITY CHECK ──
+    // If the run exists but ALL counter fields are null (not zero), the telemetry
+    // was never populated. Route to needs_rerun, NOT extractor_weak_review.
+    const hasRealTelemetry =
+      r.last_extraction_returned_ki_count != null ||
+      r.last_extraction_validated_ki_count != null ||
+      r.last_extraction_saved_ki_count != null;
+
+    if (!hasRealTelemetry) {
+      return mk('needs_rerun',
+        `Latest run exists but telemetry fields are missing (run_id: ${r.last_extraction_run_id || 'unknown'}). ` +
+        `Resource has ${r.ki_count_total} KIs from prior extractions. Needs a fresh rerun to populate telemetry.`);
+    }
 
     // 5. API / chunk failure: all chunks failed → not an extractor problem
     if (hasChunkFailures(r)) {
