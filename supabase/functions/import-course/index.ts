@@ -794,8 +794,18 @@ Deno.serve(async (req) => {
 
     // Default: discover
     const result = await discoverCurriculum(url, creds);
+    const domain = new URL(url).hostname;
     return new Response(
-      JSON.stringify({ success: true, ...result }),
+      JSON.stringify({
+        success: true,
+        ...result,
+        meta: {
+          domain,
+          used_request_credentials: !!creds,
+          auth_status: result.lessons.length === 0 && result.title === 'Authentication Required' ? 'auth_failed' : 'authenticated',
+          lessons_discovered: result.lessons.length,
+        },
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
