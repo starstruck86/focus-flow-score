@@ -1252,6 +1252,10 @@ async function reconcileResourceSnapshot(
     update.extraction_batch_status = 'completed';
     update.last_extraction_run_status = 'completed';
     update.last_extraction_summary = `Job mode complete: ${totalBatches} batches, ${finalTotal} KIs, ${finalKisPer1k} KIs/1k`;
+    update.active_job_step_label = 'completed';
+    update.active_job_progress_current = totalBatches;
+    update.active_job_progress_total = totalBatches;
+    update.active_job_progress_pct = 100;
   } else {
     // Still incomplete — mark as partial/resumable.
     // Do NOT set 'running' here — the self-invoke dispatch section handles that separately.
@@ -1601,11 +1605,18 @@ Deno.serve(async (req) => {
       }
 
       // ── Heartbeat helper ──
-      const updateHeartbeat = async (statusNote: string) => {
-        await supabaseAdmin.from('resources').update({
+      const updateHeartbeat = async (statusNote: string, stepLabel?: string, progressCurrent?: number, progressTotal?: number) => {
+        const hbUpdate: Record<string, any> = {
           active_job_updated_at: new Date().toISOString(),
           extraction_batch_status: statusNote,
-        }).eq('id', resourceId);
+        };
+        if (stepLabel) hbUpdate.active_job_step_label = stepLabel;
+        if (progressCurrent != null && progressTotal != null) {
+          hbUpdate.active_job_progress_current = progressCurrent;
+          hbUpdate.active_job_progress_total = progressTotal;
+          hbUpdate.active_job_progress_pct = progressTotal > 0 ? Math.round((progressCurrent / progressTotal) * 100) : 0;
+        }
+        await supabaseAdmin.from('resources').update(hbUpdate).eq('id', resourceId);
       };
 
       // Fetch full content
@@ -1736,6 +1747,10 @@ Deno.serve(async (req) => {
         extraction_batch_status: `job_mode_running`,
         extraction_is_resumable: true,
         extraction_batch_total: totalBatches,
+        active_job_step_label: 'preparing',
+        active_job_progress_current: completedSet.size,
+        active_job_progress_total: totalBatches,
+        active_job_progress_pct: totalBatches > 0 ? Math.round((completedSet.size / totalBatches) * 100) : 0,
       }).eq('id', resourceId);
 
       let batchesProcessedThisJob = 0;
@@ -1782,7 +1797,7 @@ Deno.serve(async (req) => {
           status: 'running', started_at: new Date().toISOString(),
         }, { onConflict: 'resource_id,batch_index' });
 
-        await updateHeartbeat(`running_batch_${batchIdx + 1}_of_${totalBatches}`);
+        await updateHeartbeat(`running_batch_${batchIdx + 1}_of_${totalBatches}`, 'extracting', completedSet.size, totalBatches);
 
         try {
           // Refresh existing KI context
@@ -1851,6 +1866,10 @@ Deno.serve(async (req) => {
             extraction_depth_bucket: computeDepthBucket(batchPersist.currentResourceKiCount, fullLength, category),
             under_extracted_flag: computeUnderExtracted(batchPersist.currentResourceKiCount, fullLength, category),
             extraction_batch_status: `completed_batch_${batchIdx + 1}_of_${totalBatches}`,
+            active_job_step_label: 'saving',
+            active_job_progress_current: completedSet.size,
+            active_job_progress_total: totalBatches,
+            active_job_progress_pct: totalBatches > 0 ? Math.round((completedSet.size / totalBatches) * 100) : 0,
           }).eq('id', resourceId);
 
            console.log(`[JOB MODE] batch completed | ${batchIdx + 1}/${totalBatches} | saved=${batchPersist.savedCount} total=${batchPersist.currentResourceKiCount}`);

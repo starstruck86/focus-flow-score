@@ -25,6 +25,7 @@ import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import { routeFailure, getFailureBucketActions } from '@/lib/failureRouting';
 import { deriveProcessingRoute, getRouteLabel } from '@/lib/processingRoute';
+import { ResourceOperationProgress } from '@/components/knowledge/ResourceOperationProgress';
 
 interface Props {
   resource: Resource;
@@ -103,13 +104,35 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
             )}
           </div>
 
-          {/* Live job progress */}
-          {liveJob && liveJob.status === 'running' && (
-            <div className="flex items-center gap-1.5">
-              <Loader2 className="h-3 w-3 animate-spin text-primary" />
-              <span className="text-[10px] text-muted-foreground">{getJobLabel(liveJob.jobType, 'running')}</span>
-            </div>
-          )}
+          {/* Live job progress — real progress bar */}
+          {(() => {
+            const r = resource as any;
+            const activeStatus = r.active_job_status;
+            const hasActiveOp = activeStatus === 'running' || activeStatus === 'queued' || activeStatus === 'partial';
+            if (hasActiveOp) {
+              return (
+                <ResourceOperationProgress
+                  status={activeStatus}
+                  jobType={r.active_job_type}
+                  stepLabel={r.active_job_step_label}
+                  progressPct={r.active_job_progress_pct}
+                  progressCurrent={r.active_job_progress_current}
+                  progressTotal={r.active_job_progress_total}
+                  updatedAt={r.active_job_updated_at}
+                />
+              );
+            }
+            // Fallback to zustand live job for in-memory-only tracking
+            if (liveJob && liveJob.status === 'running') {
+              return (
+                <div className="flex items-center gap-1.5">
+                  <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                  <span className="text-[10px] text-muted-foreground">{getJobLabel(liveJob.jobType, 'running')}</span>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
 
         {/* Action area — truth-driven */}

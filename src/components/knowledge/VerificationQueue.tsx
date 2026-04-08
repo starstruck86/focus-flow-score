@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/table';
 import { Crosshair, Zap } from 'lucide-react';
 import type { ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
+import { ResourceOperationProgress } from './ResourceOperationProgress';
 
 interface Props {
   resources: ResourceAuditRow[];
@@ -140,12 +141,14 @@ export function VerificationQueue({ resources, onFlagForReExtraction, onSelectRe
                 <TableHead className="text-[10px] text-right">KIs</TableHead>
                 <TableHead className="text-[10px] text-right">KIs/1k</TableHead>
                 <TableHead className="text-[10px]">Depth</TableHead>
+                <TableHead className="text-[10px]">Progress</TableHead>
                 <TableHead className="text-[10px]">Reason</TableHead>
-                <TableHead className="text-[10px]">Summary</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {queue.map(({ resource: r, reason }) => (
+              {queue.map(({ resource: r, reason }) => {
+                const hasActiveOp = r.active_job_status === 'running' || r.active_job_status === 'queued';
+                return (
                 <TableRow
                   key={r.resource_id}
                   className="cursor-pointer hover:bg-accent/50"
@@ -156,12 +159,26 @@ export function VerificationQueue({ resources, onFlagForReExtraction, onSelectRe
                   <TableCell className="text-[11px] text-right font-mono">{r.ki_count_total}</TableCell>
                   <TableCell className="text-[11px] text-right font-mono">{r.kis_per_1k_chars}</TableCell>
                   <TableCell><DepthBadge bucket={r.extraction_depth_bucket} /></TableCell>
-                  <TableCell className="text-[10px] text-muted-foreground max-w-[120px] truncate">{reason}</TableCell>
-                  <TableCell className="text-[10px] text-muted-foreground max-w-[150px] truncate">
-                    {r.last_extraction_summary || '—'}
+                  <TableCell className="min-w-[130px]">
+                    {hasActiveOp ? (
+                      <ResourceOperationProgress
+                        status={r.active_job_status}
+                        jobType={r.active_job_type}
+                        stepLabel={r.active_job_step_label}
+                        progressPct={r.active_job_progress_pct}
+                        progressCurrent={r.active_job_progress_current}
+                        progressTotal={r.active_job_progress_total}
+                        updatedAt={r.active_job_updated_at}
+                        compact
+                      />
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">—</span>
+                    )}
                   </TableCell>
+                  <TableCell className="text-[10px] text-muted-foreground max-w-[120px] truncate">{reason}</TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </div>
