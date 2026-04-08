@@ -558,6 +558,20 @@ function deduplicateItems(items: any[], isLesson = false): DedupeResult {
           isDupe = true; dupeReason = 'substring';
         }
       }
+      // Layer 7 (NEW): Same leading verb + high core-word overlap — catches rephrased same-concept tactics
+      else if (!isLesson) {
+        const itemCoreWords = corePhrase(item.title || '').split(/\s+/).filter(w => w.length > 0);
+        const existCoreWords = corePhrase(result[i].title || '').split(/\s+/).filter(w => w.length > 0);
+        if (itemCoreWords.length >= 2 && existCoreWords.length >= 2) {
+          const itemVerb = normalizedWords(item.title || '')[0];
+          const existVerb = normalizedWords(result[i].title || '')[0];
+          const coreInter = itemCoreWords.filter(w => existCoreWords.includes(w));
+          const coreOvr = coreInter.length / Math.min(itemCoreWords.length, existCoreWords.length);
+          if (itemVerb === existVerb && coreOvr >= 0.6) {
+            isDupe = true; dupeReason = 'core_phrase';
+          }
+        }
+      }
 
       if (isDupe) {
         const existingRichness = (result[i].how_to_execute?.length || 0) + (result[i].when_to_use?.length || 0) + (result[i].source_excerpt?.length || 0);
