@@ -18,6 +18,8 @@ import { GlobalSearch } from '@/components/GlobalSearch';
 import { TerritoryCopilot } from '@/components/TerritoryCopilot';
 import { DaveMicFAB } from '@/components/DaveMicFAB';
 import { DaveConversationMode } from '@/components/DaveConversationMode';
+import { DaveDebugPanel } from '@/components/dave/DaveDebugPanel';
+import { useDaveConnectionManager } from '@/hooks/useDaveConnectionManager';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BackToToday } from '@/components/BackToToday';
 import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
