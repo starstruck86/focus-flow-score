@@ -234,9 +234,22 @@ export function derivePostExtractionState(r: ResourceAuditRow): PostExtractionSt
     }
 
     // 7. True extractor weak: 0→0→0 with NO API failures
+    //    Only applies if fallback ladder was exhausted (passesRun includes fallback passes)
+    //    or if the resource is too short for fallbacks (<1500 chars)
     if (raw === 0 && validated === 0 && saved === 0) {
-      return mk('extractor_weak_review',
-        `Latest run: 0 raw → 0 validated → 0 saved from ${(r.content_length / 1000).toFixed(1)}k chars.`);
+      const passesRun = (r as any).extraction_passes_run as string[] | null;
+      const fallbacksRan = passesRun && (passesRun.includes('fallback_aggressive') || passesRun.includes('fallback_segmented'));
+      const tooShortForFallback = r.content_length < 1500;
+      const summary = r.last_extraction_summary || '';
+      const isTrueZeroAfterFallbacks = summary.includes('true_zero_after_fallbacks');
+
+      if (fallbacksRan || tooShortForFallback || isTrueZeroAfterFallbacks) {
+        return mk('extractor_weak_review',
+          `Latest run: 0 raw → 0 validated → 0 saved from ${(r.content_length / 1000).toFixed(1)}k chars.${fallbacksRan ? ' All fallback tiers exhausted.' : ''}`);
+      }
+      // Fallback ladder hasn't run yet — route to needs_rerun so it can run with fallbacks
+      return mk('needs_rerun',
+        `Latest run returned 0 items but fallback ladder has not been attempted. Needs rerun with fallback extraction.`);
     }
 
     // 8. Validator too strict: raw > 0, validated = 0
