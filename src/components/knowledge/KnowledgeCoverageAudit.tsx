@@ -30,6 +30,7 @@ import { ReExtractionQueue } from './ReExtractionQueue';
 import { ResourceAuditDrilldown } from './ResourceAuditDrilldown';
 import { RealBottleneckReview } from './RealBottleneckReview';
 import { toast } from 'sonner';
+import { filterByPanel, filterByState, derivePostExtractionState } from '@/lib/postExtractionState';
 
 type AuditFilter = 'all' | 'resumable' | 'under_extracted' | 'shallow' | 'rich_weak' | 'zero_kis' | 'recently_extracted' | 'biggest_lift';
 
@@ -63,7 +64,8 @@ export function KnowledgeCoverageAudit() {
     const r = audit.resources;
     switch (auditFilter) {
       case 'resumable': return r.filter(isResumable);
-      case 'under_extracted': return r.filter(x => x.under_extracted_flag);
+      // ── CANONICAL STATE FILTER: under_extracted uses postExtractionState panel ──
+      case 'under_extracted': return filterByPanel(r, 'under_extracted');
       case 'shallow': return r.filter(x => x.extraction_depth_bucket === 'shallow');
       case 'rich_weak': return r.filter(x => x.content_length >= 3000 && x.kis_per_1k_chars < 1.0);
       case 'zero_kis': return r.filter(x => x.ki_count_total === 0);
@@ -279,7 +281,7 @@ export function KnowledgeCoverageAudit() {
               size="sm"
               className="text-xs gap-1.5"
               onClick={() => {
-                const underExtracted = audit.resources.filter(r => r.under_extracted_flag && r.content_length >= 1500);
+                const underExtracted = filterByPanel(audit.resources, 'under_extracted');
                 handleFlagForReExtraction(underExtracted, 'Under-extracted — auto-flagged');
               }}
             >
