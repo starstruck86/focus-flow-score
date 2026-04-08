@@ -106,6 +106,12 @@ export function evaluateResourceEligibility(resource: Resource, mode: EnrichMode
     return { eligible: false, reason: 'missing or non-http file_url', normalizedMode };
   }
 
+  // Block metadata-only stubs — they need transcript/manual content first
+  const contentStatus = (resource as any).content_status as string | undefined;
+  if (contentStatus === 'metadata_only') {
+    return { eligible: false, reason: 'metadata_only: needs transcript or manual content before enrichment', normalizedMode };
+  }
+
   if (status === 'duplicate' || status === 'superseded' || status === 'quarantined') {
     return { eligible: false, reason: `excluded: ${status}`, normalizedMode };
   }

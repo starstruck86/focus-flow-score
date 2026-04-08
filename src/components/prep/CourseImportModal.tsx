@@ -427,8 +427,14 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                 content: updated,
                 content_length: updated.length,
                 content_status: 'transcript',
-                enrichment_status: 'enriched',
+                enrichment_status: 'not_enriched',
               } as any).eq('id', resourceId);
+              // Remove needs-transcript tag now that content exists
+              const { data: tagRow } = await supabase.from('resources').select('tags').eq('id', resourceId).single();
+              if (tagRow?.tags) {
+                const cleaned = (tagRow.tags as string[]).filter(t => t !== 'needs-transcript');
+                await supabase.from('resources').update({ tags: cleaned } as any).eq('id', resourceId);
+              }
               await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete', transcript_text: txData.transcript });
               console.log(`Transcribed video for ${lesson.title}: ${txData.transcript.length} chars`);
             } else {
@@ -699,7 +705,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                           {q && (r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (
                             <div className="flex items-center gap-1.5 pl-5 flex-wrap text-[10px] text-muted-foreground">
                               <Badge variant={q.usable_content ? 'outline' : 'destructive'} className="text-[9px] h-4">{q.content_type}</Badge>
-                              {r.metadataOnly && <Badge variant="secondary" className="text-[9px] h-4">metadata only</Badge>}
+                              {r.metadataOnly && <Badge variant="secondary" className="text-[9px] h-4 cursor-help" title="Needs transcript or manual content before enrichment">metadata only</Badge>}
                               <span>{q.content_length.toLocaleString()} chars</span>
                               <span>·</span>
                               <span>{q.cleaned_text_length.toLocaleString()} cleaned</span>
@@ -746,17 +752,18 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                         size="sm"
                         className="h-6 text-[10px] gap-1"
                         onClick={() => {
+                          const sanitize = (s: string) => s.replace(/[\t\r\n]+/g, ' ').trim();
                           const toImport = lessons.filter((_, i) => selected.has(i));
                           const failedRows = lessonResults
                             .filter(r => r.status === 'failed')
                             .map(r => {
                               const lesson = toImport[r.lessonIndex];
                               return {
-                                title: lesson?.title || 'Unknown',
-                                url: r.lessonUrl || lesson?.url || '',
-                                error: r.error || 'Unknown error',
-                                content_type: r.quality?.content_type || '',
-                                issues: r.quality?.issues?.join('; ') || '',
+                                title: sanitize(lesson?.title || 'Unknown'),
+                                url: sanitize(r.lessonUrl || lesson?.url || ''),
+                                error: sanitize(r.error || 'Unknown error'),
+                                content_type: sanitize(r.quality?.content_type || ''),
+                                issues: sanitize(r.quality?.issues?.join('; ') || ''),
                               };
                             });
                           const header = 'Title\tURL\tError\tContent Type\tIssues';
