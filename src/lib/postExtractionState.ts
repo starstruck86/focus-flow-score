@@ -3,8 +3,20 @@
  *
  * ── PURPOSE ──
  * After extraction runs, every resource gets exactly ONE canonical state.
- * All audit panels (Verification Queue, Under-Extracted, Bottleneck Review,
- * Re-Extraction Queue) MUST derive from this — not from independent heuristics.
+ * All audit panels (Under-Extracted, Bottleneck Review, Re-Extraction Queue)
+ * MUST derive from this — not from independent heuristics.
+ *
+ * ── PANEL ROUTING (strict single-home) ──
+ * Every canonical state maps to exactly ONE primary panel. No overlaps.
+ *
+ * ── VERIFICATION QUEUE (derived, not a panel) ──
+ * The Verification Queue is NOT a routing destination. It is a prioritized
+ * review queue built from a deterministic subset of canonical states:
+ *   - under_extracted_candidate
+ *   - needs_first_extraction
+ *   - reextract_completed_no_lift
+ * It exists as a convenience view for manual review triage.
+ * It does NOT appear in STATE_PANELS.
  *
  * ── SEPARATION FROM PROGRESS ──
  * post_extraction_state = what the resource IS now (post-run outcome)
@@ -50,17 +62,19 @@ export interface PostExtractionStateResult {
   label: string;
   /** Human-readable explanation of why this state was assigned */
   explanation: string;
-  /** Which panel(s) this resource belongs in — deterministic, no overlap in conflicting panels */
+  /** The ONE primary panel this resource belongs in — strict single-home */
   panels: PostExtractionPanel[];
 }
 
+/**
+ * Primary panels — each resource maps to exactly one.
+ * 'verification_queue' is intentionally NOT here; it is a derived view.
+ */
 export type PostExtractionPanel =
   | 'under_extracted'
-  | 'verification_queue'
   | 'bottleneck_review'
   | 'reextraction_queue'
   | 'none';
-
 // ── Labels ────────────────────────────────────────────────
 
 export const STATE_LABELS: Record<PostExtractionState, string> = {
@@ -77,14 +91,15 @@ export const STATE_LABELS: Record<PostExtractionState, string> = {
   excluded: 'Excluded',
 };
 
-// ── Panel Mapping ─────────────────────────────────────────
+// ── Panel Mapping (strict single-home) ────────────────────
 /**
- * Each state maps to exactly one set of panels.
- * A resource CANNOT appear in conflicting panels.
+ * Each state maps to exactly ONE primary panel.
+ * No resource can appear in multiple conflicting panels.
+ * verification_queue is NOT here — it is a derived view (see VERIFICATION_QUEUE_STATES).
  */
 const STATE_PANELS: Record<PostExtractionState, PostExtractionPanel[]> = {
   needs_first_extraction:        ['under_extracted'],
-  under_extracted_candidate:     ['under_extracted', 'verification_queue'],
+  under_extracted_candidate:     ['under_extracted'],
   reextract_running:             ['reextraction_queue'],
   reextract_completed_with_lift: ['none'],
   reextract_completed_no_lift:   ['bottleneck_review'],
@@ -95,6 +110,18 @@ const STATE_PANELS: Record<PostExtractionState, PostExtractionPanel[]> = {
   done:                          ['none'],
   excluded:                      ['none'],
 };
+
+// ── Verification Queue (derived view, not a panel) ────────
+/**
+ * The Verification Queue is a prioritized review queue built from a
+ * deterministic subset of canonical states. It is NOT a routing destination.
+ * Resources here still "live" in their primary panel (under_extracted or bottleneck_review).
+ */
+export const VERIFICATION_QUEUE_STATES: PostExtractionState[] = [
+  'under_extracted_candidate',
+  'needs_first_extraction',
+  'reextract_completed_no_lift',
+];
 
 // ── Content-type-aware density thresholds ──────────────────
 

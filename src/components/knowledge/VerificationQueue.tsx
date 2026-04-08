@@ -1,10 +1,12 @@
 /**
- * Verification Queue — auto-populated from canonical post-extraction state.
- * Shows resources whose canonical state maps to the 'verification_queue' panel.
+ * Verification Queue — a DERIVED prioritized review queue.
  *
- * ── RENDER PRIORITY (canonical state) ──
- * This panel ONLY shows resources where derivePostExtractionState().panels
- * includes 'verification_queue'. It does NOT use independent heuristics.
+ * This is NOT a primary routing panel. Resources here still belong to their
+ * canonical primary panel (under_extracted, bottleneck_review, etc.).
+ *
+ * The queue is built from a deterministic subset of canonical states
+ * (VERIFICATION_QUEUE_STATES), sorted by priority. It exists as a
+ * convenience view for manual review triage.
  */
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +21,7 @@ import {
 import { Crosshair, Zap, Info } from 'lucide-react';
 import type { ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
 import { ResourceOperationProgress } from './ResourceOperationProgress';
-import { derivePostExtractionState, filterByPanel, type PostExtractionStateResult } from '@/lib/postExtractionState';
+import { derivePostExtractionState, VERIFICATION_QUEUE_STATES, type PostExtractionStateResult } from '@/lib/postExtractionState';
 
 interface Props {
   resources: ResourceAuditRow[];
@@ -44,8 +46,10 @@ const TYPE_PRIORITY: Record<string, number> = {
 };
 
 function buildQueue(resources: ResourceAuditRow[]): QueueEntry[] {
-  // Derive from canonical state — only resources that belong to verification_queue
-  const eligible = filterByPanel(resources, 'verification_queue');
+  // Derived queue: filter to resources whose canonical state is in VERIFICATION_QUEUE_STATES
+  const eligible = resources.filter(r =>
+    VERIFICATION_QUEUE_STATES.includes(derivePostExtractionState(r).state)
+  );
 
   return eligible
     .map(r => {
