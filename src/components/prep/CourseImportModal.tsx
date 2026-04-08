@@ -687,7 +687,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                             )}
                           </div>
                           {/* Quality report row */}
-                          {q && (r.status === 'complete' || r.status === 'failed') && (
+                          {q && (r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (
                             <div className="flex items-center gap-1.5 pl-5 flex-wrap text-[10px] text-muted-foreground">
                               <Badge variant={q.usable_content ? 'outline' : 'destructive'} className="text-[9px] h-4">{q.content_type}</Badge>
                               {r.metadataOnly && <Badge variant="secondary" className="text-[9px] h-4">metadata only</Badge>}
@@ -705,7 +705,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                             </div>
                           )}
                           {/* Issues */}
-                          {q && q.issues.length > 0 && (r.status === 'complete' || r.status === 'failed') && (
+                          {q && q.issues.length > 0 && (r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (
                             <div className="pl-5 text-[10px] text-destructive">
                               {q.issues.map((issue, j) => <div key={j}>⚠ {issue}</div>)}
                             </div>
