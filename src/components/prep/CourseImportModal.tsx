@@ -372,7 +372,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         const isVideoLesson = lesson.type === 'video' || lessonData?.type === 'video' || Boolean(lessonData?.media_url);
         classification.resource_type = isVideoLesson ? 'video' : 'article';
         if (metadataOnly) {
-          classification.content_status = 'metadata_only';
+          (classification as any).content_status = 'metadata_only';
         }
         classification.tags = Array.from(new Set([...(classification.tags || []), 'course', courseTitle].filter(Boolean)));
 
