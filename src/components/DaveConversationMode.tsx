@@ -188,9 +188,18 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       // ── Connection Manager: mark connected ──
       connMgr.dispatch({ type: 'CONNECT_SUCCESS', sessionId: sessionData.token.substring(0, 16) });
       
-      // ── Start heartbeat: check if conversation status is still connected ──
+      // ── Start heartbeat: stronger liveness check ──
       connMgr.startHeartbeat(async () => {
-        return conversation.status === 'connected';
+        // Primary: SDK status
+        if (conversation.status !== 'connected') return false;
+        // Secondary: stale-session heuristic — if we haven't received
+        // any message in 90s during an active session, treat as degraded
+        const lastMsg = lastMessageAtRef.current;
+        if (lastMsg && messagesReceivedCountRef.current > 0) {
+          const silenceMs = Date.now() - lastMsg;
+          if (silenceMs > 90_000) return false;
+        }
+        return true;
       });
 
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
@@ -416,8 +425,9 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     }
     dismissRecovery();
 
-    // ── Connection Manager: clean disconnect ──
+    // ── Connection Manager: clean disconnect + full reset ──
     cleanDisconnectRef.current = true;
+    connMgr.dispatch({ type: 'DISCONNECT', reason: 'user_initiated', wasClean: true });
     connMgr.cleanup();
 
     const currentTranscript = transcriptRef.current;
