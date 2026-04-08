@@ -284,7 +284,15 @@ async function reconcileResourceSnapshot(resourceId: string, item: ReExtractQueu
     ? 'partial_complete_resumable'
     : latestRun?.status || 'completed';
 
-  await supabase.from('resources' as any).update({
+  // Determine terminal enrichment_status: if job completed and no incomplete batches,
+  // transition out of 'extraction_retrying' to prevent stale queue entries
+  const isTerminal = !resumeInfo.hasIncompleteBatches && (derivedStatus === 'completed' || latestRun?.status === 'completed');
+  const depthBucket = computeDepthBucket(postTotal, item.content_length);
+  const terminalEnrichmentStatus = isTerminal
+    ? (depthBucket === 'strong' ? 'deep_enriched' : 'enriched')
+    : undefined; // leave unchanged if not terminal
+
+  const updatePayload: Record<string, any> = {
     extraction_attempt_count: runCountResult.count ?? 0,
     extraction_batches_completed: resumeInfo.completedCount,
     extraction_batch_total: resumeInfo.batchTotal,
@@ -294,10 +302,18 @@ async function reconcileResourceSnapshot(resourceId: string, item: ReExtractQueu
     current_resource_ki_count: postTotal,
     current_resource_kis_per_1k: postKisPer1k,
     kis_per_1k_chars: postKisPer1k,
-    extraction_depth_bucket: computeDepthBucket(postTotal, item.content_length),
+    extraction_depth_bucket: depthBucket,
     under_extracted_flag: computeUnderExtracted(postTotal, item.content_length, item.resource_type),
     active_job_status: resumeInfo.hasIncompleteBatches ? 'partial' : latestRun?.status === 'failed' ? 'failed' : 'succeeded',
-  } as any).eq('id', resourceId);
+    // Clear retry-related fields on terminal completion
+    ...(isTerminal ? {
+      enrichment_status: terminalEnrichmentStatus,
+      extraction_retry_eligible: false,
+      extraction_failure_type: null,
+    } : {}),
+  };
+
+  await supabase.from('resources' as any).update(updatePayload as any).eq('id', resourceId);
 
   return resumeInfo;
 }
@@ -959,13 +975,39 @@ export function useDeepReExtraction() {
     });
 
     setIsRunning(false);
+
+    // ── AUTO-CLEAR: Remove completed no-lift items from queue ──
+    // A resource exits the queue if:
+    // - status is 'completed' (not partial/resumable/failed)
+    // - ki_delta === 0 and net_new_unique === 0
+    // - lift_status is 'no_lift'
+    // This prevents exhausted reruns from lingering in the queue.
+    setQueue(prev => {
+      const remaining = prev.filter(item => {
+        if (item.status !== 'completed') return true; // keep non-terminal
+        if (item.lift_status === 'meaningful_lift' || item.lift_status === 'minor_lift') return true; // keep lifts for review
+        // Remove completed no-lift / zero-delta items
+        const isExhausted = (item.ki_delta ?? 0) === 0 && (item.net_new_unique ?? 0) === 0;
+        if (isExhausted) {
+          console.log(`[QUEUE AUTO-CLEAR] Removing exhausted item: "${item.title}" (no lift, delta=0)`);
+          return false;
+        }
+        return true;
+      });
+      if (remaining.length < prev.length) {
+        const cleared = prev.length - remaining.length;
+        console.log(`[QUEUE AUTO-CLEAR] Removed ${cleared} exhausted no-lift items from queue`);
+      }
+      return remaining;
+    });
+
     qc.invalidateQueries({ queryKey: ['knowledge-coverage-audit'] });
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
     qc.invalidateQueries({ queryKey: ['resources'] });
     if (totalNetNew > 0) {
       toast.success(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalNetNew} net new KIs`);
     } else if (noLiftCount === succeeded && succeeded > 0) {
-      toast.warning(`${succeeded}/${queued.length} runs completed, but produced no measurable coverage lift`);
+      toast.warning(`${succeeded}/${queued.length} runs completed, but produced no measurable coverage lift. Exhausted items auto-cleared.`);
     } else {
       toast.info(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalNetNew} net new KIs`);
     }
