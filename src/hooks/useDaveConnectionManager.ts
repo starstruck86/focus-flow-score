@@ -3,6 +3,11 @@
  * 
  * This is the single source of truth for Dave's connection lifecycle.
  * UI components consume state from this hook; they do NOT manage WebRTC directly.
+ * 
+ * Hardening notes:
+ * - reconnectAttemptCount is tracked via ref to avoid stale closures in setTimeout
+ * - cleanup() preserves terminal state briefly for UX; use reset() for full wipe
+ * - event history is maintained for debug panel
  */
 
 import { useReducer, useCallback, useRef, useEffect } from 'react';
@@ -22,23 +27,29 @@ import {
 
 const logger = createLogger('DaveConnectionMgr');
 
+// ── Event History ──────────────────────────────────────────────────
+export interface DaveEventRecord {
+  type: string;
+  ts: number;
+  detail?: string;
+}
+
+const MAX_EVENT_HISTORY = 20;
+
 export interface UseDaveConnectionManager {
-  /** Current connection metadata (state, timestamps, errors, etc.) */
   meta: DaveConnectionMeta;
-  /** Dispatch a connection event to transition state */
   dispatch: (event: DaveConnectionEvent) => void;
-  /** Start heartbeat monitoring (call when connected) */
   startHeartbeat: (checkFn: () => Promise<boolean>) => void;
-  /** Stop heartbeat monitoring */
   stopHeartbeat: () => void;
-  /** Schedule a reconnect with exponential backoff */
   scheduleReconnect: (reconnectFn: () => Promise<void>) => void;
-  /** Cancel any pending reconnect timer */
   cancelReconnect: () => void;
-  /** Full cleanup — stop heartbeat, cancel reconnect, reset state */
+  /** Soft cleanup — stops timers but preserves terminal state for UX */
   cleanup: () => void;
-  /** Whether we've exceeded max reconnect attempts */
+  /** Hard reset — wipes all state back to idle */
+  reset: () => void;
   isReconnectExhausted: boolean;
+  /** Last N connection events for debug panel */
+  eventHistory: DaveEventRecord[];
 }
 
 export function useDaveConnectionManager(): UseDaveConnectionManager {
@@ -50,11 +61,32 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
   const reconnectingRef = useRef(false);
   const cleanedUpRef = useRef(false);
 
-  // Wrap dispatch with logging
+  // ── Ref-backed state to avoid stale closures ──
+  const metaRef = useRef(meta);
+  metaRef.current = meta;
+
+  // ── Event history ──
+  const eventHistoryRef = useRef<DaveEventRecord[]>([]);
+  // Force re-render on event history update via a counter
+  const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
+
+  const pushEvent = useCallback((type: string, detail?: string) => {
+    const record: DaveEventRecord = { type, ts: Date.now(), detail };
+    eventHistoryRef.current = [...eventHistoryRef.current.slice(-(MAX_EVENT_HISTORY - 1)), record];
+    forceUpdate();
+  }, []);
+
+  // Wrap dispatch with logging + event history
   const dispatch = useCallback((event: DaveConnectionEvent) => {
     logger.info(`Event: ${event.type}`, event);
+    const detail =
+      'error' in event ? (event as any).error :
+      'reason' in event ? (event as any).reason :
+      'latencyMs' in event ? `${(event as any).latencyMs}ms` :
+      undefined;
+    pushEvent(event.type, detail);
     rawDispatch(event);
-  }, []);
+  }, [pushEvent]);
 
   const stopHeartbeat = useCallback(() => {
     if (heartbeatTimerRef.current) {
@@ -75,6 +107,10 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
     stopHeartbeat();
 
     heartbeatTimerRef.current = setInterval(async () => {
+      const currentMeta = metaRef.current;
+      // Only heartbeat when we think we're connected or degraded
+      if (currentMeta.state !== 'connected' && currentMeta.state !== 'degraded') return;
+
       const start = Date.now();
       try {
         const ok = await Promise.race([
@@ -103,12 +139,20 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
       return;
     }
 
-    // Check if exhausted based on current meta
-    // We read from a ref-like pattern since meta is stale in closure
-    // The reducer itself will handle RECONNECT_EXHAUSTED
-    const delay = getBackoffDelay(meta.reconnectAttemptCount);
+    // Read latest state from ref, not stale closure
+    const currentMeta = metaRef.current;
+    const currentAttempt = currentMeta.reconnectAttemptCount;
+
+    // Check exhaustion BEFORE scheduling
+    if (currentAttempt >= MAX_RECONNECT_ATTEMPTS) {
+      logger.warn('Reconnect exhausted — not scheduling');
+      dispatch({ type: 'RECONNECT_EXHAUSTED' });
+      return;
+    }
+
+    const delay = getBackoffDelay(currentAttempt);
     
-    logger.info('Scheduling reconnect', { attempt: meta.reconnectAttemptCount + 1, delayMs: delay });
+    logger.info('Scheduling reconnect', { attempt: currentAttempt + 1, delayMs: delay });
     dispatch({ type: 'RECONNECT_SCHEDULED' });
 
     reconnectTimerRef.current = setTimeout(async () => {
@@ -116,25 +160,36 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
 
       if (cleanedUpRef.current) return;
 
+      // Re-check exhaustion at execution time using ref
+      const latestMeta = metaRef.current;
+      if (latestMeta.reconnectAttemptCount >= MAX_RECONNECT_ATTEMPTS) {
+        dispatch({ type: 'RECONNECT_EXHAUSTED' });
+        reconnectingRef.current = false;
+        return;
+      }
+
       reconnectingRef.current = true;
       dispatch({ type: 'RECONNECT_START' });
 
       try {
         await reconnectFn();
         // Success will be handled by CONNECT_SUCCESS or RECONNECT_SUCCESS dispatched externally
+        reconnectingRef.current = false;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         dispatch({ type: 'RECONNECT_FAILURE', error: msg });
         reconnectingRef.current = false;
 
-        // Check if we should try again
-        if (meta.reconnectAttemptCount + 1 >= MAX_RECONNECT_ATTEMPTS) {
+        // Check exhaustion after failure using ref
+        const afterFailMeta = metaRef.current;
+        if (afterFailMeta.reconnectAttemptCount >= MAX_RECONNECT_ATTEMPTS) {
           dispatch({ type: 'RECONNECT_EXHAUSTED' });
         }
       }
     }, delay);
-  }, [meta.reconnectAttemptCount, dispatch]);
+  }, [dispatch]);
 
+  // Soft cleanup: stop timers but preserve terminal state for banner/debug
   const cleanup = useCallback(() => {
     cleanedUpRef.current = true;
     stopHeartbeat();
@@ -143,8 +198,16 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
       clearTimeout(stableTimerRef.current);
       stableTimerRef.current = null;
     }
+    // Do NOT dispatch RESET — let the last state linger for UX.
+    // Components should call reset() explicitly when they want to wipe.
+  }, [stopHeartbeat, cancelReconnect]);
+
+  // Hard reset: full state wipe
+  const reset = useCallback(() => {
+    cleanup();
     dispatch({ type: 'RESET' });
-  }, [stopHeartbeat, cancelReconnect, dispatch]);
+    eventHistoryRef.current = [];
+  }, [cleanup, dispatch]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -165,6 +228,8 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
     scheduleReconnect,
     cancelReconnect,
     cleanup,
+    reset,
     isReconnectExhausted: meta.reconnectAttemptCount >= MAX_RECONNECT_ATTEMPTS,
+    eventHistory: eventHistoryRef.current,
   };
 }
