@@ -24,7 +24,7 @@ type LessonItem = {
   type?: string;
 };
 
-type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 'saving_resource' | 'transcribing' | 'complete' | 'failed';
+type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 'saving_resource' | 'transcribing' | 'complete' | 'metadata_only' | 'failed';
 
 type LessonQualityReport = {
   content_length: number;
@@ -433,7 +433,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete' });
         }
 
-        updateLessonResult(i, { status: 'complete', resourceId: resourceId || undefined, quality, lessonUrl: lesson.url, requestedUrl, finalUrl, metadataOnly });
+        const finalStatus: LessonImportStatus = metadataOnly ? 'metadata_only' : 'complete';
+        updateLessonResult(i, { status: finalStatus, resourceId: resourceId || undefined, quality, lessonUrl: lesson.url, requestedUrl, finalUrl, metadataOnly });
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to save resource';
         updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url, requestedUrl, finalUrl });
@@ -443,11 +444,20 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       setImportProgress({ done: i + 1, total: toImport.length, current: '' });
     }
 
-    const failedCount = toImport.length - successCount;
+    // Compute summary counts
+    const fullCount = lessonResults.filter(r => r.status === 'complete').length;
+    const metaCount = lessonResults.filter(r => r.status === 'metadata_only').length;
+    const failedCount = toImport.length - fullCount - metaCount;
+
+    const parts: string[] = [];
+    if (fullCount > 0) parts.push(`${fullCount} full`);
+    if (metaCount > 0) parts.push(`${metaCount} metadata-only`);
+    if (failedCount > 0) parts.push(`${failedCount} failed`);
+
     if (failedCount > 0) {
-      toast.warning(`Imported ${successCount} of ${toImport.length} lessons (${failedCount} failed)`);
+      toast.warning(`Import complete: ${parts.join(', ')}`);
     } else {
-      toast.success(`Imported ${successCount} of ${toImport.length} lessons`);
+      toast.success(`Import complete: ${parts.join(', ')}`);
     }
     setImporting(false);
     clearCredPassword();
@@ -655,16 +665,20 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                       const lesson = toImport[r.lessonIndex];
                       if (!lesson) return null;
                       const StatusIcon = r.status === 'complete' ? CheckCircle2
+                        : r.status === 'metadata_only' ? Info
                         : r.status === 'failed' ? XCircle
                         : null;
                       const q = r.quality;
+                      const statusColor = r.status === 'complete' ? 'text-green-500'
+                        : r.status === 'metadata_only' ? 'text-amber-500'
+                        : r.status === 'failed' ? 'text-destructive'
+                        : 'text-muted-foreground';
+                            ) : (
                       return (
                         <div key={idx} className="space-y-0.5">
                           <div className="flex items-center gap-2 text-[11px]">
                             {StatusIcon ? (
-                              <StatusIcon className={`h-3 w-3 flex-shrink-0 ${r.status === 'complete' ? 'text-green-500' : 'text-destructive'}`} />
-                            ) : (
-                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
+                              <StatusIcon className={`h-3 w-3 flex-shrink-0 ${statusColor}`} />
                             )}
                             <span className="truncate flex-1">{lesson.title}</span>
                             {r.status !== 'complete' && r.status !== 'failed' && r.status !== 'queued' && (

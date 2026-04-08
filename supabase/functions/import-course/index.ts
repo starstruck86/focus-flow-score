@@ -475,19 +475,34 @@ function classifyLessonContent(text: string, html: string, finalUrl: string, les
   } else if (trimmed.length < 100 && videoEmbeds > 0) {
     contentType = 'video_only';
     if (wordCount < 10) issues.push('Video-only page with no substantial text');
-  } else if (/<div[\s>]|<span[\s>]|font-family\s*:|class="/i.test(trimmed)) {
-    // Tightened html_junk classifier: require MANY raw tags AND low text ratio
-    // to avoid misclassifying valid rich-text lessons that have occasional inline HTML
-    const htmlTagCount = (trimmed.match(/<[a-z]+[\s>]/gi) || []).length;
-    const textRatio = cleanedTextLength / trimmed.length;
-    // Only flag as html_junk if: many tags (>20), text ratio below 40%, AND
-    // the cleaned text itself is short (real lessons have long cleaned text even with HTML)
-    if (htmlTagCount > 20 && textRatio < 0.4 && cleanedTextLength < 500) {
-      contentType = 'html_junk';
-      issues.push(`Content contains raw HTML fragments (${htmlTagCount} tags, ${Math.round(textRatio * 100)}% text) — extraction likely failed`);
+  } else {
+    // Explicit page-chrome / raw-HTML artifact detection
+    // Look for structural indicators that the extractor returned page markup, not lesson prose
+    const PAGE_CHROME_SIGNALS = [
+      /<(?:header|footer|nav|aside|form)[\s>]/gi,        // structural page elements
+      /class="[^"]*(?:navbar|footer|sidebar|menu|modal|popup|cookie)[^"]*"/gi, // layout classes
+      /(?:font-family|background-color|margin|padding)\s*:/gi,  // inline CSS rules
+      /<(?:script|style|link|meta)[\s>]/gi,               // non-content tags
+      /<input[\s>]/gi,                                     // form inputs
+    ];
+    let chromeSignalCount = 0;
+    for (const sig of PAGE_CHROME_SIGNALS) {
+      chromeSignalCount += (trimmed.match(sig) || []).length;
     }
-  } else if (videoEmbeds > 0 && wordCount > 20) {
-    contentType = 'mixed';
+    const htmlTagCount = (trimmed.match(/<[a-z]+[\s>]/gi) || []).length;
+    const textRatio = trimmed.length > 0 ? cleanedTextLength / trimmed.length : 1;
+
+    // html_junk if: heavy chrome artifacts AND low text ratio AND short cleaned text
+    if (chromeSignalCount >= 8 && textRatio < 0.4 && cleanedTextLength < 500) {
+      contentType = 'html_junk';
+      issues.push(`Raw page chrome detected (${chromeSignalCount} signals, ${htmlTagCount} tags, ${Math.round(textRatio * 100)}% text) — extraction failed`);
+    } else if (htmlTagCount > 30 && textRatio < 0.3 && cleanedTextLength < 300) {
+      // Fallback: extreme tag density with almost no text
+      contentType = 'html_junk';
+      issues.push(`Extreme tag density (${htmlTagCount} tags, ${Math.round(textRatio * 100)}% text) — extraction failed`);
+    } else if (videoEmbeds > 0 && wordCount > 20) {
+      contentType = 'mixed';
+    }
   }
 
   // Near-empty guard
