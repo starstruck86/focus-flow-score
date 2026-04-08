@@ -60,6 +60,13 @@ function formatElapsed(updatedAt: string | null): string | null {
   return `${Math.round(ms / 60_000)}m ago`;
 }
 
+/**
+ * ── RENDER PRIORITY (progress component) ──
+ * This component renders ONLY for active operations (running, queued, partial).
+ * It returns null for all terminal states (succeeded, failed, idle, null),
+ * ensuring no stale progress bars persist after work completes.
+ * Stall detection is handled internally via heartbeat age.
+ */
 export function ResourceOperationProgress({
   status,
   jobType,
@@ -70,7 +77,7 @@ export function ResourceOperationProgress({
   updatedAt,
   compact = false,
 }: ResourceOperationProgressProps) {
-  if (!status || status === 'succeeded' || status === 'idle' || !['running', 'queued', 'partial'].includes(status)) {
+  if (!status || status === 'succeeded' || status === 'failed' || status === 'idle' || !['running', 'queued', 'partial'].includes(status)) {
     return null;
   }
 

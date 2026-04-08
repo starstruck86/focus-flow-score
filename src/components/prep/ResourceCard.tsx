@@ -104,7 +104,16 @@ export function ResourceCard({ resource, lc, audioJob, isSelected, onToggleSelec
             )}
           </div>
 
-          {/* Live job progress — real progress bar */}
+          {/*
+           * ── RENDER PRIORITY (resource row) ──
+           * 1. Active operation progress (running / queued / partial) — always wins
+           * 2. Stalled detection (handled inside ResourceOperationProgress)
+           * 3. Terminal extraction outcome badges (No Lift, Extractor weak) — shown ONLY when no active op
+           * 4. Recommendation / bottleneck badges — lowest priority
+           *
+           * When an active operation is showing, signal/truth badges above still render
+           * but the progress bar replaces the inline status area to avoid contradiction.
+           */}
           {(() => {
             const r = resource as any;
             const activeStatus = r.active_job_status;
