@@ -26,11 +26,24 @@ type LessonItem = {
 
 type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 'saving_resource' | 'transcribing' | 'complete' | 'failed';
 
+type LessonQualityReport = {
+  content_length: number;
+  content_type: string;
+  has_login_wall: boolean;
+  has_redirect: boolean;
+  redirect_url?: string;
+  word_count: number;
+  video_embeds_found: number;
+  issues: string[];
+};
+
 type LessonImportResult = {
   lessonIndex: number;
   status: LessonImportStatus;
   error?: string;
   resourceId?: string;
+  quality?: LessonQualityReport;
+  lessonUrl?: string;
 };
 
 interface CourseImportModalProps {
@@ -291,8 +304,20 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         lessonData = data;
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to fetch lesson';
-        updateLessonResult(i, { status: 'failed', error: errMsg });
+        updateLessonResult(i, { status: 'failed', error: errMsg, lessonUrl: lesson.url });
         await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'fetching_lesson', error: errMsg });
+        setImportProgress({ done: i + 1, total: toImport.length, current: '' });
+        continue;
+      }
+
+      // Capture server-side quality report
+      const quality: LessonQualityReport | undefined = lessonData?.quality;
+
+      // Server already fails loudly on login_page / empty / html_junk
+      if (!lessonData?.success) {
+        const errMsg = lessonData?.error || 'Lesson fetch returned failure';
+        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url });
+        await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'quality_gate', error: errMsg });
         setImportProgress({ done: i + 1, total: toImport.length, current: '' });
         continue;
       }
@@ -306,7 +331,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
       if (!validation.valid) {
         const errMsg = validation.reason || 'Content validation failed';
-        updateLessonResult(i, { status: 'failed', error: errMsg });
+        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url });
         await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'validating_content', error: `${validation.code}: ${errMsg}` });
         setImportProgress({ done: i + 1, total: toImport.length, current: '' });
         console.warn(`Validation failed for "${lesson.title}": ${errMsg}`);
@@ -397,10 +422,10 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete' });
         }
 
-        updateLessonResult(i, { status: 'complete', resourceId: resourceId || undefined });
+        updateLessonResult(i, { status: 'complete', resourceId: resourceId || undefined, quality, lessonUrl: lesson.url });
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to save resource';
-        updateLessonResult(i, { status: 'failed', error: errMsg });
+        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url });
         await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'saving_resource', error: errMsg });
         console.error(`Failed to import ${lesson.title}:`, e);
       }
@@ -612,8 +637,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
               {/* Per-lesson status during import */}
               {lessonResults.length > 0 && (
-                <ScrollArea className="max-h-32 border rounded-md mt-2">
-                  <div className="p-2 space-y-1">
+                <ScrollArea className="max-h-48 border rounded-md mt-2">
+                  <div className="p-2 space-y-2">
                     {lessonResults.map((r, idx) => {
                       const toImport = lessons.filter((_, i) => selected.has(i));
                       const lesson = toImport[r.lessonIndex];
@@ -621,19 +646,40 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                       const StatusIcon = r.status === 'complete' ? CheckCircle2
                         : r.status === 'failed' ? XCircle
                         : null;
+                      const q = r.quality;
                       return (
-                        <div key={idx} className="flex items-center gap-2 text-[11px]">
-                          {StatusIcon ? (
-                            <StatusIcon className={`h-3 w-3 flex-shrink-0 ${r.status === 'complete' ? 'text-green-500' : 'text-destructive'}`} />
-                          ) : (
-                            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
+                        <div key={idx} className="space-y-0.5">
+                          <div className="flex items-center gap-2 text-[11px]">
+                            {StatusIcon ? (
+                              <StatusIcon className={`h-3 w-3 flex-shrink-0 ${r.status === 'complete' ? 'text-green-500' : 'text-destructive'}`} />
+                            ) : (
+                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
+                            )}
+                            <span className="truncate flex-1">{lesson.title}</span>
+                            {r.status !== 'complete' && r.status !== 'failed' && r.status !== 'queued' && (
+                              <Badge variant="outline" className="text-[9px] h-4">{r.status.replace('_', ' ')}</Badge>
+                            )}
+                          </div>
+                          {/* Quality report row */}
+                          {q && (r.status === 'complete' || r.status === 'failed') && (
+                            <div className="flex items-center gap-1.5 pl-5 flex-wrap text-[10px] text-muted-foreground">
+                              <Badge variant="outline" className="text-[9px] h-4">{q.content_type}</Badge>
+                              <span>{q.content_length.toLocaleString()} chars</span>
+                              <span>·</span>
+                              <span>{q.word_count} words</span>
+                              {q.video_embeds_found > 0 && <span>· {q.video_embeds_found} video{q.video_embeds_found !== 1 ? 's' : ''}</span>}
+                              {q.has_login_wall && <Badge variant="destructive" className="text-[9px] h-4">login wall</Badge>}
+                              {q.has_redirect && <Badge variant="secondary" className="text-[9px] h-4">redirected</Badge>}
+                            </div>
                           )}
-                          <span className="truncate flex-1">{lesson.title}</span>
-                          {r.status === 'failed' && r.error && (
-                            <span className="text-destructive truncate max-w-[140px]" title={r.error}>{r.error}</span>
+                          {/* Issues */}
+                          {q && q.issues.length > 0 && (r.status === 'complete' || r.status === 'failed') && (
+                            <div className="pl-5 text-[10px] text-destructive">
+                              {q.issues.map((issue, j) => <div key={j}>⚠ {issue}</div>)}
+                            </div>
                           )}
-                          {r.status !== 'complete' && r.status !== 'failed' && r.status !== 'queued' && (
-                            <Badge variant="outline" className="text-[9px] h-4">{r.status.replace('_', ' ')}</Badge>
+                          {r.status === 'failed' && r.error && !q?.issues.length && (
+                            <div className="pl-5 text-[10px] text-destructive truncate" title={r.error}>⚠ {r.error}</div>
                           )}
                         </div>
                       );

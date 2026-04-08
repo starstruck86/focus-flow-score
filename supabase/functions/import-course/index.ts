@@ -418,7 +418,87 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
   return { platform, title: courseTitle, lessons, debug };
 }
 
-async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: { email?: string; password?: string }): Promise<{ title: string; content: string; type: string; debug: string[] }> {
+interface LessonQuality {
+  content_length: number;
+  content_type: 'text' | 'transcript' | 'video_only' | 'html_junk' | 'login_page' | 'empty' | 'mixed';
+  has_login_wall: boolean;
+  has_redirect: boolean;
+  redirect_url?: string;
+  word_count: number;
+  video_embeds_found: number;
+  issues: string[];
+}
+
+function classifyLessonContent(text: string, html: string, finalUrl: string, lessonUrl: string): LessonQuality {
+  const issues: string[] = [];
+  const trimmed = text.trim();
+  const wordCount = trimmed.split(/\s+/).filter(w => w.length > 2).length;
+
+  // Redirect detection
+  const hasRedirect = finalUrl !== lessonUrl && new URL(finalUrl).pathname !== new URL(lessonUrl).pathname;
+  const redirectUrl = hasRedirect ? finalUrl : undefined;
+  if (hasRedirect) issues.push(`Redirected to ${finalUrl}`);
+
+  // Login wall detection
+  const loginPatterns = [
+    /member\[password\]/i,
+    /new_member_session/i,
+    /sign[\s_-]?in to (?:continue|access|view)/i,
+    /you must (?:log|sign) in/i,
+    /please (?:log|sign) in/i,
+    /authentication required/i,
+    /access denied/i,
+    /login to (?:continue|view|access)/i,
+  ];
+  const hasLoginWall = loginPatterns.some(p => p.test(html));
+  if (hasLoginWall) issues.push('Login/auth wall detected in page HTML');
+
+  // Login redirect detection
+  const loginRedirect = hasRedirect && /\/login|\/sign_in|\/signin/i.test(finalUrl);
+  if (loginRedirect) issues.push('Redirected to login page');
+
+  // Video embed count
+  const videoEmbeds = (html.match(/wistia|vimeo|youtube|sproutvideo|video-player/gi) || []).length;
+
+  // Content type classification
+  let contentType: LessonQuality['content_type'] = 'text';
+  if (hasLoginWall || loginRedirect) {
+    contentType = 'login_page';
+  } else if (trimmed.length === 0) {
+    contentType = 'empty';
+    issues.push('No content extracted');
+  } else if (trimmed.length < 100 && videoEmbeds > 0) {
+    contentType = 'video_only';
+    if (wordCount < 10) issues.push('Video-only page with no substantial text');
+  } else if (/<div[\s>]|<span[\s>]|font-family\s*:|class="/i.test(trimmed)) {
+    const htmlTagCount = (trimmed.match(/<[a-z]+[\s>]/gi) || []).length;
+    const textRatio = trimmed.replace(/<[^>]+>/g, '').length / trimmed.length;
+    if (htmlTagCount > 10 && textRatio < 0.5) {
+      contentType = 'html_junk';
+      issues.push('Content contains raw HTML fragments — extraction likely failed');
+    }
+  } else if (videoEmbeds > 0 && wordCount > 20) {
+    contentType = 'mixed';
+  }
+
+  // Near-empty guard
+  if (contentType === 'text' && wordCount < 15) {
+    issues.push(`Very low word count (${wordCount} words)`);
+  }
+
+  return {
+    content_length: trimmed.length,
+    content_type: contentType,
+    has_login_wall: hasLoginWall || loginRedirect,
+    has_redirect: hasRedirect,
+    redirect_url: redirectUrl,
+    word_count: wordCount,
+    video_embeds_found: videoEmbeds,
+    issues,
+  };
+}
+
+async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: { email?: string; password?: string }): Promise<{ title: string; content: string; type: string; debug: string[]; quality: LessonQuality; media_url?: string; video_duration?: number }> {
   const jar = createCookieJar();
   const debug: string[] = [];
   
@@ -749,7 +829,11 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
   
   debug.push(`Content extracted: ${content.length} chars, type: ${type}, mediaUrl: ${mediaUrl ? 'yes' : 'no'}`);
   
-  return { title, content, type, debug, media_url: mediaUrl || undefined, video_duration: videoDuration || undefined };
+  // Quality classification
+  const quality = classifyLessonContent(content, html, resp.url, lessonUrl);
+  debug.push(`Quality: type=${quality.content_type}, words=${quality.word_count}, issues=${quality.issues.length > 0 ? quality.issues.join('; ') : 'none'}`);
+  
+  return { title, content, type, debug, quality, media_url: mediaUrl || undefined, video_duration: videoDuration || undefined };
 }
 
 Deno.serve(async (req) => {
@@ -777,6 +861,27 @@ Deno.serve(async (req) => {
         );
       }
       const result = await fetchLessonContent(url, lesson_url, creds);
+      
+      // Fail loudly on login walls or empty content
+      if (result.quality.has_login_wall) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Lesson page returned a login wall — authentication failed or expired', quality: result.quality, debug: result.debug }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (result.quality.content_type === 'empty') {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Lesson page returned empty content — nothing to import', quality: result.quality, debug: result.debug }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (result.quality.content_type === 'html_junk') {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Lesson page returned raw HTML fragments — content extraction failed', quality: result.quality, debug: result.debug }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       return new Response(
         JSON.stringify({ success: true, ...result }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
