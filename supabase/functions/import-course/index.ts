@@ -759,7 +759,8 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { url, action, lesson_url } = body;
+    const { url, action, lesson_url, email: reqEmail, password: reqPassword } = body;
+    const creds = (reqEmail && reqPassword) ? { email: reqEmail, password: reqPassword } : undefined;
 
     if (!url) {
       return new Response(
@@ -775,7 +776,7 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      const result = await fetchLessonContent(url, lesson_url);
+      const result = await fetchLessonContent(url, lesson_url, creds);
       return new Response(
         JSON.stringify({ success: true, ...result }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -784,7 +785,7 @@ Deno.serve(async (req) => {
 
     if (action === 'debug_login') {
       const jar = createCookieJar();
-      const { success, debug } = await kajabiLogin(url, jar);
+      const { success, debug } = await kajabiLogin(url, jar, creds);
       return new Response(
         JSON.stringify({ success, debug, cookies: [...jar.cookies.keys()] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -792,7 +793,7 @@ Deno.serve(async (req) => {
     }
 
     // Default: discover
-    const result = await discoverCurriculum(url);
+    const result = await discoverCurriculum(url, creds);
     return new Response(
       JSON.stringify({ success: true, ...result }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
