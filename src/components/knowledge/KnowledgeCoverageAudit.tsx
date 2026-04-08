@@ -64,7 +64,8 @@ export function KnowledgeCoverageAudit() {
     const r = audit.resources;
     switch (auditFilter) {
       case 'resumable': return r.filter(isResumable);
-      case 'under_extracted': return r.filter(x => x.under_extracted_flag);
+      // ── CANONICAL STATE FILTER: under_extracted uses postExtractionState panel ──
+      case 'under_extracted': return filterByPanel(r, 'under_extracted');
       case 'shallow': return r.filter(x => x.extraction_depth_bucket === 'shallow');
       case 'rich_weak': return r.filter(x => x.content_length >= 3000 && x.kis_per_1k_chars < 1.0);
       case 'zero_kis': return r.filter(x => x.ki_count_total === 0);
