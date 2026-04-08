@@ -1252,6 +1252,10 @@ async function reconcileResourceSnapshot(
     update.extraction_batch_status = 'completed';
     update.last_extraction_run_status = 'completed';
     update.last_extraction_summary = `Job mode complete: ${totalBatches} batches, ${finalTotal} KIs, ${finalKisPer1k} KIs/1k`;
+    update.active_job_step_label = 'completed';
+    update.active_job_progress_current = totalBatches;
+    update.active_job_progress_total = totalBatches;
+    update.active_job_progress_pct = 100;
   } else {
     // Still incomplete — mark as partial/resumable.
     // Do NOT set 'running' here — the self-invoke dispatch section handles that separately.
