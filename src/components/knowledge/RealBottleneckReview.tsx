@@ -1,6 +1,9 @@
 /**
- * Real Bottleneck Review — shows canary/weak resources with evidence-based
- * diagnosis and actionable recommendations.
+ * Real Bottleneck Review — shows resources whose canonical post-extraction state
+ * maps to the 'bottleneck_review' panel.
+ *
+ * Canonical states routed here: extractor_weak_review, validator_review,
+ * dedup_review, reextract_completed_no_lift.
  */
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +19,7 @@ import { Microscope, Zap, Info, CheckCircle2, AlertTriangle, Ban } from 'lucide-
 import { cn } from '@/lib/utils';
 import type { ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
 import type { ReExtractQueueItem, DominantBottleneck } from '@/hooks/useDeepReExtraction';
+import { filterByPanel, derivePostExtractionState } from '@/lib/postExtractionState';
 
 interface Props {
   resources: ResourceAuditRow[];
@@ -97,16 +101,17 @@ const recConfig: Record<Recommendation, { cls: string; icon: React.ReactNode }> 
 
 export function RealBottleneckReview({ resources, queueResults, onFlagForReExtraction, onSelectResource }: Props) {
   const reviewRows = useMemo<ReviewRow[]>(() => {
-    // Focus on weak-density resources with substantial content
-    const candidates = resources
-      .filter(r => r.content_length >= 1500 && r.kis_per_1k_chars < 1.5 && r.resource_type !== 'reference_only')
+    // ── CANONICAL STATE FILTER ──
+    // Only show resources whose post-extraction state routes to 'bottleneck_review'
+    const candidates = filterByPanel(resources, 'bottleneck_review')
       .sort((a, b) => a.kis_per_1k_chars - b.kis_per_1k_chars)
       .slice(0, 15);
 
     return candidates.map(r => {
       const qr = queueResults.find(q => q.resource_id === r.resource_id) ?? null;
+      const canonical = derivePostExtractionState(r);
       const { rec, explanation, priority } = computeRecommendation(r, qr);
-      return { resource: r, queueResult: qr, recommendation: rec, explanation, priority };
+      return { resource: r, queueResult: qr, recommendation: rec, explanation: `[${canonical.label}] ${explanation}`, priority };
     }).sort((a, b) => b.priority - a.priority);
   }, [resources, queueResults]);
 

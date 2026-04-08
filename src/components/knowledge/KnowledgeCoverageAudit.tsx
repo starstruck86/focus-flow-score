@@ -30,6 +30,7 @@ import { ReExtractionQueue } from './ReExtractionQueue';
 import { ResourceAuditDrilldown } from './ResourceAuditDrilldown';
 import { RealBottleneckReview } from './RealBottleneckReview';
 import { toast } from 'sonner';
+import { filterByPanel, filterByState, derivePostExtractionState } from '@/lib/postExtractionState';
 
 type AuditFilter = 'all' | 'resumable' | 'under_extracted' | 'shallow' | 'rich_weak' | 'zero_kis' | 'recently_extracted' | 'biggest_lift';
 
