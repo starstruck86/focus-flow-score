@@ -147,8 +147,7 @@ export function VerificationQueue({ resources, onFlagForReExtraction, onSelectRe
             </TableHeader>
             <TableBody>
               {queue.map(({ resource: r, reason }) => {
-                const rAny = r as any;
-                const hasActiveOp = rAny.active_job_status === 'running' || rAny.active_job_status === 'queued';
+                const hasActiveOp = r.active_job_status === 'running' || r.active_job_status === 'queued';
                 return (
                 <TableRow
                   key={r.resource_id}
@@ -163,13 +162,13 @@ export function VerificationQueue({ resources, onFlagForReExtraction, onSelectRe
                   <TableCell className="min-w-[130px]">
                     {hasActiveOp ? (
                       <ResourceOperationProgress
-                        status={rAny.active_job_status}
-                        jobType={rAny.active_job_type}
-                        stepLabel={rAny.active_job_step_label}
-                        progressPct={rAny.active_job_progress_pct}
-                        progressCurrent={rAny.active_job_progress_current}
-                        progressTotal={rAny.active_job_progress_total}
-                        updatedAt={rAny.active_job_updated_at}
+                        status={r.active_job_status}
+                        jobType={r.active_job_type}
+                        stepLabel={r.active_job_step_label}
+                        progressPct={r.active_job_progress_pct}
+                        progressCurrent={r.active_job_progress_current}
+                        progressTotal={r.active_job_progress_total}
+                        updatedAt={r.active_job_updated_at}
                         compact
                       />
                     ) : (
