@@ -1110,6 +1110,7 @@ CRITICAL: One complete play per concept. Do not merge. Do not skip.`;
     chunksTotal: 1,
     chunksProcessed: 1,
     chunksFailed: 0,
+    fallbackTier: 'primary_extractor' as FallbackTier,
   };
 }
 
