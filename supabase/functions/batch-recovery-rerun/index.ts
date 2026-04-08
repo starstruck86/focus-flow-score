@@ -1,7 +1,6 @@
 /**
- * batch-recovery-rerun - Fire-and-forget dispatcher for extract-tactics
- * Dispatches all resources in the slice without waiting for completion.
- * Check results via DB queries after processing completes.
+ * batch-recovery-rerun - Staggered dispatcher for extract-tactics
+ * Dispatches resources in waves of 2, waiting for each wave to complete.
  */
 
 const corsHeaders = {
@@ -30,6 +29,20 @@ const RESOURCE_IDS = [
 
 const USER_ID = '9f11e308-4028-4527-b7ba-5ea365dc1441';
 
+async function callExtract(supabaseUrl: string, serviceRoleKey: string, resourceId: string) {
+  const resp = await fetch(`${supabaseUrl}/functions/v1/extract-tactics`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${serviceRoleKey}`,
+      'x-batch-key': serviceRoleKey,
+    },
+    body: JSON.stringify({ resourceId, jobMode: true, deepMode: true, userId: USER_ID }),
+  });
+  const data = await resp.json();
+  return { id: resourceId, status: resp.status, saved: data.totalSaved || 0, error: data.error || null };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -37,39 +50,26 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   const start = parseInt(url.searchParams.get('start') || '0', 10);
-  const count = parseInt(url.searchParams.get('count') || '32', 10);
+  const count = parseInt(url.searchParams.get('count') || '4', 10);
   const slice = RESOURCE_IDS.slice(start, start + count);
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-  // Fire all calls without waiting — they run as separate edge function invocations
-  const dispatched: string[] = [];
-  for (const resourceId of slice) {
-    // Fire and don't await — each extract-tactics call runs independently
-    fetch(`${supabaseUrl}/functions/v1/extract-tactics`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${serviceRoleKey}`,
-        'x-batch-key': serviceRoleKey,
-      },
-      body: JSON.stringify({
-        resourceId,
-        jobMode: true,
-        deepMode: true,
-        userId: USER_ID,
-      }),
-    }).then(r => console.log(`[dispatch] ${resourceId}: ${r.status}`))
-      .catch(e => console.error(`[dispatch] ${resourceId}: ${e.message}`));
-    
-    dispatched.push(resourceId);
-  }
+  // Process this small slice in parallel (2-4 at a time is safe)
+  const results = await Promise.all(
+    slice.map(id => callExtract(supabaseUrl, serviceRoleKey, id))
+  );
+
+  const succeeded = results.filter(r => r.status === 200 && !r.error).length;
 
   return new Response(JSON.stringify({
-    dispatched: dispatched.length,
-    message: `Dispatched ${dispatched.length} extract-tactics calls. Check DB for results in 3-5 minutes.`,
-    resourceIds: dispatched,
+    slice: `${start}-${start + slice.length}`,
+    processed: results.length,
+    succeeded,
+    failed: results.length - succeeded,
+    totalSaved: results.reduce((s, r) => s + r.saved, 0),
+    results,
   }, null, 2), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
