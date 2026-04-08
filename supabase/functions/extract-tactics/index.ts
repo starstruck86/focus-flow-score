@@ -1003,11 +1003,29 @@ async function serverSidePersist(
   let status: 'completed' | 'partial' | 'failed' = 'completed';
   let error: string | null = null;
 
-  console.log(`[extract-tactics] PERSIST: ${kiRows.length} rows to save, ${duplicatesSkipped} pre-filtered as dupes`);
+  // ── CRITICAL: Detect all-chunks-failed (silent API failure) ──
+  // If every chunk call failed, this run produced nothing — it is a failure, not a completion.
+  const allChunksFailed = result.chunksFailed > 0 && result.chunksFailed >= (result.chunksTotal * result.passesRun.length);
+  const chunkErrors = getAndClearChunkErrors();
+  if (allChunksFailed) {
+    const errorCause = chunkErrors.length > 0 ? chunkErrors[0].slice(0, 200) : 'All extraction passes failed (API/credits)';
+    const is402 = chunkErrors.some(e => e.includes('402'));
+    const is429 = chunkErrors.some(e => e.includes('429'));
+    status = 'failed';
+    error = is402 ? `API credits exhausted (402): ${errorCause}` 
+          : is429 ? `API rate limited (429): ${errorCause}`
+          : `All chunk extractions failed: ${errorCause}`;
+    console.error(`[extract-tactics] ALL CHUNKS FAILED: ${error}`);
+  }
+
+  console.log(`[extract-tactics] PERSIST: ${kiRows.length} rows to save, ${duplicatesSkipped} pre-filtered as dupes | allChunksFailed=${allChunksFailed}`);
 
   try {
     if (kiRows.length === 0) {
-      status = duplicatesSkipped > 0 ? 'completed' : (result.validatedCount > 0 ? 'failed' : 'completed');
+      // Only mark completed if chunks actually succeeded but yielded nothing (true zero)
+      if (!allChunksFailed) {
+        status = duplicatesSkipped > 0 ? 'completed' : (result.validatedCount > 0 ? 'failed' : 'completed');
+      }
       console.log(`[extract-tactics] PERSIST: 0 rows to save (${duplicatesSkipped} dupes skipped)`);
     } else {
       // Save KIs in batches of 50 — DB unique index on (user_id, ki_fingerprint) is the final guard
