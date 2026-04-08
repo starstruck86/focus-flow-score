@@ -31,13 +31,15 @@
  * 2.  reextract_running:            active_job_status in (running, queued, partial)
  * 3.  needs_enrichment:             no content (<200 chars), never enriched
  * 4.  needs_first_extraction:       has content, 0 KIs, no extraction run ever
- * 5.  extractor_weak_review:        last run raw=0 → 0 → 0
- * 6.  validator_review:             last run raw>0, validated=0
- * 7.  dedup_review:                 last run validated>0, saved=0
- * 8.  reextract_completed_with_lift: last run saved>0 AND density still low
- * 9.  reextract_completed_no_lift:  last run saved=0, has prior KIs, density low
- * 10. under_extracted_candidate:    under_extracted_flag OR density below threshold
- * 11. done:                         healthy density or strong depth bucket
+ * 5.  api_failure_review:           last run had chunk failures (API/credit errors)
+ * 6.  legacy_pipeline_rejection:    last run was single_pass with quality-gate rejection
+ * 7.  extractor_weak_review:        last run raw=0 → 0 → 0 (true extractor weakness, no API failure)
+ * 8.  validator_review:             last run raw>0, validated=0
+ * 9.  dedup_review:                 last run validated>0, saved=0
+ * 10. reextract_completed_with_lift: last run saved>0 AND density still low
+ * 11. reextract_completed_no_lift:  last run saved=0, has prior KIs, density low
+ * 12. under_extracted_candidate:    under_extracted_flag OR density below threshold
+ * 13. done:                         healthy density or strong depth bucket
  */
 
 import type { ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
@@ -50,6 +52,8 @@ export type PostExtractionState =
   | 'reextract_running'
   | 'reextract_completed_with_lift'
   | 'reextract_completed_no_lift'
+  | 'api_failure_review'
+  | 'legacy_pipeline_rejection'
   | 'extractor_weak_review'
   | 'validator_review'
   | 'dedup_review'
@@ -83,6 +87,8 @@ export const STATE_LABELS: Record<PostExtractionState, string> = {
   reextract_running: 'Re-Extracting',
   reextract_completed_with_lift: 'Lift Achieved',
   reextract_completed_no_lift: 'No Lift',
+  api_failure_review: 'API Failure',
+  legacy_pipeline_rejection: 'Legacy Rejection',
   extractor_weak_review: 'Extractor Weak',
   validator_review: 'Validator Review',
   dedup_review: 'Dedup Review',
@@ -103,6 +109,8 @@ const STATE_PANELS: Record<PostExtractionState, PostExtractionPanel[]> = {
   reextract_running:             ['reextraction_queue'],
   reextract_completed_with_lift: ['none'],
   reextract_completed_no_lift:   ['bottleneck_review'],
+  api_failure_review:            ['bottleneck_review'],
+  legacy_pipeline_rejection:     ['bottleneck_review'],
   extractor_weak_review:         ['bottleneck_review'],
   validator_review:              ['bottleneck_review'],
   dedup_review:                  ['bottleneck_review'],
@@ -141,6 +149,20 @@ function isEnrichedStatus(status: string): boolean {
   return ['deep_enriched', 'enriched', 'verified', 'extracted', 'content_ready', 'extraction_retrying'].includes(status);
 }
 
+// ── API / chunk failure detection ─────────────────────────
+
+function hasChunkFailures(r: ResourceAuditRow): boolean {
+  const failed = (r as any).last_extraction_chunks_failed ?? 0;
+  const total = (r as any).last_extraction_chunks_total ?? 0;
+  // All chunks failed, or more chunks failed than processed
+  return failed > 0 && (total === 0 || failed >= total);
+}
+
+function isLegacySinglePass(r: ResourceAuditRow): boolean {
+  const mode = (r as any).last_extraction_mode;
+  return mode === 'single_pass';
+}
+
 // ── Main Derivation ───────────────────────────────────────
 
 export function derivePostExtractionState(r: ResourceAuditRow): PostExtractionStateResult {
@@ -168,31 +190,48 @@ export function derivePostExtractionState(r: ResourceAuditRow): PostExtractionSt
     return mk('needs_first_extraction', `Content present (${r.content_length} chars) but no extraction run recorded.`);
   }
 
-  // 5-9: Post-extraction outcome routing
+  // 5-11: Post-extraction outcome routing
   if (hasExtractionRun) {
     const raw = r.last_extraction_returned_ki_count ?? 0;
     const validated = r.last_extraction_validated_ki_count ?? 0;
     const saved = r.last_extraction_saved_ki_count ?? 0;
 
-    // 5. Extractor weak: 0→0→0
+    // 5. API / chunk failure: all chunks failed → not an extractor problem
+    if (hasChunkFailures(r)) {
+      const failed = (r as any).last_extraction_chunks_failed ?? 0;
+      const errSnippet = r.last_extraction_error
+        ? ` Error: ${r.last_extraction_error.slice(0, 80)}`
+        : '';
+      return mk('api_failure_review',
+        `${failed} chunk(s) failed — likely API credit/rate-limit issue.${errSnippet}`);
+    }
+
+    // 6. Legacy single_pass rejection: old pipeline quality-gate blocked valid items
+    if (isLegacySinglePass(r) && saved === 0 && raw > 0) {
+      const summary = r.last_extraction_summary || '';
+      return mk('legacy_pipeline_rejection',
+        `Legacy single_pass pipeline rejected output. ${raw} raw items generated but not saved. ${summary ? `Reason: ${summary.slice(0, 100)}` : ''}`);
+    }
+
+    // 7. True extractor weak: 0→0→0 with NO API failures
     if (raw === 0 && validated === 0 && saved === 0) {
       return mk('extractor_weak_review',
         `Latest run: 0 raw → 0 validated → 0 saved from ${(r.content_length / 1000).toFixed(1)}k chars.`);
     }
 
-    // 6. Validator too strict: raw > 0, validated = 0
+    // 8. Validator too strict: raw > 0, validated = 0
     if (raw > 0 && validated === 0) {
       return mk('validator_review',
         `Latest run: ${raw} raw → 0 validated → 0 saved. All items rejected by validation.`);
     }
 
-    // 7. Dedup too aggressive: validated > 0, saved = 0
+    // 9. Dedup too aggressive: validated > 0, saved = 0
     if (validated > 0 && saved === 0) {
       return mk('dedup_review',
         `Latest run: ${raw} raw → ${validated} validated → 0 saved. All items removed by dedup.`);
     }
 
-    // 8. Positive lift
+    // 10. Positive lift
     if (saved > 0) {
       if (isHealthyDensity(r.kis_per_1k_chars, r.resource_type)) {
         return mk('done',
@@ -202,7 +241,7 @@ export function derivePostExtractionState(r: ResourceAuditRow): PostExtractionSt
         `Latest run saved ${saved} KIs. Density ${r.kis_per_1k_chars.toFixed(2)}/1k — may benefit from further extraction.`);
     }
 
-    // 9. No lift (had extraction, 0 saved, but already has KIs from prior runs)
+    // 11. No lift (had extraction, 0 saved, but already has KIs from prior runs)
     if (r.ki_count_total > 0 && saved === 0) {
       if (isHealthyDensity(r.kis_per_1k_chars, r.resource_type)) {
         return mk('done',
@@ -213,13 +252,13 @@ export function derivePostExtractionState(r: ResourceAuditRow): PostExtractionSt
     }
   }
 
-  // 10. Under-extracted candidate (has KIs but density is low)
+  // 12. Under-extracted candidate (has KIs but density is low)
   if (r.under_extracted_flag || isUnderDensity(r)) {
     return mk('under_extracted_candidate',
       `Density ${r.kis_per_1k_chars.toFixed(2)}/1k below threshold (${getDensityThreshold(r.resource_type)}/1k) for ${r.resource_type}.`);
   }
 
-  // 11. Done
+  // 13. Done
   return mk('done',
     `${r.ki_count_total} KIs, density ${r.kis_per_1k_chars.toFixed(2)}/1k. Depth: ${r.extraction_depth_bucket}.`);
 }
@@ -260,4 +299,15 @@ export function aggregatePostExtractionStates(resources: ResourceAuditRow[]): Re
   for (const s of Object.keys(STATE_LABELS) as PostExtractionState[]) counts[s] = 0;
   for (const r of resources) counts[derivePostExtractionState(r).state]++;
   return counts;
+}
+
+// ── Raw count helper ──────────────────────────────────────
+/**
+ * Compute total raw count from pass-keyed JSON object.
+ * raw_candidate_counts is stored as e.g. { "standard": 18, "deep": 12 }
+ * NOT as { "total": 30 }. Sum all pass values.
+ */
+export function computeTotalRawCount(rawCounts: Record<string, number> | null | undefined): number {
+  if (!rawCounts || typeof rawCounts !== 'object') return 0;
+  return Object.values(rawCounts).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
 }

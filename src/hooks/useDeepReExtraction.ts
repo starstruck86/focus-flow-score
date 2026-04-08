@@ -22,6 +22,8 @@ export type NoLiftReason =
   | 'duplicate_heavy'
   | 'extractor_returned_no_new_items'
   | 'extractor_weak_output'
+  | 'api_failure'
+  | 'legacy_pipeline_rejection'
   | 'items_generated_but_filtered_out'
   | 'items_generated_but_deduped'
   | 'validation_too_strict'
@@ -30,6 +32,8 @@ export type NoLiftReason =
 
 export type DominantBottleneck =
   | 'extractor_weak_output'
+  | 'api_failure'
+  | 'legacy_pipeline_rejection'
   | 'validation_too_strict'
   | 'dedup_too_aggressive'
   | 'already_mined'

@@ -42,6 +42,10 @@ export interface ResourceAuditRow {
   last_extraction_error: string | null;
   last_extraction_duration_ms: number | null;
   last_extraction_model: string | null;
+  // Chunk failure diagnostics (from latest extraction_run)
+  last_extraction_chunks_failed: number | null;
+  last_extraction_chunks_total: number | null;
+  last_extraction_mode: string | null;
   // Per-resource operation progress
   active_job_type: string | null;
   active_job_step_label: string | null;
@@ -103,7 +107,7 @@ export function useKnowledgeCoverageAudit() {
       while (true) {
         const { data: runs, error: runsErr } = await supabase
           .from('extraction_runs' as any)
-          .select('resource_id, status, started_at, completed_at')
+          .select('resource_id, status, started_at, completed_at, chunks_failed, chunks_total, extraction_mode')
           .range(runsFrom, runsFrom + PAGE_SIZE - 1);
         if (runsErr) throw runsErr;
         if (!runs || runs.length === 0) break;
@@ -143,7 +147,7 @@ export function useKnowledgeCoverageAudit() {
 
       const kiMap = new Map<string, { total: number; active: number; withCtx: number }>();
       const runCountMap = new Map<string, number>();
-      const latestRunMap = new Map<string, { status: string; started_at: string | null; completed_at: string | null }>();
+      const latestRunMap = new Map<string, { status: string; started_at: string | null; completed_at: string | null; chunks_failed?: number | null; chunks_total?: number | null; extraction_mode?: string | null }>();
       const batchMap = new Map<string, any[]>();
       // Method mix from KIs (source of truth)
       const methodMix = { llm: 0, heuristic: 0, hybrid: 0, unknown: 0 };
@@ -200,6 +204,7 @@ export function useKnowledgeCoverageAudit() {
         }
         const batchEntries = Array.from(dedupedBatches.values()).sort((a, b) => a.batch_index - b.batch_index);
         const cl = Number(r.content_length) || 0;
+        const latestRun = latestRunMap.get(r.id) ?? null;
 
         // Use server-persisted current_resource_ki_count if available, else use counted KIs
         const kiTotal = (r.current_resource_ki_count != null && Number(r.current_resource_ki_count) > 0)
@@ -277,6 +282,10 @@ export function useKnowledgeCoverageAudit() {
           last_extraction_error: r.last_extraction_error || null,
           last_extraction_duration_ms: r.last_extraction_duration_ms ?? null,
           last_extraction_model: r.last_extraction_model || null,
+          // Chunk failure diagnostics (from latest extraction_run)
+          last_extraction_chunks_failed: latestRun?.chunks_failed ?? null,
+          last_extraction_chunks_total: latestRun?.chunks_total ?? null,
+          last_extraction_mode: latestRun?.extraction_mode ?? r.extraction_mode ?? null,
           // Per-resource operation progress
           active_job_type: r.active_job_type || null,
           active_job_step_label: r.active_job_step_label || null,

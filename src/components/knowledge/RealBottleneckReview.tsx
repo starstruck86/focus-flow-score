@@ -2,8 +2,8 @@
  * Real Bottleneck Review — shows resources whose canonical post-extraction state
  * maps to the 'bottleneck_review' panel.
  *
- * Canonical states routed here: extractor_weak_review, validator_review,
- * dedup_review, reextract_completed_no_lift.
+ * Canonical states routed here: api_failure_review, legacy_pipeline_rejection,
+ * extractor_weak_review, validator_review, dedup_review, reextract_completed_no_lift.
  */
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -74,6 +74,12 @@ function computeRecommendation(r: ResourceAuditRow, qr: ReExtractQueueItem | nul
     }
     if (qr.dominant_bottleneck === 'extractor_weak_output') {
       return { rec: 're-extract again', explanation: `Extractor produced only ${qr.ef_returned_count ?? 0} raw items from ${(r.content_length / 1000).toFixed(0)}k chars. May benefit from chunking improvements.`, priority: 7 };
+    }
+    if (qr.dominant_bottleneck === 'api_failure') {
+      return { rec: 're-extract again', explanation: `API failure (credits exhausted or rate-limited). Re-run when credits are available.`, priority: 8 };
+    }
+    if (qr.dominant_bottleneck === 'legacy_pipeline_rejection') {
+      return { rec: 're-extract again', explanation: `Legacy single_pass pipeline rejected valid output. Re-run with current multi-pass pipeline.`, priority: 8 };
     }
     if (qr.ki_delta != null && qr.ki_delta > 0) {
       return { rec: 'already well mined', explanation: `Last run added ${qr.ki_delta} KIs. Current density is ${r.kis_per_1k_chars}/1k.`, priority: 1 };
