@@ -28,6 +28,7 @@ type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 
 
 type LessonQualityReport = {
   content_length: number;
+  cleaned_text_length: number;
   content_type: string;
   has_login_wall: boolean;
   has_redirect: boolean;
@@ -35,6 +36,7 @@ type LessonQualityReport = {
   word_count: number;
   video_embeds_found: number;
   issues: string[];
+  usable_content: boolean;
 };
 
 type LessonImportResult = {
@@ -44,6 +46,9 @@ type LessonImportResult = {
   resourceId?: string;
   quality?: LessonQualityReport;
   lessonUrl?: string;
+  requestedUrl?: string;
+  finalUrl?: string;
+  metadataOnly?: boolean;
 };
 
 interface CourseImportModalProps {
@@ -312,11 +317,14 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
       // Capture server-side quality report
       const quality: LessonQualityReport | undefined = lessonData?.quality;
+      const requestedUrl = lessonData?.requested_lesson_url || lesson.url;
+      const finalUrl = lessonData?.final_url || lesson.url;
+      const metadataOnly = lessonData?.metadata_only === true;
 
-      // Server already fails loudly on login_page / empty / html_junk
-      if (!lessonData?.success) {
+      // Server blocks login_page/empty/html_junk and computes usable_content
+      if (!lessonData?.success || quality?.usable_content === false) {
         const errMsg = lessonData?.error || 'Lesson fetch returned failure';
-        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url });
+        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url, requestedUrl, finalUrl });
         await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'quality_gate', error: errMsg });
         setImportProgress({ done: i + 1, total: toImport.length, current: '' });
         continue;
@@ -331,7 +339,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
       if (!validation.valid) {
         const errMsg = validation.reason || 'Content validation failed';
-        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url });
+        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url, requestedUrl, finalUrl });
         await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'validating_content', error: `${validation.code}: ${errMsg}` });
         setImportProgress({ done: i + 1, total: toImport.length, current: '' });
         console.warn(`Validation failed for "${lesson.title}": ${errMsg}`);
@@ -358,11 +366,14 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         classification.title = cleanCourseTitle && lessonTitle
           ? `${cleanCourseTitle} > ${lessonTitle}`
           : lessonTitle || classification.title || 'Untitled Lesson';
-        if (lessonData?.success && lessonData.content && lessonData.content.length > 50) {
+        if (lessonData?.success && lessonData.content && lessonData.content.length > 50 && !metadataOnly) {
           classification.scraped_content = lessonData.content;
         }
         const isVideoLesson = lesson.type === 'video' || lessonData?.type === 'video' || Boolean(lessonData?.media_url);
         classification.resource_type = isVideoLesson ? 'video' : 'article';
+        if (metadataOnly) {
+          (classification as any).content_status = 'metadata_only';
+        }
         classification.tags = Array.from(new Set([...(classification.tags || []), 'course', courseTitle].filter(Boolean)));
 
         const resource = await addUrl.mutateAsync({ url: lesson.url, classification });
@@ -422,10 +433,10 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete' });
         }
 
-        updateLessonResult(i, { status: 'complete', resourceId: resourceId || undefined, quality, lessonUrl: lesson.url });
+        updateLessonResult(i, { status: 'complete', resourceId: resourceId || undefined, quality, lessonUrl: lesson.url, requestedUrl, finalUrl, metadataOnly });
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to save resource';
-        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url });
+        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url, requestedUrl, finalUrl });
         await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'saving_resource', error: errMsg });
         console.error(`Failed to import ${lesson.title}:`, e);
       }
@@ -663,13 +674,19 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                           {/* Quality report row */}
                           {q && (r.status === 'complete' || r.status === 'failed') && (
                             <div className="flex items-center gap-1.5 pl-5 flex-wrap text-[10px] text-muted-foreground">
-                              <Badge variant="outline" className="text-[9px] h-4">{q.content_type}</Badge>
+                              <Badge variant={q.usable_content ? 'outline' : 'destructive'} className="text-[9px] h-4">{q.content_type}</Badge>
+                              {r.metadataOnly && <Badge variant="secondary" className="text-[9px] h-4">metadata only</Badge>}
                               <span>{q.content_length.toLocaleString()} chars</span>
+                              <span>·</span>
+                              <span>{q.cleaned_text_length.toLocaleString()} cleaned</span>
                               <span>·</span>
                               <span>{q.word_count} words</span>
                               {q.video_embeds_found > 0 && <span>· {q.video_embeds_found} video{q.video_embeds_found !== 1 ? 's' : ''}</span>}
                               {q.has_login_wall && <Badge variant="destructive" className="text-[9px] h-4">login wall</Badge>}
                               {q.has_redirect && <Badge variant="secondary" className="text-[9px] h-4">redirected</Badge>}
+                              {r.finalUrl && r.requestedUrl && r.finalUrl !== r.requestedUrl && (
+                                <span className="truncate max-w-[120px]" title={r.finalUrl}>→ {new URL(r.finalUrl).pathname}</span>
+                              )}
                             </div>
                           )}
                           {/* Issues */}

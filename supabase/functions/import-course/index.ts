@@ -420,6 +420,7 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
 
 interface LessonQuality {
   content_length: number;
+  cleaned_text_length: number;
   content_type: 'text' | 'transcript' | 'video_only' | 'html_junk' | 'login_page' | 'empty' | 'mixed';
   has_login_wall: boolean;
   has_redirect: boolean;
@@ -427,12 +428,16 @@ interface LessonQuality {
   word_count: number;
   video_embeds_found: number;
   issues: string[];
+  usable_content: boolean;
 }
 
 function classifyLessonContent(text: string, html: string, finalUrl: string, lessonUrl: string): LessonQuality {
   const issues: string[] = [];
   const trimmed = text.trim();
-  const wordCount = trimmed.split(/\s+/).filter(w => w.length > 2).length;
+  // cleaned_text_length = text after stripping any residual HTML tags
+  const cleanedText = trimmed.replace(/<[^>]+>/g, '').trim();
+  const cleanedTextLength = cleanedText.length;
+  const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 2).length;
 
   // Redirect detection
   const hasRedirect = finalUrl !== lessonUrl && new URL(finalUrl).pathname !== new URL(lessonUrl).pathname;
@@ -471,11 +476,15 @@ function classifyLessonContent(text: string, html: string, finalUrl: string, les
     contentType = 'video_only';
     if (wordCount < 10) issues.push('Video-only page with no substantial text');
   } else if (/<div[\s>]|<span[\s>]|font-family\s*:|class="/i.test(trimmed)) {
+    // Tightened html_junk classifier: require MANY raw tags AND low text ratio
+    // to avoid misclassifying valid rich-text lessons that have occasional inline HTML
     const htmlTagCount = (trimmed.match(/<[a-z]+[\s>]/gi) || []).length;
-    const textRatio = trimmed.replace(/<[^>]+>/g, '').length / trimmed.length;
-    if (htmlTagCount > 10 && textRatio < 0.5) {
+    const textRatio = cleanedTextLength / trimmed.length;
+    // Only flag as html_junk if: many tags (>20), text ratio below 40%, AND
+    // the cleaned text itself is short (real lessons have long cleaned text even with HTML)
+    if (htmlTagCount > 20 && textRatio < 0.4 && cleanedTextLength < 500) {
       contentType = 'html_junk';
-      issues.push('Content contains raw HTML fragments — extraction likely failed');
+      issues.push(`Content contains raw HTML fragments (${htmlTagCount} tags, ${Math.round(textRatio * 100)}% text) — extraction likely failed`);
     }
   } else if (videoEmbeds > 0 && wordCount > 20) {
     contentType = 'mixed';
@@ -486,8 +495,13 @@ function classifyLessonContent(text: string, html: string, finalUrl: string, les
     issues.push(`Very low word count (${wordCount} words)`);
   }
 
+  // Compute usable_content: server-side boolean so client doesn't have to infer
+  const BLOCKED_TYPES: Set<string> = new Set(['login_page', 'empty', 'html_junk']);
+  const usableContent = !BLOCKED_TYPES.has(contentType) && !hasLoginWall && !loginRedirect && wordCount >= 5;
+
   return {
     content_length: trimmed.length,
+    cleaned_text_length: cleanedTextLength,
     content_type: contentType,
     has_login_wall: hasLoginWall || loginRedirect,
     has_redirect: hasRedirect,
@@ -495,6 +509,7 @@ function classifyLessonContent(text: string, html: string, finalUrl: string, les
     word_count: wordCount,
     video_embeds_found: videoEmbeds,
     issues,
+    usable_content: usableContent,
   };
 }
 
@@ -862,28 +877,52 @@ Deno.serve(async (req) => {
       }
       const result = await fetchLessonContent(url, lesson_url, creds);
       
-      // Fail loudly on login walls or empty content
-      if (result.quality.has_login_wall) {
+      // Build standardized lesson result envelope
+      const lessonResult = {
+        requested_lesson_url: lesson_url,
+        final_url: result.debug.find(d => d.startsWith('Lesson page:'))?.includes('final URL:') ? result.debug.find(d => d.includes('final URL:'))?.split('final URL: ')[1] : lesson_url,
+        content_length: result.quality.content_length,
+        cleaned_text_length: result.quality.cleaned_text_length,
+        word_count: result.quality.word_count,
+        quality: result.quality,
+      };
+
+      // ── BLOCK: login_page, empty, html_junk — never persist ──
+      const BLOCKED_TYPES = new Set(['login_page', 'empty', 'html_junk']);
+      if (BLOCKED_TYPES.has(result.quality.content_type) || !result.quality.usable_content) {
+        const errorMessages: Record<string, string> = {
+          login_page: 'Lesson page returned a login wall — authentication failed or expired',
+          empty: 'Lesson page returned empty content — nothing to import',
+          html_junk: 'Lesson page returned raw HTML fragments — content extraction failed',
+        };
         return new Response(
-          JSON.stringify({ success: false, error: 'Lesson page returned a login wall — authentication failed or expired', quality: result.quality, debug: result.debug }),
+          JSON.stringify({
+            success: false,
+            error: errorMessages[result.quality.content_type] || 'Content quality too low to import',
+            ...lessonResult,
+            debug: result.debug,
+          }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      if (result.quality.content_type === 'empty') {
+
+      // ── POLICY: video_only → import as metadata-only, not fully extracted ──
+      if (result.quality.content_type === 'video_only') {
         return new Response(
-          JSON.stringify({ success: false, error: 'Lesson page returned empty content — nothing to import', quality: result.quality, debug: result.debug }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      if (result.quality.content_type === 'html_junk') {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Lesson page returned raw HTML fragments — content extraction failed', quality: result.quality, debug: result.debug }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({
+            success: true,
+            ...result,
+            ...lessonResult,
+            metadata_only: true,
+            content: '', // strip thin content — not real lesson text
+            _note: 'Video-only lesson imported as metadata stub. Transcription required for full content.',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
       return new Response(
-        JSON.stringify({ success: true, ...result }),
+        JSON.stringify({ success: true, ...result, ...lessonResult }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
