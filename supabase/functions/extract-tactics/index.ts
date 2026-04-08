@@ -306,10 +306,18 @@ async function requestExtraction(
 
   let res = await doFetch();
   if (res.status === 429) {
+    console.warn(`[extract-tactics] AI rate-limited (429), retrying after 3s`);
     await new Promise(r => setTimeout(r, 3000));
     res = await doFetch();
   }
-  if (!res.ok) throw new Error(`AI error: ${res.status}`);
+  if (!res.ok) {
+    // Read body for diagnostics before throwing
+    let errorBody = '';
+    try { errorBody = await res.text(); } catch { errorBody = '(unreadable)'; }
+    const errMsg = `AI error: ${res.status} — ${errorBody.slice(0, 200)}`;
+    console.error(`[extract-tactics] ${errMsg}`);
+    throw new Error(errMsg);
+  }
   return res.json();
 }
 
@@ -320,8 +328,12 @@ function parseAiResponse(result: any): any[] {
     const start = cleaned.indexOf('[');
     const end = cleaned.lastIndexOf(']');
     if (start !== -1 && end > start) {
-      try { return JSON.parse(cleaned.slice(start, end + 1)); } catch { return []; }
+      try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {
+        console.warn(`[extract-tactics] JSON parse failed after bracket extraction | preview: ${cleaned.slice(0, 150)}`);
+        return [];
+      }
     }
+    console.warn(`[extract-tactics] JSON parse failed entirely | preview: ${cleaned.slice(0, 150)}`);
     return [];
   }
 }
@@ -331,17 +343,33 @@ function isTruncatedResponse(result: any): boolean {
   return fr === 'length' || fr === 'MAX_TOKENS';
 }
 
-async function extractFromChunk(apiKey: string, systemPrompt: string, userPrompt: string): Promise<any[]> {
-  const result = await requestExtraction(apiKey, systemPrompt, userPrompt, MAX_TOKENS);
-  let items = parseAiResponse(result);
-  if (items.length > 0 && !isTruncatedResponse(result)) return items;
-  const retryPrompt = `${userPrompt}\n\nIMPORTANT: Return exactly 2 tactical plays maximum. Keep every field complete but concise, and output valid JSON only.`;
-  const retryResult = await requestExtraction(apiKey, systemPrompt, retryPrompt, MAX_TOKENS);
-  const retryItems = parseAiResponse(retryResult);
-  if (retryItems.length > 0) items = retryItems;
-  return items;
+// Track chunk-level errors for diagnostics
+let _lastChunkErrors: string[] = [];
+function getAndClearChunkErrors(): string[] {
+  const errs = [..._lastChunkErrors];
+  _lastChunkErrors = [];
+  return errs;
 }
 
+async function extractFromChunk(apiKey: string, systemPrompt: string, userPrompt: string): Promise<any[]> {
+  try {
+    const result = await requestExtraction(apiKey, systemPrompt, userPrompt, MAX_TOKENS);
+    let items = parseAiResponse(result);
+    if (items.length > 0 && !isTruncatedResponse(result)) return items;
+    // Retry with constrained prompt
+    const retryPrompt = `${userPrompt}\n\nIMPORTANT: Return exactly 2 tactical plays maximum. Keep every field complete but concise, and output valid JSON only.`;
+    const retryResult = await requestExtraction(apiKey, systemPrompt, retryPrompt, MAX_TOKENS);
+    const retryItems = parseAiResponse(retryResult);
+    if (retryItems.length > 0) items = retryItems;
+    if (items.length === 0) {
+      console.warn(`[extract-tactics] extractFromChunk: 0 items after retry`);
+    }
+    return items;
+  } catch (err: any) {
+    _lastChunkErrors.push(err.message || String(err));
+    throw err; // Re-throw so caller (runPass) can handle
+  }
+}
 // ══════════════════════════════════════════════════════
 // DETERMINISTIC KI FINGERPRINTING — for duplicate protection
 // ══════════════════════════════════════════════════════
@@ -632,8 +660,10 @@ ${chunks[i]}`;
           item._pass = passName;
         }
         passItems.push(...items);
-      } catch (err) {
-        console.error(`[extract-tactics] ${passName} ${chunkLabel} failed:`, err);
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        const is402 = errMsg.includes('402');
+        console.error(`[extract-tactics] ${passName} ${chunkLabel} failed: ${errMsg}${is402 ? ' [CREDITS EXHAUSTED]' : ''}`);
         chunksFailed++;
       }
     }
@@ -688,7 +718,13 @@ ${chunks[i]}`;
   const modelUnderExtracted = computeUnderExtracted(validated.length, contentLength, category);
   const extractionMode = shouldEscalate ? 'deep' : 'standard';
 
-  const summary = `${extractionMode}: ${passesRun.join('+')} | ${allCandidates.length} raw → ${dedupeResult.kept.length} deduped → ${validated.length} validated | ${modelKisPer1k} KIs/1k | ${modelDepthBucket}`;
+  // Surface chunk errors in summary for diagnostics
+  const chunkErrors = getAndClearChunkErrors();
+  const errorSuffix = chunksFailed > 0
+    ? ` | ${chunksFailed} chunk(s) failed${chunkErrors.length > 0 ? ': ' + chunkErrors[0].slice(0, 80) : ''}`
+    : '';
+
+  const summary = `${extractionMode}: ${passesRun.join('+')} | ${allCandidates.length} raw → ${dedupeResult.kept.length} deduped → ${validated.length} validated | ${modelKisPer1k} KIs/1k | ${modelDepthBucket}${errorSuffix}`;
   console.log(`[extract-tactics] FINAL: ${summary}`);
 
   return {
