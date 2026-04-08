@@ -1,7 +1,7 @@
 /**
- * batch-recovery-rerun - Process 32 api_failure resources sequentially
- * Calls extract-tactics for each, with concurrency=2 to respect rate limits.
- * Returns aggregate results.
+ * batch-recovery-rerun - Fire-and-forget dispatcher for extract-tactics
+ * Dispatches all resources in the slice without waiting for completion.
+ * Check results via DB queries after processing completes.
  */
 
 const corsHeaders = {
@@ -36,59 +36,40 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
-  // ?start=0&count=8 to process a slice (edge functions have ~200s budget)
   const start = parseInt(url.searchParams.get('start') || '0', 10);
-  const count = parseInt(url.searchParams.get('count') || '8', 10);
+  const count = parseInt(url.searchParams.get('count') || '32', 10);
   const slice = RESOURCE_IDS.slice(start, start + count);
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-  const results: Array<{ id: string; status: number; saved: number; error?: string }> = [];
-
-  // Process sequentially to avoid rate limits
+  // Fire all calls without waiting — they run as separate edge function invocations
+  const dispatched: string[] = [];
   for (const resourceId of slice) {
-    try {
-      console.log(`[batch] Processing ${resourceId} (${results.length + 1}/${slice.length})`);
-      const resp = await fetch(`${supabaseUrl}/functions/v1/extract-tactics`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'x-batch-key': serviceRoleKey,
-        },
-        body: JSON.stringify({
-          resourceId,
-          jobMode: true,
-          deepMode: true,
-          userId: USER_ID,
-        }),
-      });
-      const data = await resp.json();
-      results.push({
-        id: resourceId,
-        status: resp.status,
-        saved: data.totalSaved || 0,
-        error: data.error || undefined,
-      });
-      console.log(`[batch] ${resourceId}: status=${resp.status} saved=${data.totalSaved || 0}`);
-    } catch (err) {
-      results.push({ id: resourceId, status: 0, saved: 0, error: err.message });
-      console.error(`[batch] ${resourceId} error:`, err.message);
-    }
+    // Fire and don't await — each extract-tactics call runs independently
+    fetch(`${supabaseUrl}/functions/v1/extract-tactics`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'x-batch-key': serviceRoleKey,
+      },
+      body: JSON.stringify({
+        resourceId,
+        jobMode: true,
+        deepMode: true,
+        userId: USER_ID,
+      }),
+    }).then(r => console.log(`[dispatch] ${resourceId}: ${r.status}`))
+      .catch(e => console.error(`[dispatch] ${resourceId}: ${e.message}`));
+    
+    dispatched.push(resourceId);
   }
 
-  const succeeded = results.filter(r => r.status === 200 && !r.error).length;
-  const failed = results.length - succeeded;
-  const totalSaved = results.reduce((s, r) => s + r.saved, 0);
-
   return new Response(JSON.stringify({
-    slice: `${start}-${start + slice.length}`,
-    processed: results.length,
-    succeeded,
-    failed,
-    totalSaved,
-    results,
+    dispatched: dispatched.length,
+    message: `Dispatched ${dispatched.length} extract-tactics calls. Check DB for results in 3-5 minutes.`,
+    resourceIds: dispatched,
   }, null, 2), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
