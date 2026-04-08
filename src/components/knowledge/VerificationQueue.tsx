@@ -99,11 +99,11 @@ export function VerificationQueue({ resources, onFlagForReExtraction, onSelectRe
                 <TableHead className="text-[10px] text-right">KIs/1k</TableHead>
                 <TableHead className="text-[10px]">Depth</TableHead>
                 <TableHead className="text-[10px]">Progress</TableHead>
-                <TableHead className="text-[10px]">Reason</TableHead>
+                <TableHead className="text-[10px]">State</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {queue.map(({ resource: r, reason }) => {
+              {queue.map(({ resource: r, canonical }) => {
                 const hasActiveOp = r.active_job_status === 'running' || r.active_job_status === 'queued' || r.active_job_status === 'partial';
                 return (
                 <TableRow
@@ -132,7 +132,21 @@ export function VerificationQueue({ resources, onFlagForReExtraction, onSelectRe
                       <span className="text-[10px] text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-[10px] text-muted-foreground max-w-[120px] truncate">{reason}</TableCell>
+                  <TableCell className="max-w-[140px]">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant="outline" className="text-[9px] cursor-help gap-1">
+                            {canonical.label}
+                            <Info className="h-2.5 w-2.5" />
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="max-w-[250px] text-[11px]">
+                          {canonical.explanation}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableCell>
                 </TableRow>
                 );
               })}
