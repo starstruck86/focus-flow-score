@@ -392,6 +392,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
           preacquiredMicStream={preacquiredMicStream}
         />
       )}
+
+      {/* Dave Debug Panel — Ctrl+Shift+D to toggle */}
+      <DaveDebugPanel
+        meta={daveConnMgr.meta}
+        extraInfo={{
+          daveOpen,
+          daveMinimized,
+          retryCount: daveRetryCount,
+          blockedByTab: daveBlockedByTab,
+        }}
+      />
     </div>
   );
 }
