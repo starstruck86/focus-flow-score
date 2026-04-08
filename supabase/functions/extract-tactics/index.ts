@@ -660,8 +660,10 @@ ${chunks[i]}`;
           item._pass = passName;
         }
         passItems.push(...items);
-      } catch (err) {
-        console.error(`[extract-tactics] ${passName} ${chunkLabel} failed:`, err);
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        const is402 = errMsg.includes('402');
+        console.error(`[extract-tactics] ${passName} ${chunkLabel} failed: ${errMsg}${is402 ? ' [CREDITS EXHAUSTED]' : ''}`);
         chunksFailed++;
       }
     }
@@ -716,7 +718,13 @@ ${chunks[i]}`;
   const modelUnderExtracted = computeUnderExtracted(validated.length, contentLength, category);
   const extractionMode = shouldEscalate ? 'deep' : 'standard';
 
-  const summary = `${extractionMode}: ${passesRun.join('+')} | ${allCandidates.length} raw → ${dedupeResult.kept.length} deduped → ${validated.length} validated | ${modelKisPer1k} KIs/1k | ${modelDepthBucket}`;
+  // Surface chunk errors in summary for diagnostics
+  const chunkErrors = getAndClearChunkErrors();
+  const errorSuffix = chunksFailed > 0
+    ? ` | ${chunksFailed} chunk(s) failed${chunkErrors.length > 0 ? ': ' + chunkErrors[0].slice(0, 80) : ''}`
+    : '';
+
+  const summary = `${extractionMode}: ${passesRun.join('+')} | ${allCandidates.length} raw → ${dedupeResult.kept.length} deduped → ${validated.length} validated | ${modelKisPer1k} KIs/1k | ${modelDepthBucket}${errorSuffix}`;
   console.log(`[extract-tactics] FINAL: ${summary}`);
 
   return {
