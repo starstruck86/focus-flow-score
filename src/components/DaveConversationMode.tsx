@@ -219,26 +219,39 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     },
     onDisconnect: () => {
       releasePreflightStream();
+      connMgr.stopHeartbeat();
       const uptime = connectedAtRef.current ? Date.now() - connectedAtRef.current : 0;
       logStatus(`❌ Disconnected (uptime: ${uptime}ms, msgs: ${messagesReceivedCountRef.current})`);
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
-      // Detect unexpected disconnect — auto-retry once if we had an active interaction
+      const wasClean = cleanDisconnectRef.current;
+      cleanDisconnectRef.current = false;
+
+      // ── Connection Manager: mark disconnected ──
+      connMgr.dispatch({
+        type: 'DISCONNECT',
+        reason: wasClean ? 'user_initiated' : `uptime=${uptime}ms msgs=${messagesReceivedCountRef.current}`,
+        wasClean,
+      });
+
+      if (wasClean) return;
+
+      // Detect unexpected disconnect — auto-retry via connection manager
       const wasActive = uptime > 2000 && messagesReceivedCountRef.current > 0;
       const reqId = currentRequestIdRef.current;
       if (wasActive && reqId && !autoRetryingRef.current) {
         failInteraction(reqId);
         const recoverable = getRecoverableInteraction();
         if (recoverable && recoverable.retryCount < 1) {
-          logStatus('🔄 Unexpected disconnect — auto-retrying...');
+          logStatus('🔄 Unexpected disconnect — auto-retrying via connection manager...');
           autoRetryingRef.current = true;
           incrementRetry(reqId);
           toast.info('Dave got interrupted — reconnecting...', { duration: 3000 });
-          setTimeout(() => {
+          connMgr.scheduleReconnect(async () => {
             autoRetryingRef.current = false;
             onRetry();
-          }, 1500);
+          });
           return;
         }
       }
@@ -271,7 +284,6 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
         const text = message.agent_response_event.agent_response;
         setTranscript(prev => [...prev, { role: 'agent', text }]);
         addDaveResponse(text);
-        // Track partial response for recovery
         if (currentRequestIdRef.current) {
           appendPartialResponse(currentRequestIdRef.current, text);
         }
@@ -283,8 +295,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       errorHistoryRef.current = [...errorHistoryRef.current.slice(-4), msg];
       console.error('[Dave] Full error object:', err);
       releasePreflightStream();
+      connMgr.stopHeartbeat();
       const friendlyMessage = classifyDaveStartupError(err);
       setError(friendlyMessage);
+      connMgr.dispatch({ type: 'CONNECT_FAILURE', error: friendlyMessage });
       if (currentRequestIdRef.current) failInteraction(currentRequestIdRef.current);
       toast.error('Dave connection error', { description: friendlyMessage });
     },
