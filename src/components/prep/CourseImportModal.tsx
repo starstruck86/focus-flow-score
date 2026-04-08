@@ -414,7 +414,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       toast.success(`Imported ${successCount} of ${toImport.length} lessons`);
     }
     setImporting(false);
-  }, [lessons, selected, classify, addUrl, url, courseTitle, platform, user]);
+    clearCredPassword();
+  }, [lessons, selected, classify, addUrl, url, courseTitle, platform, user, credEmail, credPassword]);
 
   const selectedCount = selected.size;
   const progressPct = importProgress.total > 0 ? (importProgress.done / importProgress.total) * 100 : 0;
