@@ -36,16 +36,34 @@ interface Props {
   onMarkExcluded?: (resourceId: string) => void;
 }
 
-function StatusIcon({ status, batchInfo }: { status: string; batchInfo?: { completed?: number; total?: number } }) {
-  if (status === 'running_batched') return (
-    <div className="flex items-center gap-1">
-      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-      {batchInfo?.completed != null && batchInfo?.total != null && (
-        <span className="text-[10px] font-mono text-primary">{batchInfo.completed}/{batchInfo.total}</span>
-      )}
-    </div>
-  );
-  if (status === 'running') return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />;
+function StatusIcon({ status, batchInfo, item }: { status: string; batchInfo?: { completed?: number; total?: number }; item?: ReExtractQueueItem }) {
+  // Show real progress bar for running items
+  if (status === 'running_batched' || status === 'running') {
+    const rAny = item as any;
+    const hasDurableProgress = rAny?.active_job_progress_total > 0;
+    if (hasDurableProgress) {
+      return (
+        <ResourceOperationProgress
+          status="running"
+          stepLabel={rAny?.active_job_step_label}
+          progressPct={rAny?.active_job_progress_pct}
+          progressCurrent={rAny?.active_job_progress_current}
+          progressTotal={rAny?.active_job_progress_total}
+          updatedAt={rAny?.active_job_updated_at}
+          compact
+        />
+      );
+    }
+    // Fallback to spinner with batch count
+    return (
+      <div className="flex items-center gap-1">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+        {batchInfo?.completed != null && batchInfo?.total != null && (
+          <span className="text-[10px] font-mono text-primary">{batchInfo.completed}/{batchInfo.total}</span>
+        )}
+      </div>
+    );
+  }
   if (status === 'completed') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />;
   if (status === 'partial' || status === 'partial_complete_resumable') return <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />;
   if (status === 'failed') return <XCircle className="h-3.5 w-3.5 text-destructive" />;
