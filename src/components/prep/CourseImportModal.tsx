@@ -422,10 +422,10 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete' });
         }
 
-        updateLessonResult(i, { status: 'complete', resourceId: resourceId || undefined });
+        updateLessonResult(i, { status: 'complete', resourceId: resourceId || undefined, quality, lessonUrl: lesson.url });
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to save resource';
-        updateLessonResult(i, { status: 'failed', error: errMsg });
+        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url });
         await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'saving_resource', error: errMsg });
         console.error(`Failed to import ${lesson.title}:`, e);
       }
