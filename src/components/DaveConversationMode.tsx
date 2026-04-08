@@ -192,12 +192,16 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       connMgr.startHeartbeat(async () => {
         // Primary: SDK status
         if (conversation.status !== 'connected') return false;
-        // Secondary: stale-session heuristic — if we haven't received
-        // any message in 90s during an active session, treat as degraded
+        // Secondary: stale-session heuristic — only trigger if the conversation
+        // was actively exchanging messages (>2 messages = past greeting phase)
+        // and then went silent for 90s. A single greeting followed by idle is normal.
         const lastMsg = lastMessageAtRef.current;
-        if (lastMsg && messagesReceivedCountRef.current > 0) {
+        if (lastMsg && messagesReceivedCountRef.current > 2) {
           const silenceMs = Date.now() - lastMsg;
-          if (silenceMs > 90_000) return false;
+          if (silenceMs > 90_000) {
+            console.warn('[DaveConn] Stale session: active conversation silent for 90s+');
+            return false;
+          }
         }
         return true;
       });

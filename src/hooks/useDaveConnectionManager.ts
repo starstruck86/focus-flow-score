@@ -50,6 +50,8 @@ export interface UseDaveConnectionManager {
   isReconnectExhausted: boolean;
   /** Last N connection events for debug panel */
   eventHistory: DaveEventRecord[];
+  /** Dump full connection summary to console for runtime validation */
+  dumpSummary: () => void;
 }
 
 export function useDaveConnectionManager(): UseDaveConnectionManager {
@@ -76,16 +78,33 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
     forceUpdate();
   }, []);
 
-  // Wrap dispatch with logging + event history
+  // Wrap dispatch with logging + event history + structured console groups
   const dispatch = useCallback((event: DaveConnectionEvent) => {
-    logger.info(`Event: ${event.type}`, event);
+    const prevState = metaRef.current.state;
+    rawDispatch(event);
+
     const detail =
       'error' in event ? (event as any).error :
       'reason' in event ? (event as any).reason :
       'latencyMs' in event ? `${(event as any).latencyMs}ms` :
       undefined;
     pushEvent(event.type, detail);
-    rawDispatch(event);
+
+    // Structured console log for runtime validation
+    const ts = new Date().toISOString().substring(11, 23);
+    console.groupCollapsed(
+      `%c[DaveConn] ${event.type}%c ${prevState} → …  @${ts}`,
+      'color: #6366f1; font-weight: bold',
+      'color: #888',
+    );
+    console.log('Event:', event);
+    console.log('Prev state:', prevState);
+    console.log('Reconnect attempts:', metaRef.current.reconnectAttemptCount);
+    console.log('Reconnect timer active:', metaRef.current.reconnectTimerActive);
+    if (detail) console.log('Detail:', detail);
+    console.groupEnd();
+
+    logger.info(`Event: ${event.type}`, event);
   }, [pushEvent]);
 
   const stopHeartbeat = useCallback(() => {
@@ -220,6 +239,28 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
     };
   }, [stopHeartbeat, cancelReconnect]);
 
+  // Console summary dump for runtime validation
+  const dumpSummary = useCallback(() => {
+    const m = metaRef.current;
+    const events = eventHistoryRef.current;
+    console.group('%c[DaveConn] Connection Summary', 'color: #6366f1; font-weight: bold; font-size: 13px');
+    console.table({
+      state: m.state,
+      sessionId: m.sessionId || '—',
+      reconnectAttempts: m.reconnectAttemptCount,
+      reconnectTimerActive: m.reconnectTimerActive,
+      heartbeatLatency: m.heartbeatLatencyMs !== null ? `${m.heartbeatLatencyMs}ms` : '—',
+      lastError: m.lastError || '—',
+      lastConnected: m.lastConnectedAt ? new Date(m.lastConnectedAt).toISOString() : '—',
+      lastDisconnected: m.lastDisconnectedAt ? new Date(m.lastDisconnectedAt).toISOString() : '—',
+    });
+    console.log('Event history:');
+    events.forEach(ev => {
+      console.log(`  ${new Date(ev.ts).toISOString().substring(11, 23)} ${ev.type}${ev.detail ? ` (${ev.detail})` : ''}`);
+    });
+    console.groupEnd();
+  }, []);
+
   return {
     meta,
     dispatch,
@@ -231,5 +272,6 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
     reset,
     isReconnectExhausted: meta.reconnectAttemptCount >= MAX_RECONNECT_ATTEMPTS,
     eventHistory: eventHistoryRef.current,
+    dumpSummary,
   };
 }
