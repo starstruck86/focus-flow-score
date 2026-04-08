@@ -562,12 +562,15 @@ function deduplicateItems(items: any[], isLesson = false): DedupeResult {
       else if (!isLesson) {
         const itemCoreWords = corePhrase(item.title || '').split(/\s+/).filter(w => w.length > 0);
         const existCoreWords = corePhrase(result[i].title || '').split(/\s+/).filter(w => w.length > 0);
-        if (itemCoreWords.length >= 2 && existCoreWords.length >= 2) {
+        if (itemCoreWords.length >= 3 && existCoreWords.length >= 3) {
           const itemVerb = normalizedWords(item.title || '')[0];
           const existVerb = normalizedWords(result[i].title || '')[0];
           const coreInter = itemCoreWords.filter(w => existCoreWords.includes(w));
           const coreOvr = coreInter.length / Math.min(itemCoreWords.length, existCoreWords.length);
-          if (itemVerb === existVerb && coreOvr >= 0.6) {
+          // For short titles (<40 chars), require higher overlap to avoid false merges on structured labels
+          const minTitleLen = Math.min((item.title || '').length, (result[i].title || '').length);
+          const threshold = minTitleLen < 40 ? 0.85 : 0.6;
+          if (itemVerb === existVerb && coreOvr >= threshold) {
             isDupe = true; dupeReason = 'core_phrase';
           }
         }
