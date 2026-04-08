@@ -22,6 +22,7 @@ export type NoLiftReason =
   | 'duplicate_heavy'
   | 'extractor_returned_no_new_items'
   | 'extractor_weak_output'
+  | 'telemetry_inconsistency'
   | 'api_failure'
   | 'legacy_pipeline_rejection'
   | 'items_generated_but_filtered_out'
@@ -32,6 +33,7 @@ export type NoLiftReason =
 
 export type DominantBottleneck =
   | 'extractor_weak_output'
+  | 'telemetry_inconsistency'
   | 'api_failure'
   | 'legacy_pipeline_rejection'
   | 'validation_too_strict'
@@ -123,15 +125,19 @@ function classifyLift(kiDelta: number, preKisPer1k: number, postKisPer1k: number
 
 function diagnoseNoLift(
   kiDelta: number, preKisPer1k: number, dupsSkipped: number,
-  efReturned: number, efValidated: number, efSaved: number, contentLength: number,
+  efReturned: number | null, efValidated: number | null, efSaved: number | null, contentLength: number,
+  hasPipelineTelemetry: boolean, lastError?: string | null,
 ): NoLiftReason | undefined {
   if (kiDelta > 0) return undefined;
+  if (looksLikeApiFailure(lastError)) return 'api_failure';
   if (preKisPer1k >= 1.5) return 'already_dense';
+  if (!hasPipelineTelemetry) return 'telemetry_inconsistency';
+  if (efReturned == null || efValidated == null) return 'telemetry_inconsistency';
   if (efReturned === 0) return 'extractor_returned_no_new_items';
   if (efReturned > 0 && efReturned < 3) return 'extractor_weak_output';
   if (efReturned > 0 && efValidated === 0) return 'validation_too_strict';
   if (efReturned > 0 && efValidated > 0 && efValidated < efReturned * 0.3) return 'validation_too_strict';
-  if (efValidated > 0 && efSaved === 0 && dupsSkipped > 0) return 'items_generated_but_deduped';
+  if (efValidated > 0 && (efSaved ?? 0) === 0 && dupsSkipped > 0) return 'items_generated_but_deduped';
   if (dupsSkipped > 0 && efSaved === 0) return 'duplicate_heavy';
   if (efReturned > 0 && efValidated === 0) return 'items_generated_but_filtered_out';
   if (contentLength < 1500) return 'resource_not_suitable';
@@ -139,16 +145,26 @@ function diagnoseNoLift(
 }
 
 function classifyBottleneck(
-  efReturned: number, efValidated: number, efSaved: number,
+  efReturned: number | null, efValidated: number | null, efSaved: number | null,
   dupsSkipped: number, preKisPer1k: number, kiDelta: number,
+  hasPipelineTelemetry: boolean, lastError?: string | null,
 ): DominantBottleneck {
   if (kiDelta > 0) return 'none';
+  if (looksLikeApiFailure(lastError)) return 'api_failure';
   if (preKisPer1k >= 1.5) return 'already_mined';
+  if (!hasPipelineTelemetry) return 'telemetry_inconsistency';
+  if (efReturned == null || efValidated == null) return 'telemetry_inconsistency';
   if (efReturned === 0) return 'extractor_weak_output';
+  if (dupsSkipped > 0 && (efSaved ?? 0) === 0) return 'dedup_too_aggressive';
   if (efReturned > 0 && efValidated < efReturned * 0.3) return 'validation_too_strict';
   if (efValidated > 0 && efSaved === 0 && dupsSkipped > 0) return 'dedup_too_aggressive';
   if (efReturned < 3) return 'extractor_weak_output';
   return 'unknown';
+}
+
+function looksLikeApiFailure(error?: string | null): boolean {
+  if (!error) return false;
+  return /(402|429|payment required|credits? exhausted|credits? unavailable|rate[- ]?limit|quota|too many requests)/i.test(error);
 }
 
 // ── STALE JOB DETECTION ──
@@ -581,10 +597,10 @@ export function useDeepReExtraction() {
       ));
     }
 
-    let totalEfReturned = 0;
-    let totalEfValidated = 0;
-    let totalEfSaved = 0;
-    let totalDupsSkipped = 0;
+    let totalEfReturned: number | null = null;
+    let totalEfValidated: number | null = null;
+    let totalEfSaved: number | null = null;
+    let totalDupsSkipped: number | null = null;
     let allPassesRun: string[] = [];
     let lastError: string | null = null;
     let batchesCompleted = resumeFrom;
@@ -616,7 +632,7 @@ export function useDeepReExtraction() {
           throw new Error(data?.error || `HTTP ${response.status}`);
         }
 
-        totalEfSaved = data?.totalSaved ?? 0;
+        totalEfSaved = data?.totalSaved ?? null;
         batchesCompleted = data?.completedBatches ?? batchesCompleted;
         lastError = data?.error ?? null;
 
@@ -672,7 +688,7 @@ export function useDeepReExtraction() {
             // Check for terminal state
             if (rData.active_job_status === 'succeeded' || rData.extraction_batch_status === 'completed') {
               console.log('[JOB MODE CLIENT] Server completed all batches');
-              totalEfSaved = rData.current_resource_ki_count - item.pre_ki_count;
+              totalEfSaved = Math.max(0, (rData.current_resource_ki_count ?? item.pre_ki_count) - item.pre_ki_count);
               batchesCompleted = rData.extraction_batch_total ?? batchesCompleted;
               break;
             }
@@ -765,10 +781,10 @@ export function useDeepReExtraction() {
         if (error) throw new Error(typeof error === 'string' ? error : JSON.stringify(error));
         if (data?.error) throw new Error(data.error);
 
-        totalEfReturned = data?.model_metrics?.raw_count ?? 0;
-        totalEfValidated = data?.model_metrics?.validated_count ?? 0;
-        totalEfSaved = data?.persistence?.saved_count ?? data?.totalSaved ?? 0;
-        totalDupsSkipped = data?.persistence?.duplicates_skipped ?? 0;
+        totalEfReturned = data?.model_metrics?.raw_count ?? null;
+        totalEfValidated = data?.model_metrics?.validated_count ?? null;
+        totalEfSaved = data?.persistence?.saved_count ?? data?.totalSaved ?? null;
+        totalDupsSkipped = data?.persistence?.duplicates_skipped ?? null;
         allPassesRun = data?.model_metrics?.extraction_passes_run ?? [];
       } catch (err: any) {
         lastError = err.message;
@@ -799,13 +815,21 @@ export function useDeepReExtraction() {
     const activeDelta = postActive - item.pre_active_count;
     const contextDelta = postWithCtx - item.pre_context_count;
 
+    const resolvedDupsSkipped = totalDupsSkipped ?? 0;
+    const hasPipelineTelemetry =
+      totalEfReturned != null ||
+      totalEfValidated != null ||
+      (totalDupsSkipped != null && totalDupsSkipped > 0) ||
+      allPassesRun.length > 0 ||
+      looksLikeApiFailure(lastError);
+
     const liftStatus = classifyLift(kiDelta, item.pre_kis_per_1k, postKisPer1k);
     const noLiftReason = diagnoseNoLift(
-      kiDelta, item.pre_kis_per_1k, totalDupsSkipped,
-      totalEfReturned, totalEfValidated, totalEfSaved, item.content_length
+      kiDelta, item.pre_kis_per_1k, resolvedDupsSkipped,
+      totalEfReturned, totalEfValidated, totalEfSaved, item.content_length, hasPipelineTelemetry, lastError,
     );
     const dominantBottleneck = classifyBottleneck(
-      totalEfReturned, totalEfValidated, totalEfSaved, totalDupsSkipped, item.pre_kis_per_1k, kiDelta
+      totalEfReturned, totalEfValidated, totalEfSaved, resolvedDupsSkipped, item.pre_kis_per_1k, kiDelta, hasPipelineTelemetry, lastError,
     );
 
     // Determine final status: if stopped by safety limits (not error), stay resumable
@@ -829,7 +853,8 @@ export function useDeepReExtraction() {
       batched: isBatched, batchesCompleted, batchTotal, resumedFrom: resumeFrom,
       preTotal: item.pre_ki_count, postTotal,
       rawDelta: kiDelta, netNewUnique,
-      totalEfReturned, totalEfValidated, totalEfSaved, totalDupsSkipped,
+      totalEfReturned, totalEfValidated, totalEfSaved, totalDupsSkipped: resolvedDupsSkipped,
+      hasPipelineTelemetry,
       liftStatus, dominantBottleneck,
     });
 
@@ -846,12 +871,12 @@ export function useDeepReExtraction() {
         active_delta: activeDelta,
         context_delta: contextDelta,
         passes_run: allPassesRun,
-        duplicates_skipped: totalDupsSkipped,
+        duplicates_skipped: totalDupsSkipped ?? undefined,
         lift_status: liftStatus,
         no_lift_reason: noLiftReason,
-        ef_returned_count: totalEfReturned,
-        ef_validated_count: totalEfValidated,
-        ef_saved_count: totalEfSaved,
+        ef_returned_count: totalEfReturned ?? undefined,
+        ef_validated_count: totalEfValidated ?? undefined,
+        ef_saved_count: totalEfSaved ?? undefined,
         dominant_bottleneck: dominantBottleneck,
         batch_total: isBatched ? batchTotal : undefined,
         batches_completed: isBatched ? batchesCompleted : undefined,

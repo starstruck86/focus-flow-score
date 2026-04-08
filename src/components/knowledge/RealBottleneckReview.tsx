@@ -75,6 +75,9 @@ function computeRecommendation(r: ResourceAuditRow, qr: ReExtractQueueItem | nul
     if (qr.dominant_bottleneck === 'extractor_weak_output') {
       return { rec: 're-extract again', explanation: `Extractor produced only ${qr.ef_returned_count ?? 0} raw items from ${(r.content_length / 1000).toFixed(0)}k chars. May benefit from chunking improvements.`, priority: 7 };
     }
+    if (qr.dominant_bottleneck === 'telemetry_inconsistency') {
+      return { rec: 're-extract again', explanation: `Latest run finished without trustworthy pipeline counts. Do not treat this as extractor weakness until telemetry is present on a fresh rerun.`, priority: 4 };
+    }
     if (qr.dominant_bottleneck === 'api_failure') {
       return { rec: 're-extract again', explanation: `API failure (credits exhausted or rate-limited). Re-run when credits are available.`, priority: 8 };
     }
