@@ -674,13 +674,19 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                           {/* Quality report row */}
                           {q && (r.status === 'complete' || r.status === 'failed') && (
                             <div className="flex items-center gap-1.5 pl-5 flex-wrap text-[10px] text-muted-foreground">
-                              <Badge variant="outline" className="text-[9px] h-4">{q.content_type}</Badge>
+                              <Badge variant={q.usable_content ? 'outline' : 'destructive'} className="text-[9px] h-4">{q.content_type}</Badge>
+                              {r.metadataOnly && <Badge variant="secondary" className="text-[9px] h-4">metadata only</Badge>}
                               <span>{q.content_length.toLocaleString()} chars</span>
+                              <span>·</span>
+                              <span>{q.cleaned_text_length.toLocaleString()} cleaned</span>
                               <span>·</span>
                               <span>{q.word_count} words</span>
                               {q.video_embeds_found > 0 && <span>· {q.video_embeds_found} video{q.video_embeds_found !== 1 ? 's' : ''}</span>}
                               {q.has_login_wall && <Badge variant="destructive" className="text-[9px] h-4">login wall</Badge>}
                               {q.has_redirect && <Badge variant="secondary" className="text-[9px] h-4">redirected</Badge>}
+                              {r.finalUrl && r.requestedUrl && r.finalUrl !== r.requestedUrl && (
+                                <span className="truncate max-w-[120px]" title={r.finalUrl}>→ {new URL(r.finalUrl).pathname}</span>
+                              )}
                             </div>
                           )}
                           {/* Issues */}
