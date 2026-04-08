@@ -22,7 +22,6 @@ export type NoLiftReason =
   | 'duplicate_heavy'
   | 'extractor_returned_no_new_items'
   | 'extractor_weak_output'
-  | 'telemetry_inconsistency'
   | 'api_failure'
   | 'legacy_pipeline_rejection'
   | 'items_generated_but_filtered_out'
@@ -33,7 +32,6 @@ export type NoLiftReason =
 
 export type DominantBottleneck =
   | 'extractor_weak_output'
-  | 'telemetry_inconsistency'
   | 'api_failure'
   | 'legacy_pipeline_rejection'
   | 'validation_too_strict'
@@ -125,21 +123,23 @@ function classifyLift(kiDelta: number, preKisPer1k: number, postKisPer1k: number
 
 function diagnoseNoLift(
   kiDelta: number, preKisPer1k: number, dupsSkipped: number,
-  efReturned: number | null, efValidated: number | null, efSaved: number | null, contentLength: number,
-  hasPipelineTelemetry: boolean, lastError?: string | null,
+  efReturned: number | null, efValidated: number | null, efSaved: number | null, contentLength: number, lastError?: string | null,
 ): NoLiftReason | undefined {
   if (kiDelta > 0) return undefined;
   if (looksLikeApiFailure(lastError)) return 'api_failure';
   if (preKisPer1k >= 1.5) return 'already_dense';
-  if (!hasPipelineTelemetry) return 'telemetry_inconsistency';
-  if (efReturned == null || efValidated == null) return 'telemetry_inconsistency';
-  if (efReturned === 0) return 'extractor_returned_no_new_items';
-  if (efReturned > 0 && efReturned < 3) return 'extractor_weak_output';
-  if (efReturned > 0 && efValidated === 0) return 'validation_too_strict';
-  if (efReturned > 0 && efValidated > 0 && efValidated < efReturned * 0.3) return 'validation_too_strict';
-  if (efValidated > 0 && (efSaved ?? 0) === 0 && dupsSkipped > 0) return 'items_generated_but_deduped';
-  if (dupsSkipped > 0 && efSaved === 0) return 'duplicate_heavy';
-  if (efReturned > 0 && efValidated === 0) return 'items_generated_but_filtered_out';
+  // Treat null as 0 — after backfill + write-path fix, nulls should not occur
+  // for completed runs. If they do, it's an extractor-returned-nothing outcome.
+  const rawCount = efReturned ?? 0;
+  const valCount = efValidated ?? 0;
+  const savedCount = efSaved ?? 0;
+  if (rawCount === 0) return 'extractor_returned_no_new_items';
+  if (rawCount > 0 && rawCount < 3) return 'extractor_weak_output';
+  if (rawCount > 0 && valCount === 0) return 'validation_too_strict';
+  if (rawCount > 0 && valCount > 0 && valCount < rawCount * 0.3) return 'validation_too_strict';
+  if (valCount > 0 && savedCount === 0 && dupsSkipped > 0) return 'items_generated_but_deduped';
+  if (dupsSkipped > 0 && savedCount === 0) return 'duplicate_heavy';
+  if (rawCount > 0 && valCount === 0) return 'items_generated_but_filtered_out';
   if (contentLength < 1500) return 'resource_not_suitable';
   return 'unknown';
 }
@@ -147,18 +147,19 @@ function diagnoseNoLift(
 function classifyBottleneck(
   efReturned: number | null, efValidated: number | null, efSaved: number | null,
   dupsSkipped: number, preKisPer1k: number, kiDelta: number,
-  hasPipelineTelemetry: boolean, lastError?: string | null,
+  lastError?: string | null,
 ): DominantBottleneck {
   if (kiDelta > 0) return 'none';
   if (looksLikeApiFailure(lastError)) return 'api_failure';
   if (preKisPer1k >= 1.5) return 'already_mined';
-  if (!hasPipelineTelemetry) return 'telemetry_inconsistency';
-  if (efReturned == null || efValidated == null) return 'telemetry_inconsistency';
-  if (efReturned === 0) return 'extractor_weak_output';
-  if (dupsSkipped > 0 && (efSaved ?? 0) === 0) return 'dedup_too_aggressive';
-  if (efReturned > 0 && efValidated < efReturned * 0.3) return 'validation_too_strict';
-  if (efValidated > 0 && efSaved === 0 && dupsSkipped > 0) return 'dedup_too_aggressive';
-  if (efReturned < 3) return 'extractor_weak_output';
+  const rawCount = efReturned ?? 0;
+  const valCount = efValidated ?? 0;
+  const savedCount = efSaved ?? 0;
+  if (rawCount === 0) return 'extractor_weak_output';
+  if (dupsSkipped > 0 && savedCount === 0) return 'dedup_too_aggressive';
+  if (rawCount > 0 && valCount < rawCount * 0.3) return 'validation_too_strict';
+  if (valCount > 0 && savedCount === 0 && dupsSkipped > 0) return 'dedup_too_aggressive';
+  if (rawCount < 3) return 'extractor_weak_output';
   return 'unknown';
 }
 
@@ -815,21 +816,13 @@ export function useDeepReExtraction() {
     const activeDelta = postActive - item.pre_active_count;
     const contextDelta = postWithCtx - item.pre_context_count;
 
-    const resolvedDupsSkipped = totalDupsSkipped ?? 0;
-    const hasPipelineTelemetry =
-      totalEfReturned != null ||
-      totalEfValidated != null ||
-      (totalDupsSkipped != null && totalDupsSkipped > 0) ||
-      allPassesRun.length > 0 ||
-      looksLikeApiFailure(lastError);
-
     const liftStatus = classifyLift(kiDelta, item.pre_kis_per_1k, postKisPer1k);
     const noLiftReason = diagnoseNoLift(
-      kiDelta, item.pre_kis_per_1k, resolvedDupsSkipped,
-      totalEfReturned, totalEfValidated, totalEfSaved, item.content_length, hasPipelineTelemetry, lastError,
+      kiDelta, item.pre_kis_per_1k, totalDupsSkipped ?? 0,
+      totalEfReturned, totalEfValidated, totalEfSaved, item.content_length, lastError,
     );
     const dominantBottleneck = classifyBottleneck(
-      totalEfReturned, totalEfValidated, totalEfSaved, resolvedDupsSkipped, item.pre_kis_per_1k, kiDelta, hasPipelineTelemetry, lastError,
+      totalEfReturned, totalEfValidated, totalEfSaved, totalDupsSkipped ?? 0, item.pre_kis_per_1k, kiDelta, lastError,
     );
 
     // Determine final status: if stopped by safety limits (not error), stay resumable
@@ -853,8 +846,7 @@ export function useDeepReExtraction() {
       batched: isBatched, batchesCompleted, batchTotal, resumedFrom: resumeFrom,
       preTotal: item.pre_ki_count, postTotal,
       rawDelta: kiDelta, netNewUnique,
-      totalEfReturned, totalEfValidated, totalEfSaved, totalDupsSkipped: resolvedDupsSkipped,
-      hasPipelineTelemetry,
+      totalEfReturned, totalEfValidated, totalEfSaved, totalDupsSkipped,
       liftStatus, dominantBottleneck,
     });
 
