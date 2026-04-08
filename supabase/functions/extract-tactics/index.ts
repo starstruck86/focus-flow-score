@@ -569,7 +569,7 @@ function deduplicateItems(items: any[], isLesson = false): DedupeResult {
           const coreOvr = coreInter.length / Math.min(itemCoreWords.length, existCoreWords.length);
           // For short titles (<40 chars), require higher overlap to avoid false merges on structured labels
           const minTitleLen = Math.min((item.title || '').length, (result[i].title || '').length);
-          const threshold = minTitleLen < 40 ? 0.8 : 0.6;
+          const threshold = minTitleLen < 40 ? 0.85 : 0.6;
           if (itemVerb === existVerb && coreOvr >= threshold) {
             isDupe = true; dupeReason = 'core_phrase';
           }
