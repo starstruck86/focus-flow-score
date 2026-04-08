@@ -2579,6 +2579,7 @@ Deno.serve(async (req) => {
         dedupe_merge_counts: result.dedupeResult.details,
         model: MODEL_NAME,
         summary: result.summary,
+        fallback_tier: result.fallbackTier,
       },
       // Saved/persisted metrics (what actually landed in the DB)
       saved_metrics: persistResult ? {
