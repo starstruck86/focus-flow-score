@@ -673,15 +673,16 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                         : r.status === 'metadata_only' ? 'text-amber-500'
                         : r.status === 'failed' ? 'text-destructive'
                         : 'text-muted-foreground';
-                            ) : (
                       return (
                         <div key={idx} className="space-y-0.5">
                           <div className="flex items-center gap-2 text-[11px]">
                             {StatusIcon ? (
                               <StatusIcon className={`h-3 w-3 flex-shrink-0 ${statusColor}`} />
+                            ) : (
+                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
                             )}
                             <span className="truncate flex-1">{lesson.title}</span>
-                            {r.status !== 'complete' && r.status !== 'failed' && r.status !== 'queued' && (
+                            {r.status !== 'complete' && r.status !== 'metadata_only' && r.status !== 'failed' && r.status !== 'queued' && (
                               <Badge variant="outline" className="text-[9px] h-4">{r.status.replace('_', ' ')}</Badge>
                             )}
                           </div>
