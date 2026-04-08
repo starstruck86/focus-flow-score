@@ -306,7 +306,7 @@ export function ReExtractionQueue({ queue, isRunning, liftSummary, onRunDeepExtr
                   return (
                     <React.Fragment key={item.resource_id}>
                       <TableRow>
-                        <TableCell><StatusIcon status={item.status} batchInfo={item.is_batched && (item.batch_total ?? 0) > 1 ? { completed: item.batches_completed, total: item.batch_total } : undefined} /></TableCell>
+                        <TableCell className="min-w-[130px]"><StatusIcon status={item.status} batchInfo={item.is_batched && (item.batch_total ?? 0) > 1 ? { completed: item.batches_completed, total: item.batch_total } : undefined} item={item} /></TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <div className="text-[11px] max-w-[120px] truncate">{item.title}</div>
