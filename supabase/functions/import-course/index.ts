@@ -829,7 +829,11 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
   
   debug.push(`Content extracted: ${content.length} chars, type: ${type}, mediaUrl: ${mediaUrl ? 'yes' : 'no'}`);
   
-  return { title, content, type, debug, media_url: mediaUrl || undefined, video_duration: videoDuration || undefined };
+  // Quality classification
+  const quality = classifyLessonContent(content, html, resp.url, lessonUrl);
+  debug.push(`Quality: type=${quality.content_type}, words=${quality.word_count}, issues=${quality.issues.length > 0 ? quality.issues.join('; ') : 'none'}`);
+  
+  return { title, content, type, debug, quality, media_url: mediaUrl || undefined, video_duration: videoDuration || undefined };
 }
 
 Deno.serve(async (req) => {
