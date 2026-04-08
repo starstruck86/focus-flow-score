@@ -156,6 +156,8 @@ function BottleneckBadge({ bottleneck }: { bottleneck?: DominantBottleneck }) {
   if (!bottleneck || bottleneck === 'none') return null;
   const cls = bottleneck === 'already_mined' ? 'border-muted-foreground/40 text-muted-foreground'
     : bottleneck === 'extractor_weak_output' ? 'border-destructive/40 text-destructive'
+    : bottleneck === 'api_failure' ? 'border-orange-500/40 text-orange-600'
+    : bottleneck === 'legacy_pipeline_rejection' ? 'border-purple-500/40 text-purple-600'
     : bottleneck === 'validation_too_strict' ? 'border-amber-500/40 text-amber-600'
     : bottleneck === 'dedup_too_aggressive' ? 'border-blue-500/40 text-blue-600'
     : 'border-muted-foreground/40 text-muted-foreground';

@@ -2,8 +2,8 @@
  * Real Bottleneck Review — shows resources whose canonical post-extraction state
  * maps to the 'bottleneck_review' panel.
  *
- * Canonical states routed here: extractor_weak_review, validator_review,
- * dedup_review, reextract_completed_no_lift.
+ * Canonical states routed here: api_failure_review, legacy_pipeline_rejection,
+ * extractor_weak_review, validator_review, dedup_review, reextract_completed_no_lift.
  */
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
