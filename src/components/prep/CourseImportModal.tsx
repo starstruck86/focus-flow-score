@@ -719,6 +719,19 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                   </div>
                 </ScrollArea>
               )}
+              {/* Import summary */}
+              {!importing && lessonResults.length > 0 && lessonResults.every(r => r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (() => {
+                const full = lessonResults.filter(r => r.status === 'complete').length;
+                const meta = lessonResults.filter(r => r.status === 'metadata_only').length;
+                const fail = lessonResults.filter(r => r.status === 'failed').length;
+                return (
+                  <div className="flex items-center gap-3 text-xs mt-2 p-2 rounded-md bg-muted/50">
+                    {full > 0 && <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" />{full} full</span>}
+                    {meta > 0 && <span className="flex items-center gap-1"><Info className="h-3 w-3 text-amber-500" />{meta} metadata-only</span>}
+                    {fail > 0 && <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" />{fail} failed</span>}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
