@@ -126,6 +126,8 @@ function formatNoLiftReason(reason: NoLiftReason): string {
     duplicate_heavy: 'All new items were duplicates of existing KIs',
     extractor_returned_no_new_items: 'AI extractor returned no new items from this content',
     extractor_weak_output: 'AI extractor produced too few candidates',
+    api_failure: 'API failure — credits exhausted or rate-limited',
+    legacy_pipeline_rejection: 'Legacy pipeline quality-gate rejected valid output',
     items_generated_but_filtered_out: 'Items generated but failed quality validation',
     items_generated_but_deduped: 'Items generated but all matched existing fingerprints',
     validation_too_strict: 'Validation rejected most candidates — may need threshold tuning',
@@ -138,6 +140,8 @@ function formatNoLiftReason(reason: NoLiftReason): string {
 function formatBottleneck(b: DominantBottleneck): string {
   const map: Record<DominantBottleneck, string> = {
     extractor_weak_output: 'Extractor weak',
+    api_failure: 'API failure',
+    legacy_pipeline_rejection: 'Legacy rejection',
     validation_too_strict: 'Validation strict',
     dedup_too_aggressive: 'Dedup aggressive',
     already_mined: 'Already mined',

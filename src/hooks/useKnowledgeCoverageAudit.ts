@@ -107,7 +107,7 @@ export function useKnowledgeCoverageAudit() {
       while (true) {
         const { data: runs, error: runsErr } = await supabase
           .from('extraction_runs' as any)
-          .select('resource_id, status, started_at, completed_at')
+          .select('resource_id, status, started_at, completed_at, chunks_failed, chunks_total, extraction_mode')
           .range(runsFrom, runsFrom + PAGE_SIZE - 1);
         if (runsErr) throw runsErr;
         if (!runs || runs.length === 0) break;
@@ -281,6 +281,10 @@ export function useKnowledgeCoverageAudit() {
           last_extraction_error: r.last_extraction_error || null,
           last_extraction_duration_ms: r.last_extraction_duration_ms ?? null,
           last_extraction_model: r.last_extraction_model || null,
+          // Chunk failure diagnostics (from latest extraction_run)
+          last_extraction_chunks_failed: latestRun?.chunks_failed ?? null,
+          last_extraction_chunks_total: latestRun?.chunks_total ?? null,
+          last_extraction_mode: latestRun?.extraction_mode ?? r.extraction_mode ?? null,
           // Per-resource operation progress
           active_job_type: r.active_job_type || null,
           active_job_step_label: r.active_job_step_label || null,
