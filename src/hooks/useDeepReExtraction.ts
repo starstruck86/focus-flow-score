@@ -284,7 +284,15 @@ async function reconcileResourceSnapshot(resourceId: string, item: ReExtractQueu
     ? 'partial_complete_resumable'
     : latestRun?.status || 'completed';
 
-  await supabase.from('resources' as any).update({
+  // Determine terminal enrichment_status: if job completed and no incomplete batches,
+  // transition out of 'extraction_retrying' to prevent stale queue entries
+  const isTerminal = !resumeInfo.hasIncompleteBatches && (derivedStatus === 'completed' || latestRun?.status === 'completed');
+  const depthBucket = computeDepthBucket(postTotal, item.content_length);
+  const terminalEnrichmentStatus = isTerminal
+    ? (depthBucket === 'strong' ? 'deep_enriched' : 'enriched')
+    : undefined; // leave unchanged if not terminal
+
+  const updatePayload: Record<string, any> = {
     extraction_attempt_count: runCountResult.count ?? 0,
     extraction_batches_completed: resumeInfo.completedCount,
     extraction_batch_total: resumeInfo.batchTotal,
@@ -294,10 +302,18 @@ async function reconcileResourceSnapshot(resourceId: string, item: ReExtractQueu
     current_resource_ki_count: postTotal,
     current_resource_kis_per_1k: postKisPer1k,
     kis_per_1k_chars: postKisPer1k,
-    extraction_depth_bucket: computeDepthBucket(postTotal, item.content_length),
+    extraction_depth_bucket: depthBucket,
     under_extracted_flag: computeUnderExtracted(postTotal, item.content_length, item.resource_type),
     active_job_status: resumeInfo.hasIncompleteBatches ? 'partial' : latestRun?.status === 'failed' ? 'failed' : 'succeeded',
-  } as any).eq('id', resourceId);
+    // Clear retry-related fields on terminal completion
+    ...(isTerminal ? {
+      enrichment_status: terminalEnrichmentStatus,
+      extraction_retry_eligible: false,
+      extraction_failure_type: null,
+    } : {}),
+  };
+
+  await supabase.from('resources' as any).update(updatePayload as any).eq('id', resourceId);
 
   return resumeInfo;
 }
