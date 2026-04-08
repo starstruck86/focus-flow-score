@@ -281,7 +281,7 @@ export function KnowledgeCoverageAudit() {
               size="sm"
               className="text-xs gap-1.5"
               onClick={() => {
-                const underExtracted = audit.resources.filter(r => r.under_extracted_flag && r.content_length >= 1500);
+                const underExtracted = filterByPanel(audit.resources, 'under_extracted');
                 handleFlagForReExtraction(underExtracted, 'Under-extracted — auto-flagged');
               }}
             >
