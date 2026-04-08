@@ -397,6 +397,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <DaveDebugPanel
         meta={daveConnMgr.meta}
         eventHistory={daveConnMgr.eventHistory}
+        onDumpSummary={daveConnMgr.dumpSummary}
         extraInfo={{
           daveOpen,
           daveMinimized,

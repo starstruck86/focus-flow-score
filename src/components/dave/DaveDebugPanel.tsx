@@ -15,6 +15,7 @@ interface Props {
   meta: DaveConnectionMeta;
   eventHistory?: DaveEventRecord[];
   extraInfo?: Record<string, string | number | boolean | null>;
+  onDumpSummary?: () => void;
 }
 
 function formatTimestamp(ts: number | null): string {
@@ -43,7 +44,7 @@ const EVENT_COLORS: Record<string, string> = {
   RESET: 'text-muted-foreground/50',
 };
 
-export function DaveDebugPanel({ meta, eventHistory = [], extraInfo }: Props) {
+export function DaveDebugPanel({ meta, eventHistory = [], extraInfo, onDumpSummary }: Props) {
   const [visible, setVisible] = useState(false);
   const [now, setNow] = useState(Date.now());
 
@@ -125,8 +126,16 @@ export function DaveDebugPanel({ meta, eventHistory = [], extraInfo }: Props) {
             </div>
           )}
 
-          <div className="mt-2 p-3 pt-2 border-t border-border/50 text-[10px] text-muted-foreground/50">
-            Ctrl+Shift+D to toggle
+          <div className="mt-2 p-3 pt-2 border-t border-border/50 flex items-center justify-between text-[10px] text-muted-foreground/50">
+            <span>Ctrl+Shift+D to toggle</span>
+            {onDumpSummary && (
+              <button
+                onClick={onDumpSummary}
+                className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground text-[10px] font-semibold"
+              >
+                Dump Summary
+              </button>
+            )}
           </div>
         </motion.div>
       )}
