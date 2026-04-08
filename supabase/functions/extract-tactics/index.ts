@@ -459,21 +459,64 @@ function computeKiFingerprint(resourceId: string, title: string, tacticSummary: 
 
 function normalize(s: string): string { return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim(); }
 function wordSet(s: string): Set<string> { return new Set(normalize(s).split(/\s+/).filter(w => w.length > 2)); }
+function normalizedWords(s: string): string[] { return normalize(s).split(/\s+/).filter(w => w.length > 2); }
+
+// Stop-words that don't carry tactical meaning — ignored when computing core phrase similarity
+const DEDUP_STOP_WORDS = new Set([
+  'the','and','for','with','your','that','this','from','into','over',
+  'how','use','when','what','why','are','its','not','can','will',
+  'more','most','all','also','but','about','their','them','than',
+  'been','being','have','has','had','does','did','should','would','could',
+  'sales','selling','sell','buyer','prospect','deal','deals','messaging',
+]);
+
+/** Extract "core phrase" — content words minus stop words, sorted for order-invariant comparison */
+function corePhrase(s: string): string {
+  return normalizedWords(s).filter(w => !DEDUP_STOP_WORDS.has(w)).sort().join(' ');
+}
+
+/** Levenshtein-based normalized similarity (0-1) for short strings */
+function stringSimilarity(a: string, b: string): number {
+  const na = normalize(a), nb = normalize(b);
+  if (na === nb) return 1;
+  const maxLen = Math.max(na.length, nb.length);
+  if (maxLen === 0) return 1;
+  // For performance, skip full edit distance on long strings
+  if (maxLen > 120) return 0;
+  const dist = levenshteinDistance(na, nb);
+  return 1 - dist / maxLen;
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[] = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
 
 interface DedupeResult {
   kept: any[];
   mergedCount: number;
-  details: { exact_summary: number; similar_title_summary: number; title_overlap: number; substring: number };
+  details: { exact_summary: number; similar_title_summary: number; title_overlap: number; substring: number; core_phrase: number; fuzzy_title: number };
 }
 
 function deduplicateItems(items: any[], isLesson = false): DedupeResult {
-  const OVERLAP_THRESHOLD = isLesson ? 0.85 : 0.75; // Relaxed from 0.6 to 0.75 to allow more distinct items
+  const OVERLAP_THRESHOLD = isLesson ? 0.85 : 0.75;
   const result: any[] = [];
-  const details = { exact_summary: 0, similar_title_summary: 0, title_overlap: 0, substring: 0 };
+  const details = { exact_summary: 0, similar_title_summary: 0, title_overlap: 0, substring: 0, core_phrase: 0, fuzzy_title: 0 };
 
   for (const item of items) {
     const itemWords = wordSet(item.title || '');
     const itemSummaryWords = wordSet(item.tactic_summary || '');
+    const itemCore = corePhrase(item.title || '');
     let isDupe = false;
     let dupeReason = '';
 
@@ -488,16 +531,33 @@ function deduplicateItems(items: any[], isLesson = false): DedupeResult {
       const summaryOverlap = itemSummaryWords.size > 0 && existingSummaryWords.size > 0
         ? summaryIntersection.length / Math.min(itemSummaryWords.size, existingSummaryWords.size) : 0;
 
+      // Layer 1: Exact summary match
       if (normalize(item.tactic_summary || '') === normalize(result[i].tactic_summary || '') && (item.tactic_summary || '').length > 20) {
         isDupe = true; dupeReason = 'exact_summary';
-      } else if (overlapRatio > 0.8 && summaryOverlap > 0.8) {
-        // Tightened from 0.7/0.7 — only merge when VERY similar on both title and summary
+      }
+      // Layer 2: High overlap on both title + summary
+      else if (overlapRatio > 0.8 && summaryOverlap > 0.8) {
         isDupe = true; dupeReason = 'similar_title_summary';
-      } else if (overlapRatio > OVERLAP_THRESHOLD && summaryOverlap > 0.6) {
-        // Require summary overlap too for title-based dedup (previously title-only at 0.6)
+      }
+      // Layer 3: Title overlap + moderate summary overlap
+      else if (overlapRatio > OVERLAP_THRESHOLD && summaryOverlap > 0.6) {
         isDupe = true; dupeReason = 'title_overlap';
       }
-      // Removed aggressive substring matching that was blocking related-but-distinct items
+      // Layer 4 (NEW): Core phrase match — catches "Audit on Key Messaging" vs "Audit on Sales Messaging"
+      else if (itemCore.length > 8 && itemCore === corePhrase(result[i].title || '')) {
+        isDupe = true; dupeReason = 'core_phrase';
+      }
+      // Layer 5 (NEW): Fuzzy title similarity — catches titles differing by 1-2 words
+      else if (stringSimilarity(item.title || '', result[i].title || '') > 0.82) {
+        isDupe = true; dupeReason = 'fuzzy_title';
+      }
+      // Layer 6 (NEW): One title is a substring of the other (normalized)
+      else if ((item.title || '').length > 25 && (result[i].title || '').length > 25) {
+        const nA = normalize(item.title || ''), nB = normalize(result[i].title || '');
+        if (nA.length > 20 && nB.length > 20 && (nA.includes(nB) || nB.includes(nA))) {
+          isDupe = true; dupeReason = 'substring';
+        }
+      }
 
       if (isDupe) {
         const existingRichness = (result[i].how_to_execute?.length || 0) + (result[i].when_to_use?.length || 0) + (result[i].source_excerpt?.length || 0);
