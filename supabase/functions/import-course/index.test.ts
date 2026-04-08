@@ -134,9 +134,9 @@ Deno.test("empty lesson failure — no content extracted", () => {
 });
 
 Deno.test("html junk failure — page chrome artifacts detected", () => {
-  // Build content with lots of page chrome
-  const junk = Array.from({ length: 10 }, (_, i) =>
-    `<nav class="navbar">Nav ${i}</nav><footer>Footer</footer><aside class="sidebar">Side</aside><style>.x{font-family:Arial;background-color:red;margin:0;padding:0}</style><script>var x=1;</script><input type="text" /><form action="/search"><header>H</header>`
+  // Build content heavy on page chrome with very little real text
+  const junk = Array.from({ length: 12 }, () =>
+    `<nav class="navbar"><a href="/">Home</a></nav><footer class="footer"></footer><aside class="sidebar"></aside><style>.x{font-family:Arial;background-color:red;margin:0;padding:0}</style><script>var x=1;var y=2;</script><input type="text" /><form action="/search"></form><header class="menu"></header><link rel="stylesheet" href="x.css"><meta name="x" content="y">`
   ).join('');
   const q = classifyLessonContent(junk, `<html>${junk}</html>`, "https://example.com/lesson/1", "https://example.com/lesson/1");
   assertEquals(q.content_type, "html_junk");
