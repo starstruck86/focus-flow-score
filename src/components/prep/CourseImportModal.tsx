@@ -28,6 +28,7 @@ type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 
 
 type LessonQualityReport = {
   content_length: number;
+  cleaned_text_length: number;
   content_type: string;
   has_login_wall: boolean;
   has_redirect: boolean;
@@ -35,6 +36,7 @@ type LessonQualityReport = {
   word_count: number;
   video_embeds_found: number;
   issues: string[];
+  usable_content: boolean;
 };
 
 type LessonImportResult = {
@@ -44,6 +46,9 @@ type LessonImportResult = {
   resourceId?: string;
   quality?: LessonQualityReport;
   lessonUrl?: string;
+  requestedUrl?: string;
+  finalUrl?: string;
+  metadataOnly?: boolean;
 };
 
 interface CourseImportModalProps {
