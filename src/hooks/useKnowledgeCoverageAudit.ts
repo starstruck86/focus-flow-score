@@ -46,6 +46,7 @@ export interface ResourceAuditRow {
   last_extraction_chunks_failed: number | null;
   last_extraction_chunks_total: number | null;
   last_extraction_mode: string | null;
+  extraction_failure_type: string | null;
   // Per-resource operation progress
   active_job_type: string | null;
   active_job_step_label: string | null;
