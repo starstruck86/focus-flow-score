@@ -328,7 +328,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     if (startingRef.current) return;
     startingRef.current = true;
     setIsConnecting(true);
-    setError(null);
+    connMgr.dispatch({ type: 'CONNECT_START' });
     setGreetingStatus('waiting');
     setTranscript([]);
 
