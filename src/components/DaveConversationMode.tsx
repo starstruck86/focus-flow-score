@@ -13,7 +13,9 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { createClientTools } from './dave/clientTools';
 import { DaveDiagnosticsPanel, type DiagnosticData } from './dave/DaveDiagnosticsPanel';
+import { DaveConnectionBanner } from './dave/DaveConnectionBanner';
 import { classifyMicrophoneAccessError, releaseMicrophoneStream, requestMicrophoneAccess } from '@/lib/microphoneAccess';
+import { useDaveConnectionManager } from '@/hooks/useDaveConnectionManager';
 
 interface Props {
   isOpen: boolean;
