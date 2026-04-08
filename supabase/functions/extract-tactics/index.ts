@@ -321,6 +321,32 @@ function chunkByParagraphs(content: string, maxChunk: number, overlap: number): 
   return chunks;
 }
 
+/** Split content into meaningful segments for fallback segmented extraction */
+function splitIntoSegments(content: string): string[] {
+  // Try splitting by markdown headings first
+  const headingSections = content.split(/(?=^## )/m).filter(s => s.trim().length > 100);
+  if (headingSections.length >= 3) return headingSections;
+
+  // Try splitting by speaker turns (e.g., **Host:** or **Guest:**)
+  const speakerSections = content.split(/(?=\*\*(?:Host|Guest|Speaker)[^*]*\*\*:)/m).filter(s => s.trim().length > 100);
+  if (speakerSections.length >= 3) return speakerSections;
+
+  // Try splitting by double newlines (paragraphs), grouping into ~2000 char segments
+  const paragraphs = content.split(/\n\n+/).filter(p => p.trim().length > 30);
+  const segments: string[] = [];
+  let current = '';
+  for (const p of paragraphs) {
+    if (current.length + p.length > 2000 && current.length > 500) {
+      segments.push(current);
+      current = p;
+    } else {
+      current += (current ? '\n\n' : '') + p;
+    }
+  }
+  if (current.trim().length > 200) segments.push(current);
+  return segments.length > 0 ? segments : [content];
+}
+
 function chunkContent(content: string, isTranscript: boolean): string[] {
   if (isTranscript) {
     if (content.length <= TRANSCRIPT_SINGLE_PASS_THRESHOLD) return [content];
