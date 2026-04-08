@@ -1240,38 +1240,48 @@ async function reconcileResourceSnapshot(
 ): Promise<void> {
   console.log(`[SNAPSHOT RECONCILE] start | resource=${resourceId} | allComplete=${allComplete}`);
 
-  // Count actual KIs from knowledge_items table
-  const { count: finalKiCount } = await supabaseAdmin
+  // ── 1. Count actual KIs from knowledge_items table ──
+  const [kiResult, runCountResult, completedBatchResult, incompleteBatchResult, latestRunResult] = await Promise.all([
+    supabaseAdmin
     .from('knowledge_items')
     .select('*', { count: 'exact', head: true })
     .eq('source_resource_id', resourceId)
-    .eq('user_id', userId);
-  const finalTotal = finalKiCount ?? 0;
-  const finalKisPer1k = fullLength > 0 ? Math.round((finalTotal * 1000 / fullLength) * 100) / 100 : 0;
-
-  // Count actual extraction_runs
-  const { count: totalRunCount } = await supabaseAdmin
+    .eq('user_id', userId),
+    // ── 2. Count actual extraction_runs ──
+    supabaseAdmin
     .from('extraction_runs')
     .select('*', { count: 'exact', head: true })
-    .eq('resource_id', resourceId);
-
-  // Count completed batches from extraction_batches
-  const { count: completedBatchCount } = await supabaseAdmin
+    .eq('resource_id', resourceId),
+    // ── 3. Count completed batches ──
+    supabaseAdmin
     .from('extraction_batches')
     .select('*', { count: 'exact', head: true })
     .eq('resource_id', resourceId)
-    .eq('status', 'completed');
-  const actualCompleted = completedBatchCount ?? 0;
-
-  // Find next incomplete batch
-  const { data: incompleteBatches } = await supabaseAdmin
+    .eq('status', 'completed'),
+    // ── 4. Find next incomplete batch ──
+    supabaseAdmin
     .from('extraction_batches')
     .select('batch_index')
     .eq('resource_id', resourceId)
     .neq('status', 'completed')
     .order('batch_index', { ascending: true })
-    .limit(1);
-  const nextIncompleteBatch = incompleteBatches?.[0]?.batch_index;
+    .limit(1),
+    // ── 5. Get latest extraction_run (TELEMETRY SOURCE OF TRUTH) ──
+    supabaseAdmin
+    .from('extraction_runs')
+    .select('id, status, extraction_mode, raw_candidate_counts, saved_candidate_count, validated_candidate_count, merged_candidate_count, chunks_processed, chunks_failed, chunks_total, error_message, started_at, completed_at, model, duration_ms')
+    .eq('resource_id', resourceId)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle(),
+  ]);
+
+  const finalTotal = kiResult.count ?? 0;
+  const finalKisPer1k = fullLength > 0 ? Math.round((finalTotal * 1000 / fullLength) * 100) / 100 : 0;
+  const totalRunCount = runCountResult.count ?? 0;
+  const actualCompleted = completedBatchResult.count ?? 0;
+  const nextIncompleteBatch = incompleteBatchResult.data?.[0]?.batch_index;
+  const latestRun = latestRunResult.data as any;
 
   const depthBucket = computeDepthBucket(finalTotal, fullLength, category);
   const underExtracted = computeUnderExtracted(finalTotal, fullLength, category);
@@ -1283,10 +1293,34 @@ async function reconcileResourceSnapshot(
     kis_per_1k_chars: finalKisPer1k,
     extraction_depth_bucket: depthBucket,
     under_extracted_flag: underExtracted,
-    extraction_attempt_count: totalRunCount ?? 0,
+    extraction_attempt_count: totalRunCount,
     extraction_batches_completed: actualCompleted,
     extraction_batch_total: totalBatches,
   };
+
+  // ── TELEMETRY INVARIANT: always populate latest-run fields from the run row ──
+  if (latestRun) {
+    const rawCounts = latestRun.raw_candidate_counts;
+    const totalRaw = rawCounts && typeof rawCounts === 'object'
+      ? Object.values(rawCounts as Record<string, number>).reduce((s: number, v: any) => s + (typeof v === 'number' ? v : 0), 0)
+      : 0;
+    update.last_extraction_run_id = latestRun.id;
+    update.last_extraction_returned_ki_count = totalRaw;
+    update.last_extraction_validated_ki_count = latestRun.validated_candidate_count ?? 0;
+    update.last_extraction_saved_ki_count = latestRun.saved_candidate_count ?? 0;
+    update.last_extraction_deduped_ki_count = latestRun.merged_candidate_count ?? 0;
+    update.last_extraction_error = latestRun.error_message || null;
+    update.last_extraction_started_at = latestRun.started_at;
+    update.last_extraction_completed_at = latestRun.completed_at;
+    update.last_extraction_duration_ms = latestRun.duration_ms ?? null;
+    update.last_extraction_model = latestRun.model || null;
+    update.extraction_mode = latestRun.extraction_mode || 'deep';
+    update.raw_candidate_counts = rawCounts || {};
+    update.merged_candidate_count = latestRun.merged_candidate_count ?? 0;
+    console.log(`[SNAPSHOT RECONCILE] telemetry from run ${latestRun.id}: raw=${totalRaw} val=${latestRun.validated_candidate_count} saved=${latestRun.saved_candidate_count} chunks_failed=${latestRun.chunks_failed}`);
+  } else {
+    console.warn(`[SNAPSHOT RECONCILE] WARNING: no extraction_runs found for resource=${resourceId} — telemetry fields will be null`);
+  }
 
   if (allComplete) {
     update.active_job_status = 'succeeded';

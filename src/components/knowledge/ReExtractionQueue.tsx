@@ -126,7 +126,6 @@ function formatNoLiftReason(reason: NoLiftReason): string {
     duplicate_heavy: 'All new items were duplicates of existing KIs',
     extractor_returned_no_new_items: 'AI extractor returned no new items from this content',
     extractor_weak_output: 'AI extractor produced too few candidates',
-    telemetry_inconsistency: 'Run finished without usable pipeline telemetry — do not treat as extractor weakness',
     api_failure: 'API failure — credits exhausted or rate-limited',
     legacy_pipeline_rejection: 'Legacy pipeline quality-gate rejected valid output',
     items_generated_but_filtered_out: 'Items generated but failed quality validation',
@@ -141,7 +140,6 @@ function formatNoLiftReason(reason: NoLiftReason): string {
 function formatBottleneck(b: DominantBottleneck): string {
   const map: Record<DominantBottleneck, string> = {
     extractor_weak_output: 'Extractor weak',
-    telemetry_inconsistency: 'Telemetry mismatch',
     api_failure: 'API failure',
     legacy_pipeline_rejection: 'Legacy rejection',
     validation_too_strict: 'Validation strict',
@@ -158,7 +156,6 @@ function BottleneckBadge({ bottleneck }: { bottleneck?: DominantBottleneck }) {
   if (!bottleneck || bottleneck === 'none') return null;
   const cls = bottleneck === 'already_mined' ? 'border-muted-foreground/40 text-muted-foreground'
     : bottleneck === 'extractor_weak_output' ? 'border-destructive/40 text-destructive'
-    : bottleneck === 'telemetry_inconsistency' ? 'border-muted-foreground/40 text-muted-foreground'
     : bottleneck === 'api_failure' ? 'border-orange-500/40 text-orange-600'
     : bottleneck === 'legacy_pipeline_rejection' ? 'border-purple-500/40 text-purple-600'
     : bottleneck === 'validation_too_strict' ? 'border-amber-500/40 text-amber-600'
