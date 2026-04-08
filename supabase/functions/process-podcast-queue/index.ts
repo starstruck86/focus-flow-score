@@ -453,6 +453,16 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
+    // ── Early exit: nothing to process ──
+    const { count: queuedCount } = await supabase
+      .from("podcast_import_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "queued");
+
+    if (!queuedCount || queuedCount === 0) {
+      return json({ message: "No queued items", processed: 0 });
+    }
+
     // ── Circuit breaker ──
     const { data: recentFailed } = await supabase
       .from("podcast_import_queue")
@@ -467,12 +477,12 @@ Deno.serve(async (req) => {
         const { count: successAfter } = await supabase
           .from("podcast_import_queue")
           .select("id", { count: "exact", head: true })
-          .eq("status", "complete")
+          .eq("status", "completed")
           .gt("processed_at", recentFailed[recentFailed.length - 1].processed_at || "1970-01-01");
 
         if (!successAfter || successAfter === 0) {
           const failureReason = recentFailed[0].failure_type;
-          console.error(`CIRCUIT BREAKER: ${CIRCUIT_BREAKER_THRESHOLD} consecutive "${failureReason}" failures. Pausing.`);
+          console.error(`CIRCUIT BREAKER: ${CIRCUIT_BREAKER_THRESHOLD} consecutive "${failureReason}" failures. Pausing remaining queued items.`);
 
           await supabase.from("podcast_import_queue").update({
             status: "failed", pipeline_stage: "failed",
