@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, BookOpen, ExternalLink, Video, FileText, HelpCircle, CheckCircle2, XCircle, AlertTriangle, KeyRound, ChevronDown, Info } from 'lucide-react';
+import { Loader2, BookOpen, ExternalLink, Video, FileText, HelpCircle, CheckCircle2, XCircle, AlertTriangle, KeyRound, ChevronDown, Info, Download } from 'lucide-react';
 import { useClassifyResource, useAddUrlResource } from '@/hooks/useResourceUpload';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -373,11 +373,20 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         classification.resource_type = isVideoLesson ? 'video' : 'article';
         if (metadataOnly) {
           (classification as any).content_status = 'metadata_only';
+          classification.tags = Array.from(new Set([...classification.tags, 'needs-transcript']));
         }
         classification.tags = Array.from(new Set([...(classification.tags || []), 'course', courseTitle].filter(Boolean)));
 
         const resource = await addUrl.mutateAsync({ url: lesson.url, classification });
         const resourceId = resource?.id || null;
+
+        // Flag metadata-only resources so enrichment flows skip them until content arrives
+        if (metadataOnly && resourceId) {
+          await supabase.from('resources').update({
+            enrichment_status: 'incomplete',
+            content_status: 'metadata_only',
+          } as any).eq('id', resourceId);
+        }
 
         await writeLineageRow({
           resourceId,
@@ -725,10 +734,46 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                 const meta = lessonResults.filter(r => r.status === 'metadata_only').length;
                 const fail = lessonResults.filter(r => r.status === 'failed').length;
                 return (
-                  <div className="flex items-center gap-3 text-xs mt-2 p-2 rounded-md bg-muted/50">
-                    {full > 0 && <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" />{full} full</span>}
-                    {meta > 0 && <span className="flex items-center gap-1"><Info className="h-3 w-3 text-amber-500" />{meta} metadata-only</span>}
-                    {fail > 0 && <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" />{fail} failed</span>}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-3 text-xs p-2 rounded-md bg-muted/50">
+                      {full > 0 && <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" />{full} full</span>}
+                      {meta > 0 && <span className="flex items-center gap-1"><Info className="h-3 w-3 text-amber-500" />{meta} metadata-only</span>}
+                      {fail > 0 && <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" />{fail} failed</span>}
+                    </div>
+                    {fail > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[10px] gap-1"
+                        onClick={() => {
+                          const toImport = lessons.filter((_, i) => selected.has(i));
+                          const failedRows = lessonResults
+                            .filter(r => r.status === 'failed')
+                            .map(r => {
+                              const lesson = toImport[r.lessonIndex];
+                              return {
+                                title: lesson?.title || 'Unknown',
+                                url: r.lessonUrl || lesson?.url || '',
+                                error: r.error || 'Unknown error',
+                                content_type: r.quality?.content_type || '',
+                                issues: r.quality?.issues?.join('; ') || '',
+                              };
+                            });
+                          const header = 'Title\tURL\tError\tContent Type\tIssues';
+                          const rows = failedRows.map(r => `${r.title}\t${r.url}\t${r.error}\t${r.content_type}\t${r.issues}`);
+                          const tsv = [header, ...rows].join('\n');
+                          const blob = new Blob([tsv], { type: 'text/tab-separated-values' });
+                          const a = document.createElement('a');
+                          a.href = URL.createObjectURL(blob);
+                          a.download = `course-import-retry-report-${new Date().toISOString().slice(0, 10)}.tsv`;
+                          a.click();
+                          URL.revokeObjectURL(a.href);
+                        }}
+                      >
+                        <Download className="h-3 w-3" />
+                        Export retry report ({fail} failed)
+                      </Button>
+                    )}
                   </div>
                 );
               })()}
