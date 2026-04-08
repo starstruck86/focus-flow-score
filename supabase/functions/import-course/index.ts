@@ -861,6 +861,27 @@ Deno.serve(async (req) => {
         );
       }
       const result = await fetchLessonContent(url, lesson_url, creds);
+      
+      // Fail loudly on login walls or empty content
+      if (result.quality.has_login_wall) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Lesson page returned a login wall — authentication failed or expired', quality: result.quality, debug: result.debug }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (result.quality.content_type === 'empty') {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Lesson page returned empty content — nothing to import', quality: result.quality, debug: result.debug }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (result.quality.content_type === 'html_junk') {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Lesson page returned raw HTML fragments — content extraction failed', quality: result.quality, debug: result.debug }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       return new Response(
         JSON.stringify({ success: true, ...result }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
