@@ -1,6 +1,10 @@
 /**
- * Verification Queue — auto-populated list of resources most likely to benefit
- * from deeper extraction or human review.
+ * Verification Queue — auto-populated from canonical post-extraction state.
+ * Shows resources whose canonical state maps to the 'verification_queue' panel.
+ *
+ * ── RENDER PRIORITY (canonical state) ──
+ * This panel ONLY shows resources where derivePostExtractionState().panels
+ * includes 'verification_queue'. It does NOT use independent heuristics.
  */
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,9 +13,13 @@ import { Button } from '@/components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Crosshair, Zap } from 'lucide-react';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Crosshair, Zap, Info } from 'lucide-react';
 import type { ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
 import { ResourceOperationProgress } from './ResourceOperationProgress';
+import { derivePostExtractionState, filterByPanel, type PostExtractionStateResult } from '@/lib/postExtractionState';
 
 interface Props {
   resources: ResourceAuditRow[];
@@ -21,85 +29,34 @@ interface Props {
 
 interface QueueEntry {
   resource: ResourceAuditRow;
-  reason: string;
+  canonical: PostExtractionStateResult;
   priority: number;
 }
 
 // Resource type priority: higher = more valuable for extraction
 const TYPE_PRIORITY: Record<string, number> = {
-  document: 4,   // frameworks, playbooks
-  article: 3,    // structured content
-  lesson: 2,     // training content
-  transcript: 2, // call/podcast transcripts
+  document: 4,
+  article: 3,
+  lesson: 2,
+  transcript: 2,
   podcast: 2,
-  reference_only: 0, // excluded
+  reference_only: 0,
 };
 
-function isExcluded(r: ResourceAuditRow): boolean {
-  return r.resource_type === 'reference_only';
-}
-
-function isResumable(r: ResourceAuditRow): boolean {
-  return r.extraction_is_resumable
-    || (r.extraction_batches_completed > 0 && r.extraction_batches_completed < r.extraction_batch_total)
-    || r.last_extraction_run_status === 'partial_complete_resumable';
-}
-
-function isAlreadyStrong(r: ResourceAuditRow): boolean {
-  // Resumable resources are NEVER considered "already strong" — they have unfinished work
-  if (isResumable(r)) return false;
-  return r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5;
-}
-
 function buildQueue(resources: ResourceAuditRow[]): QueueEntry[] {
-  const seen = new Set<string>();
-  const entries: QueueEntry[] = [];
-  // Guardrail: exclude reference_only and already-strong resources
-  const eligible = resources.filter(r => !isExcluded(r) && !isAlreadyStrong(r));
+  // Derive from canonical state — only resources that belong to verification_queue
+  const eligible = filterByPanel(resources, 'verification_queue');
 
-  const add = (r: ResourceAuditRow, reason: string, priority: number) => {
-    if (seen.has(r.resource_id)) return;
-    seen.add(r.resource_id);
-    // Boost priority by resource type value
-    const typeBoost = TYPE_PRIORITY[r.resource_type] ?? 1;
-    entries.push({ resource: r, reason, priority: priority - (typeBoost * 0.1) });
-  };
-
-  // Bucket 0 — Resumable extractions always get top priority
-  eligible
-    .filter(r => isResumable(r))
-    .sort((a, b) => b.content_length - a.content_length)
-    .forEach(r => add(r, `Resumable — batch ${r.extraction_batches_completed + 1} of ${r.extraction_batch_total}`, 0));
-
-  // Bucket A — High value + under-extracted (content_length ≥ 1500)
-  eligible
-    .filter(r => r.under_extracted_flag && r.content_length >= 1500)
-    .sort((a, b) => b.content_length - a.content_length)
-    .slice(0, 10)
-    .forEach(r => add(r, 'Under-extracted, high content value', 1));
-
-  // Bucket B — Rich content, weak density (content_length ≥ 3000, kis_per_1k < 1.0)
-  eligible
-    .filter(r => r.content_length >= 3000 && r.kis_per_1k_chars < 1.0)
-    .sort((a, b) => a.kis_per_1k_chars - b.kis_per_1k_chars)
-    .slice(0, 10)
-    .forEach(r => add(r, 'Rich content, weak KI density', 2));
-
-  // Bucket C — Large framework assets (document, content_length ≥ 5000)
-  eligible
-    .filter(r => (r.resource_type === 'document' || r.resource_type === 'article') && r.content_length >= 5000)
-    .sort((a, b) => a.kis_per_1k_chars - b.kis_per_1k_chars)
-    .slice(0, 5)
-    .forEach(r => add(r, 'Large framework asset — high extraction potential', 3));
-
-  // Bucket D — Weak transcripts (kis_per_1k < 0.8)
-  eligible
-    .filter(r => (r.resource_type === 'transcript' || r.resource_type === 'podcast') && r.kis_per_1k_chars < 0.8)
-    .sort((a, b) => a.kis_per_1k_chars - b.kis_per_1k_chars)
-    .slice(0, 5)
-    .forEach(r => add(r, 'Transcript — weak density', 4));
-
-  return entries.sort((a, b) => a.priority - b.priority);
+  return eligible
+    .map(r => {
+      const canonical = derivePostExtractionState(r);
+      const typeBoost = TYPE_PRIORITY[r.resource_type] ?? 1;
+      // Higher content = higher priority, boosted by type value
+      const priority = (r.content_length / 1000) + (typeBoost * 2);
+      return { resource: r, canonical, priority };
+    })
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, 25);
 }
 
 export function VerificationQueue({ resources, onFlagForReExtraction, onSelectResource }: Props) {
