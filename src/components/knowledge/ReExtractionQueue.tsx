@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ReExtractQueueItem, CoverageLiftSummary, LiftStatus, NoLiftReason } from '@/hooks/useDeepReExtraction';
+import { ResourceOperationProgress } from './ResourceOperationProgress';
 
 interface Props {
   queue: ReExtractQueueItem[];
