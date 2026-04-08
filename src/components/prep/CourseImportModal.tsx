@@ -304,8 +304,20 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         lessonData = data;
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to fetch lesson';
-        updateLessonResult(i, { status: 'failed', error: errMsg });
+        updateLessonResult(i, { status: 'failed', error: errMsg, lessonUrl: lesson.url });
         await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'fetching_lesson', error: errMsg });
+        setImportProgress({ done: i + 1, total: toImport.length, current: '' });
+        continue;
+      }
+
+      // Capture server-side quality report
+      const quality: LessonQualityReport | undefined = lessonData?.quality;
+
+      // Server already fails loudly on login_page / empty / html_junk
+      if (!lessonData?.success) {
+        const errMsg = lessonData?.error || 'Lesson fetch returned failure';
+        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url });
+        await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'quality_gate', error: errMsg });
         setImportProgress({ done: i + 1, total: toImport.length, current: '' });
         continue;
       }
@@ -319,7 +331,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
       if (!validation.valid) {
         const errMsg = validation.reason || 'Content validation failed';
-        updateLessonResult(i, { status: 'failed', error: errMsg });
+        updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url });
         await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'validating_content', error: `${validation.code}: ${errMsg}` });
         setImportProgress({ done: i + 1, total: toImport.length, current: '' });
         console.warn(`Validation failed for "${lesson.title}": ${errMsg}`);
