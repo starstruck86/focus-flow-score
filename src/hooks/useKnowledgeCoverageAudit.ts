@@ -42,6 +42,13 @@ export interface ResourceAuditRow {
   last_extraction_error: string | null;
   last_extraction_duration_ms: number | null;
   last_extraction_model: string | null;
+  // Per-resource operation progress
+  active_job_type: string | null;
+  active_job_step_label: string | null;
+  active_job_progress_current: number | null;
+  active_job_progress_total: number | null;
+  active_job_progress_pct: number | null;
+  active_job_updated_at: string | null;
 }
 
 export interface CoverageAuditSummary {
@@ -270,6 +277,13 @@ export function useKnowledgeCoverageAudit() {
           last_extraction_error: r.last_extraction_error || null,
           last_extraction_duration_ms: r.last_extraction_duration_ms ?? null,
           last_extraction_model: r.last_extraction_model || null,
+          // Per-resource operation progress
+          active_job_type: r.active_job_type || null,
+          active_job_step_label: r.active_job_step_label || null,
+          active_job_progress_current: r.active_job_progress_current ?? null,
+          active_job_progress_total: r.active_job_progress_total ?? null,
+          active_job_progress_pct: r.active_job_progress_pct ?? null,
+          active_job_updated_at: r.active_job_updated_at || null,
         };
       });
 
