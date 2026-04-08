@@ -975,13 +975,39 @@ export function useDeepReExtraction() {
     });
 
     setIsRunning(false);
+
+    // ── AUTO-CLEAR: Remove completed no-lift items from queue ──
+    // A resource exits the queue if:
+    // - status is 'completed' (not partial/resumable/failed)
+    // - ki_delta === 0 and net_new_unique === 0
+    // - lift_status is 'no_lift'
+    // This prevents exhausted reruns from lingering in the queue.
+    setQueue(prev => {
+      const remaining = prev.filter(item => {
+        if (item.status !== 'completed') return true; // keep non-terminal
+        if (item.lift_status === 'meaningful_lift' || item.lift_status === 'minor_lift') return true; // keep lifts for review
+        // Remove completed no-lift / zero-delta items
+        const isExhausted = (item.ki_delta ?? 0) === 0 && (item.net_new_unique ?? 0) === 0;
+        if (isExhausted) {
+          console.log(`[QUEUE AUTO-CLEAR] Removing exhausted item: "${item.title}" (no lift, delta=0)`);
+          return false;
+        }
+        return true;
+      });
+      if (remaining.length < prev.length) {
+        const cleared = prev.length - remaining.length;
+        console.log(`[QUEUE AUTO-CLEAR] Removed ${cleared} exhausted no-lift items from queue`);
+      }
+      return remaining;
+    });
+
     qc.invalidateQueries({ queryKey: ['knowledge-coverage-audit'] });
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
     qc.invalidateQueries({ queryKey: ['resources'] });
     if (totalNetNew > 0) {
       toast.success(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalNetNew} net new KIs`);
     } else if (noLiftCount === succeeded && succeeded > 0) {
-      toast.warning(`${succeeded}/${queued.length} runs completed, but produced no measurable coverage lift`);
+      toast.warning(`${succeeded}/${queued.length} runs completed, but produced no measurable coverage lift. Exhausted items auto-cleared.`);
     } else {
       toast.info(`Deep re-extraction complete: ${succeeded}/${queued.length} succeeded, +${totalNetNew} net new KIs`);
     }
