@@ -720,9 +720,17 @@ ${chunks[i]}`;
 
   // Surface chunk errors in summary for diagnostics
   const chunkErrors = getAndClearChunkErrors();
+  // chunksProcessed should never go negative — it's per-unique-chunk, not per-pass
+  // chunksFailed counts across all passes, so cap chunksProcessed at 0
+  const effectiveChunksProcessed = Math.max(0, chunks.length * passesRun.length - chunksFailed);
+  const totalChunkCalls = chunks.length * passesRun.length;
+  const allCallsFailed = chunksFailed >= totalChunkCalls && totalChunkCalls > 0;
   const errorSuffix = chunksFailed > 0
-    ? ` | ${chunksFailed} chunk(s) failed${chunkErrors.length > 0 ? ': ' + chunkErrors[0].slice(0, 80) : ''}`
+    ? ` | ${chunksFailed}/${totalChunkCalls} chunk call(s) failed${allCallsFailed ? ' [ALL FAILED]' : ''}${chunkErrors.length > 0 ? ': ' + chunkErrors[0].slice(0, 80) : ''}`
     : '';
+
+  // Re-push errors so serverSidePersist can also read them
+  for (const e of chunkErrors) _lastChunkErrors.push(e);
 
   const summary = `${extractionMode}: ${passesRun.join('+')} | ${allCandidates.length} raw → ${dedupeResult.kept.length} deduped → ${validated.length} validated | ${modelKisPer1k} KIs/1k | ${modelDepthBucket}${errorSuffix}`;
   console.log(`[extract-tactics] FINAL: ${summary}`);
