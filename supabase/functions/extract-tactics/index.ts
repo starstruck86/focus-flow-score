@@ -720,9 +720,17 @@ ${chunks[i]}`;
 
   // Surface chunk errors in summary for diagnostics
   const chunkErrors = getAndClearChunkErrors();
+  // chunksProcessed should never go negative — it's per-unique-chunk, not per-pass
+  // chunksFailed counts across all passes, so cap chunksProcessed at 0
+  const effectiveChunksProcessed = Math.max(0, chunks.length * passesRun.length - chunksFailed);
+  const totalChunkCalls = chunks.length * passesRun.length;
+  const allCallsFailed = chunksFailed >= totalChunkCalls && totalChunkCalls > 0;
   const errorSuffix = chunksFailed > 0
-    ? ` | ${chunksFailed} chunk(s) failed${chunkErrors.length > 0 ? ': ' + chunkErrors[0].slice(0, 80) : ''}`
+    ? ` | ${chunksFailed}/${totalChunkCalls} chunk call(s) failed${allCallsFailed ? ' [ALL FAILED]' : ''}${chunkErrors.length > 0 ? ': ' + chunkErrors[0].slice(0, 80) : ''}`
     : '';
+
+  // Re-push errors so serverSidePersist can also read them
+  for (const e of chunkErrors) _lastChunkErrors.push(e);
 
   const summary = `${extractionMode}: ${passesRun.join('+')} | ${allCandidates.length} raw → ${dedupeResult.kept.length} deduped → ${validated.length} validated | ${modelKisPer1k} KIs/1k | ${modelDepthBucket}${errorSuffix}`;
   console.log(`[extract-tactics] FINAL: ${summary}`);
@@ -742,7 +750,7 @@ ${chunks[i]}`;
     modelKisPer1k,
     summary,
     chunksTotal: chunks.length,
-    chunksProcessed: chunks.length - chunksFailed,
+    chunksProcessed: effectiveChunksProcessed,
     chunksFailed,
   };
 }
@@ -1003,11 +1011,29 @@ async function serverSidePersist(
   let status: 'completed' | 'partial' | 'failed' = 'completed';
   let error: string | null = null;
 
-  console.log(`[extract-tactics] PERSIST: ${kiRows.length} rows to save, ${duplicatesSkipped} pre-filtered as dupes`);
+  // ── CRITICAL: Detect all-chunks-failed (silent API failure) ──
+  // If every chunk call failed, this run produced nothing — it is a failure, not a completion.
+  const allChunksFailed = result.chunksFailed > 0 && result.chunksFailed >= (result.chunksTotal * result.passesRun.length);
+  const chunkErrors = getAndClearChunkErrors();
+  if (allChunksFailed) {
+    const errorCause = chunkErrors.length > 0 ? chunkErrors[0].slice(0, 200) : 'All extraction passes failed (API/credits)';
+    const is402 = chunkErrors.some(e => e.includes('402'));
+    const is429 = chunkErrors.some(e => e.includes('429'));
+    status = 'failed';
+    error = is402 ? `API credits exhausted (402): ${errorCause}` 
+          : is429 ? `API rate limited (429): ${errorCause}`
+          : `All chunk extractions failed: ${errorCause}`;
+    console.error(`[extract-tactics] ALL CHUNKS FAILED: ${error}`);
+  }
+
+  console.log(`[extract-tactics] PERSIST: ${kiRows.length} rows to save, ${duplicatesSkipped} pre-filtered as dupes | allChunksFailed=${allChunksFailed}`);
 
   try {
     if (kiRows.length === 0) {
-      status = duplicatesSkipped > 0 ? 'completed' : (result.validatedCount > 0 ? 'failed' : 'completed');
+      // Only mark completed if chunks actually succeeded but yielded nothing (true zero)
+      if (!allChunksFailed) {
+        status = duplicatesSkipped > 0 ? 'completed' : (result.validatedCount > 0 ? 'failed' : 'completed');
+      }
       console.log(`[extract-tactics] PERSIST: 0 rows to save (${duplicatesSkipped} dupes skipped)`);
     } else {
       // Save KIs in batches of 50 — DB unique index on (user_id, ki_fingerprint) is the final guard
@@ -1322,7 +1348,14 @@ async function reconcileResourceSnapshot(
     console.warn(`[SNAPSHOT RECONCILE] WARNING: no extraction_runs found for resource=${resourceId} — telemetry fields will be null`);
   }
 
-  if (allComplete) {
+  // ── Detect if latest run was actually a silent failure (all chunks failed) ──
+  const latestRunActuallyFailed = latestRun && latestRun.status === 'failed';
+  const latestRunSilentFailure = latestRun && latestRun.chunks_failed > 0 
+    && latestRun.chunks_failed >= latestRun.chunks_total 
+    && (latestRun.saved_candidate_count ?? 0) === 0 
+    && (latestRun.validated_candidate_count ?? 0) === 0;
+
+  if (allComplete && !latestRunActuallyFailed && !latestRunSilentFailure) {
     update.active_job_status = 'succeeded';
     update.active_job_finished_at = new Date().toISOString();
     update.extraction_is_resumable = false;
@@ -1333,6 +1366,20 @@ async function reconcileResourceSnapshot(
     update.active_job_progress_current = totalBatches;
     update.active_job_progress_total = totalBatches;
     update.active_job_progress_pct = 100;
+  } else if (allComplete && (latestRunActuallyFailed || latestRunSilentFailure)) {
+    // Job "completed" its loop, but the actual extraction failed — do NOT mark as succeeded
+    update.active_job_status = 'failed';
+    update.active_job_finished_at = new Date().toISOString();
+    update.extraction_is_resumable = false;
+    update.extraction_batch_status = 'failed';
+    update.last_extraction_run_status = 'failed';
+    update.extraction_failure_type = latestRun?.error_message?.includes('402') ? 'api_credits_exhausted' 
+      : latestRun?.error_message?.includes('429') ? 'api_rate_limited' 
+      : 'api_failure';
+    update.last_extraction_summary = `Job mode failed: all extraction calls failed. ${latestRun?.error_message || 'Unknown API error'}`;
+    update.active_job_step_label = null;
+    update.active_job_progress_pct = null;
+    console.warn(`[SNAPSHOT RECONCILE] SILENT FAILURE DETECTED: run=${latestRun?.id} chunks_failed=${latestRun?.chunks_failed} — marking as failed`);
   } else {
     // Still incomplete — mark as partial/resumable.
     // Do NOT set 'running' here — the self-invoke dispatch section handles that separately.

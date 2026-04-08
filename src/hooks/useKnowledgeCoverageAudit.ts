@@ -46,6 +46,7 @@ export interface ResourceAuditRow {
   last_extraction_chunks_failed: number | null;
   last_extraction_chunks_total: number | null;
   last_extraction_mode: string | null;
+  extraction_failure_type: string | null;
   // Per-resource operation progress
   active_job_type: string | null;
   active_job_step_label: string | null;
@@ -98,7 +99,7 @@ export function useKnowledgeCoverageAudit() {
       const PAGE_SIZE = 1000;
       const { data: resources, error: rErr } = await supabase
         .from('resources' as any)
-        .select('id, title, resource_type, enrichment_status, active_job_status, extraction_batch_status, extraction_batches_completed, extraction_batch_total, extraction_is_resumable, content_length, extraction_attempt_count, extraction_mode, extraction_passes_run, raw_candidate_counts, merged_candidate_count, kis_per_1k_chars, extraction_depth_bucket, under_extracted_flag, last_extraction_summary, extraction_method, last_extraction_run_id, last_extraction_run_status, last_extraction_returned_ki_count, last_extraction_deduped_ki_count, last_extraction_validated_ki_count, last_extraction_saved_ki_count, last_extraction_error, last_extraction_duration_ms, last_extraction_model, current_resource_ki_count, current_resource_kis_per_1k')
+        .select('id, title, resource_type, enrichment_status, active_job_status, extraction_batch_status, extraction_batches_completed, extraction_batch_total, extraction_is_resumable, content_length, extraction_attempt_count, extraction_mode, extraction_passes_run, raw_candidate_counts, merged_candidate_count, kis_per_1k_chars, extraction_depth_bucket, under_extracted_flag, last_extraction_summary, extraction_method, last_extraction_run_id, last_extraction_run_status, last_extraction_returned_ki_count, last_extraction_deduped_ki_count, last_extraction_validated_ki_count, last_extraction_saved_ki_count, last_extraction_error, last_extraction_duration_ms, last_extraction_model, current_resource_ki_count, current_resource_kis_per_1k, extraction_failure_type, active_job_type, active_job_step_label, active_job_progress_current, active_job_progress_total, active_job_progress_pct, active_job_updated_at')
         .order('content_length', { ascending: false });
       if (rErr) throw rErr;
 
@@ -293,6 +294,7 @@ export function useKnowledgeCoverageAudit() {
           last_extraction_chunks_failed: latestRun?.chunks_failed ?? null,
           last_extraction_chunks_total: latestRun?.chunks_total ?? null,
           last_extraction_mode: latestRun?.extraction_mode ?? r.extraction_mode ?? null,
+          extraction_failure_type: r.extraction_failure_type || null,
           // Per-resource operation progress
           active_job_type: r.active_job_type || null,
           active_job_step_label: r.active_job_step_label || null,

@@ -215,13 +215,15 @@ export function derivePostExtractionState(r: ResourceAuditRow): PostExtractionSt
     }
 
     // 5. API / chunk failure: all chunks failed → not an extractor problem
-    if (hasChunkFailures(r)) {
+    // Also catches backfilled resources with extraction_failure_type set
+    const failureType = (r as any).extraction_failure_type;
+    if (hasChunkFailures(r) || failureType === 'api_failure' || failureType === 'api_credits_exhausted' || failureType === 'api_rate_limited') {
       const failed = (r as any).last_extraction_chunks_failed ?? 0;
       const errSnippet = r.last_extraction_error
         ? ` Error: ${r.last_extraction_error.slice(0, 80)}`
-        : '';
+        : failureType ? ` Type: ${failureType}` : '';
       return mk('api_failure_review',
-        `${failed} chunk(s) failed — likely API credit/rate-limit issue.${errSnippet}`);
+        `${failed > 0 ? `${failed} chunk(s) failed` : 'API failure detected'} — likely API credit/rate-limit issue.${errSnippet}`);
     }
 
     // 6. Legacy single_pass rejection: old pipeline quality-gate blocked valid items
