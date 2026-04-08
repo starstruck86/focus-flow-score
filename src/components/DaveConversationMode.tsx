@@ -612,6 +612,13 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
           )}
         </div>
 
+        {/* Connection status banner */}
+        <DaveConnectionBanner
+          meta={connMgr.meta}
+          onRetry={onRetry}
+          className="mx-3 mb-1"
+        />
+
         {/* Status bar */}
         <div className="flex items-center justify-center gap-2 px-3 pb-2">
           <button
