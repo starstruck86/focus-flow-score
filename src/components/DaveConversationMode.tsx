@@ -455,7 +455,9 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
       releasePreflightStream();
+      connMgr.cleanup();
       if (conversation.status === 'connected') {
+        cleanDisconnectRef.current = true;
         conversation.endSession();
       }
     };
