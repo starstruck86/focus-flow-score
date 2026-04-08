@@ -92,6 +92,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [daveBlockedByTab, setDaveBlockedByTab] = useState(false);
   const { getSession: getDaveSession, invalidateCache: invalidateDaveCache, isFetching: isFetchingDaveSession } = useDaveContext();
   const daveDrift = useGroupDrift('dave');
+  const daveConnMgr = useDaveConnectionManager();
   const daveChannelRef = useRef<BroadcastChannel | null>(null);
   useVoiceReminders();
 
