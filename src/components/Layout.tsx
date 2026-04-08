@@ -396,6 +396,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Dave Debug Panel — Ctrl+Shift+D to toggle */}
       <DaveDebugPanel
         meta={daveConnMgr.meta}
+        eventHistory={daveConnMgr.eventHistory}
         extraInfo={{
           daveOpen,
           daveMinimized,
