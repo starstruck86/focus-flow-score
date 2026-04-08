@@ -50,6 +50,8 @@ export interface UseDaveConnectionManager {
   isReconnectExhausted: boolean;
   /** Last N connection events for debug panel */
   eventHistory: DaveEventRecord[];
+  /** Dump full connection summary to console for runtime validation */
+  dumpSummary: () => void;
 }
 
 export function useDaveConnectionManager(): UseDaveConnectionManager {
@@ -237,6 +239,28 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
     };
   }, [stopHeartbeat, cancelReconnect]);
 
+  // Console summary dump for runtime validation
+  const dumpSummary = useCallback(() => {
+    const m = metaRef.current;
+    const events = eventHistoryRef.current;
+    console.group('%c[DaveConn] Connection Summary', 'color: #6366f1; font-weight: bold; font-size: 13px');
+    console.table({
+      state: m.state,
+      sessionId: m.sessionId || '—',
+      reconnectAttempts: m.reconnectAttemptCount,
+      reconnectTimerActive: m.reconnectTimerActive,
+      heartbeatLatency: m.heartbeatLatencyMs !== null ? `${m.heartbeatLatencyMs}ms` : '—',
+      lastError: m.lastError || '—',
+      lastConnected: m.lastConnectedAt ? new Date(m.lastConnectedAt).toISOString() : '—',
+      lastDisconnected: m.lastDisconnectedAt ? new Date(m.lastDisconnectedAt).toISOString() : '—',
+    });
+    console.log('Event history:');
+    events.forEach(ev => {
+      console.log(`  ${new Date(ev.ts).toISOString().substring(11, 23)} ${ev.type}${ev.detail ? ` (${ev.detail})` : ''}`);
+    });
+    console.groupEnd();
+  }, []);
+
   return {
     meta,
     dispatch,
@@ -248,5 +272,6 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
     reset,
     isReconnectExhausted: meta.reconnectAttemptCount >= MAX_RECONNECT_ATTEMPTS,
     eventHistory: eventHistoryRef.current,
+    dumpSummary,
   };
 }
