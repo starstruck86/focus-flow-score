@@ -1310,6 +1310,62 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
     addAsset(href, text, 'kajabi-downloads-sidebar');
   }
 
+  // Strategy 7: Detect PDF URLs anywhere in HTML (not limited to <a> tags)
+  const rawPdfUrls = html.match(/https?:\/\/[^\s"'<>]+\.pdf[^\s"'<>]*/gi) || [];
+  for (const pdfUrl of rawPdfUrls) {
+    const cleaned = pdfUrl.replace(/[)\]},;]+$/, ''); // strip trailing punctuation
+    if (!seenUrls.has(cleaned)) {
+      const filename = decodeURIComponent(cleaned.split('/').pop()?.split('?')[0] || 'document.pdf');
+      seenUrls.add(cleaned);
+      assets.push({ filename, url: cleaned, extension: 'pdf', source_section: 'raw-url-scan' });
+      debug.push(`[Asset Detection] Raw PDF URL found in HTML: ${filename} from ${cleaned}`);
+    }
+  }
+
+  // Strategy 8: Detect PDF filenames inside JSON/script blocks (e.g. "Nexus_Exercise.pdf")
+  const scriptBlocks = html.match(/<script[^>]*>[\s\S]{0,50000}?<\/script>/gi) || [];
+  const jsonLike = html.match(/\{[^{}]{0,10000}\}/g) || [];
+  const searchBlocks = [...scriptBlocks, ...jsonLike];
+  for (const block of searchBlocks) {
+    const pdfRefs = block.match(/["']([^"']*?[a-zA-Z0-9_-]+\.pdf)["']/gi) || [];
+    for (const ref of pdfRefs) {
+      const raw = ref.replace(/^["']|["']$/g, '');
+      let resolvedUrl = raw;
+      try {
+        if (raw.startsWith('/')) resolvedUrl = baseUrl + raw;
+        else if (!raw.startsWith('http')) {
+          // Could be just a filename — skip if no path info
+          if (!raw.includes('/')) continue;
+          resolvedUrl = new URL(raw, lessonUrl).toString();
+        }
+      } catch { continue; }
+      if (!seenUrls.has(resolvedUrl)) {
+        const filename = decodeURIComponent(resolvedUrl.split('/').pop()?.split('?')[0] || raw);
+        seenUrls.add(resolvedUrl);
+        assets.push({ filename, url: resolvedUrl, extension: 'pdf', source_section: 'json-script-scan' });
+        debug.push(`[Asset Detection] PDF ref in script/JSON: ${filename} from ${resolvedUrl}`);
+      }
+    }
+  }
+
+  // Strategy 9: Kajabi download URLs without file extension anywhere in HTML
+  const kajabiDownloadUrls = html.match(/(?:https?:\/\/[^\s"'<>]*|)\/courses\/downloads\/[^\s"'<>]+/gi) || [];
+  for (const rawUrl of kajabiDownloadUrls) {
+    let resolvedUrl = rawUrl;
+    try {
+      if (rawUrl.startsWith('/')) resolvedUrl = baseUrl + rawUrl;
+    } catch { continue; }
+    if (seenUrls.has(resolvedUrl)) continue;
+    const slug = resolvedUrl.split('/').pop() || '';
+    const inferredExt = slug.match(/-(pdf|docx?|pptx?|xlsx?|csv|zip)$/i)?.[1]?.toLowerCase();
+    if (inferredExt) {
+      seenUrls.add(resolvedUrl);
+      const filename = decodeURIComponent(slug);
+      assets.push({ filename, url: resolvedUrl, extension: inferredExt, source_section: 'kajabi-download-raw-scan' });
+      debug.push(`[Asset Detection] Kajabi download URL (raw scan): ${filename} from ${resolvedUrl}`);
+    }
+  }
+
   function addAsset(href: string, linkText: string, source: string) {
     let resolvedUrl = href;
     try {
