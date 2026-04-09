@@ -72,14 +72,16 @@ export function KnowledgeControlPlane() {
     return buckets;
   }, [resources, processingIds]);
 
-  // Count of filtered resources (for bulk action bar)
-  const filteredCount = useMemo(() => {
-    if (customFilterIds) return customFilterIds.size;
+  // Filtered resources (for bulk action bar)
+  const filteredResources = useMemo(() => {
+    if (customFilterIds) return resources.filter(r => customFilterIds.has(r.resource_id));
     return resources.filter(r => {
       const state = deriveControlPlaneState(r, processingIds);
       return matchesFilter(state, filter, r.resource_id, conflictIds);
-    }).length;
+    });
   }, [resources, filter, processingIds, conflictIds, customFilterIds]);
+
+  const filteredCount = filteredResources.length;
 
   // ── Row-level action handler ─────────────────────────────
   const handleAction = useCallback(async (resourceId: string, action: string) => {
@@ -240,6 +242,7 @@ export function KnowledgeControlPlane() {
       <BulkActionBar
         filter={filter}
         filteredCount={filteredCount}
+        filteredResources={filteredResources}
         onBulkAction={handleBulkAction}
         loading={actionLoading}
       />
