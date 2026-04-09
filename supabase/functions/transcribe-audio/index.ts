@@ -336,8 +336,13 @@ async function headCheck(url: string): Promise<AudioMeta> {
 }
 
 function guessExtension(url: string, contentType: string): string {
-  const match = url.match(/\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)/i);
-  if (match) return match[1].toLowerCase();
+  const audioMatch = url.match(/\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)(\?|#|$)/i);
+  if (audioMatch) return audioMatch[1].toLowerCase();
+  const videoMatch = url.match(/\.(mp4|mov|webm)(\?|#|$)/i);
+  if (videoMatch) return videoMatch[1].toLowerCase();
+  // Wistia .bin deliveries are typically MP4 video containers
+  if (/wistia\.com\/deliveries\/.*\.bin/i.test(url)) return "mp4";
+  if (contentType.includes("video") || contentType.includes("mp4")) return "mp4";
   if (contentType.includes("wav")) return "wav";
   if (contentType.includes("ogg")) return "ogg";
   if (contentType.includes("webm")) return "webm";
