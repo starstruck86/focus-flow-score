@@ -36,6 +36,7 @@ interface Props {
   onAction: (resourceId: string, action: string) => void;
   onInspect: (resource: CanonicalResourceStatus, state: ControlPlaneState) => void;
   actionLoading?: boolean;
+  outcomeRefreshKey?: number;
 }
 
 function inferSourceType(title: string): string {
