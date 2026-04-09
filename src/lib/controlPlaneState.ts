@@ -208,7 +208,7 @@ export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
     dataSources: ['resources table', 'knowledge_items table'],
   },
   needsReview: {
-    label: 'Needs Review',
+    label: 'Blocked',
     definition: 'Resources with a detected blocker — empty content, stale state, missing activation, or missing contexts.',
     formula: 'COUNT(resources WHERE blocked_reason ≠ "none")',
     dataSources: ['resources table', 'knowledge_items table'],

@@ -32,7 +32,7 @@ const CARDS: { key: ControlPlaneFilter; label: string; icon: React.ElementType; 
   { key: 'all', label: 'Total', icon: Database, valueKey: 'total', color: 'text-foreground', activeBg: 'bg-accent' },
   { key: 'ready', label: 'Ready', icon: CheckCircle2, valueKey: 'ready', color: 'text-emerald-600', activeBg: 'bg-emerald-50 dark:bg-emerald-950/30' },
   { key: 'needs_extraction', label: 'Needs Extraction', icon: Zap, valueKey: 'needsExtraction', color: 'text-amber-600', activeBg: 'bg-amber-50 dark:bg-amber-950/30' },
-  { key: 'needs_review', label: 'Needs Review', icon: AlertTriangle, valueKey: 'needsReview', color: 'text-destructive', activeBg: 'bg-destructive/10' },
+  { key: 'needs_review', label: 'Blocked', icon: AlertTriangle, valueKey: 'needsReview', color: 'text-destructive', activeBg: 'bg-destructive/10' },
   { key: 'processing', label: 'Processing', icon: Loader2, valueKey: 'processing', color: 'text-primary', activeBg: 'bg-primary/10' },
   { key: 'ingested', label: 'Ingested', icon: Inbox, valueKey: 'ingested', color: 'text-muted-foreground', activeBg: 'bg-muted/50' },
 ];

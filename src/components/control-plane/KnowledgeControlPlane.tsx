@@ -191,7 +191,7 @@ export function KnowledgeControlPlane() {
 
   const filterLabel = customFilterLabel ?? (
     filter === 'all' ? null : filter === 'conflicts' ? 'Conflicts' : {
-      ready: 'Ready', needs_extraction: 'Needs Extraction', needs_review: 'Needs Review',
+      ready: 'Ready', needs_extraction: 'Needs Extraction', needs_review: 'Blocked',
       processing: 'Processing', ingested: 'Ingested',
     }[filter]
   );
