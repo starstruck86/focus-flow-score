@@ -1433,11 +1433,18 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
       htmlSnippets.push(...anchorWithAsset.slice(0, 2).map(m => `[anchor_asset] ${m.substring(0, 250)}`));
     }
 
+    // Fallback classification: video + download keywords but no asset URL
+    const hasVideo = /video|wistia|vimeo|youtube|sproutvideo/i.test(html);
+    const hasAssetKeywords = /download|exercise|worksheet|handout|attachment|\.pdf/i.test(html);
+    if (hasVideo && hasAssetKeywords) {
+      debug.push(`[Asset Detection] Likely dynamic asset (not present in server HTML) — video + asset keywords detected but no extractable URL`);
+      console.log(`[Asset Detection] Fallback: dynamic asset suspected`);
+    }
+
     if (assetHints.length > 0) {
       debug.push(`[Asset Detection] No assets captured. ${assetHints.length} hint(s): ${assetHints.join(', ')}`);
       debug.push(`[Asset Detection Snippets] ${htmlSnippets.join('\n---\n')}`);
       console.log(`[Asset Detection Hints] ${assetHints.join(', ')}`);
-      // Log snippets to edge function logs (truncate to avoid log overflow)
       for (const s of htmlSnippets.slice(0, 4)) {
         console.log(`[Asset Snippet] ${s.substring(0, 500)}`);
       }
