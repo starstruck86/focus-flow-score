@@ -56,6 +56,29 @@ type ExtractionTrace = {
   final_source: string | null;
 };
 
+type DetectedAsset = {
+  filename: string;
+  url: string;
+  extension: string;
+  source_section: string;
+};
+
+type AssetResult = {
+  filename: string;
+  extension: string;
+  detected: boolean;
+  downloaded: boolean;
+  parsed: boolean;
+  text_length?: number;
+  detail?: string;
+};
+
+type AssetTrace = {
+  attempted: boolean;
+  assets_found: number;
+  assets: AssetResult[];
+};
+
 type LessonImportResult = {
   lessonIndex: number;
   status: LessonImportStatus;
@@ -69,6 +92,7 @@ type LessonImportResult = {
   transcriptSource?: string;
   hasVideoTranscript?: boolean;
   extractionTrace?: ExtractionTrace;
+  assetTrace?: AssetTrace;
 };
 
 interface CourseImportModalProps {
@@ -88,6 +112,53 @@ const STATUS_ICONS: Record<string, typeof CheckCircle2> = {
 };
 
 const VIDEO_TRANSCRIPT_MARKER = '\n\n--- Video Transcript ---\n\n';
+
+/**
+ * Basic text extraction from a base64-encoded PDF.
+ * Uses stream-based extraction without a full PDF library.
+ */
+function extractTextFromPdfBase64(base64Data: string): string {
+  try {
+    const binaryStr = atob(base64Data);
+    // Look for text streams in the PDF binary
+    const segments: string[] = [];
+    
+    // Extract text between BT (begin text) and ET (end text) operators
+    const btEtPattern = /BT\s([\s\S]*?)ET/g;
+    let m;
+    while ((m = btEtPattern.exec(binaryStr)) !== null) {
+      // Extract text from Tj and TJ operators
+      const tjMatches = m[1].matchAll(/\(([^)]*)\)\s*Tj/g);
+      for (const tj of tjMatches) {
+        const text = tj[1].replace(/\\n/g, '\n').replace(/\\\(/g, '(').replace(/\\\)/g, ')');
+        if (text.trim()) segments.push(text.trim());
+      }
+      // TJ arrays
+      const tjArrayMatches = m[1].matchAll(/\[(.*?)\]\s*TJ/g);
+      for (const tja of tjArrayMatches) {
+        const parts = [...tja[1].matchAll(/\(([^)]*)\)/g)].map(p => 
+          p[1].replace(/\\n/g, '\n').replace(/\\\(/g, '(').replace(/\\\)/g, ')')
+        );
+        const joined = parts.join('').trim();
+        if (joined) segments.push(joined);
+      }
+    }
+    
+    // Also try to find readable ASCII text runs as fallback
+    if (segments.length === 0) {
+      const asciiRuns = binaryStr.match(/[\x20-\x7E]{20,}/g) || [];
+      for (const run of asciiRuns) {
+        if (!/^[%\/\[\]{}()<>]+$/.test(run) && !/^\d+\s\d+\s(obj|R)/.test(run)) {
+          segments.push(run.trim());
+        }
+      }
+    }
+    
+    return segments.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  } catch {
+    return '';
+  }
+}
 
 function normalizeComparableText(input: string) {
   return input
@@ -539,6 +610,139 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           });
         }
 
+        // === DOWNLOAD LESSON ASSETS (PDFs, worksheets, etc.) ===
+        const detectedAssets: DetectedAsset[] = lessonData?.detected_assets || [];
+        const assetTrace: AssetTrace = { attempted: detectedAssets.length > 0, assets_found: detectedAssets.length, assets: [] };
+
+        if (detectedAssets.length > 0 && resourceId && user) {
+          setImportProgress({ done: i, total: toImport.length, current: `${lesson.title} (downloading ${detectedAssets.length} asset${detectedAssets.length !== 1 ? 's' : ''}...)` });
+
+          // Look up the lesson_import row id for linking
+          const { data: cliRow } = await (supabase.from('course_lesson_imports' as any) as any)
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('lesson_url', lesson.url)
+            .eq('original_course_url', url.trim())
+            .maybeSingle();
+          const lessonImportId = cliRow?.id || null;
+
+          for (const asset of detectedAssets) {
+            const ar: AssetResult = { filename: asset.filename, extension: asset.extension, detected: true, downloaded: false, parsed: false };
+            try {
+              // Download via edge function (authenticated)
+              const { data: dlData, error: dlErr } = await trackedInvoke<any>('import-course', {
+                body: { url: url.trim(), action: 'download_asset', asset_url: asset.url, ...getCredsBody() },
+                timeoutMs: 60_000,
+              });
+              if (dlErr || !dlData?.success) {
+                ar.detail = dlData?.error || dlErr?.message || 'Download failed';
+                assetTrace.assets.push(ar);
+                // Record failure in DB
+                await (supabase.from('lesson_assets' as any) as any).insert({
+                  user_id: user.id,
+                  lesson_import_id: lessonImportId,
+                  parent_resource_id: resourceId,
+                  source_url: asset.url,
+                  filename: asset.filename,
+                  download_status: 'failed',
+                  parse_status: 'pending',
+                  error_detail: ar.detail,
+                });
+                continue;
+              }
+
+              ar.downloaded = true;
+              const sizeBytes = dlData.size_bytes || 0;
+              const contentType = dlData.content_type || 'application/octet-stream';
+
+              // Upload to storage
+              const storagePath = `lesson-assets/${user.id}/${resourceId}/${asset.filename}`;
+              const binaryStr = atob(dlData.data_base64);
+              const bytes = new Uint8Array(binaryStr.length);
+              for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+
+              const { error: uploadErr } = await supabase.storage
+                .from('resource-files')
+                .upload(storagePath, bytes, { contentType, upsert: true });
+
+              if (uploadErr) {
+                ar.detail = `Upload failed: ${uploadErr.message}`;
+                await (supabase.from('lesson_assets' as any) as any).insert({
+                  user_id: user.id,
+                  lesson_import_id: lessonImportId,
+                  parent_resource_id: resourceId,
+                  source_url: asset.url,
+                  filename: asset.filename,
+                  mime_type: contentType,
+                  file_size_bytes: sizeBytes,
+                  download_status: 'downloaded',
+                  parse_status: 'failed',
+                  error_detail: ar.detail,
+                });
+                assetTrace.assets.push(ar);
+                continue;
+              }
+
+              // Parse PDFs for text
+              let parsedTextLength = 0;
+              let childResourceId: string | null = null;
+              if (asset.extension === 'pdf' && dlData.data_base64) {
+                try {
+                  // Use basic text extraction from the PDF binary
+                  const textContent = extractTextFromPdfBase64(dlData.data_base64);
+                  parsedTextLength = textContent.length;
+                  ar.parsed = parsedTextLength > 50;
+                  ar.text_length = parsedTextLength;
+
+                  if (parsedTextLength > 50) {
+                    // Create child resource
+                    const childTitle = `${courseTitle} > ${lesson.title} > ${asset.filename}`;
+                    const childClassification = await classify.mutateAsync({ url: asset.url });
+                    childClassification.title = childTitle;
+                    childClassification.resource_type = 'document';
+                    childClassification.scraped_content = textContent;
+                    childClassification.tags = [...(childClassification.tags || []), 'course', 'attachment', courseTitle].filter(Boolean);
+                    const childResource = await addUrl.mutateAsync({ url: asset.url, classification: childClassification });
+                    childResourceId = childResource?.id || null;
+                    ar.detail = `Parsed ${parsedTextLength.toLocaleString()} chars, child resource created`;
+                  } else {
+                    ar.detail = `PDF text too short (${parsedTextLength} chars)`;
+                    ar.parsed = false;
+                  }
+                } catch (parseErr: any) {
+                  ar.detail = `PDF parse failed: ${parseErr?.message || 'unknown'}`;
+                  ar.parsed = false;
+                }
+              } else {
+                ar.detail = `Downloaded (${(sizeBytes / 1024).toFixed(1)} KB), parse not supported for .${asset.extension}`;
+              }
+
+              // Record in lesson_assets
+              await (supabase.from('lesson_assets' as any) as any).insert({
+                user_id: user.id,
+                lesson_import_id: lessonImportId,
+                parent_resource_id: resourceId,
+                source_url: asset.url,
+                filename: asset.filename,
+                mime_type: contentType,
+                file_size_bytes: sizeBytes,
+                storage_path: storagePath,
+                download_status: 'downloaded',
+                parse_status: ar.parsed ? 'parsed' : (asset.extension === 'pdf' ? 'failed' : 'unsupported'),
+                parsed_text_length: parsedTextLength || null,
+                child_resource_id: childResourceId,
+                error_detail: ar.parsed ? null : ar.detail,
+              });
+
+              assetTrace.assets.push(ar);
+              console.log(`[CourseImport] Asset "${asset.filename}": downloaded=${ar.downloaded}, parsed=${ar.parsed}, chars=${parsedTextLength}`);
+            } catch (assetErr: any) {
+              ar.detail = assetErr?.message || 'Asset processing failed';
+              assetTrace.assets.push(ar);
+            }
+          }
+        }
+
         const finalStatus: LessonImportStatus = metadataOnly ? 'metadata_only' : 'complete';
         updateLessonResult(i, {
           status: finalStatus,
@@ -551,6 +755,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           transcriptSource: lessonData?.transcript_source,
           hasVideoTranscript: lessonData?.has_video_transcript,
           extractionTrace: lessonData?.extraction_trace,
+          assetTrace: assetTrace.attempted ? assetTrace : undefined,
         });
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to save resource';
@@ -856,6 +1061,34 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                           {/* Extraction trace expander */}
                           {r.extractionTrace && (r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (
                             <ExtractionTraceExpander trace={r.extractionTrace} metadataOnly={r.metadataOnly} />
+                          )}
+                          {/* Asset trace */}
+                          {r.assetTrace && r.assetTrace.assets_found > 0 && (
+                            <Collapsible className="pl-5">
+                              <CollapsibleTrigger className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                                <Download className="h-2.5 w-2.5" />
+                                <span>{r.assetTrace.assets_found} asset{r.assetTrace.assets_found !== 1 ? 's' : ''}</span>
+                                <ChevronDown className="h-2.5 w-2.5" />
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="mt-1 space-y-0.5">
+                                {r.assetTrace.assets.map((a, ai) => {
+                                  const color = a.parsed ? 'text-green-600' : a.downloaded ? 'text-amber-500' : 'text-destructive';
+                                  const icon = a.parsed ? '✓' : a.downloaded ? '◎' : '✗';
+                                  return (
+                                    <div key={ai} className={`flex items-start gap-1.5 text-[10px] ${color}`}>
+                                      <span className="w-2.5 text-center flex-shrink-0">{icon}</span>
+                                      <span className="font-medium">{a.filename}</span>
+                                      <span className="text-muted-foreground">
+                                        — {a.downloaded ? 'downloaded' : 'failed'}
+                                        {a.parsed && a.text_length != null && `, parsed (${a.text_length.toLocaleString()} chars)`}
+                                        {!a.parsed && a.downloaded && ', parse ' + (a.extension === 'pdf' ? 'failed' : 'unsupported')}
+                                      </span>
+                                      {a.detail && <span className="text-muted-foreground/70 truncate max-w-[200px]" title={a.detail}>· {a.detail}</span>}
+                                    </div>
+                                  );
+                                })}
+                              </CollapsibleContent>
+                            </Collapsible>
                           )}
                         </div>
                       );

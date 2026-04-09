@@ -1184,6 +1184,9 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
   
   debug.push(`Content extracted: ${content.length} chars, type: ${type}, mediaUrl: ${mediaUrl ? 'yes' : 'no'}, transcriptSource: ${transcriptSource || 'none'}`);
   
+  // === DETECT DOWNLOADABLE ASSETS ===
+  const detectedAssets = detectLessonAssets(html, lessonUrl, debug);
+  
   // Quality classification — run AFTER transcript merge so word counts reflect actual content
   const quality = classifyLessonContent(content, html, resp.url, lessonUrl);
   debug.push(`Quality: type=${quality.content_type}, words=${quality.word_count}, issues=${quality.issues.length > 0 ? quality.issues.join('; ') : 'none'}`);
@@ -1195,7 +1198,92 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
     transcript_source: transcriptSource || undefined,
     has_video_transcript: Boolean(videoTranscript),
     extraction_trace,
+    detected_assets: detectedAssets,
   };
+}
+
+interface DetectedAsset {
+  filename: string;
+  url: string;
+  extension: string;
+  source_section: string;
+}
+
+/**
+ * Scan lesson HTML for downloadable assets (PDFs, DOCX, PPTX, XLSX, etc.)
+ */
+function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): DetectedAsset[] {
+  const assets: DetectedAsset[] = [];
+  const seenUrls = new Set<string>();
+  const baseUrl = new URL(lessonUrl).origin;
+
+  const ASSET_EXTENSIONS = /\.(pdf|docx?|pptx?|xlsx?|csv|txt|rtf|zip|key|pages|numbers)(?:\?|#|$)/i;
+
+  // Strategy 1: Links with download attribute
+  const downloadLinks = [...html.matchAll(/<a[^>]*\bdownload\b[^>]*href="([^"]+)"[^>]*>([^<]*)/gi)];
+  for (const m of downloadLinks) {
+    const href = m[1];
+    const text = m[2]?.replace(/<[^>]+>/g, '').trim() || '';
+    addAsset(href, text, 'download-attribute');
+  }
+
+  // Strategy 2: Links matching asset file extensions
+  const allLinks = [...html.matchAll(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  for (const m of allLinks) {
+    const href = m[1];
+    if (ASSET_EXTENSIONS.test(href)) {
+      const text = m[2]?.replace(/<[^>]+>/g, '').trim() || '';
+      addAsset(href, text, 'file-extension-link');
+    }
+  }
+
+  // Strategy 3: Links inside Download/Resource/Attachment sections
+  const sectionPatterns = [
+    /(?:downloads?|resources?|attachments?|files?|handouts?|worksheets?|materials?)\s*<\/(?:h[1-6]|span|div|p|strong|b)>[\s\S]*?(<a[^>]*href="[^"]+"[\s\S]*?<\/a>)/gi,
+    /<(?:div|section)[^>]*class="[^"]*(?:download|resource|attachment|file|handout|material)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|section)>/gi,
+    /<(?:div|section)[^>]*(?:id|data-[a-z-]+)="[^"]*(?:download|resource|attachment|file)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|section)>/gi,
+  ];
+  for (const pattern of sectionPatterns) {
+    let m;
+    while ((m = pattern.exec(html)) !== null) {
+      const innerLinks = [...m[1].matchAll(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+      for (const link of innerLinks) {
+        addAsset(link[1], link[2]?.replace(/<[^>]+>/g, '').trim() || '', 'asset-section');
+      }
+    }
+  }
+
+  // Strategy 4: Kajabi file download blocks
+  const kajabiFiles = [...html.matchAll(/<div[^>]*class="[^"]*kjb-file[^"]*"[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  for (const m of kajabiFiles) {
+    addAsset(m[1], m[2]?.replace(/<[^>]+>/g, '').trim() || '', 'kajabi-file-block');
+  }
+
+  function addAsset(href: string, linkText: string, source: string) {
+    let resolvedUrl = href;
+    try {
+      if (href.startsWith('/')) resolvedUrl = baseUrl + href;
+      else if (!href.startsWith('http')) resolvedUrl = new URL(href, lessonUrl).toString();
+    } catch { return; }
+
+    // Skip non-asset URLs
+    if (/^(?:javascript|mailto|tel):/i.test(href)) return;
+    if (seenUrls.has(resolvedUrl)) return;
+    seenUrls.add(resolvedUrl);
+
+    const extMatch = resolvedUrl.match(/\.([a-z0-9]+)(?:\?|#|$)/i);
+    const ext = extMatch?.[1]?.toLowerCase() || '';
+
+    // Must have a recognizable asset extension OR download attribute source
+    if (!ASSET_EXTENSIONS.test(resolvedUrl) && source !== 'download-attribute') return;
+
+    const filename = linkText || decodeURIComponent(resolvedUrl.split('/').pop()?.split('?')[0] || 'unknown');
+
+    assets.push({ filename, url: resolvedUrl, extension: ext, source_section: source });
+  }
+
+  debug.push(`[Asset Detection] Found ${assets.length} downloadable asset(s): ${assets.map(a => a.filename).join(', ') || 'none'}`);
+  return assets;
 }
 
 Deno.serve(async (req) => {
@@ -1288,6 +1376,45 @@ Deno.serve(async (req) => {
       
       return new Response(
         JSON.stringify({ success: true, ...result, ...lessonResult }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'download_asset') {
+      const { asset_url } = body;
+      if (!asset_url) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'asset_url is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      // Download the asset with authenticated session
+      const jar = createCookieJar();
+      await kajabiLogin(url, jar, creds);
+      
+      const assetResp = await fetch(asset_url, {
+        headers: { 'User-Agent': UA, 'Cookie': jar.toString() },
+        redirect: 'follow',
+      });
+      
+      if (!assetResp.ok) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Asset download failed: HTTP ${assetResp.status}` }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const contentType = assetResp.headers.get('content-type') || 'application/octet-stream';
+      const arrayBuffer = await assetResp.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          content_type: contentType,
+          size_bytes: arrayBuffer.byteLength,
+          data_base64: base64,
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
