@@ -1259,6 +1259,36 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
     addAsset(m[1], m[2]?.replace(/<[^>]+>/g, '').trim() || '', 'kajabi-file-block');
   }
 
+  // Strategy 5: Kajabi /courses/downloads/ links (URL has no file extension, e.g. /nexus_exercise-pdf)
+  const kajabiDownloadLinks = [...html.matchAll(/<a[^>]*href="([^"]*\/courses\/downloads\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  for (const m of kajabiDownloadLinks) {
+    const href = m[1];
+    const text = m[2]?.replace(/<[^>]+>/g, '').trim() || '';
+    // Infer extension from the slug (e.g. "nexus_exercise-pdf" → "pdf")
+    const slug = href.split('/').pop() || '';
+    const inferredExt = slug.match(/-(pdf|docx?|pptx?|xlsx?|csv|zip)$/i)?.[1]?.toLowerCase();
+    if (inferredExt) {
+      let resolvedUrl = href;
+      try {
+        if (href.startsWith('/')) resolvedUrl = baseUrl + href;
+        else if (!href.startsWith('http')) resolvedUrl = new URL(href, lessonUrl).toString();
+      } catch { continue; }
+      if (seenUrls.has(resolvedUrl)) continue;
+      seenUrls.add(resolvedUrl);
+      const filename = text || decodeURIComponent(slug);
+      assets.push({ filename, url: resolvedUrl, extension: inferredExt, source_section: 'kajabi-download-path' });
+      debug.push(`[Asset Detection] Kajabi download path: ${filename} (${inferredExt}) from ${resolvedUrl}`);
+    }
+  }
+
+  // Strategy 6: Kajabi downloads sidebar (class="downloads__download")
+  const kajabiSidebarLinks = [...html.matchAll(/<a[^>]*class="[^"]*downloads__download[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  for (const m of kajabiSidebarLinks) {
+    const href = m[1];
+    const text = m[2]?.replace(/<[^>]+>/g, '').trim() || '';
+    addAsset(href, text, 'kajabi-downloads-sidebar');
+  }
+
   function addAsset(href: string, linkText: string, source: string) {
     let resolvedUrl = href;
     try {
