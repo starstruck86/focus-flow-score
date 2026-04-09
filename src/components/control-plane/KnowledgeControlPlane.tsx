@@ -13,6 +13,9 @@ import { CentralResourceTable } from './CentralResourceTable';
 import { ResourceInspectDrawer } from './ResourceInspectDrawer';
 import { ConflictBreakdownBanner } from './ConflictBreakdownBanner';
 import { BulkActionBar } from './BulkActionBar';
+import { RecentActionsPanel } from './RecentActionsPanel';
+import { BulkActionResultDialog } from './BulkActionResultDialog';
+import { buildActionPreview } from './ActionPreviewDialog';
 import {
   type ControlPlaneFilter, type ControlPlaneState,
   computeControlPlaneSummary,
@@ -24,7 +27,10 @@ import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
 
 export function KnowledgeControlPlane() {
   const { summary, loading, refetch, isRefetching } = useCanonicalLifecycle();
-  const { operationalize, operationalizeBatch, isRunning: opRunning } = useAutoOperationalize();
+  const {
+    operationalizeWithOutcome, operationalizeBatchWithOutcome,
+    isRunning: opRunning, lastBulkOutcome, setLastBulkOutcome, outcomeRefreshKey,
+  } = useAutoOperationalize();
   const { runBatch, isRunning: extractRunning } = useExtractionPipeline();
   const [filter, setFilter] = useState<ControlPlaneFilter>('all');
   const [customFilterIds, setCustomFilterIds] = useState<Set<string> | null>(null);
@@ -34,10 +40,13 @@ export function KnowledgeControlPlane() {
   const [inspectResource, setInspectResource] = useState<CanonicalResourceStatus | null>(null);
   const [inspectState, setInspectState] = useState<ControlPlaneState | null>(null);
 
+  // Bulk result dialog
+  const [bulkResultOpen, setBulkResultOpen] = useState(false);
+
   const resources = summary?.resources ?? [];
   const actionLoading = opRunning || extractRunning;
 
-  // Processing IDs (could be wired from background jobs later)
+  // Processing IDs
   const processingIds = useMemo(() => new Set<string>(), []);
 
   const cpSummary = useMemo(
@@ -72,7 +81,7 @@ export function KnowledgeControlPlane() {
     return buckets;
   }, [resources, processingIds]);
 
-  // Filtered resources (for bulk action bar)
+  // Filtered resources
   const filteredResources = useMemo(() => {
     if (customFilterIds) return resources.filter(r => customFilterIds.has(r.resource_id));
     return resources.filter(r => {
@@ -83,15 +92,25 @@ export function KnowledgeControlPlane() {
 
   const filteredCount = filteredResources.length;
 
-  // ── Row-level action handler ─────────────────────────────
+  // ── Row-level action handler (with outcome tracking) ─────
   const handleAction = useCallback(async (resourceId: string, action: string) => {
     switch (action) {
       case 'extract':
       case 'enrich':
       case 'fix':
       case 'activate': {
-        toast.info(`Running ${action} on resource…`);
-        await operationalize(resourceId);
+        const resource = resources.find(r => r.resource_id === resourceId);
+        if (!resource) return;
+        const preState = deriveControlPlaneState(resource, processingIds);
+        const preview = buildActionPreview(action, preState, resource);
+        await operationalizeWithOutcome(
+          resourceId,
+          preState,
+          preview.toState,
+          action,
+          preview.actionLabel,
+          resource.title,
+        );
         refetch();
         break;
       }
@@ -107,9 +126,9 @@ export function KnowledgeControlPlane() {
       default:
         toast.info(`Action "${action}" not yet implemented`);
     }
-  }, [resources, processingIds, operationalize, refetch]);
+  }, [resources, processingIds, operationalizeWithOutcome, refetch]);
 
-  // ── Bulk action handler ──────────────────────────────────
+  // ── Bulk action handler (with outcome tracking) ──────────
   const handleBulkAction = useCallback(async (action: string, currentFilter: ControlPlaneFilter) => {
     const targetResources = resources.filter(r => {
       const state = deriveControlPlaneState(r, processingIds);
@@ -121,26 +140,21 @@ export function KnowledgeControlPlane() {
       return;
     }
 
-    const ids = targetResources.map(r => r.resource_id);
+    const actionLabels: Record<string, string> = {
+      bulk_extract: 'Extract Knowledge (Batch)',
+      bulk_enrich: 'Enrich Content (Batch)',
+      bulk_review: 'Diagnose & Repair (Batch)',
+    };
 
-    switch (action) {
-      case 'bulk_extract': {
-        toast.info(`Extracting knowledge from ${ids.length} resources…`);
-        await runBatch('all_ready', { max: ids.length });
-        refetch();
-        break;
-      }
-      case 'bulk_enrich':
-      case 'bulk_review': {
-        toast.info(`Running auto-operationalize on ${ids.length} resources…`);
-        await operationalizeBatch(ids);
-        refetch();
-        break;
-      }
-      default:
-        toast.info(`Bulk action "${action}" not yet implemented`);
-    }
-  }, [resources, processingIds, conflictIds, operationalizeBatch, runBatch, refetch]);
+    const outcome = await operationalizeBatchWithOutcome(
+      targetResources,
+      actionLabels[action] || action,
+      action,
+      processingIds,
+    );
+    setBulkResultOpen(true);
+    refetch();
+  }, [resources, processingIds, conflictIds, operationalizeBatchWithOutcome, refetch]);
 
   // ── Inspect drawer handler ───────────────────────────────
   const handleInspect = useCallback((r: CanonicalResourceStatus, state: ControlPlaneState) => {
@@ -158,7 +172,7 @@ export function KnowledgeControlPlane() {
   const handleFilterConflictCategory = useCallback((ids: Set<string>) => {
     setCustomFilterIds(ids);
     setCustomFilterLabel(`${ids.size} conflicted resource${ids.size !== 1 ? 's' : ''}`);
-    setFilter('all'); // Clear primary filter to avoid double-filtering
+    setFilter('all');
   }, []);
 
   const clearCustomFilter = useCallback(() => {
@@ -247,6 +261,9 @@ export function KnowledgeControlPlane() {
         loading={actionLoading}
       />
 
+      {/* Recent Actions Panel */}
+      <RecentActionsPanel refreshKey={outcomeRefreshKey} />
+
       {/* Central Table */}
       <CentralResourceTable
         resources={resources}
@@ -257,6 +274,7 @@ export function KnowledgeControlPlane() {
         onAction={handleAction}
         onInspect={handleInspect}
         actionLoading={actionLoading}
+        outcomeRefreshKey={outcomeRefreshKey}
       />
 
       {/* Inspect Drawer */}
@@ -267,6 +285,13 @@ export function KnowledgeControlPlane() {
         onClose={() => { setInspectResource(null); setInspectState(null); }}
         onAction={handleAction}
         actionLoading={actionLoading}
+      />
+
+      {/* Bulk Action Result Dialog */}
+      <BulkActionResultDialog
+        outcome={lastBulkOutcome}
+        open={bulkResultOpen}
+        onClose={() => setBulkResultOpen(false)}
       />
     </div>
   );
