@@ -1,12 +1,12 @@
 /**
- * Bulk Action Result Dialog — shows outcome summary after batch operations.
+ * Bulk Action Result Dialog — shows outcome summary with reconciliation.
  */
 import {
   AlertDialog, AlertDialogAction,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, MinusCircle, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { CONTROL_PLANE_LABELS, CONTROL_PLANE_COLORS } from '@/lib/controlPlaneState';
@@ -32,13 +32,25 @@ export function BulkActionResultDialog({ outcome, open, onClose }: Props) {
         </AlertDialogHeader>
         <AlertDialogDescription asChild>
           <div className="space-y-4">
-            {/* Counts */}
+            {/* Execution counts */}
             <div className="grid grid-cols-2 gap-2">
               <Stat icon={CheckCircle2} label="Succeeded" value={outcome.succeeded} color="text-emerald-600" />
               <Stat icon={XCircle} label="Failed" value={outcome.failed} color="text-destructive" />
               <Stat icon={MinusCircle} label="Unchanged" value={outcome.unchanged} color="text-muted-foreground" />
               <Stat icon={AlertTriangle} label="Needs Review" value={outcome.needsReview} color="text-amber-600" />
             </div>
+
+            {/* Reconciliation summary */}
+            {(outcome.confirmed > 0 || outcome.partial > 0 || outcome.mismatched > 0) && (
+              <div>
+                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Reconciliation</span>
+                <div className="mt-1 grid grid-cols-3 gap-2">
+                  <Stat icon={ShieldCheck} label="Confirmed" value={outcome.confirmed} color="text-emerald-600" />
+                  <Stat icon={AlertTriangle} label="Partial" value={outcome.partial} color="text-amber-600" />
+                  <Stat icon={ShieldAlert} label="Mismatched" value={outcome.mismatched} color="text-destructive" />
+                </div>
+              </div>
+            )}
 
             {/* State transitions */}
             {outcome.transitions.length > 0 && (
