@@ -101,12 +101,12 @@ export function KnowledgeCoverageAudit() {
 
   const handleFlagForReExtraction = (resources: ResourceAuditRow[], reason: string) => {
     console.log('[QUEUE PATH] handleFlagForReExtraction called', { count: resources.length, reason });
-    void deepReExtract.flagForReExtraction(resources, reason);
+    void deepReExtract.flagForReExtraction(resources, reason, true);
   };
 
   const handleFlagSingle = (resource: ResourceAuditRow) => {
     console.log('[QUEUE PATH] handleFlagSingle called', { resourceId: resource.resource_id, title: resource.title });
-    void deepReExtract.flagForReExtraction([resource], 'Manual — single resource re-extract');
+    void deepReExtract.flagForReExtraction([resource], 'Manual — single resource re-extract', true);
   };
 
   const handleResumeSingle = (resource: ResourceAuditRow) => {
