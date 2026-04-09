@@ -2,7 +2,7 @@
  * Knowledge Control Plane — trust-first, lifecycle-driven, operable workspace.
  */
 import { useState, useMemo, useCallback } from 'react';
-import { RefreshCw, Filter, Clock } from 'lucide-react';
+import { RefreshCw, Filter, Clock, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
