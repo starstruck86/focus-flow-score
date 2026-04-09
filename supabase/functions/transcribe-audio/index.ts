@@ -85,7 +85,9 @@ serve(async (req) => {
     // Some CDNs return generic content types for audio — if the URL has an audio/video extension, allow it
     const urlLooksAudio = /\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)(\?|#|$)/i.test(audio_url);
     const urlLooksVideo = /\.(mp4|webm|mov)(\?|#|$)/i.test(audio_url);
-    if (!isAudio && !isVideo && !urlLooksAudio && !urlLooksVideo) {
+    // Wistia .bin delivery URLs are video containers — always allow
+    const urlLooksWistiaBin = /embed-ssl\.wistia\.com\/deliveries\/.*\.bin/i.test(audio_url);
+    if (!isAudio && !isVideo && !urlLooksAudio && !urlLooksVideo && !urlLooksWistiaBin) {
       return jsonResp({
         success: false,
         failureCode: "INVALID_CONTENT_TYPE",
@@ -230,6 +232,7 @@ serve(async (req) => {
     results.sort((a, b) => a.chunkIndex - b.chunkIndex);
     const fullTranscript = results.map((r) => r.text).join("\n\n");
     const totalWords = fullTranscript.split(/\s+/).filter(Boolean).length;
+    console.log(`Transcription complete: ${results.length}/${chunks.length} chunks, ${totalWords} words, ${fullTranscript.length} chars`);
 
     // ── STAGE 6: Persist to DB if we have auth ──────────
     let persisted = false;
@@ -334,8 +337,13 @@ async function headCheck(url: string): Promise<AudioMeta> {
 }
 
 function guessExtension(url: string, contentType: string): string {
-  const match = url.match(/\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)/i);
-  if (match) return match[1].toLowerCase();
+  const audioMatch = url.match(/\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)(\?|#|$)/i);
+  if (audioMatch) return audioMatch[1].toLowerCase();
+  const videoMatch = url.match(/\.(mp4|mov|webm)(\?|#|$)/i);
+  if (videoMatch) return videoMatch[1].toLowerCase();
+  // Wistia .bin deliveries are typically MP4 video containers
+  if (/wistia\.com\/deliveries\/.*\.bin/i.test(url)) return "mp4";
+  if (contentType.includes("video") || contentType.includes("mp4")) return "mp4";
   if (contentType.includes("wav")) return "wav";
   if (contentType.includes("ogg")) return "ogg";
   if (contentType.includes("webm")) return "webm";
