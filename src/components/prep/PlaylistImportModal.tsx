@@ -90,7 +90,7 @@ export function PlaylistImportModal({ open, onOpenChange }: PlaylistImportModalP
 
   return (
     <Dialog open={open} onOpenChange={isProcessing ? undefined : handleClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ListVideo className="h-5 w-5 text-primary" />
