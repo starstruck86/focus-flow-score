@@ -135,6 +135,66 @@ function buildMergedLessonContent(baseContent: string, transcript: string) {
   return `${cleanedBase}${VIDEO_TRANSCRIPT_MARKER}${cleanedTranscript}`;
 }
 
+const TRACE_LABELS: Record<string, string> = {
+  dom_transcript: 'DOM transcript',
+  wistia_captions: 'Wistia captions',
+  vimeo_captions: 'Vimeo captions',
+  wistia_media: 'Wistia media URL',
+  vimeo_media: 'Vimeo media URL',
+  audio_transcription: 'Audio transcription',
+};
+
+function ExtractionTraceExpander({ trace, metadataOnly }: { trace: ExtractionTrace; metadataOnly?: boolean }) {
+  const [open, setOpen] = useState(false);
+
+  const stepKeys = ['dom_transcript', 'wistia_captions', 'vimeo_captions', 'wistia_media', 'vimeo_media', 'audio_transcription'] as const;
+
+  // Build metadata-only explanation from trace
+  const metadataReason = metadataOnly
+    ? stepKeys
+        .filter(k => trace[k].attempted && !trace[k].success)
+        .map(k => TRACE_LABELS[k] + ': ' + (trace[k].detail || 'failed'))
+        .join('; ') || 'No extraction strategies succeeded'
+    : null;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="pl-5">
+      <CollapsibleTrigger className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+        <Search className="h-2.5 w-2.5" />
+        <span>Trace</span>
+        {trace.final_source && (
+          <Badge variant="outline" className="text-[8px] h-3.5 ml-1">{trace.final_source.replace(/_/g, ' ')}</Badge>
+        )}
+        <ChevronDown className={`h-2.5 w-2.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-1 space-y-0.5">
+        {stepKeys.map(key => {
+          const step = trace[key];
+          const color = step.success
+            ? 'text-green-600'
+            : step.attempted
+            ? 'text-amber-500'
+            : 'text-muted-foreground/50';
+          const icon = step.success ? '✓' : step.attempted ? '○' : '–';
+          return (
+            <div key={key} className={`flex items-start gap-1.5 text-[10px] ${color}`}>
+              <span className="w-2.5 text-center flex-shrink-0">{icon}</span>
+              <span className="font-medium flex-shrink-0">{TRACE_LABELS[key]}:</span>
+              <span className="text-muted-foreground">{step.detail || (step.attempted ? 'no result' : 'not attempted')}</span>
+              {step.word_count != null && <span className="text-muted-foreground">({step.word_count}w)</span>}
+            </div>
+          );
+        })}
+        {metadataReason && (
+          <div className="text-[10px] text-amber-600 mt-1 pt-1 border-t border-border/50">
+            ⚠ Metadata-only: {metadataReason}
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps) {
   const [url, setUrl] = useState('');
   const [fetching, setFetching] = useState(false);
