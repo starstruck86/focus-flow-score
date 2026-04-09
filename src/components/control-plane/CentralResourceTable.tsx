@@ -266,16 +266,19 @@ export function CentralResourceTable({
                         <span className="text-xs text-muted-foreground">{inferSourceType(r.title)}</span>
                       </TableCell>
                       <TableCell>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge variant="outline" className={cn('text-[10px] font-medium cursor-help', colors.text, colors.bg, colors.border)}>
-                              {CONTROL_PLANE_LABELS[state]}
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="max-w-xs text-xs">
-                            <p className="font-medium mb-1">{evidence.reason}</p>
-                          </TooltipContent>
-                        </Tooltip>
+                        <div className="flex items-center gap-1.5">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className={cn('text-[10px] font-medium cursor-help', colors.text, colors.bg, colors.border)}>
+                                {CONTROL_PLANE_LABELS[state]}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="max-w-xs text-xs">
+                              <p className="font-medium mb-1">{evidence.reason}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          {flash && <FlashBadge status={flash} />}
+                        </div>
                       </TableCell>
                       <TableCell className="text-center">
                         {r.is_content_backed
