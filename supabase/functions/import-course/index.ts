@@ -510,17 +510,29 @@ function parseCurriculum(html: string, baseOrigin: string): LessonInfo[] {
 
 async function discoverCurriculum(courseUrl: string, creds?: { email?: string; password?: string }): Promise<{ platform: string; title: string; lessons: LessonInfo[]; debug: string[] }> {
   const jar = createCookieJar();
-  const origin = new URL(courseUrl).origin;
+  const parsedUrl = new URL(courseUrl);
+  const origin = parsedUrl.origin;
   
-  const { success: loggedIn, debug } = await kajabiLogin(courseUrl, jar, creds);
+  // Auto-strip /categories/... suffix to scan the full product page
+  const categoryMatch = parsedUrl.pathname.match(/^(\/products\/[^/]+)\/categories\/.+$/);
+  let effectiveUrl = courseUrl;
+  if (categoryMatch) {
+    effectiveUrl = `${origin}${categoryMatch[1]}`;
+  }
+  
+  const { success: loggedIn, debug } = await kajabiLogin(effectiveUrl, jar, creds);
   
   if (!loggedIn) {
     debug.push('Login failed — attempting course page fetch anyway');
   }
   
+  if (effectiveUrl !== courseUrl) {
+    debug.push(`Category URL detected — scanning full product page instead: ${effectiveUrl}`);
+  }
+  
   // Fetch the course page with session cookies
-  debug.push(`Fetching course page: ${courseUrl}`);
-  const courseResp = await fetch(courseUrl, {
+  debug.push(`Fetching course page: ${effectiveUrl}`);
+  const courseResp = await fetch(effectiveUrl, {
     headers: {
       'User-Agent': UA,
       'Cookie': jar.toString(),
