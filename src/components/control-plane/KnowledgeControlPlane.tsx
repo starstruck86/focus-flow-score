@@ -60,6 +60,11 @@ export function KnowledgeControlPlane() {
     [resources, processingIds],
   );
 
+  const downstreamReadiness = useMemo(
+    () => computeDownstreamReadiness(resources),
+    [resources],
+  );
+
   const conflicts = useMemo(() => detectAllConflicts(resources), [resources]);
   const conflictIds = useMemo(() => new Set(conflicts.map(c => c.resource_id)), [conflicts]);
 
