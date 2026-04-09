@@ -1380,6 +1380,45 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (action === 'download_asset') {
+      const { asset_url } = body;
+      if (!asset_url) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'asset_url is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      // Download the asset with authenticated session
+      const jar = createCookieJar();
+      await kajabiLogin(url, jar, creds);
+      
+      const assetResp = await fetch(asset_url, {
+        headers: { 'User-Agent': UA, 'Cookie': jar.toString() },
+        redirect: 'follow',
+      });
+      
+      if (!assetResp.ok) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Asset download failed: HTTP ${assetResp.status}` }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const contentType = assetResp.headers.get('content-type') || 'application/octet-stream';
+      const arrayBuffer = await assetResp.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          content_type: contentType,
+          size_bytes: arrayBuffer.byteLength,
+          data_base64: base64,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (action === 'debug_login') {
       const jar = createCookieJar();
       const { success, debug } = await kajabiLogin(url, jar, creds);
