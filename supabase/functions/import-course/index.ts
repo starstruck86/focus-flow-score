@@ -557,10 +557,16 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
     };
   }
   
-  // Extract course title
-  const titleMatch = courseHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || 
-                     courseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const courseTitle = titleMatch?.[1]?.replace(/<[^>]+>/g, '').trim() || 'Untitled Course';
+  // Extract course title — prefer <title> (usually "Course Name | Platform") over <h1> (can be a lesson name)
+  const titleTagMatch = courseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const h1Match = courseHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  let courseTitle = 'Untitled Course';
+  if (titleTagMatch) {
+    // Strip platform suffix like " | Kajabi" or " - pclub.io"
+    courseTitle = titleTagMatch[1].replace(/<[^>]+>/g, '').replace(/\s*[|–—-]\s*[^|–—-]*$/, '').trim() || courseTitle;
+  } else if (h1Match) {
+    courseTitle = h1Match[1].replace(/<[^>]+>/g, '').trim() || courseTitle;
+  }
   
   // Detect platform
   let platform = 'kajabi';
