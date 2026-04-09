@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Crosshair, Brain, Download } from 'lucide-react';
+import { Crosshair, Brain, Download, Shield } from 'lucide-react';
 import { SHELL } from '@/lib/layout';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { PodcastQueueIndicator } from '@/components/prep/PodcastQueueIndicator';
@@ -10,12 +10,13 @@ import { PodcastQueueIndicator } from '@/components/prep/PodcastQueueIndicator';
 import { PrepCommandCenter } from '@/components/prep-tab/PrepCommandCenter';
 import { KnowledgeWorkspace } from '@/components/knowledge/KnowledgeWorkspace';
 import { IngestWorkspace } from '@/components/ingest/IngestWorkspace';
+import { KnowledgeControlPlane } from '@/components/control-plane/KnowledgeControlPlane';
 
 // Governance (feature-flagged overlay)
 import { GovernancePanel } from '@/components/governance/GovernancePanel';
 
 export default function PrepHub() {
-  const [activeTab, setActiveTab] = useState('prep');
+  const [activeTab, setActiveTab] = useState('control-plane');
 
   // Listen for Dave navigation event
   useEffect(() => {
@@ -30,7 +31,7 @@ export default function PrepHub() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">Sales Brain OS</h1>
-            <p className="text-xs text-muted-foreground">Prep · Knowledge · Ingest</p>
+            <p className="text-xs text-muted-foreground">Control Plane · Prep · Knowledge · Ingest</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -41,6 +42,10 @@ export default function PrepHub() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className={SHELL.tabs.list}>
+            <TabsTrigger value="control-plane" className={SHELL.tabs.triggerWithIcon}>
+              <Shield className="h-3.5 w-3.5" />
+              Control Plane
+            </TabsTrigger>
             <TabsTrigger value="prep" className={SHELL.tabs.triggerWithIcon}>
               <Crosshair className="h-3.5 w-3.5" />
               Prep
@@ -57,6 +62,11 @@ export default function PrepHub() {
 
           {/* GOVERNANCE PANEL — collapsible, feature-flagged */}
           <GovernancePanel />
+
+          {/* ═══ CONTROL PLANE ═══ */}
+          <TabsContent value="control-plane" className="mt-3">
+            <KnowledgeControlPlane />
+          </TabsContent>
 
           {/* ═══ PREP ═══ */}
           <TabsContent value="prep" className="mt-3">
