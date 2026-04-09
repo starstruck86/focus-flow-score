@@ -578,11 +578,22 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
               .eq('id', resourceId)
               .single();
 
-            const { data: txData } = await trackedInvoke<any>('transcribe-audio', {
+            const { data: txData, error: txError } = await trackedInvoke<any>('transcribe-audio', {
               body: { audio_url: lessonData.media_url },
               timeoutMs: 120_000,
             });
-            if (txData?.success && txData.transcript) {
+            console.log(`[CourseImport] transcribe-audio response for "${lesson.title}":`, {
+              success: txData?.success,
+              hasTranscript: typeof txData?.transcript === 'string',
+              transcriptLength: txData?.transcript?.length,
+              totalWords: txData?.totalWords,
+              failureCode: txData?.failureCode,
+              failureReason: txData?.failureReason,
+              stage: txData?.stage,
+              error: txError?.message,
+            });
+            // Check success: transcript can be empty string for silent videos, so check type not truthiness
+            if (txData?.success && typeof txData.transcript === 'string' && txData.transcript.trim().length > 0) {
               const transcript = txData.transcript.trim();
               const baseContent = pickLessonBody([
                 lessonData?.content,
@@ -612,6 +623,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
               });
               console.log(`Transcribed video for ${lesson.title}: ${txData.transcript.length} chars`);
             } else {
+              const reason = txData?.failureCode || txData?.failureReason || txError?.message || 'unknown';
+              console.warn(`[CourseImport] Transcription failed for "${lesson.title}": ${reason}`);
               await updateLineageRow(lesson.url, { transcript_status: 'transcript_failed' });
             }
           } catch (txErr) {
