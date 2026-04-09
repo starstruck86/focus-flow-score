@@ -1,17 +1,21 @@
 /**
- * Central Resource Table — filterable, expandable rows with lifecycle state.
+ * Central Resource Table — filterable, expandable rows with "Why?" evidence.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import {
+  Tooltip, TooltipContent, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   type ControlPlaneState, type ControlPlaneFilter,
   CONTROL_PLANE_LABELS, CONTROL_PLANE_COLORS,
   deriveControlPlaneState, matchesFilter,
+  deriveStateEvidence,
 } from '@/lib/controlPlaneState';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
 
@@ -19,6 +23,7 @@ interface Props {
   resources: CanonicalResourceStatus[];
   filter: ControlPlaneFilter;
   processingIds?: Set<string>;
+  conflictIds?: Set<string>;
 }
 
 // Source type heuristic from title
@@ -68,7 +73,7 @@ function nextActionLabel(state: ControlPlaneState, resource: CanonicalResourceSt
   }
 }
 
-export function CentralResourceTable({ resources, filter, processingIds }: Props) {
+export function CentralResourceTable({ resources, filter, processingIds, conflictIds }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<'title' | 'state' | 'kis' | 'updated'>('updated');
   const [sortAsc, setSortAsc] = useState(false);
@@ -76,7 +81,7 @@ export function CentralResourceTable({ resources, filter, processingIds }: Props
   const rows = useMemo(() => {
     const filtered = resources
       .map(r => ({ resource: r, state: deriveControlPlaneState(r, processingIds) }))
-      .filter(({ state }) => matchesFilter(state, filter));
+      .filter(({ state, resource }) => matchesFilter(state, filter, resource.resource_id, conflictIds));
 
     filtered.sort((a, b) => {
       let cmp = 0;
@@ -90,7 +95,7 @@ export function CentralResourceTable({ resources, filter, processingIds }: Props
     });
 
     return filtered;
-  }, [resources, filter, processingIds, sortField, sortAsc]);
+  }, [resources, filter, processingIds, conflictIds, sortField, sortAsc]);
 
   const handleSort = (field: typeof sortField) => {
     if (sortField === field) setSortAsc(!sortAsc);
@@ -134,12 +139,13 @@ export function CentralResourceTable({ resources, filter, processingIds }: Props
             {rows.map(({ resource: r, state }) => {
               const isExpanded = expandedId === r.resource_id;
               const colors = CONTROL_PLANE_COLORS[state];
+              const evidence = deriveStateEvidence(r, state);
+              const hasConflict = conflictIds?.has(r.resource_id);
 
               return (
-                <>
+                <Fragment key={r.resource_id}>
                   <TableRow
-                    key={r.resource_id}
-                    className="cursor-pointer"
+                    className={cn('cursor-pointer', hasConflict && 'bg-destructive/5')}
                     onClick={() => setExpandedId(isExpanded ? null : r.resource_id)}
                   >
                     <TableCell className="p-2">
@@ -149,15 +155,27 @@ export function CentralResourceTable({ resources, filter, processingIds }: Props
                       }
                     </TableCell>
                     <TableCell className="font-medium text-sm max-w-[200px] truncate">
-                      {r.title}
+                      <div className="flex items-center gap-1.5">
+                        {hasConflict && (
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive shrink-0" title="Has conflicts" />
+                        )}
+                        {r.title}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <span className="text-xs text-muted-foreground">{inferSourceType(r.title)}</span>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={cn('text-[10px] font-medium', colors.text, colors.bg, colors.border)}>
-                        {CONTROL_PLANE_LABELS[state]}
-                      </Badge>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant="outline" className={cn('text-[10px] font-medium cursor-help', colors.text, colors.bg, colors.border)}>
+                            {CONTROL_PLANE_LABELS[state]}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-xs text-xs">
+                          <p className="font-medium mb-1">{evidence.reason}</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </TableCell>
                     <TableCell className="text-center">
                       {r.is_content_backed
@@ -191,13 +209,13 @@ export function CentralResourceTable({ resources, filter, processingIds }: Props
                   </TableRow>
 
                   {isExpanded && (
-                    <TableRow key={`${r.resource_id}-detail`}>
+                    <TableRow>
                       <TableCell colSpan={9} className="bg-muted/30 p-4">
                         <ExpandedResourceDetail resource={r} state={state} />
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </TableBody>
@@ -210,40 +228,30 @@ export function CentralResourceTable({ resources, filter, processingIds }: Props
   );
 }
 
-// ── Expanded detail view ───────────────────────────────────
+// ── Expanded detail with "Why?" evidence panel ─────────────
 function ExpandedResourceDetail({ resource: r, state }: { resource: CanonicalResourceStatus; state: ControlPlaneState }) {
   const colors = CONTROL_PLANE_COLORS[state];
+  const evidence = deriveStateEvidence(r, state);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-      {/* Pipeline Timeline */}
+      {/* WHY? — Primary evidence panel */}
       <div className="space-y-2">
-        <h4 className="font-semibold text-foreground">Pipeline Status</h4>
-        <div className="space-y-1">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Lifecycle State</span>
-            <Badge variant="outline" className={cn('text-[10px]', colors.text, colors.bg)}>
-              {CONTROL_PLANE_LABELS[state]}
-            </Badge>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Internal Stage</span>
-            <span className="font-mono">{r.canonical_stage}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Enriched</span>
-            <span>{r.is_enriched ? '✓ Yes' : '✗ No'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Content Backed</span>
-            <span>{r.is_content_backed ? '✓ Yes' : '✗ No'}</span>
-          </div>
-          {r.blocked_reason !== 'none' && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Blocked Reason</span>
-              <span className="text-destructive font-medium">{r.blocked_reason.replace(/_/g, ' ')}</span>
+        <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+          Why: {CONTROL_PLANE_LABELS[state]}
+        </h4>
+        <p className="text-muted-foreground italic">{evidence.reason}</p>
+        <div className="space-y-1 mt-2">
+          {evidence.evidence.map((e, i) => (
+            <div key={i} className="flex items-center gap-2">
+              {e.pass
+                ? <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                : <XCircle className="h-3 w-3 text-destructive shrink-0" />
+              }
+              <span className="text-muted-foreground">{e.label}</span>
+              <span className="ml-auto font-mono tabular-nums">{e.value}</span>
             </div>
-          )}
+          ))}
         </div>
       </div>
 
@@ -272,17 +280,31 @@ function ExpandedResourceDetail({ resource: r, state }: { resource: CanonicalRes
         </div>
       </div>
 
-      {/* Diagnostics */}
+      {/* Pipeline Facts */}
       <div className="space-y-2">
-        <h4 className="font-semibold text-foreground">Diagnostics</h4>
+        <h4 className="font-semibold text-foreground">Pipeline Facts</h4>
         <div className="space-y-1">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Internal Stage</span>
+            <span className="font-mono text-[10px]">{r.canonical_stage}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Enriched</span>
+            <span>{r.is_enriched ? '✓ Yes' : '✗ No'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Content Backed</span>
+            <span>{r.is_content_backed ? '✓ Yes' : '✗ No'}</span>
+          </div>
+          {r.blocked_reason !== 'none' && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Blocked Reason</span>
+              <span className="text-destructive font-medium">{r.blocked_reason.replace(/_/g, ' ')}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Last Updated</span>
             <span>{r.last_transition_at ? new Date(r.last_transition_at).toLocaleString() : '—'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Next Action</span>
-            <span className="text-primary font-medium">{nextActionLabel(state, r)}</span>
           </div>
         </div>
       </div>

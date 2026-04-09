@@ -34,18 +34,198 @@ export const CONTROL_PLANE_COLORS: Record<ControlPlaneState, { text: string; bg:
   processing: { text: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/30' },
 };
 
-// ── Derived signals (explanations, not states) ─────────────
-export interface DerivedSignals {
-  has_digest: boolean;
-  ki_count: number;
-  ki_density: number;
-  under_extracted: boolean;
-  stale: boolean;
-  shallow: boolean;
-  resumable: boolean;
-  drift_detected: boolean;
-  mismatch_detected: boolean;
+// ── Evidence: structured "Why?" for every state ────────────
+export interface StateEvidence {
+  state: ControlPlaneState;
+  reason: string;
+  evidence: { label: string; value: string; pass: boolean }[];
 }
+
+export function deriveStateEvidence(
+  resource: CanonicalResourceStatus,
+  state: ControlPlaneState,
+): StateEvidence {
+  const e: StateEvidence['evidence'] = [];
+
+  // Content evidence
+  e.push({
+    label: 'Content exists',
+    value: resource.is_content_backed ? 'Yes' : 'No',
+    pass: resource.is_content_backed,
+  });
+
+  // KI evidence
+  e.push({
+    label: 'KI count',
+    value: String(resource.knowledge_item_count),
+    pass: resource.knowledge_item_count > 0,
+  });
+
+  // Active KI evidence
+  if (resource.knowledge_item_count > 0) {
+    e.push({
+      label: 'Active KIs',
+      value: String(resource.active_ki_count),
+      pass: resource.active_ki_count > 0,
+    });
+  }
+
+  // Context evidence (only if active KIs exist)
+  if (resource.active_ki_count > 0) {
+    e.push({
+      label: 'KIs with contexts',
+      value: String(resource.active_ki_with_context_count),
+      pass: resource.active_ki_with_context_count > 0,
+    });
+  }
+
+  // Enrichment evidence
+  e.push({
+    label: 'Enriched',
+    value: resource.is_enriched ? 'Yes' : 'No',
+    pass: resource.is_enriched,
+  });
+
+  // Blocked reason
+  e.push({
+    label: 'Blocked reason',
+    value: resource.blocked_reason === 'none' ? 'None' : resource.blocked_reason.replace(/_/g, ' '),
+    pass: resource.blocked_reason === 'none',
+  });
+
+  // Derive the human-readable reason
+  let reason: string;
+  switch (state) {
+    case 'ingested':
+      reason = 'No usable content detected yet';
+      break;
+    case 'has_content':
+      reason = resource.knowledge_item_count === 0
+        ? 'Content exists but no knowledge has been extracted'
+        : 'Content exists but KIs are not yet active';
+      break;
+    case 'extracted':
+      reason = 'Knowledge extracted but not fully activated for downstream use';
+      break;
+    case 'activated':
+      reason = 'Fully activated — usable by downstream AI';
+      break;
+    case 'blocked': {
+      const blockedReasons: Record<string, string> = {
+        empty_content: 'Content is missing or too short',
+        no_extraction: 'Enriched but extraction produced no knowledge items',
+        no_activation: 'Knowledge items exist but none are active',
+        missing_contexts: 'Active KIs exist but none have usage contexts assigned',
+        stale_blocker_state: 'Content exists but resource is stuck in a failed/blocked pipeline state',
+      };
+      reason = blockedReasons[resource.blocked_reason] ?? 'Resource has an unresolved issue';
+      break;
+    }
+    case 'processing':
+      reason = 'Currently being processed by the pipeline';
+      break;
+    default:
+      reason = 'Unknown state';
+  }
+
+  return { state, reason, evidence: e };
+}
+
+// ── Conflict detection ─────────────────────────────────────
+export interface ConflictInfo {
+  resource_id: string;
+  title: string;
+  conflicts: string[];
+}
+
+export function detectConflicts(resource: CanonicalResourceStatus): string[] {
+  const conflicts: string[] = [];
+
+  // Content-backed but blocked as empty_content
+  if (resource.is_content_backed && resource.blocked_reason === 'empty_content') {
+    conflicts.push('Marked as content-backed but blocked for empty content');
+  }
+
+  // Has KIs but canonical stage says uploaded
+  if (resource.knowledge_item_count > 0 && resource.canonical_stage === 'uploaded') {
+    conflicts.push('Has knowledge items but lifecycle stage is "uploaded"');
+  }
+
+  // Enriched but no content
+  if (resource.is_enriched && !resource.is_content_backed) {
+    conflicts.push('Marked enriched but has no usable content');
+  }
+
+  // Active KIs with contexts but not operationalized
+  if (resource.active_ki_with_context_count > 0 && resource.canonical_stage !== 'operationalized') {
+    conflicts.push(`Has ${resource.active_ki_with_context_count} active KIs with contexts but stage is "${resource.canonical_stage}" not "operationalized"`);
+  }
+
+  // Active KIs but blocked
+  if (resource.active_ki_count > 0 && resource.blocked_reason !== 'none') {
+    conflicts.push(`Has ${resource.active_ki_count} active KIs but is blocked: ${resource.blocked_reason.replace(/_/g, ' ')}`);
+  }
+
+  return conflicts;
+}
+
+export function detectAllConflicts(resources: CanonicalResourceStatus[]): ConflictInfo[] {
+  const results: ConflictInfo[] = [];
+  for (const r of resources) {
+    const conflicts = detectConflicts(r);
+    if (conflicts.length > 0) {
+      results.push({ resource_id: r.resource_id, title: r.title, conflicts });
+    }
+  }
+  return results;
+}
+
+// ── Metric definitions ─────────────────────────────────────
+export interface MetricDefinition {
+  label: string;
+  definition: string;
+  formula: string;
+  dataSources: string[];
+}
+
+export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
+  total: {
+    label: 'Total Resources',
+    definition: 'Count of all resources in the library, regardless of state.',
+    formula: 'COUNT(resources)',
+    dataSources: ['resources table'],
+  },
+  ready: {
+    label: 'Ready',
+    definition: 'Resources with extracted knowledge that are usable downstream. Includes both "Extracted" (KIs exist but not all active) and "Activated" (fully usable by AI).',
+    formula: 'COUNT(resources WHERE knowledge_item_count > 0 AND blocked_reason = "none")',
+    dataSources: ['resources table', 'knowledge_items table'],
+  },
+  needsExtraction: {
+    label: 'Needs Extraction',
+    definition: 'Resources with parseable content but no knowledge items extracted yet.',
+    formula: 'COUNT(resources WHERE content_backed = true AND knowledge_item_count = 0 AND blocked_reason = "none")',
+    dataSources: ['resources table', 'knowledge_items table'],
+  },
+  needsReview: {
+    label: 'Needs Review',
+    definition: 'Resources with a detected blocker — empty content, stale state, missing activation, or missing contexts.',
+    formula: 'COUNT(resources WHERE blocked_reason ≠ "none")',
+    dataSources: ['resources table', 'knowledge_items table'],
+  },
+  processing: {
+    label: 'Processing',
+    definition: 'Resources currently being processed by an active background job.',
+    formula: 'COUNT(resources WHERE active_job_status = "running")',
+    dataSources: ['resources table', 'background_jobs table'],
+  },
+  ingested: {
+    label: 'Ingested',
+    definition: 'Resources that exist in the library but have no usable content yet (content too short or missing).',
+    formula: 'COUNT(resources WHERE content_backed = false AND blocked_reason = "none")',
+    dataSources: ['resources table'],
+  },
+};
 
 // ── Map canonical lifecycle → control plane state ──────────
 export function deriveControlPlaneState(
@@ -85,32 +265,6 @@ export function deriveControlPlaneState(
   }
 }
 
-// ── Derive signals from resource data ──────────────────────
-export function deriveDerivedSignals(
-  resource: CanonicalResourceStatus & {
-    content_length?: number | null;
-    enrichment_status?: string | null;
-    enriched_at?: string | null;
-    updated_at?: string | null;
-  },
-): DerivedSignals {
-  const contentLength = resource.is_content_backed ? 1000 : 0; // approximate
-  const kiCount = resource.knowledge_item_count;
-  const kiDensity = contentLength > 0 ? (kiCount / (contentLength / 1000)) : 0;
-
-  return {
-    has_digest: false, // will be enriched later when digest data available
-    ki_count: kiCount,
-    ki_density: Math.round(kiDensity * 100) / 100,
-    under_extracted: resource.is_content_backed && kiCount === 0,
-    stale: false, // can be enriched with time-based logic
-    shallow: kiCount > 0 && kiCount < 3,
-    resumable: false, // will be enriched from extraction_batches
-    drift_detected: false,
-    mismatch_detected: resource.blocked_reason !== 'none',
-  };
-}
-
 // ── Summary view for the control bar ───────────────────────
 export interface ControlPlaneSummary {
   total: number;
@@ -119,6 +273,7 @@ export interface ControlPlaneSummary {
   needsReview: number;  // blocked or mismatch
   processing: number;
   ingested: number;
+  lastUpdated: string;  // ISO timestamp
 }
 
 export function computeControlPlaneSummary(
@@ -132,6 +287,7 @@ export function computeControlPlaneSummary(
     needsReview: 0,
     processing: 0,
     ingested: 0,
+    lastUpdated: new Date().toISOString(),
   };
 
   for (const r of resources) {
@@ -166,13 +322,17 @@ export type ControlPlaneFilter =
   | 'needs_extraction'
   | 'needs_review'
   | 'processing'
-  | 'ingested';
+  | 'ingested'
+  | 'conflicts';
 
 export function matchesFilter(
   state: ControlPlaneState,
   filter: ControlPlaneFilter,
+  resourceId?: string,
+  conflictIds?: Set<string>,
 ): boolean {
   if (filter === 'all') return true;
+  if (filter === 'conflicts') return conflictIds?.has(resourceId ?? '') ?? false;
   switch (filter) {
     case 'ready': return state === 'extracted' || state === 'activated';
     case 'needs_extraction': return state === 'has_content';
