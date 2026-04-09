@@ -479,6 +479,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           metadataOnly,
           transcriptSource: lessonData?.transcript_source,
           hasVideoTranscript: lessonData?.has_video_transcript,
+          extractionTrace: lessonData?.extraction_trace,
         });
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to save resource';
