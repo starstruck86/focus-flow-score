@@ -30,6 +30,7 @@ interface LibraryStats {
   total: number;
   enriched: number;
   operationalized: number;
+  digested: number;
   placeholder: number;
   shallow: number;
   stale: number;
