@@ -276,6 +276,13 @@ export interface ControlPlaneSummary {
   lastUpdated: string;  // ISO timestamp
 }
 
+/** Downstream AI readiness metrics (structured for future surface) */
+export interface DownstreamReadiness {
+  withActiveKIs: number;
+  withContexts: number;
+  groundingEligible: number;
+}
+
 export function computeControlPlaneSummary(
   resources: CanonicalResourceStatus[],
   processingIds?: Set<string>,
@@ -313,6 +320,30 @@ export function computeControlPlaneSummary(
   }
 
   return summary;
+}
+
+/** Compute downstream AI readiness (Dave grounding, playbook gen, etc.) */
+export function computeDownstreamReadiness(
+  resources: CanonicalResourceStatus[],
+): DownstreamReadiness {
+  let withActiveKIs = 0;
+  let withContexts = 0;
+  let groundingEligible = 0;
+
+  for (const r of resources) {
+    if (r.active_ki_count > 0) {
+      withActiveKIs++;
+      if (r.active_ki_with_context_count > 0) {
+        withContexts++;
+        // Grounding-eligible = active KIs + contexts + not blocked
+        if (r.blocked_reason === 'none') {
+          groundingEligible++;
+        }
+      }
+    }
+  }
+
+  return { withActiveKIs, withContexts, groundingEligible };
 }
 
 // ── Filter type for the central table ──────────────────────
