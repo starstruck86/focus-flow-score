@@ -51,7 +51,7 @@ export interface UseDaveConnectionManager {
   /** Last N connection events for debug panel */
   eventHistory: DaveEventRecord[];
   /** Dump full connection summary to console for runtime validation */
-  dumpSummary: () => void;
+  dumpSummary: (opts?: { copy?: boolean; download?: boolean }) => void;
 }
 
 export function useDaveConnectionManager(): UseDaveConnectionManager {
