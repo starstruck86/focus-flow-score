@@ -124,7 +124,7 @@ export function KnowledgeControlPlane() {
     switch (action) {
       case 'bulk_extract': {
         toast.info(`Extracting knowledge from ${ids.length} resources…`);
-        await runBatch('needs_extraction', { max: ids.length });
+        await runBatch('all_ready', { max: ids.length });
         refetch();
         break;
       }
