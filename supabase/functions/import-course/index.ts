@@ -1282,35 +1282,55 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
     assets.push({ filename, url: resolvedUrl, extension: ext, source_section: source });
   }
 
-  // Diagnostic: log any raw HTML snippets containing asset-like keywords that weren't captured
+  // Diagnostic: capture evidence about asset-like references in HTML
   if (assets.length === 0) {
     const assetHints: string[] = [];
-    // Look for any mention of common asset filenames/extensions in the HTML
-    const hintPatterns = [
-      /[^<>"'\s]*\.pdf[^<>"'\s]*/gi,
-      /[^<>"'\s]*\.docx?[^<>"'\s]*/gi,
-      /[^<>"'\s]*\.pptx?[^<>"'\s]*/gi,
-      /[^<>"'\s]*\.xlsx?[^<>"'\s]*/gi,
+    const htmlSnippets: string[] = [];
+
+    // Keyword search with context snippets
+    const keywordPatterns = [
+      { label: 'pdf_ref', pattern: /\.pdf/gi },
+      { label: 'nexus', pattern: /nexus.{0,30}exercise/gi },
+      { label: 'download_kw', pattern: /download/gi },
+      { label: 'attachment_kw', pattern: /attachment/gi },
+      { label: 'kjb_file', pattern: /kjb-file/gi },
+      { label: 'file_block', pattern: /file.{0,5}block/gi },
     ];
-    for (const p of hintPatterns) {
-      const matches = html.match(p);
-      if (matches) assetHints.push(...matches.slice(0, 3));
+
+    for (const { label, pattern } of keywordPatterns) {
+      let m;
+      let count = 0;
+      while ((m = pattern.exec(html)) !== null && count < 2) {
+        assetHints.push(`${label}@${m.index}`);
+        // Capture surrounding HTML (300 chars before, 300 after)
+        const start = Math.max(0, m.index - 300);
+        const end = Math.min(html.length, m.index + m[0].length + 300);
+        const snippet = html.substring(start, end)
+          .replace(/\n\s+/g, ' ')  // collapse whitespace
+          .replace(/\s{2,}/g, ' '); // normalize
+        htmlSnippets.push(`[${label}@${m.index}] ...${snippet}...`);
+        count++;
+      }
     }
-    // Look for download buttons/links that might not be standard <a href>
-    const downloadBtnMatches = html.match(/<(?:button|a)[^>]*(?:download|file|attachment)[^>]*>[\s\S]{0,200}/gi);
-    if (downloadBtnMatches) {
-      assetHints.push(...downloadBtnMatches.slice(0, 2).map(m => m.substring(0, 150)));
+
+    // Also look for any <a> tags with href containing known asset keywords
+    const anchorWithAsset = html.match(/<a[^>]*href="[^"]*(?:pdf|download|attachment|file)[^"]*"[^>]*>[\s\S]{0,100}<\/a>/gi);
+    if (anchorWithAsset) {
+      assetHints.push(`anchor_asset_href:${anchorWithAsset.length}`);
+      htmlSnippets.push(...anchorWithAsset.slice(0, 2).map(m => `[anchor_asset] ${m.substring(0, 250)}`));
     }
-    // Look for Kajabi file blocks with broader patterns
-    const kjbFileMatches = html.match(/kjb-file[\s\S]{0,300}/gi);
-    if (kjbFileMatches) {
-      assetHints.push(...kjbFileMatches.slice(0, 2).map(m => m.substring(0, 200)));
-    }
+
     if (assetHints.length > 0) {
-      debug.push(`[Asset Detection] No assets captured, but found ${assetHints.length} hint(s) in HTML: ${assetHints.join(' | ')}`);
-      console.log(`[Asset Detection Hints] ${assetHints.join(' | ')}`);
+      debug.push(`[Asset Detection] No assets captured. ${assetHints.length} hint(s): ${assetHints.join(', ')}`);
+      debug.push(`[Asset Detection Snippets] ${htmlSnippets.join('\n---\n')}`);
+      console.log(`[Asset Detection Hints] ${assetHints.join(', ')}`);
+      // Log snippets to edge function logs (truncate to avoid log overflow)
+      for (const s of htmlSnippets.slice(0, 4)) {
+        console.log(`[Asset Snippet] ${s.substring(0, 500)}`);
+      }
     } else {
       debug.push(`[Asset Detection] No assets found and no asset-like references in HTML`);
+      console.log(`[Asset Detection] Zero hints in ${html.length} chars of HTML`);
     }
   } else {
     debug.push(`[Asset Detection] Found ${assets.length} downloadable asset(s): ${assets.map(a => `${a.filename} (${a.source_section})`).join(', ')}`);
