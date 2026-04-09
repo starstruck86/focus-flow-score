@@ -1031,6 +1031,17 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
   let videoTranscript = '';
   let transcriptSource = '';
 
+  // Structured extraction trace
+  interface TraceStep { attempted: boolean; success: boolean; word_count?: number; detail?: string }
+  const trace: Record<string, TraceStep> = {
+    dom_transcript: { attempted: false, success: false },
+    wistia_captions: { attempted: false, success: false },
+    vimeo_captions: { attempted: false, success: false },
+    wistia_media: { attempted: false, success: false },
+    vimeo_media: { attempted: false, success: false },
+    audio_transcription: { attempted: false, success: false },
+  };
+
   const wistiaIds = videoEmbeds
     .filter(v => v.startsWith('[Wistia Video:'))
     .map(v => v.match(/\[Wistia Video: ([a-z0-9]+)\]/i)?.[1])
@@ -1042,54 +1053,120 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
     .filter(Boolean) as string[];
 
   // Strategy 1: DOM transcript (already extracted above)
+  trace.dom_transcript.attempted = true;
   if (domTranscript) {
+    const wc = domTranscript.split(/\s+/).filter(Boolean).length;
+    trace.dom_transcript.success = true;
+    trace.dom_transcript.word_count = wc;
+    trace.dom_transcript.detail = `Extracted ${wc} words from page transcript containers`;
     videoTranscript = domTranscript;
     transcriptSource = 'dom_transcript';
-    debug.push(`[Transcript Strategy] Using DOM transcript (${domTranscript.split(/\s+/).length} words)`);
+    debug.push(`[Transcript Strategy] Using DOM transcript (${wc} words)`);
+  } else {
+    trace.dom_transcript.detail = 'No transcript containers found in DOM';
   }
 
   // Strategy 2: Wistia captions API
   if (!videoTranscript && wistiaIds.length > 0) {
+    trace.wistia_captions.attempted = true;
     for (const wid of wistiaIds) {
       const captions = await resolveWistiaCaptions(wid, debug);
       if (captions && captions.split(/\s+/).length > 20) {
+        const wc = captions.split(/\s+/).filter(Boolean).length;
+        trace.wistia_captions.success = true;
+        trace.wistia_captions.word_count = wc;
+        trace.wistia_captions.detail = `Recovered ${wc} words from Wistia captions API (${wid})`;
         videoTranscript = captions;
         transcriptSource = 'wistia_captions';
         debug.push(`[Transcript Strategy] Using Wistia captions`);
         break;
+      } else {
+        trace.wistia_captions.detail = captions
+          ? `Wistia captions too short (${captions.split(/\s+/).length} words, need >20)`
+          : `Wistia captions API returned no content for ${wid}`;
       }
     }
+  } else if (!videoTranscript && wistiaIds.length === 0) {
+    trace.wistia_captions.detail = 'No Wistia embeds detected';
   }
 
   // Strategy 3: Vimeo text tracks
   if (!videoTranscript && vimeoIds.length > 0) {
+    trace.vimeo_captions.attempted = true;
     for (const vid of vimeoIds) {
       const captions = await resolveVimeoCaptions(vid, debug);
       if (captions && captions.split(/\s+/).length > 20) {
+        const wc = captions.split(/\s+/).filter(Boolean).length;
+        trace.vimeo_captions.success = true;
+        trace.vimeo_captions.word_count = wc;
+        trace.vimeo_captions.detail = `Recovered ${wc} words from Vimeo text track (${vid})`;
         videoTranscript = captions;
         transcriptSource = 'vimeo_captions';
         debug.push(`[Transcript Strategy] Using Vimeo captions`);
         break;
+      } else {
+        trace.vimeo_captions.detail = captions
+          ? `Vimeo captions too short (${captions.split(/\s+/).length} words)`
+          : `Vimeo config returned no text tracks for ${vid}`;
       }
     }
+  } else if (!videoTranscript && vimeoIds.length === 0) {
+    trace.vimeo_captions.detail = 'No Vimeo embeds detected';
   }
 
   // Strategy 4: Resolve media URLs for downstream audio transcription
   if (wistiaIds.length > 0) {
+    trace.wistia_media.attempted = true;
     const resolved = await resolveWistiaMediaUrl(wistiaIds[0], debug);
     if (resolved) {
       mediaUrl = resolved.url;
       videoDuration = resolved.duration;
+      trace.wistia_media.success = true;
+      trace.wistia_media.detail = `Resolved MP4 URL (${Math.round(resolved.duration)}s)`;
+    } else {
+      trace.wistia_media.detail = `Failed to resolve Wistia media URL for ${wistiaIds[0]}`;
     }
   }
 
   if (!mediaUrl && vimeoIds.length > 0) {
+    trace.vimeo_media.attempted = true;
     const resolved = await resolveVimeoMediaUrl(vimeoIds[0], debug);
     if (resolved) {
       mediaUrl = resolved.url;
       videoDuration = resolved.duration;
+      trace.vimeo_media.success = true;
+      trace.vimeo_media.detail = `Resolved progressive MP4 URL (${Math.round(resolved.duration)}s)`;
+    } else {
+      trace.vimeo_media.detail = `Failed to resolve Vimeo media URL for ${vimeoIds[0]}`;
     }
   }
+
+  // Audio transcription is client-side, mark as queued if we have a media URL but no transcript
+  if (!videoTranscript && mediaUrl) {
+    trace.audio_transcription.attempted = true;
+    trace.audio_transcription.detail = 'Media URL resolved — queued for client-side audio transcription';
+  } else if (!videoTranscript && !mediaUrl && videoEmbeds.length > 0) {
+    trace.audio_transcription.detail = 'No media URL resolved — cannot queue transcription';
+  }
+
+  // Determine final_source
+  let finalSource: string;
+  if (transcriptSource) {
+    finalSource = transcriptSource;
+  } else if (mediaUrl) {
+    finalSource = 'media_url_only';
+  } else if (content.split(/\s+/).filter(Boolean).length >= 50) {
+    finalSource = 'html_text_only';
+  } else if (videoEmbeds.length > 0) {
+    finalSource = 'metadata_only';
+  } else {
+    finalSource = content.trim().length > 0 ? 'html_text_only' : 'failed';
+  }
+
+  const extraction_trace = {
+    ...trace,
+    final_source: finalSource,
+  };
 
   // === MERGE: If we got a video transcript via captions, append it to content ===
   if (videoTranscript) {
@@ -1097,11 +1174,9 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
     const contentWordCount = content.split(/\s+/).filter(Boolean).length;
     
     if (contentWordCount < 50) {
-      // Content is essentially empty — use transcript as the content
       content = (content ? content + '\n\n--- Video Transcript ---\n\n' : '') + videoTranscript;
       debug.push(`[Transcript Merge] Transcript is primary content (${txWordCount} words, source: ${transcriptSource})`);
     } else {
-      // Append transcript to existing content
       content = content + '\n\n--- Video Transcript ---\n\n' + videoTranscript;
       debug.push(`[Transcript Merge] Appended transcript (${txWordCount} words) to existing content (${contentWordCount} words)`);
     }
@@ -1119,6 +1194,7 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
     video_duration: videoDuration || undefined,
     transcript_source: transcriptSource || undefined,
     has_video_transcript: Boolean(videoTranscript),
+    extraction_trace,
   };
 }
 
