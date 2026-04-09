@@ -1,11 +1,12 @@
 /**
- * Central Resource Table — filterable, expandable rows with action previews.
+ * Central Resource Table — filterable, expandable rows with action previews and outcome flashes.
  */
 import { useState, useMemo, useCallback, Fragment } from 'react';
 import { cn } from '@/lib/utils';
 import {
   ChevronDown, ChevronRight, CheckCircle2, XCircle,
   Zap, FileText, Play, Wrench, Eye, MoreHorizontal,
+  MinusCircle, AlertTriangle,
 } from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/controlPlaneState';
 import { ActionPreviewDialog, buildActionPreview, type ActionPreview } from './ActionPreviewDialog';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
+import { getRowFlash, type RowFlashStatus } from '@/lib/actionOutcomeStore';
 
 interface Props {
   resources: CanonicalResourceStatus[];
