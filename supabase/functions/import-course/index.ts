@@ -1238,15 +1238,16 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
   }
 
   // Strategy 3: Links inside Download/Resource/Attachment sections
+  // Use bounded quantifiers (.{0,5000}) to prevent stack overflow on large HTML
   const sectionPatterns = [
-    /(?:downloads?|resources?|attachments?|files?|handouts?|worksheets?|materials?)\s*<\/(?:h[1-6]|span|div|p|strong|b)>[\s\S]*?(<a[^>]*href="[^"]+"[\s\S]*?<\/a>)/gi,
-    /<(?:div|section)[^>]*class="[^"]*(?:download|resource|attachment|file|handout|material)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|section)>/gi,
-    /<(?:div|section)[^>]*(?:id|data-[a-z-]+)="[^"]*(?:download|resource|attachment|file)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|section)>/gi,
+    /(?:downloads?|resources?|attachments?|files?|handouts?|worksheets?|materials?)\s*<\/(?:h[1-6]|span|div|p|strong|b)>.{0,5000}?(<a[^>]*href="[^"]+"[^>]*>[^<]{0,200}<\/a>)/gi,
+    /<(?:div|section)[^>]*class="[^"]*(?:download|resource|attachment|file|handout|material)[^"]*"[^>]*>(.{0,5000}?)<\/(?:div|section)>/gi,
+    /<(?:div|section)[^>]*(?:id|data-[a-z-]+)="[^"]*(?:download|resource|attachment|file)[^"]*"[^>]*>(.{0,5000}?)<\/(?:div|section)>/gi,
   ];
   for (const pattern of sectionPatterns) {
     let m;
     while ((m = pattern.exec(html)) !== null) {
-      const innerLinks = [...m[1].matchAll(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+      const innerLinks = [...m[1].matchAll(/<a[^>]*href="([^"]+)"[^>]*>([^<]{0,200})<\/a>/gi)];
       for (const link of innerLinks) {
         addAsset(link[1], link[2]?.replace(/<[^>]+>/g, '').trim() || '', 'asset-section');
       }
