@@ -467,7 +467,7 @@ function parseCurriculum(html: string, baseOrigin: string): LessonInfo[] {
     if (/\/(login|signup|password|checkout|cart)/.test(href)) continue;
     if (/\.(css|js|png|jpg|svg|ico|woff)/.test(href)) continue;
     // Skip navigation buttons that look like lessons
-    if (/^(play now|next module|back|previous|continue|go back|next lesson|prev lesson)$/i.test(linkTextClean)) continue;
+    if (/^(next module|back|previous|continue|go back|next lesson|prev lesson|previous lesson)$/i.test(linkTextClean)) continue;
     
     // Must look like a lesson/post URL for Kajabi
     const isLesson = /\/(posts|lessons|chapters)\//.test(href) ||
