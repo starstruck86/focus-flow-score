@@ -1137,6 +1137,15 @@ export function useDeepReExtraction() {
     qc.invalidateQueries({ queryKey: ['resources'] });
   }, [queue, qc]);
 
+  // Auto-run: when flagForReExtraction sets pendingAutoRunRef, trigger runDeepExtraction
+  // after the queue state has updated via React re-render
+  useEffect(() => {
+    if (pendingAutoRunRef.current && !isRunning && queue.some(i => i.status === 'queued' || i.status === 'partial_complete_resumable')) {
+      pendingAutoRunRef.current = false;
+      runDeepExtraction();
+    }
+  }, [queue, isRunning, runDeepExtraction]);
+
   return {
     queue, isRunning, liftSummary, excludedResourceIds,
     flagForReExtraction, removeFromQueue, clearQueue, runDeepExtraction, markExcluded,
