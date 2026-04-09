@@ -445,7 +445,9 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     setAuthWallHit(false);
     setAuthError(null);
     setImportProgress({ done: 0, total: toImport.length, current: '' });
-    setLessonResults(toImport.map((_, i) => ({ lessonIndex: i, status: 'queued' as const })));
+    const initialResults = toImport.map((_, i) => ({ lessonIndex: i, status: 'queued' as const }));
+    setLessonResults(initialResults);
+    lessonResultsRef.current = initialResults;
 
     let successCount = 0;
     for (let i = 0; i < toImport.length; i++) {
