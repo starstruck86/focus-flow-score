@@ -276,11 +276,16 @@ export interface ControlPlaneSummary {
   lastUpdated: string;  // ISO timestamp
 }
 
-/** Downstream AI readiness metrics (structured for future surface) */
+/** Downstream AI readiness metrics with resource ID sets for table filtering */
 export interface DownstreamReadiness {
   withActiveKIs: number;
   withContexts: number;
   groundingEligible: number;
+  ids: {
+    withActiveKIs: Set<string>;
+    withContexts: Set<string>;
+    groundingEligible: Set<string>;
+  };
 }
 
 export function computeControlPlaneSummary(
@@ -326,24 +331,30 @@ export function computeControlPlaneSummary(
 export function computeDownstreamReadiness(
   resources: CanonicalResourceStatus[],
 ): DownstreamReadiness {
-  let withActiveKIs = 0;
-  let withContexts = 0;
-  let groundingEligible = 0;
+  const ids = {
+    withActiveKIs: new Set<string>(),
+    withContexts: new Set<string>(),
+    groundingEligible: new Set<string>(),
+  };
 
   for (const r of resources) {
     if (r.active_ki_count > 0) {
-      withActiveKIs++;
+      ids.withActiveKIs.add(r.resource_id);
       if (r.active_ki_with_context_count > 0) {
-        withContexts++;
-        // Grounding-eligible = active KIs + contexts + not blocked
+        ids.withContexts.add(r.resource_id);
         if (r.blocked_reason === 'none') {
-          groundingEligible++;
+          ids.groundingEligible.add(r.resource_id);
         }
       }
     }
   }
 
-  return { withActiveKIs, withContexts, groundingEligible };
+  return {
+    withActiveKIs: ids.withActiveKIs.size,
+    withContexts: ids.withContexts.size,
+    groundingEligible: ids.groundingEligible.size,
+    ids,
+  };
 }
 
 // ── Filter type for the central table ──────────────────────

@@ -196,32 +196,60 @@ export function KnowledgeControlPlane() {
     }[filter]
   );
 
+  const handleFilterReadiness = useCallback((key: 'withActiveKIs' | 'withContexts' | 'groundingEligible') => {
+    const labels: Record<string, string> = {
+      withActiveKIs: 'Active KIs',
+      withContexts: 'With Contexts',
+      groundingEligible: 'Grounding-Ready',
+    };
+    setCustomFilter(downstreamReadiness.ids[key], labels[key]);
+  }, [downstreamReadiness, setCustomFilter]);
+
+  // Plain-English library summary
+  const librarySummary = useMemo(() => {
+    if (resources.length === 0) return null;
+    const parts: string[] = [];
+    parts.push(`${cpSummary.ready} of ${cpSummary.total} resources are usable`);
+    if (downstreamReadiness.groundingEligible > 0) {
+      parts.push(`${downstreamReadiness.groundingEligible} ready for AI grounding`);
+    }
+    const attention = cpSummary.needsReview + cpSummary.needsExtraction;
+    if (attention > 0) {
+      parts.push(`${attention} need attention`);
+    }
+    return parts.join(' · ');
+  }, [resources.length, cpSummary, downstreamReadiness]);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Knowledge Control Plane</h2>
-          <div className="flex items-center gap-2">
+          {librarySummary ? (
+            <p className="text-xs text-muted-foreground">{librarySummary}</p>
+          ) : (
             <p className="text-xs text-muted-foreground">
               Lifecycle-driven view — every resource has one canonical state
             </p>
-            {cpSummary.lastUpdated && (
-              <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
-                <Clock className="h-2.5 w-2.5" />
-                Last recalculated {new Date(cpSummary.lastUpdated).toLocaleTimeString()}
-              </span>
-            )}
-          </div>
+          )}
         </div>
-        <Button
-          variant="outline" size="sm"
-          onClick={() => refetch()} disabled={isRefetching}
-          className="h-7 text-xs gap-1.5"
-        >
-          <RefreshCw className={`h-3 w-3 ${isRefetching ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {cpSummary.lastUpdated && (
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
+              <Clock className="h-2.5 w-2.5" />
+              {new Date(cpSummary.lastUpdated).toLocaleTimeString()}
+            </span>
+          )}
+          <Button
+            variant="outline" size="sm"
+            onClick={() => refetch()} disabled={isRefetching}
+            className="h-7 text-xs gap-1.5"
+          >
+            <RefreshCw className={`h-3 w-3 ${isRefetching ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* System Health — reconciliation & trust */}
@@ -235,7 +263,7 @@ export function KnowledgeControlPlane() {
       />
 
       {/* AI Readiness — secondary downstream layer */}
-      <DaveReadinessStrip readiness={downstreamReadiness} totalResources={resources.length} />
+      <DaveReadinessStrip readiness={downstreamReadiness} totalResources={resources.length} onFilterReadiness={handleFilterReadiness} />
 
       {/* Conflict Breakdown */}
       <ConflictBreakdownBanner
