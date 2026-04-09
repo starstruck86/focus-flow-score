@@ -231,6 +231,7 @@ export function CentralResourceTable({
                 const rowActions = getRowActions(state, r);
                 const primaryAction = rowActions[0];
                 const moreActions = rowActions.slice(1);
+                const flash = getRowFlash(r.resource_id);
 
                 return (
                   <Fragment key={r.resource_id}>
