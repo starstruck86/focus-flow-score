@@ -705,7 +705,10 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
               const contentType = dlData.content_type || 'application/octet-stream';
 
               // Upload to storage
-              const storagePath = `${user.id}/lesson-assets/${resourceId}/${asset.filename}`;
+              // Ensure storage path has proper extension for downstream parsers
+              const hasProperExt = /\.[a-zA-Z0-9]{1,5}$/.test(asset.filename);
+              const storageFilename = hasProperExt ? asset.filename : `${asset.filename}.${asset.extension || 'bin'}`;
+              const storagePath = `${user.id}/lesson-assets/${resourceId}/${storageFilename}`;
               const binaryStr = atob(dlData.data_base64);
               const bytes = new Uint8Array(binaryStr.length);
               for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
@@ -732,34 +735,52 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                 continue;
               }
 
-              // Parse PDFs for text
+              // Create child resource and use server-side parsing for PDFs
               let parsedTextLength = 0;
               let childResourceId: string | null = null;
-              if (asset.extension === 'pdf' && dlData.data_base64) {
+              if (asset.extension === 'pdf') {
                 try {
-                  // Use basic text extraction from the PDF binary
-                  const textContent = extractTextFromPdfBase64(dlData.data_base64);
-                  parsedTextLength = textContent.length;
-                  ar.parsed = parsedTextLength > 50;
-                  ar.text_length = parsedTextLength;
+                  // Create child resource with storage path (not URL) so parse-uploaded-file can find it
+                  const childTitle = `${courseTitle} > ${lesson.title} > ${asset.filename}`;
+                  const { data: childResource, error: childErr } = await (supabase.from('resources') as any)
+                    .insert({
+                      user_id: user.id,
+                      title: childTitle,
+                      description: `PDF attachment from course lesson: ${lesson.title}`,
+                      resource_type: 'document',
+                      tags: ['course', 'attachment', 'pdf', courseTitle].filter(Boolean),
+                      file_url: storagePath, // storage path, not URL — required for parse-uploaded-file
+                      content: `[Pending parse: ${asset.filename}]`,
+                      content_status: 'placeholder',
+                    })
+                    .select()
+                    .single();
 
-                  if (parsedTextLength > 50) {
-                    // Create child resource
-                    const childTitle = `${courseTitle} > ${lesson.title} > ${asset.filename}`;
-                    const childClassification = await classify.mutateAsync({ url: asset.url });
-                    childClassification.title = childTitle;
-                    childClassification.resource_type = 'document';
-                    childClassification.scraped_content = textContent;
-                    childClassification.tags = [...(childClassification.tags || []), 'course', 'attachment', courseTitle].filter(Boolean);
-                    const childResource = await addUrl.mutateAsync({ url: asset.url, classification: childClassification });
-                    childResourceId = childResource?.id || null;
-                    ar.detail = `Parsed ${parsedTextLength.toLocaleString()} chars, child resource created`;
-                  } else {
-                    ar.detail = `PDF text too short (${parsedTextLength} chars)`;
-                    ar.parsed = false;
+                  if (childErr) throw childErr;
+                  childResourceId = childResource?.id || null;
+
+                  if (childResourceId) {
+                    // Invoke server-side PDF parser which extracts real text and updates resource.content
+                    const { data: parseResult, error: parseErr } = await supabase.functions.invoke('parse-uploaded-file', {
+                      body: { resource_id: childResourceId },
+                    });
+
+                    if (parseErr) {
+                      console.warn(`[CourseImport] Server parse failed for ${asset.filename}:`, parseErr);
+                      ar.detail = `Child resource created, server parse failed: ${parseErr.message}`;
+                      ar.parsed = false;
+                    } else if (parseResult?.success && parseResult.content_length > 0) {
+                      parsedTextLength = parseResult.content_length;
+                      ar.parsed = true;
+                      ar.text_length = parsedTextLength;
+                      ar.detail = `Server-parsed ${parsedTextLength.toLocaleString()} chars, child resource created`;
+                    } else {
+                      ar.detail = `Server parse returned no content for ${asset.filename}`;
+                      ar.parsed = false;
+                    }
                   }
                 } catch (parseErr: any) {
-                  ar.detail = `PDF parse failed: ${parseErr?.message || 'unknown'}`;
+                  ar.detail = `PDF asset processing failed: ${parseErr?.message || 'unknown'}`;
                   ar.parsed = false;
                 }
               } else {
