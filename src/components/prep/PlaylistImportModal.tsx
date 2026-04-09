@@ -101,7 +101,7 @@ export function PlaylistImportModal({ open, onOpenChange }: PlaylistImportModalP
           </p>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto">
           {/* URL input */}
           {!isProcessing && !isDone && (
             <div className="flex gap-2">
