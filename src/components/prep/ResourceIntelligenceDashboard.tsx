@@ -30,6 +30,7 @@ interface LibraryStats {
   total: number;
   enriched: number;
   operationalized: number;
+  digested: number;
   placeholder: number;
   shallow: number;
   stale: number;
@@ -59,16 +60,25 @@ export function ResourceIntelligenceDashboard() {
     setLoading(true);
 
     try {
-      const [resourcesRes, digestsRes] = await Promise.all([
+      const [resourcesRes, digestsRes, kisRes] = await Promise.all([
         supabase.from('resources').select('id, title, enrichment_status, enriched_at, content_length, last_quality_tier').eq('user_id', user.id),
         supabase.from('resource_digests').select('resource_id, use_cases, takeaways').eq('user_id', user.id),
+        supabase.from('knowledge_items' as any).select('source_resource_id').eq('user_id', user.id).eq('active', true),
       ]);
 
       const resources = (resourcesRes.data || []) as any[];
       const digests = (digestsRes.data || []) as any[];
+      const activeKIs = (kisRes.data || []) as any[];
+
+      // Build set of resource IDs that have at least 1 active KI
+      const resourcesWithActiveKIs = new Set<string>();
+      for (const ki of activeKIs) {
+        if (ki.source_resource_id) resourcesWithActiveKIs.add(ki.source_resource_id);
+      }
 
       const enriched = resources.filter(r => r.enrichment_status === 'deep_enriched').length;
       const placeholder = resources.filter(r => !r.enrichment_status || r.enrichment_status === 'not_enriched').length;
+      const operationalized = resources.filter(r => resourcesWithActiveKIs.has(r.id)).length;
 
       const now = Date.now();
       const staleThreshold = STALE_DAYS * 86400000;
@@ -78,7 +88,8 @@ export function ResourceIntelligenceDashboard() {
       setStats({
         total: resources.length,
         enriched,
-        operationalized: digests.length,
+        operationalized,
+        digested: digests.length,
         placeholder,
         shallow,
         stale,
@@ -244,6 +255,7 @@ export function ResourceIntelligenceDashboard() {
 
   const opRate = stats.total > 0 ? Math.round((stats.operationalized / stats.total) * 100) : 0;
   const enrichRate = stats.total > 0 ? Math.round((stats.enriched / stats.total) * 100) : 0;
+  const digestRate = stats.total > 0 ? Math.round((stats.digested / stats.total) * 100) : 0;
 
   return (
     <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
@@ -264,7 +276,7 @@ export function ResourceIntelligenceDashboard() {
               {findingGaps ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Search className="h-3 w-3 mr-1" />}
               Find Gaps
             </Button>
-            {stats.operationalized < stats.enriched && (
+            {stats.digested < stats.operationalized && (
               <Button
                 variant="outline"
                 size="sm"
@@ -281,7 +293,7 @@ export function ResourceIntelligenceDashboard() {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Stats row */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <div className="text-center">
             <div className="text-lg font-bold text-foreground">{stats.total}</div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Resources</div>
@@ -301,6 +313,14 @@ export function ResourceIntelligenceDashboard() {
             </div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Enriched</div>
             <Progress value={enrichRate} className="h-1 mt-1" />
+          </div>
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-1">
+              <span className="text-lg font-bold text-foreground">{stats.digested}</span>
+              <span className="text-xs text-muted-foreground">/ {stats.total}</span>
+            </div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Digested</div>
+            <Progress value={digestRate} className="h-1 mt-1" />
           </div>
         </div>
 
@@ -401,12 +421,12 @@ export function ResourceIntelligenceDashboard() {
           </div>
         )}
 
-        {/* Operationalization nudge */}
-        {stats.operationalized < stats.enriched && (
+        {/* Digest nudge */}
+        {stats.digested < stats.operationalized && (
           <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
             <p className="text-[11px] text-amber-400">
-              ⚡ {stats.enriched - stats.operationalized} enriched resources aren't operationalized yet. 
-              You're leaving intelligence on the table.
+              ⚡ {stats.operationalized - stats.digested} operationalized resources don't have digests yet.
+              Use Bulk Operationalize to generate summaries.
             </p>
           </div>
         )}
