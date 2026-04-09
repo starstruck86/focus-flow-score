@@ -101,6 +101,34 @@ describe('Soft-delete — data layer contract', () => {
   });
 });
 
+// ─── Transcript status guard structural check ─────────────────
+
+describe('Transcript status guard — contract', () => {
+  it('detectTranscriptStatusDrift exists and is importable', async () => {
+    const mod = await import('@/lib/transcriptStatusGuard');
+    expect(typeof mod.detectTranscriptStatusDrift).toBe('function');
+    expect(typeof mod.healTranscriptStatusDrift).toBe('function');
+    expect(typeof mod.warnIfStatusDrifted).toBe('function');
+  });
+
+  it('warnIfStatusDrifted logs warning on drift', async () => {
+    const { warnIfStatusDrifted } = await import('@/lib/transcriptStatusGuard');
+    const warnings: string[] = [];
+    const origWarn = console.warn;
+    console.warn = (...args: any[]) => { warnings.push(args.join(' ')); };
+    try {
+      warnIfStatusDrifted('Test Lesson', 'transcript_pending', true);
+      expect(warnings.some(w => w.includes('DRIFT DETECTED'))).toBe(true);
+
+      warnings.length = 0;
+      warnIfStatusDrifted('Good Lesson', 'transcript_complete', true);
+      expect(warnings.some(w => w.includes('DRIFT DETECTED'))).toBe(false);
+    } finally {
+      console.warn = origWarn;
+    }
+  });
+});
+
 // ─── Soft refresh structural check ─────────────────────────────
 
 describe('Soft refresh — contract', () => {
