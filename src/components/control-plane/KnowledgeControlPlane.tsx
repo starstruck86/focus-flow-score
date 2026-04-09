@@ -10,17 +10,20 @@ import { useAutoOperationalize } from '@/hooks/useAutoOperationalize';
 import { useExtractionPipeline } from '@/hooks/useExtractionPipeline';
 import { SystemHealthStrip } from './SystemHealthStrip';
 import { ResourceHealthStrip } from './ResourceHealthStrip';
+import { DaveReadinessStrip } from './DaveReadinessStrip';
 import { ControlPlaneSummaryBar } from './ControlPlaneSummaryBar';
 import { CentralResourceTable } from './CentralResourceTable';
 import { ResourceInspectDrawer } from './ResourceInspectDrawer';
 import { ConflictBreakdownBanner } from './ConflictBreakdownBanner';
 import { BulkActionBar } from './BulkActionBar';
+import { NeedsAttentionQueue } from './NeedsAttentionQueue';
 import { RecentActionsPanel } from './RecentActionsPanel';
 import { BulkActionResultDialog } from './BulkActionResultDialog';
 import { buildActionPreview } from './ActionPreviewDialog';
 import {
   type ControlPlaneFilter, type ControlPlaneState,
   computeControlPlaneSummary,
+  computeDownstreamReadiness,
   deriveControlPlaneState,
   detectAllConflicts,
   matchesFilter,
