@@ -1,5 +1,5 @@
 /**
- * Central Resource Table — filterable, expandable rows with actions + inspect.
+ * Central Resource Table — filterable, expandable rows with action previews.
  */
 import { useState, useMemo, useCallback, Fragment } from 'react';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,7 @@ import {
   deriveControlPlaneState, matchesFilter,
   deriveStateEvidence,
 } from '@/lib/controlPlaneState';
+import { ActionPreviewDialog, buildActionPreview, type ActionPreview } from './ActionPreviewDialog';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
 
 interface Props {
@@ -66,15 +67,15 @@ function nextActionLabel(state: ControlPlaneState, resource: CanonicalResourceSt
   switch (state) {
     case 'ingested': return 'Enrich content';
     case 'has_content': return 'Extract knowledge';
-    case 'extracted': return 'Activate KIs';
+    case 'extracted': return 'Activate knowledge';
     case 'activated': return 'Ready';
     case 'blocked': {
       switch (resource.blocked_reason) {
         case 'empty_content': return 'Add content';
         case 'no_extraction': return 'Run extraction';
-        case 'no_activation': return 'Activate KIs';
+        case 'no_activation': return 'Activate knowledge';
         case 'missing_contexts': return 'Add contexts';
-        case 'stale_blocker_state': return 'Clear stale state';
+        case 'stale_blocker_state': return 'Diagnose & repair';
         default: return 'Review';
       }
     }
@@ -101,7 +102,7 @@ function getRowActions(state: ControlPlaneState, resource: CanonicalResourceStat
     case 'blocked': {
       const actions: RowAction[] = [];
       if (['no_extraction', 'stale_blocker_state'].includes(resource.blocked_reason)) {
-        actions.push({ key: 'fix', label: 'Auto-fix', icon: Wrench });
+        actions.push({ key: 'fix', label: 'Diagnose', icon: Wrench });
       }
       if (['no_activation', 'missing_contexts'].includes(resource.blocked_reason)) {
         actions.push({ key: 'activate', label: 'Activate', icon: Play });
@@ -124,11 +125,14 @@ export function CentralResourceTable({
   const [sortField, setSortField] = useState<'title' | 'state' | 'kis' | 'updated'>('updated');
   const [sortAsc, setSortAsc] = useState(false);
 
+  // Action preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pendingPreview, setPendingPreview] = useState<{ preview: ActionPreview; resourceId: string; title: string } | null>(null);
+
   const rows = useMemo(() => {
     let filtered = resources
       .map(r => ({ resource: r, state: deriveControlPlaneState(r, processingIds) }));
 
-    // Apply custom filter IDs if set (conflict category filter)
     if (customFilterIds) {
       filtered = filtered.filter(({ resource }) => customFilterIds.has(resource.resource_id));
     } else {
@@ -156,6 +160,31 @@ export function CentralResourceTable({
     else { setSortField(field); setSortAsc(false); }
   };
 
+  // Show preview before executing action
+  const handleActionWithPreview = useCallback((resourceId: string, actionKey: string, state: ControlPlaneState, resource: CanonicalResourceStatus) => {
+    // Read-only actions skip preview
+    if (actionKey === 'view_progress' || actionKey === 'inspect') {
+      onAction(resourceId, actionKey);
+      return;
+    }
+    const preview = buildActionPreview(actionKey, state, resource);
+    setPendingPreview({ preview, resourceId, title: resource.title });
+    setPreviewOpen(true);
+  }, [onAction]);
+
+  const confirmAction = useCallback(() => {
+    if (pendingPreview) {
+      onAction(pendingPreview.resourceId, pendingPreview.preview.actionKey);
+    }
+    setPreviewOpen(false);
+    setPendingPreview(null);
+  }, [pendingPreview, onAction]);
+
+  const cancelPreview = useCallback(() => {
+    setPreviewOpen(false);
+    setPendingPreview(null);
+  }, []);
+
   if (rows.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground text-sm">
@@ -165,177 +194,187 @@ export function CentralResourceTable({
   }
 
   return (
-    <div className="border rounded-lg overflow-hidden">
-      <div className="max-h-[60vh] overflow-y-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-8" />
-              <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('title')}>
-                Resource {sortField === 'title' && (sortAsc ? '↑' : '↓')}
-              </TableHead>
-              <TableHead className="w-24">Source</TableHead>
-              <TableHead className="cursor-pointer hover:text-foreground w-28" onClick={() => handleSort('state')}>
-                State {sortField === 'state' && (sortAsc ? '↑' : '↓')}
-              </TableHead>
-              <TableHead className="w-16 text-center">Content</TableHead>
-              <TableHead className="cursor-pointer hover:text-foreground w-16 text-center" onClick={() => handleSort('kis')}>
-                KIs {sortField === 'kis' && (sortAsc ? '↑' : '↓')}
-              </TableHead>
-              <TableHead className="w-20">Quality</TableHead>
-              <TableHead className="cursor-pointer hover:text-foreground w-28" onClick={() => handleSort('updated')}>
-                Updated {sortField === 'updated' && (sortAsc ? '↑' : '↓')}
-              </TableHead>
-              <TableHead className="w-24 text-right">Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map(({ resource: r, state }) => {
-              const isExpanded = expandedId === r.resource_id;
-              const colors = CONTROL_PLANE_COLORS[state];
-              const evidence = deriveStateEvidence(r, state);
-              const hasConflict = conflictIds?.has(r.resource_id);
-              const rowActions = getRowActions(state, r);
-              const primaryAction = rowActions[0];
-              const moreActions = rowActions.slice(1);
+    <>
+      <div className="border rounded-lg overflow-hidden">
+        <div className="max-h-[60vh] overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-8" />
+                <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('title')}>
+                  Resource {sortField === 'title' && (sortAsc ? '↑' : '↓')}
+                </TableHead>
+                <TableHead className="w-24">Source</TableHead>
+                <TableHead className="cursor-pointer hover:text-foreground w-28" onClick={() => handleSort('state')}>
+                  State {sortField === 'state' && (sortAsc ? '↑' : '↓')}
+                </TableHead>
+                <TableHead className="w-16 text-center">Content</TableHead>
+                <TableHead className="cursor-pointer hover:text-foreground w-16 text-center" onClick={() => handleSort('kis')}>
+                  KIs {sortField === 'kis' && (sortAsc ? '↑' : '↓')}
+                </TableHead>
+                <TableHead className="w-20">Quality</TableHead>
+                <TableHead className="cursor-pointer hover:text-foreground w-28" onClick={() => handleSort('updated')}>
+                  Updated {sortField === 'updated' && (sortAsc ? '↑' : '↓')}
+                </TableHead>
+                <TableHead className="w-24 text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map(({ resource: r, state }) => {
+                const isExpanded = expandedId === r.resource_id;
+                const colors = CONTROL_PLANE_COLORS[state];
+                const evidence = deriveStateEvidence(r, state);
+                const hasConflict = conflictIds?.has(r.resource_id);
+                const rowActions = getRowActions(state, r);
+                const primaryAction = rowActions[0];
+                const moreActions = rowActions.slice(1);
 
-              return (
-                <Fragment key={r.resource_id}>
-                  <TableRow
-                    className={cn('group/row', hasConflict && 'bg-destructive/5')}
-                  >
-                    <TableCell
-                      className="p-2 cursor-pointer"
-                      onClick={() => setExpandedId(isExpanded ? null : r.resource_id)}
-                    >
-                      {isExpanded
-                        ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                        : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                      }
-                    </TableCell>
-                    <TableCell
-                      className="font-medium text-sm max-w-[200px] truncate cursor-pointer"
-                      onClick={() => onInspect(r, state)}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        {hasConflict && (
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive shrink-0" title="Has conflicts" />
-                        )}
-                        <span className="hover:underline">{r.title}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-muted-foreground">{inferSourceType(r.title)}</span>
-                    </TableCell>
-                    <TableCell>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Badge variant="outline" className={cn('text-[10px] font-medium cursor-help', colors.text, colors.bg, colors.border)}>
-                            {CONTROL_PLANE_LABELS[state]}
-                          </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-xs text-xs">
-                          <p className="font-medium mb-1">{evidence.reason}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {r.is_content_backed
-                        ? <span className="text-xs text-emerald-600">✓</span>
-                        : <span className="text-xs text-muted-foreground">—</span>
-                      }
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className="text-xs tabular-nums font-medium">
-                        {r.knowledge_item_count > 0 ? r.knowledge_item_count : '—'}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className={cn('text-xs', qualityColor(r.knowledge_item_count, r.active_ki_count))}>
-                        {qualityLabel(r.knowledge_item_count, r.active_ki_count)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-muted-foreground">
-                        {r.last_transition_at
-                          ? new Date(r.last_transition_at).toLocaleDateString()
-                          : '—'
+                return (
+                  <Fragment key={r.resource_id}>
+                    <TableRow className={cn('group/row', hasConflict && 'bg-destructive/5')}>
+                      <TableCell
+                        className="p-2 cursor-pointer"
+                        onClick={() => setExpandedId(isExpanded ? null : r.resource_id)}
+                      >
+                        {isExpanded
+                          ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                          : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                         }
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity">
-                        {primaryAction && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 text-[10px] px-2 gap-1"
-                            onClick={(e) => { e.stopPropagation(); onAction(r.resource_id, primaryAction.key); }}
-                            disabled={actionLoading}
-                          >
-                            <primaryAction.icon className="h-3 w-3" />
-                            {primaryAction.label}
-                          </Button>
-                        )}
-                        {moreActions.length > 0 && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={e => e.stopPropagation()}>
-                                <MoreHorizontal className="h-3 w-3" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="text-xs">
-                              {moreActions.map(a => (
+                      </TableCell>
+                      <TableCell
+                        className="font-medium text-sm max-w-[200px] truncate cursor-pointer"
+                        onClick={() => onInspect(r, state)}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {hasConflict && (
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive shrink-0" title="Has conflicts" />
+                          )}
+                          <span className="hover:underline">{r.title}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground">{inferSourceType(r.title)}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className={cn('text-[10px] font-medium cursor-help', colors.text, colors.bg, colors.border)}>
+                              {CONTROL_PLANE_LABELS[state]}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-xs text-xs">
+                            <p className="font-medium mb-1">{evidence.reason}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {r.is_content_backed
+                          ? <span className="text-xs text-emerald-600">✓</span>
+                          : <span className="text-xs text-muted-foreground">—</span>
+                        }
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="text-xs tabular-nums font-medium">
+                          {r.knowledge_item_count > 0 ? r.knowledge_item_count : '—'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={cn('text-xs', qualityColor(r.knowledge_item_count, r.active_ki_count))}>
+                          {qualityLabel(r.knowledge_item_count, r.active_ki_count)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground">
+                          {r.last_transition_at
+                            ? new Date(r.last_transition_at).toLocaleDateString()
+                            : '—'
+                          }
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity">
+                          {primaryAction && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] px-2 gap-1"
+                              onClick={(e) => { e.stopPropagation(); handleActionWithPreview(r.resource_id, primaryAction.key, state, r); }}
+                              disabled={actionLoading}
+                            >
+                              <primaryAction.icon className="h-3 w-3" />
+                              {primaryAction.label}
+                            </Button>
+                          )}
+                          {moreActions.length > 0 && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={e => e.stopPropagation()}>
+                                  <MoreHorizontal className="h-3 w-3" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="text-xs">
+                                {moreActions.map(a => (
+                                  <DropdownMenuItem
+                                    key={a.key}
+                                    onClick={() => handleActionWithPreview(r.resource_id, a.key, state, r)}
+                                    className="text-xs gap-2"
+                                  >
+                                    <a.icon className="h-3 w-3" />
+                                    {a.label}
+                                  </DropdownMenuItem>
+                                ))}
                                 <DropdownMenuItem
-                                  key={a.key}
-                                  onClick={() => onAction(r.resource_id, a.key)}
+                                  onClick={() => onInspect(r, state)}
                                   className="text-xs gap-2"
                                 >
-                                  <a.icon className="h-3 w-3" />
-                                  {a.label}
+                                  <Eye className="h-3 w-3" />
+                                  Inspect
                                 </DropdownMenuItem>
-                              ))}
-                              <DropdownMenuItem
-                                onClick={() => onInspect(r, state)}
-                                className="text-xs gap-2"
-                              >
-                                <Eye className="h-3 w-3" />
-                                Inspect
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                        {moreActions.length === 0 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={(e) => { e.stopPropagation(); onInspect(r, state); }}
-                          >
-                            <Eye className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-
-                  {isExpanded && (
-                    <TableRow>
-                      <TableCell colSpan={9} className="bg-muted/30 p-4">
-                        <ExpandedResourceDetail resource={r} state={state} />
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                          {moreActions.length === 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={(e) => { e.stopPropagation(); onInspect(r, state); }}
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
-                  )}
-                </Fragment>
-              );
-            })}
-          </TableBody>
-        </Table>
+
+                    {isExpanded && (
+                      <TableRow>
+                        <TableCell colSpan={9} className="bg-muted/30 p-4">
+                          <ExpandedResourceDetail resource={r} state={state} />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+          Showing {rows.length} of {resources.length} resources
+        </div>
       </div>
-      <div className="border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
-        Showing {rows.length} of {resources.length} resources
-      </div>
-    </div>
+
+      {/* Action Preview Dialog */}
+      <ActionPreviewDialog
+        preview={pendingPreview?.preview ?? null}
+        resourceTitle={pendingPreview?.title}
+        open={previewOpen}
+        onConfirm={confirmAction}
+        onCancel={cancelPreview}
+        loading={actionLoading}
+      />
+    </>
   );
 }
 
