@@ -1177,16 +1177,34 @@ Deno.serve(async (req) => {
         );
       }
 
-      // ── POLICY: video_only → import as metadata-only, not fully extracted ──
+      // ── POLICY: video_only → if we captured a transcript via captions, it's usable; otherwise metadata-only ──
       if (result.quality.content_type === 'video_only') {
+        // If transcript was captured via captions API or DOM, the content is already merged and quality recalculated
+        // Check if the merged content actually has substance now
+        if (result.has_video_transcript && result.quality.word_count >= 50) {
+          // Transcript recovered — treat as full content
+          return new Response(
+            JSON.stringify({
+              success: true,
+              ...result,
+              ...lessonResult,
+              metadata_only: false,
+              _note: `Video transcript recovered via ${result.transcript_source} (${result.quality.word_count} words)`,
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        // No transcript recovered — still needs downstream audio transcription
         return new Response(
           JSON.stringify({
             success: true,
             ...result,
             ...lessonResult,
-            metadata_only: true,
-            content: '', // strip thin content — not real lesson text
-            _note: 'Video-only lesson imported as metadata stub. Transcription required for full content.',
+            metadata_only: !result.media_url ? true : false, // If we have a media URL, client will transcribe
+            content: result.media_url ? result.content : '', // Keep content if media URL exists for transcription
+            _note: result.media_url
+              ? 'Video-only lesson with media URL resolved. Client will attempt audio transcription.'
+              : 'Video-only lesson imported as metadata stub. Transcription required for full content.',
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
