@@ -1282,7 +1282,39 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
     assets.push({ filename, url: resolvedUrl, extension: ext, source_section: source });
   }
 
-  debug.push(`[Asset Detection] Found ${assets.length} downloadable asset(s): ${assets.map(a => a.filename).join(', ') || 'none'}`);
+  // Diagnostic: log any raw HTML snippets containing asset-like keywords that weren't captured
+  if (assets.length === 0) {
+    const assetHints: string[] = [];
+    // Look for any mention of common asset filenames/extensions in the HTML
+    const hintPatterns = [
+      /[^<>"'\s]*\.pdf[^<>"'\s]*/gi,
+      /[^<>"'\s]*\.docx?[^<>"'\s]*/gi,
+      /[^<>"'\s]*\.pptx?[^<>"'\s]*/gi,
+      /[^<>"'\s]*\.xlsx?[^<>"'\s]*/gi,
+    ];
+    for (const p of hintPatterns) {
+      const matches = html.match(p);
+      if (matches) assetHints.push(...matches.slice(0, 3));
+    }
+    // Look for download buttons/links that might not be standard <a href>
+    const downloadBtnMatches = html.match(/<(?:button|a)[^>]*(?:download|file|attachment)[^>]*>[\s\S]{0,200}/gi);
+    if (downloadBtnMatches) {
+      assetHints.push(...downloadBtnMatches.slice(0, 2).map(m => m.substring(0, 150)));
+    }
+    // Look for Kajabi file blocks with broader patterns
+    const kjbFileMatches = html.match(/kjb-file[\s\S]{0,300}/gi);
+    if (kjbFileMatches) {
+      assetHints.push(...kjbFileMatches.slice(0, 2).map(m => m.substring(0, 200)));
+    }
+    if (assetHints.length > 0) {
+      debug.push(`[Asset Detection] No assets captured, but found ${assetHints.length} hint(s) in HTML: ${assetHints.join(' | ')}`);
+      console.log(`[Asset Detection Hints] ${assetHints.join(' | ')}`);
+    } else {
+      debug.push(`[Asset Detection] No assets found and no asset-like references in HTML`);
+    }
+  } else {
+    debug.push(`[Asset Detection] Found ${assets.length} downloadable asset(s): ${assets.map(a => `${a.filename} (${a.source_section})`).join(', ')}`);
+  }
   return assets;
 }
 
