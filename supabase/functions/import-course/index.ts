@@ -113,6 +113,146 @@ function stripTranscriptSections(html: string) {
 }
 
 /**
+ * Fetch Wistia captions/transcript via the public embed API.
+ */
+async function resolveWistiaCaptions(videoId: string, debug: string[]): Promise<string | null> {
+  try {
+    debug.push(`[Wistia Captions] Fetching captions for ${videoId}...`);
+    const resp = await fetch(`https://fast.wistia.com/embed/captions/${videoId}.json`, {
+      headers: { 'User-Agent': UA },
+    });
+    if (!resp.ok) {
+      debug.push(`[Wistia Captions] API returned ${resp.status}`);
+      await resp.text();
+      return null;
+    }
+    const captions = await resp.json();
+    // Wistia captions format: array of { language, text, ... } or { captions: [...] }
+    const captionList = Array.isArray(captions) ? captions : captions?.captions || [];
+    if (captionList.length === 0) {
+      debug.push('[Wistia Captions] No captions available');
+      return null;
+    }
+    // Prefer English, fallback to first available
+    const english = captionList.find((c: any) => /^en/i.test(c.language)) || captionList[0];
+    if (!english?.hash) {
+      // Try direct text field
+      if (english?.text) {
+        debug.push(`[Wistia Captions] Got direct text (${english.text.length} chars)`);
+        return english.text;
+      }
+      debug.push('[Wistia Captions] No caption hash or text found');
+      return null;
+    }
+    // Fetch the actual caption lines
+    const lines = english.hash;
+    if (Array.isArray(lines)) {
+      const text = lines.map((line: any) => line.text || '').filter(Boolean).join(' ');
+      const wordCount = text.split(/\s+/).filter(Boolean).length;
+      debug.push(`[Wistia Captions] Extracted ${wordCount} words from ${lines.length} caption lines`);
+      return text;
+    }
+    debug.push('[Wistia Captions] Unexpected caption format');
+    return null;
+  } catch (err) {
+    debug.push(`[Wistia Captions] Error: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+/**
+ * Resolve a Vimeo video to its text tracks (captions) via oEmbed + player config.
+ */
+async function resolveVimeoCaptions(videoId: string, debug: string[]): Promise<string | null> {
+  try {
+    debug.push(`[Vimeo Captions] Attempting caption extraction for ${videoId}...`);
+    // Vimeo player config endpoint (public, no API key needed)
+    const configResp = await fetch(`https://player.vimeo.com/video/${videoId}/config`, {
+      headers: { 'User-Agent': UA },
+    });
+    if (!configResp.ok) {
+      debug.push(`[Vimeo Captions] Config returned ${configResp.status}`);
+      await configResp.text();
+      return null;
+    }
+    const config = await configResp.json();
+    const textTracks = config?.request?.text_tracks || [];
+    if (textTracks.length === 0) {
+      debug.push('[Vimeo Captions] No text tracks available');
+      return null;
+    }
+    // Prefer English
+    const track = textTracks.find((t: any) => /^en/i.test(t.lang)) || textTracks[0];
+    if (!track?.url) {
+      debug.push('[Vimeo Captions] No track URL found');
+      return null;
+    }
+    const trackUrl = track.url.startsWith('http') ? track.url : `https://player.vimeo.com${track.url}`;
+    const trackResp = await fetch(trackUrl, { headers: { 'User-Agent': UA } });
+    if (!trackResp.ok) {
+      debug.push(`[Vimeo Captions] Track fetch returned ${trackResp.status}`);
+      await trackResp.text();
+      return null;
+    }
+    const trackData = await trackResp.json();
+    // Vimeo text tracks are typically an array of { startTime, endTime, text }
+    if (Array.isArray(trackData)) {
+      const text = trackData.map((cue: any) => cue.text || '').filter(Boolean).join(' ');
+      const wordCount = text.split(/\s+/).filter(Boolean).length;
+      debug.push(`[Vimeo Captions] Extracted ${wordCount} words from ${trackData.length} cues`);
+      return text;
+    }
+    debug.push('[Vimeo Captions] Unexpected track data format');
+    return null;
+  } catch (err) {
+    debug.push(`[Vimeo Captions] Error: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+/**
+ * Resolve a Vimeo video ID to a downloadable media URL via player config.
+ */
+async function resolveVimeoMediaUrl(videoId: string, debug: string[]): Promise<{ url: string; duration: number } | null> {
+  try {
+    debug.push(`[Vimeo Media] Resolving media URL for ${videoId}...`);
+    const configResp = await fetch(`https://player.vimeo.com/video/${videoId}/config`, {
+      headers: { 'User-Agent': UA },
+    });
+    if (!configResp.ok) {
+      debug.push(`[Vimeo Media] Config returned ${configResp.status}`);
+      await configResp.text();
+      return null;
+    }
+    const config = await configResp.json();
+    const duration = config?.video?.duration || 0;
+    // Progressive downloads (direct MP4 files)
+    const progressive = config?.request?.files?.progressive || [];
+    if (progressive.length > 0) {
+      // Pick smallest quality for transcription
+      const sorted = [...progressive].sort((a: any, b: any) => (a.width || 0) - (b.width || 0));
+      const best = sorted[0];
+      debug.push(`[Vimeo Media] Resolved progressive: ${best.width}x${best.height}, ${Math.round(duration)}s`);
+      return { url: best.url, duration };
+    }
+    // HLS fallback (less useful for direct download but may work)
+    const hls = config?.request?.files?.hls?.cdns;
+    if (hls) {
+      const firstCdn = Object.values(hls)[0] as any;
+      if (firstCdn?.url) {
+        debug.push(`[Vimeo Media] Resolved HLS URL (may not work for transcription)`);
+        return { url: firstCdn.url, duration };
+      }
+    }
+    debug.push('[Vimeo Media] No downloadable files found');
+    return null;
+  } catch (err) {
+    debug.push(`[Vimeo Media] Error: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+/**
  * Resolve a Wistia video ID to its smallest MP4 URL via the public embed API.
  */
 async function resolveWistiaMediaUrl(videoId: string, debug: string[]): Promise<{ url: string; duration: number } | null> {
