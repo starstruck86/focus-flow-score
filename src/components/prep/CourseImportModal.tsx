@@ -39,6 +39,23 @@ type LessonQualityReport = {
   usable_content: boolean;
 };
 
+type ExtractionTraceStep = {
+  attempted: boolean;
+  success: boolean;
+  word_count?: number;
+  detail?: string;
+};
+
+type ExtractionTrace = {
+  dom_transcript: ExtractionTraceStep;
+  wistia_captions: ExtractionTraceStep;
+  vimeo_captions: ExtractionTraceStep;
+  wistia_media: ExtractionTraceStep;
+  vimeo_media: ExtractionTraceStep;
+  audio_transcription: ExtractionTraceStep;
+  final_source: string | null;
+};
+
 type LessonImportResult = {
   lessonIndex: number;
   status: LessonImportStatus;
@@ -51,6 +68,7 @@ type LessonImportResult = {
   metadataOnly?: boolean;
   transcriptSource?: string;
   hasVideoTranscript?: boolean;
+  extractionTrace?: ExtractionTrace;
 };
 
 interface CourseImportModalProps {
