@@ -782,6 +782,10 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                           {r.status === 'failed' && r.error && !q?.issues.length && (
                             <div className="pl-5 text-[10px] text-destructive truncate" title={r.error}>⚠ {r.error}</div>
                           )}
+                          {/* Extraction trace expander */}
+                          {r.extractionTrace && (r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (
+                            <ExtractionTraceExpander trace={r.extractionTrace} metadataOnly={r.metadataOnly} />
+                          )}
                         </div>
                       );
                     })}
