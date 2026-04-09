@@ -1,5 +1,6 @@
 /**
  * Resource Inspect Drawer — right-side drawer for deep resource inspection.
+ * V2: includes per-resource action history with reconciliation status.
  */
 import { cn } from '@/lib/utils';
 import {
@@ -11,7 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   CheckCircle2, XCircle, Zap, Play, Eye, Wrench,
   Clock, FileText, Brain, AlertTriangle, GitBranch,
-  Mic, BookOpen, History,
+  Mic, History, ArrowRight, MinusCircle, ShieldCheck, ShieldAlert,
 } from 'lucide-react';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
 import {
@@ -19,6 +20,7 @@ import {
   CONTROL_PLANE_LABELS, CONTROL_PLANE_COLORS,
   deriveStateEvidence, detectConflicts,
 } from '@/lib/controlPlaneState';
+import { getResourceActionHistory, type ActionOutcome, type ReconciliationVerdict } from '@/lib/actionOutcomeStore';
 
 interface Props {
   resource: CanonicalResourceStatus | null;
@@ -38,6 +40,13 @@ function inferSourceType(title: string): string {
   return 'Document';
 }
 
+const RECONCILIATION_CONFIG: Record<ReconciliationVerdict, { icon: React.ElementType; label: string; className: string }> = {
+  confirmed: { icon: ShieldCheck, label: 'Confirmed', className: 'text-emerald-600' },
+  partial: { icon: ArrowRight, label: 'Partial', className: 'text-amber-600' },
+  mismatched: { icon: ShieldAlert, label: 'Mismatched', className: 'text-destructive' },
+  pending: { icon: Clock, label: 'Pending', className: 'text-muted-foreground' },
+};
+
 export function ResourceInspectDrawer({ resource, state, open, onClose, onAction, actionLoading }: Props) {
   if (!resource || !state) return null;
 
@@ -46,6 +55,7 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
   const conflicts = detectConflicts(resource);
   const actions = getActionsForState(state, resource);
   const sourceType = inferSourceType(resource.title);
+  const actionHistory = getResourceActionHistory(resource.resource_id);
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -105,6 +115,26 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
 
           <Separator />
 
+          {/* ── Action History (per-resource) ── */}
+          <Section title="Action History" icon={History}>
+            {actionHistory.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No actions run on this resource yet</p>
+            ) : (
+              <div className="space-y-2">
+                {actionHistory.slice(0, 5).map(a => (
+                  <ActionHistoryEntry key={a.id} outcome={a} />
+                ))}
+                {actionHistory.length > 5 && (
+                  <p className="text-[10px] text-muted-foreground/70 italic">
+                    …and {actionHistory.length - 5} older actions
+                  </p>
+                )}
+              </div>
+            )}
+          </Section>
+
+          <Separator />
+
           {/* ── Knowledge Items ── */}
           <Section title="Knowledge Items" icon={Brain}>
             <div className="space-y-1 text-xs">
@@ -136,10 +166,7 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
                     : 'N/A'
                 }
               />
-              <Row
-                label="Source Type"
-                value={sourceType}
-              />
+              <Row label="Source Type" value={sourceType} />
             </div>
           </Section>
 
@@ -175,23 +202,6 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
             </div>
           </Section>
 
-          {/* ── Last Action / Failures ── */}
-          <Separator />
-          <Section title="Operation History" icon={History}>
-            <div className="space-y-1 text-xs">
-              <Row
-                label="Last Transition"
-                value={resource.last_transition_at ? new Date(resource.last_transition_at).toLocaleString() : 'No transitions recorded'}
-              />
-              {resource.blocked_reason !== 'none' && (
-                <Row label="Current Blocker" value={resource.blocked_reason.replace(/_/g, ' ')} destructive />
-              )}
-              {resource.blocked_reason === 'none' && (
-                <Row label="Last Failure" value="None recorded" />
-              )}
-            </div>
-          </Section>
-
           {/* ── Conflicts ── */}
           {conflicts.length > 0 && (
             <>
@@ -211,6 +221,55 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+// ── Action History Entry ───────────────────────────────────
+function ActionHistoryEntry({ outcome }: { outcome: ActionOutcome }) {
+  const reconcileCfg = RECONCILIATION_CONFIG[outcome.reconciliation];
+  const ReconcileIcon = reconcileCfg.icon;
+  const fromColors = CONTROL_PLANE_COLORS[outcome.expectedFromState];
+  const actualTo = outcome.reconciledToState ?? outcome.mutationToState;
+  const toColors = CONTROL_PLANE_COLORS[actualTo];
+
+  return (
+    <div className="rounded-md border bg-muted/30 px-2.5 py-2 space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium">{outcome.actionLabel}</span>
+        <div className="flex items-center gap-1">
+          <ReconcileIcon className={cn('h-3 w-3', reconcileCfg.className)} />
+          <span className={cn('text-[10px] font-medium', reconcileCfg.className)}>
+            {reconcileCfg.label}
+          </span>
+        </div>
+      </div>
+
+      {/* Transition */}
+      <div className="flex items-center gap-1.5 text-[10px]">
+        <Badge variant="outline" className={cn('text-[9px] px-1 py-0', fromColors.text, fromColors.bg, fromColors.border)}>
+          {CONTROL_PLANE_LABELS[outcome.expectedFromState]}
+        </Badge>
+        <ArrowRight className="h-2.5 w-2.5 text-muted-foreground" />
+        <Badge variant="outline" className={cn('text-[9px] px-1 py-0', toColors.text, toColors.bg, toColors.border)}>
+          {CONTROL_PLANE_LABELS[actualTo]}
+        </Badge>
+        {outcome.expectedToState !== actualTo && (
+          <span className="text-[9px] text-muted-foreground/70 italic ml-1">
+            (expected: {CONTROL_PLANE_LABELS[outcome.expectedToState]})
+          </span>
+        )}
+      </div>
+
+      {/* Mismatch explanation */}
+      {outcome.mismatchExplanation && (
+        <p className="text-[10px] text-amber-600 italic">{outcome.mismatchExplanation}</p>
+      )}
+
+      {/* Timestamp */}
+      <span className="text-[10px] text-muted-foreground/60">
+        {new Date(outcome.timestamp).toLocaleString()}
+      </span>
+    </div>
   );
 }
 
@@ -241,7 +300,7 @@ function Row({ label, value, mono, destructive }: { label: string; value: string
   );
 }
 
-// ── Action model per state (renamed for clarity) ───────────
+// ── Action model per state ─────────────────────────────────
 interface ActionDef {
   key: string;
   label: string;
@@ -252,22 +311,16 @@ interface ActionDef {
 function getActionsForState(state: ControlPlaneState, resource: CanonicalResourceStatus): ActionDef[] {
   switch (state) {
     case 'ingested':
-      return [
-        { key: 'enrich', label: 'Enrich Content', icon: FileText, primary: true },
-      ];
+      return [{ key: 'enrich', label: 'Enrich Content', icon: FileText, primary: true }];
     case 'has_content':
-      return [
-        { key: 'extract', label: 'Extract Knowledge', icon: Zap, primary: true },
-      ];
+      return [{ key: 'extract', label: 'Extract Knowledge', icon: Zap, primary: true }];
     case 'extracted':
       return [
         { key: 'activate', label: 'Activate Knowledge', icon: Play, primary: true },
         { key: 'extract', label: 'Re-extract Knowledge', icon: Zap, primary: false },
       ];
     case 'activated':
-      return [
-        { key: 'extract', label: 'Re-extract Knowledge', icon: Zap, primary: false },
-      ];
+      return [{ key: 'extract', label: 'Re-extract Knowledge', icon: Zap, primary: false }];
     case 'blocked': {
       const actions: ActionDef[] = [];
       if (['no_extraction', 'stale_blocker_state'].includes(resource.blocked_reason)) {
@@ -283,9 +336,7 @@ function getActionsForState(state: ControlPlaneState, resource: CanonicalResourc
       return actions;
     }
     case 'processing':
-      return [
-        { key: 'view_progress', label: 'View Progress', icon: Eye, primary: false },
-      ];
+      return [{ key: 'view_progress', label: 'View Progress', icon: Eye, primary: false }];
     default:
       return [];
   }

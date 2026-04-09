@@ -128,14 +128,15 @@ export function KnowledgeControlPlane() {
     }
   }, [resources, processingIds, operationalizeWithOutcome, refetch]);
 
-  // ── Bulk action handler (with outcome tracking) ──────────
+  // ── Bulk action handler (with snapshot integrity + reconciliation) ──
   const handleBulkAction = useCallback(async (action: string, currentFilter: ControlPlaneFilter) => {
-    const targetResources = resources.filter(r => {
+    // Snapshot the exact resource set at preview time — preserved even if filter/data changes
+    const snapshotResources = resources.filter(r => {
       const state = deriveControlPlaneState(r, processingIds);
       return matchesFilter(state, currentFilter, r.resource_id, conflictIds);
     });
 
-    if (targetResources.length === 0) {
+    if (snapshotResources.length === 0) {
       toast.info('No resources to process');
       return;
     }
@@ -146,8 +147,8 @@ export function KnowledgeControlPlane() {
       bulk_review: 'Diagnose & Repair (Batch)',
     };
 
-    const outcome = await operationalizeBatchWithOutcome(
-      targetResources,
+    await operationalizeBatchWithOutcome(
+      snapshotResources, // frozen snapshot — won't change if UI refreshes during execution
       actionLabels[action] || action,
       action,
       processingIds,
