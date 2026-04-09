@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -276,6 +276,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0, current: '' });
   const [lessonResults, setLessonResults] = useState<LessonImportResult[]>([]);
+  // Mirror of lessonResults that is always current (avoids stale closure reads)
+  const lessonResultsRef = useRef<LessonImportResult[]>([]);
 
   // Per-import credentials (never persisted)
   const [credEmail, setCredEmail] = useState('');
@@ -376,10 +378,11 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const updateLessonResult = (lessonIndex: number, update: Partial<LessonImportResult>) => {
     setLessonResults(prev => {
       const existing = prev.find(r => r.lessonIndex === lessonIndex);
-      if (existing) {
-        return prev.map(r => r.lessonIndex === lessonIndex ? { ...r, ...update } : r);
-      }
-      return [...prev, { lessonIndex, status: 'queued', ...update } as LessonImportResult];
+      const next = existing
+        ? prev.map(r => r.lessonIndex === lessonIndex ? { ...r, ...update } : r)
+        : [...prev, { lessonIndex, status: 'queued', ...update } as LessonImportResult];
+      lessonResultsRef.current = next;
+      return next;
     });
   };
 
@@ -442,7 +445,9 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     setAuthWallHit(false);
     setAuthError(null);
     setImportProgress({ done: 0, total: toImport.length, current: '' });
-    setLessonResults(toImport.map((_, i) => ({ lessonIndex: i, status: 'queued' as const })));
+    const initialResults = toImport.map((_, i) => ({ lessonIndex: i, status: 'queued' as const }));
+    setLessonResults(initialResults);
+    lessonResultsRef.current = initialResults;
 
     let successCount = 0;
     for (let i = 0; i < toImport.length; i++) {
@@ -624,7 +629,15 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
               console.log(`Transcribed video for ${lesson.title}: ${txData.transcript.length} chars`);
             } else {
               const reason = txData?.failureCode || txData?.failureReason || txError?.message || 'unknown';
-              console.warn(`[CourseImport] Transcription failed for "${lesson.title}": ${reason}`);
+              console.warn(`[CourseImport] Transcription evaluated as FAILED for "${lesson.title}":`, {
+                reason,
+                txDataType: typeof txData,
+                txDataKeys: txData ? Object.keys(txData) : [],
+                successField: txData?.success,
+                transcriptType: typeof txData?.transcript,
+                transcriptLen: typeof txData?.transcript === 'string' ? txData.transcript.length : 'N/A',
+                errorMsg: txError?.message,
+              });
               await updateLineageRow(lesson.url, { transcript_status: 'transcript_failed' });
             }
           } catch (txErr) {
@@ -795,9 +808,10 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       setImportProgress({ done: i + 1, total: toImport.length, current: '' });
     }
 
-    // Compute summary counts
-    const fullCount = lessonResults.filter(r => r.status === 'complete').length;
-    const metaCount = lessonResults.filter(r => r.status === 'metadata_only').length;
+    // Use ref for current results (lessonResults from closure is stale)
+    const currentResults = lessonResultsRef.current;
+    const fullCount = currentResults.filter(r => r.status === 'complete').length;
+    const metaCount = currentResults.filter(r => r.status === 'metadata_only').length;
     const failedCount = toImport.length - fullCount - metaCount;
 
     const parts: string[] = [];
