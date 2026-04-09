@@ -1,6 +1,5 @@
 /**
- * Resource Inspect Drawer — right-side drawer for deep resource inspection.
- * V2: includes per-resource action history with reconciliation status.
+ * Resource Inspect Drawer — deep inspection with action history + state transition log.
  */
 import { cn } from '@/lib/utils';
 import {
@@ -13,6 +12,7 @@ import {
   CheckCircle2, XCircle, Zap, Play, Eye, Wrench,
   Clock, FileText, Brain, AlertTriangle, GitBranch,
   Mic, History, ArrowRight, MinusCircle, ShieldCheck, ShieldAlert,
+  RotateCcw,
 } from 'lucide-react';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
 import {
@@ -56,6 +56,9 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
   const actions = getActionsForState(state, resource);
   const sourceType = inferSourceType(resource.title);
   const actionHistory = getResourceActionHistory(resource.resource_id);
+
+  // Derive state transition history from action outcomes
+  const stateTransitions = deriveStateTransitions(actionHistory);
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -111,6 +114,36 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
                 </div>
               ))}
             </div>
+          </Section>
+
+          <Separator />
+
+          {/* ── State Transition History ── */}
+          <Section title="State History" icon={RotateCcw}>
+            {stateTransitions.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No recorded state changes</p>
+            ) : (
+              <div className="space-y-1.5">
+                {stateTransitions.map((t, i) => {
+                  const fromC = CONTROL_PLANE_COLORS[t.from];
+                  const toC = CONTROL_PLANE_COLORS[t.to];
+                  return (
+                    <div key={i} className="flex items-center gap-1.5 text-[10px]">
+                      <Badge variant="outline" className={cn('text-[9px] px-1 py-0', fromC.text, fromC.bg, fromC.border)}>
+                        {CONTROL_PLANE_LABELS[t.from]}
+                      </Badge>
+                      <ArrowRight className="h-2.5 w-2.5 text-muted-foreground" />
+                      <Badge variant="outline" className={cn('text-[9px] px-1 py-0', toC.text, toC.bg, toC.border)}>
+                        {CONTROL_PLANE_LABELS[t.to]}
+                      </Badge>
+                      <span className="ml-auto text-[10px] text-muted-foreground/60">
+                        {new Date(t.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </Section>
 
           <Separator />
@@ -222,6 +255,30 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
       </SheetContent>
     </Sheet>
   );
+}
+
+// ── State Transition derivation ───────────────────────────
+interface StateTransition {
+  from: ControlPlaneState;
+  to: ControlPlaneState;
+  timestamp: string;
+}
+
+function deriveStateTransitions(actionHistory: ActionOutcome[]): StateTransition[] {
+  const transitions: StateTransition[] = [];
+  // Reverse to get chronological order, then dedupe
+  const chronological = [...actionHistory].reverse();
+  for (const a of chronological) {
+    const actualTo = a.reconciledToState ?? a.mutationToState;
+    if (a.expectedFromState !== actualTo) {
+      transitions.push({
+        from: a.expectedFromState,
+        to: actualTo,
+        timestamp: a.timestamp,
+      });
+    }
+  }
+  return transitions;
 }
 
 // ── Action History Entry ───────────────────────────────────
