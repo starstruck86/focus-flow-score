@@ -303,17 +303,29 @@ export function KnowledgeControlPlane() {
         sampleResources={sampleResources}
       />
 
-      {/* Active Filter Banner */}
+      {/* Active Filter Banner with explanation */}
       {filterLabel && (
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/5 border border-primary/20">
-          <Filter className="h-3 w-3 text-primary" />
-          <span className="text-xs text-primary font-medium">Filtered: {filterLabel}</span>
-          <button
-            onClick={() => { handleFilterChange('all'); clearCustomFilter(); }}
-            className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
-          >
-            Clear
-          </button>
+        <div className="rounded-md bg-primary/5 border border-primary/20">
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            <Filter className="h-3 w-3 text-primary shrink-0" />
+            <span className="text-xs text-primary font-medium">
+              Showing: {filterLabel} ({filteredCount})
+            </span>
+            <button
+              onClick={() => { handleFilterChange('all'); clearCustomFilter(); }}
+              className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          </div>
+          {filterExplanation && (
+            <div className="flex items-start gap-1.5 px-3 pb-1.5 -mt-0.5">
+              <Info className="h-2.5 w-2.5 text-muted-foreground shrink-0 mt-0.5" />
+              <span className="text-[10px] text-muted-foreground leading-tight">
+                {filterExplanation}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
