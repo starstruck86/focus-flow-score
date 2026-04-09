@@ -826,6 +826,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       setCredEmail('');
       setCredPassword('');
       setAuthError(null);
+      setAuthWallHit(false);
     }
     onOpenChange(newOpen);
   };
