@@ -705,7 +705,10 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
               const contentType = dlData.content_type || 'application/octet-stream';
 
               // Upload to storage
-              const storagePath = `${user.id}/lesson-assets/${resourceId}/${asset.filename}`;
+              // Ensure storage path has proper extension for downstream parsers
+              const hasProperExt = /\.[a-zA-Z0-9]{1,5}$/.test(asset.filename);
+              const storageFilename = hasProperExt ? asset.filename : `${asset.filename}.${asset.extension || 'bin'}`;
+              const storagePath = `${user.id}/lesson-assets/${resourceId}/${storageFilename}`;
               const binaryStr = atob(dlData.data_base64);
               const bytes = new Uint8Array(binaryStr.length);
               for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);

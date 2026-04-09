@@ -25,9 +25,13 @@ type FileCategory = "pdf" | "text" | "unsupported";
 
 function categoriseFile(storagePath: string, mimeType?: string): { category: FileCategory; ext: string } {
   const ext = storagePath.split(".").pop()?.toLowerCase() || "";
-  if (ext === "pdf" || mimeType === "application/pdf") return { category: "pdf", ext };
-  if (["txt", "md", "csv", "json", "xml", "html", "htm", "log", "rtf"].includes(ext)) return { category: "text", ext };
-  return { category: "unsupported", ext };
+  // Handle Kajabi-style slugs where extension is encoded as suffix (e.g., "filename-pdf")
+  const slugMatch = storagePath.match(/[-_](pdf|docx?|pptx?|txt|md|csv)$/i);
+  const inferredExt = slugMatch ? slugMatch[1].toLowerCase() : "";
+  const effectiveExt = ext.length <= 5 && ext.match(/^[a-z]+$/) ? ext : inferredExt;
+  if (effectiveExt === "pdf" || mimeType === "application/pdf") return { category: "pdf", ext: effectiveExt || "pdf" };
+  if (["txt", "md", "csv", "json", "xml", "html", "htm", "log", "rtf"].includes(effectiveExt)) return { category: "text", ext: effectiveExt };
+  return { category: "unsupported", ext: effectiveExt || ext };
 }
 
 // ── Split PDF into chunks of N pages ──────────────────────
