@@ -282,6 +282,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [credPassword, setCredPassword] = useState('');
   const [showCreds, setShowCreds] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authWallHit, setAuthWallHit] = useState(false);
   const [discoverMeta, setDiscoverMeta] = useState<Record<string, any> | null>(null);
 
   const clearCredPassword = () => setCredPassword('');
