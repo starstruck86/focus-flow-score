@@ -255,6 +255,7 @@ export function ResourceIntelligenceDashboard() {
 
   const opRate = stats.total > 0 ? Math.round((stats.operationalized / stats.total) * 100) : 0;
   const enrichRate = stats.total > 0 ? Math.round((stats.enriched / stats.total) * 100) : 0;
+  const digestRate = stats.total > 0 ? Math.round((stats.digested / stats.total) * 100) : 0;
 
   return (
     <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
@@ -292,7 +293,7 @@ export function ResourceIntelligenceDashboard() {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Stats row */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <div className="text-center">
             <div className="text-lg font-bold text-foreground">{stats.total}</div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Resources</div>
@@ -312,6 +313,14 @@ export function ResourceIntelligenceDashboard() {
             </div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Enriched</div>
             <Progress value={enrichRate} className="h-1 mt-1" />
+          </div>
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-1">
+              <span className="text-lg font-bold text-foreground">{stats.digested}</span>
+              <span className="text-xs text-muted-foreground">/ {stats.total}</span>
+            </div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Digested</div>
+            <Progress value={digestRate} className="h-1 mt-1" />
           </div>
         </div>
 
