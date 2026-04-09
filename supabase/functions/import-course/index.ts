@@ -1254,8 +1254,8 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
     }
   }
 
-  // Strategy 4: Kajabi file download blocks
-  const kajabiFiles = [...html.matchAll(/<div[^>]*class="[^"]*kjb-file[^"]*"[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  // Strategy 4: Kajabi file download blocks (bounded to prevent stack overflow)
+  const kajabiFiles = [...html.matchAll(/<div[^>]*class="[^"]*kjb-file[^"]*"[^>]*>.{0,2000}?<a[^>]*href="([^"]+)"[^>]*>([^<]{0,200})<\/a>/gi)];
   for (const m of kajabiFiles) {
     addAsset(m[1], m[2]?.replace(/<[^>]+>/g, '').trim() || '', 'kajabi-file-block');
   }
