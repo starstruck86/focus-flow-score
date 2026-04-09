@@ -798,8 +798,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       toast.success(`Import complete: ${parts.join(', ')}`);
     }
     setImporting(false);
-    clearCredPassword();
-  }, [lessons, selected, classify, addUrl, url, courseTitle, platform, user, credEmail, credPassword]);
+    if (!authWallHit) clearCredPassword();
+  }, [lessons, selected, classify, addUrl, url, courseTitle, platform, user, credEmail, credPassword, showCreds]);
 
   const selectedCount = selected.size;
   const progressPct = importProgress.total > 0 ? (importProgress.done / importProgress.total) * 100 : 0;
