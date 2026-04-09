@@ -120,7 +120,7 @@ export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKe
 
   if (queue.length === 0) return null;
 
-  const shown = expanded ? queue.slice(0, 15) : queue.slice(0, 5);
+  const shown = expanded ? queue.slice(0, 15) : queue.slice(0, 3);
   const counts = { needs_review: 0, mismatched: 0, failed: 0, needs_extraction: 0 };
   for (const q of queue) counts[q.category]++;
 

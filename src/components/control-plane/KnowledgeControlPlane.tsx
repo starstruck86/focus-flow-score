@@ -2,7 +2,7 @@
  * Knowledge Control Plane — trust-first, lifecycle-driven, operable workspace.
  */
 import { useState, useMemo, useCallback } from 'react';
-import { RefreshCw, Filter, Clock } from 'lucide-react';
+import { RefreshCw, Filter, Clock, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
@@ -196,6 +196,27 @@ export function KnowledgeControlPlane() {
     }[filter]
   );
 
+  /** Contextual explanation for the current filter */
+  const filterExplanation = useMemo((): string | null => {
+    if (customFilterLabel) {
+      if (customFilterLabel.includes('Active KIs')) return 'Resources with at least one active knowledge item — usable for downstream AI.';
+      if (customFilterLabel.includes('With Contexts')) return 'Resources with active KIs that have usage contexts assigned — ready for coaching and playbooks.';
+      if (customFilterLabel.includes('Grounding-Ready')) return 'Resources eligible for Dave grounding — active KIs, contexts, and no blockers.';
+      if (customFilterLabel.includes('conflicted')) return 'Resources with contradictory lifecycle signals that may need manual review.';
+      if (customFilterLabel.includes('attention')) return 'Resources that failed or had unexpected outcomes in the last batch action.';
+      return null;
+    }
+    switch (filter) {
+      case 'ready': return 'Resources with extracted knowledge — usable downstream. Includes both Extracted and Activated states.';
+      case 'needs_extraction': return 'Resources with parseable content but no knowledge items yet. Run Extract to process them.';
+      case 'needs_review': return 'Resources blocked by an issue — empty content, failed extraction, missing activation, or stale state.';
+      case 'processing': return 'Resources currently being processed by a background job.';
+      case 'ingested': return 'Resources in the library with no usable content yet. Run Enrich to fetch and parse content.';
+      case 'conflicts': return 'Resources where lifecycle signals contradict each other — e.g. marked enriched but no content found.';
+      default: return null;
+    }
+  }, [filter, customFilterLabel]);
+
   const handleFilterReadiness = useCallback((key: 'withActiveKIs' | 'withContexts' | 'groundingEligible') => {
     const labels: Record<string, string> = {
       withActiveKIs: 'Active KIs',
@@ -209,9 +230,9 @@ export function KnowledgeControlPlane() {
   const librarySummary = useMemo(() => {
     if (resources.length === 0) return null;
     const parts: string[] = [];
-    parts.push(`${cpSummary.ready} of ${cpSummary.total} resources are usable`);
+    parts.push(`${cpSummary.ready} of ${cpSummary.total} resources usable`);
     if (downstreamReadiness.groundingEligible > 0) {
-      parts.push(`${downstreamReadiness.groundingEligible} ready for AI grounding`);
+      parts.push(`${downstreamReadiness.groundingEligible} grounding-ready`);
     }
     const attention = cpSummary.needsReview + cpSummary.needsExtraction;
     if (attention > 0) {
@@ -221,7 +242,7 @@ export function KnowledgeControlPlane() {
   }, [resources.length, cpSummary, downstreamReadiness]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -282,17 +303,29 @@ export function KnowledgeControlPlane() {
         sampleResources={sampleResources}
       />
 
-      {/* Active Filter Banner */}
+      {/* Active Filter Banner with explanation */}
       {filterLabel && (
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/5 border border-primary/20">
-          <Filter className="h-3 w-3 text-primary" />
-          <span className="text-xs text-primary font-medium">Filtered: {filterLabel}</span>
-          <button
-            onClick={() => { handleFilterChange('all'); clearCustomFilter(); }}
-            className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
-          >
-            Clear
-          </button>
+        <div className="rounded-md bg-primary/5 border border-primary/20">
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            <Filter className="h-3 w-3 text-primary shrink-0" />
+            <span className="text-xs text-primary font-medium">
+              Showing: {filterLabel} ({filteredCount})
+            </span>
+            <button
+              onClick={() => { handleFilterChange('all'); clearCustomFilter(); }}
+              className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          </div>
+          {filterExplanation && (
+            <div className="flex items-start gap-1.5 px-3 pb-1.5 -mt-0.5">
+              <Info className="h-2.5 w-2.5 text-muted-foreground shrink-0 mt-0.5" />
+              <span className="text-[10px] text-muted-foreground leading-tight">
+                {filterExplanation}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
