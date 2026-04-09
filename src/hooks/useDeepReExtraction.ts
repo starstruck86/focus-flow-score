@@ -4,7 +4,7 @@
  * Includes lift_status classification, no_lift_reason diagnosis, and verification layer.
  * Supports resumable batched extraction for large documents with server-side batch ledger.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
