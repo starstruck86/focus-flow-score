@@ -391,6 +391,25 @@ export function CentralResourceTable({
   );
 }
 
+// ── Flash Badge ────────────────────────────────────────────
+const FLASH_CONFIG: Record<RowFlashStatus, { icon: React.ElementType; label: string; className: string }> = {
+  success: { icon: CheckCircle2, label: 'Updated', className: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200' },
+  no_change: { icon: MinusCircle, label: 'No change', className: 'text-muted-foreground bg-muted/50 border-muted' },
+  failed: { icon: XCircle, label: 'Failed', className: 'text-destructive bg-destructive/10 border-destructive/30' },
+  needs_review: { icon: AlertTriangle, label: 'Needs review', className: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30 border-amber-200' },
+};
+
+function FlashBadge({ status }: { status: RowFlashStatus }) {
+  const cfg = FLASH_CONFIG[status];
+  const Icon = cfg.icon;
+  return (
+    <Badge variant="outline" className={cn('text-[9px] px-1 py-0 gap-0.5 animate-in fade-in duration-300', cfg.className)}>
+      <Icon className="h-2.5 w-2.5" />
+      {cfg.label}
+    </Badge>
+  );
+}
+
 // ── Expanded detail with "Why?" evidence panel ─────────────
 function ExpandedResourceDetail({ resource: r, state }: { resource: CanonicalResourceStatus; state: ControlPlaneState }) {
   const evidence = deriveStateEvidence(r, state);
