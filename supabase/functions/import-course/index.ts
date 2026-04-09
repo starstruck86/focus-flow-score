@@ -1025,14 +1025,56 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
     debug.push(`Intro text prepended: ${introText.length} chars`);
   }
   
-  // Resolve Wistia video media URLs for transcription
+  // === MULTI-STRATEGY VIDEO TRANSCRIPT EXTRACTION ===
   let mediaUrl = '';
   let videoDuration = 0;
+  let videoTranscript = '';
+  let transcriptSource = '';
+
   const wistiaIds = videoEmbeds
     .filter(v => v.startsWith('[Wistia Video:'))
     .map(v => v.match(/\[Wistia Video: ([a-z0-9]+)\]/i)?.[1])
     .filter(Boolean) as string[];
-  
+
+  const vimeoIds = videoEmbeds
+    .filter(v => v.startsWith('[Vimeo Video:'))
+    .map(v => v.match(/\[Vimeo Video: (\d+)\]/i)?.[1])
+    .filter(Boolean) as string[];
+
+  // Strategy 1: DOM transcript (already extracted above)
+  if (domTranscript) {
+    videoTranscript = domTranscript;
+    transcriptSource = 'dom_transcript';
+    debug.push(`[Transcript Strategy] Using DOM transcript (${domTranscript.split(/\s+/).length} words)`);
+  }
+
+  // Strategy 2: Wistia captions API
+  if (!videoTranscript && wistiaIds.length > 0) {
+    for (const wid of wistiaIds) {
+      const captions = await resolveWistiaCaptions(wid, debug);
+      if (captions && captions.split(/\s+/).length > 20) {
+        videoTranscript = captions;
+        transcriptSource = 'wistia_captions';
+        debug.push(`[Transcript Strategy] Using Wistia captions`);
+        break;
+      }
+    }
+  }
+
+  // Strategy 3: Vimeo text tracks
+  if (!videoTranscript && vimeoIds.length > 0) {
+    for (const vid of vimeoIds) {
+      const captions = await resolveVimeoCaptions(vid, debug);
+      if (captions && captions.split(/\s+/).length > 20) {
+        videoTranscript = captions;
+        transcriptSource = 'vimeo_captions';
+        debug.push(`[Transcript Strategy] Using Vimeo captions`);
+        break;
+      }
+    }
+  }
+
+  // Strategy 4: Resolve media URLs for downstream audio transcription
   if (wistiaIds.length > 0) {
     const resolved = await resolveWistiaMediaUrl(wistiaIds[0], debug);
     if (resolved) {
@@ -1040,14 +1082,44 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
       videoDuration = resolved.duration;
     }
   }
+
+  if (!mediaUrl && vimeoIds.length > 0) {
+    const resolved = await resolveVimeoMediaUrl(vimeoIds[0], debug);
+    if (resolved) {
+      mediaUrl = resolved.url;
+      videoDuration = resolved.duration;
+    }
+  }
+
+  // === MERGE: If we got a video transcript via captions, append it to content ===
+  if (videoTranscript) {
+    const txWordCount = videoTranscript.split(/\s+/).filter(Boolean).length;
+    const contentWordCount = content.split(/\s+/).filter(Boolean).length;
+    
+    if (contentWordCount < 50) {
+      // Content is essentially empty — use transcript as the content
+      content = (content ? content + '\n\n--- Video Transcript ---\n\n' : '') + videoTranscript;
+      debug.push(`[Transcript Merge] Transcript is primary content (${txWordCount} words, source: ${transcriptSource})`);
+    } else {
+      // Append transcript to existing content
+      content = content + '\n\n--- Video Transcript ---\n\n' + videoTranscript;
+      debug.push(`[Transcript Merge] Appended transcript (${txWordCount} words) to existing content (${contentWordCount} words)`);
+    }
+  }
   
-  debug.push(`Content extracted: ${content.length} chars, type: ${type}, mediaUrl: ${mediaUrl ? 'yes' : 'no'}`);
+  debug.push(`Content extracted: ${content.length} chars, type: ${type}, mediaUrl: ${mediaUrl ? 'yes' : 'no'}, transcriptSource: ${transcriptSource || 'none'}`);
   
-  // Quality classification
+  // Quality classification — run AFTER transcript merge so word counts reflect actual content
   const quality = classifyLessonContent(content, html, resp.url, lessonUrl);
   debug.push(`Quality: type=${quality.content_type}, words=${quality.word_count}, issues=${quality.issues.length > 0 ? quality.issues.join('; ') : 'none'}`);
   
-  return { title, content, type, debug, quality, media_url: mediaUrl || undefined, video_duration: videoDuration || undefined };
+  return {
+    title, content, type, debug, quality,
+    media_url: mediaUrl || undefined,
+    video_duration: videoDuration || undefined,
+    transcript_source: transcriptSource || undefined,
+    has_video_transcript: Boolean(videoTranscript),
+  };
 }
 
 Deno.serve(async (req) => {
