@@ -60,16 +60,25 @@ export function ResourceIntelligenceDashboard() {
     setLoading(true);
 
     try {
-      const [resourcesRes, digestsRes] = await Promise.all([
+      const [resourcesRes, digestsRes, kisRes] = await Promise.all([
         supabase.from('resources').select('id, title, enrichment_status, enriched_at, content_length, last_quality_tier').eq('user_id', user.id),
         supabase.from('resource_digests').select('resource_id, use_cases, takeaways').eq('user_id', user.id),
+        supabase.from('knowledge_items' as any).select('source_resource_id').eq('user_id', user.id).eq('active', true),
       ]);
 
       const resources = (resourcesRes.data || []) as any[];
       const digests = (digestsRes.data || []) as any[];
+      const activeKIs = (kisRes.data || []) as any[];
+
+      // Build set of resource IDs that have at least 1 active KI
+      const resourcesWithActiveKIs = new Set<string>();
+      for (const ki of activeKIs) {
+        if (ki.source_resource_id) resourcesWithActiveKIs.add(ki.source_resource_id);
+      }
 
       const enriched = resources.filter(r => r.enrichment_status === 'deep_enriched').length;
       const placeholder = resources.filter(r => !r.enrichment_status || r.enrichment_status === 'not_enriched').length;
+      const operationalized = resources.filter(r => resourcesWithActiveKIs.has(r.id)).length;
 
       const now = Date.now();
       const staleThreshold = STALE_DAYS * 86400000;
@@ -79,7 +88,8 @@ export function ResourceIntelligenceDashboard() {
       setStats({
         total: resources.length,
         enriched,
-        operationalized: digests.length,
+        operationalized,
+        digested: digests.length,
         placeholder,
         shallow,
         stale,
