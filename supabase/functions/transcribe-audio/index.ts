@@ -85,7 +85,9 @@ serve(async (req) => {
     // Some CDNs return generic content types for audio — if the URL has an audio/video extension, allow it
     const urlLooksAudio = /\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)(\?|#|$)/i.test(audio_url);
     const urlLooksVideo = /\.(mp4|webm|mov)(\?|#|$)/i.test(audio_url);
-    if (!isAudio && !isVideo && !urlLooksAudio && !urlLooksVideo) {
+    // Wistia .bin delivery URLs are video containers — always allow
+    const urlLooksWistiaBin = /embed-ssl\.wistia\.com\/deliveries\/.*\.bin/i.test(audio_url);
+    if (!isAudio && !isVideo && !urlLooksAudio && !urlLooksVideo && !urlLooksWistiaBin) {
       return jsonResp({
         success: false,
         failureCode: "INVALID_CONTENT_TYPE",
