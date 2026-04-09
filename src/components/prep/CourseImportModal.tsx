@@ -56,6 +56,29 @@ type ExtractionTrace = {
   final_source: string | null;
 };
 
+type DetectedAsset = {
+  filename: string;
+  url: string;
+  extension: string;
+  source_section: string;
+};
+
+type AssetResult = {
+  filename: string;
+  extension: string;
+  detected: boolean;
+  downloaded: boolean;
+  parsed: boolean;
+  text_length?: number;
+  detail?: string;
+};
+
+type AssetTrace = {
+  attempted: boolean;
+  assets_found: number;
+  assets: AssetResult[];
+};
+
 type LessonImportResult = {
   lessonIndex: number;
   status: LessonImportStatus;
@@ -69,6 +92,7 @@ type LessonImportResult = {
   transcriptSource?: string;
   hasVideoTranscript?: boolean;
   extractionTrace?: ExtractionTrace;
+  assetTrace?: AssetTrace;
 };
 
 interface CourseImportModalProps {
