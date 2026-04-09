@@ -1,6 +1,6 @@
 /**
  * Needs Attention Queue — "What should I work next?"
- * Prioritized compact queue: extraction → review → mismatches → failures.
+ * Prioritized compact queue showing current state, reason, and expected next state.
  */
 import { useState, useMemo } from 'react';
 import {
@@ -10,24 +10,41 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
-import { deriveControlPlaneState, type ControlPlaneState } from '@/lib/controlPlaneState';
-import { getRecentActions, type ActionOutcome } from '@/lib/actionOutcomeStore';
+import {
+  deriveControlPlaneState, CONTROL_PLANE_LABELS,
+  type ControlPlaneState,
+} from '@/lib/controlPlaneState';
+import { getRecentActions } from '@/lib/actionOutcomeStore';
 
 interface QueueItem {
   id: string;
   title: string;
-  priority: number; // lower = higher priority
+  priority: number;
   category: 'needs_extraction' | 'needs_review' | 'mismatched' | 'failed';
   reason: string;
   state: ControlPlaneState;
+  expectedNextState: ControlPlaneState;
 }
 
-const CATEGORY_CONFIG: Record<QueueItem['category'], { icon: React.ElementType; label: string; color: string; actionLabel: string }> = {
-  needs_review: { icon: AlertTriangle, label: 'Blocked', color: 'text-destructive', actionLabel: 'Review' },
+const CATEGORY_CONFIG: Record<QueueItem['category'], {
+  icon: React.ElementType; label: string; color: string; actionLabel: string;
+}> = {
+  needs_review: { icon: AlertTriangle, label: 'Blocked', color: 'text-destructive', actionLabel: 'Diagnose' },
   mismatched: { icon: ShieldAlert, label: 'Mismatched', color: 'text-amber-600', actionLabel: 'Inspect' },
   failed: { icon: XCircle, label: 'Failed', color: 'text-destructive', actionLabel: 'Retry' },
   needs_extraction: { icon: Zap, label: 'Needs Extraction', color: 'text-amber-600', actionLabel: 'Extract' },
 };
+
+/** Map category to expected next state if acted on */
+function expectedNext(category: QueueItem['category'], currentState: ControlPlaneState): ControlPlaneState {
+  switch (category) {
+    case 'needs_extraction': return 'extracted';
+    case 'needs_review': return 'has_content';
+    case 'failed': return 'has_content';
+    case 'mismatched': return 'extracted';
+    default: return currentState;
+  }
+}
 
 interface Props {
   resources: CanonicalResourceStatus[];
@@ -46,7 +63,6 @@ export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKe
     const mismatchedIds = new Set<string>();
     const failedIds = new Set<string>();
 
-    // Collect mismatched and failed from recent actions
     for (const a of recentActions) {
       if (a.reconciliation === 'mismatched') mismatchedIds.add(a.resourceId);
       if (a.status === 'failed') failedIds.add(a.resourceId);
@@ -55,56 +71,44 @@ export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKe
     for (const r of resources) {
       const state = deriveControlPlaneState(r, processingIds);
 
-      // Priority 1: Mismatched outcomes (trust issue)
       if (mismatchedIds.has(r.resource_id)) {
         const action = recentActions.find(a => a.resourceId === r.resource_id && a.reconciliation === 'mismatched');
         items.push({
-          id: r.resource_id,
-          title: r.title,
-          priority: 1,
+          id: r.resource_id, title: r.title, priority: 1,
           category: 'mismatched',
           reason: action?.mismatchExplanation || 'Outcome did not match expected transition',
-          state,
+          state, expectedNextState: expectedNext('mismatched', state),
         });
-        continue; // Don't double-list
+        continue;
       }
 
-      // Priority 2: Recent failures
       if (failedIds.has(r.resource_id)) {
         const action = recentActions.find(a => a.resourceId === r.resource_id && a.status === 'failed');
         items.push({
-          id: r.resource_id,
-          title: r.title,
-          priority: 2,
+          id: r.resource_id, title: r.title, priority: 2,
           category: 'failed',
           reason: action?.detail || 'Action failed during execution',
-          state,
+          state, expectedNextState: expectedNext('failed', state),
         });
         continue;
       }
 
-      // Priority 3: Blocked
       if (state === 'blocked') {
         items.push({
-          id: r.resource_id,
-          title: r.title,
-          priority: 3,
+          id: r.resource_id, title: r.title, priority: 3,
           category: 'needs_review',
           reason: r.blocked_reason?.replace(/_/g, ' ') || 'Resource is blocked',
-          state,
+          state, expectedNextState: expectedNext('needs_review', state),
         });
         continue;
       }
 
-      // Priority 4: Needs extraction
       if (state === 'has_content') {
         items.push({
-          id: r.resource_id,
-          title: r.title,
-          priority: 4,
+          id: r.resource_id, title: r.title, priority: 4,
           category: 'needs_extraction',
-          reason: 'Content available but no knowledge extracted',
-          state,
+          reason: 'Content available — no knowledge extracted yet',
+          state, expectedNextState: expectedNext('needs_extraction', state),
         });
       }
     }
@@ -117,8 +121,6 @@ export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKe
   if (queue.length === 0) return null;
 
   const shown = expanded ? queue.slice(0, 15) : queue.slice(0, 5);
-
-  // Group counts
   const counts = { needs_review: 0, mismatched: 0, failed: 0, needs_extraction: 0 };
   for (const q of queue) counts[q.category]++;
 
@@ -133,7 +135,6 @@ export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKe
           Needs Attention ({queue.length})
         </span>
         <div className="flex items-center gap-2">
-          {/* Category chips */}
           {counts.mismatched > 0 && (
             <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-amber-600 border-amber-200">
               {counts.mismatched} mismatched
@@ -170,13 +171,22 @@ export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKe
               <Icon className={cn('h-3 w-3 shrink-0', cfg.color)} />
               <button
                 onClick={() => onInspect(item.id)}
-                className="font-medium truncate max-w-[180px] text-left hover:text-primary hover:underline"
+                className="font-medium truncate max-w-[140px] text-left hover:text-primary hover:underline"
               >
                 {item.title}
               </button>
-              <span className="text-muted-foreground truncate max-w-[200px] hidden sm:inline">
+
+              {/* Current state → Expected next state */}
+              <span className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
+                <span>{CONTROL_PLANE_LABELS[item.state]}</span>
+                <ArrowRight className="h-2.5 w-2.5" />
+                <span className="text-foreground">{CONTROL_PLANE_LABELS[item.expectedNextState]}</span>
+              </span>
+
+              <span className="text-muted-foreground truncate max-w-[180px] hidden md:inline text-[10px]">
                 {item.reason}
               </span>
+
               <div className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => {
