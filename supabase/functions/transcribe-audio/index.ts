@@ -271,6 +271,15 @@ serve(async (req) => {
             enrichment_version: 2,
             validation_version: 2,
           }).eq("id", resource_id).eq("user_id", user.id);
+
+          // Update any course_lesson_imports linked to this resource
+          await sb.from("course_lesson_imports").update({
+            transcript_status: "transcript_complete",
+            transcript_word_count: totalWords,
+            transcript_completed_at: new Date().toISOString(),
+            transcript_source: "audio_transcription",
+            updated_at: new Date().toISOString(),
+          }).eq("resource_id", resource_id).eq("user_id", user.id);
         }
       }
     } catch (e) {
