@@ -111,12 +111,12 @@ describe('Transcript status guard — contract', () => {
     expect(typeof mod.warnIfStatusDrifted).toBe('function');
   });
 
-  it('warnIfStatusDrifted logs warning on drift', () => {
+  it('warnIfStatusDrifted logs warning on drift', async () => {
+    const { warnIfStatusDrifted } = await import('@/lib/transcriptStatusGuard');
     const warnings: string[] = [];
     const origWarn = console.warn;
     console.warn = (...args: any[]) => { warnings.push(args.join(' ')); };
     try {
-      const { warnIfStatusDrifted } = require('@/lib/transcriptStatusGuard');
       warnIfStatusDrifted('Test Lesson', 'transcript_pending', true);
       expect(warnings.some(w => w.includes('DRIFT DETECTED'))).toBe(true);
 
