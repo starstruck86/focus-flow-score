@@ -1062,6 +1062,34 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                           {r.extractionTrace && (r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (
                             <ExtractionTraceExpander trace={r.extractionTrace} metadataOnly={r.metadataOnly} />
                           )}
+                          {/* Asset trace */}
+                          {r.assetTrace && r.assetTrace.assets_found > 0 && (
+                            <Collapsible className="pl-5">
+                              <CollapsibleTrigger className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                                <Download className="h-2.5 w-2.5" />
+                                <span>{r.assetTrace.assets_found} asset{r.assetTrace.assets_found !== 1 ? 's' : ''}</span>
+                                <ChevronDown className="h-2.5 w-2.5" />
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="mt-1 space-y-0.5">
+                                {r.assetTrace.assets.map((a, ai) => {
+                                  const color = a.parsed ? 'text-green-600' : a.downloaded ? 'text-amber-500' : 'text-destructive';
+                                  const icon = a.parsed ? '✓' : a.downloaded ? '◎' : '✗';
+                                  return (
+                                    <div key={ai} className={`flex items-start gap-1.5 text-[10px] ${color}`}>
+                                      <span className="w-2.5 text-center flex-shrink-0">{icon}</span>
+                                      <span className="font-medium">{a.filename}</span>
+                                      <span className="text-muted-foreground">
+                                        — {a.downloaded ? 'downloaded' : 'failed'}
+                                        {a.parsed && a.text_length != null && `, parsed (${a.text_length.toLocaleString()} chars)`}
+                                        {!a.parsed && a.downloaded && ', parse ' + (a.extension === 'pdf' ? 'failed' : 'unsupported')}
+                                      </span>
+                                      {a.detail && <span className="text-muted-foreground/70 truncate max-w-[200px]" title={a.detail}>· {a.detail}</span>}
+                                    </div>
+                                  );
+                                })}
+                              </CollapsibleContent>
+                            </Collapsible>
+                          )}
                         </div>
                       );
                     })}
