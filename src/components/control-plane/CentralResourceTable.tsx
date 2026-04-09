@@ -1,11 +1,12 @@
 /**
- * Central Resource Table — filterable, expandable rows with action previews.
+ * Central Resource Table — filterable, expandable rows with action previews and outcome flashes.
  */
 import { useState, useMemo, useCallback, Fragment } from 'react';
 import { cn } from '@/lib/utils';
 import {
   ChevronDown, ChevronRight, CheckCircle2, XCircle,
   Zap, FileText, Play, Wrench, Eye, MoreHorizontal,
+  MinusCircle, AlertTriangle,
 } from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/controlPlaneState';
 import { ActionPreviewDialog, buildActionPreview, type ActionPreview } from './ActionPreviewDialog';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
+import { getRowFlash, type RowFlashStatus } from '@/lib/actionOutcomeStore';
 
 interface Props {
   resources: CanonicalResourceStatus[];
@@ -36,6 +38,7 @@ interface Props {
   onAction: (resourceId: string, action: string) => void;
   onInspect: (resource: CanonicalResourceStatus, state: ControlPlaneState) => void;
   actionLoading?: boolean;
+  outcomeRefreshKey?: number;
 }
 
 function inferSourceType(title: string): string {
@@ -119,7 +122,7 @@ function getRowActions(state: ControlPlaneState, resource: CanonicalResourceStat
 
 export function CentralResourceTable({
   resources, filter, processingIds, conflictIds, customFilterIds,
-  onAction, onInspect, actionLoading,
+  onAction, onInspect, actionLoading, outcomeRefreshKey,
 }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<'title' | 'state' | 'kis' | 'updated'>('updated');
@@ -228,10 +231,17 @@ export function CentralResourceTable({
                 const rowActions = getRowActions(state, r);
                 const primaryAction = rowActions[0];
                 const moreActions = rowActions.slice(1);
+                const flash = getRowFlash(r.resource_id);
 
                 return (
                   <Fragment key={r.resource_id}>
-                    <TableRow className={cn('group/row', hasConflict && 'bg-destructive/5')}>
+                    <TableRow className={cn(
+                      'group/row transition-colors duration-500',
+                      hasConflict && 'bg-destructive/5',
+                      flash === 'success' && 'bg-emerald-50/50 dark:bg-emerald-950/20',
+                      flash === 'failed' && 'bg-destructive/5',
+                      flash === 'needs_review' && 'bg-amber-50/50 dark:bg-amber-950/20',
+                    )}>
                       <TableCell
                         className="p-2 cursor-pointer"
                         onClick={() => setExpandedId(isExpanded ? null : r.resource_id)}
@@ -256,16 +266,19 @@ export function CentralResourceTable({
                         <span className="text-xs text-muted-foreground">{inferSourceType(r.title)}</span>
                       </TableCell>
                       <TableCell>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge variant="outline" className={cn('text-[10px] font-medium cursor-help', colors.text, colors.bg, colors.border)}>
-                              {CONTROL_PLANE_LABELS[state]}
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="max-w-xs text-xs">
-                            <p className="font-medium mb-1">{evidence.reason}</p>
-                          </TooltipContent>
-                        </Tooltip>
+                        <div className="flex items-center gap-1.5">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className={cn('text-[10px] font-medium cursor-help', colors.text, colors.bg, colors.border)}>
+                                {CONTROL_PLANE_LABELS[state]}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="max-w-xs text-xs">
+                              <p className="font-medium mb-1">{evidence.reason}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          {flash && <FlashBadge status={flash} />}
+                        </div>
                       </TableCell>
                       <TableCell className="text-center">
                         {r.is_content_backed
@@ -375,6 +388,25 @@ export function CentralResourceTable({
         loading={actionLoading}
       />
     </>
+  );
+}
+
+// ── Flash Badge ────────────────────────────────────────────
+const FLASH_CONFIG: Record<RowFlashStatus, { icon: React.ElementType; label: string; className: string }> = {
+  success: { icon: CheckCircle2, label: 'Updated', className: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200' },
+  no_change: { icon: MinusCircle, label: 'No change', className: 'text-muted-foreground bg-muted/50 border-muted' },
+  failed: { icon: XCircle, label: 'Failed', className: 'text-destructive bg-destructive/10 border-destructive/30' },
+  needs_review: { icon: AlertTriangle, label: 'Needs review', className: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30 border-amber-200' },
+};
+
+function FlashBadge({ status }: { status: RowFlashStatus }) {
+  const cfg = FLASH_CONFIG[status];
+  const Icon = cfg.icon;
+  return (
+    <Badge variant="outline" className={cn('text-[9px] px-1 py-0 gap-0.5 animate-in fade-in duration-300', cfg.className)}>
+      <Icon className="h-2.5 w-2.5" />
+      {cfg.label}
+    </Badge>
   );
 }
 
