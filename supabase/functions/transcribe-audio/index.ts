@@ -232,6 +232,7 @@ serve(async (req) => {
     results.sort((a, b) => a.chunkIndex - b.chunkIndex);
     const fullTranscript = results.map((r) => r.text).join("\n\n");
     const totalWords = fullTranscript.split(/\s+/).filter(Boolean).length;
+    console.log(`Transcription complete: ${results.length}/${chunks.length} chunks, ${totalWords} words, ${fullTranscript.length} chars`);
 
     // ── STAGE 6: Persist to DB if we have auth ──────────
     let persisted = false;
