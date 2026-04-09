@@ -563,6 +563,139 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           });
         }
 
+        // === DOWNLOAD LESSON ASSETS (PDFs, worksheets, etc.) ===
+        const detectedAssets: DetectedAsset[] = lessonData?.detected_assets || [];
+        const assetTrace: AssetTrace = { attempted: detectedAssets.length > 0, assets_found: detectedAssets.length, assets: [] };
+
+        if (detectedAssets.length > 0 && resourceId && user) {
+          setImportProgress({ done: i, total: toImport.length, current: `${lesson.title} (downloading ${detectedAssets.length} asset${detectedAssets.length !== 1 ? 's' : ''}...)` });
+
+          // Look up the lesson_import row id for linking
+          const { data: cliRow } = await (supabase.from('course_lesson_imports' as any) as any)
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('lesson_url', lesson.url)
+            .eq('original_course_url', url.trim())
+            .maybeSingle();
+          const lessonImportId = cliRow?.id || null;
+
+          for (const asset of detectedAssets) {
+            const ar: AssetResult = { filename: asset.filename, extension: asset.extension, detected: true, downloaded: false, parsed: false };
+            try {
+              // Download via edge function (authenticated)
+              const { data: dlData, error: dlErr } = await trackedInvoke<any>('import-course', {
+                body: { url: url.trim(), action: 'download_asset', asset_url: asset.url, ...getCredsBody() },
+                timeoutMs: 60_000,
+              });
+              if (dlErr || !dlData?.success) {
+                ar.detail = dlData?.error || dlErr?.message || 'Download failed';
+                assetTrace.assets.push(ar);
+                // Record failure in DB
+                await (supabase.from('lesson_assets' as any) as any).insert({
+                  user_id: user.id,
+                  lesson_import_id: lessonImportId,
+                  parent_resource_id: resourceId,
+                  source_url: asset.url,
+                  filename: asset.filename,
+                  download_status: 'failed',
+                  parse_status: 'pending',
+                  error_detail: ar.detail,
+                });
+                continue;
+              }
+
+              ar.downloaded = true;
+              const sizeBytes = dlData.size_bytes || 0;
+              const contentType = dlData.content_type || 'application/octet-stream';
+
+              // Upload to storage
+              const storagePath = `lesson-assets/${user.id}/${resourceId}/${asset.filename}`;
+              const binaryStr = atob(dlData.data_base64);
+              const bytes = new Uint8Array(binaryStr.length);
+              for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+
+              const { error: uploadErr } = await supabase.storage
+                .from('resource-files')
+                .upload(storagePath, bytes, { contentType, upsert: true });
+
+              if (uploadErr) {
+                ar.detail = `Upload failed: ${uploadErr.message}`;
+                await (supabase.from('lesson_assets' as any) as any).insert({
+                  user_id: user.id,
+                  lesson_import_id: lessonImportId,
+                  parent_resource_id: resourceId,
+                  source_url: asset.url,
+                  filename: asset.filename,
+                  mime_type: contentType,
+                  file_size_bytes: sizeBytes,
+                  download_status: 'downloaded',
+                  parse_status: 'failed',
+                  error_detail: ar.detail,
+                });
+                assetTrace.assets.push(ar);
+                continue;
+              }
+
+              // Parse PDFs for text
+              let parsedTextLength = 0;
+              let childResourceId: string | null = null;
+              if (asset.extension === 'pdf' && dlData.data_base64) {
+                try {
+                  // Use basic text extraction from the PDF binary
+                  const textContent = extractTextFromPdfBase64(dlData.data_base64);
+                  parsedTextLength = textContent.length;
+                  ar.parsed = parsedTextLength > 50;
+                  ar.text_length = parsedTextLength;
+
+                  if (parsedTextLength > 50) {
+                    // Create child resource
+                    const childTitle = `${courseTitle} > ${lesson.title} > ${asset.filename}`;
+                    const childClassification = await classify.mutateAsync({ url: asset.url });
+                    childClassification.title = childTitle;
+                    childClassification.resource_type = 'document';
+                    childClassification.scraped_content = textContent;
+                    childClassification.tags = [...(childClassification.tags || []), 'course', 'attachment', courseTitle].filter(Boolean);
+                    const childResource = await addUrl.mutateAsync({ url: asset.url, classification: childClassification });
+                    childResourceId = childResource?.id || null;
+                    ar.detail = `Parsed ${parsedTextLength.toLocaleString()} chars, child resource created`;
+                  } else {
+                    ar.detail = `PDF text too short (${parsedTextLength} chars)`;
+                    ar.parsed = false;
+                  }
+                } catch (parseErr: any) {
+                  ar.detail = `PDF parse failed: ${parseErr?.message || 'unknown'}`;
+                  ar.parsed = false;
+                }
+              } else {
+                ar.detail = `Downloaded (${(sizeBytes / 1024).toFixed(1)} KB), parse not supported for .${asset.extension}`;
+              }
+
+              // Record in lesson_assets
+              await (supabase.from('lesson_assets' as any) as any).insert({
+                user_id: user.id,
+                lesson_import_id: lessonImportId,
+                parent_resource_id: resourceId,
+                source_url: asset.url,
+                filename: asset.filename,
+                mime_type: contentType,
+                file_size_bytes: sizeBytes,
+                storage_path: storagePath,
+                download_status: 'downloaded',
+                parse_status: ar.parsed ? 'parsed' : (asset.extension === 'pdf' ? 'failed' : 'unsupported'),
+                parsed_text_length: parsedTextLength || null,
+                child_resource_id: childResourceId,
+                error_detail: ar.parsed ? null : ar.detail,
+              });
+
+              assetTrace.assets.push(ar);
+              console.log(`[CourseImport] Asset "${asset.filename}": downloaded=${ar.downloaded}, parsed=${ar.parsed}, chars=${parsedTextLength}`);
+            } catch (assetErr: any) {
+              ar.detail = assetErr?.message || 'Asset processing failed';
+              assetTrace.assets.push(ar);
+            }
+          }
+        }
+
         const finalStatus: LessonImportStatus = metadataOnly ? 'metadata_only' : 'complete';
         updateLessonResult(i, {
           status: finalStatus,
@@ -575,6 +708,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
           transcriptSource: lessonData?.transcript_source,
           hasVideoTranscript: lessonData?.has_video_transcript,
           extractionTrace: lessonData?.extraction_trace,
+          assetTrace: assetTrace.attempted ? assetTrace : undefined,
         });
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to save resource';
