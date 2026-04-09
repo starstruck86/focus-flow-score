@@ -27,6 +27,19 @@ import {
 
 const logger = createLogger('DaveConnectionMgr');
 
+function deepFreeze<T>(obj: T): T {
+  if (obj && typeof obj === 'object') {
+    Object.freeze(obj);
+    Object.getOwnPropertyNames(obj).forEach((prop) => {
+      const val = (obj as Record<string, unknown>)[prop];
+      if (val && typeof val === 'object' && !Object.isFrozen(val)) {
+        deepFreeze(val);
+      }
+    });
+  }
+  return obj;
+}
+
 // ── Event History ──────────────────────────────────────────────────
 export interface DaveEventRecord {
   type: string;
@@ -241,7 +254,9 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
 
   const dumpSummary = useCallback((opts?: { copy?: boolean; download?: boolean }) => {
     const now = Date.now();
-    const clone = typeof structuredClone === 'function' ? structuredClone : (v: unknown) => JSON.parse(JSON.stringify(v));
+    const clone = typeof structuredClone === 'function'
+      ? structuredClone
+      : (v: unknown) => JSON.parse(JSON.stringify(v));
 
     const snapshot = {
       dumpedAt: new Date(now).toISOString(),
@@ -257,7 +272,7 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
       lastEventAge: snapshot.eventHistory.length ? now - snapshot.eventHistory.at(-1)!.ts : null,
     };
 
-    const fullDump = Object.freeze({ ...snapshot, derived: Object.freeze(derived), meta: Object.freeze(snapshot.meta), eventHistory: Object.freeze(snapshot.eventHistory) });
+    const fullDump = deepFreeze({ ...snapshot, derived });
 
     console.group('%c[Dave Dump Summary]', 'color: #6366f1; font-weight: bold; font-size: 13px');
     console.log(fullDump);
@@ -266,10 +281,14 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
     const json = JSON.stringify(fullDump, null, 2);
 
     if (opts?.copy) {
-      navigator.clipboard.writeText(json).then(
-        () => console.log('[Dave Dump] Copied to clipboard'),
-        (e) => console.warn('[Dave Dump] Clipboard copy failed', e),
-      );
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(json).then(
+          () => console.log('[Dave Dump] Copied to clipboard'),
+          (e) => console.warn('[Dave Dump] Clipboard copy failed', e),
+        );
+      } else {
+        console.warn('[Dave Dump] Clipboard API not available');
+      }
     }
 
     if (opts?.download) {
@@ -278,8 +297,10 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
       const a = document.createElement('a');
       a.href = url;
       a.download = `dave-dump-${now}.json`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
     }
 
     return fullDump;
