@@ -392,15 +392,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 6. Success — update resource (no content cap for full-document extraction)
+    // 6. Success — update resource with parsed text, but do NOT mark as enriched.
+    // The resource must go through the normal enrichment pipeline to earn deep_enriched.
     await supabase.from("resources").update({
       content: extractedText,
       content_length: extractedText.length,
-      enrichment_status: "deep_enriched",
+      enrichment_status: "not_enriched",
       failure_reason: null,
-      content_status: "content",
-      enrichment_version: 2,
-      validation_version: 2,
+      content_status: "full",
     }).eq("id", resource_id);
 
     // Log successful attempt
