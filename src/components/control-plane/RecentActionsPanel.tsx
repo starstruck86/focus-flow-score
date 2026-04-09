@@ -46,7 +46,7 @@ export function RecentActionsPanel({ refreshKey, onOpenResource, onOpenBulkResul
     <div className="border rounded-lg bg-card">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-foreground hover:bg-muted/50 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50 transition-colors"
       >
         <span className="flex items-center gap-1.5">
           <History className="h-3 w-3 text-muted-foreground" />
@@ -54,55 +54,55 @@ export function RecentActionsPanel({ refreshKey, onOpenResource, onOpenBulkResul
         </span>
         {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
       </button>
-      <div className="border-t divide-y">
-        {/* Bulk actions */}
-        {shownBulk.map(b => (
-          <button
-            key={b.id}
-            onClick={() => onOpenBulkResult?.(b)}
-            className="w-full px-3 py-1.5 flex items-center gap-2 text-xs hover:bg-muted/30 transition-colors text-left"
-          >
-            <History className="h-3 w-3 shrink-0 text-primary" />
-            <span className="font-medium truncate max-w-[120px]">{b.actionLabel}</span>
-            <Badge variant="outline" className="text-[9px] px-1 py-0">
-              {b.succeeded}/{b.attempted}
-            </Badge>
-            {b.mismatched > 0 && (
-              <ShieldAlert className="h-3 w-3 text-destructive shrink-0" />
-            )}
-            <span className="ml-auto text-[10px] text-muted-foreground/70 whitespace-nowrap">
-              {new Date(b.timestamp).toLocaleTimeString()}
-            </span>
-          </button>
-        ))}
-        {/* Row actions */}
-        {shown.map(a => {
-          const cfg = STATUS_CONFIG[a.status];
-          const Icon = cfg.icon;
-          const rcfg = RECONCILE_CONFIG[a.reconciliation];
-          const RIcon = rcfg.icon;
-          return (
+      {expanded && (shown.length > 0 || shownBulk.length > 0) && (
+        <div className="border-t divide-y">
+          {shownBulk.map(b => (
             <button
-              key={a.id}
-              onClick={() => onOpenResource?.(a.resourceId)}
-              className="w-full px-3 py-1.5 flex items-center gap-2 text-xs hover:bg-muted/30 transition-colors text-left"
+              key={b.id}
+              onClick={() => onOpenBulkResult?.(b)}
+              className="w-full px-3 py-1 flex items-center gap-2 text-xs hover:bg-muted/30 transition-colors text-left"
             >
-              <Icon className={cn('h-3 w-3 shrink-0', cfg.color)} />
-              <span className="font-medium truncate max-w-[100px]">{a.actionLabel}</span>
-              <span className="text-muted-foreground truncate max-w-[120px]">{a.resourceTitle}</span>
-              <RIcon className={cn('h-3 w-3 shrink-0', rcfg.color)} title={`Reconciliation: ${a.reconciliation}`} />
-              {a.mismatchExplanation && (
-                <Badge variant="outline" className="text-[9px] px-1 py-0 text-amber-600 border-amber-200 max-w-[120px] truncate">
-                  {a.reconciliation}
-                </Badge>
+              <History className="h-3 w-3 shrink-0 text-primary" />
+              <span className="font-medium truncate max-w-[120px]">{b.actionLabel}</span>
+              <Badge variant="outline" className="text-[9px] px-1 py-0">
+                {b.succeeded}/{b.attempted}
+              </Badge>
+              {b.mismatched > 0 && (
+                <ShieldAlert className="h-3 w-3 text-destructive shrink-0" />
               )}
               <span className="ml-auto text-[10px] text-muted-foreground/70 whitespace-nowrap">
-                {new Date(a.timestamp).toLocaleTimeString()}
+                {new Date(b.timestamp).toLocaleTimeString()}
               </span>
             </button>
-          );
-        })}
-      </div>
+          ))}
+          {shown.map(a => {
+            const cfg = STATUS_CONFIG[a.status];
+            const Icon = cfg.icon;
+            const rcfg = RECONCILE_CONFIG[a.reconciliation];
+            const RIcon = rcfg.icon;
+            return (
+              <button
+                key={a.id}
+                onClick={() => onOpenResource?.(a.resourceId)}
+                className="w-full px-3 py-1 flex items-center gap-2 text-xs hover:bg-muted/30 transition-colors text-left"
+              >
+                <Icon className={cn('h-3 w-3 shrink-0', cfg.color)} />
+                <span className="font-medium truncate max-w-[100px]">{a.actionLabel}</span>
+                <span className="text-muted-foreground truncate max-w-[120px]">{a.resourceTitle}</span>
+                <RIcon className={cn('h-3 w-3 shrink-0', rcfg.color)} title={`Reconciliation: ${a.reconciliation}`} />
+                {a.mismatchExplanation && (
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 text-amber-600 border-amber-200 max-w-[120px] truncate">
+                    {a.reconciliation}
+                  </Badge>
+                )}
+                <span className="ml-auto text-[10px] text-muted-foreground/70 whitespace-nowrap">
+                  {new Date(a.timestamp).toLocaleTimeString()}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
