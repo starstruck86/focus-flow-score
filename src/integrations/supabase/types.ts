@@ -1030,8 +1030,11 @@ export type Database = {
           provider_video_url: string | null
           resource_id: string | null
           source_lesson_title: string | null
+          transcript_completed_at: string | null
+          transcript_source: string | null
           transcript_status: string | null
           transcript_text: string | null
+          transcript_word_count: number | null
           updated_at: string
           user_id: string
         }
@@ -1052,8 +1055,11 @@ export type Database = {
           provider_video_url?: string | null
           resource_id?: string | null
           source_lesson_title?: string | null
+          transcript_completed_at?: string | null
+          transcript_source?: string | null
           transcript_status?: string | null
           transcript_text?: string | null
+          transcript_word_count?: number | null
           updated_at?: string
           user_id: string
         }
@@ -1074,8 +1080,11 @@ export type Database = {
           provider_video_url?: string | null
           resource_id?: string | null
           source_lesson_title?: string | null
+          transcript_completed_at?: string | null
+          transcript_source?: string | null
           transcript_status?: string | null
           transcript_text?: string | null
+          transcript_word_count?: number | null
           updated_at?: string
           user_id?: string
         }
