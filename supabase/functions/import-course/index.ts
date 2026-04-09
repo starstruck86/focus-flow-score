@@ -805,6 +805,9 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
   
   debug.push(`Video embeds found: ${videoEmbeds.length}`);
   
+  // === EXTRACT DOM TRANSCRIPT BEFORE STRIPPING ===
+  const domTranscript = extractDomTranscript(html, debug);
+  
   // Strip comments sections before content extraction
   // Kajabi uses data-controller="comments" or similar patterns
   let cleanedHtml = html
