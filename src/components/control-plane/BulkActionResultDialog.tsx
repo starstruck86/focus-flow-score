@@ -1,5 +1,5 @@
 /**
- * Bulk Action Result Dialog — shows outcome summary with reconciliation.
+ * Bulk Action Result Dialog — outcome summary with clickable attention items.
  */
 import {
   AlertDialog, AlertDialogAction,
@@ -16,10 +16,19 @@ interface Props {
   outcome: BulkActionOutcome | null;
   open: boolean;
   onClose: () => void;
+  onFilterAttention?: (ids: Set<string>) => void;
+  onOpenResource?: (resourceId: string) => void;
 }
 
-export function BulkActionResultDialog({ outcome, open, onClose }: Props) {
+export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttention, onOpenResource }: Props) {
   if (!outcome) return null;
+
+  const handleFilterAttention = () => {
+    if (!onFilterAttention || outcome.stillNeedAttention.length === 0) return;
+    const ids = new Set(outcome.stillNeedAttention.map(r => r.resourceId));
+    onFilterAttention(ids);
+    onClose();
+  };
 
   return (
     <AlertDialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -77,16 +86,31 @@ export function BulkActionResultDialog({ outcome, open, onClose }: Props) {
               </div>
             )}
 
-            {/* Still need attention */}
+            {/* Still need attention — clickable */}
             {outcome.stillNeedAttention.length > 0 && (
               <div>
-                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">
-                  Still need attention ({outcome.stillNeedAttention.length})
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">
+                    Still need attention ({outcome.stillNeedAttention.length})
+                  </span>
+                  {onFilterAttention && (
+                    <button
+                      onClick={handleFilterAttention}
+                      className="text-[10px] text-primary hover:underline"
+                    >
+                      Filter in table →
+                    </button>
+                  )}
+                </div>
                 <ul className="mt-1 space-y-0.5">
                   {outcome.stillNeedAttention.slice(0, 5).map((r, i) => (
-                    <li key={i} className="text-xs text-muted-foreground truncate">
-                      • {r.title} — {r.reason}
+                    <li key={i}>
+                      <button
+                        onClick={() => onOpenResource?.(r.resourceId)}
+                        className="text-xs text-muted-foreground truncate hover:text-foreground hover:underline transition-colors text-left w-full"
+                      >
+                        • {r.title} — {r.reason}
+                      </button>
                     </li>
                   ))}
                   {outcome.stillNeedAttention.length > 5 && (

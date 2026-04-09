@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import { useAutoOperationalize } from '@/hooks/useAutoOperationalize';
 import { useExtractionPipeline } from '@/hooks/useExtractionPipeline';
+import { SystemConfidenceStrip } from './SystemConfidenceStrip';
 import { ControlPlaneSummaryBar } from './ControlPlaneSummaryBar';
 import { CentralResourceTable } from './CentralResourceTable';
 import { ResourceInspectDrawer } from './ResourceInspectDrawer';
@@ -24,6 +25,7 @@ import {
   matchesFilter,
 } from '@/lib/controlPlaneState';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
+import type { BulkActionOutcome } from '@/lib/actionOutcomeStore';
 
 export function KnowledgeControlPlane() {
   const { summary, loading, refetch, isRefetching } = useCanonicalLifecycle();
@@ -42,6 +44,7 @@ export function KnowledgeControlPlane() {
 
   // Bulk result dialog
   const [bulkResultOpen, setBulkResultOpen] = useState(false);
+  const [bulkResultOutcome, setBulkResultOutcome] = useState<BulkActionOutcome | null>(null);
 
   const resources = summary?.resources ?? [];
   const actionLoading = opRunning || extractRunning;
@@ -92,6 +95,15 @@ export function KnowledgeControlPlane() {
 
   const filteredCount = filteredResources.length;
 
+  // ── Open resource in inspect drawer by ID ────────────────
+  const openResourceById = useCallback((resourceId: string) => {
+    const r = resources.find(r => r.resource_id === resourceId);
+    if (r) {
+      setInspectResource(r);
+      setInspectState(deriveControlPlaneState(r, processingIds));
+    }
+  }, [resources, processingIds]);
+
   // ── Row-level action handler (with outcome tracking) ─────
   const handleAction = useCallback(async (resourceId: string, action: string) => {
     switch (action) {
@@ -116,21 +128,16 @@ export function KnowledgeControlPlane() {
       }
       case 'view_progress':
       case 'inspect': {
-        const r = resources.find(r => r.resource_id === resourceId);
-        if (r) {
-          setInspectResource(r);
-          setInspectState(deriveControlPlaneState(r, processingIds));
-        }
+        openResourceById(resourceId);
         break;
       }
       default:
         toast.info(`Action "${action}" not yet implemented`);
     }
-  }, [resources, processingIds, operationalizeWithOutcome, refetch]);
+  }, [resources, processingIds, operationalizeWithOutcome, refetch, openResourceById]);
 
   // ── Bulk action handler (with snapshot integrity + reconciliation) ──
   const handleBulkAction = useCallback(async (action: string, currentFilter: ControlPlaneFilter) => {
-    // Snapshot the exact resource set at preview time — preserved even if filter/data changes
     const snapshotResources = resources.filter(r => {
       const state = deriveControlPlaneState(r, processingIds);
       return matchesFilter(state, currentFilter, r.resource_id, conflictIds);
@@ -147,12 +154,13 @@ export function KnowledgeControlPlane() {
       bulk_review: 'Diagnose & Repair (Batch)',
     };
 
-    await operationalizeBatchWithOutcome(
-      snapshotResources, // frozen snapshot — won't change if UI refreshes during execution
+    const outcome = await operationalizeBatchWithOutcome(
+      snapshotResources,
       actionLabels[action] || action,
       action,
       processingIds,
     );
+    setBulkResultOutcome(outcome);
     setBulkResultOpen(true);
     refetch();
   }, [resources, processingIds, conflictIds, operationalizeBatchWithOutcome, refetch]);
@@ -176,9 +184,21 @@ export function KnowledgeControlPlane() {
     setFilter('all');
   }, []);
 
+  const setCustomFilter = useCallback((ids: Set<string>, label?: string) => {
+    setCustomFilterIds(ids);
+    setCustomFilterLabel(label ?? `${ids.size} resource${ids.size !== 1 ? 's' : ''}`);
+    setFilter('all');
+  }, []);
+
   const clearCustomFilter = useCallback(() => {
     setCustomFilterIds(null);
     setCustomFilterLabel(null);
+  }, []);
+
+  // ── Open bulk result from recent actions ─────────────────
+  const handleOpenBulkResult = useCallback((outcome: BulkActionOutcome) => {
+    setBulkResultOutcome(outcome);
+    setBulkResultOpen(true);
   }, []);
 
   // Labels
@@ -222,6 +242,12 @@ export function KnowledgeControlPlane() {
         </Button>
       </div>
 
+      {/* System Confidence Strip */}
+      <SystemConfidenceStrip
+        conflictCount={conflicts.length}
+        refreshKey={outcomeRefreshKey}
+      />
+
       {/* Conflict Breakdown */}
       <ConflictBreakdownBanner
         conflicts={conflicts}
@@ -262,8 +288,12 @@ export function KnowledgeControlPlane() {
         loading={actionLoading}
       />
 
-      {/* Recent Actions Panel */}
-      <RecentActionsPanel refreshKey={outcomeRefreshKey} />
+      {/* Recent Actions Panel — clickable */}
+      <RecentActionsPanel
+        refreshKey={outcomeRefreshKey}
+        onOpenResource={openResourceById}
+        onOpenBulkResult={handleOpenBulkResult}
+      />
 
       {/* Central Table */}
       <CentralResourceTable
@@ -288,11 +318,13 @@ export function KnowledgeControlPlane() {
         actionLoading={actionLoading}
       />
 
-      {/* Bulk Action Result Dialog */}
+      {/* Bulk Action Result Dialog — with click-through */}
       <BulkActionResultDialog
-        outcome={lastBulkOutcome}
+        outcome={bulkResultOutcome ?? lastBulkOutcome}
         open={bulkResultOpen}
         onClose={() => setBulkResultOpen(false)}
+        onFilterAttention={(ids) => setCustomFilter(ids, `${ids.size} need attention`)}
+        onOpenResource={(id) => { setBulkResultOpen(false); openResourceById(id); }}
       />
     </div>
   );

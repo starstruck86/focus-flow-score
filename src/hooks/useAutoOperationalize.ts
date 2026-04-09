@@ -43,17 +43,23 @@ export function useAutoOperationalize() {
     qc.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
   }, [qc]);
 
-  /** Refetch canonical lifecycle and find a resource's reconciled state */
+  /** Refetch canonical lifecycle and find a resource's reconciled state, with retry for lag */
   const fetchReconciledState = useCallback(async (resourceId: string): Promise<ControlPlaneState | null> => {
-    try {
-      const freshData = await auditCanonicalLifecycle();
-      if (!freshData) return null;
-      const resource = freshData.resources.find(r => r.resource_id === resourceId);
-      if (!resource) return null;
-      return deriveControlPlaneState(resource);
-    } catch {
-      return null;
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY = 1500;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        if (attempt > 0) await new Promise(r => setTimeout(r, RETRY_DELAY));
+        const freshData = await auditCanonicalLifecycle();
+        if (!freshData) continue;
+        const resource = freshData.resources.find(r => r.resource_id === resourceId);
+        if (!resource) continue;
+        return deriveControlPlaneState(resource);
+      } catch {
+        // retry
+      }
     }
+    return null;
   }, []);
 
   /** Refetch and return all fresh resources */
