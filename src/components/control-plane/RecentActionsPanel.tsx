@@ -39,8 +39,8 @@ export function RecentActionsPanel({ refreshKey, onOpenResource, onOpenBulkResul
 
   if (actions.length === 0 && bulkActions.length === 0) return null;
 
-  const shown = expanded ? actions.slice(0, 20) : actions.slice(0, 3);
-  const shownBulk = expanded ? bulkActions.slice(0, 5) : bulkActions.slice(0, 1);
+  const shown = expanded ? actions.slice(0, 20) : [];
+  const shownBulk = expanded ? bulkActions.slice(0, 5) : [];
 
   return (
     <div className="border rounded-lg bg-card">
