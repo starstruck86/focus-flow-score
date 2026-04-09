@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
   CheckCircle2, XCircle, Zap, Play, Eye, Wrench,
-  Clock, FileText, Brain, AlertTriangle,
+  Clock, FileText, Brain, AlertTriangle, GitBranch,
+  Mic, BookOpen, History,
 } from 'lucide-react';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
 import {
@@ -43,8 +44,8 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
   const evidence = deriveStateEvidence(resource, state);
   const colors = CONTROL_PLANE_COLORS[state];
   const conflicts = detectConflicts(resource);
-
   const actions = getActionsForState(state, resource);
+  const sourceType = inferSourceType(resource.title);
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -57,7 +58,7 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
             <Badge variant="outline" className={cn('text-[10px]', colors.text, colors.bg, colors.border)}>
               {CONTROL_PLANE_LABELS[state]}
             </Badge>
-            <span className="text-[10px] text-muted-foreground">{inferSourceType(resource.title)}</span>
+            <span className="text-[10px] text-muted-foreground">{sourceType}</span>
           </div>
         </SheetHeader>
 
@@ -122,12 +123,32 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
 
           <Separator />
 
-          {/* ── Pipeline Facts ── */}
+          {/* ── Transcript & Content ── */}
+          <Section title="Content & Transcript" icon={Mic}>
+            <div className="space-y-1 text-xs">
+              <Row label="Content Backed" value={resource.is_content_backed ? '✓ Yes' : '✗ No'} />
+              <Row label="Enriched" value={resource.is_enriched ? '✓ Yes' : '✗ No'} />
+              <Row
+                label="Transcript"
+                value={
+                  sourceType === 'Podcast' || sourceType === 'Lesson'
+                    ? (resource.is_content_backed ? '✓ Available' : '✗ Missing')
+                    : 'N/A'
+                }
+              />
+              <Row
+                label="Source Type"
+                value={sourceType}
+              />
+            </div>
+          </Section>
+
+          <Separator />
+
+          {/* ── Pipeline Timeline ── */}
           <Section title="Pipeline Timeline" icon={Clock}>
             <div className="space-y-1 text-xs">
               <Row label="Internal Stage" value={resource.canonical_stage} mono />
-              <Row label="Enriched" value={resource.is_enriched ? '✓ Yes' : '✗ No'} />
-              <Row label="Content Backed" value={resource.is_content_backed ? '✓ Yes' : '✗ No'} />
               {resource.blocked_reason !== 'none' && (
                 <Row label="Blocked" value={resource.blocked_reason.replace(/_/g, ' ')} destructive />
               )}
@@ -135,6 +156,39 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
                 label="Last Updated"
                 value={resource.last_transition_at ? new Date(resource.last_transition_at).toLocaleString() : '—'}
               />
+            </div>
+          </Section>
+
+          <Separator />
+
+          {/* ── Resource Lineage ── */}
+          <Section title="Resource Lineage" icon={GitBranch}>
+            <div className="space-y-1 text-xs">
+              <Row label="Resource ID" value={resource.resource_id.slice(0, 8) + '…'} mono />
+              <Row
+                label="Origin"
+                value={
+                  resource.title.includes(' > ') ? 'Course lesson import' :
+                  sourceType === 'Podcast' ? 'Podcast feed import' : 'Direct upload'
+                }
+              />
+            </div>
+          </Section>
+
+          {/* ── Last Action / Failures ── */}
+          <Separator />
+          <Section title="Operation History" icon={History}>
+            <div className="space-y-1 text-xs">
+              <Row
+                label="Last Transition"
+                value={resource.last_transition_at ? new Date(resource.last_transition_at).toLocaleString() : 'No transitions recorded'}
+              />
+              {resource.blocked_reason !== 'none' && (
+                <Row label="Current Blocker" value={resource.blocked_reason.replace(/_/g, ' ')} destructive />
+              )}
+              {resource.blocked_reason === 'none' && (
+                <Row label="Last Failure" value="None recorded" />
+              )}
             </div>
           </Section>
 
@@ -187,7 +241,7 @@ function Row({ label, value, mono, destructive }: { label: string; value: string
   );
 }
 
-// ── Action model per state ─────────────────────────────────
+// ── Action model per state (renamed for clarity) ───────────
 interface ActionDef {
   key: string;
   label: string;
@@ -207,7 +261,7 @@ function getActionsForState(state: ControlPlaneState, resource: CanonicalResourc
       ];
     case 'extracted':
       return [
-        { key: 'activate', label: 'Activate KIs', icon: Play, primary: true },
+        { key: 'activate', label: 'Activate Knowledge', icon: Play, primary: true },
         { key: 'extract', label: 'Re-extract Knowledge', icon: Zap, primary: false },
       ];
     case 'activated':
@@ -217,10 +271,10 @@ function getActionsForState(state: ControlPlaneState, resource: CanonicalResourc
     case 'blocked': {
       const actions: ActionDef[] = [];
       if (['no_extraction', 'stale_blocker_state'].includes(resource.blocked_reason)) {
-        actions.push({ key: 'fix', label: 'Auto-fix Resource', icon: Wrench, primary: true });
+        actions.push({ key: 'fix', label: 'Diagnose & Repair', icon: Wrench, primary: true });
       }
       if (resource.blocked_reason === 'no_activation' || resource.blocked_reason === 'missing_contexts') {
-        actions.push({ key: 'activate', label: 'Activate KIs', icon: Play, primary: true });
+        actions.push({ key: 'activate', label: 'Activate Knowledge', icon: Play, primary: true });
       }
       if (resource.blocked_reason === 'empty_content') {
         actions.push({ key: 'enrich', label: 'Enrich Content', icon: FileText, primary: true });
