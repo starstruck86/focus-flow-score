@@ -1304,8 +1304,14 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
     const extMatch = resolvedUrl.match(/\.([a-z0-9]+)(?:\?|#|$)/i);
     const ext = extMatch?.[1]?.toLowerCase() || '';
 
-    // Must have a recognizable asset extension OR download attribute source
-    if (!ASSET_EXTENSIONS.test(resolvedUrl) && source !== 'download-attribute') return;
+    // Must have a recognizable asset extension OR be from a trusted source strategy
+    const trustedSources = ['download-attribute', 'kajabi-downloads-sidebar', 'kajabi-file-block'];
+    if (!ASSET_EXTENSIONS.test(resolvedUrl) && !trustedSources.includes(source)) {
+      // Try to infer extension from Kajabi-style slug (e.g. /nexus_exercise-pdf)
+      const slug = resolvedUrl.split('/').pop() || '';
+      const inferredExt = slug.match(/-(pdf|docx?|pptx?|xlsx?|csv|zip)$/i)?.[1]?.toLowerCase();
+      if (!inferredExt) return;
+    }
 
     const filename = linkText || decodeURIComponent(resolvedUrl.split('/').pop()?.split('?')[0] || 'unknown');
 
