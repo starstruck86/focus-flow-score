@@ -1184,6 +1184,9 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
   
   debug.push(`Content extracted: ${content.length} chars, type: ${type}, mediaUrl: ${mediaUrl ? 'yes' : 'no'}, transcriptSource: ${transcriptSource || 'none'}`);
   
+  // === DETECT DOWNLOADABLE ASSETS ===
+  const detectedAssets = detectLessonAssets(html, lessonUrl, debug);
+  
   // Quality classification — run AFTER transcript merge so word counts reflect actual content
   const quality = classifyLessonContent(content, html, resp.url, lessonUrl);
   debug.push(`Quality: type=${quality.content_type}, words=${quality.word_count}, issues=${quality.issues.length > 0 ? quality.issues.join('; ') : 'none'}`);
@@ -1195,6 +1198,7 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
     transcript_source: transcriptSource || undefined,
     has_video_transcript: Boolean(videoTranscript),
     extraction_trace,
+    detected_assets: detectedAssets,
   };
 }
 
