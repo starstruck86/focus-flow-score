@@ -479,6 +479,19 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url, requestedUrl, finalUrl });
         await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'quality_gate', error: errMsg });
         setImportProgress({ done: i + 1, total: toImport.length, current: '' });
+
+        // Early-abort: if first lesson hits login wall, don't waste time on the rest
+        if (quality?.has_login_wall || quality?.content_type === 'login_page') {
+          setAuthWallHit(true);
+          setAuthError('This course requires login. Please enter or update your credentials and retry.');
+          if (!showCreds) setShowCreds(true);
+          // Mark remaining lessons as failed
+          for (let j = i + 1; j < toImport.length; j++) {
+            updateLessonResult(j, { status: 'failed', error: 'Skipped — authentication required', lessonUrl: toImport[j].url });
+          }
+          toast.error('Import stopped — authentication failed. Update credentials and retry.');
+          break;
+        }
         continue;
       }
 
