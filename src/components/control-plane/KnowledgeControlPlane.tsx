@@ -8,7 +8,8 @@ import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import { useAutoOperationalize } from '@/hooks/useAutoOperationalize';
 import { useExtractionPipeline } from '@/hooks/useExtractionPipeline';
-import { SystemConfidenceStrip } from './SystemConfidenceStrip';
+import { SystemHealthStrip } from './SystemHealthStrip';
+import { ResourceHealthStrip } from './ResourceHealthStrip';
 import { ControlPlaneSummaryBar } from './ControlPlaneSummaryBar';
 import { CentralResourceTable } from './CentralResourceTable';
 import { ResourceInspectDrawer } from './ResourceInspectDrawer';
@@ -49,7 +50,6 @@ export function KnowledgeControlPlane() {
   const resources = summary?.resources ?? [];
   const actionLoading = opRunning || extractRunning;
 
-  // Processing IDs
   const processingIds = useMemo(() => new Set<string>(), []);
 
   const cpSummary = useMemo(
@@ -57,11 +57,9 @@ export function KnowledgeControlPlane() {
     [resources, processingIds],
   );
 
-  // Conflict detection
   const conflicts = useMemo(() => detectAllConflicts(resources), [resources]);
   const conflictIds = useMemo(() => new Set(conflicts.map(c => c.resource_id)), [conflicts]);
 
-  // Sample resources for metric cards
   const sampleResources = useMemo(() => {
     const buckets: Record<string, CanonicalResourceStatus[]> = {
       all: resources.slice(0, 3), ready: [], needs_extraction: [],
@@ -84,7 +82,6 @@ export function KnowledgeControlPlane() {
     return buckets;
   }, [resources, processingIds]);
 
-  // Filtered resources
   const filteredResources = useMemo(() => {
     if (customFilterIds) return resources.filter(r => customFilterIds.has(r.resource_id));
     return resources.filter(r => {
@@ -104,7 +101,7 @@ export function KnowledgeControlPlane() {
     }
   }, [resources, processingIds]);
 
-  // ── Row-level action handler (with outcome tracking) ─────
+  // ── Row-level action handler ─────────────────────────────
   const handleAction = useCallback(async (resourceId: string, action: string) => {
     switch (action) {
       case 'extract':
@@ -116,62 +113,46 @@ export function KnowledgeControlPlane() {
         const preState = deriveControlPlaneState(resource, processingIds);
         const preview = buildActionPreview(action, preState, resource);
         await operationalizeWithOutcome(
-          resourceId,
-          preState,
-          preview.toState,
-          action,
-          preview.actionLabel,
-          resource.title,
+          resourceId, preState, preview.toState, action, preview.actionLabel, resource.title,
         );
         refetch();
         break;
       }
       case 'view_progress':
-      case 'inspect': {
+      case 'inspect':
         openResourceById(resourceId);
         break;
-      }
       default:
         toast.info(`Action "${action}" not yet implemented`);
     }
   }, [resources, processingIds, operationalizeWithOutcome, refetch, openResourceById]);
 
-  // ── Bulk action handler (with snapshot integrity + reconciliation) ──
+  // ── Bulk action handler ──────────────────────────────────
   const handleBulkAction = useCallback(async (action: string, currentFilter: ControlPlaneFilter) => {
     const snapshotResources = resources.filter(r => {
       const state = deriveControlPlaneState(r, processingIds);
       return matchesFilter(state, currentFilter, r.resource_id, conflictIds);
     });
-
-    if (snapshotResources.length === 0) {
-      toast.info('No resources to process');
-      return;
-    }
+    if (snapshotResources.length === 0) { toast.info('No resources to process'); return; }
 
     const actionLabels: Record<string, string> = {
       bulk_extract: 'Extract Knowledge (Batch)',
       bulk_enrich: 'Enrich Content (Batch)',
       bulk_review: 'Diagnose & Repair (Batch)',
     };
-
     const outcome = await operationalizeBatchWithOutcome(
-      snapshotResources,
-      actionLabels[action] || action,
-      action,
-      processingIds,
+      snapshotResources, actionLabels[action] || action, action, processingIds,
     );
     setBulkResultOutcome(outcome);
     setBulkResultOpen(true);
     refetch();
   }, [resources, processingIds, conflictIds, operationalizeBatchWithOutcome, refetch]);
 
-  // ── Inspect drawer handler ───────────────────────────────
   const handleInspect = useCallback((r: CanonicalResourceStatus, state: ControlPlaneState) => {
     setInspectResource(r);
     setInspectState(state);
   }, []);
 
-  // ── Filter management ────────────────────────────────────
   const handleFilterChange = useCallback((f: ControlPlaneFilter) => {
     setFilter(f);
     setCustomFilterIds(null);
@@ -195,26 +176,21 @@ export function KnowledgeControlPlane() {
     setCustomFilterLabel(null);
   }, []);
 
-  // ── Open bulk result from recent actions ─────────────────
   const handleOpenBulkResult = useCallback((outcome: BulkActionOutcome) => {
     setBulkResultOutcome(outcome);
     setBulkResultOpen(true);
   }, []);
 
-  // Labels
   const filterLabel = customFilterLabel ?? (
     filter === 'all' ? null : filter === 'conflicts' ? 'Conflicts' : {
-      ready: 'Ready',
-      needs_extraction: 'Needs Extraction',
-      needs_review: 'Needs Review',
-      processing: 'Processing',
-      ingested: 'Ingested',
+      ready: 'Ready', needs_extraction: 'Needs Extraction', needs_review: 'Needs Review',
+      processing: 'Processing', ingested: 'Ingested',
     }[filter]
   );
 
   return (
     <div className="space-y-4">
-      {/* Header with freshness */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Knowledge Control Plane</h2>
@@ -231,10 +207,8 @@ export function KnowledgeControlPlane() {
           </div>
         </div>
         <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetch()}
-          disabled={isRefetching}
+          variant="outline" size="sm"
+          onClick={() => refetch()} disabled={isRefetching}
           className="h-7 text-xs gap-1.5"
         >
           <RefreshCw className={`h-3 w-3 ${isRefetching ? 'animate-spin' : ''}`} />
@@ -242,10 +216,14 @@ export function KnowledgeControlPlane() {
         </Button>
       </div>
 
-      {/* System Confidence Strip */}
-      <SystemConfidenceStrip
+      {/* System Health — reconciliation & trust */}
+      <SystemHealthStrip refreshKey={outcomeRefreshKey} onOpenResource={openResourceById} />
+
+      {/* Resource Health — blocked, extraction, conflicts */}
+      <ResourceHealthStrip
+        summary={cpSummary}
         conflictCount={conflicts.length}
-        refreshKey={outcomeRefreshKey}
+        onFilterChange={handleFilterChange}
       />
 
       {/* Conflict Breakdown */}
@@ -288,7 +266,7 @@ export function KnowledgeControlPlane() {
         loading={actionLoading}
       />
 
-      {/* Recent Actions Panel — clickable */}
+      {/* Recent Actions — clickable */}
       <RecentActionsPanel
         refreshKey={outcomeRefreshKey}
         onOpenResource={openResourceById}
@@ -318,7 +296,7 @@ export function KnowledgeControlPlane() {
         actionLoading={actionLoading}
       />
 
-      {/* Bulk Action Result Dialog — with click-through */}
+      {/* Bulk Action Result Dialog */}
       <BulkActionResultDialog
         outcome={bulkResultOutcome ?? lastBulkOutcome}
         open={bulkResultOpen}
