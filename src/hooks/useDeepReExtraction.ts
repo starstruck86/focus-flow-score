@@ -403,10 +403,11 @@ export function useDeepReExtraction() {
   const [liftSummary, setLiftSummary] = useState<CoverageLiftSummary | null>(null);
   const [excludedResourceIds, setExcludedResourceIds] = useState<Set<string>>(new Set());
 
-  const flagForReExtraction = useCallback(async (resources: ResourceAuditRow[], reason: string) => {
+  const flagForReExtraction = useCallback(async (resources: ResourceAuditRow[], reason: string, autoRun = false) => {
     console.log('[QUEUE PATH] flagForReExtraction called', {
       count: resources.length,
       reason,
+      autoRun,
       titles: resources.map(r => r.title).slice(0, 3),
     });
 
@@ -488,7 +489,104 @@ export function useDeepReExtraction() {
       ? `${newItems.length} flagged for re-extraction (${skipped} skipped)`
       : `${newItems.length} resources flagged for deep re-extraction`;
     console.log('[QUEUE PATH] showing flagged toast', { msg });
-    toast.success(msg);
+    toast.success(autoRun ? `Running extraction on ${newItems.length} resources…` : msg);
+
+    // Auto-run: immediately process flagged items without waiting for re-render
+    if (autoRun && newItems.length > 0) {
+      const runnableItems = newItems.filter(i => i.status === 'queued' || i.status === 'partial_complete_resumable');
+      if (runnableItems.length > 0) {
+        console.log(`[QUEUE PATH] autoRun: starting extraction on ${runnableItems.length} items`);
+        setIsRunning(true);
+        let succeeded = 0;
+        let totalDelta = 0;
+        let totalNetNew = 0;
+        let totalNewActive = 0;
+        let totalNewCtx = 0;
+        let depthUpgrades = 0;
+        let noLiftCount = 0;
+        const noLiftReasons: NoLiftReason[] = [];
+        const bottlenecks: DominantBottleneck[] = [];
+        const preKisArr: number[] = [];
+        const postKisArr: number[] = [];
+
+        for (const item of runnableItems) {
+          try {
+            const result = await runSingleExtraction(item) as any;
+            if (result.finalStatus === 'completed' || result.finalStatus === 'partial' || result.finalStatus === 'partial_complete_resumable') {
+              succeeded++;
+              totalDelta += result.kiDelta;
+              totalNetNew += result.netNewUnique;
+              totalNewActive += Math.max(0, result.activeDelta);
+              totalNewCtx += Math.max(0, result.contextDelta);
+              const isUpgrade = (item.pre_depth_bucket === 'none' || item.pre_depth_bucket === 'shallow') &&
+                result.postKisPer1k >= 0.75;
+              if (isUpgrade) depthUpgrades++;
+              if (result.liftStatus === 'no_lift') {
+                noLiftCount++;
+                if (result.noLiftReason) noLiftReasons.push(result.noLiftReason);
+                if (result.dominantBottleneck && result.dominantBottleneck !== 'none') bottlenecks.push(result.dominantBottleneck);
+              }
+            }
+            preKisArr.push(item.pre_kis_per_1k);
+            postKisArr.push(result.postKisPer1k);
+          } catch (err: any) {
+            setQueue(prev => prev.map(i =>
+              i.resource_id === item.resource_id ? { ...i, status: 'failed' as const, error: err.message } : i
+            ));
+            preKisArr.push(item.pre_kis_per_1k);
+            postKisArr.push(item.pre_kis_per_1k);
+          }
+        }
+
+        const avgBefore = preKisArr.length > 0 ? preKisArr.reduce((a, b) => a + b, 0) / preKisArr.length : 0;
+        const avgAfter = postKisArr.length > 0 ? postKisArr.reduce((a, b) => a + b, 0) / postKisArr.length : 0;
+        const reasonCounts = new Map<NoLiftReason, number>();
+        for (const r of noLiftReasons) reasonCounts.set(r, (reasonCounts.get(r) || 0) + 1);
+        let topNoLiftReason: NoLiftReason | null = null;
+        let topCount = 0;
+        for (const [reason, count] of reasonCounts) {
+          if (count > topCount) { topNoLiftReason = reason; topCount = count; }
+        }
+        const bnCounts = new Map<DominantBottleneck, number>();
+        for (const b of bottlenecks) bnCounts.set(b, (bnCounts.get(b) || 0) + 1);
+        let topBottleneck: DominantBottleneck | null = null;
+        let topBnCount = 0;
+        for (const [bn, count] of bnCounts) {
+          if (count > topBnCount) { topBottleneck = bn; topBnCount = count; }
+        }
+
+        setLiftSummary({
+          resourcesProcessed: runnableItems.length, resourcesSucceeded: succeeded,
+          totalKiDelta: totalDelta, totalNetNewUnique: totalNetNew,
+          totalNewActive: totalNewActive, totalNewWithContext: totalNewCtx,
+          avgKisPer1kBefore: Math.round(avgBefore * 100) / 100,
+          avgKisPer1kAfter: Math.round(avgAfter * 100) / 100,
+          depthUpgrades, noLiftCount, topNoLiftReason, topBottleneck,
+          successRate: runnableItems.length > 0 ? Math.round((succeeded / runnableItems.length) * 100) : 0,
+        });
+
+        setIsRunning(false);
+
+        // Auto-clear exhausted no-lift items
+        setQueue(prev => {
+          const remaining = prev.filter(item => {
+            if (item.status !== 'completed') return true;
+            if (item.lift_status === 'meaningful_lift' || item.lift_status === 'minor_lift') return true;
+            const isExhausted = (item.ki_delta ?? 0) === 0 && (item.net_new_unique ?? 0) === 0;
+            if (isExhausted) {
+              console.log(`[QUEUE AUTO-CLEAR] Removing exhausted item: "${item.title}" (no lift, delta=0)`);
+              return false;
+            }
+            return true;
+          });
+          return remaining;
+        });
+
+        qc.invalidateQueries({ queryKey: ['knowledge-coverage-audit'] });
+        qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+        qc.invalidateQueries({ queryKey: ['resources'] });
+      }
+    }
   }, [excludedResourceIds]);
 
   const removeFromQueue = useCallback((resourceId: string) => {
