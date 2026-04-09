@@ -1261,7 +1261,7 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
   }
 
   // Strategy 5: Kajabi /courses/downloads/ links (URL has no file extension, e.g. /nexus_exercise-pdf)
-  const kajabiDownloadLinks = [...html.matchAll(/<a[^>]*href="([^"]*\/courses\/downloads\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const kajabiDownloadLinks = [...html.matchAll(/<a[^>]*href="([^"]*\/courses\/downloads\/[^"]+)"[^>]*>([^<]{0,200})<\/a>/gi)];
   for (const m of kajabiDownloadLinks) {
     const href = m[1];
     const text = m[2]?.replace(/<[^>]+>/g, '').trim() || '';
@@ -1283,7 +1283,7 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
   }
 
   // Strategy 6: Kajabi downloads sidebar (class="downloads__download")
-  const kajabiSidebarLinks = [...html.matchAll(/<a[^>]*class="[^"]*downloads__download[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const kajabiSidebarLinks = [...html.matchAll(/<a[^>]*class="[^"]*downloads__download[^"]*"[^>]*href="([^"]+)"[^>]*>([^<]{0,200})<\/a>/gi)];
   for (const m of kajabiSidebarLinks) {
     const href = m[1];
     const text = m[2]?.replace(/<[^>]+>/g, '').trim() || '';
