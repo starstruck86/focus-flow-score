@@ -804,8 +804,18 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     return lessonResults.find(r => r.lessonIndex === toImportIdx);
   };
 
+  // Clear credentials on modal close
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen) {
+      setCredEmail('');
+      setCredPassword('');
+      setAuthError(null);
+    }
+    onOpenChange(newOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={importing ? undefined : onOpenChange}>
+    <Dialog open={open} onOpenChange={importing ? undefined : handleOpenChange}>
       <DialogContent className="max-w-lg flex flex-col" style={{ maxHeight: '90vh' }}>
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
