@@ -515,7 +515,14 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                 const cleaned = (tagRow.tags as string[]).filter(t => t !== 'needs-transcript');
                 await supabase.from('resources').update({ tags: cleaned } as any).eq('id', resourceId);
               }
-              await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete', transcript_text: txData.transcript });
+              const txWordCount = transcript.split(/\s+/).filter(Boolean).length;
+              await updateLineageRow(lesson.url, {
+                transcript_status: 'transcript_complete',
+                transcript_text: txData.transcript,
+                transcript_word_count: txWordCount,
+                transcript_completed_at: new Date().toISOString(),
+                transcript_source: 'audio_transcription',
+              });
               console.log(`Transcribed video for ${lesson.title}: ${txData.transcript.length} chars`);
             } else {
               await updateLineageRow(lesson.url, { transcript_status: 'transcript_failed' });
@@ -525,7 +532,11 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
             await updateLineageRow(lesson.url, { transcript_status: 'transcript_failed' });
           }
         } else if (lessonData?.media_url && resourceId) {
-          await updateLineageRow(lesson.url, { transcript_status: 'transcript_complete' });
+          await updateLineageRow(lesson.url, {
+            transcript_status: 'transcript_complete',
+            transcript_completed_at: new Date().toISOString(),
+            transcript_source: 'media_url_resolved',
+          });
         }
 
         const finalStatus: LessonImportStatus = metadataOnly ? 'metadata_only' : 'complete';
