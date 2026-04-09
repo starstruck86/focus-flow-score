@@ -2635,6 +2635,74 @@ export type Database = {
         }
         Relationships: []
       }
+      lesson_assets: {
+        Row: {
+          child_resource_id: string | null
+          created_at: string
+          download_status: string
+          error_detail: string | null
+          file_size_bytes: number | null
+          filename: string
+          id: string
+          lesson_import_id: string | null
+          mime_type: string | null
+          page_count: number | null
+          parent_resource_id: string | null
+          parse_status: string
+          parsed_text_length: number | null
+          source_url: string
+          storage_path: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          child_resource_id?: string | null
+          created_at?: string
+          download_status?: string
+          error_detail?: string | null
+          file_size_bytes?: number | null
+          filename: string
+          id?: string
+          lesson_import_id?: string | null
+          mime_type?: string | null
+          page_count?: number | null
+          parent_resource_id?: string | null
+          parse_status?: string
+          parsed_text_length?: number | null
+          source_url: string
+          storage_path?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          child_resource_id?: string | null
+          created_at?: string
+          download_status?: string
+          error_detail?: string | null
+          file_size_bytes?: number | null
+          filename?: string
+          id?: string
+          lesson_import_id?: string | null
+          mime_type?: string | null
+          page_count?: number | null
+          parent_resource_id?: string | null
+          parse_status?: string
+          parsed_text_length?: number | null
+          source_url?: string
+          storage_path?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_assets_lesson_import_id_fkey"
+            columns: ["lesson_import_id"]
+            isOneToOne: false
+            referencedRelation: "course_lesson_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       library_reconciliation_items: {
         Row: {
           bucket: string
