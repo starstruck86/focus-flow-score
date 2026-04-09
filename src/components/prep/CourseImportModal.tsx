@@ -113,6 +113,53 @@ const STATUS_ICONS: Record<string, typeof CheckCircle2> = {
 
 const VIDEO_TRANSCRIPT_MARKER = '\n\n--- Video Transcript ---\n\n';
 
+/**
+ * Basic text extraction from a base64-encoded PDF.
+ * Uses stream-based extraction without a full PDF library.
+ */
+function extractTextFromPdfBase64(base64Data: string): string {
+  try {
+    const binaryStr = atob(base64Data);
+    // Look for text streams in the PDF binary
+    const segments: string[] = [];
+    
+    // Extract text between BT (begin text) and ET (end text) operators
+    const btEtPattern = /BT\s([\s\S]*?)ET/g;
+    let m;
+    while ((m = btEtPattern.exec(binaryStr)) !== null) {
+      // Extract text from Tj and TJ operators
+      const tjMatches = m[1].matchAll(/\(([^)]*)\)\s*Tj/g);
+      for (const tj of tjMatches) {
+        const text = tj[1].replace(/\\n/g, '\n').replace(/\\\(/g, '(').replace(/\\\)/g, ')');
+        if (text.trim()) segments.push(text.trim());
+      }
+      // TJ arrays
+      const tjArrayMatches = m[1].matchAll(/\[(.*?)\]\s*TJ/g);
+      for (const tja of tjArrayMatches) {
+        const parts = [...tja[1].matchAll(/\(([^)]*)\)/g)].map(p => 
+          p[1].replace(/\\n/g, '\n').replace(/\\\(/g, '(').replace(/\\\)/g, ')')
+        );
+        const joined = parts.join('').trim();
+        if (joined) segments.push(joined);
+      }
+    }
+    
+    // Also try to find readable ASCII text runs as fallback
+    if (segments.length === 0) {
+      const asciiRuns = binaryStr.match(/[\x20-\x7E]{20,}/g) || [];
+      for (const run of asciiRuns) {
+        if (!/^[%\/\[\]{}()<>]+$/.test(run) && !/^\d+\s\d+\s(obj|R)/.test(run)) {
+          segments.push(run.trim());
+        }
+      }
+    }
+    
+    return segments.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  } catch {
+    return '';
+  }
+}
+
 function normalizeComparableText(input: string) {
   return input
     .toLowerCase()
