@@ -800,9 +800,10 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       setImportProgress({ done: i + 1, total: toImport.length, current: '' });
     }
 
-    // Compute summary counts
-    const fullCount = lessonResults.filter(r => r.status === 'complete').length;
-    const metaCount = lessonResults.filter(r => r.status === 'metadata_only').length;
+    // Use ref for current results (lessonResults from closure is stale)
+    const currentResults = lessonResultsRef.current;
+    const fullCount = currentResults.filter(r => r.status === 'complete').length;
+    const metaCount = currentResults.filter(r => r.status === 'metadata_only').length;
     const failedCount = toImport.length - fullCount - metaCount;
 
     const parts: string[] = [];
