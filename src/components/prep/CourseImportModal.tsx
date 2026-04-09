@@ -656,6 +656,13 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         const detectedAssets: DetectedAsset[] = lessonData?.detected_assets || [];
         const assetTrace: AssetTrace = { attempted: detectedAssets.length > 0, assets_found: detectedAssets.length, assets: [] };
 
+        // Diagnostic: log asset detection results and any debug hints from edge function
+        const assetDebugLines = (lessonData?.debug || []).filter((d: string) => d.includes('[Asset'));
+        console.log(`[CourseImport][AssetDiag] "${lesson.title}": detected_assets=${detectedAssets.length}, debug_hints=${assetDebugLines.length}`, {
+          detected_assets: detectedAssets,
+          asset_debug: assetDebugLines,
+        });
+
         if (detectedAssets.length > 0 && resourceId && user) {
           setImportProgress({ done: i, total: toImport.length, current: `${lesson.title} (downloading ${detectedAssets.length} asset${detectedAssets.length !== 1 ? 's' : ''}...)` });
 
