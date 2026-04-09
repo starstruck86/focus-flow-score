@@ -451,7 +451,17 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         }
 
         const finalStatus: LessonImportStatus = metadataOnly ? 'metadata_only' : 'complete';
-        updateLessonResult(i, { status: finalStatus, resourceId: resourceId || undefined, quality, lessonUrl: lesson.url, requestedUrl, finalUrl, metadataOnly });
+        updateLessonResult(i, {
+          status: finalStatus,
+          resourceId: resourceId || undefined,
+          quality,
+          lessonUrl: lesson.url,
+          requestedUrl,
+          finalUrl,
+          metadataOnly,
+          transcriptSource: lessonData?.transcript_source,
+          hasVideoTranscript: lessonData?.has_video_transcript,
+        });
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to save resource';
         updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url, requestedUrl, finalUrl });
