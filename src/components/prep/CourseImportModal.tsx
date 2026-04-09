@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, BookOpen, ExternalLink, Video, FileText, HelpCircle, CheckCircle2, XCircle, AlertTriangle, KeyRound, ChevronDown, Info, Download } from 'lucide-react';
+import { Loader2, BookOpen, ExternalLink, Video, FileText, HelpCircle, CheckCircle2, XCircle, AlertTriangle, KeyRound, ChevronDown, Info, Download, Search } from 'lucide-react';
 import { useClassifyResource, useAddUrlResource } from '@/hooks/useResourceUpload';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
