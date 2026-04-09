@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -276,6 +276,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0, current: '' });
   const [lessonResults, setLessonResults] = useState<LessonImportResult[]>([]);
+  // Mirror of lessonResults that is always current (avoids stale closure reads)
+  const lessonResultsRef = useRef<LessonImportResult[]>([]);
 
   // Per-import credentials (never persisted)
   const [credEmail, setCredEmail] = useState('');
