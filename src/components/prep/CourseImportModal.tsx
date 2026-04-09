@@ -378,10 +378,11 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const updateLessonResult = (lessonIndex: number, update: Partial<LessonImportResult>) => {
     setLessonResults(prev => {
       const existing = prev.find(r => r.lessonIndex === lessonIndex);
-      if (existing) {
-        return prev.map(r => r.lessonIndex === lessonIndex ? { ...r, ...update } : r);
-      }
-      return [...prev, { lessonIndex, status: 'queued', ...update } as LessonImportResult];
+      const next = existing
+        ? prev.map(r => r.lessonIndex === lessonIndex ? { ...r, ...update } : r)
+        : [...prev, { lessonIndex, status: 'queued', ...update } as LessonImportResult];
+      lessonResultsRef.current = next;
+      return next;
     });
   };
 
