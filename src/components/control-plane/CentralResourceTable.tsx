@@ -1,16 +1,23 @@
 /**
- * Central Resource Table — filterable, expandable rows with "Why?" evidence.
+ * Central Resource Table — filterable, expandable rows with actions + inspect.
  */
-import { useState, useMemo, Fragment } from 'react';
+import { useState, useMemo, useCallback, Fragment } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
+import {
+  ChevronDown, ChevronRight, CheckCircle2, XCircle,
+  Zap, FileText, Play, Wrench, Eye, MoreHorizontal,
+} from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   type ControlPlaneState, type ControlPlaneFilter,
   CONTROL_PLANE_LABELS, CONTROL_PLANE_COLORS,
@@ -24,9 +31,12 @@ interface Props {
   filter: ControlPlaneFilter;
   processingIds?: Set<string>;
   conflictIds?: Set<string>;
+  customFilterIds?: Set<string> | null;
+  onAction: (resourceId: string, action: string) => void;
+  onInspect: (resource: CanonicalResourceStatus, state: ControlPlaneState) => void;
+  actionLoading?: boolean;
 }
 
-// Source type heuristic from title
 function inferSourceType(title: string): string {
   const lower = title.toLowerCase();
   if (lower.includes(' > ')) return 'Lesson';
@@ -73,15 +83,59 @@ function nextActionLabel(state: ControlPlaneState, resource: CanonicalResourceSt
   }
 }
 
-export function CentralResourceTable({ resources, filter, processingIds, conflictIds }: Props) {
+interface RowAction {
+  key: string;
+  label: string;
+  icon: React.ElementType;
+}
+
+function getRowActions(state: ControlPlaneState, resource: CanonicalResourceStatus): RowAction[] {
+  switch (state) {
+    case 'ingested': return [{ key: 'enrich', label: 'Enrich', icon: FileText }];
+    case 'has_content': return [{ key: 'extract', label: 'Extract', icon: Zap }];
+    case 'extracted': return [
+      { key: 'activate', label: 'Activate', icon: Play },
+      { key: 'extract', label: 'Re-extract', icon: Zap },
+    ];
+    case 'activated': return [{ key: 'extract', label: 'Re-extract', icon: Zap }];
+    case 'blocked': {
+      const actions: RowAction[] = [];
+      if (['no_extraction', 'stale_blocker_state'].includes(resource.blocked_reason)) {
+        actions.push({ key: 'fix', label: 'Auto-fix', icon: Wrench });
+      }
+      if (['no_activation', 'missing_contexts'].includes(resource.blocked_reason)) {
+        actions.push({ key: 'activate', label: 'Activate', icon: Play });
+      }
+      if (resource.blocked_reason === 'empty_content') {
+        actions.push({ key: 'enrich', label: 'Enrich', icon: FileText });
+      }
+      return actions;
+    }
+    case 'processing': return [{ key: 'view_progress', label: 'View', icon: Eye }];
+    default: return [];
+  }
+}
+
+export function CentralResourceTable({
+  resources, filter, processingIds, conflictIds, customFilterIds,
+  onAction, onInspect, actionLoading,
+}: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<'title' | 'state' | 'kis' | 'updated'>('updated');
   const [sortAsc, setSortAsc] = useState(false);
 
   const rows = useMemo(() => {
-    const filtered = resources
-      .map(r => ({ resource: r, state: deriveControlPlaneState(r, processingIds) }))
-      .filter(({ state, resource }) => matchesFilter(state, filter, resource.resource_id, conflictIds));
+    let filtered = resources
+      .map(r => ({ resource: r, state: deriveControlPlaneState(r, processingIds) }));
+
+    // Apply custom filter IDs if set (conflict category filter)
+    if (customFilterIds) {
+      filtered = filtered.filter(({ resource }) => customFilterIds.has(resource.resource_id));
+    } else {
+      filtered = filtered.filter(({ state, resource }) =>
+        matchesFilter(state, filter, resource.resource_id, conflictIds),
+      );
+    }
 
     filtered.sort((a, b) => {
       let cmp = 0;
@@ -95,7 +149,7 @@ export function CentralResourceTable({ resources, filter, processingIds, conflic
     });
 
     return filtered;
-  }, [resources, filter, processingIds, conflictIds, sortField, sortAsc]);
+  }, [resources, filter, processingIds, conflictIds, customFilterIds, sortField, sortAsc]);
 
   const handleSort = (field: typeof sortField) => {
     if (sortField === field) setSortAsc(!sortAsc);
@@ -132,7 +186,7 @@ export function CentralResourceTable({ resources, filter, processingIds, conflic
               <TableHead className="cursor-pointer hover:text-foreground w-28" onClick={() => handleSort('updated')}>
                 Updated {sortField === 'updated' && (sortAsc ? '↑' : '↓')}
               </TableHead>
-              <TableHead className="w-32">Next Action</TableHead>
+              <TableHead className="w-24 text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -141,25 +195,33 @@ export function CentralResourceTable({ resources, filter, processingIds, conflic
               const colors = CONTROL_PLANE_COLORS[state];
               const evidence = deriveStateEvidence(r, state);
               const hasConflict = conflictIds?.has(r.resource_id);
+              const rowActions = getRowActions(state, r);
+              const primaryAction = rowActions[0];
+              const moreActions = rowActions.slice(1);
 
               return (
                 <Fragment key={r.resource_id}>
                   <TableRow
-                    className={cn('cursor-pointer', hasConflict && 'bg-destructive/5')}
-                    onClick={() => setExpandedId(isExpanded ? null : r.resource_id)}
+                    className={cn('group/row', hasConflict && 'bg-destructive/5')}
                   >
-                    <TableCell className="p-2">
+                    <TableCell
+                      className="p-2 cursor-pointer"
+                      onClick={() => setExpandedId(isExpanded ? null : r.resource_id)}
+                    >
                       {isExpanded
                         ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                         : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                       }
                     </TableCell>
-                    <TableCell className="font-medium text-sm max-w-[200px] truncate">
+                    <TableCell
+                      className="font-medium text-sm max-w-[200px] truncate cursor-pointer"
+                      onClick={() => onInspect(r, state)}
+                    >
                       <div className="flex items-center gap-1.5">
                         {hasConflict && (
                           <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive shrink-0" title="Has conflicts" />
                         )}
-                        {r.title}
+                        <span className="hover:underline">{r.title}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -201,10 +263,59 @@ export function CentralResourceTable({ resources, filter, processingIds, conflic
                         }
                       </span>
                     </TableCell>
-                    <TableCell>
-                      <span className="text-xs font-medium text-primary">
-                        {nextActionLabel(state, r)}
-                      </span>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity">
+                        {primaryAction && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-[10px] px-2 gap-1"
+                            onClick={(e) => { e.stopPropagation(); onAction(r.resource_id, primaryAction.key); }}
+                            disabled={actionLoading}
+                          >
+                            <primaryAction.icon className="h-3 w-3" />
+                            {primaryAction.label}
+                          </Button>
+                        )}
+                        {moreActions.length > 0 && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={e => e.stopPropagation()}>
+                                <MoreHorizontal className="h-3 w-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="text-xs">
+                              {moreActions.map(a => (
+                                <DropdownMenuItem
+                                  key={a.key}
+                                  onClick={() => onAction(r.resource_id, a.key)}
+                                  className="text-xs gap-2"
+                                >
+                                  <a.icon className="h-3 w-3" />
+                                  {a.label}
+                                </DropdownMenuItem>
+                              ))}
+                              <DropdownMenuItem
+                                onClick={() => onInspect(r, state)}
+                                className="text-xs gap-2"
+                              >
+                                <Eye className="h-3 w-3" />
+                                Inspect
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                        {moreActions.length === 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={(e) => { e.stopPropagation(); onInspect(r, state); }}
+                          >
+                            <Eye className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
 
@@ -230,16 +341,13 @@ export function CentralResourceTable({ resources, filter, processingIds, conflic
 
 // ── Expanded detail with "Why?" evidence panel ─────────────
 function ExpandedResourceDetail({ resource: r, state }: { resource: CanonicalResourceStatus; state: ControlPlaneState }) {
-  const colors = CONTROL_PLANE_COLORS[state];
   const evidence = deriveStateEvidence(r, state);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-      {/* WHY? — Primary evidence panel */}
+      {/* WHY? */}
       <div className="space-y-2">
-        <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-          Why: {CONTROL_PLANE_LABELS[state]}
-        </h4>
+        <h4 className="font-semibold text-foreground">Why: {CONTROL_PLANE_LABELS[state]}</h4>
         <p className="text-muted-foreground italic">{evidence.reason}</p>
         <div className="space-y-1 mt-2">
           {evidence.evidence.map((e, i) => (
@@ -259,24 +367,9 @@ function ExpandedResourceDetail({ resource: r, state }: { resource: CanonicalRes
       <div className="space-y-2">
         <h4 className="font-semibold text-foreground">Knowledge Items</h4>
         <div className="space-y-1">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Total KIs</span>
-            <span className="font-medium tabular-nums">{r.knowledge_item_count}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Active KIs</span>
-            <span className="font-medium tabular-nums">{r.active_ki_count}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">With Contexts</span>
-            <span className="font-medium tabular-nums">{r.active_ki_with_context_count}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Quality</span>
-            <span className={qualityColor(r.knowledge_item_count, r.active_ki_count)}>
-              {qualityLabel(r.knowledge_item_count, r.active_ki_count)}
-            </span>
-          </div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Total KIs</span><span className="font-medium tabular-nums">{r.knowledge_item_count}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Active KIs</span><span className="font-medium tabular-nums">{r.active_ki_count}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">With Contexts</span><span className="font-medium tabular-nums">{r.active_ki_with_context_count}</span></div>
         </div>
       </div>
 
@@ -284,28 +377,13 @@ function ExpandedResourceDetail({ resource: r, state }: { resource: CanonicalRes
       <div className="space-y-2">
         <h4 className="font-semibold text-foreground">Pipeline Facts</h4>
         <div className="space-y-1">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Internal Stage</span>
-            <span className="font-mono text-[10px]">{r.canonical_stage}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Enriched</span>
-            <span>{r.is_enriched ? '✓ Yes' : '✗ No'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Content Backed</span>
-            <span>{r.is_content_backed ? '✓ Yes' : '✗ No'}</span>
-          </div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Internal Stage</span><span className="font-mono text-[10px]">{r.canonical_stage}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Enriched</span><span>{r.is_enriched ? '✓ Yes' : '✗ No'}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Content Backed</span><span>{r.is_content_backed ? '✓ Yes' : '✗ No'}</span></div>
           {r.blocked_reason !== 'none' && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Blocked Reason</span>
-              <span className="text-destructive font-medium">{r.blocked_reason.replace(/_/g, ' ')}</span>
-            </div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Blocked</span><span className="text-destructive font-medium">{r.blocked_reason.replace(/_/g, ' ')}</span></div>
           )}
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Last Updated</span>
-            <span>{r.last_transition_at ? new Date(r.last_transition_at).toLocaleString() : '—'}</span>
-          </div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Last Updated</span><span>{r.last_transition_at ? new Date(r.last_transition_at).toLocaleString() : '—'}</span></div>
         </div>
       </div>
     </div>
