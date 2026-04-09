@@ -63,6 +63,47 @@ function createCookieJar(): CookieJar {
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
+/**
+ * Extract transcript text from DOM elements BEFORE stripping them.
+ * Returns the extracted transcript text (or empty string).
+ */
+function extractDomTranscript(html: string, debug: string[]): string {
+  const patterns = [
+    /<div[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+    /<section[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>([\s\S]*?)<\/section>/gi,
+    /<aside[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>([\s\S]*?)<\/aside>/gi,
+    /<details[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>([\s\S]*?)<\/details>/gi,
+    // Expandable transcript toggles (common in course platforms)
+    /<div[^>]*(?:id|class)="[^"]*(?:accordion|collapsible|expandable)[^"]*"[^>]*>[\s\S]*?(?:transcript|caption)[\s\S]*?<div[^>]*>([\s\S]*?)<\/div>/gi,
+  ];
+
+  const segments: string[] = [];
+  for (const pattern of patterns) {
+    let m;
+    while ((m = pattern.exec(html)) !== null) {
+      const text = m[1]
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (text.length > 50) {
+        segments.push(text);
+      }
+    }
+  }
+
+  if (segments.length > 0) {
+    const transcript = segments.join('\n\n');
+    const wordCount = transcript.split(/\s+/).filter(Boolean).length;
+    debug.push(`[DOM Transcript] Extracted ${segments.length} segment(s), ${wordCount} words`);
+    return transcript;
+  }
+  return '';
+}
+
 function stripTranscriptSections(html: string) {
   return html
     .replace(/<div[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
