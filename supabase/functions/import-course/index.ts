@@ -1238,29 +1238,30 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
   }
 
   // Strategy 3: Links inside Download/Resource/Attachment sections
+  // Use bounded quantifiers (.{0,5000}) to prevent stack overflow on large HTML
   const sectionPatterns = [
-    /(?:downloads?|resources?|attachments?|files?|handouts?|worksheets?|materials?)\s*<\/(?:h[1-6]|span|div|p|strong|b)>[\s\S]*?(<a[^>]*href="[^"]+"[\s\S]*?<\/a>)/gi,
-    /<(?:div|section)[^>]*class="[^"]*(?:download|resource|attachment|file|handout|material)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|section)>/gi,
-    /<(?:div|section)[^>]*(?:id|data-[a-z-]+)="[^"]*(?:download|resource|attachment|file)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|section)>/gi,
+    /(?:downloads?|resources?|attachments?|files?|handouts?|worksheets?|materials?)\s*<\/(?:h[1-6]|span|div|p|strong|b)>.{0,5000}?(<a[^>]*href="[^"]+"[^>]*>[^<]{0,200}<\/a>)/gi,
+    /<(?:div|section)[^>]*class="[^"]*(?:download|resource|attachment|file|handout|material)[^"]*"[^>]*>(.{0,5000}?)<\/(?:div|section)>/gi,
+    /<(?:div|section)[^>]*(?:id|data-[a-z-]+)="[^"]*(?:download|resource|attachment|file)[^"]*"[^>]*>(.{0,5000}?)<\/(?:div|section)>/gi,
   ];
   for (const pattern of sectionPatterns) {
     let m;
     while ((m = pattern.exec(html)) !== null) {
-      const innerLinks = [...m[1].matchAll(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+      const innerLinks = [...m[1].matchAll(/<a[^>]*href="([^"]+)"[^>]*>([^<]{0,200})<\/a>/gi)];
       for (const link of innerLinks) {
         addAsset(link[1], link[2]?.replace(/<[^>]+>/g, '').trim() || '', 'asset-section');
       }
     }
   }
 
-  // Strategy 4: Kajabi file download blocks
-  const kajabiFiles = [...html.matchAll(/<div[^>]*class="[^"]*kjb-file[^"]*"[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  // Strategy 4: Kajabi file download blocks (bounded to prevent stack overflow)
+  const kajabiFiles = [...html.matchAll(/<div[^>]*class="[^"]*kjb-file[^"]*"[^>]*>.{0,2000}?<a[^>]*href="([^"]+)"[^>]*>([^<]{0,200})<\/a>/gi)];
   for (const m of kajabiFiles) {
     addAsset(m[1], m[2]?.replace(/<[^>]+>/g, '').trim() || '', 'kajabi-file-block');
   }
 
   // Strategy 5: Kajabi /courses/downloads/ links (URL has no file extension, e.g. /nexus_exercise-pdf)
-  const kajabiDownloadLinks = [...html.matchAll(/<a[^>]*href="([^"]*\/courses\/downloads\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const kajabiDownloadLinks = [...html.matchAll(/<a[^>]*href="([^"]*\/courses\/downloads\/[^"]+)"[^>]*>([^<]{0,200})<\/a>/gi)];
   for (const m of kajabiDownloadLinks) {
     const href = m[1];
     const text = m[2]?.replace(/<[^>]+>/g, '').trim() || '';
@@ -1282,7 +1283,7 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
   }
 
   // Strategy 6: Kajabi downloads sidebar (class="downloads__download")
-  const kajabiSidebarLinks = [...html.matchAll(/<a[^>]*class="[^"]*downloads__download[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const kajabiSidebarLinks = [...html.matchAll(/<a[^>]*class="[^"]*downloads__download[^"]*"[^>]*href="([^"]+)"[^>]*>([^<]{0,200})<\/a>/gi)];
   for (const m of kajabiSidebarLinks) {
     const href = m[1];
     const text = m[2]?.replace(/<[^>]+>/g, '').trim() || '';
@@ -1350,7 +1351,7 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
     }
 
     // Also look for any <a> tags with href containing known asset keywords
-    const anchorWithAsset = html.match(/<a[^>]*href="[^"]*(?:pdf|download|attachment|file)[^"]*"[^>]*>[\s\S]{0,100}<\/a>/gi);
+    const anchorWithAsset = html.match(/<a[^>]*href="[^"]*(?:pdf|download|attachment|file)[^"]*"[^>]*>[^<]{0,100}<\/a>/gi);
     if (anchorWithAsset) {
       assetHints.push(`anchor_asset_href:${anchorWithAsset.length}`);
       htmlSnippets.push(...anchorWithAsset.slice(0, 2).map(m => `[anchor_asset] ${m.substring(0, 250)}`));
