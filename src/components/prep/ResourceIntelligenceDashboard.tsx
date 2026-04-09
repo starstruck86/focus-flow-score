@@ -421,12 +421,12 @@ export function ResourceIntelligenceDashboard() {
           </div>
         )}
 
-        {/* Operationalization nudge */}
-        {stats.operationalized < stats.enriched && (
+        {/* Digest nudge */}
+        {stats.digested < stats.operationalized && (
           <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
             <p className="text-[11px] text-amber-400">
-              ⚡ {stats.enriched - stats.operationalized} enriched resources aren't operationalized yet. 
-              You're leaving intelligence on the table.
+              ⚡ {stats.operationalized - stats.digested} operationalized resources don't have digests yet.
+              Use Bulk Operationalize to generate summaries.
             </p>
           </div>
         )}
