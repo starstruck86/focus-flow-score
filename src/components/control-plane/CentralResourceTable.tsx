@@ -235,7 +235,13 @@ export function CentralResourceTable({
 
                 return (
                   <Fragment key={r.resource_id}>
-                    <TableRow className={cn('group/row', hasConflict && 'bg-destructive/5')}>
+                    <TableRow className={cn(
+                      'group/row transition-colors duration-500',
+                      hasConflict && 'bg-destructive/5',
+                      flash === 'success' && 'bg-emerald-50/50 dark:bg-emerald-950/20',
+                      flash === 'failed' && 'bg-destructive/5',
+                      flash === 'needs_review' && 'bg-amber-50/50 dark:bg-amber-950/20',
+                    )}>
                       <TableCell
                         className="p-2 cursor-pointer"
                         onClick={() => setExpandedId(isExpanded ? null : r.resource_id)}
