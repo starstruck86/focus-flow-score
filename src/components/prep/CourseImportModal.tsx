@@ -49,6 +49,8 @@ type LessonImportResult = {
   requestedUrl?: string;
   finalUrl?: string;
   metadataOnly?: boolean;
+  transcriptSource?: string;
+  hasVideoTranscript?: boolean;
 };
 
 interface CourseImportModalProps {
