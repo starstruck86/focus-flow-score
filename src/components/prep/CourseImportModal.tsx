@@ -1178,10 +1178,17 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
         {lessons.length > 0 && !importing && (
           <DialogFooter className="flex-shrink-0">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={handleImport} disabled={selectedCount === 0}>
-              Queue {selectedCount} lesson{selectedCount !== 1 ? 's' : ''}
-            </Button>
+            <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancel</Button>
+            {authWallHit ? (
+              <Button onClick={handleImport} disabled={selectedCount === 0 || !credEmail.trim() || !credPassword}>
+                <KeyRound className="h-3.5 w-3.5 mr-1.5" />
+                Retry with credentials
+              </Button>
+            ) : (
+              <Button onClick={handleImport} disabled={selectedCount === 0}>
+                Queue {selectedCount} lesson{selectedCount !== 1 ? 's' : ''}
+              </Button>
+            )}
           </DialogFooter>
         )}
       </DialogContent>
