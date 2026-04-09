@@ -234,6 +234,9 @@ export function KnowledgeControlPlane() {
         onFilterChange={handleFilterChange}
       />
 
+      {/* AI Readiness — secondary downstream layer */}
+      <DaveReadinessStrip readiness={downstreamReadiness} totalResources={resources.length} />
+
       {/* Conflict Breakdown */}
       <ConflictBreakdownBanner
         conflicts={conflicts}
@@ -264,6 +267,15 @@ export function KnowledgeControlPlane() {
           </button>
         </div>
       )}
+
+      {/* Work Queue — "What should I work next?" */}
+      <NeedsAttentionQueue
+        resources={resources}
+        processingIds={processingIds}
+        outcomeRefreshKey={outcomeRefreshKey}
+        onAction={handleAction}
+        onInspect={openResourceById}
+      />
 
       {/* Bulk Action Bar */}
       <BulkActionBar
