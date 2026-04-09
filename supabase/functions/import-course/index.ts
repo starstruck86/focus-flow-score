@@ -1351,7 +1351,7 @@ function detectLessonAssets(html: string, lessonUrl: string, debug: string[]): D
     }
 
     // Also look for any <a> tags with href containing known asset keywords
-    const anchorWithAsset = html.match(/<a[^>]*href="[^"]*(?:pdf|download|attachment|file)[^"]*"[^>]*>[\s\S]{0,100}<\/a>/gi);
+    const anchorWithAsset = html.match(/<a[^>]*href="[^"]*(?:pdf|download|attachment|file)[^"]*"[^>]*>[^<]{0,100}<\/a>/gi);
     if (anchorWithAsset) {
       assetHints.push(`anchor_asset_href:${anchorWithAsset.length}`);
       htmlSnippets.push(...anchorWithAsset.slice(0, 2).map(m => `[anchor_asset] ${m.substring(0, 250)}`));
