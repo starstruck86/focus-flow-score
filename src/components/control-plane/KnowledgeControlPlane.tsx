@@ -263,7 +263,7 @@ export function KnowledgeControlPlane() {
       />
 
       {/* AI Readiness — secondary downstream layer */}
-      <DaveReadinessStrip readiness={downstreamReadiness} totalResources={resources.length} />
+      <DaveReadinessStrip readiness={downstreamReadiness} totalResources={resources.length} onFilterReadiness={handleFilterReadiness} />
 
       {/* Conflict Breakdown */}
       <ConflictBreakdownBanner
