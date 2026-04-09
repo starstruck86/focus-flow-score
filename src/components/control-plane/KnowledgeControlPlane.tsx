@@ -10,17 +10,20 @@ import { useAutoOperationalize } from '@/hooks/useAutoOperationalize';
 import { useExtractionPipeline } from '@/hooks/useExtractionPipeline';
 import { SystemHealthStrip } from './SystemHealthStrip';
 import { ResourceHealthStrip } from './ResourceHealthStrip';
+import { DaveReadinessStrip } from './DaveReadinessStrip';
 import { ControlPlaneSummaryBar } from './ControlPlaneSummaryBar';
 import { CentralResourceTable } from './CentralResourceTable';
 import { ResourceInspectDrawer } from './ResourceInspectDrawer';
 import { ConflictBreakdownBanner } from './ConflictBreakdownBanner';
 import { BulkActionBar } from './BulkActionBar';
+import { NeedsAttentionQueue } from './NeedsAttentionQueue';
 import { RecentActionsPanel } from './RecentActionsPanel';
 import { BulkActionResultDialog } from './BulkActionResultDialog';
 import { buildActionPreview } from './ActionPreviewDialog';
 import {
   type ControlPlaneFilter, type ControlPlaneState,
   computeControlPlaneSummary,
+  computeDownstreamReadiness,
   deriveControlPlaneState,
   detectAllConflicts,
   matchesFilter,
@@ -55,6 +58,11 @@ export function KnowledgeControlPlane() {
   const cpSummary = useMemo(
     () => computeControlPlaneSummary(resources, processingIds),
     [resources, processingIds],
+  );
+
+  const downstreamReadiness = useMemo(
+    () => computeDownstreamReadiness(resources),
+    [resources],
   );
 
   const conflicts = useMemo(() => detectAllConflicts(resources), [resources]);
@@ -183,7 +191,7 @@ export function KnowledgeControlPlane() {
 
   const filterLabel = customFilterLabel ?? (
     filter === 'all' ? null : filter === 'conflicts' ? 'Conflicts' : {
-      ready: 'Ready', needs_extraction: 'Needs Extraction', needs_review: 'Needs Review',
+      ready: 'Ready', needs_extraction: 'Needs Extraction', needs_review: 'Blocked',
       processing: 'Processing', ingested: 'Ingested',
     }[filter]
   );
@@ -226,6 +234,9 @@ export function KnowledgeControlPlane() {
         onFilterChange={handleFilterChange}
       />
 
+      {/* AI Readiness — secondary downstream layer */}
+      <DaveReadinessStrip readiness={downstreamReadiness} totalResources={resources.length} />
+
       {/* Conflict Breakdown */}
       <ConflictBreakdownBanner
         conflicts={conflicts}
@@ -256,6 +267,15 @@ export function KnowledgeControlPlane() {
           </button>
         </div>
       )}
+
+      {/* Work Queue — "What should I work next?" */}
+      <NeedsAttentionQueue
+        resources={resources}
+        processingIds={processingIds}
+        outcomeRefreshKey={outcomeRefreshKey}
+        onAction={handleAction}
+        onInspect={openResourceById}
+      />
 
       {/* Bulk Action Bar */}
       <BulkActionBar
