@@ -402,6 +402,7 @@ export function useDeepReExtraction() {
   const [isRunning, setIsRunning] = useState(false);
   const [liftSummary, setLiftSummary] = useState<CoverageLiftSummary | null>(null);
   const [excludedResourceIds, setExcludedResourceIds] = useState<Set<string>>(new Set());
+  const pendingAutoRunRef = useRef(false);
 
   const flagForReExtraction = useCallback(async (resources: ResourceAuditRow[], reason: string, autoRun = false) => {
     console.log('[QUEUE PATH] flagForReExtraction called', {
