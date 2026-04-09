@@ -439,6 +439,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     if (toImport.length === 0) return;
     console.log('[CourseImport][v2] handleImport started, lessons:', toImport.length);
     setImporting(true);
+    setAuthWallHit(false);
+    setAuthError(null);
     setImportProgress({ done: 0, total: toImport.length, current: '' });
     setLessonResults(toImport.map((_, i) => ({ lessonIndex: i, status: 'queued' as const })));
 
