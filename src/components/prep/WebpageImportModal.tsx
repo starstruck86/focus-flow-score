@@ -110,7 +110,7 @@ export function WebpageImportModal({ open, onOpenChange }: WebpageImportModalPro
 
   return (
     <Dialog open={open} onOpenChange={importing ? undefined : onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Globe className="h-5 w-5 text-primary" />
