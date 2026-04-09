@@ -51,7 +51,7 @@ export interface UseDaveConnectionManager {
   /** Last N connection events for debug panel */
   eventHistory: DaveEventRecord[];
   /** Dump full connection summary to console for runtime validation */
-  dumpSummary: () => void;
+  dumpSummary: (opts?: { copy?: boolean; download?: boolean }) => void;
 }
 
 export function useDaveConnectionManager(): UseDaveConnectionManager {
@@ -239,26 +239,50 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
     };
   }, [stopHeartbeat, cancelReconnect]);
 
-  // Console summary dump for runtime validation
-  const dumpSummary = useCallback(() => {
-    const m = metaRef.current;
-    const events = eventHistoryRef.current;
-    console.group('%c[DaveConn] Connection Summary', 'color: #6366f1; font-weight: bold; font-size: 13px');
-    console.table({
-      state: m.state,
-      sessionId: m.sessionId || '—',
-      reconnectAttempts: m.reconnectAttemptCount,
-      reconnectTimerActive: m.reconnectTimerActive,
-      heartbeatLatency: m.heartbeatLatencyMs !== null ? `${m.heartbeatLatencyMs}ms` : '—',
-      lastError: m.lastError || '—',
-      lastConnected: m.lastConnectedAt ? new Date(m.lastConnectedAt).toISOString() : '—',
-      lastDisconnected: m.lastDisconnectedAt ? new Date(m.lastDisconnectedAt).toISOString() : '—',
-    });
-    console.log('Event history:');
-    events.forEach(ev => {
-      console.log(`  ${new Date(ev.ts).toISOString().substring(11, 23)} ${ev.type}${ev.detail ? ` (${ev.detail})` : ''}`);
-    });
+  const dumpSummary = useCallback((opts?: { copy?: boolean; download?: boolean }) => {
+    const now = Date.now();
+    const clone = typeof structuredClone === 'function' ? structuredClone : (v: unknown) => JSON.parse(JSON.stringify(v));
+
+    const snapshot = {
+      dumpedAt: new Date(now).toISOString(),
+      meta: clone(metaRef.current),
+      eventHistory: clone(eventHistoryRef.current),
+    };
+
+    const derived = {
+      reconnectTimerActive: reconnectTimerRef.current != null,
+      heartbeatRunning: heartbeatTimerRef.current != null,
+      eventCount: snapshot.eventHistory.length,
+      lastEventType: snapshot.eventHistory.at(-1)?.type ?? null,
+      lastEventAge: snapshot.eventHistory.length ? now - snapshot.eventHistory.at(-1)!.ts : null,
+    };
+
+    const fullDump = Object.freeze({ ...snapshot, derived: Object.freeze(derived), meta: Object.freeze(snapshot.meta), eventHistory: Object.freeze(snapshot.eventHistory) });
+
+    console.group('%c[Dave Dump Summary]', 'color: #6366f1; font-weight: bold; font-size: 13px');
+    console.log(fullDump);
     console.groupEnd();
+
+    const json = JSON.stringify(fullDump, null, 2);
+
+    if (opts?.copy) {
+      navigator.clipboard.writeText(json).then(
+        () => console.log('[Dave Dump] Copied to clipboard'),
+        (e) => console.warn('[Dave Dump] Clipboard copy failed', e),
+      );
+    }
+
+    if (opts?.download) {
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dave-dump-${now}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    return fullDump;
   }, []);
 
   return {
