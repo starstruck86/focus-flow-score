@@ -282,6 +282,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [credPassword, setCredPassword] = useState('');
   const [showCreds, setShowCreds] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authWallHit, setAuthWallHit] = useState(false);
   const [discoverMeta, setDiscoverMeta] = useState<Record<string, any> | null>(null);
 
   const clearCredPassword = () => setCredPassword('');
@@ -438,6 +439,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     if (toImport.length === 0) return;
     console.log('[CourseImport][v2] handleImport started, lessons:', toImport.length);
     setImporting(true);
+    setAuthWallHit(false);
+    setAuthError(null);
     setImportProgress({ done: 0, total: toImport.length, current: '' });
     setLessonResults(toImport.map((_, i) => ({ lessonIndex: i, status: 'queued' as const })));
 
@@ -478,6 +481,19 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url, requestedUrl, finalUrl });
         await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'quality_gate', error: errMsg });
         setImportProgress({ done: i + 1, total: toImport.length, current: '' });
+
+        // Early-abort: if first lesson hits login wall, don't waste time on the rest
+        if (quality?.has_login_wall || quality?.content_type === 'login_page') {
+          setAuthWallHit(true);
+          setAuthError('This course requires login. Please enter or update your credentials and retry.');
+          if (!showCreds) setShowCreds(true);
+          // Mark remaining lessons as failed
+          for (let j = i + 1; j < toImport.length; j++) {
+            updateLessonResult(j, { status: 'failed', error: 'Skipped — authentication required', lessonUrl: toImport[j].url });
+          }
+          toast.error('Import stopped — authentication failed. Update credentials and retry.');
+          break;
+        }
         continue;
       }
 
@@ -782,8 +798,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       toast.success(`Import complete: ${parts.join(', ')}`);
     }
     setImporting(false);
-    clearCredPassword();
-  }, [lessons, selected, classify, addUrl, url, courseTitle, platform, user, credEmail, credPassword]);
+    if (!authWallHit) clearCredPassword();
+  }, [lessons, selected, classify, addUrl, url, courseTitle, platform, user, credEmail, credPassword, showCreds]);
 
   const selectedCount = selected.size;
   const progressPct = importProgress.total > 0 ? (importProgress.done / importProgress.total) * 100 : 0;
@@ -804,8 +820,19 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     return lessonResults.find(r => r.lessonIndex === toImportIdx);
   };
 
+  // Clear credentials on modal close
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen) {
+      setCredEmail('');
+      setCredPassword('');
+      setAuthError(null);
+      setAuthWallHit(false);
+    }
+    onOpenChange(newOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={importing ? undefined : onOpenChange}>
+    <Dialog open={open} onOpenChange={importing ? undefined : handleOpenChange}>
       <DialogContent className="max-w-lg flex flex-col" style={{ maxHeight: '90vh' }}>
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
@@ -1152,10 +1179,17 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
         {lessons.length > 0 && !importing && (
           <DialogFooter className="flex-shrink-0">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={handleImport} disabled={selectedCount === 0}>
-              Queue {selectedCount} lesson{selectedCount !== 1 ? 's' : ''}
-            </Button>
+            <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancel</Button>
+            {authWallHit ? (
+              <Button onClick={handleImport} disabled={selectedCount === 0 || !credEmail.trim() || !credPassword}>
+                <KeyRound className="h-3.5 w-3.5 mr-1.5" />
+                Retry with credentials
+              </Button>
+            ) : (
+              <Button onClick={handleImport} disabled={selectedCount === 0}>
+                Queue {selectedCount} lesson{selectedCount !== 1 ? 's' : ''}
+              </Button>
+            )}
           </DialogFooter>
         )}
       </DialogContent>
