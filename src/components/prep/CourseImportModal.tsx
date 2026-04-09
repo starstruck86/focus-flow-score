@@ -629,7 +629,15 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
               console.log(`Transcribed video for ${lesson.title}: ${txData.transcript.length} chars`);
             } else {
               const reason = txData?.failureCode || txData?.failureReason || txError?.message || 'unknown';
-              console.warn(`[CourseImport] Transcription failed for "${lesson.title}": ${reason}`);
+              console.warn(`[CourseImport] Transcription evaluated as FAILED for "${lesson.title}":`, {
+                reason,
+                txDataType: typeof txData,
+                txDataKeys: txData ? Object.keys(txData) : [],
+                successField: txData?.success,
+                transcriptType: typeof txData?.transcript,
+                transcriptLen: typeof txData?.transcript === 'string' ? txData.transcript.length : 'N/A',
+                errorMsg: txError?.message,
+              });
               await updateLineageRow(lesson.url, { transcript_status: 'transcript_failed' });
             }
           } catch (txErr) {
