@@ -122,7 +122,7 @@ function getRowActions(state: ControlPlaneState, resource: CanonicalResourceStat
 
 export function CentralResourceTable({
   resources, filter, processingIds, conflictIds, customFilterIds,
-  onAction, onInspect, actionLoading,
+  onAction, onInspect, actionLoading, outcomeRefreshKey,
 }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<'title' | 'state' | 'kis' | 'updated'>('updated');
