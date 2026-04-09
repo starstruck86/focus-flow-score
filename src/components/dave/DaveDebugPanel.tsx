@@ -15,7 +15,7 @@ interface Props {
   meta: DaveConnectionMeta;
   eventHistory?: DaveEventRecord[];
   extraInfo?: Record<string, string | number | boolean | null>;
-  onDumpSummary?: () => void;
+  onDumpSummary?: (opts?: { copy?: boolean; download?: boolean }) => void;
 }
 
 function formatTimestamp(ts: number | null): string {
@@ -129,12 +129,26 @@ export function DaveDebugPanel({ meta, eventHistory = [], extraInfo, onDumpSumma
           <div className="mt-2 p-3 pt-2 border-t border-border/50 flex items-center justify-between text-[10px] text-muted-foreground/50">
             <span>Ctrl+Shift+D to toggle</span>
             {onDumpSummary && (
-              <button
-                onClick={onDumpSummary}
-                className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground text-[10px] font-semibold"
-              >
-                Dump Summary
-              </button>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => onDumpSummary()}
+                  className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground text-[10px] font-semibold"
+                >
+                  Dump
+                </button>
+                <button
+                  onClick={() => onDumpSummary({ copy: true })}
+                  className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground text-[10px] font-semibold"
+                >
+                  Copy
+                </button>
+                <button
+                  onClick={() => onDumpSummary({ download: true })}
+                  className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground text-[10px] font-semibold"
+                >
+                  Save
+                </button>
+              </div>
             )}
           </div>
         </motion.div>
