@@ -276,7 +276,7 @@ export function ResourceIntelligenceDashboard() {
               {findingGaps ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Search className="h-3 w-3 mr-1" />}
               Find Gaps
             </Button>
-            {stats.operationalized < stats.enriched && (
+            {stats.digested < stats.operationalized && (
               <Button
                 variant="outline"
                 size="sm"
