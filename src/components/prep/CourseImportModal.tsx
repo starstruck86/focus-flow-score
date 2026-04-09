@@ -49,6 +49,8 @@ type LessonImportResult = {
   requestedUrl?: string;
   finalUrl?: string;
   metadataOnly?: boolean;
+  transcriptSource?: string;
+  hasVideoTranscript?: boolean;
 };
 
 interface CourseImportModalProps {
@@ -449,7 +451,17 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         }
 
         const finalStatus: LessonImportStatus = metadataOnly ? 'metadata_only' : 'complete';
-        updateLessonResult(i, { status: finalStatus, resourceId: resourceId || undefined, quality, lessonUrl: lesson.url, requestedUrl, finalUrl, metadataOnly });
+        updateLessonResult(i, {
+          status: finalStatus,
+          resourceId: resourceId || undefined,
+          quality,
+          lessonUrl: lesson.url,
+          requestedUrl,
+          finalUrl,
+          metadataOnly,
+          transcriptSource: lessonData?.transcript_source,
+          hasVideoTranscript: lessonData?.has_video_transcript,
+        });
       } catch (e: any) {
         const errMsg = e?.message || 'Failed to save resource';
         updateLessonResult(i, { status: 'failed', error: errMsg, quality, lessonUrl: lesson.url, requestedUrl, finalUrl });
@@ -706,6 +718,14 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                             <div className="flex items-center gap-1.5 pl-5 flex-wrap text-[10px] text-muted-foreground">
                               <Badge variant={q.usable_content ? 'outline' : 'destructive'} className="text-[9px] h-4">{q.content_type}</Badge>
                               {r.metadataOnly && <Badge variant="secondary" className="text-[9px] h-4 cursor-help" title="Needs transcript or manual content before enrichment">metadata only</Badge>}
+                              {r.hasVideoTranscript && (
+                                <Badge variant="outline" className="text-[9px] h-4 border-green-500/30 text-green-600">
+                                  {r.transcriptSource === 'dom_transcript' ? 'transcript from page'
+                                    : r.transcriptSource === 'wistia_captions' ? 'Wistia captions'
+                                    : r.transcriptSource === 'vimeo_captions' ? 'Vimeo captions'
+                                    : 'transcribed from video'}
+                                </Badge>
+                              )}
                               <span>{q.content_length.toLocaleString()} chars</span>
                               <span>·</span>
                               <span>{q.cleaned_text_length.toLocaleString()} cleaned</span>
@@ -719,10 +739,25 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                               )}
                             </div>
                           )}
-                          {/* Issues */}
+                          {/* Issues — rewrite video-specific ones */}
                           {q && q.issues.length > 0 && (r.status === 'complete' || r.status === 'metadata_only' || r.status === 'failed') && (
                             <div className="pl-5 text-[10px] text-destructive">
-                              {q.issues.map((issue, j) => <div key={j}>⚠ {issue}</div>)}
+                              {q.issues.map((issue, j) => {
+                                // Replace generic "Very low word count" with video-aware messages
+                                let displayIssue = issue;
+                                if (/very low word count/i.test(issue) && q.video_embeds_found > 0) {
+                                  if (r.hasVideoTranscript) {
+                                    return null; // Transcript recovered, suppress the warning
+                                  } else if (r.status === 'transcribing') {
+                                    displayIssue = 'Transcript missing — attempting video transcription';
+                                  } else if (r.metadataOnly) {
+                                    displayIssue = 'Video-only lesson — transcript required for full content';
+                                  } else {
+                                    displayIssue = `Video lesson with minimal text (${q.word_count} words) — check transcript`;
+                                  }
+                                }
+                                return <div key={j}>⚠ {displayIssue}</div>;
+                              }).filter(Boolean)}
                             </div>
                           )}
                           {r.status === 'failed' && r.error && !q?.issues.length && (

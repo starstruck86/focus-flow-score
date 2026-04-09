@@ -63,12 +63,193 @@ function createCookieJar(): CookieJar {
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
+/**
+ * Extract transcript text from DOM elements BEFORE stripping them.
+ * Returns the extracted transcript text (or empty string).
+ */
+function extractDomTranscript(html: string, debug: string[]): string {
+  const patterns = [
+    /<div[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+    /<section[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>([\s\S]*?)<\/section>/gi,
+    /<aside[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>([\s\S]*?)<\/aside>/gi,
+    /<details[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>([\s\S]*?)<\/details>/gi,
+    // Expandable transcript toggles (common in course platforms)
+    /<div[^>]*(?:id|class)="[^"]*(?:accordion|collapsible|expandable)[^"]*"[^>]*>[\s\S]*?(?:transcript|caption)[\s\S]*?<div[^>]*>([\s\S]*?)<\/div>/gi,
+  ];
+
+  const segments: string[] = [];
+  for (const pattern of patterns) {
+    let m;
+    while ((m = pattern.exec(html)) !== null) {
+      const text = m[1]
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (text.length > 50) {
+        segments.push(text);
+      }
+    }
+  }
+
+  if (segments.length > 0) {
+    const transcript = segments.join('\n\n');
+    const wordCount = transcript.split(/\s+/).filter(Boolean).length;
+    debug.push(`[DOM Transcript] Extracted ${segments.length} segment(s), ${wordCount} words`);
+    return transcript;
+  }
+  return '';
+}
+
 function stripTranscriptSections(html: string) {
   return html
     .replace(/<div[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
     .replace(/<section[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>[\s\S]*?<\/section>/gi, '')
     .replace(/<aside[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>[\s\S]*?<\/aside>/gi, '')
     .replace(/<details[^>]*(?:id|class)="[^"]*(?:transcript|captions?|subtitles?|video-transcript)[^"]*"[^>]*>[\s\S]*?<\/details>/gi, '');
+}
+
+/**
+ * Fetch Wistia captions/transcript via the public embed API.
+ */
+async function resolveWistiaCaptions(videoId: string, debug: string[]): Promise<string | null> {
+  try {
+    debug.push(`[Wistia Captions] Fetching captions for ${videoId}...`);
+    const resp = await fetch(`https://fast.wistia.com/embed/captions/${videoId}.json`, {
+      headers: { 'User-Agent': UA },
+    });
+    if (!resp.ok) {
+      debug.push(`[Wistia Captions] API returned ${resp.status}`);
+      await resp.text();
+      return null;
+    }
+    const captions = await resp.json();
+    // Wistia captions format: array of { language, text, ... } or { captions: [...] }
+    const captionList = Array.isArray(captions) ? captions : captions?.captions || [];
+    if (captionList.length === 0) {
+      debug.push('[Wistia Captions] No captions available');
+      return null;
+    }
+    // Prefer English, fallback to first available
+    const english = captionList.find((c: any) => /^en/i.test(c.language)) || captionList[0];
+    if (!english?.hash) {
+      // Try direct text field
+      if (english?.text) {
+        debug.push(`[Wistia Captions] Got direct text (${english.text.length} chars)`);
+        return english.text;
+      }
+      debug.push('[Wistia Captions] No caption hash or text found');
+      return null;
+    }
+    // Fetch the actual caption lines
+    const lines = english.hash;
+    if (Array.isArray(lines)) {
+      const text = lines.map((line: any) => line.text || '').filter(Boolean).join(' ');
+      const wordCount = text.split(/\s+/).filter(Boolean).length;
+      debug.push(`[Wistia Captions] Extracted ${wordCount} words from ${lines.length} caption lines`);
+      return text;
+    }
+    debug.push('[Wistia Captions] Unexpected caption format');
+    return null;
+  } catch (err) {
+    debug.push(`[Wistia Captions] Error: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+/**
+ * Resolve a Vimeo video to its text tracks (captions) via oEmbed + player config.
+ */
+async function resolveVimeoCaptions(videoId: string, debug: string[]): Promise<string | null> {
+  try {
+    debug.push(`[Vimeo Captions] Attempting caption extraction for ${videoId}...`);
+    // Vimeo player config endpoint (public, no API key needed)
+    const configResp = await fetch(`https://player.vimeo.com/video/${videoId}/config`, {
+      headers: { 'User-Agent': UA },
+    });
+    if (!configResp.ok) {
+      debug.push(`[Vimeo Captions] Config returned ${configResp.status}`);
+      await configResp.text();
+      return null;
+    }
+    const config = await configResp.json();
+    const textTracks = config?.request?.text_tracks || [];
+    if (textTracks.length === 0) {
+      debug.push('[Vimeo Captions] No text tracks available');
+      return null;
+    }
+    // Prefer English
+    const track = textTracks.find((t: any) => /^en/i.test(t.lang)) || textTracks[0];
+    if (!track?.url) {
+      debug.push('[Vimeo Captions] No track URL found');
+      return null;
+    }
+    const trackUrl = track.url.startsWith('http') ? track.url : `https://player.vimeo.com${track.url}`;
+    const trackResp = await fetch(trackUrl, { headers: { 'User-Agent': UA } });
+    if (!trackResp.ok) {
+      debug.push(`[Vimeo Captions] Track fetch returned ${trackResp.status}`);
+      await trackResp.text();
+      return null;
+    }
+    const trackData = await trackResp.json();
+    // Vimeo text tracks are typically an array of { startTime, endTime, text }
+    if (Array.isArray(trackData)) {
+      const text = trackData.map((cue: any) => cue.text || '').filter(Boolean).join(' ');
+      const wordCount = text.split(/\s+/).filter(Boolean).length;
+      debug.push(`[Vimeo Captions] Extracted ${wordCount} words from ${trackData.length} cues`);
+      return text;
+    }
+    debug.push('[Vimeo Captions] Unexpected track data format');
+    return null;
+  } catch (err) {
+    debug.push(`[Vimeo Captions] Error: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+/**
+ * Resolve a Vimeo video ID to a downloadable media URL via player config.
+ */
+async function resolveVimeoMediaUrl(videoId: string, debug: string[]): Promise<{ url: string; duration: number } | null> {
+  try {
+    debug.push(`[Vimeo Media] Resolving media URL for ${videoId}...`);
+    const configResp = await fetch(`https://player.vimeo.com/video/${videoId}/config`, {
+      headers: { 'User-Agent': UA },
+    });
+    if (!configResp.ok) {
+      debug.push(`[Vimeo Media] Config returned ${configResp.status}`);
+      await configResp.text();
+      return null;
+    }
+    const config = await configResp.json();
+    const duration = config?.video?.duration || 0;
+    // Progressive downloads (direct MP4 files)
+    const progressive = config?.request?.files?.progressive || [];
+    if (progressive.length > 0) {
+      // Pick smallest quality for transcription
+      const sorted = [...progressive].sort((a: any, b: any) => (a.width || 0) - (b.width || 0));
+      const best = sorted[0];
+      debug.push(`[Vimeo Media] Resolved progressive: ${best.width}x${best.height}, ${Math.round(duration)}s`);
+      return { url: best.url, duration };
+    }
+    // HLS fallback (less useful for direct download but may work)
+    const hls = config?.request?.files?.hls?.cdns;
+    if (hls) {
+      const firstCdn = Object.values(hls)[0] as any;
+      if (firstCdn?.url) {
+        debug.push(`[Vimeo Media] Resolved HLS URL (may not work for transcription)`);
+        return { url: firstCdn.url, duration };
+      }
+    }
+    debug.push('[Vimeo Media] No downloadable files found');
+    return null;
+  } catch (err) {
+    debug.push(`[Vimeo Media] Error: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
 }
 
 /**
@@ -528,7 +709,7 @@ function classifyLessonContent(text: string, html: string, finalUrl: string, les
   };
 }
 
-async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: { email?: string; password?: string }): Promise<{ title: string; content: string; type: string; debug: string[]; quality: LessonQuality; media_url?: string; video_duration?: number }> {
+async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: { email?: string; password?: string }): Promise<{ title: string; content: string; type: string; debug: string[]; quality: LessonQuality; media_url?: string; video_duration?: number; transcript_source?: string; has_video_transcript?: boolean }> {
   const jar = createCookieJar();
   const debug: string[] = [];
   
@@ -623,6 +804,9 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
   }
   
   debug.push(`Video embeds found: ${videoEmbeds.length}`);
+  
+  // === EXTRACT DOM TRANSCRIPT BEFORE STRIPPING ===
+  const domTranscript = extractDomTranscript(html, debug);
   
   // Strip comments sections before content extraction
   // Kajabi uses data-controller="comments" or similar patterns
@@ -841,14 +1025,56 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
     debug.push(`Intro text prepended: ${introText.length} chars`);
   }
   
-  // Resolve Wistia video media URLs for transcription
+  // === MULTI-STRATEGY VIDEO TRANSCRIPT EXTRACTION ===
   let mediaUrl = '';
   let videoDuration = 0;
+  let videoTranscript = '';
+  let transcriptSource = '';
+
   const wistiaIds = videoEmbeds
     .filter(v => v.startsWith('[Wistia Video:'))
     .map(v => v.match(/\[Wistia Video: ([a-z0-9]+)\]/i)?.[1])
     .filter(Boolean) as string[];
-  
+
+  const vimeoIds = videoEmbeds
+    .filter(v => v.startsWith('[Vimeo Video:'))
+    .map(v => v.match(/\[Vimeo Video: (\d+)\]/i)?.[1])
+    .filter(Boolean) as string[];
+
+  // Strategy 1: DOM transcript (already extracted above)
+  if (domTranscript) {
+    videoTranscript = domTranscript;
+    transcriptSource = 'dom_transcript';
+    debug.push(`[Transcript Strategy] Using DOM transcript (${domTranscript.split(/\s+/).length} words)`);
+  }
+
+  // Strategy 2: Wistia captions API
+  if (!videoTranscript && wistiaIds.length > 0) {
+    for (const wid of wistiaIds) {
+      const captions = await resolveWistiaCaptions(wid, debug);
+      if (captions && captions.split(/\s+/).length > 20) {
+        videoTranscript = captions;
+        transcriptSource = 'wistia_captions';
+        debug.push(`[Transcript Strategy] Using Wistia captions`);
+        break;
+      }
+    }
+  }
+
+  // Strategy 3: Vimeo text tracks
+  if (!videoTranscript && vimeoIds.length > 0) {
+    for (const vid of vimeoIds) {
+      const captions = await resolveVimeoCaptions(vid, debug);
+      if (captions && captions.split(/\s+/).length > 20) {
+        videoTranscript = captions;
+        transcriptSource = 'vimeo_captions';
+        debug.push(`[Transcript Strategy] Using Vimeo captions`);
+        break;
+      }
+    }
+  }
+
+  // Strategy 4: Resolve media URLs for downstream audio transcription
   if (wistiaIds.length > 0) {
     const resolved = await resolveWistiaMediaUrl(wistiaIds[0], debug);
     if (resolved) {
@@ -856,14 +1082,44 @@ async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: 
       videoDuration = resolved.duration;
     }
   }
+
+  if (!mediaUrl && vimeoIds.length > 0) {
+    const resolved = await resolveVimeoMediaUrl(vimeoIds[0], debug);
+    if (resolved) {
+      mediaUrl = resolved.url;
+      videoDuration = resolved.duration;
+    }
+  }
+
+  // === MERGE: If we got a video transcript via captions, append it to content ===
+  if (videoTranscript) {
+    const txWordCount = videoTranscript.split(/\s+/).filter(Boolean).length;
+    const contentWordCount = content.split(/\s+/).filter(Boolean).length;
+    
+    if (contentWordCount < 50) {
+      // Content is essentially empty — use transcript as the content
+      content = (content ? content + '\n\n--- Video Transcript ---\n\n' : '') + videoTranscript;
+      debug.push(`[Transcript Merge] Transcript is primary content (${txWordCount} words, source: ${transcriptSource})`);
+    } else {
+      // Append transcript to existing content
+      content = content + '\n\n--- Video Transcript ---\n\n' + videoTranscript;
+      debug.push(`[Transcript Merge] Appended transcript (${txWordCount} words) to existing content (${contentWordCount} words)`);
+    }
+  }
   
-  debug.push(`Content extracted: ${content.length} chars, type: ${type}, mediaUrl: ${mediaUrl ? 'yes' : 'no'}`);
+  debug.push(`Content extracted: ${content.length} chars, type: ${type}, mediaUrl: ${mediaUrl ? 'yes' : 'no'}, transcriptSource: ${transcriptSource || 'none'}`);
   
-  // Quality classification
+  // Quality classification — run AFTER transcript merge so word counts reflect actual content
   const quality = classifyLessonContent(content, html, resp.url, lessonUrl);
   debug.push(`Quality: type=${quality.content_type}, words=${quality.word_count}, issues=${quality.issues.length > 0 ? quality.issues.join('; ') : 'none'}`);
   
-  return { title, content, type, debug, quality, media_url: mediaUrl || undefined, video_duration: videoDuration || undefined };
+  return {
+    title, content, type, debug, quality,
+    media_url: mediaUrl || undefined,
+    video_duration: videoDuration || undefined,
+    transcript_source: transcriptSource || undefined,
+    has_video_transcript: Boolean(videoTranscript),
+  };
 }
 
 Deno.serve(async (req) => {
@@ -921,16 +1177,34 @@ Deno.serve(async (req) => {
         );
       }
 
-      // ── POLICY: video_only → import as metadata-only, not fully extracted ──
+      // ── POLICY: video_only → if we captured a transcript via captions, it's usable; otherwise metadata-only ──
       if (result.quality.content_type === 'video_only') {
+        // If transcript was captured via captions API or DOM, the content is already merged and quality recalculated
+        // Check if the merged content actually has substance now
+        if (result.has_video_transcript && result.quality.word_count >= 50) {
+          // Transcript recovered — treat as full content
+          return new Response(
+            JSON.stringify({
+              success: true,
+              ...result,
+              ...lessonResult,
+              metadata_only: false,
+              _note: `Video transcript recovered via ${result.transcript_source} (${result.quality.word_count} words)`,
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        // No transcript recovered — still needs downstream audio transcription
         return new Response(
           JSON.stringify({
             success: true,
             ...result,
             ...lessonResult,
-            metadata_only: true,
-            content: '', // strip thin content — not real lesson text
-            _note: 'Video-only lesson imported as metadata stub. Transcription required for full content.',
+            metadata_only: !result.media_url ? true : false, // If we have a media URL, client will transcribe
+            content: result.media_url ? result.content : '', // Keep content if media URL exists for transcription
+            _note: result.media_url
+              ? 'Video-only lesson with media URL resolved. Client will attempt audio transcription.'
+              : 'Video-only lesson imported as metadata stub. Transcription required for full content.',
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
