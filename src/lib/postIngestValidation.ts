@@ -166,7 +166,8 @@ export type FailureClass =
   | 'pdf_parse_incomplete'
   | 'auth_capture_incomplete'
   | 'enriched_no_extraction'
-  | 'extraction_ready_not_queued';
+  | 'extraction_ready_not_queued'
+  | 'placeholder_enriched_contradiction';
 
 export interface ValidationViolation {
   resource_id: string;
@@ -210,6 +211,7 @@ function emptyReport(): ValidationReport {
       auth_capture_incomplete: 0,
       enriched_no_extraction: 0,
       extraction_ready_not_queued: 0,
+      placeholder_enriched_contradiction: 0,
     },
     timestamp: new Date().toISOString(),
   };
@@ -277,6 +279,19 @@ export function validateResource(r: {
     }
   }
 
+  // Rule 2b: IMPOSSIBLE STATE — placeholder content must never coexist with enriched/deep_enriched
+  // Auto-correct the enrichment status immediately.
+  if (isPlaceholder && isEnriched) {
+    violations.push({
+      resource_id: r.id,
+      title: r.title,
+      failure_class: 'placeholder_enriched_contradiction',
+      detail: `Placeholder content ("${content.slice(0, 40)}…") with enrichment_status="${r.enrichment_status}" — impossible state, auto-correcting.`,
+      auto_repairable: true,
+      repair_action: 'reset_enrichment_status',
+    });
+  }
+
   // Rule 4: Enriched but 0 KIs and 0 attempts (non-transcript only —
   // transcripts are already covered by Rule 1 with a more specific class)
   if (!isTranscript && hasRealContent && isEnriched && kiCount === 0 && attempts === 0) {
@@ -313,6 +328,7 @@ function repairActionToOpType(action: string): OperationType {
     case 'queue_extraction': return 'extraction';
     case 'retry_parse': return 'parse';
     case 'queue_enrichment': return 'enrichment';
+    case 'reset_enrichment_status': return 'enrichment';
     default: return 'extraction';
   }
 }
@@ -437,6 +453,30 @@ async function remediateViolation(v: ValidationViolation): Promise<RemediationRe
           detail: ok
             ? 'Resource marked for enrichment (status reset to not_enriched)'
             : `Failed to queue enrichment: ${error?.message ?? 'unknown error'}`,
+        };
+      }
+
+      case 'reset_enrichment_status': {
+        log.info('Auto-remediation: resetting enrichment_status for placeholder-enriched contradiction', {
+          resourceId: v.resource_id,
+          failureClass: v.failure_class,
+        });
+        const { error } = await supabase
+          .from('resources')
+          .update({
+            enrichment_status: 'not_enriched',
+            failure_reason: 'placeholder_enriched_contradiction — auto-corrected',
+            last_status_change_at: new Date().toISOString(),
+          })
+          .eq('id', v.resource_id);
+        const ok = !error;
+        return {
+          ...base,
+          action_taken: 'reset_enrichment_status',
+          success: ok,
+          detail: ok
+            ? 'Enrichment status reset from enriched → not_enriched (placeholder content detected)'
+            : `Failed to reset enrichment status: ${error?.message ?? 'unknown error'}`,
         };
       }
 
