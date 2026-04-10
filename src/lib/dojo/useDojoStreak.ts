@@ -31,7 +31,7 @@ export function useDojoStats() {
       const [sessionsRes, turnsRes] = await Promise.all([
         supabase
           .from('dojo_sessions')
-          .select('started_at, best_score, latest_score, status, skill_focus')
+          .select('id, started_at, best_score, latest_score, status, skill_focus')
           .eq('user_id', user!.id)
           .eq('status', 'completed')
           .order('started_at', { ascending: false })
