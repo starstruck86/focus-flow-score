@@ -32,6 +32,7 @@ async function fetchPlayerResponse(videoId: string): Promise<any> {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "Accept-Language": "en-US,en;q=0.9",
+      "Cookie": "CONSENT=YES+cb.20210328-17-p0.en+FX+299",
     },
   });
 
@@ -41,14 +42,34 @@ async function fetchPlayerResponse(videoId: string): Promise<any> {
 
   const html = await resp.text();
 
-  // Extract ytInitialPlayerResponse from the page
-  const match = html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;/);
-  if (!match) {
-    throw new Error("Could not extract player response from watch page");
+  // Extract ytInitialPlayerResponse — use greedy match up to the closing semicolon pattern
+  const startMarker = "ytInitialPlayerResponse = ";
+  const startIdx = html.indexOf(startMarker);
+  if (startIdx === -1) {
+    throw new Error("Could not find ytInitialPlayerResponse in watch page");
+  }
+
+  // Find the JSON object by tracking brace depth
+  const jsonStart = startIdx + startMarker.length;
+  let depth = 0;
+  let jsonEnd = jsonStart;
+  for (let i = jsonStart; i < html.length && i < jsonStart + 500_000; i++) {
+    if (html[i] === "{") depth++;
+    else if (html[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        jsonEnd = i + 1;
+        break;
+      }
+    }
+  }
+
+  if (depth !== 0) {
+    throw new Error("Could not parse ytInitialPlayerResponse JSON boundaries");
   }
 
   try {
-    return JSON.parse(match[1]);
+    return JSON.parse(html.slice(jsonStart, jsonEnd));
   } catch {
     throw new Error("Failed to parse player response JSON");
   }
