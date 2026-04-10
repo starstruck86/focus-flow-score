@@ -1,4 +1,4 @@
-export type SkillFocus = 'objection_handling' | 'discovery' | 'executive_response';
+export type SkillFocus = 'objection_handling' | 'discovery' | 'executive_response' | 'deal_control' | 'qualification';
 
 export interface DojoScenario {
   id: string;
@@ -11,8 +11,6 @@ export interface DojoScenario {
 
 const SCENARIOS: DojoScenario[] = [
   // ── Objection Handling ──────────────────────────────────────────────
-  // Each tests a distinct resistance pattern: incumbent loyalty, budget, stall, resources, price, past failure, delay, internal build
-
   { id: 'oh-1', skillFocus: 'objection_handling', title: 'Incumbent loyalty',
     context: "You're mid-discovery with a VP of Marketing at a DTC skincare brand doing $12M ARR. They've used Braze for 2 years, renewed 3 months ago, and their lifecycle team of 4 built all automations in Braze. The VP personally championed the Braze deal.",
     objection: "We just renewed Braze three months ago and my team built everything in it. I'm not ripping that out.", difficulty: 'standard' },
@@ -46,8 +44,6 @@ const SCENARIOS: DojoScenario[] = [
     objection: "We're going to build this in-house. My team already scoped it — we can get 80% of what you do in about 3 months using our own data warehouse.", difficulty: 'standard' },
 
   // ── Discovery ───────────────────────────────────────────────────────
-  // Each tests a distinct discovery behavior: deepening pain, creating urgency, uncovering process, quantifying impact, building a business case, handling competitor deflection
-
   { id: 'd-1', skillFocus: 'discovery', title: 'Surface pain — won\'t go deeper',
     context: "First discovery call with a Sr. Manager of Retention at a DTC skincare brand ($6M revenue). She mentioned churn is a problem but immediately pivoted to asking about your segmentation features. She's treating this like a vendor demo, not a business conversation.",
     objection: "Yeah, churn's been up. Anyway — can you walk me through your segmentation? That's really what I want to see.", difficulty: 'standard' },
@@ -77,8 +73,6 @@ const SCENARIOS: DojoScenario[] = [
     objection: "I think this could work, but honestly, I'd need to get IT, Finance, and my CMO aligned. It's a whole process here. I'm not sure how to even start that.", difficulty: 'standard' },
 
   // ── Executive Response ──────────────────────────────────────────────
-  // Each tests a distinct exec scenario: time pressure, ROI demand, cost-cutting mode, board prep, category skepticism, strategic pivot
-
   { id: 'ex-1', skillFocus: 'executive_response', title: 'CMO wants 30-second version',
     context: "You get pulled into a meeting with the CMO of a $100M DTC brand. She walked in late, has 4 minutes before her next call, and is checking her phone. Your champion introduced you as 'the vendor I mentioned for our retention problem.' She hasn't seen a demo or any materials.",
     objection: "Give me the 30-second version. Why should I care?", difficulty: 'standard' },
@@ -102,6 +96,72 @@ const SCENARIOS: DojoScenario[] = [
   { id: 'ex-6', skillFocus: 'executive_response', title: 'CEO pivoting strategy',
     context: "CEO of a $70M ecomm company just announced a strategic pivot from acquisition to retention at their all-hands. She's meeting with vendors her CMO recommended. She's smart, impatient, and thinks in terms of unit economics and customer lifetime value. This is a 15-minute slot.",
     objection: "We just shifted our entire company strategy from acquisition to retention. I need to know — concretely — how you fit into that and what the first 90 days look like. Don't give me a sales pitch.", difficulty: 'standard' },
+
+  // ── Deal Control ────────────────────────────────────────────────────
+  { id: 'dc-1', skillFocus: 'deal_control', title: 'Champion goes dark after demo',
+    context: "You ran a strong demo 10 days ago with a Director of CRM at a $25M beauty brand. She was engaged, asked great questions, introduced you to her VP on the call. She said she'd set up a technical review that week. Since then — nothing. Two follow-up emails, one voicemail, no response. Your manager is asking for a forecast update.",
+    objection: "Hey — sorry I've been slammed. Things got crazy with our product launch. Can we reconnect in a couple weeks? I haven't forgotten about you.", difficulty: 'standard' },
+
+  { id: 'dc-2', skillFocus: 'deal_control', title: 'Buyer wants to "circle back next quarter"',
+    context: "Third call with VP of Marketing at a $40M outdoor brand. Discovery went well, demo landed, she said 'this makes sense.' But when you proposed a mutual action plan and a decision date, she pushed back. No budget cycle excuse — she just doesn't want to commit.",
+    objection: "Look, I like what you've shown me. But we've got a lot going on right now. Let's circle back in Q3 when things calm down and I can give this proper attention.", difficulty: 'standard' },
+
+  { id: 'dc-3', skillFocus: 'deal_control', title: 'Procurement hijacks the timeline',
+    context: "You have verbal approval from the VP of E-Commerce at a $90M retailer. She sent the proposal to procurement two weeks ago. Since then, procurement has requested a security questionnaire, a 90-day payment term (vs your standard 30), and a 3-year commitment at a 25% discount. Your VP is pressuring you to close this month.",
+    objection: "We've sent your proposal to our procurement team. They handle all vendor agreements from here. I'd suggest working directly with them — they'll have some questions about terms.", difficulty: 'standard' },
+
+  { id: 'dc-4', skillFocus: 'deal_control', title: 'Evaluation committee wants another demo',
+    context: "You're in final stages with a $60M health & wellness company. You've done 2 demos, a technical review, and provided a custom ROI analysis. The Director loves it. Now she tells you the 'evaluation committee' — 4 people you haven't met — wants to see one more demo before making a decision. Your deal has been in pipeline for 67 days.",
+    objection: "Great news — the committee wants to see a final demo. Can you do Thursday? They just want to see the SMS and segmentation pieces one more time. I think this will seal it.", difficulty: 'standard' },
+
+  { id: 'dc-5', skillFocus: 'deal_control', title: 'Buyer won\'t introduce you to the decision maker',
+    context: "Four calls in with a Sr. Manager of Lifecycle at a $35M pet food brand. She's your only contact. She keeps saying her VP 'will be involved at the right time' but won't schedule an intro. She does all her own research and brings recommendations to her VP. Your coach (an industry contact) told you this VP kills 80% of vendor proposals she didn't originate.",
+    objection: "I know my VP well. She trusts my recommendations. Let me build the case internally and present it to her. I don't want to bring you in too early — she doesn't like that.", difficulty: 'standard' },
+
+  { id: 'dc-6', skillFocus: 'deal_control', title: 'Deal stuck — no defined next step',
+    context: "You've had 3 solid meetings with a Director of Growth at a $20M DTC furniture company. Each meeting ends with 'this was really helpful, let me digest this.' No next step has ever been set. No timeline discussed. No other stakeholders surfaced. You're starting to wonder if this is a real opportunity or just research.",
+    objection: "This has been super informative. Let me take this back to the team and think about it. I'll reach out when we're ready to take the next step.", difficulty: 'standard' },
+
+  { id: 'dc-7', skillFocus: 'deal_control', title: 'Buyer introduces a new competitor late',
+    context: "You're in final negotiation with a VP of Digital at a $55M fashion retailer. MSA is drafted, pricing is agreed, and you expected signature this week. In today's call, she casually mentions her CMO asked her to 'also look at' a competitor you've never heard of. She says it's 'just a formality.'",
+    objection: "Oh, one thing — my CMO wants us to also look at Ometria before we sign. It's not a big deal, she just wants to check a box. Shouldn't change anything.", difficulty: 'standard' },
+
+  { id: 'dc-8', skillFocus: 'deal_control', title: 'Mutual plan agreed but milestones slipping',
+    context: "You built a mutual action plan with the Director of CRM at a $45M supplements brand 3 weeks ago. She agreed to complete a technical review by last Friday, share security docs by Monday, and schedule a CFO intro this week. The technical review happened late, security docs haven't been sent, and the CFO intro hasn't been mentioned. She's friendly and responsive but nothing is on track.",
+    objection: "I know we're a little behind on the timeline — things just got hectic with our spring launch. We're still on track though, don't worry. Let's just push everything back two weeks.", difficulty: 'standard' },
+
+  // ── Qualification ───────────────────────────────────────────────────
+  { id: 'q-1', skillFocus: 'qualification', title: 'Enthusiastic but no budget or authority',
+    context: "First call with a Marketing Coordinator at a $5M DTC candle company. She's 24, 8 months into the role, incredibly enthusiastic about your product. She watched 3 of your webinars, followed your founder on LinkedIn, and booked this call herself. She has zero budget authority and reports to a Marketing Manager who reports to the founder.",
+    objection: "I love this! I've been telling my team we need something like this. I don't have exact budget numbers, but I'm sure we could find room. When can we do a demo for my boss?", difficulty: 'standard' },
+
+  { id: 'q-2', skillFocus: 'qualification', title: 'Big company, no defined problem',
+    context: "Inbound from a $200M enterprise retailer. A VP of Marketing filled out your contact form. On the call, she's pleasant but vague. When asked what prompted the inquiry, she says 'just exploring options.' No specific problem, no failed project, no upcoming renewal. She has 30 minutes and seems genuinely curious.",
+    objection: "We're just doing some market research right now. We're not unhappy with our current setup, but it's always good to know what's out there. Walk me through what you do.", difficulty: 'standard' },
+
+  { id: 'q-3', skillFocus: 'qualification', title: 'Real pain but zero urgency',
+    context: "Discovery with a Director of E-Commerce at a $30M home goods brand. She clearly articulated that their email program is underperforming — 12% open rates, no lifecycle automation, their team manually segments every send. But when asked about timeline, she said 'no rush.' When asked about consequences of waiting, she said 'we've been living with it.'",
+    objection: "Yeah, we know our email program is behind. We've been meaning to fix it for a while. There's no burning platform though — business is fine. We'll get to it eventually.", difficulty: 'standard' },
+
+  { id: 'q-4', skillFocus: 'qualification', title: 'Technical buyer with no business case',
+    context: "Call with a Sr. Marketing Ops Manager at a $45M ecomm brand. She's extremely technical — asking about API architecture, data models, event schemas. She's done a competitive analysis spreadsheet. But when you ask who else is involved or what problem they're solving for the business, she can't answer. She's evaluating because she wants to — not because anyone asked her to.",
+    objection: "Can you send me your API documentation and a sandbox environment? I want to test the integration with our Snowflake warehouse before I bring this to anyone.", difficulty: 'standard' },
+
+  { id: 'q-5', skillFocus: 'qualification', title: 'Competitor evaluation as leverage',
+    context: "Inbound request from a Sr. Director at a $70M fashion retailer. She's 6 months into a 2-year contract with your biggest competitor. On the call, she's asking detailed pricing and feature questions but being evasive about timeline. Your gut says she's using your proposal to renegotiate her existing deal.",
+    objection: "We're evaluating alternatives right now. Can you put together a full proposal with pricing? We want to compare everything side by side. I need it by Friday.", difficulty: 'standard' },
+
+  { id: 'q-6', skillFocus: 'qualification', title: 'Decision process is a black box',
+    context: "Third call with a VP of Digital at a $50M CPG company. She loves the product, sees the value, and has told you twice that she wants to move forward. But every time you ask about the decision process — who approves, what's the budget cycle, is there a procurement step — she gives a different answer or says 'I'm handling it.' You've never met anyone else from the company.",
+    objection: "I told you, I'm the decision maker here. I just need to get my CMO's blessing, which is basically a formality. Don't worry about the process — just get me a proposal and I'll handle the rest.", difficulty: 'standard' },
+
+  { id: 'q-7', skillFocus: 'qualification', title: 'Pain exists but wrong buyer',
+    context: "Discovery with a Head of Brand at a $40M outdoor gear company. She's sharing real frustration — the lifecycle team is drowning, they're sending batch-and-blast emails, and she knows they're leaving revenue on the table. But lifecycle marketing reports to the VP of Growth, not to her. She has no authority over the budget, team, or tech stack. She's passionate but in the wrong seat.",
+    objection: "This is exactly what our lifecycle team needs. I've been pushing for this for months. The problem is, lifecycle reports to our VP of Growth, not me. But I have a lot of influence — I can definitely advocate for this.", difficulty: 'standard' },
+
+  { id: 'q-8', skillFocus: 'qualification', title: 'Wants a pilot with no commitment',
+    context: "Final stage with a Director of Marketing at a $25M DTC wellness brand. She wants to move forward but proposes a 'no-commitment pilot' — 30 days, no contract, and she'll 'see how it goes.' Your product requires a 2-week implementation and meaningful data integration. A no-commitment pilot would consume significant CS resources with no guarantee of conversion. Your win rate on unpaid pilots is 15%.",
+    objection: "Here's what I'm thinking — let's do a 30-day pilot, no contract. If we see results, we'll sign. If not, no hard feelings. That way there's zero risk for us.", difficulty: 'standard' },
 ];
 
 export function getRandomScenario(skillFocus?: SkillFocus): DojoScenario {
@@ -109,7 +169,7 @@ export function getRandomScenario(skillFocus?: SkillFocus): DojoScenario {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-interface SkillStat {
+export interface SkillStat {
   skill: SkillFocus;
   count: number;
   avgScore: number;
@@ -131,9 +191,8 @@ export interface AutopilotResult {
  * 4. Random
  */
 export function getAutopilotRecommendation(stats?: SkillStat[]): AutopilotResult {
-  const allSkills: SkillFocus[] = ['objection_handling', 'discovery', 'executive_response'];
+  const allSkills: SkillFocus[] = ['objection_handling', 'discovery', 'executive_response', 'deal_control', 'qualification'];
 
-  // No data — pick random, say so
   if (!stats || stats.length === 0) {
     const scenario = getRandomScenario();
     return {
@@ -154,6 +213,8 @@ export function getAutopilotRecommendation(stats?: SkillStat[]): AutopilotResult
       objection_handling: "You haven't drilled objection handling yet. Let's fix that.",
       discovery: "No discovery reps logged. That's where deals are won or lost.",
       executive_response: "You haven't practiced exec responses. Executives punish the unprepared.",
+      deal_control: "Zero reps on deal control. Deals don't close themselves — you need to drive them.",
+      qualification: "You haven't drilled qualification yet. Half your pipeline is probably unqualified — let's fix your instincts.",
     };
     return {
       scenario,
@@ -202,6 +263,8 @@ export const SKILL_LABELS: Record<SkillFocus, string> = {
   objection_handling: 'Objection Handling',
   discovery: 'Discovery',
   executive_response: 'Executive Response',
+  deal_control: 'Deal Control',
+  qualification: 'Qualification',
 };
 
 export const MISTAKE_LABELS: Record<string, string> = {
@@ -215,4 +278,15 @@ export const MISTAKE_LABELS: Record<string, string> = {
   weak_close: 'Weak close',
   stacked_questions: 'Stacked questions',
   failed_to_deepen: 'Failed to deepen pain',
+  // Deal Control
+  vague_next_step: 'Vague next step',
+  too_passive: 'Too passive',
+  no_mutual_plan: 'No mutual plan',
+  accepted_delay: 'Accepted the delay',
+  // Qualification
+  failed_to_qualify: 'Failed to qualify',
+  accepted_weak_pain: 'Accepted weak pain',
+  no_urgency: 'Didn\'t test urgency',
+  skipped_stakeholders: 'Skipped stakeholder mapping',
+  no_disqualification: 'Didn\'t consider disqualifying',
 };
