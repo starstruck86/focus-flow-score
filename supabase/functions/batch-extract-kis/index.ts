@@ -1636,7 +1636,7 @@ Deno.serve(async (req) => {
       }
       log.rawAiResponse = rawResponse;
     } catch (aiErr: any) {
-      const failureType = classifyFailure(aiErr, 0, computeMinKiFloor(resource.content.length, isLesson, densitySignals), 0);
+      const failureType = classifyFailure(aiErr, 0, computeMinKiFloor(resource.content.length, isLesson, densitySignals, resource.resource_type), 0);
       log.outcome = 'ai_error';
       log.error = aiErr.message;
       log.failureType = failureType;
@@ -1645,7 +1645,7 @@ Deno.serve(async (req) => {
       // Telemetry
       logTelemetry({
         resource_id: resourceId, title: resource.title, content_length: resource.content.length,
-        is_structured_lesson: isLesson, ki_count: 0, min_ki_floor: computeMinKiFloor(resource.content.length, isLesson, densitySignals),
+        is_structured_lesson: isLesson, ki_count: 0, min_ki_floor: computeMinKiFloor(resource.content.length, isLesson, densitySignals, resource.resource_type),
         attempt_number: attemptNumber, extractor_strategy: strategy, failure_reason: failureType,
         duration_ms: Date.now() - startTime, routing_basis: routingBasis,
       });
@@ -1745,9 +1745,9 @@ Deno.serve(async (req) => {
     // High KI density is NOT a problem if KIs are distinct and high-quality.
     // Log for observability but do NOT trim — quality/dedup gates handle bad KIs.
     if (isLesson) {
-      const observationalCeiling = Math.max(computeMinKiFloor(resource.content.length, isLesson, densitySignals), Math.floor(resource.content.length / 500));
+      const observationalCeiling = Math.max(computeMinKiFloor(resource.content.length, isLesson, densitySignals, resource.resource_type), Math.floor(resource.content.length / 500));
       if (deduped.length > observationalCeiling) {
-        console.log(`[extract-ceiling] 📊 HIGH DENSITY (observational): "${resource.title}" | content=${resource.content.length} chars | kis=${deduped.length} | ref_ceiling=${observationalCeiling} | floor=${computeMinKiFloor(resource.content.length, isLesson, densitySignals)} | KEPT ALL — all KIs passed quality+dedup gates`);
+        console.log(`[extract-ceiling] 📊 HIGH DENSITY (observational): "${resource.title}" | content=${resource.content.length} chars | kis=${deduped.length} | ref_ceiling=${observationalCeiling} | floor=${computeMinKiFloor(resource.content.length, isLesson, densitySignals, resource.resource_type)} | KEPT ALL — all KIs passed quality+dedup gates`);
       }
     }
 
@@ -1795,7 +1795,7 @@ Deno.serve(async (req) => {
     }
 
     // ── 6. Quality threshold gate + post-extraction invariant ──
-    const floorDetails = computeMinKiFloorDetailed(resource.content.length, isLesson, densitySignals);
+    const floorDetails = computeMinKiFloorDetailed(resource.content.length, isLesson, densitySignals, resource.resource_type);
     const minKiFloor = floorDetails.final;
     const durationMs = Date.now() - startTime;
 
