@@ -4626,6 +4626,7 @@ export type Database = {
           last_quality_tier: string | null
           last_reconciled_at: string | null
           last_recovery_error: string | null
+          last_remediation_at: string | null
           last_status_change_at: string | null
           lightweight_extraction: Json | null
           manual_content_present: boolean | null
@@ -4753,6 +4754,7 @@ export type Database = {
           last_quality_tier?: string | null
           last_reconciled_at?: string | null
           last_recovery_error?: string | null
+          last_remediation_at?: string | null
           last_status_change_at?: string | null
           lightweight_extraction?: Json | null
           manual_content_present?: boolean | null
@@ -4880,6 +4882,7 @@ export type Database = {
           last_quality_tier?: string | null
           last_reconciled_at?: string | null
           last_recovery_error?: string | null
+          last_remediation_at?: string | null
           last_status_change_at?: string | null
           lightweight_extraction?: Json | null
           manual_content_present?: boolean | null
