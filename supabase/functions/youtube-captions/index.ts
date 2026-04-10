@@ -320,23 +320,7 @@ Deno.serve(async (req) => {
     const bestTrack = pickBestTrack(tracks)!;
     console.log(`[youtube-captions] Using track: lang=${bestTrack.lang}`);
 
-    let transcript = "";
-
-    try {
-      const srv3 = await fetchCaptionXml(bestTrack.url);
-      transcript = parseSrv3ToText(srv3);
-    } catch (e) {
-      console.log(`[youtube-captions] srv3 failed, trying raw XML: ${(e as Error).message}`);
-    }
-
-    if (!transcript || transcript.length < 100) {
-      try {
-        const rawXml = await fetchCaptionRawXml(bestTrack.url);
-        transcript = parseSrv3ToText(rawXml);
-      } catch (e) {
-        console.log(`[youtube-captions] Raw XML also failed: ${(e as Error).message}`);
-      }
-    }
+    const transcript = await fetchAndParseCaptions(bestTrack.url);
 
     if (!transcript || transcript.length < 50) {
       return new Response(
