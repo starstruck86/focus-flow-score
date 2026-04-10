@@ -1,13 +1,50 @@
 /**
  * Dojo Roleplay Scoring Edge Function
  *
- * Scores a multi-turn roleplay conversation using the same teaching framework as drill scoring.
+ * Scores a multi-turn roleplay conversation with turn-level analysis,
+ * control/adaptation/progression assessment, and canonical focus patterns.
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-trace-id",
+};
+
+// Canonical focus patterns (same as dojo-score)
+const VALID_FOCUS_PATTERNS: Record<string, string[]> = {
+  objection_handling: ['isolate_before_answering', 'reframe_to_business_impact', 'use_specific_proof', 'control_next_step', 'stay_concise_under_pressure'],
+  discovery: ['deepen_one_level', 'tie_to_business_impact', 'ask_singular_questions', 'test_urgency', 'quantify_the_pain'],
+  executive_response: ['lead_with_the_number', 'cut_to_three_sentences', 'anchor_to_their_priority', 'project_certainty', 'close_with_a_specific_ask'],
+  deal_control: ['control_next_step', 'name_the_risk', 'lock_mutual_commitment', 'test_before_accepting', 'create_urgency_without_pressure'],
+  qualification: ['test_urgency', 'validate_real_pain', 'map_stakeholders', 'disqualify_weak_opportunities', 'tie_problem_to_business_impact'],
+};
+const ALL_VALID_IDS = new Set(Object.values(VALID_FOCUS_PATTERNS).flat());
+
+function normalizeFocusPattern(raw: string, skill: string): string {
+  if (!raw) return '';
+  if (ALL_VALID_IDS.has(raw)) return raw;
+  const cleaned = raw.toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z_]/g, '');
+  if (ALL_VALID_IDS.has(cleaned)) return cleaned;
+  const candidates = VALID_FOCUS_PATTERNS[skill] || [];
+  const rawWords = raw.toLowerCase().replace(/_/g, ' ').split(' ').filter(w => w.length >= 3);
+  let best = ''; let bestScore = 0;
+  for (const id of candidates) {
+    const idWords = id.split('_');
+    let score = 0;
+    for (const w of rawWords) { if (idWords.some(k => k.includes(w) || w.includes(k))) score++; }
+    if (score > bestScore) { bestScore = score; best = id; }
+  }
+  if (bestScore >= 1 && best) return best;
+  return candidates[0] || raw;
+}
+
+const SKILL_LABELS: Record<string, string> = {
+  objection_handling: 'Objection Handling',
+  discovery: 'Discovery',
+  executive_response: 'Executive Response',
+  deal_control: 'Deal Control',
+  qualification: 'Qualification',
 };
 
 serve(async (req) => {
@@ -24,21 +61,16 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const SKILL_LABELS: Record<string, string> = {
-      objection_handling: 'Objection Handling',
-      discovery: 'Discovery',
-      executive_response: 'Executive Response',
-      deal_control: 'Deal Control',
-      qualification: 'Qualification',
-    };
+    const repTurns = conversation.filter((m: { role: string }) => m.role === 'rep').length;
+    const validPatterns = (VALID_FOCUS_PATTERNS[skillFocus] || []).join(', ');
 
     const conversationText = conversation
-      .map((msg: { role: string; content: string }, i: number) => 
-        `${msg.role === 'buyer' ? 'BUYER' : 'REP'}: "${msg.content}"`
+      .map((msg: { role: string; content: string }, i: number) =>
+        `Turn ${Math.floor(i / 2) + 1} — ${msg.role === 'buyer' ? 'BUYER' : 'REP'}: "${msg.content}"`
       )
       .join('\n');
 
-    const systemPrompt = `You are Dave — an elite sales coach reviewing a multi-turn roleplay session.
+    const systemPrompt = `You are Dave — an elite sales coach reviewing a ${repTurns}-turn roleplay session.
 
 SCENARIO:
 Skill tested: ${SKILL_LABELS[skillFocus] || skillFocus}
@@ -48,38 +80,53 @@ Opening: "${scenario.objection}"
 CONVERSATION:
 ${conversationText}
 
-Evaluate the REP's performance across ALL turns. Assess:
-1. Consistency — did they maintain quality across turns or degrade?
-2. Adaptability — did they adjust their approach based on buyer responses?
-3. Control — did they maintain conversation direction or lose it?
-4. Progression — did the conversation improve or get worse from the rep's side?
+ROLEPLAY-SPECIFIC ASSESSMENT (evaluate ALL of these):
 
-SCORING (100pts):
+1. CONTROL ACROSS TURNS (25pts): Did the rep maintain or gain control of the conversation? Did they drive toward an outcome, or did the buyer lead? Losing control early and never recovering = 0-10pts. Starting weak but recovering = 15pts. Consistent control = 20-25pts.
+
+2. ADAPTATION (25pts): Did the rep adjust their approach based on the buyer's responses? Did they hear what the buyer said and respond to it, or did they stick to a script? Repeating the same move across turns = 0-10pts. Noticing buyer signals and pivoting = 15-20pts. Reading the room and shifting strategy = 20-25pts.
+
+3. PROGRESSION (25pts): Did the conversation move forward? Did it get closer to a next step, a deeper understanding, or a commitment? Circular conversations = 0-10pts. Some forward movement = 15pts. Clear progression toward outcome = 20-25pts.
+
+4. CONSISTENCY (25pts): Was the quality stable across turns, or did the rep start strong and fade? Degrading quality = 0-10pts. Uneven = 15pts. Consistent or improving = 20-25pts.
+
+SCORING:
 - 85-100: Exceptional across all turns. Maintained control, adapted well, advanced the conversation.
-- 70-84: Strong overall with minor lapses. Good adaptation.
-- 55-69: Average. Some good moments but inconsistent across turns.
-- 40-54: Weak. Lost control, failed to adapt, or degraded across turns.
-- Below 40: Poor. Conversation went badly due to rep's approach.
+- 70-84: Strong overall with minor lapses.
+- 55-69: Average. Some good moments but inconsistent.
+- 40-54: Weak. Lost control, failed to adapt, or degraded.
+- Below 40: Poor. Conversation went badly.
+
+YOUR DEFAULT IS 55-62. Multi-turn consistency is HARD — most reps degrade after turn 2.
+
+FOCUS PATTERNS (pick ONE from this EXACT list): ${validPatterns}
+
+TURN ANALYSIS: For each rep turn, provide a brief assessment (1-2 sentences) covering:
+- What they did well or poorly in that specific moment
+- Whether they maintained/gained/lost control
+- How they responded to the buyer's previous message
 
 Respond with ONLY valid JSON:
 {
   "score": 60,
-  "feedback": "2 sentences. What worked across the conversation. What was the biggest gap.",
+  "feedback": "2 sentences. What worked across the conversation. The biggest gap.",
   "topMistake": "single_mistake_code",
-  "improvedVersion": "What the rep should have said at the weakest moment in the conversation. Quote the buyer line they responded poorly to, then give the better version.",
-  "worldClassResponse": "How a top 1% rep would have handled the ENTIRE conversation arc. Not just one turn — show the strategic approach across 3-4 key moments.",
+  "improvedVersion": "What the rep should have said at the WEAKEST moment. Quote the buyer line, then give the better version.",
+  "worldClassResponse": "How a top 1% rep would have handled the ENTIRE arc — show the strategic approach across 3-4 key moments.",
   "whyItWorks": ["Pattern 1", "Pattern 2"],
   "moveSequence": ["step 1", "step 2", "step 3"],
   "patternTags": ["tag_one", "tag_two"],
-  "focusPattern": "single_focus_pattern",
+  "focusPattern": "from_the_exact_list_above",
   "focusReason": "Because...",
-  "practiceCue": "Short behavioral instruction for the next roleplay.",
+  "practiceCue": "One concrete behavioral instruction for the next roleplay.",
   "teachingNote": "One sentence coaching principle.",
   "deltaNote": "One sentence on the gap between improved and world-class.",
   "turnAnalysis": [
-    {"turn": 1, "assessment": "brief assessment of rep's turn 1"},
-    {"turn": 2, "assessment": "brief assessment of rep's turn 2"}
-  ]
+    {"turn": 1, "assessment": "What the rep did in turn 1 — control, adaptation, quality.", "verdict": "strong|adequate|weak"},
+    {"turn": 2, "assessment": "Turn 2 assessment.", "verdict": "strong|adequate|weak"}
+  ],
+  "controlArc": "One sentence describing how control shifted across the conversation.",
+  "adaptationNote": "One sentence on the rep's ability to adjust to buyer signals."
 }`;
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -95,7 +142,7 @@ Respond with ONLY valid JSON:
           { role: "user", content: "Score this roleplay session." },
         ],
         temperature: 0.3,
-        max_tokens: 2500,
+        max_tokens: 3000,
       }),
     });
 
@@ -123,6 +170,13 @@ Respond with ONLY valid JSON:
     if (typeof parsed.deltaNote !== "string") parsed.deltaNote = "";
     if (!Array.isArray(parsed.whyItWorks)) parsed.whyItWorks = [];
     if (!Array.isArray(parsed.turnAnalysis)) parsed.turnAnalysis = [];
+    if (typeof parsed.controlArc !== "string") parsed.controlArc = "";
+    if (typeof parsed.adaptationNote !== "string") parsed.adaptationNote = "";
+
+    // Normalize focusPattern
+    if (parsed.focusPattern) {
+      parsed.focusPattern = normalizeFocusPattern(parsed.focusPattern, skillFocus);
+    }
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
