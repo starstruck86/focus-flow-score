@@ -21,33 +21,52 @@ interface Props {
   onOpenResource?: (resourceId: string) => void;
 }
 
+/** Derive a category-specific verb for "succeeded" based on the dominant transition */
+function successVerb(outcome: BulkActionOutcome): string {
+  if (outcome.transitions.length === 0) return 'moved forward';
+  const dominant = outcome.transitions.reduce((a, b) => b.count > a.count ? b : a);
+  if (dominant.to === 'extracted') return 'extracted';
+  if (dominant.to === 'activated') return 'activated';
+  if (dominant.to === 'has_content' && dominant.from === 'blocked') return 'unblocked';
+  if (dominant.to === 'has_content') return 'enriched';
+  return 'moved forward';
+}
+
+/** Derive a category-specific phrase for failures */
+function failurePhrase(outcome: BulkActionOutcome): string {
+  if (outcome.transitions.length === 0) return 'failed';
+  const dominant = outcome.transitions.reduce((a, b) => b.count > a.count ? b : a);
+  if (dominant.from === 'blocked') return 'still blocked';
+  return 'failed';
+}
+
 /** Build a plain-English summary sentence for the outcome */
 function buildOutcomeSummary(outcome: BulkActionOutcome): string {
   const parts: string[] = [];
+  const verb = successVerb(outcome);
 
   if (outcome.succeeded > 0) {
-    parts.push(`${outcome.succeeded} moved forward`);
+    parts.push(`${outcome.succeeded} ${verb}`);
   }
   if (outcome.unchanged > 0) {
     parts.push(`${outcome.unchanged} unchanged`);
   }
   if (outcome.failed > 0) {
-    parts.push(`${outcome.failed} failed`);
+    parts.push(`${outcome.failed} ${failurePhrase(outcome)}`);
   }
   if (outcome.needsReview > 0) {
-    parts.push(`${outcome.needsReview} need review`);
+    parts.push(`${outcome.needsReview} still need review`);
   }
 
   if (parts.length === 0) return 'No resources were affected.';
 
   const summary = parts.join(', ');
 
-  // Add reconciliation note if relevant
   if (outcome.mismatched > 0) {
     return `${summary}. ${outcome.mismatched} had unexpected outcomes — inspect recommended.`;
   }
   if (outcome.confirmed > 0 && outcome.failed === 0 && outcome.mismatched === 0) {
-    return `${summary}. All transitions confirmed by reconciliation.`;
+    return `${summary}. All transitions confirmed.`;
   }
   return `${summary}.`;
 }
