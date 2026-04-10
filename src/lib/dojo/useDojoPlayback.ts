@@ -5,6 +5,7 @@
  * - dojoAudioController (pure state machine)
  * - elevenlabsTransport (ElevenLabs TTS I/O)
  * - dojoSessionSnapshot (crash-safe localStorage persistence)
+ * - dojoSessionOwnership (multi-tab protection)
  * - Watchdog polling for hung playback
  *
  * CRASH RESILIENCE:
@@ -12,6 +13,7 @@
  * - On mount, tryRecover() checks for an existing snapshot and resumes
  * - Recovery advances past completed chunks and never replays them
  * - Ambiguous states (requested-but-not-completed) are retried safely
+ * - Multi-tab ownership prevents duplicate playback
  *
  * Scoped to Sales Dojo only. Not a generic voice agent hook.
  */
@@ -56,9 +58,13 @@ import {
   restoreFromSnapshot,
 } from './dojoSessionSnapshot';
 import {
+  claimSession,
+  startOwnershipHeartbeat,
+  releaseOwnership,
+} from './dojoSessionOwnership';
+import {
   createMetrics,
   logChunkRequested,
-  logChunkStarted,
   logChunkCompleted,
   logChunkFailed,
   logChunkTimedOut,
@@ -89,6 +95,8 @@ export interface DojoPlaybackControls {
   metrics: DojoAudioMetrics;
   /** Whether this session was recovered from a crash/refresh. */
   wasRecovered: boolean;
+  /** Whether this tab owns the session (for multi-tab protection). */
+  isOwner: boolean;
 
   initialize: (dojo: PlaybackState, mode?: DeliveryMode) => void;
   startDelivery: () => void;
@@ -109,11 +117,14 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const [ctrlState, setCtrlState] = useState<AudioControllerState | null>(null);
   const [lastDirective, setLastDirective] = useState<ControllerDirective | null>(null);
   const [wasRecovered, setWasRecovered] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
 
   const ctrlRef = useRef<AudioControllerState | null>(null);
   const handleRef = useRef<TransportHandle>(createTransportHandle());
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const metricsRef = useRef<DojoAudioMetrics>(createMetrics());
+  const ownershipCleanupRef = useRef<(() => void) | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
 
   // Keep ref in sync with state + track metrics
   const applyResult = useCallback((result: ControllerResult) => {
@@ -139,6 +150,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
           if (result.directive.level === 'session') {
             metricsRef.current = logSessionLevelDegrade(metricsRef.current, result.directive.reason);
           }
+        } else {
+          metricsRef.current = logRecovery(metricsRef.current, result.directive.reason);
         }
         break;
       case 'chunk_skipped_max_retries':
@@ -178,15 +191,40 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     }
   }, [config, applyResult]);
 
+  // ── Ownership helper ────────────────────────────────────────────
+
+  const acquireOwnership = useCallback((sessionId: string): boolean => {
+    const claim = claimSession(sessionId);
+    if (!claim.ok) {
+      setIsOwner(false);
+      return false;
+    }
+    setIsOwner(true);
+    sessionIdRef.current = sessionId;
+    ownershipCleanupRef.current = startOwnershipHeartbeat(sessionId);
+    return true;
+  }, []);
+
   // ── Public controls ──────────────────────────────────────────────
 
   const initialize = useCallback((dojo: PlaybackState, mode: DeliveryMode = 'voice') => {
+    // Claim ownership
+    if (!acquireOwnership(dojo.sessionId)) {
+      // Another tab owns it — degrade to text-only viewing
+      const ctrl = createAudioController(dojo, 'text_fallback');
+      ctrlRef.current = ctrl;
+      setCtrlState(ctrl);
+      setLastDirective(null);
+      setWasRecovered(false);
+      return;
+    }
+
     const ctrl = createAudioController(dojo, mode);
     ctrlRef.current = ctrl;
     setCtrlState(ctrl);
     setLastDirective(null);
     setWasRecovered(false);
-  }, []);
+  }, [acquireOwnership]);
 
   const startDelivery = useCallback(() => {
     const ctrl = ctrlRef.current;
@@ -275,6 +313,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const restoreVoice = useCallback((reason: string) => {
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
+    metricsRef.current = logRecovery(metricsRef.current, reason);
     applyResult(switchToVoice(ctrl, reason));
   }, [applyResult]);
 
@@ -287,9 +326,15 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
       return false;
     }
 
+    // Claim ownership before recovering
+    if (!acquireOwnership(sessionId)) {
+      // Another tab is active — don't fight over it
+      return false;
+    }
+
     const snap = loaded.snapshot;
     const ctrl = restoreFromSnapshot(snap);
-    metricsRef.current = logCrashRecovery(metricsRef.current, `crash_recovery:${sessionId}`);
+    metricsRef.current = logCrashRecovery(metricsRef.current, `${loaded.restoreReason}:${sessionId}`);
     setWasRecovered(true);
 
     // Use the controller's own recovery path to get the right directive
@@ -297,7 +342,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     const result = recoverSession(controllerSnap);
     handleTransportEvent(result);
     return true;
-  }, [handleTransportEvent]);
+  }, [handleTransportEvent, acquireOwnership]);
 
   const destroy = useCallback(() => {
     if (watchdogRef.current) {
@@ -308,6 +353,18 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     metricsRef.current = createMetrics();
     destroyTransport(handleRef.current);
     handleRef.current = createTransportHandle();
+
+    // Release ownership
+    if (sessionIdRef.current) {
+      releaseOwnership(sessionIdRef.current);
+      sessionIdRef.current = null;
+    }
+    if (ownershipCleanupRef.current) {
+      ownershipCleanupRef.current();
+      ownershipCleanupRef.current = null;
+    }
+    setIsOwner(false);
+
     ctrlRef.current = null;
     setCtrlState(null);
     setLastDirective(null);
@@ -338,6 +395,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     return () => {
       destroyTransport(handleRef.current);
       if (watchdogRef.current) clearInterval(watchdogRef.current);
+      if (sessionIdRef.current) releaseOwnership(sessionIdRef.current);
+      if (ownershipCleanupRef.current) ownershipCleanupRef.current();
     };
   }, []);
 
@@ -348,6 +407,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     isPlaying: ctrlState?.dojo.playback.currentPlayingChunkId !== null,
     metrics: metricsRef.current,
     wasRecovered,
+    isOwner,
 
     initialize,
     startDelivery,
