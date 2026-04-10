@@ -51,6 +51,7 @@ export function KnowledgeCoverageAudit() {
     skipped: { resource: ResourceAuditRow; reason: string }[];
     total: number;
   } | null>(null);
+  const [showRunSummary, setShowRunSummary] = useState(false);
 
   const selectedResource = useMemo(() => {
     if (!selectedResourceId || !audit) return null;
@@ -272,34 +273,43 @@ export function KnowledgeCoverageAudit() {
       />
 
       {/* Under-Extracted Recovery */}
-      {audit.resourcesUnderExtracted > 0 && (
-        <Card className="border-amber-500/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-amber-500" />
-              Under-Extracted Resources ({audit.resourcesUnderExtracted})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-[11px] text-muted-foreground">
-              These resources have rich content but low KI density. Deep re-extraction could yield significantly more knowledge.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs gap-1.5"
-              onClick={() => {
-                const underExtracted = filterByPanel(audit.resources, 'under_extracted');
-                const preview = deepReExtract.checkEligibility(underExtracted);
-                setEligibilityPreview({ ...preview, total: underExtracted.length });
-              }}
-            >
-              <Zap className="h-3 w-3" />
-              Flag {audit.resourcesUnderExtracted} for Deep Re-Extraction
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+      {audit.resourcesUnderExtracted > 0 && (() => {
+        const underExtracted = filterByPanel(audit.resources, 'under_extracted');
+        const preview = deepReExtract.checkEligibility(underExtracted);
+        const actionableCount = preview.eligible.length;
+        return (
+          <Card className="border-amber-500/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-amber-500" />
+                Under-Extracted Resources ({audit.resourcesUnderExtracted})
+                {actionableCount < audit.resourcesUnderExtracted && (
+                  <Badge variant="secondary" className="text-[9px]">{actionableCount} actionable</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-[11px] text-muted-foreground">
+                These resources have rich content but low KI density. Deep re-extraction could yield significantly more knowledge.
+                {actionableCount < audit.resourcesUnderExtracted && (
+                  <span className="text-muted-foreground/70"> ({audit.resourcesUnderExtracted - actionableCount} are ineligible due to content length, density, or exclusion rules.)</span>
+                )}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs gap-1.5"
+                onClick={() => {
+                  setEligibilityPreview({ ...preview, total: underExtracted.length });
+                }}
+              >
+                <Zap className="h-3 w-3" />
+                Review {audit.resourcesUnderExtracted} Re-Extraction Candidates
+              </Button>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Count Integrity Check */}
       <Card className={cn(!countIntegrityPass && 'border-destructive/30')}>
