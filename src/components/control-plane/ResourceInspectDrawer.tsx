@@ -116,7 +116,7 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
             </TabsTrigger>
           </TabsList>
 
-          <div className="px-6 pb-6">
+          <div className="px-4 sm:px-6 pb-6">
             <TabsContent value="overview" className="mt-3">
               <InspectOverviewTab
                 canonical={resource}
