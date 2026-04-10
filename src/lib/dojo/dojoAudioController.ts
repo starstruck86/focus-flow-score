@@ -88,10 +88,18 @@ function getStitchingContext(
   return { previousText: prev, nextText: next };
 }
 
+// ── Helpers ────────────────────────────────────────────────────────
+
+/** Preserve playback checkpoint when core engine returns ConversationState. */
+function liftPlayback(base: ReturnType<typeof getNextMessage>['nextState'], pb: PlaybackState): PlaybackState {
+  return { ...base, playback: (base as Partial<PlaybackState>).playback ?? pb.playback };
+}
+
 // ── Core: advance to next chunk ────────────────────────────────────
 
 function advanceToNext(ctrl: AudioControllerState): ControllerResult {
-  const { chunk, nextState } = getNextMessage(ctrl.dojo);
+  const { chunk, nextState: raw } = getNextMessage(ctrl.dojo);
+  const nextState = liftPlayback(raw, ctrl.dojo);
 
   if (!chunk) {
     return {
