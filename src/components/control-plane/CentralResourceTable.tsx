@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import {
   ChevronDown, ChevronRight, CheckCircle2, XCircle,
   Zap, FileText, Play, Wrench, Eye, MoreHorizontal,
-  MinusCircle, AlertTriangle,
+  MinusCircle, AlertTriangle, Search,
 } from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -37,7 +37,7 @@ interface Props {
   customFilterIds?: Set<string> | null;
   customFilterLabel?: string | null;
   onAction: (resourceId: string, action: string) => void;
-  onInspect: (resource: CanonicalResourceStatus, state: ControlPlaneState) => void;
+  onInspect: (resource: CanonicalResourceStatus, state: ControlPlaneState, tab?: 'overview' | 'content' | 'knowledge') => void;
   actionLoading?: boolean;
   outcomeRefreshKey?: number;
 }
@@ -372,6 +372,13 @@ export function CentralResourceTable({
                                 >
                                   <Eye className="h-3 w-3" />
                                   Inspect
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => onInspect(r, state, 'knowledge')}
+                                  className="text-xs gap-2"
+                                >
+                                  <Search className="h-3 w-3" />
+                                  Spot Check
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>

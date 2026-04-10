@@ -48,6 +48,7 @@ export function KnowledgeControlPlane() {
   // Inspect drawer state
   const [inspectResource, setInspectResource] = useState<CanonicalResourceStatus | null>(null);
   const [inspectState, setInspectState] = useState<ControlPlaneState | null>(null);
+  const [inspectInitialTab, setInspectInitialTab] = useState<'overview' | 'content' | 'knowledge' | undefined>(undefined);
 
   // Bulk result dialog
   const [bulkResultOpen, setBulkResultOpen] = useState(false);
@@ -104,13 +105,20 @@ export function KnowledgeControlPlane() {
   const filteredCount = filteredResources.length;
 
   // ── Open resource in inspect drawer by ID ────────────────
-  const openResourceById = useCallback((resourceId: string) => {
+  const openResourceById = useCallback((resourceId: string, tab?: 'overview' | 'content' | 'knowledge') => {
     const r = resources.find(r => r.resource_id === resourceId);
     if (r) {
       setInspectResource(r);
       setInspectState(deriveControlPlaneState(r, processingIds));
+      setInspectInitialTab(tab);
     }
   }, [resources, processingIds]);
+
+  const handleInspect = useCallback((r: CanonicalResourceStatus, state: ControlPlaneState, tab?: 'overview' | 'content' | 'knowledge') => {
+    setInspectResource(r);
+    setInspectState(state);
+    setInspectInitialTab(tab);
+  }, []);
 
   // ── Row-level action handler ─────────────────────────────
   const handleAction = useCallback(async (resourceId: string, action: string) => {
@@ -179,10 +187,7 @@ export function KnowledgeControlPlane() {
     refetch();
   }, [resources, processingIds, operationalizeBatchWithOutcome, refetch]);
 
-  const handleInspect = useCallback((r: CanonicalResourceStatus, state: ControlPlaneState) => {
-    setInspectResource(r);
-    setInspectState(state);
-  }, []);
+  // handleInspect defined above (line ~117)
 
   const handleFilterChange = useCallback((f: ControlPlaneFilter) => {
     setFilter(f);
@@ -432,9 +437,10 @@ export function KnowledgeControlPlane() {
         resource={inspectResource}
         state={inspectState}
         open={!!inspectResource}
-        onClose={() => { setInspectResource(null); setInspectState(null); }}
+        onClose={() => { setInspectResource(null); setInspectState(null); setInspectInitialTab(undefined); }}
         onAction={handleAction}
         actionLoading={actionLoading}
+        initialTab={inspectInitialTab}
       />
 
       {/* Bulk Action Result Dialog */}
