@@ -188,11 +188,16 @@ export function deriveCanonicalStage(
   const dims = new Set(tags.filter(t => t.includes(':')).map(t => t.split(':')[0]));
   const hasRequiredTags = dims.has('skill') || dims.has('context');
 
+  // IMPORTANT INVARIANT: once KIs exist, the resource has moved past "needs extraction"
+  // even if legacy resource-level tags are missing or stale.
+  if (ki.total > 0) {
+    if (ki.active === 0) return 'knowledge_extracted';
+    if (ki.activeWithContexts === 0) return 'activated';
+    return 'operationalized';
+  }
+
   if (!hasRequiredTags) return 'content_ready';
-  if (ki.total === 0) return 'tagged';
-  if (ki.active === 0) return 'knowledge_extracted';
-  if (ki.activeWithContexts === 0) return 'activated';
-  return 'operationalized';
+  return 'tagged';
 }
 
 // ── Core: derive blocked reason ────────────────────────────

@@ -146,9 +146,9 @@ export function detectConflicts(resource: CanonicalResourceStatus): string[] {
     conflicts.push('Marked as content-backed but blocked for empty content');
   }
 
-  // Has KIs but canonical stage says uploaded
-  if (resource.knowledge_item_count > 0 && resource.canonical_stage === 'uploaded') {
-    conflicts.push('Has knowledge items but lifecycle stage is "uploaded"');
+  // Has KIs but lifecycle stage still says pre-extraction
+  if (resource.knowledge_item_count > 0 && ['uploaded', 'content_ready', 'tagged'].includes(resource.canonical_stage)) {
+    conflicts.push(`Has ${resource.knowledge_item_count} knowledge items but lifecycle stage is still "${resource.canonical_stage}"`);
   }
 
   // Enriched but no content
@@ -235,6 +235,15 @@ export function deriveControlPlaneState(
   // Processing takes precedence
   if (processingResourceIds?.has(resource.resource_id)) {
     return 'processing';
+  }
+
+  // HARD INVARIANT: any KI-backed resource must never surface as "Needs Extraction"
+  // even if a legacy stage field is stale or resource-level tags are missing.
+  if (resource.knowledge_item_count > 0) {
+    if (resource.blocked_reason !== 'none') {
+      return 'blocked';
+    }
+    return resource.active_ki_with_context_count > 0 ? 'activated' : 'extracted';
   }
 
   // Blocked: any blocked_reason other than 'none'
