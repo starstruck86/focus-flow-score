@@ -461,6 +461,7 @@ Deno.serve(async (req) => {
       console.log(`[youtube-captions] Updated resource ${resource_id} with ${transcript.length} chars`);
     }
 
+    const bestTrack = pickBestTrack(tracks);
     return new Response(
       JSON.stringify({
         success: true,
@@ -469,8 +470,8 @@ Deno.serve(async (req) => {
         author,
         duration_seconds: durationSecs,
         transcript_length: transcript.length,
-        transcript_language: bestTrack.lang,
-        caption_type: tracks.find(t => t.url === bestTrack.url)?.kind === "asr" ? "auto_generated" : "manual",
+        transcript_language: bestTrack?.lang || "en",
+        caption_type: bestTrack && tracks.find(t => t.url === bestTrack.url)?.kind === "asr" ? "auto_generated" : "manual",
         tracks_available: tracks.length,
         transcript: resource_id ? undefined : transcript.slice(0, 60_000),
         resource_updated: !!resource_id,
