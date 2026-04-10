@@ -256,7 +256,7 @@ export default function DojoSession() {
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate">{scenario.title}</p>
-          <p className="text-xs text-muted-foreground">{SKILL_LABELS[scenario.skillFocus]} · Drill</p>
+          <p className="text-xs text-muted-foreground">{SKILL_LABELS[scenario.skillFocus]} · {sessionType === 'roleplay' ? 'Roleplay' : sessionType === 'review' ? 'Review' : 'Drill'}</p>
         </div>
         <Badge variant="outline" className="text-xs shrink-0">5 min</Badge>
       </div>
