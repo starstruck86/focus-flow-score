@@ -18,8 +18,8 @@ import { BulkActionBar } from './BulkActionBar';
 import { NeedsAttentionQueue } from './NeedsAttentionQueue';
 import { RecentActionsPanel } from './RecentActionsPanel';
 import { BulkActionResultDialog } from './BulkActionResultDialog';
-import { TableFilterPresets } from './TableFilterPresets';
-import { buildActionPreview } from './ActionPreviewDialog';
+import { TableFilterPresets, getPinnedPreset, PRESET_EXPLANATIONS } from './TableFilterPresets';
+import { setPinnedPreset as savePinnedPreset } from './TableFilterPresets';
 import {
   type ControlPlaneFilter, type ControlPlaneState,
   computeControlPlaneSummary,
@@ -39,8 +39,12 @@ export function KnowledgeControlPlane() {
   } = useAutoOperationalize();
   const { runBatch, isRunning: extractRunning } = useExtractionPipeline();
   const [filter, setFilter] = useState<ControlPlaneFilter>('all');
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [customFilterIds, setCustomFilterIds] = useState<Set<string> | null>(null);
   const [customFilterLabel, setCustomFilterLabel] = useState<string | null>(null);
+
+  // Apply pinned preset on mount
+  const [didApplyPinned, setDidApplyPinned] = useState(false);
 
   // Inspect drawer state
   const [inspectResource, setInspectResource] = useState<CanonicalResourceStatus | null>(null);
