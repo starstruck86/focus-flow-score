@@ -209,7 +209,12 @@ serve(async (req) => {
     const focusPatternGuide = FOCUS_PATTERNS[skill] || FOCUS_PATTERNS.objection_handling;
 
     const retryBlock = retryCount > 0
-      ? `This is retry #${retryCount}.${focusReminder ? ` The rep was told to focus on: "${focusReminder}". You MUST explicitly assess whether they applied this pattern. If they did, name exactly how in your feedback. If they didn't, call it out directly: "You were asked to focus on ${focusReminder} — this attempt still doesn't do that." Do not ignore the focus reminder.` : ''} Compare to what a first attempt typically looks like. If they improved, name exactly what changed. If they didn't improve meaningfully, say so directly.`
+      ? `This is retry #${retryCount}.${focusReminder ? ` The rep was told to focus on: "${focusReminder}". You MUST explicitly assess whether they applied this pattern. If they did, name exactly how in your feedback. If they didn't, call it out directly: "You were asked to focus on ${focusReminder} — this attempt still doesn't do that." Do not ignore the focus reminder.
+
+FOCUS APPLICATION ASSESSMENT (REQUIRED for retries):
+You MUST return these two fields:
+- "focusApplied": "yes" if the rep clearly applied the assigned focus, "partial" if they attempted it but incompletely, "no" if they did not apply it at all.
+- "focusAppliedReason": One sentence explaining your assessment. Be specific: name what the rep did or didn't do relative to the focus pattern.` : ''} Compare to what a first attempt typically looks like. If they improved, name exactly what changed. If they didn't improve meaningfully, say so directly.`
       : '';
 
     const wcTone = WORLD_CLASS_TONE[skill] || 'calm, specific, commercially sharp, confident';
@@ -251,6 +256,7 @@ RESPONSE RULES:
 - "focusReason": One sentence starting with "Because" explaining why this is the highest-leverage fix. Must reference the rep's actual miss and explain why this matters more than other gaps. Good: "Because you answered the objection before isolating whether price was the real issue." Bad: "Because you should focus on this."
 - "practiceCue": One short behavioral instruction for the retry — concrete and immediately executable. The rep must be able to do this on the very next attempt with zero interpretation. Good: "Ask one sharp question before making your point." "Tie the pain to dollars before you mention the solution." "Do not accept the delay — test what is behind it." Bad: "Focus on qualification." "Improve urgency." "Show more control." If the cue requires interpretation, it is too vague — rewrite it.
 - "teachingNote": One sentence that generalizes the lesson BEYOND this scenario. Should sound like a world-class coach's final line — memorable, sharp, transferable. Good: "Vague next steps are where deals go to die." "Executives reward clarity and consequence, not context and setup." Different from whyItWorks — whyItWorks explains the elite answer, teachingNote turns the moment into a broader principle.
+- "deltaNote": One sentence explaining the BIGGEST DIFFERENCE between improvedVersion and worldClassResponse. improvedVersion = a better version of the rep's current approach. worldClassResponse = elite instinct from scratch. deltaNote makes the gap obvious in plain English. Good: "The improved answer responds better; the world-class answer slows the moment down and diagnoses the real issue before advancing." "The improved answer sounds tighter; the world-class answer ties the problem to business risk and regains control." Bad: "The world-class answer is better." (too vague)
 - "topMistake": Pick the single most impactful mistake from the list.
 
 COHERENCE RULE (CRITICAL):
@@ -258,6 +264,11 @@ feedback, topMistake, focusPattern, focusReason, and practiceCue MUST all point 
 - If topMistake is about urgency, focusPattern must be urgency-related, focusReason must explain why urgency was the biggest miss, and practiceCue must tell the rep exactly how to test urgency on the retry.
 - If they drift from each other, regenerate them until they align.
 - Test: could a reader predict focusPattern from topMistake? Could they predict practiceCue from focusPattern? If not, they are not aligned.
+
+COHERENCE VALIDATION CHECKS (apply these in order):
+1. focusPattern MUST be a plausible remedy for topMistake. If topMistake is "pitched_too_early", focusPattern cannot be "stay_concise_under_pressure" — it must address premature pitching.
+2. practiceCue MUST operationalize focusPattern in one immediately executable behavior. If focusPattern is "isolate_before_answering", practiceCue must tell the rep HOW to isolate (e.g., "Ask 'What's driving that concern?' before you respond"). A cue that doesn't clearly execute the pattern fails this check.
+3. If topMistake, focusPattern, focusReason, and practiceCue do not clearly align around ONE lesson, regenerate them until they do. Do not ship misaligned outputs.
 
 TONE RULES:
 - Direct, constructive, confidence-building, high-standard. NOT soft, flattering, generic, or overly intense.
@@ -293,8 +304,14 @@ Respond with ONLY valid JSON:
   "focusPattern": "single_focus_pattern",
   "focusReason": "Because the biggest gap here was X.",
   "practiceCue": "Short behavioral instruction.",
-  "teachingNote": "General coaching principle from this rep."
-}`;
+  "teachingNote": "General coaching principle from this rep.",
+  "deltaNote": "One sentence on the biggest difference between improvedVersion and worldClassResponse."
+}` + (retryCount > 0 ? `
+
+RETRY-ONLY FIELDS (you MUST include these since this is a retry):
+Add these to your JSON response:
+  "focusApplied": "yes" or "partial" or "no",
+  "focusAppliedReason": "One sentence."` : '');
 
     const userPrompt = `SCENARIO:
 Skill being tested: ${skill}
@@ -375,6 +392,11 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     if (typeof parsed.focusReason !== "string") parsed.focusReason = "";
     if (typeof parsed.practiceCue !== "string") parsed.practiceCue = "";
     if (typeof parsed.teachingNote !== "string") parsed.teachingNote = "";
+    if (typeof parsed.deltaNote !== "string") parsed.deltaNote = "";
+    if (retryCount > 0) {
+      if (typeof parsed.focusApplied !== "string" || !["yes", "partial", "no"].includes(parsed.focusApplied)) parsed.focusApplied = "no";
+      if (typeof parsed.focusAppliedReason !== "string") parsed.focusAppliedReason = "";
+    }
 
     // ── Targeted regeneration for consistency issues ─────────────
 
@@ -414,6 +436,28 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       if (!needsRegen.includes("practiceCue")) needsRegen.push("practiceCue");
     }
 
+    // Check: coherence — focusPattern should plausibly remedy topMistake
+    // and practiceCue should operationalize focusPattern
+    if (parsed.focusPattern && parsed.topMistake && parsed.practiceCue) {
+      const topMistakeWords = parsed.topMistake.replace(/_/g, ' ').toLowerCase();
+      const focusWords = parsed.focusPattern.replace(/_/g, ' ').toLowerCase();
+      const cueWords = parsed.practiceCue.toLowerCase();
+      // If focusPattern shares no semantic overlap with topMistake, flag for regen
+      const mistakeTokens = topMistakeWords.split(' ');
+      const focusTokens = focusWords.split(' ');
+      const hasOverlap = mistakeTokens.some((t: string) => focusTokens.includes(t)) || 
+        (topMistakeWords.includes('impact') && focusWords.includes('impact')) ||
+        (topMistakeWords.includes('control') && focusWords.includes('control')) ||
+        (topMistakeWords.includes('close') && focusWords.includes('step')) ||
+        (topMistakeWords.includes('generic') && (focusWords.includes('specific') || focusWords.includes('proof'))) ||
+        (topMistakeWords.includes('long') && focusWords.includes('concise'));
+      if (!hasOverlap) {
+        if (!needsRegen.includes("focusPattern")) needsRegen.push("focusPattern");
+        if (!needsRegen.includes("practiceCue")) needsRegen.push("practiceCue");
+        if (!needsRegen.includes("focusReason")) needsRegen.push("focusReason");
+      }
+    }
+
     if (needsRegen.length > 0) {
       const triggerReasons: Record<string, string> = {};
       const regenParts: string[] = [];
@@ -440,6 +484,11 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       if (needsRegen.includes("practiceCue")) {
         triggerReasons.practiceCue = "too_vague";
         regenParts.push(`REGENERATE "practiceCue": The current practiceCue is "${parsed.practiceCue}". It is too vague or abstract. Rewrite as one concrete behavioral instruction the rep can immediately execute on the next attempt. Good: "Ask one sharp question before making any point." Bad: "Focus on qualification." Must pass the test: can the rep do this right now without interpretation?`);
+      }
+
+      if (needsRegen.includes("focusPattern")) {
+        triggerReasons.focusPattern = "misaligned_with_topMistake";
+        regenParts.push(`REGENERATE "focusPattern", "focusReason", and "practiceCue": The topMistake is "${parsed.topMistake}" but focusPattern is "${parsed.focusPattern}" — these don't align. Pick a focusPattern from the FOCUS PATTERNS list that is a PLAUSIBLE REMEDY for "${parsed.topMistake}". Then write focusReason starting with "Because" that explains why this focus addresses the mistake. Then write practiceCue as one concrete behavioral instruction that operationalizes the new focusPattern. All three must form ONE coherent teaching thread.`);
       }
 
       const regenPrompt = `You previously scored a sales rep's response. Some outputs need regeneration for consistency. Keep the same score (${parsed.score}) and topMistake (${parsed.topMistake}).\n\n${regenParts.join("\n\n")}\n\nRespond with ONLY valid JSON containing the regenerated fields.`;
