@@ -281,7 +281,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const tryRecover = useCallback((sessionId: string): boolean => {
     const loaded = loadSnapshot(sessionId);
     if (!loaded.ok) {
-      if (loaded.reason === 'version_mismatch') {
+      if ('reason' in loaded && loaded.reason === 'version_mismatch') {
         metricsRef.current = logAmbiguousResume(metricsRef.current);
       }
       return false;
