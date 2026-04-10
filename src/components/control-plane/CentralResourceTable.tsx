@@ -37,7 +37,7 @@ interface Props {
   customFilterIds?: Set<string> | null;
   customFilterLabel?: string | null;
   onAction: (resourceId: string, action: string) => void;
-  onInspect: (resource: CanonicalResourceStatus, state: ControlPlaneState) => void;
+  onInspect: (resource: CanonicalResourceStatus, state: ControlPlaneState, tab?: 'overview' | 'content' | 'knowledge') => void;
   actionLoading?: boolean;
   outcomeRefreshKey?: number;
 }
