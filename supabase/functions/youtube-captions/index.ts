@@ -53,13 +53,20 @@ async function fetchPlayerResponse(videoId: string): Promise<any> {
     throw new Error("Could not find ytInitialPlayerResponse in watch page");
   }
 
-  // Find the JSON object by tracking brace depth
+  // Find the JSON object by tracking brace depth (string-aware to handle braces inside strings)
   const jsonStart = startIdx + startMarker.length;
   let depth = 0;
   let jsonEnd = jsonStart;
-  for (let i = jsonStart; i < html.length && i < jsonStart + 500_000; i++) {
-    if (html[i] === "{") depth++;
-    else if (html[i] === "}") {
+  let inString = false;
+  let escapeNext = false;
+  for (let i = jsonStart; i < html.length && i < jsonStart + 1_000_000; i++) {
+    const c = html[i];
+    if (escapeNext) { escapeNext = false; continue; }
+    if (c === "\\" && inString) { escapeNext = true; continue; }
+    if (c === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (c === "{") depth++;
+    else if (c === "}") {
       depth--;
       if (depth === 0) {
         jsonEnd = i + 1;
