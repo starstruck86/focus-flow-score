@@ -25,6 +25,7 @@ import { isPlaceholderContent } from '@/lib/canonicalLifecycle';
 export type BlockerType =
   | 'missing_content'
   | 'placeholder_content'
+  | 'auth_capture_incomplete'
   | 'needs_enrichment'
   | 'needs_extraction'
   | 'needs_activation'
@@ -58,6 +59,7 @@ export interface Blocker {
 export const BLOCKER_META: Record<BlockerType, { severity: BlockerSeverity; fixability: BlockerFixability; ownership: BlockerOwnership; label: string }> = {
   missing_content:          { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'pipeline',       label: 'Missing Content' },
   placeholder_content:      { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'pipeline',       label: 'Parse Incomplete' },
+  auth_capture_incomplete:  { severity: 'critical', fixability: 'manual_only',       ownership: 'manual_review',  label: 'Auth Re-import Needed' },
   needs_enrichment:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'pipeline',       label: 'Needs Enrichment' },
   needs_extraction:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'extraction',     label: 'Needs Extraction' },
   needs_activation:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'activation',     label: 'Needs Activation' },
