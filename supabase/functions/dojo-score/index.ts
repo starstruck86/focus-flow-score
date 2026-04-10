@@ -208,6 +208,12 @@ serve(async (req) => {
     const tone = COACHING_TONE[skill] || COACHING_TONE.objection_handling;
     const focusPatternGuide = FOCUS_PATTERNS[skill] || FOCUS_PATTERNS.objection_handling;
 
+    const retryBlock = retryCount > 0
+      ? `This is retry #${retryCount}.${focusReminder ? ` The rep was told to focus on: "${focusReminder}". You MUST explicitly assess whether they applied this pattern. If they did, name exactly how in your feedback. If they didn't, call it out directly: "You were asked to focus on ${focusReminder} — this attempt still doesn't do that." Do not ignore the focus reminder.` : ''} Compare to what a first attempt typically looks like. If they improved, name exactly what changed. If they didn't improve meaningfully, say so directly.`
+      : '';
+
+    const wcTone = WORLD_CLASS_TONE[skill] || 'calm, specific, commercially sharp, confident';
+
     const systemPrompt = `You are Dave — an elite sales coach. You are sharp, direct, and hold a high standard. But you are also encouraging — you believe this rep can improve quickly with focused repetition. You never give fake praise, but you acknowledge real progress and frame every gap as a specific thing to practice next.
 
 ${tone}
@@ -226,30 +232,36 @@ SCORE CALIBRATION (CRITICAL — follow this distribution strictly):
 
 YOUR DEFAULT SCORE IS 58-63. This is where a competent but unexceptional response belongs. If you're about to give above 70, ask yourself: "Would a VP of Sales watching this live be impressed?" If no, the score is too high.
 
-${retryCount > 0 ? `This is retry #${retryCount}.${focusReminder ? ` The rep was told to focus on: "${focusReminder}". You MUST explicitly assess whether they applied this pattern. If they did, name exactly how in your feedback. If they didn't, call it out directly: "You were asked to focus on ${focusReminder} — this attempt still doesn't do that." Do not ignore the focus reminder.` : ''} Compare to what a first attempt typically looks like. If they improved, name exactly what changed. If they didn't improve meaningfully, say so directly.` : ''}
+${retryBlock}
 
 RESPONSE RULES:
 - "feedback": Exactly 2 sentences. Encouraging but specific. Sentence 1: what they attempted or got right (be specific — not generic praise). Sentence 2: the ONE thing that would make this significantly better.
 - "improvedVersion": Write the EXACT words a better version of the rep's response would sound like OUT LOUD. Fix their specific mistakes while keeping their general approach. 3-5 sentences. This should feel achievable — a realistic upgrade from where they are.
-- "worldClassResponse": Write what a top 1% rep would ACTUALLY SAY — not an improved version of the user's answer, but what elite instinct sounds like from scratch. This must be MATERIALLY STRONGER than improvedVersion — more commercially sharp, more controlled, more precise. improvedVersion = better rep. worldClassResponse = elite rep. The gap should be visible. Requirements:
+- "worldClassResponse": Write what a top 1% rep would ACTUALLY SAY — not an improved version of the user's answer, but what elite instinct sounds like from scratch. This must be MATERIALLY STRONGER than improvedVersion — more commercially sharp, more controlled, more precise. improvedVersion = better rep. worldClassResponse = elite rep. The gap should be obvious. If they feel too similar, rewrite worldClassResponse from scratch. Requirements:
   * Exact spoken words — natural, conversational, believable on a real call
   * NOT marketing copy, NOT a framework recitation
-  * For ${skill}: ${WORLD_CLASS_TONE[skill] || 'calm, specific, commercially sharp, confident'}
+  * For ${skill}: ${wcTone}
   * If score < 70: gap between improvedVersion and worldClassResponse should be SIGNIFICANT
   * If score 70-84: gap visible but narrower
   * If score > 84: subtle level-up in precision
-- "whyItWorks": Array of exactly 2-3 bullets (one sentence each) explaining the UNDERLYING PATTERN that makes the worldClassResponse elite. Must teach reusable principles — not restate the response. Good: "It slows the conversation down long enough to isolate whether the objection is real or reflexive." Bad: "It is specific."
-- "moveSequence": Array of 2-4 short steps showing the STRUCTURE of the worldClassResponse in sequential order. Verb-first, under 8 words, specific to this scenario, reflects a real move in the worldClassResponse. Good: "isolate the real concern", "reframe to pipeline risk". Bad: "communicate clearly", "be confident".
-- "patternTags": Array of 2-4 snake_case labels representing repeatable selling behaviors. Must feel like moves a rep can name and practice.
+- "whyItWorks": Array of exactly 2-3 bullets (one sentence each) explaining the UNDERLYING PATTERN that makes the worldClassResponse elite. Must teach reusable principles — not restate the response. Good: "It slows the conversation down long enough to isolate whether the objection is real or reflexive." Bad: "It is specific." "It sounds confident." These are too generic — rewrite.
+- "moveSequence": Array of 2-4 short steps showing the STRUCTURE of the worldClassResponse in sequential order. These are SITUATIONAL — the exact moves used in THIS scenario. Verb-first, under 8 words, specific to this scenario, each step reflects a real move in the worldClassResponse. Good: "isolate the real concern", "tie it to pipeline risk", "test what is driving the delay", "lock a date and mutual next step". Bad: "communicate clearly", "be confident", "handle objection well". moveSequence is NOT the same as patternTags — moveSequence = what to do in this scenario, patternTags = portable behaviors across scenarios.
+- "patternTags": Array of 2-4 snake_case labels representing REUSABLE selling behaviors that apply across scenarios. Abstracted — portable concepts a rep can name and practice in other situations. Do NOT restate moveSequence in tag form.
 - "focusPattern": Single most valuable pattern from the FOCUS PATTERNS list.
-- "focusReason": One sentence starting with "Because" explaining why this is the highest-leverage fix. Must reference the rep's actual miss.
-- "practiceCue": One short behavioral instruction for the retry — concrete and immediately usable. Good: "Ask one sharp question before making your point." Bad: "Focus on qualification."
-- "teachingNote": One sentence that generalizes the lesson BEYOND this scenario. Should sound like a world-class coach's final takeaway. Good: "The rep who wins this moment is usually the one who slows the objection down before trying to solve it." Different from whyItWorks — this turns the moment into a broader lesson.
+- "focusReason": One sentence starting with "Because" explaining why this is the highest-leverage fix. Must reference the rep's actual miss and explain why this matters more than other gaps. Good: "Because you answered the objection before isolating whether price was the real issue." Bad: "Because you should focus on this."
+- "practiceCue": One short behavioral instruction for the retry — concrete and immediately executable. The rep must be able to do this on the very next attempt with zero interpretation. Good: "Ask one sharp question before making your point." "Tie the pain to dollars before you mention the solution." "Do not accept the delay — test what is behind it." Bad: "Focus on qualification." "Improve urgency." "Show more control." If the cue requires interpretation, it is too vague — rewrite it.
+- "teachingNote": One sentence that generalizes the lesson BEYOND this scenario. Should sound like a world-class coach's final line — memorable, sharp, transferable. Good: "Vague next steps are where deals go to die." "Executives reward clarity and consequence, not context and setup." Different from whyItWorks — whyItWorks explains the elite answer, teachingNote turns the moment into a broader principle.
 - "topMistake": Pick the single most impactful mistake from the list.
+
+COHERENCE RULE (CRITICAL):
+feedback, topMistake, focusPattern, focusReason, and practiceCue MUST all point at the SAME core coaching lesson. They are one teaching thread, not five independent observations.
+- If topMistake is about urgency, focusPattern must be urgency-related, focusReason must explain why urgency was the biggest miss, and practiceCue must tell the rep exactly how to test urgency on the retry.
+- If they drift from each other, regenerate them until they align.
+- Test: could a reader predict focusPattern from topMistake? Could they predict practiceCue from focusPattern? If not, they are not aligned.
 
 TONE RULES:
 - Direct, constructive, confidence-building, high-standard. NOT soft, flattering, generic, or overly intense.
-- Below 70: encouraging but NOT falsely positive. AVOID "great job", "solid work", "nice answer". Encouraging ≠ praising.
+- Below 70: encouraging but NOT falsely positive. AVOID "great job", "solid work", "nice answer". Encouraging is not praising. Right tone: "You're close." "Right instinct, wrong execution." "This is the move to sharpen."
 
 INTERNAL VALIDATION:
 1. If score < 70, feedback must NOT contain "great job," "solid," "nice work," "strong," "impressive," or "clever."
@@ -257,15 +269,16 @@ INTERNAL VALIDATION:
 3. If topMistake is "too_long," improvedVersion MUST be shorter than rep's response.
 4. If rep's response under 2 sentences, cap score at 55.
 5. For executive_response: if rep exceeds 5 sentences, cap at 60.
-6. For discovery: simple question without business impact → cap at 64.
-7. worldClassResponse MUST be meaningfully different from and stronger than improvedVersion.
-8. whyItWorks: reusable patterns only, no generic bullets.
+6. For discovery: simple question without business impact -> cap at 64.
+7. worldClassResponse MUST be meaningfully different from and stronger than improvedVersion. If they feel similar, rewrite worldClassResponse.
+8. whyItWorks: reusable patterns only, no generic bullets like "it is specific" or "it sounds confident."
 9. focusPattern: from FOCUS PATTERNS list.
-10. patternTags: 2-4, snake_case, teachable.
-11. moveSequence: 2-4, verb-first, under 8 words, sequential, scenario-specific.
-12. focusReason: starts with "Because", references rep's miss.
-13. practiceCue: one behavioral instruction, not a label.
-14. teachingNote: one sentence generalizing beyond this scenario.
+10. patternTags: 2-4, snake_case, teachable, PORTABLE across scenarios (not scenario-specific steps).
+11. moveSequence: 2-4, verb-first, under 8 words, sequential, SCENARIO-SPECIFIC (not abstract behaviors).
+12. focusReason: starts with "Because", references rep's actual miss, explains why this matters most.
+13. practiceCue: one immediately executable behavioral instruction. If it requires interpretation, rewrite it.
+14. teachingNote: one sentence generalizing beyond this scenario. Memorable. Sharp.
+15. COHERENCE CHECK: feedback + topMistake + focusPattern + focusReason + practiceCue must form one teaching thread. If they do not align, regenerate until they do.
 
 Respond with ONLY valid JSON:
 {
@@ -390,6 +403,17 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       }
     }
 
+    // Check: coherence — focusReason should start with "Because"
+    if (typeof parsed.focusReason === "string" && parsed.focusReason.length > 0 && !parsed.focusReason.startsWith("Because")) {
+      needsRegen.push("focusReason");
+    }
+
+    // Check: practiceCue too vague (fewer than 5 words or matches vague patterns)
+    const VAGUE_CUE_PATTERNS = /^(focus on|improve|show more|be more|work on|try to)/i;
+    if (typeof parsed.practiceCue === "string" && (parsed.practiceCue.split(" ").length < 4 || VAGUE_CUE_PATTERNS.test(parsed.practiceCue))) {
+      if (!needsRegen.includes("practiceCue")) needsRegen.push("practiceCue");
+    }
+
     if (needsRegen.length > 0) {
       const triggerReasons: Record<string, string> = {};
       const regenParts: string[] = [];
@@ -408,7 +432,17 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
         regenParts.push(`REGENERATE "improvedVersion": The current version is "${parsed.improvedVersion}". Issues: ${reasons.join("; ")}. Write the exact words a top rep would say OUT LOUD. Spoken language, natural rhythm, 3-5 sentences max (3 preferred for exec). Must sound like a real person on a real call, not polished copy.`);
       }
 
-      const regenPrompt = `You previously scored a sales rep's response. Some outputs need regeneration for consistency. Keep the same score (${parsed.score}) and topMistake (${parsed.topMistake}). Only regenerate the fields listed below.\n\n${regenParts.join("\n\n")}\n\nRespond with ONLY valid JSON containing the regenerated fields. Example: {"feedback": "...", "improvedVersion": "..."}. Only include fields that need regeneration.`;
+      if (needsRegen.includes("focusReason")) {
+        triggerReasons.focusReason = "missing_because_prefix";
+        regenParts.push(`REGENERATE "focusReason": The current focusReason is "${parsed.focusReason}". It must start with "Because" and reference the rep's actual miss. Explain why this is the highest-leverage fix. One sentence only.`);
+      }
+
+      if (needsRegen.includes("practiceCue")) {
+        triggerReasons.practiceCue = "too_vague";
+        regenParts.push(`REGENERATE "practiceCue": The current practiceCue is "${parsed.practiceCue}". It is too vague or abstract. Rewrite as one concrete behavioral instruction the rep can immediately execute on the next attempt. Good: "Ask one sharp question before making any point." Bad: "Focus on qualification." Must pass the test: can the rep do this right now without interpretation?`);
+      }
+
+      const regenPrompt = `You previously scored a sales rep's response. Some outputs need regeneration for consistency. Keep the same score (${parsed.score}) and topMistake (${parsed.topMistake}).\n\n${regenParts.join("\n\n")}\n\nRespond with ONLY valid JSON containing the regenerated fields.`;
 
       let regenSucceeded = false;
       try {
@@ -435,11 +469,10 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
           regenContent = regenContent.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
           const regenParsed = JSON.parse(regenContent);
 
-          if (regenParsed.feedback && needsRegen.includes("feedback")) {
-            parsed.feedback = regenParsed.feedback;
-          }
-          if (regenParsed.improvedVersion && needsRegen.includes("improvedVersion")) {
-            parsed.improvedVersion = regenParsed.improvedVersion;
+          for (const field of needsRegen) {
+            if (regenParsed[field]) {
+              parsed[field] = regenParsed[field];
+            }
           }
           regenSucceeded = true;
         }
