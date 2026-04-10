@@ -942,6 +942,7 @@ export function useDeepReExtraction() {
     const queued = queue.filter(i => i.status === 'queued' || i.status === 'partial_complete_resumable');
     if (queued.length === 0) return;
 
+    console.log(`[BATCH RUN] Starting deep re-extraction for ${queued.length} resources`);
     setIsRunning(true);
     let succeeded = 0;
     let totalDelta = 0;
@@ -955,34 +956,57 @@ export function useDeepReExtraction() {
     const preKisArr: number[] = [];
     const postKisArr: number[] = [];
 
-    for (const item of queued) {
-      try {
-        const result = await runSingleExtraction(item) as any;
+    // Process in concurrent waves of CONCURRENCY_LIMIT
+    const CONCURRENCY_LIMIT = 3;
+    let processed = 0;
 
-        if (result.finalStatus === 'completed' || result.finalStatus === 'partial' || result.finalStatus === 'partial_complete_resumable') {
-          succeeded++;
-          totalDelta += result.kiDelta;
-          totalNetNew += result.netNewUnique;
-          totalNewActive += Math.max(0, result.activeDelta);
-          totalNewCtx += Math.max(0, result.contextDelta);
-          const isUpgrade = (item.pre_depth_bucket === 'none' || item.pre_depth_bucket === 'shallow') &&
-            result.postKisPer1k >= 0.75;
-          if (isUpgrade) depthUpgrades++;
-          if (result.liftStatus === 'no_lift') {
-            noLiftCount++;
-            if (result.noLiftReason) noLiftReasons.push(result.noLiftReason);
-            if (result.dominantBottleneck && result.dominantBottleneck !== 'none') bottlenecks.push(result.dominantBottleneck);
+    for (let waveStart = 0; waveStart < queued.length; waveStart += CONCURRENCY_LIMIT) {
+      const wave = queued.slice(waveStart, waveStart + CONCURRENCY_LIMIT);
+      console.log(`[BATCH RUN] Wave ${Math.floor(waveStart / CONCURRENCY_LIMIT) + 1}: processing ${wave.length} resources (${processed}/${queued.length} done)`);
+
+      const waveResults = await Promise.allSettled(
+        wave.map(async (item) => {
+          try {
+            const result = await runSingleExtraction(item) as any;
+            return { item, result, error: null };
+          } catch (err: any) {
+            setQueue(prev => prev.map(i =>
+              i.resource_id === item.resource_id ? { ...i, status: 'failed' as const, error: err.message } : i
+            ));
+            return { item, result: null, error: err.message };
           }
+        })
+      );
+
+      for (const settled of waveResults) {
+        const { item, result, error } = settled.status === 'fulfilled' ? settled.value : { item: wave[0], result: null, error: 'Promise rejected' };
+        processed++;
+
+        if (result) {
+          if (result.finalStatus === 'completed' || result.finalStatus === 'partial' || result.finalStatus === 'partial_complete_resumable') {
+            succeeded++;
+            totalDelta += result.kiDelta;
+            totalNetNew += result.netNewUnique;
+            totalNewActive += Math.max(0, result.activeDelta);
+            totalNewCtx += Math.max(0, result.contextDelta);
+            const isUpgrade = (item.pre_depth_bucket === 'none' || item.pre_depth_bucket === 'shallow') &&
+              result.postKisPer1k >= 0.75;
+            if (isUpgrade) depthUpgrades++;
+            if (result.liftStatus === 'no_lift') {
+              noLiftCount++;
+              if (result.noLiftReason) noLiftReasons.push(result.noLiftReason);
+              if (result.dominantBottleneck && result.dominantBottleneck !== 'none') bottlenecks.push(result.dominantBottleneck);
+            }
+          }
+          preKisArr.push(item.pre_kis_per_1k);
+          postKisArr.push(result.postKisPer1k);
+        } else {
+          preKisArr.push(item.pre_kis_per_1k);
+          postKisArr.push(item.pre_kis_per_1k);
         }
-        preKisArr.push(item.pre_kis_per_1k);
-        postKisArr.push(result.postKisPer1k);
-      } catch (err: any) {
-        setQueue(prev => prev.map(i =>
-          i.resource_id === item.resource_id ? { ...i, status: 'failed' as const, error: err.message } : i
-        ));
-        preKisArr.push(item.pre_kis_per_1k);
-        postKisArr.push(item.pre_kis_per_1k);
       }
+
+      console.log(`[BATCH RUN] Wave complete: ${processed}/${queued.length} total, ${succeeded} succeeded`);
     }
 
     const avgBefore = preKisArr.length > 0 ? preKisArr.reduce((a, b) => a + b, 0) / preKisArr.length : 0;
