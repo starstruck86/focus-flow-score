@@ -402,27 +402,36 @@ async function processItem(
     });
 
     try {
-      const kiResp = await fetch(`${supabaseUrl}/functions/v1/batch-actionize`, {
+      // Call extract-tactics directly (not batch-actionize) for faster, more reliable extraction
+      const kiResp = await fetch(`${supabaseUrl}/functions/v1/extract-tactics`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${serviceRoleKey}`,
           "x-batch-key": serviceRoleKey,
         },
-        body: JSON.stringify({ batchSize: 1, resource_id: resourceId, user_id: queueItem.user_id }),
+        body: JSON.stringify({
+          resourceId,
+          userId: queueItem.user_id,
+          persist: true,
+          resourceType: "transcript",
+          title: queueItem.episode_title || queueItem.source_lesson_title || "Podcast Episode",
+          content: structuredContent.slice(0, 60000),
+        }),
       });
 
       if (kiResp.ok) {
         const kiResult = await kiResp.json();
-        kiCount = kiResult?.knowledge_created || 0;
+        // extract-tactics returns items array + saved count
+        kiCount = kiResult?.saved || kiResult?.items?.length || 0;
         console.log(`[${queueItem.id}] Generated ${kiCount} KIs for resource ${resourceId}`);
       } else {
         const errText = await kiResp.text();
-        console.warn(`[${queueItem.id}] KI generation failed (${kiResp.status}): ${errText}`);
+        console.warn(`[${queueItem.id}] KI extraction failed (${kiResp.status}): ${errText}`);
         // Non-fatal: item still completes, KIs can be generated later
       }
     } catch (err) {
-      console.warn(`[${queueItem.id}] KI generation error: ${err.message}`);
+      console.warn(`[${queueItem.id}] KI extraction error: ${err.message}`);
     }
   }
 
