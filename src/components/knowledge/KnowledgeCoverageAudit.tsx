@@ -588,6 +588,52 @@ export function KnowledgeCoverageAudit() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Post-Run Summary Dialog */}
+      <Dialog open={showRunSummary} onOpenChange={setShowRunSummary}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              Re-Extraction Run Summary
+            </DialogTitle>
+          </DialogHeader>
+          {deepReExtract.liftSummary && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <SummaryStat label="Selected" value={deepReExtract.liftSummary.resourcesProcessed} />
+                <SummaryStat label="Succeeded" value={deepReExtract.liftSummary.resourcesSucceeded} color="text-emerald-600" />
+                <SummaryStat label="Failed" value={deepReExtract.liftSummary.resourcesProcessed - deepReExtract.liftSummary.resourcesSucceeded} color={deepReExtract.liftSummary.resourcesProcessed - deepReExtract.liftSummary.resourcesSucceeded > 0 ? 'text-destructive' : undefined} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <SummaryStat label="Net New KIs" value={deepReExtract.liftSummary.totalNetNewUnique} color="text-emerald-600" />
+                <SummaryStat label="Depth Upgrades" value={deepReExtract.liftSummary.depthUpgrades} color="text-primary" />
+                <SummaryStat label="No Lift" value={deepReExtract.liftSummary.noLiftCount} color={deepReExtract.liftSummary.noLiftCount > 0 ? 'text-amber-500' : undefined} />
+                <SummaryStat label="Success Rate" value={`${deepReExtract.liftSummary.successRate}%`} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs border border-border rounded p-2">
+                <div><span className="text-muted-foreground">Avg KIs/1k Before:</span> <span className="font-mono">{deepReExtract.liftSummary.avgKisPer1kBefore}</span></div>
+                <div><span className="text-muted-foreground">Avg KIs/1k After:</span> <span className="font-mono">{deepReExtract.liftSummary.avgKisPer1kAfter}</span></div>
+              </div>
+              {deepReExtract.liftSummary.topNoLiftReason && (
+                <div className="rounded border border-amber-500/20 bg-amber-500/5 p-2 text-xs">
+                  <span className="font-medium">Top skip reason:</span>{' '}
+                  <span className="text-muted-foreground">{deepReExtract.liftSummary.topNoLiftReason.replace(/_/g, ' ')}</span>
+                </div>
+              )}
+              {deepReExtract.liftSummary.topBottleneck && deepReExtract.liftSummary.topBottleneck !== 'none' && (
+                <div className="rounded border border-amber-500/20 bg-amber-500/5 p-2 text-xs">
+                  <span className="font-medium">Top bottleneck:</span>{' '}
+                  <span className="text-muted-foreground">{deepReExtract.liftSummary.topBottleneck.replace(/_/g, ' ')}</span>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowRunSummary(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
