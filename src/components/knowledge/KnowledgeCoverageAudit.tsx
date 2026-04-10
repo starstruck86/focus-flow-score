@@ -510,6 +510,74 @@ export function KnowledgeCoverageAudit() {
         isExcluded={selectedResourceId ? deepReExtract.excludedResourceIds.has(selectedResourceId) : false}
         lastQueueResult={selectedResourceId ? deepReExtract.queue.find(q => q.resource_id === selectedResourceId) : undefined}
       />
+
+      {/* Eligibility Preview Dialog */}
+      <Dialog open={!!eligibilityPreview} onOpenChange={(open) => { if (!open) setEligibilityPreview(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-amber-500" />
+              Deep Re-Extraction — Eligibility Check
+            </DialogTitle>
+            <DialogDescription className="space-y-3 pt-2">
+              {eligibilityPreview && (
+                <>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="border border-border rounded p-2">
+                      <div className="font-bold text-lg">{eligibilityPreview.total}</div>
+                      <div className="text-muted-foreground">Total Selected</div>
+                    </div>
+                    <div className="border border-border rounded p-2">
+                      <div className="font-bold text-lg text-emerald-600">{eligibilityPreview.eligible.length}</div>
+                      <div className="text-muted-foreground">Will Process</div>
+                    </div>
+                  </div>
+
+                  {eligibilityPreview.skipped.length > 0 && (
+                    <div className="rounded border border-amber-500/20 bg-amber-500/5 p-2 space-y-1">
+                      <div className="text-xs font-semibold flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3 text-amber-500" />
+                        {eligibilityPreview.skipped.length} resources will be skipped:
+                      </div>
+                      {(() => {
+                        const reasons = new Map<string, number>();
+                        for (const s of eligibilityPreview.skipped) {
+                          reasons.set(s.reason, (reasons.get(s.reason) || 0) + 1);
+                        }
+                        return [...reasons.entries()].sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
+                          <div key={reason} className="text-[11px] text-muted-foreground flex justify-between">
+                            <span>{reason}</span>
+                            <span className="font-mono">{count}</span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  )}
+
+                  {eligibilityPreview.eligible.length === 0 && (
+                    <p className="text-xs text-destructive">No resources are eligible for re-extraction.</p>
+                  )}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEligibilityPreview(null)}>Cancel</Button>
+            <Button
+              disabled={!eligibilityPreview || eligibilityPreview.eligible.length === 0}
+              onClick={() => {
+                if (eligibilityPreview) {
+                  handleFlagForReExtraction(eligibilityPreview.eligible, 'Under-extracted — auto-flagged');
+                  setEligibilityPreview(null);
+                }
+              }}
+            >
+              <Zap className="h-4 w-4 mr-1" />
+              Run on {eligibilityPreview?.eligible.length ?? 0} Resources
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
