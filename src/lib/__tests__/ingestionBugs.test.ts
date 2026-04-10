@@ -32,7 +32,7 @@ describe('Bug 1 — Transcript with content blocked as no_extraction', () => {
   });
 
   it('no_extraction label should be descriptive', () => {
-    expect(BLOCKED_LABELS['no_extraction']).toContain('extraction not triggered');
+    expect(BLOCKED_LABELS['no_extraction']).toContain('extraction not yet run');
   });
 
   it('should not be placeholder content', () => {
