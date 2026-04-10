@@ -110,10 +110,19 @@ export interface LifecycleSummary {
   operationalized: number;
   blocked: {
     empty_content: number;
+    placeholder_content: number;
     no_extraction: number;
     no_activation: number;
     missing_contexts: number;
     stale_blocker_state: number;
+  };
+  /** Failure-class observability counters */
+  failure_classes: {
+    transcript_extraction_not_triggered: number;
+    pdf_parse_incomplete: number;
+    auth_capture_incomplete: number;
+    enriched_no_extraction: number;
+    extraction_ready_not_queued: number;
   };
   resources: CanonicalResourceStatus[];
 }
@@ -279,10 +288,18 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
     operationalized: 0,
     blocked: {
       empty_content: 0,
+      placeholder_content: 0,
       no_extraction: 0,
       no_activation: 0,
       missing_contexts: 0,
       stale_blocker_state: 0,
+    },
+    failure_classes: {
+      transcript_extraction_not_triggered: 0,
+      pdf_parse_incomplete: 0,
+      auth_capture_incomplete: 0,
+      enriched_no_extraction: 0,
+      extraction_ready_not_queued: 0,
     },
     resources: [],
   };
