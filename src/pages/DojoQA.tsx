@@ -18,6 +18,21 @@ import { VALID_FOCUS_PATTERN_IDS, formatFocusPattern } from '@/lib/dojo/focusPat
 import { normalizeScoreResult, type DojoScoreResult } from '@/lib/dojo/types';
 import { QA_FIXTURES, validateQAResult, type QAResult } from '@/lib/dojo/qaHarness';
 
+interface AudioMetrics {
+  totalChunks: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+  timedOut: number;
+  retries: number;
+  degradations: number;
+  recoveries: number;
+  avgChunkDurationMs: number;
+  p95ChunkDurationMs: number;
+  sessionDurationMs: number;
+  successRate: number;
+}
+
 interface SessionRow {
   id: string;
   session_type: string;
@@ -27,6 +42,7 @@ interface SessionRow {
   created_at: string;
   scenario_title: string | null;
   retry_count: number;
+  audio_metrics: AudioMetrics | null;
 }
 
 interface TurnRow {
