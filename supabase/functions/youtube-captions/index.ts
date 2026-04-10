@@ -122,18 +122,28 @@ function pickBestTrack(tracks: Array<{ url: string; lang: string; name: string; 
 }
 
 // ── Caption text parsing ──────────────────────────────────
-async function fetchCaptionXml(captionUrl: string): Promise<string> {
-  const url = new URL(captionUrl);
-  url.searchParams.set("fmt", "3"); // srv3 format
-  const resp = await fetch(url.toString());
-  if (!resp.ok) throw new Error(`Caption fetch failed: ${resp.status}`);
-  return resp.text();
+
+function parseXmlCaptions(xml: string): string {
+  const textMatches = xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/gi);
+  const lines: string[] = [];
+  for (const match of textMatches) {
+    const decoded = match[1]
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&#(\d+);/g, (_m: string, code: string) => String.fromCharCode(parseInt(code, 10)))
+      .replace(/<[^>]+>/g, "")
+      .trim();
+    if (decoded) lines.push(decoded);
+  }
+  return lines.join(" ").replace(/\s+/g, " ").trim();
 }
 
-function parseSrv3ToText(srv3: string): string {
-  // Try JSON (srv3) first
+function parseSrv3Json(json: string): string {
   try {
-    const data = JSON.parse(srv3);
+    const data = JSON.parse(json);
     if (data.events && Array.isArray(data.events)) {
       const lines: string[] = [];
       for (const event of data.events) {
@@ -145,30 +155,64 @@ function parseSrv3ToText(srv3: string): string {
       return lines.join(" ").replace(/\s+/g, " ").trim();
     }
   } catch {
-    // Not JSON — try XML
+    // Not valid JSON
   }
-
-  // Fallback: XML timedtext format
-  const textMatches = srv3.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/gi);
-  const lines: string[] = [];
-  for (const match of textMatches) {
-    const decoded = match[1]
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/<[^>]+>/g, "")
-      .trim();
-    if (decoded) lines.push(decoded);
-  }
-  return lines.join(" ").replace(/\s+/g, " ").trim();
+  return "";
 }
 
-async function fetchCaptionRawXml(captionUrl: string): Promise<string> {
-  const resp = await fetch(captionUrl);
-  if (!resp.ok) throw new Error(`Caption raw XML fetch failed: ${resp.status}`);
-  return resp.text();
+async function fetchAndParseCaptions(captionUrl: string): Promise<string> {
+  // Strategy 1: Default XML format (most reliable)
+  try {
+    const resp = await fetch(captionUrl);
+    if (resp.ok) {
+      const text = await resp.text();
+      console.log(`[youtube-captions] Default format response: ${text.length} chars, starts with: ${text.slice(0, 100)}`);
+      const parsed = parseXmlCaptions(text);
+      if (parsed.length > 50) {
+        console.log(`[youtube-captions] XML parse success: ${parsed.length} chars`);
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.log(`[youtube-captions] Default format failed: ${(e as Error).message}`);
+  }
+
+  // Strategy 2: srv3 JSON format
+  try {
+    const url = new URL(captionUrl);
+    url.searchParams.set("fmt", "srv3");
+    const resp = await fetch(url.toString());
+    if (resp.ok) {
+      const text = await resp.text();
+      console.log(`[youtube-captions] srv3 response: ${text.length} chars, starts with: ${text.slice(0, 100)}`);
+      const parsed = parseSrv3Json(text);
+      if (parsed.length > 50) {
+        console.log(`[youtube-captions] srv3 JSON parse success: ${parsed.length} chars`);
+        return parsed;
+      }
+      // Maybe srv3 returned XML anyway
+      const xmlParsed = parseXmlCaptions(text);
+      if (xmlParsed.length > 50) return xmlParsed;
+    }
+  } catch (e) {
+    console.log(`[youtube-captions] srv3 format failed: ${(e as Error).message}`);
+  }
+
+  // Strategy 3: fmt=1 (legacy XML)
+  try {
+    const url = new URL(captionUrl);
+    url.searchParams.set("fmt", "1");
+    const resp = await fetch(url.toString());
+    if (resp.ok) {
+      const text = await resp.text();
+      const parsed = parseXmlCaptions(text);
+      if (parsed.length > 50) return parsed;
+    }
+  } catch (e) {
+    console.log(`[youtube-captions] fmt=1 failed: ${(e as Error).message}`);
+  }
+
+  return "";
 }
 
 // ── Metadata extraction ───────────────────────────────────
