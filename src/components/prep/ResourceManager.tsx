@@ -27,6 +27,7 @@ import { ResourceLibraryTable } from './ResourceLibraryTable';
 import { LibraryResourceDrawer } from './LibraryResourceDrawer';
 import { ResourceAudioInspector } from './ResourceAudioInspector';
 import { ManualTranscriptAssist } from './ManualTranscriptAssist';
+import { AuthReimportDialog } from './AuthReimportDialog';
 import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
