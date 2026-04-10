@@ -148,8 +148,8 @@ export function deriveResourceTruth(
   const isActivelyProcessing = ps.state === 'RUNNING' && !hasStuckJob;
 
   // ── Placeholder content detection (Rule B) ──────────────
-  const contentText = (rAny.content as string) ?? '';
-  const hasPlaceholder = isPlaceholderContent(contentText) && contentText.length > 0;
+  const rawContent = (rAny.content as string) ?? '';
+  const hasPlaceholder = isPlaceholderContent(rawContent) && rawContent.length > 0;
 
   // ── Content blockers ────────────────────────────────────
   const contentLength = rAny.content_length ?? 0;
