@@ -257,9 +257,18 @@ export default function DojoQA() {
       if (filterSeverity === 'errors' && !d.flags.some(f => f.type === 'error')) return false;
       if (filterSeverity === 'warnings' && d.flags.length === 0) return false;
       if (filterSeverity === 'clean' && d.flags.length > 0) return false;
+
+      const am = d.session.audio_metrics;
+      if (filterAudio === 'has_audio' && !am) return false;
+      if (filterAudio === 'degraded' && (!am || am.degradations === 0)) return false;
+      if (filterAudio === 'recovered' && (!am || am.recoveries === 0)) return false;
+      if (filterAudio === 'replayed' && (!am || (am as Record<string, unknown>).replaysRequested === undefined)) return false;
+      if (filterAudio === 'skipped' && (!am || am.skipped === 0)) return false;
+      if (filterAudio === 'timed_out' && (!am || am.timedOut === 0)) return false;
+
       return true;
     });
-  }, [sessionData, filterMode, filterSeverity, filterSkill]);
+  }, [sessionData, filterMode, filterSeverity, filterSkill, filterAudio]);
 
   const totalFlags = useMemo(() => {
     const t = { errors: 0, warnings: 0 };
