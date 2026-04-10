@@ -198,5 +198,8 @@ export function restoreFromSnapshot(snap: SessionSnapshot): AudioControllerState
     chunkStartedAt: null, // INVARIANT: never restore mid-playback timestamp
     completedChunkIds: completedSet,
     chunkAttempts: new Map(snap.chunkAttempts),
+    degradation: snap.isSessionDegraded ? 'session' : 'none',
+    replayedChunkIds: new Set(snap.replayedChunkIds),
+    skippedChunkIds: new Set(snap.skippedChunkIds),
   };
 }
