@@ -28,12 +28,12 @@ interface QueueItem {
 }
 
 const CATEGORY_CONFIG: Record<Category, {
-  icon: React.ElementType; label: string; color: string; actionLabel: string; hint: string;
+  icon: React.ElementType; label: string; color: string; actionLabel: string; batchLabel: string; hint: string;
 }> = {
-  mismatched: { icon: ShieldAlert, label: 'Mismatched', color: 'text-amber-600', actionLabel: 'Inspect', hint: 'Inspect and re-run the last action, or manually verify state.' },
-  failed: { icon: XCircle, label: 'Failed', color: 'text-destructive', actionLabel: 'Retry', hint: 'Retry the failed action or diagnose the root cause.' },
-  needs_review: { icon: AlertTriangle, label: 'Blocked', color: 'text-destructive', actionLabel: 'Diagnose', hint: 'Fix the blocking issue — usually re-enrich or review content.' },
-  needs_extraction: { icon: Zap, label: 'Needs Extraction', color: 'text-amber-600', actionLabel: 'Extract', hint: 'Run Extract to mine knowledge items from available content.' },
+  mismatched: { icon: ShieldAlert, label: 'Mismatched', color: 'text-amber-600', actionLabel: 'Inspect', batchLabel: 'Inspect All', hint: 'Inspect and re-run, or manually verify state.' },
+  failed: { icon: XCircle, label: 'Failed', color: 'text-destructive', actionLabel: 'Retry', batchLabel: 'Retry All', hint: 'Retry the failed action or diagnose root cause.' },
+  needs_review: { icon: AlertTriangle, label: 'Blocked', color: 'text-destructive', actionLabel: 'Diagnose', batchLabel: 'Diagnose All', hint: 'Fix blockers — re-enrich or review content.' },
+  needs_extraction: { icon: Zap, label: 'Needs Extraction', color: 'text-amber-600', actionLabel: 'Extract', batchLabel: 'Extract All', hint: 'Run Extract on available content.' },
 };
 
 const CATEGORY_ORDER: Category[] = ['mismatched', 'failed', 'needs_review', 'needs_extraction'];
@@ -54,9 +54,10 @@ interface Props {
   outcomeRefreshKey: number;
   onAction: (resourceId: string, action: string) => void;
   onInspect: (resourceId: string) => void;
+  onBatchCategoryAction?: (ids: string[], action: string) => void;
 }
 
-export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKey, onAction, onInspect }: Props) {
+export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKey, onAction, onInspect, onBatchCategoryAction }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const { grouped, totalCount, categoryCounts } = useMemo(() => {
@@ -168,14 +169,27 @@ export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKe
             return (
               <div key={cat}>
                 {/* Category header with resolution hint */}
-                <div className="px-3 py-1 bg-muted/30 border-b">
-                  <div className="flex items-center gap-1.5">
-                    <Icon className={cn('h-3 w-3', cfg.color)} />
-                    <span className={cn('text-[10px] font-semibold uppercase tracking-wider', cfg.color)}>
-                      {cfg.label} ({items.length})
-                    </span>
+                <div className="px-3 py-1 bg-muted/30 border-b flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Icon className={cn('h-3 w-3', cfg.color)} />
+                      <span className={cn('text-[10px] font-semibold uppercase tracking-wider', cfg.color)}>
+                        {cfg.label} ({items.length})
+                      </span>
+                    </div>
+                    <p className="text-[9px] text-muted-foreground mt-0.5 pl-[18px]">{cfg.hint}</p>
                   </div>
-                  <p className="text-[9px] text-muted-foreground mt-0.5 pl-[18px]">{cfg.hint}</p>
+                  {onBatchCategoryAction && items.length > 1 && (
+                    <button
+                      onClick={() => {
+                        const action = cat === 'needs_extraction' ? 'extract' : cat === 'needs_review' || cat === 'failed' ? 'fix' : 'inspect';
+                        onBatchCategoryAction(items.map(i => i.id), action);
+                      }}
+                      className={cn('text-[9px] font-medium px-2 py-0.5 rounded border border-current/20 hover:bg-muted transition-colors', cfg.color)}
+                    >
+                      {cfg.batchLabel}
+                    </button>
+                  )}
                 </div>
 
                 {/* Items */}

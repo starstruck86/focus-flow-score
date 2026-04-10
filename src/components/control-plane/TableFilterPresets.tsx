@@ -1,7 +1,8 @@
 /**
  * Table Filter Presets — quick-access saved views above the resource table.
  */
-import { Wrench, Target, ShieldAlert, Clock } from 'lucide-react';
+import { useState } from 'react';
+import { Wrench, Target, ShieldAlert, Clock, Pin, PinOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ControlPlaneFilter } from '@/lib/controlPlaneState';
 
@@ -11,32 +12,21 @@ interface Preset {
   icon: React.ElementType;
   filter?: ControlPlaneFilter;
   customKey?: string;
+  explanation: string;
 }
 
 const PRESETS: Preset[] = [
-  { id: 'cleanup', label: 'Cleanup', icon: Wrench, filter: 'needs_review' },
-  { id: 'ai-ready', label: 'AI Ready', icon: Target, customKey: 'groundingEligible' },
-  { id: 'mismatches', label: 'Mismatches', icon: ShieldAlert, filter: 'conflicts' },
-  { id: 'extract', label: 'Needs Extract', icon: Clock, filter: 'needs_extraction' },
+  { id: 'cleanup', label: 'Cleanup', icon: Wrench, filter: 'needs_review', explanation: 'Blocked resources — diagnose and fix the underlying issue.' },
+  { id: 'ai-ready', label: 'AI Ready', icon: Target, customKey: 'groundingEligible', explanation: 'Ready for Dave grounding — no action needed.' },
+  { id: 'mismatches', label: 'Mismatches', icon: ShieldAlert, filter: 'conflicts', explanation: 'Conflicting lifecycle signals — inspect and re-run.' },
+  { id: 'extract', label: 'Needs Extract', icon: Clock, filter: 'needs_extraction', explanation: 'Has content but no knowledge items — run Extract.' },
 ];
 
 export const PRESET_EXPLANATIONS: Record<string, { why: string; action: string }> = {
-  cleanup: {
-    why: 'Resources blocked by missing content, failed extraction, or stale state.',
-    action: 'Diagnose each resource and fix the underlying issue — usually re-enrich or manually review.',
-  },
-  'ai-ready': {
-    why: 'Resources with active KIs, contexts, and no blockers — eligible for Dave grounding.',
-    action: 'No action needed — these are ready for downstream AI use.',
-  },
-  mismatches: {
-    why: 'Resources where lifecycle signals contradict each other or reconciliation failed.',
-    action: 'Inspect each resource, verify the current state, and re-run the appropriate action.',
-  },
-  extract: {
-    why: 'Resources with parseable content but no knowledge items extracted yet.',
-    action: 'Run Extract to mine knowledge items from the available content.',
-  },
+  cleanup: { why: 'Resources blocked by missing content, failed extraction, or stale state.', action: 'Diagnose each resource and fix the underlying issue — usually re-enrich or manually review.' },
+  'ai-ready': { why: 'Resources with active KIs, contexts, and no blockers — eligible for Dave grounding.', action: 'No action needed — these are ready for downstream AI use.' },
+  mismatches: { why: 'Resources where lifecycle signals contradict each other or reconciliation failed.', action: 'Inspect each resource, verify the current state, and re-run the appropriate action.' },
+  extract: { why: 'Resources with parseable content but no knowledge items extracted yet.', action: 'Run Extract to mine knowledge items from the available content.' },
 };
 
 const PINNED_KEY = 'cp-pinned-preset';
@@ -62,50 +52,65 @@ interface Props {
 }
 
 export function TableFilterPresets({ activeFilter, customFilterLabel, activePresetId, onFilterChange, onCustomPreset, onPinPreset }: Props) {
-  const pinnedId = getPinnedPreset();
+  const [pinnedId, setPinnedIdLocal] = useState(() => getPinnedPreset());
+
+  const handlePin = (id: string) => {
+    const newPin = pinnedId === id ? null : id;
+    setPinnedPreset(newPin);
+    setPinnedIdLocal(newPin);
+    onPinPreset(newPin);
+  };
 
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] text-muted-foreground font-medium mr-1">Quick:</span>
+        <span className="text-[10px] text-muted-foreground font-medium mr-1">Views:</span>
         {PRESETS.map(({ id, label, icon: Icon, filter, customKey }) => {
           const isActive = activePresetId === id || (filter ? activeFilter === filter : customFilterLabel?.includes(label.replace('AI Ready', 'Grounding-Ready')));
           const isPinned = pinnedId === id;
           return (
-            <button
-              key={id}
-              onClick={() => {
-                if (customKey) onCustomPreset(customKey);
-                else if (filter) onFilterChange(isActive ? 'all' : filter);
-              }}
-              onDoubleClick={() => {
-                const newPin = isPinned ? null : id;
-                setPinnedPreset(newPin);
-                onPinPreset(newPin);
-              }}
-              title={isPinned ? 'Default view (double-click to unpin)' : 'Double-click to set as default view'}
-              className={cn(
-                'flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors',
-                isActive
-                  ? 'bg-primary/10 border-primary/30 text-primary'
-                  : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/30',
-                isPinned && !isActive && 'border-primary/20',
+            <div key={id} className="flex items-center gap-0">
+              <button
+                onClick={() => {
+                  if (customKey) onCustomPreset(customKey);
+                  else if (filter) onFilterChange(isActive ? 'all' : filter);
+                }}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium border transition-colors',
+                  isPinned ? 'rounded-l-full' : 'rounded-full',
+                  isActive
+                    ? 'bg-primary/10 border-primary/30 text-primary'
+                    : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/30',
+                  isPinned && !isActive && 'border-primary/20',
+                )}
+              >
+                <Icon className="h-2.5 w-2.5" />
+                {label}
+              </button>
+              {/* Explicit pin toggle — only show on active or already-pinned */}
+              {(isActive || isPinned) && (
+                <button
+                  onClick={() => handlePin(id)}
+                  title={isPinned ? 'Remove as default view' : 'Set as default view'}
+                  className={cn(
+                    'flex items-center px-1 py-0.5 border border-l-0 rounded-r-full text-[10px] transition-colors',
+                    isPinned
+                      ? 'bg-primary/10 border-primary/30 text-primary'
+                      : 'border-border bg-card text-muted-foreground hover:text-primary hover:border-primary/30',
+                  )}
+                >
+                  {isPinned ? <PinOff className="h-2.5 w-2.5" /> : <Pin className="h-2.5 w-2.5" />}
+                </button>
               )}
-            >
-              <Icon className="h-2.5 w-2.5" />
-              {label}
-              {isPinned && <span className="text-[8px]">📌</span>}
-            </button>
+            </div>
           );
         })}
       </div>
-      {activePresetId && PRESET_EXPLANATIONS[activePresetId] && (
-        <div className="flex items-start gap-2 px-2.5 py-1.5 rounded-md bg-muted/40 border border-border text-[10px]">
-          <span className="text-muted-foreground leading-tight">
-            <span className="font-medium text-foreground">Why:</span> {PRESET_EXPLANATIONS[activePresetId].why}{' '}
-            <span className="font-medium text-foreground">Action:</span> {PRESET_EXPLANATIONS[activePresetId].action}
-          </span>
-        </div>
+      {/* Compact one-line explanation */}
+      {activePresetId && PRESETS.find(p => p.id === activePresetId) && (
+        <p className="text-[10px] text-muted-foreground px-1 leading-tight">
+          {PRESETS.find(p => p.id === activePresetId)!.explanation}
+        </p>
       )}
     </div>
   );
