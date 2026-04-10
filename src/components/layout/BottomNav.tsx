@@ -10,11 +10,12 @@ import {
   Compass,
   Brain,
   Crosshair,
+  Swords,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'cockpit';
+export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'cockpit' | 'dojo';
 
 export interface NavItemDef {
   to: string;
@@ -34,6 +35,7 @@ export const COLOR_VAR: Record<NavColor, string> = {
   quota: 'var(--nav-quota)',
   settings: 'var(--nav-settings)',
   cockpit: 'var(--nav-today)',
+  dojo: 'var(--nav-coach)',
 };
 
 export const navRow1: NavItemDef[] = [
@@ -46,6 +48,7 @@ export const navRow1: NavItemDef[] = [
 
 export const navRow2: NavItemDef[] = [
   { to: '/prep', label: 'Sales Brain', icon: Brain, color: 'prep' },
+  { to: '/dojo', label: 'Dojo', icon: Swords, color: 'dojo' },
   { to: '/coach', label: 'Coach', icon: Compass, color: 'coach' },
   { to: '/trends', label: 'Trends', icon: TrendingUp, color: 'trends' },
   { to: '/quota', label: 'Quota', icon: DollarSign, color: 'quota' },

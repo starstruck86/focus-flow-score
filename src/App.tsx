@@ -39,6 +39,8 @@ const EnrichmentVerification = lazy(() => import("./pages/EnrichmentVerification
 const ExecuteWorkspace = lazy(() => import("./pages/ExecuteWorkspace"));
 const BulkExtractRunner = lazy(() => import("./pages/BulkExtractRunner"));
 const ExtractionAdmin = lazy(() => import("./pages/ExtractionAdmin"));
+const Dojo = lazy(() => import("./pages/Dojo"));
+const DojoSession = lazy(() => import("./pages/DojoSession"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -135,6 +137,20 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
                         <ExtractionAdmin />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/dojo" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                        <Dojo />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/dojo/session" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                        <DojoSession />
                       </Suspense>
                     </ProtectedRoute>
                   } />
