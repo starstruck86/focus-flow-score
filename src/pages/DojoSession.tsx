@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import {
   ArrowLeft, Send, RotateCcw, Loader2, Target, AlertTriangle,
   CheckCircle2, Lightbulb, Swords, ChevronRight, Crown, Sparkles,
+  Crosshair,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,7 +26,54 @@ interface ScoreResult {
   improvedVersion: string;
   worldClassResponse?: string;
   whyItWorks?: string[];
+  patternTags?: string[];
+  focusPattern?: string;
 }
+
+const FOCUS_PATTERN_LABELS: Record<string, string> = {
+  isolate_before_answering: 'Isolate before answering',
+  reframe_to_business_impact: 'Reframe to business impact',
+  use_specific_proof: 'Use specific proof',
+  control_next_step: 'Control the next step',
+  stay_concise_under_pressure: 'Stay concise under pressure',
+  deepen_one_level: 'Deepen one level',
+  tie_to_business_impact: 'Tie to business impact',
+  ask_singular_questions: 'Ask singular questions',
+  test_urgency: 'Test urgency',
+  quantify_the_pain: 'Quantify the pain',
+  lead_with_the_number: 'Lead with the number',
+  cut_to_three_sentences: 'Cut to 3 sentences',
+  anchor_to_their_priority: 'Anchor to their priority',
+  project_certainty: 'Project certainty',
+  close_with_a_specific_ask: 'Close with a specific ask',
+  name_the_risk: 'Name the risk',
+  lock_mutual_commitment: 'Lock mutual commitment',
+  test_before_accepting: 'Test before accepting',
+  create_urgency_without_pressure: 'Create urgency without pressure',
+  validate_real_pain: 'Validate real pain',
+  map_stakeholders: 'Map stakeholders',
+  disqualify_weak_opportunities: 'Disqualify weak opportunities',
+  tie_problem_to_business_impact: 'Tie problem to business impact',
+};
+
+const PATTERN_TAG_LABELS: Record<string, string> = {
+  isolates_real_issue: 'Isolates real issue',
+  reframes_to_business_impact: 'Reframes to business impact',
+  quantifies_pain: 'Quantifies pain',
+  tests_urgency: 'Tests urgency',
+  maps_stakeholders: 'Maps stakeholders',
+  controls_next_step: 'Controls next step',
+  locks_mutual_plan: 'Locks mutual plan',
+  disqualifies_weak_opportunity: 'Disqualifies weak opp',
+  stays_concise_under_pressure: 'Stays concise',
+  names_the_risk: 'Names risk',
+  uses_specific_proof: 'Uses proof',
+  projects_certainty: 'Projects certainty',
+  deepens_pain: 'Deepens pain',
+  creates_mutual_accountability: 'Mutual accountability',
+  validates_before_advancing: 'Validates first',
+  leads_with_outcome: 'Leads with outcome',
+};
 
 export default function DojoSession() {
   const location = useLocation();
@@ -58,6 +106,8 @@ export default function DojoSession() {
     setPhase('scoring');
 
     try {
+      const currentFocus = isRetry ? (retryResult?.focusPattern || result?.focusPattern) : undefined;
+
       const { data, error } = await supabase.functions.invoke('dojo-score', {
         body: {
           scenario: {
@@ -67,6 +117,7 @@ export default function DojoSession() {
           },
           userResponse: text,
           retryCount: isRetry ? retryCount + 1 : 0,
+          focusReminder: currentFocus,
         },
       });
 
@@ -160,7 +211,7 @@ export default function DojoSession() {
       toast.error(e.message || 'Failed to score response');
       setPhase(isRetry ? 'retry' : 'respond');
     }
-  }, [scenario, user, sessionId, firstTurnId, retryCount, result, state?.mode]);
+  }, [scenario, user, sessionId, firstTurnId, retryCount, result, retryResult, state?.mode]);
 
   const handleSubmit = () => {
     if (!response.trim()) return;
@@ -185,6 +236,7 @@ export default function DojoSession() {
   const currentResult = retryResult || result;
   const scoreDelta = retryResult && result ? retryResult.score - result.score : null;
   const userText = retryResult ? retryResponse : response;
+  const activeFocus = currentResult?.focusPattern;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -368,6 +420,17 @@ export default function DojoSession() {
                         "{currentResult.worldClassResponse}"
                       </p>
 
+                      {/* Pattern tags */}
+                      {currentResult.patternTags && currentResult.patternTags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {currentResult.patternTags.map((tag, i) => (
+                            <Badge key={i} variant="secondary" className="text-[10px] font-medium">
+                              {PATTERN_TAG_LABELS[tag] || tag.replace(/_/g, ' ')}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Why it works */}
                       {currentResult.whyItWorks && currentResult.whyItWorks.length > 0 && (
                         <div className="pt-1.5 border-t border-primary/10 space-y-1">
@@ -391,6 +454,25 @@ export default function DojoSession() {
                   </Card>
                 )}
               </div>
+
+              {/* ── Focus on This Next ── */}
+              {activeFocus && (
+                <Card className="border-amber-500/30 bg-amber-500/5">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2">
+                      <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                          Focus on This Next
+                        </p>
+                        <p className="text-sm font-medium text-foreground">
+                          {FOCUS_PATTERN_LABELS[activeFocus] || activeFocus.replace(/_/g, ' ')}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Actions */}
               <div className="flex gap-3 pt-2">
@@ -422,6 +504,23 @@ export default function DojoSession() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-3"
             >
+              {/* Focus reminder for retry */}
+              {activeFocus && (
+                <Card className="border-amber-500/30 bg-amber-500/5">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2">
+                      <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Focus on: </span>
+                        <span className="font-semibold text-foreground">
+                          {FOCUS_PATTERN_LABELS[activeFocus] || activeFocus.replace(/_/g, ' ')}
+                        </span>
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Previous feedback reminder */}
               <div className="flex items-start gap-2 px-1">
                 <Swords className="h-4 w-4 text-primary mt-0.5 shrink-0" />
