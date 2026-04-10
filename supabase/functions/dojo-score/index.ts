@@ -486,6 +486,11 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
         regenParts.push(`REGENERATE "practiceCue": The current practiceCue is "${parsed.practiceCue}". It is too vague or abstract. Rewrite as one concrete behavioral instruction the rep can immediately execute on the next attempt. Good: "Ask one sharp question before making any point." Bad: "Focus on qualification." Must pass the test: can the rep do this right now without interpretation?`);
       }
 
+      if (needsRegen.includes("focusPattern")) {
+        triggerReasons.focusPattern = "misaligned_with_topMistake";
+        regenParts.push(`REGENERATE "focusPattern", "focusReason", and "practiceCue": The topMistake is "${parsed.topMistake}" but focusPattern is "${parsed.focusPattern}" — these don't align. Pick a focusPattern from the FOCUS PATTERNS list that is a PLAUSIBLE REMEDY for "${parsed.topMistake}". Then write focusReason starting with "Because" that explains why this focus addresses the mistake. Then write practiceCue as one concrete behavioral instruction that operationalizes the new focusPattern. All three must form ONE coherent teaching thread.`);
+      }
+
       const regenPrompt = `You previously scored a sales rep's response. Some outputs need regeneration for consistency. Keep the same score (${parsed.score}) and topMistake (${parsed.topMistake}).\n\n${regenParts.join("\n\n")}\n\nRespond with ONLY valid JSON containing the regenerated fields.`;
 
       let regenSucceeded = false;
