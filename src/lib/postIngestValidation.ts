@@ -11,6 +11,13 @@
  *  3. auth_capture_incomplete — auth-gated PDF with no parsed text and no raw file
  *  4. enriched_no_extraction — enriched content with 0 KIs and 0 attempts
  *  5. extraction_ready_not_queued — content-ready resource sitting idle
+ *
+ * Idempotency: Two layers prevent duplicate remediation:
+ *  - In-memory dedup map (fast, same-tab, 60s window)
+ *  - Durable DB column `last_remediation_at` (cross-tab, cross-reload, 5min cooldown)
+ *
+ * In-flight protection: Before dispatching, checks for active background_jobs
+ * and resource heartbeat fields to avoid duplicate work.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -20,27 +27,135 @@ import { createLogger } from './logger';
 
 const log = createLogger('PostIngestValidation');
 
-// ── Idempotency guard ─────────────────────────────────────
-// Prevents duplicate remediation dispatch within a short window.
-const DEDUP_WINDOW_MS = 60_000; // 60 seconds
-const recentRemediations = new Map<string, number>(); // resourceId → timestamp
+// ── In-memory idempotency (fast, same-tab) ────────────────
+const DEDUP_WINDOW_MS = 60_000;
+const recentRemediations = new Map<string, number>();
 
-function isDuplicateRemediation(resourceId: string): boolean {
+function isDuplicateInMemory(resourceId: string): boolean {
   const lastTime = recentRemediations.get(resourceId);
-  if (lastTime && Date.now() - lastTime < DEDUP_WINDOW_MS) {
-    return true;
-  }
-  return false;
+  return !!(lastTime && Date.now() - lastTime < DEDUP_WINDOW_MS);
 }
 
-function markRemediated(resourceId: string): void {
+function markRemediatedInMemory(resourceId: string): void {
   recentRemediations.set(resourceId, Date.now());
-  // Garbage-collect old entries every 50 calls
   if (recentRemediations.size > 200) {
     const cutoff = Date.now() - DEDUP_WINDOW_MS;
     for (const [id, ts] of recentRemediations) {
       if (ts < cutoff) recentRemediations.delete(id);
     }
+  }
+}
+
+// ── Durable idempotency (cross-tab, cross-reload) ─────────
+const DURABLE_COOLDOWN_MS = 5 * 60_000; // 5 minutes
+
+async function isDuplicateDurable(resourceId: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from('resources')
+      .select('last_remediation_at')
+      .eq('id', resourceId)
+      .single();
+
+    if (!data?.last_remediation_at) return false;
+    const elapsed = Date.now() - new Date(data.last_remediation_at).getTime();
+    return elapsed < DURABLE_COOLDOWN_MS;
+  } catch {
+    return false; // fail open — allow remediation if check fails
+  }
+}
+
+async function markRemediatedDurable(resourceId: string): Promise<void> {
+  try {
+    await supabase
+      .from('resources')
+      .update({ last_remediation_at: new Date().toISOString() } as any)
+      .eq('id', resourceId);
+  } catch {
+    // Non-critical
+  }
+}
+
+// ── In-flight operation detection ─────────────────────────
+// Checks background_jobs table and resource heartbeat fields
+// to determine if a matching operation is already running.
+
+type OperationType = 'extraction' | 'parse' | 'enrichment';
+
+async function hasInFlightOperation(resourceId: string, opType: OperationType): Promise<boolean> {
+  try {
+    // Check 1: Active background_jobs for this resource
+    const jobTypes: string[] = opType === 'extraction'
+      ? ['extraction', 'batch-extract-kis', 'extract-tactics']
+      : opType === 'parse'
+        ? ['parse', 'parse-uploaded-file']
+        : ['enrichment', 'run-enrichment-job'];
+
+    const { data: activeJobs } = await supabase
+      .from('background_jobs')
+      .select('id, status, type')
+      .eq('entity_id', resourceId)
+      .in('status', ['queued', 'running'])
+      .limit(1);
+
+    if (activeJobs && activeJobs.length > 0) {
+      log.info('In-flight job detected via background_jobs', {
+        resourceId,
+        opType,
+        jobId: activeJobs[0].id,
+        jobStatus: activeJobs[0].status,
+      });
+      return true;
+    }
+
+    // Check 2: Resource heartbeat — if active_job_updated_at is recent (< 3 min)
+    const { data: resource } = await supabase
+      .from('resources')
+      .select('active_job_step_label, active_job_updated_at')
+      .eq('id', resourceId)
+      .single();
+
+    if (resource?.active_job_updated_at) {
+      const heartbeatAge = Date.now() - new Date(resource.active_job_updated_at).getTime();
+      if (heartbeatAge < 3 * 60_000) { // 3 minutes
+        log.info('In-flight operation detected via resource heartbeat', {
+          resourceId,
+          opType,
+          stepLabel: resource.active_job_step_label,
+          heartbeatAgeMs: heartbeatAge,
+        });
+        return true;
+      }
+    }
+
+    // Check 3: enrichment_status indicates in-progress work
+    if (opType === 'extraction' || opType === 'enrichment') {
+      const { data: statusData } = await supabase
+        .from('resources')
+        .select('enrichment_status')
+        .eq('id', resourceId)
+        .single();
+
+      const inProgressStatuses = [
+        'deep_enrich_in_progress',
+        'reenrich_in_progress',
+        'queued_for_deep_enrich',
+        'queued_for_reenrich',
+      ];
+      if (statusData && inProgressStatuses.includes(statusData.enrichment_status)) {
+        log.info('In-flight operation detected via enrichment_status', {
+          resourceId,
+          opType,
+          status: statusData.enrichment_status,
+        });
+        return true;
+      }
+    }
+
+    return false;
+  } catch (err: any) {
+    log.error('In-flight check failed — allowing remediation', { resourceId, opType, error: err.message });
+    return false; // fail open
   }
 }
 
@@ -192,6 +307,15 @@ export function validateResource(r: {
 
 // ── Auto-remediation engine ───────────────────────────────
 
+function repairActionToOpType(action: string): OperationType {
+  switch (action) {
+    case 'queue_extraction': return 'extraction';
+    case 'retry_parse': return 'parse';
+    case 'queue_enrichment': return 'enrichment';
+    default: return 'extraction';
+  }
+}
+
 async function remediateViolation(v: ValidationViolation): Promise<RemediationResult> {
   const base: Omit<RemediationResult, 'action_taken' | 'success' | 'detail'> = {
     resource_id: v.resource_id,
@@ -210,6 +334,23 @@ async function remediateViolation(v: ValidationViolation): Promise<RemediationRe
       action_taken: 'none',
       success: false,
       detail: `Manual action required: ${v.repair_action}. ${v.detail}`,
+    };
+  }
+
+  // In-flight check: skip if a matching operation is already running
+  const opType = repairActionToOpType(v.repair_action);
+  const inFlight = await hasInFlightOperation(v.resource_id, opType);
+  if (inFlight) {
+    log.info('Remediation skipped — in-flight operation detected', {
+      resourceId: v.resource_id,
+      failureClass: v.failure_class,
+      opType,
+    });
+    return {
+      ...base,
+      action_taken: 'skipped_in_flight',
+      success: true, // Not a failure — work is already happening
+      detail: `Skipped: ${opType} operation already in flight for this resource`,
     };
   }
 
@@ -275,7 +416,6 @@ async function remediateViolation(v: ValidationViolation): Promise<RemediationRe
           resourceId: v.resource_id,
           failureClass: v.failure_class,
         });
-        // Mark as not_enriched so the enrichment pipeline picks it up
         const { error } = await supabase
           .from('resources')
           .update({
@@ -328,9 +468,17 @@ export async function validateAndRemediate(resourceId: string): Promise<{
   violations: ValidationViolation[];
   remediations: RemediationResult[];
 }> {
-  // Idempotency: skip if already remediated within the dedup window
-  if (isDuplicateRemediation(resourceId)) {
-    log.info('Skipping duplicate remediation', { resourceId, windowMs: DEDUP_WINDOW_MS });
+  // Layer 1: In-memory dedup (fast, same-tab)
+  if (isDuplicateInMemory(resourceId)) {
+    log.info('Skipping remediation — in-memory dedup', { resourceId });
+    return { violations: [], remediations: [] };
+  }
+
+  // Layer 2: Durable DB cooldown (cross-tab, cross-reload)
+  const durableDup = await isDuplicateDurable(resourceId);
+  if (durableDup) {
+    log.info('Skipping remediation — durable cooldown active', { resourceId, cooldownMs: DURABLE_COOLDOWN_MS });
+    markRemediatedInMemory(resourceId); // sync memory to avoid re-checking DB
     return { violations: [], remediations: [] };
   }
 
@@ -350,8 +498,9 @@ export async function validateAndRemediate(resourceId: string): Promise<{
     return { violations: [], remediations: [] };
   }
 
-  // Mark as remediated BEFORE dispatching to prevent re-entrant calls
-  markRemediated(resourceId);
+  // Mark as remediated in BOTH layers BEFORE dispatching
+  markRemediatedInMemory(resourceId);
+  await markRemediatedDurable(resourceId);
 
   log.info('Post-ingest violations found — running auto-remediation', {
     resourceId,
@@ -402,6 +551,33 @@ export async function runPostIngestAudit(userId: string, options?: { autoRemedia
       report.counts[v.failure_class]++;
 
       if (shouldRemediate) {
+        // In-flight + durable checks per resource during batch
+        const opType = repairActionToOpType(v.repair_action);
+        const inFlight = await hasInFlightOperation(v.resource_id, opType);
+        if (inFlight) {
+          report.remediations.push({
+            resource_id: v.resource_id,
+            failure_class: v.failure_class,
+            action_taken: 'skipped_in_flight',
+            success: true,
+            detail: `Skipped: ${opType} already in flight`,
+          });
+          continue;
+        }
+
+        const durableDup = await isDuplicateDurable(v.resource_id);
+        if (durableDup) {
+          report.remediations.push({
+            resource_id: v.resource_id,
+            failure_class: v.failure_class,
+            action_taken: 'skipped_cooldown',
+            success: true,
+            detail: 'Skipped: durable cooldown active',
+          });
+          continue;
+        }
+
+        await markRemediatedDurable(v.resource_id);
         const result = await remediateViolation(v);
         report.remediations.push(result);
       }
@@ -417,6 +593,7 @@ export async function runPostIngestAudit(userId: string, options?: { autoRemedia
       total: report.remediations.length,
       succeeded: report.remediations.filter(r => r.success).length,
       failed: report.remediations.filter(r => !r.success).length,
+      skipped: report.remediations.filter(r => r.action_taken.startsWith('skipped_')).length,
     } : null,
   });
 
