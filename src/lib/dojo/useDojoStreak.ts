@@ -3,12 +3,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { SkillFocus } from './scenarios';
 
+export interface SkillStat {
+  skill: SkillFocus;
+  count: number;
+  avgScore: number;
+  /** Average score of first attempts only (turn_index = 0) */
+  avgFirstAttempt: number;
+  recentFirstAttempts: number[];
+}
+
 export interface DojoStats {
   totalSessions: number;
   lastScore: number | null;
   bestScore: number;
   streak: number;
-  skillBreakdown: { skill: SkillFocus; count: number; avgScore: number }[];
+  skillBreakdown: SkillStat[];
 }
 
 export function useDojoStats() {
@@ -18,31 +27,44 @@ export function useDojoStats() {
     queryKey: ['dojo-stats', user?.id],
     enabled: !!user?.id,
     queryFn: async (): Promise<DojoStats> => {
-      const { data: sessions, error } = await supabase
-        .from('dojo_sessions')
-        .select('started_at, best_score, latest_score, status, skill_focus')
-        .eq('user_id', user!.id)
-        .eq('status', 'completed')
-        .order('started_at', { ascending: false })
-        .limit(200);
+      // Fetch sessions + first-attempt turns in parallel
+      const [sessionsRes, turnsRes] = await Promise.all([
+        supabase
+          .from('dojo_sessions')
+          .select('started_at, best_score, latest_score, status, skill_focus')
+          .eq('user_id', user!.id)
+          .eq('status', 'completed')
+          .order('started_at', { ascending: false })
+          .limit(200),
+        supabase
+          .from('dojo_session_turns')
+          .select('session_id, score, turn_index, created_at')
+          .eq('user_id', user!.id)
+          .eq('turn_index', 0)
+          .order('created_at', { ascending: false })
+          .limit(200),
+      ]);
 
-      if (error) throw error;
+      if (sessionsRes.error) throw sessionsRes.error;
+      if (turnsRes.error) throw turnsRes.error;
 
-      const completed = sessions || [];
-      const totalSessions = completed.length;
-      const lastScore = completed[0]?.latest_score ?? null;
-      const bestScore = completed.length > 0
-        ? Math.max(...completed.map(s => s.best_score ?? 0))
+      const sessions = sessionsRes.data || [];
+      const firstAttemptTurns = turnsRes.data || [];
+
+      const totalSessions = sessions.length;
+      const lastScore = sessions[0]?.latest_score ?? null;
+      const bestScore = sessions.length > 0
+        ? Math.max(...sessions.map(s => s.best_score ?? 0))
         : 0;
 
-      // Streak: consecutive days with at least 1 session
+      // Streak
       let streak = 0;
-      if (completed.length > 0) {
+      if (sessions.length > 0) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const dayMs = 86400000;
         const sessionDays = new Set(
-          completed.map(s => {
+          sessions.map(s => {
             const d = new Date(s.started_at);
             d.setHours(0, 0, 0, 0);
             return d.getTime();
@@ -56,20 +78,67 @@ export function useDojoStats() {
         }
       }
 
-      // Skill breakdown for autopilot
-      const bySkill = new Map<SkillFocus, { total: number; scoreSum: number }>();
-      for (const s of completed) {
-        const skill = s.skill_focus as SkillFocus;
-        const existing = bySkill.get(skill) || { total: 0, scoreSum: 0 };
-        existing.total++;
-        existing.scoreSum += s.latest_score ?? 0;
-        bySkill.set(skill, existing);
+      // Build session-id → skill map
+      const sessionSkillMap = new Map<string, SkillFocus>();
+      for (const s of sessions) {
+        sessionSkillMap.set(s.started_at + s.skill_focus, s.skill_focus as SkillFocus);
       }
-      const skillBreakdown = Array.from(bySkill.entries()).map(([skill, data]) => ({
-        skill,
-        count: data.total,
-        avgScore: Math.round(data.scoreSum / data.total),
-      }));
+
+      // Build skill breakdown with first-attempt data
+      const bySkill = new Map<SkillFocus, {
+        total: number;
+        scoreSum: number;
+        firstAttemptScores: number[];
+      }>();
+
+      // Count sessions per skill
+      for (const s of sessions) {
+        const skill = s.skill_focus as SkillFocus;
+        if (!bySkill.has(skill)) {
+          bySkill.set(skill, { total: 0, scoreSum: 0, firstAttemptScores: [] });
+        }
+        const entry = bySkill.get(skill)!;
+        entry.total++;
+        entry.scoreSum += s.latest_score ?? 0;
+      }
+
+      // Map first-attempt scores to skills via session lookup
+      // We need session_id → skill, so let's build that from a joined approach
+      // Since we have sessions ordered and turns ordered, match by session_id
+      const sessionIdToSkill = new Map<string, SkillFocus>();
+      // Re-fetch with id included for mapping
+      const { data: sessionIds } = await supabase
+        .from('dojo_sessions')
+        .select('id, skill_focus')
+        .eq('user_id', user!.id)
+        .eq('status', 'completed')
+        .limit(200);
+
+      if (sessionIds) {
+        for (const s of sessionIds) {
+          sessionIdToSkill.set(s.id, s.skill_focus as SkillFocus);
+        }
+      }
+
+      for (const turn of firstAttemptTurns) {
+        const skill = sessionIdToSkill.get(turn.session_id);
+        if (skill && bySkill.has(skill) && turn.score != null) {
+          bySkill.get(skill)!.firstAttemptScores.push(turn.score);
+        }
+      }
+
+      const skillBreakdown: SkillStat[] = Array.from(bySkill.entries()).map(([skill, data]) => {
+        const recentFirst = data.firstAttemptScores.slice(0, 10); // last 10
+        return {
+          skill,
+          count: data.total,
+          avgScore: Math.round(data.scoreSum / data.total),
+          avgFirstAttempt: recentFirst.length > 0
+            ? Math.round(recentFirst.reduce((a, b) => a + b, 0) / recentFirst.length)
+            : 0,
+          recentFirstAttempts: recentFirst,
+        };
+      });
 
       return { totalSessions, lastScore, bestScore, streak, skillBreakdown };
     },
