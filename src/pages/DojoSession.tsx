@@ -32,6 +32,9 @@ interface ScoreResult {
   focusReason?: string;
   practiceCue?: string;
   teachingNote?: string;
+  deltaNote?: string;
+  focusApplied?: 'yes' | 'partial' | 'no';
+  focusAppliedReason?: string;
 }
 
 const FOCUS_PATTERN_LABELS: Record<string, string> = {
