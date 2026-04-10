@@ -46,6 +46,7 @@ export function KnowledgeControlPlane() {
   const [customFilterIds, setCustomFilterIds] = useState<Set<string> | null>(null);
   const [customFilterLabel, setCustomFilterLabel] = useState<string | null>(null);
   const [queuePanelOpen, setQueuePanelOpen] = useState(false);
+  const [didApplyPinned, setDidApplyPinned] = useState(false);
 
   // Inspect drawer state
   const [inspectResource, setInspectResource] = useState<CanonicalResourceStatus | null>(null);
