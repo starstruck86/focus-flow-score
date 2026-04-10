@@ -187,10 +187,7 @@ export function KnowledgeControlPlane() {
     refetch();
   }, [resources, processingIds, operationalizeBatchWithOutcome, refetch]);
 
-  const handleInspect = useCallback((r: CanonicalResourceStatus, state: ControlPlaneState) => {
-    setInspectResource(r);
-    setInspectState(state);
-  }, []);
+  // handleInspect defined above (line ~117)
 
   const handleFilterChange = useCallback((f: ControlPlaneFilter) => {
     setFilter(f);
