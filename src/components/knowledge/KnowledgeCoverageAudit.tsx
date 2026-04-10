@@ -3,7 +3,7 @@
  * Includes: verification queue, re-extraction workflow, audit drilldown, filters.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,17 @@ export function KnowledgeCoverageAudit() {
     total: number;
   } | null>(null);
   const [showRunSummary, setShowRunSummary] = useState(false);
+
+  const [showRunSummary, setShowRunSummary] = useState(false);
+  const prevLiftSummaryRef = useRef(deepReExtract.liftSummary);
+
+  // Auto-open summary dialog when a run completes
+  useEffect(() => {
+    if (deepReExtract.liftSummary && deepReExtract.liftSummary !== prevLiftSummaryRef.current) {
+      setShowRunSummary(true);
+    }
+    prevLiftSummaryRef.current = deepReExtract.liftSummary;
+  }, [deepReExtract.liftSummary]);
 
   const selectedResource = useMemo(() => {
     if (!selectedResourceId || !audit) return null;
@@ -634,6 +645,15 @@ export function KnowledgeCoverageAudit() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function SummaryStat({ label, value, color }: { label: string; value: number | string; color?: string }) {
+  return (
+    <div className="border border-border rounded-md p-2 text-center">
+      <div className={cn("text-lg font-bold", color)}>{value}</div>
+      <div className="text-[10px] text-muted-foreground">{label}</div>
     </div>
   );
 }
