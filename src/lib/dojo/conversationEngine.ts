@@ -1,12 +1,12 @@
 /**
- * Dojo Conversation Engine v2
+ * Dojo Conversation Engine v3
  *
  * Pure, deterministic orchestration layer between scoring functions and UI/voice.
  * - Converts DojoScoreResult into ordered, speakable sub-chunks
  * - Manages versioned session state with typed user-input handling
  * - Prepares for audio-first delivery without coupling to any TTS provider
  *
- * All IDs are deterministic: `${sessionId}:${resultVersion}:${role}:${subIndex}`
+ * All IDs are deterministic: `${sessionId}:v${resultVersion}:${globalIndex}`
  * All functions are pure (state-in → state-out). No side effects.
  */
 
@@ -14,7 +14,7 @@ import type { DojoScoreResult } from './types';
 
 // ── Constants ──────────────────────────────────────────────────────
 
-/** Approximate character count per speakable sub-chunk (~12-15 seconds of speech). */
+/** Approximate character count per speakable sub-chunk (~12-15s of speech). */
 const SUB_CHUNK_TARGET_LENGTH = 280;
 
 // ── Chunk Types ────────────────────────────────────────────────────
@@ -22,12 +22,12 @@ const SUB_CHUNK_TARGET_LENGTH = 280;
 export type ChunkRole = 'feedback' | 'improvedVersion' | 'worldClassResponse' | 'practiceCue';
 
 export interface SpeechChunk {
-  /** Deterministic: `${sessionId}:${resultVersion}:${role}:${subIndex}` */
+  /** Deterministic, collision-free: `${sessionId}:v${resultVersion}:${globalIndex}` */
   id: string;
   role: ChunkRole;
   label: string;
   text: string;
-  /** Global delivery index across all chunks */
+  /** Global delivery index across all chunks (unique per result load) */
   index: number;
   /** Sub-index within the parent role (0 if not split) */
   subIndex: number;
@@ -45,13 +45,16 @@ export type UserInputType =
 
 // ── Session Phases ─────────────────────────────────────────────────
 
+export type PostDeliveryPhase =
+  | 'awaiting_retry'
+  | 'awaiting_followup'
+  | 'awaiting_confirmation';
+
 export type SessionPhase =
   | 'awaiting_response'
   | 'scoring'
   | 'delivering'
-  | 'awaiting_followup'
-  | 'awaiting_retry'
-  | 'awaiting_confirmation'
+  | PostDeliveryPhase
   | 'completed'
   | 'cancelled';
 
@@ -64,7 +67,8 @@ export type HistoryEventType =
   | 'interrupted'
   | 'user_input'
   | 'scoring_started'
-  | 'scoring_completed';
+  | 'scoring_completed'
+  | 'delivery_resumed';
 
 export interface HistoryEntry {
   turn: number;
@@ -88,6 +92,7 @@ export interface ConversationState {
   chunks: SpeechChunk[];
   currentChunkIndex: number;
   lastDeliveredChunkId: string | null;
+  postDeliveryPhase: PostDeliveryPhase;
   history: HistoryEntry[];
 }
 
@@ -101,27 +106,32 @@ const CHUNK_ORDER: { role: ChunkRole; label: string; field: keyof DojoScoreResul
 ];
 
 /**
- * Split a long text into sub-chunks at sentence boundaries,
+ * Split long text into sub-chunks at sentence boundaries,
  * targeting SUB_CHUNK_TARGET_LENGTH characters each.
+ * Preserves clean spacing between sentences.
  */
 function splitIntoSubChunks(text: string): string[] {
-  if (text.length <= SUB_CHUNK_TARGET_LENGTH) return [text];
+  const trimmed = text.trim();
+  if (trimmed.length <= SUB_CHUNK_TARGET_LENGTH) return [trimmed];
 
-  const sentences = text.match(/[^.!?]+[.!?]+\s*/g);
-  if (!sentences || sentences.length <= 1) return [text];
+  // Split on sentence-ending punctuation followed by whitespace
+  const sentences = trimmed.match(/[^.!?]*[.!?]+(?:\s+|$)/g);
+  if (!sentences || sentences.length <= 1) return [trimmed];
 
   const subs: string[] = [];
   let current = '';
 
-  for (const sentence of sentences) {
-    if (current.length + sentence.length > SUB_CHUNK_TARGET_LENGTH && current.length > 0) {
+  for (const raw of sentences) {
+    const sentence = raw.trimEnd();
+    if (current.length > 0 && current.length + 1 + sentence.length > SUB_CHUNK_TARGET_LENGTH) {
       subs.push(current.trim());
       current = sentence;
     } else {
-      current += sentence;
+      current = current.length > 0 ? `${current} ${sentence}` : sentence;
     }
   }
-  if (current.trim()) subs.push(current.trim());
+  const final = current.trim();
+  if (final) subs.push(final);
 
   return subs;
 }
@@ -141,14 +151,15 @@ function buildChunks(
     const subs = splitIntoSubChunks(fullText);
     for (let si = 0; si < subs.length; si++) {
       chunks.push({
-        id: `${sessionId}:${resultVersion}:${spec.role}:${si}`,
+        id: `${sessionId}:v${resultVersion}:${globalIndex}`,
         role: spec.role,
         label: subs.length > 1 ? `${spec.label} (${si + 1}/${subs.length})` : spec.label,
         text: subs[si],
-        index: globalIndex++,
+        index: globalIndex,
         subIndex: si,
         subTotal: subs.length,
       });
+      globalIndex++;
     }
   }
 
@@ -161,16 +172,27 @@ function pushHistory(
   history: HistoryEntry[],
   entry: Omit<HistoryEntry, 'turn' | 'timestamp'>
 ): HistoryEntry[] {
-  return [
-    ...history,
-    { ...entry, turn: history.length, timestamp: Date.now() },
-  ];
+  return [...history, { ...entry, turn: history.length, timestamp: Date.now() }];
+}
+
+function pushHistoryMulti(
+  history: HistoryEntry[],
+  entries: Omit<HistoryEntry, 'turn' | 'timestamp'>[]
+): HistoryEntry[] {
+  let h = history;
+  for (const e of entries) {
+    h = pushHistory(h, e);
+  }
+  return h;
 }
 
 // ── Engine: Core ───────────────────────────────────────────────────
 
 /** Create a fresh session. */
-export function createSession(sessionId: string): ConversationState {
+export function createSession(
+  sessionId: string,
+  options?: { postDeliveryPhase?: PostDeliveryPhase }
+): ConversationState {
   return {
     sessionId,
     phase: 'awaiting_response',
@@ -180,6 +202,7 @@ export function createSession(sessionId: string): ConversationState {
     chunks: [],
     currentChunkIndex: 0,
     lastDeliveredChunkId: null,
+    postDeliveryPhase: options?.postDeliveryPhase ?? 'awaiting_retry',
     history: [],
   };
 }
@@ -208,6 +231,14 @@ export function loadResult(
   };
 }
 
+/** Set the phase the engine transitions to after all chunks are delivered. */
+export function setPostDeliveryPhase(
+  state: ConversationState,
+  phase: PostDeliveryPhase
+): ConversationState {
+  return { ...state, postDeliveryPhase: phase };
+}
+
 // ── Engine: Delivery ───────────────────────────────────────────────
 
 /** Get the next chunk to deliver. Returns null when delivery is complete. */
@@ -217,7 +248,7 @@ export function getNextMessage(state: ConversationState): {
 } {
   if (state.phase !== 'delivering' || state.currentChunkIndex >= state.chunks.length) {
     const nextPhase: SessionPhase =
-      state.phase === 'delivering' ? 'awaiting_retry' : state.phase;
+      state.phase === 'delivering' ? state.postDeliveryPhase : state.phase;
     return { chunk: null, nextState: { ...state, phase: nextPhase } };
   }
 
@@ -230,7 +261,7 @@ export function getNextMessage(state: ConversationState): {
       ...state,
       currentChunkIndex: state.currentChunkIndex + 1,
       lastDeliveredChunkId: chunk.id,
-      phase: isLast ? 'awaiting_retry' : 'delivering',
+      phase: isLast ? state.postDeliveryPhase : 'delivering',
       history: pushHistory(state.history, {
         role: 'coach',
         eventType: 'delivered',
@@ -268,9 +299,31 @@ export function handleUserInput(
   inputType: UserInputType,
   state: ConversationState
 ): ConversationState {
-  // Replay request is handled separately
+  const userEvent: Omit<HistoryEntry, 'turn' | 'timestamp'> = {
+    role: 'user',
+    eventType: 'user_input',
+    inputType,
+    text: input,
+  };
+
+  // Replay: log user action, then perform replay
   if (inputType === 'replay_request') {
-    return replayLastMessage(state).nextState;
+    const lastChunk = state.lastDeliveredChunkId
+      ? state.chunks.find((c) => c.id === state.lastDeliveredChunkId) ?? null
+      : null;
+
+    const events: Omit<HistoryEntry, 'turn' | 'timestamp'>[] = [userEvent];
+    if (lastChunk) {
+      events.push({
+        role: 'system',
+        eventType: 'replayed',
+        chunkId: lastChunk.id,
+        chunkRole: lastChunk.role,
+        text: lastChunk.text,
+      });
+    }
+
+    return { ...state, history: pushHistoryMulti(state.history, events) };
   }
 
   // Interruption during delivery
@@ -278,12 +331,7 @@ export function handleUserInput(
     return {
       ...state,
       phase: 'awaiting_followup',
-      history: pushHistory(state.history, {
-        role: 'user',
-        eventType: 'user_input',
-        inputType: 'interruption',
-        text: input,
-      }),
+      history: pushHistory(state.history, userEvent),
     };
   }
 
@@ -293,12 +341,7 @@ export function handleUserInput(
     ...state,
     phase: 'scoring',
     retryCount: state.retryCount + (isRetry ? 1 : 0),
-    history: pushHistory(state.history, {
-      role: 'user',
-      eventType: 'user_input',
-      inputType,
-      text: input,
-    }),
+    history: pushHistory(state.history, userEvent),
   };
 }
 
@@ -343,7 +386,7 @@ export function skipCurrentMessage(state: ConversationState): ConversationState 
   return {
     ...state,
     currentChunkIndex: state.currentChunkIndex + 1,
-    phase: isLast ? 'awaiting_retry' : 'delivering',
+    phase: isLast ? state.postDeliveryPhase : 'delivering',
     history: pushHistory(state.history, {
       role: 'system',
       eventType: 'skipped',
@@ -381,10 +424,29 @@ export function replayLastMessage(state: ConversationState): {
   };
 }
 
+/**
+ * Resume delivery from current position after interruption or follow-up.
+ * Only transitions if there are remaining chunks to deliver.
+ */
+export function resumeDelivery(state: ConversationState): ConversationState {
+  if (state.currentChunkIndex >= state.chunks.length) return state;
+  if (state.phase === 'delivering') return state; // already delivering
+
+  return {
+    ...state,
+    phase: 'delivering',
+    history: pushHistory(state.history, {
+      role: 'system',
+      eventType: 'delivery_resumed',
+      text: `Resumed at chunk ${state.currentChunkIndex + 1}/${state.chunks.length}`,
+    }),
+  };
+}
+
 /** Resume from persisted/rehydrated state. */
 export function resumeFromState(state: ConversationState): ConversationState {
   if (state.phase === 'delivering' && state.currentChunkIndex >= state.chunks.length) {
-    return { ...state, phase: 'awaiting_retry' };
+    return { ...state, phase: state.postDeliveryPhase };
   }
   return state;
 }
@@ -394,7 +456,7 @@ export function completeSession(state: ConversationState): ConversationState {
   return { ...state, phase: 'completed' };
 }
 
-/** Transition from awaiting_followup to awaiting_retry (e.g. after answering a question). */
+/** Transition from a waiting phase to awaiting_retry. */
 export function transitionToRetry(state: ConversationState): ConversationState {
   if (state.phase !== 'awaiting_followup' && state.phase !== 'awaiting_confirmation') {
     return state;
