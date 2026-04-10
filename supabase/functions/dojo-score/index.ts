@@ -436,6 +436,28 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       if (!needsRegen.includes("practiceCue")) needsRegen.push("practiceCue");
     }
 
+    // Check: coherence — focusPattern should plausibly remedy topMistake
+    // and practiceCue should operationalize focusPattern
+    if (parsed.focusPattern && parsed.topMistake && parsed.practiceCue) {
+      const topMistakeWords = parsed.topMistake.replace(/_/g, ' ').toLowerCase();
+      const focusWords = parsed.focusPattern.replace(/_/g, ' ').toLowerCase();
+      const cueWords = parsed.practiceCue.toLowerCase();
+      // If focusPattern shares no semantic overlap with topMistake, flag for regen
+      const mistakeTokens = topMistakeWords.split(' ');
+      const focusTokens = focusWords.split(' ');
+      const hasOverlap = mistakeTokens.some((t: string) => focusTokens.includes(t)) || 
+        (topMistakeWords.includes('impact') && focusWords.includes('impact')) ||
+        (topMistakeWords.includes('control') && focusWords.includes('control')) ||
+        (topMistakeWords.includes('close') && focusWords.includes('step')) ||
+        (topMistakeWords.includes('generic') && (focusWords.includes('specific') || focusWords.includes('proof'))) ||
+        (topMistakeWords.includes('long') && focusWords.includes('concise'));
+      if (!hasOverlap) {
+        if (!needsRegen.includes("focusPattern")) needsRegen.push("focusPattern");
+        if (!needsRegen.includes("practiceCue")) needsRegen.push("practiceCue");
+        if (!needsRegen.includes("focusReason")) needsRegen.push("focusReason");
+      }
+    }
+
     if (needsRegen.length > 0) {
       const triggerReasons: Record<string, string> = {};
       const regenParts: string[] = [];
