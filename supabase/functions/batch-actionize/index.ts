@@ -324,9 +324,10 @@ Deno.serve(async (req) => {
       });
     }
 
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      serviceRoleKey,
     );
 
     // Parse body early so we can check for user_id
@@ -335,31 +336,40 @@ Deno.serve(async (req) => {
 
     let userId: string;
 
-    // Try JWT auth first
-    const supabaseUser = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-    const { data: { user }, error: authErr } = await supabaseUser.auth.getUser();
-    console.log('batch-actionize: auth result', user?.id || 'no user', authErr?.message || 'no error', 'body.user_id:', body.user_id);
-    
-    if (user) {
-      userId = user.id;
-    } else if (body.user_id) {
-      // Fallback: service-role or internal invocation with explicit user_id
-      // Validate user exists via admin client
-      const { data: targetUser } = await supabaseAdmin.auth.admin.getUserById(body.user_id);
-      if (!targetUser?.user) {
-        return new Response(JSON.stringify({ error: 'Invalid user_id' }), {
+    // Check for service-role invocation via x-batch-key header
+    const batchKey = req.headers.get('x-batch-key');
+    const isServiceRole = batchKey != null && batchKey === serviceRoleKey;
+
+    if (isServiceRole && body.user_id) {
+      // Service-role caller — trust body.user_id directly
+      console.log('batch-actionize: service-role auth via x-batch-key, user_id:', body.user_id);
+      userId = body.user_id;
+    } else {
+      // Try JWT auth
+      const supabaseUser = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } },
+      );
+      const { data: { user }, error: authErr } = await supabaseUser.auth.getUser();
+      console.log('batch-actionize: auth result', user?.id || 'no user', authErr?.message || 'no error', 'body.user_id:', body.user_id);
+      
+      if (user) {
+        userId = user.id;
+      } else if (body.user_id) {
+        // Fallback: validate user exists via admin client
+        const { data: targetUser } = await supabaseAdmin.auth.admin.getUserById(body.user_id);
+        if (!targetUser?.user) {
+          return new Response(JSON.stringify({ error: 'Invalid user_id' }), {
+            status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        userId = body.user_id;
+      } else {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      userId = body.user_id;
-    } else {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
     }
 
     const batchSize = Math.min(body.batchSize || 15, 50);
