@@ -15,7 +15,7 @@ import { CentralResourceTable } from './CentralResourceTable';
 import { ResourceInspectDrawer } from './ResourceInspectDrawer';
 import { ConflictBreakdownBanner } from './ConflictBreakdownBanner';
 import { BulkActionBar } from './BulkActionBar';
-import { NeedsAttentionQueue } from './NeedsAttentionQueue';
+import { NeedsAttentionQueue, type QueueCategory, type QueueItem } from './NeedsAttentionQueue';
 import { RecentActionsPanel } from './RecentActionsPanel';
 import { BulkActionResultDialog } from './BulkActionResultDialog';
 import { TableFilterPresets, getPinnedPreset, setPinnedPreset as savePinnedPreset } from './TableFilterPresets';
@@ -158,6 +158,26 @@ export function KnowledgeControlPlane() {
     setBulkResultOpen(true);
     refetch();
   }, [resources, processingIds, conflictIds, operationalizeBatchWithOutcome, refetch]);
+
+  // ── Queue group batch action handler ────────────────────
+  const handleQueueBatchAction = useCallback(async (
+    ids: string[], action: string, _category: QueueCategory, _items: QueueItem[],
+  ) => {
+    const snapshotResources = resources.filter(r => ids.includes(r.resource_id));
+    if (snapshotResources.length === 0) { toast.info('No resources to process'); return; }
+
+    const actionLabels: Record<string, string> = {
+      extract: 'Extract Knowledge (Queue Batch)',
+      fix: 'Diagnose & Repair (Queue Batch)',
+      inspect: 'Re-inspect (Queue Batch)',
+    };
+    const outcome = await operationalizeBatchWithOutcome(
+      snapshotResources, actionLabels[action] || action, action, processingIds,
+    );
+    setBulkResultOutcome(outcome);
+    setBulkResultOpen(true);
+    refetch();
+  }, [resources, processingIds, operationalizeBatchWithOutcome, refetch]);
 
   const handleInspect = useCallback((r: CanonicalResourceStatus, state: ControlPlaneState) => {
     setInspectResource(r);
@@ -356,6 +376,8 @@ export function KnowledgeControlPlane() {
         outcomeRefreshKey={outcomeRefreshKey}
         onAction={handleAction}
         onInspect={openResourceById}
+        onBatchCategoryAction={handleQueueBatchAction}
+        batchLoading={actionLoading}
       />
 
       {/* Bulk Action Bar */}
