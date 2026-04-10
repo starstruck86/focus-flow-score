@@ -747,6 +747,14 @@ export default function DojoSession() {
             </motion.div>
           )}
         </AnimatePresence>
+        )}
+
+        {/* Feedback for roleplay/review modes */}
+        {sessionType !== 'drill' && phase === 'feedback' && currentResult && (
+          <AnimatePresence mode="wait">
+            {renderFeedback()}
+          </AnimatePresence>
+        )}
       </div>
     </div>
   );
