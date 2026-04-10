@@ -46,11 +46,17 @@ const RECONCILIATION_CONFIG: Record<ReconciliationVerdict, { icon: React.Element
 export function ResourceInspectDrawer({ resource, state, open, onClose, onAction, actionLoading, initialTab }: Props) {
   const [activeTab, setActiveTab] = useState<string>(initialTab ?? 'overview');
 
-  const { resource: detail, knowledgeItems, loading, error } = useResourceInspectData(
-    open && resource ? resource.resource_id : null
-  );
+  const resourceId = open && resource ? resource.resource_id : null;
+  const { resource: detail, knowledgeItems, loading, error } = useResourceInspectData(resourceId);
 
   const handleNavigateTab = useCallback((tab: string) => setActiveTab(tab), []);
+
+  // Reset tab when initialTab changes or drawer opens with a new resource
+  const [lastResourceId, setLastResourceId] = useState<string | null>(null);
+  if (resourceId && resourceId !== lastResourceId) {
+    setLastResourceId(resourceId);
+    setActiveTab(initialTab ?? 'overview');
+  }
 
   if (!resource || !state) return null;
 
