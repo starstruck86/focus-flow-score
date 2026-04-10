@@ -12,11 +12,17 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deriveBlockedReason, deriveCanonicalStage } from '../canonicalLifecycle';
+import {
+  deriveBlockedReason,
+  deriveCanonicalStage,
+  type CanonicalResourceStatus,
+  type LifecycleStage,
+  type BlockedReason,
+} from '../canonicalLifecycle';
 import { deriveControlPlaneState } from '../controlPlaneState';
 import { auditImpossibleExtractionStates } from '../postExtractionReconciliation';
 
-function makeResource(overrides: Record<string, any> = {}) {
+function makeResource(overrides: Partial<CanonicalResourceStatus> & Record<string, any> = {}): CanonicalResourceStatus & Record<string, any> {
   return {
     content_length: 5000,
     content: 'A'.repeat(5000),
