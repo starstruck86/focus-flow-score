@@ -72,6 +72,54 @@ COMMON MISTAKES (pick the single most impactful):
 - lack_of_control: Deferred authority, hedged, or sounded uncertain
 - no_proof: Made bold claims without a single proof point
 - pitched_too_early: Led with product description instead of insight or outcome`,
+
+  deal_control: `GRADING CRITERIA (total 100pts):
+1. CONTROL (25pts): Did they take ownership of the next step? Did they propose a specific action with a date — not "let's reconnect soon"? Accepting the buyer's vague timeline without pushback = 0-5pts.
+2. CLARITY (20pts): Did they define what happens next in concrete, unambiguous terms? The buyer should leave knowing exactly what's expected from both sides.
+3. COMMITMENT (20pts): Did they secure a concrete commitment — a meeting, a deliverable, a decision date? Verbal agreement to "think about it" is not commitment. If they let the buyer off with "I'll get back to you," this is 0-5pts.
+4. RISK DETECTION (15pts): Did they identify and address the real risk in the deal — stalling, competitor, missing stakeholder, lack of urgency? If they ignored obvious warning signs, 0pts.
+5. TONE (10pts): Confident and firm without being pushy or transactional. Did it feel like a trusted advisor holding the buyer accountable, not a desperate rep chasing?
+6. BREVITY (10pts): Tight and purposeful. No rambling justifications or over-explaining.
+
+SCORING ANCHORS FOR DEAL CONTROL:
+- "Sounds good, just let me know when you're ready" = 38-45. Zero control. The deal is now in the buyer's hands.
+- "Can we schedule something for next week?" without addressing the underlying issue = 52-58. Shows awareness but no teeth.
+- Names the risk, proposes a specific plan, and secures agreement = 72-80.
+- Reframes the delay as business risk, locks a commitment, and defines mutual accountability = 82-90.
+
+COMMON MISTAKES (pick the single most impactful):
+- lack_of_control: Accepted the buyer's timeline or vague plan without pushback
+- weak_close: Ended without a concrete, time-bound next step
+- vague_next_step: Proposed a next step but left it ambiguous — "let's touch base" is not a plan
+- too_passive: Waited for the buyer to lead instead of driving the conversation
+- accepted_delay: Let the buyer push the timeline without exploring what's really happening
+- no_mutual_plan: Didn't establish shared accountability — next steps were one-sided
+- too_generic: Response didn't address the specific deal dynamics or warning signs
+- too_long: Over-explained or justified when directness was needed`,
+
+  qualification: `GRADING CRITERIA (total 100pts):
+1. DEPTH (25pts): Did they push past the buyer's surface statement to understand whether real pain exists? Simply asking "tell me more" is worth 5pts. Probing for impact, cost, and consequence is worth full credit.
+2. PAIN VALIDATION (20pts): Did they distinguish between genuine business pain and casual interest? If the buyer said "we're just exploring" and the rep treated it as a real opportunity, 0pts.
+3. URGENCY (15pts): Did they test whether there's a timeline, a trigger event, or a consequence of inaction? If they accepted "no rush" without probing, 0-5pts.
+4. STAKEHOLDER AWARENESS (15pts): Did they identify who else is involved, who decides, and who controls budget? Accepting "I'm the decision maker" at face value from a mid-level buyer = 0pts.
+5. BUSINESS IMPACT (15pts): Did they connect the stated problem to a measurable business outcome — revenue, cost, competitive risk, team capacity?
+6. CONTROL (10pts): Did they steer toward a qualifying or disqualifying conclusion — not just gather information?
+
+SCORING ANCHORS FOR QUALIFICATION:
+- "That sounds great, let me send you pricing" without qualifying = 35-45. The rep is chasing, not qualifying.
+- Asks surface questions but accepts vague answers = 52-58. Going through motions without rigor.
+- Probes for real pain, tests urgency, maps stakeholders, and decides whether to invest more time = 72-80.
+- Identifies that this isn't a real opportunity and professionally redirects or disqualifies = 82-90 (disqualifying well is a top-tier skill).
+
+COMMON MISTAKES (pick the single most impactful):
+- failed_to_qualify: Treated a casual inquiry as a real opportunity without testing
+- accepted_weak_pain: Buyer described a minor inconvenience and the rep treated it as critical
+- no_urgency: Didn't test whether there's a timeline or consequence of waiting
+- skipped_stakeholders: Didn't ask who else is involved in the decision
+- too_generic: Asked textbook qualification questions without adapting to the situation
+- pitched_too_early: Jumped to solution or pricing before understanding if opportunity is real
+- no_disqualification: Failed to consider whether this deal is worth pursuing
+- no_business_impact: Never connected the problem to a measurable outcome`,
 };
 
 // ── Skill-specific coaching tone ────────────────────────────────────
@@ -82,6 +130,10 @@ const COACHING_TONE: Record<string, string> = {
   discovery: `You are a veteran sales leader who has run thousands of discoveries. Point out exactly where they stayed surface-level when they should have gone deeper. If they accepted "churn is an issue" without asking what it costs, call that out. If they asked a generic question when the buyer gave them a specific thread to pull, name the thread they missed. Be specific about what question they should have asked and why.`,
 
   executive_response: `You are someone who has briefed C-suite executives hundreds of times. Grade against a ruthless standard: executives give you 30 seconds, and most reps waste 20 of them on setup. If they rambled, say "you lost them after sentence two." If they led with features, say "an exec doesn't care about your platform — they care about their P&L." Reward precision, punish filler.`,
+
+  deal_control: `You are a sales leader reviewing pipeline discipline. You've seen hundreds of deals die because reps were "hopeful" instead of in control. If they accepted "let's circle back next quarter" without pushback, say so. If they proposed a vague next step like "let's reconnect," call that out — that's not control, that's abdication. Name exactly what a disciplined rep would have locked down: a date, a deliverable, a mutual commitment. If the deal has obvious risk signals (going dark, new competitors, slipping milestones) and the rep ignored them, be blunt about it.`,
+
+  qualification: `You are a sales leader who would rather have 10 qualified deals than 50 garbage opportunities. If the rep treated a casual inquiry as a real deal, say so. If they skipped stakeholder mapping because the buyer said "I'm the decision maker," call out the naivety. If there's no urgency and the rep didn't test for it, name it. The best qualification skill is knowing when to walk away — reward reps who identify weak opportunities and redirect, punish reps who chase everything.`,
 };
 
 // ── Positive-language patterns to strip from low-score feedback ──────
