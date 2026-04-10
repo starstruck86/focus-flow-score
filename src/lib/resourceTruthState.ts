@@ -157,7 +157,11 @@ export function deriveResourceTruth(
   const isContentBacked = !hasPlaceholder && (contentLength >= 200 || hasManualContent);
 
   if (hasPlaceholder && !isActivelyProcessing) {
-    blockers.push(blocker('placeholder_content', `Placeholder content detected — PDF parse incomplete. Stored: "${rawContent.slice(0, 60)}"`));
+    const hasRawFile = !!(rAny.file_url);
+    const repairDetail = hasRawFile
+      ? `PDF found but content not captured during authenticated ingest. Raw file exists — retry parse. Stored: "${rawContent.slice(0, 60)}"`
+      : `PDF found but content not captured during authenticated ingest. No raw file stored — re-import with authentication required. Stored: "${rawContent.slice(0, 60)}"`;
+    blockers.push(blocker('placeholder_content', repairDetail));
   } else if (!isContentBacked && !isActivelyProcessing) {
     blockers.push(blocker('missing_content', 'Content length < 200 chars and no manual content'));
   }
@@ -188,7 +192,11 @@ export function deriveResourceTruth(
 
   // ── Extraction blockers ─────────────────────────────────
   if (isContentBacked && kiTotal === 0 && ENRICHED_STATUSES.includes(enrichStatus) && !isActivelyProcessing) {
-    blockers.push(blocker('needs_extraction', 'Content enriched but no knowledge items extracted'));
+    const isTranscript = rAny.resource_type === 'transcript' || rAny.resource_type === 'podcast' || rAny.resource_type === 'audio';
+    const detail = isTranscript
+      ? `Transcript content exists (${contentLength} chars) — extraction not yet run`
+      : `Content enriched (${contentLength} chars) but no knowledge items extracted`;
+    blockers.push(blocker('needs_extraction', detail));
   }
 
   // ── Activation blockers ─────────────────────────────────
@@ -318,9 +326,13 @@ export function deriveResourceTruth(
       case 'missing_content':
         next_required_action = { label: 'Add Content', actionKey: 'manual_assist', variant: 'default' };
         break;
-      case 'placeholder_content':
-        next_required_action = { label: 'Retry Parse', actionKey: 'deep_enrich', variant: 'default' };
+      case 'placeholder_content': {
+        const hasFile = !!(resource as any).file_url;
+        next_required_action = hasFile
+          ? { label: 'Retry Parse', actionKey: 'deep_enrich', variant: 'default' }
+          : { label: 'Re-import', actionKey: 'manual_assist', variant: 'default' };
         break;
+      }
       case 'needs_enrichment':
         next_required_action = { label: 'Enrich', actionKey: 'deep_enrich', variant: 'default' };
         break;
