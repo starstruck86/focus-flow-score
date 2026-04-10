@@ -150,7 +150,7 @@ export default function DaveCoachingDelivery({
       const summary = summarizeSession(playback.metrics);
       supabase
         .from('dojo_sessions')
-        .update({ audio_metrics: summary as unknown as Record<string, unknown> })
+        .update({ audio_metrics: JSON.parse(JSON.stringify(summary)) })
         .eq('id', sessionId)
         .then(() => {});
 
