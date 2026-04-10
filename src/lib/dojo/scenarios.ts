@@ -6,7 +6,7 @@ export interface DojoScenario {
   title: string;
   context: string;
   objection: string;
-  difficulty: 'standard';
+  difficulty: 'foundational' | 'intermediate' | 'advanced';
 }
 
 const SCENARIOS: DojoScenario[] = [
