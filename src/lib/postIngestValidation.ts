@@ -166,7 +166,8 @@ export type FailureClass =
   | 'pdf_parse_incomplete'
   | 'auth_capture_incomplete'
   | 'enriched_no_extraction'
-  | 'extraction_ready_not_queued';
+  | 'extraction_ready_not_queued'
+  | 'placeholder_enriched_contradiction';
 
 export interface ValidationViolation {
   resource_id: string;
