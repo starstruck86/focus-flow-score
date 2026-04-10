@@ -160,10 +160,13 @@ export function deriveResourceTruth(
 
   if (hasPlaceholder && !isActivelyProcessing) {
     const hasRawFile = !!(rAny.file_url);
-    const repairDetail = hasRawFile
-      ? `PDF found but content not captured during authenticated ingest. Raw file exists — retry parse. Stored: "${rawContent.slice(0, 60)}"`
-      : `PDF found but content not captured during authenticated ingest. No raw file stored — re-import with authentication required. Stored: "${rawContent.slice(0, 60)}"`;
-    blockers.push(blocker('placeholder_content', repairDetail));
+    if (hasRawFile) {
+      const repairDetail = `PDF found but content not captured during authenticated ingest. Raw file exists — retry parse. Stored: "${rawContent.slice(0, 60)}"`;
+      blockers.push(blocker('placeholder_content', repairDetail));
+    } else {
+      const repairDetail = `PDF found but content not captured during authenticated ingest. No raw file stored — re-import with authentication required. Stored: "${rawContent.slice(0, 60)}"`;
+      blockers.push(blocker('auth_capture_incomplete', repairDetail));
+    }
   } else if (!isContentBacked && !isActivelyProcessing) {
     blockers.push(blocker('missing_content', 'Content length < 200 chars and no manual content'));
   }
