@@ -241,7 +241,8 @@ export function onUserRequestedReplay(ctrl: AudioControllerState): ControllerRes
 
 /** User requested skip of current chunk. */
 export function onUserRequestedSkip(ctrl: AudioControllerState): ControllerResult {
-  const dojo = skipCurrentMessage(ctrl.dojo) as PlaybackState;
+  const base = skipCurrentMessage(ctrl.dojo);
+  const dojo = liftPlayback(base, ctrl.dojo);
   return advanceToNext({ ...ctrl, dojo, chunkStartedAt: null });
 }
 
