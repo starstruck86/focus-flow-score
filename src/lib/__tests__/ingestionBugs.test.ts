@@ -186,3 +186,103 @@ describe('Rule C — Enriched content with 0 KIs', () => {
     expect(violations.some(v => v.failure_class === 'enriched_no_extraction')).toBe(true);
   });
 });
+
+// ── IMPOSSIBLE STATE: Placeholder content + enriched ────────
+
+describe('Impossible state — placeholder + enriched must be detected and auto-corrected', () => {
+  const noKIs = { total: 0, active: 0, activeWithContexts: 0 };
+
+  it('placeholder + deep_enriched must be classified as uploaded (not enriched stage)', () => {
+    const resource = {
+      content_length: 51,
+      content: '[Pending parse: exercise_sales_judo-pdf]',
+      manual_content_present: false,
+      enrichment_status: 'deep_enriched',
+      tags: [] as string[],
+    };
+    expect(deriveCanonicalStage(resource, noKIs)).toBe('uploaded');
+  });
+
+  it('placeholder + enriched triggers placeholder_enriched_contradiction violation', () => {
+    const violations = validateResource({
+      id: 'placeholder-enriched-test',
+      title: 'Fake Enriched Resource',
+      resource_type: 'document',
+      content: '[Pending parse: some-file-pdf]',
+      content_length: 30,
+      enrichment_status: 'deep_enriched',
+      file_url: 'bucket/path/file.pdf',
+      current_resource_ki_count: 0,
+      extraction_attempt_count: 0,
+    });
+    const contradiction = violations.find(v => v.failure_class === 'placeholder_enriched_contradiction');
+    expect(contradiction).toBeDefined();
+    expect(contradiction!.auto_repairable).toBe(true);
+    expect(contradiction!.repair_action).toBe('reset_enrichment_status');
+  });
+
+  it('placeholder + verified also triggers contradiction', () => {
+    const violations = validateResource({
+      id: 'placeholder-verified-test',
+      title: 'Verified But Placeholder',
+      resource_type: 'document',
+      content: '[Pending parse]',
+      content_length: 15,
+      enrichment_status: 'verified',
+      file_url: null,
+      current_resource_ki_count: 0,
+      extraction_attempt_count: 0,
+    });
+    expect(violations.some(v => v.failure_class === 'placeholder_enriched_contradiction')).toBe(true);
+  });
+
+  it('real content + deep_enriched does NOT trigger contradiction', () => {
+    const violations = validateResource({
+      id: 'real-enriched-test',
+      title: 'Properly Enriched Resource',
+      resource_type: 'document',
+      content: 'Real sales methodology content about discovery techniques ' + 'x'.repeat(500),
+      content_length: 556,
+      enrichment_status: 'deep_enriched',
+      file_url: null,
+      current_resource_ki_count: 5,
+      extraction_attempt_count: 1,
+    });
+    expect(violations.some(v => v.failure_class === 'placeholder_enriched_contradiction')).toBe(false);
+  });
+
+  it('Pclub exact case: [Pending parse: exercise_sales_judo-pdf] + deep_enriched is impossible', () => {
+    // This is the exact real-world case that caused the original bug
+    const resource = {
+      content_length: 40,
+      content: '[Pending parse: exercise_sales_judo-pdf]',
+      manual_content_present: false,
+      enrichment_status: 'deep_enriched',
+      tags: [] as string[],
+      manual_input_required: false,
+      recovery_queue_bucket: null,
+      failure_reason: null,
+      file_url: '9f11e308/lesson-assets/12a386ca/exercise_sales_judo-pdf.pdf',
+    };
+
+    // Lifecycle must NOT show this as enriched
+    expect(deriveCanonicalStage(resource, noKIs)).toBe('uploaded');
+    expect(deriveBlockedReason(resource, noKIs)).toBe('placeholder_content');
+
+    // Validation must flag the contradiction
+    const violations = validateResource({
+      id: '59534836-56f2-4de3-80e1-39e2526990b5',
+      title: 'exercise_sales_judo-pdf',
+      resource_type: 'document',
+      content: resource.content,
+      content_length: resource.content_length,
+      enrichment_status: resource.enrichment_status,
+      file_url: resource.file_url,
+      current_resource_ki_count: 0,
+      extraction_attempt_count: 0,
+    });
+    // Must have BOTH: pdf_parse_incomplete AND placeholder_enriched_contradiction
+    expect(violations.some(v => v.failure_class === 'pdf_parse_incomplete')).toBe(true);
+    expect(violations.some(v => v.failure_class === 'placeholder_enriched_contradiction')).toBe(true);
+  });
+});
