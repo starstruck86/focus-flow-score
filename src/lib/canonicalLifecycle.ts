@@ -76,8 +76,8 @@ export type BlockedReason =
 
 export const BLOCKED_LABELS: Record<BlockedReason, string> = {
   empty_content: 'Empty content',
-  placeholder_content: 'Parse incomplete — placeholder content only',
-  no_extraction: 'Content exists but extraction not triggered',
+  placeholder_content: 'PDF found but content not captured during ingest',
+  no_extraction: 'Transcript content exists — extraction not yet run',
   no_activation: 'No activation',
   missing_contexts: 'Missing contexts',
   stale_blocker_state: 'Stale blocker state',
