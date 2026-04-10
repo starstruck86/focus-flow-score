@@ -166,57 +166,95 @@ const captionFetchHeaders: Record<string, string> = {
   "Cookie": "CONSENT=PENDING+987; SOCS=CAESEwgDEgk2NjI1MjcyNjAaAmVuIAEaBgiA_L2aBg",
 };
 
-async function fetchAndParseCaptions(captionUrl: string): Promise<string> {
+async function fetchAndParseCaptions(captionUrl: string, videoId: string, lang: string): Promise<string> {
   console.log(`[youtube-captions] Caption URL: ${captionUrl.slice(0, 200)}`);
-  // Strategy 1: Default XML format with proper headers
+
+  // Strategy 1: Use the timedtext API directly (bypasses signature issues)
   try {
-    const resp = await fetch(captionUrl, { headers: captionFetchHeaders, redirect: "follow" });
-    console.log(`[youtube-captions] Caption fetch status: ${resp.status}, headers: ${JSON.stringify(Object.fromEntries(resp.headers.entries())).slice(0, 300)}`);
-    const text = await resp.text();
-    console.log(`[youtube-captions] Default format response: ${text.length} chars, starts with: ${text.slice(0, 300)}`);
-    if (resp.ok && text.length > 0) {
-      const parsed = parseXmlCaptions(text);
-      if (parsed.length > 50) {
-        console.log(`[youtube-captions] XML parse success: ${parsed.length} chars`);
-        return parsed;
+    const timedtextUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}`;
+    console.log(`[youtube-captions] Trying timedtext API: ${timedtextUrl}`);
+    const resp = await fetch(timedtextUrl, { headers: captionFetchHeaders, redirect: "follow" });
+    if (resp.ok) {
+      const text = await resp.text();
+      console.log(`[youtube-captions] timedtext API response: ${text.length} chars, starts: ${text.slice(0, 150)}`);
+      if (text.length > 0) {
+        const parsed = parseXmlCaptions(text);
+        if (parsed.length > 50) {
+          console.log(`[youtube-captions] timedtext API success: ${parsed.length} chars`);
+          return parsed;
+        }
       }
-      // Try as JSON too
-      const jsonParsed = parseSrv3Json(text);
-      if (jsonParsed.length > 50) return jsonParsed;
     }
   } catch (e) {
-    console.log(`[youtube-captions] Default format failed: ${(e as Error).message}`);
+    console.log(`[youtube-captions] timedtext API failed: ${(e as Error).message}`);
   }
 
-  // Strategy 2: srv3 JSON format
-  try {
-    const url = new URL(captionUrl);
-    url.searchParams.set("fmt", "srv3");
-    const resp = await fetch(url.toString(), { headers: captionFetchHeaders });
-    if (resp.ok) {
-      const text = await resp.text();
-      console.log(`[youtube-captions] srv3 response: ${text.length} chars`);
-      const parsed = parseSrv3Json(text);
-      if (parsed.length > 50) return parsed;
-      const xmlParsed = parseXmlCaptions(text);
-      if (xmlParsed.length > 50) return xmlParsed;
+  // Strategy 2: Fetch caption URL with proper headers
+  for (const fmt of [undefined, "srv3", "1"]) {
+    try {
+      const url = new URL(captionUrl);
+      if (fmt) url.searchParams.set("fmt", fmt);
+      const resp = await fetch(url.toString(), { headers: captionFetchHeaders, redirect: "follow" });
+      if (resp.ok) {
+        const text = await resp.text();
+        console.log(`[youtube-captions] fmt=${fmt || 'default'} response: ${text.length} chars`);
+        if (text.length > 0) {
+          const xmlParsed = parseXmlCaptions(text);
+          if (xmlParsed.length > 50) return xmlParsed;
+          const jsonParsed = parseSrv3Json(text);
+          if (jsonParsed.length > 50) return jsonParsed;
+        }
+      }
+    } catch (e) {
+      console.log(`[youtube-captions] fmt=${fmt || 'default'} failed: ${(e as Error).message}`);
     }
-  } catch (e) {
-    console.log(`[youtube-captions] srv3 format failed: ${(e as Error).message}`);
   }
 
-  // Strategy 3: fmt=1 (legacy XML)
+  // Strategy 3: Use innertube API to get captions
   try {
-    const url = new URL(captionUrl);
-    url.searchParams.set("fmt", "1");
-    const resp = await fetch(url.toString(), { headers: captionFetchHeaders });
+    const innertubeUrl = "https://www.youtube.com/youtubei/v1/get_transcript";
+    const payload = {
+      context: {
+        client: { clientName: "WEB", clientVersion: "2.20240101.00.00" }
+      },
+      params: btoa(`\n\x0b${videoId}`)
+    };
+    const resp = await fetch(innertubeUrl, {
+      method: "POST",
+      headers: { ...captionFetchHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
     if (resp.ok) {
-      const text = await resp.text();
-      const parsed = parseXmlCaptions(text);
-      if (parsed.length > 50) return parsed;
+      const data = await resp.json();
+      console.log(`[youtube-captions] innertube transcript keys: ${JSON.stringify(Object.keys(data)).slice(0, 200)}`);
+      const actions = data?.actions;
+      if (Array.isArray(actions)) {
+        const lines: string[] = [];
+        for (const action of actions) {
+          const body = action?.updateEngagementPanelAction?.content?.transcriptRenderer?.body?.transcriptBodyRenderer?.cueGroups;
+          if (Array.isArray(body)) {
+            for (const group of body) {
+              const cues = group?.transcriptCueGroupRenderer?.cues;
+              if (Array.isArray(cues)) {
+                for (const cue of cues) {
+                  const text = cue?.transcriptCueRenderer?.cue?.simpleText;
+                  if (text) lines.push(text);
+                }
+              }
+            }
+          }
+        }
+        if (lines.length > 0) {
+          const transcript = lines.join(" ").replace(/\s+/g, " ").trim();
+          if (transcript.length > 50) {
+            console.log(`[youtube-captions] innertube transcript success: ${transcript.length} chars`);
+            return transcript;
+          }
+        }
+      }
     }
   } catch (e) {
-    console.log(`[youtube-captions] fmt=1 failed: ${(e as Error).message}`);
+    console.log(`[youtube-captions] innertube transcript failed: ${(e as Error).message}`);
   }
 
   return "";
