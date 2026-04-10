@@ -147,12 +147,18 @@ export function deriveResourceTruth(
   const ps = deriveProcessingState(resource, audioJob);
   const isActivelyProcessing = ps.state === 'RUNNING' && !hasStuckJob;
 
+  // ── Placeholder content detection (Rule B) ──────────────
+  const contentText = (rAny.content as string) ?? '';
+  const hasPlaceholder = isPlaceholderContent(contentText) && contentText.length > 0;
+
   // ── Content blockers ────────────────────────────────────
   const contentLength = rAny.content_length ?? 0;
   const hasManualContent = rAny.manual_content_present === true;
-  const isContentBacked = contentLength >= 200 || hasManualContent;
+  const isContentBacked = !hasPlaceholder && (contentLength >= 200 || hasManualContent);
 
-  if (!isContentBacked && !isActivelyProcessing) {
+  if (hasPlaceholder && !isActivelyProcessing) {
+    blockers.push(blocker('placeholder_content', `Placeholder content detected — PDF parse incomplete. Stored: "${contentText.slice(0, 60)}"`));
+  } else if (!isContentBacked && !isActivelyProcessing) {
     blockers.push(blocker('missing_content', 'Content length < 200 chars and no manual content'));
   }
 
