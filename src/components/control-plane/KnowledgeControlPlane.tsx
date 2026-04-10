@@ -1,7 +1,7 @@
 /**
  * Knowledge Control Plane — trust-first, lifecycle-driven, operable workspace.
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { RefreshCw, Filter, Clock, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -43,8 +43,21 @@ export function KnowledgeControlPlane() {
   const [customFilterIds, setCustomFilterIds] = useState<Set<string> | null>(null);
   const [customFilterLabel, setCustomFilterLabel] = useState<string | null>(null);
 
-  // Apply pinned preset on mount
+  // Apply pinned preset on mount once resources load
   const [didApplyPinned, setDidApplyPinned] = useState(false);
+  useEffect(() => {
+    if (didApplyPinned || resources.length === 0) return;
+    const pinned = getPinnedPreset();
+    if (!pinned) { setDidApplyPinned(true); return; }
+    const filterMap: Record<string, ControlPlaneFilter> = { cleanup: 'needs_review', mismatches: 'conflicts', extract: 'needs_extraction' };
+    if (pinned === 'ai-ready') {
+      handleFilterReadiness('groundingEligible');
+      setActivePresetId('ai-ready');
+    } else if (filterMap[pinned]) {
+      handleFilterChange(filterMap[pinned]);
+    }
+    setDidApplyPinned(true);
+  }, [didApplyPinned, resources.length, handleFilterChange, handleFilterReadiness]);
 
   // Inspect drawer state
   const [inspectResource, setInspectResource] = useState<CanonicalResourceStatus | null>(null);
