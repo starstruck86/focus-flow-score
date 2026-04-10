@@ -423,16 +423,6 @@ export default function DojoSession() {
                         "{currentResult.worldClassResponse}"
                       </p>
 
-                      {/* Pattern tags */}
-                      {currentResult.patternTags && currentResult.patternTags.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {currentResult.patternTags.map((tag, i) => (
-                            <Badge key={i} variant="secondary" className="text-[10px] font-medium">
-                              {PATTERN_TAG_LABELS[tag] || tag.replace(/_/g, ' ')}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
 
                       {/* Why it works */}
                       {currentResult.whyItWorks && currentResult.whyItWorks.length > 0 && (
