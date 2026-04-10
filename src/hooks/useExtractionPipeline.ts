@@ -13,6 +13,7 @@ import {
   type PipelineStats,
   type JobScope,
 } from '@/lib/extractionPipeline';
+import { invalidateExtractionCaches } from '@/lib/postExtractionReconciliation';
 
 export function useExtractionPipeline() {
   const { user } = useAuth();
@@ -28,10 +29,7 @@ export function useExtractionPipeline() {
   const lastInvalidateRef = useRef(0);
 
   const invalidate = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['knowledge-items'] });
-    qc.invalidateQueries({ queryKey: ['resources'] });
-    qc.invalidateQueries({ queryKey: ['pipeline-diagnoses'] });
-    qc.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
+    invalidateExtractionCaches(qc);
     lastInvalidateRef.current = Date.now();
   }, [qc]);
 
