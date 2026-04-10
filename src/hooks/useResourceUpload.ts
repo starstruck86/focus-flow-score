@@ -431,13 +431,18 @@ export function useAddUrlResource() {
       qc.invalidateQueries({ queryKey: ['resource-folders'] });
       toast.success('Link added and classified');
       if (data?.id) {
-        autoOperationalizeResource(data.id).then(result => {
+        autoOperationalizeResource(data.id).then(async result => {
           qc.invalidateQueries({ queryKey: ['knowledge-items'] });
           if (result.operationalized) {
             toast.success(`Auto-operationalized — ${result.knowledgeExtracted} extracted, ${result.knowledgeActivated} activated`);
           } else if (result.stagesCompleted.includes('knowledge_extracted')) {
             toast.info(`${result.knowledgeExtracted} knowledge items extracted — review to activate`);
           }
+          // Post-ingest validation: catch and self-heal any remaining issues
+          try {
+            const { validateAndRemediate } = await import('@/lib/postIngestValidation');
+            await validateAndRemediate(data.id);
+          } catch { /* non-critical */ }
         }).catch(() => { /* non-fatal */ });
       }
     },
