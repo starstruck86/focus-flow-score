@@ -1,14 +1,13 @@
 /**
- * Dojo Audio Analytics v2
+ * Dojo Audio Analytics v3
  *
  * Structured telemetry for Dave's audio delivery inside Sales Dojo.
- * Tracks chunk lifecycle, failures, retries, degradation, recovery,
- * transport details, and ownership conflicts.
- *
- * No side effects beyond logging. No UI coupling.
+ * Tracks chunk lifecycle, audibility, failures, retries, degradation, recovery,
+ * transport details, ownership conflicts, and visibility events.
  */
 
 import { createLogger } from '@/lib/logger';
+import type { RestoreReason, ChunkAudibleState } from './dojoAudioController';
 
 const log = createLogger('DojoAudio');
 
@@ -48,11 +47,23 @@ export interface DojoAudioMetrics {
   ownershipConflictCount: number;
   /** How many chunks actually became audible (got 'playing' event). */
   chunksAudible: number;
+  /** How many chunks failed before reaching audible state. */
+  chunksFailedBeforeAudible: number;
+  /** How many chunks failed after reaching audible state. */
+  chunksFailedAfterAudible: number;
   /** How many chunks were voice vs text fallback vs replay vs skip. */
   voiceDeliveryCount: number;
   textFallbackDeliveryCount: number;
   /** How many voice restores after degradation. */
   voiceRestoreCount: number;
+
+  // ── Visibility metrics ──
+  tabHiddenCount: number;
+  tabResumeCount: number;
+
+  // ── Restore reason tracking ──
+  lastRestoreReason: RestoreReason;
+  restoreReasons: RestoreReason[];
 }
 
 export function createMetrics(): DojoAudioMetrics {
@@ -85,9 +96,15 @@ export function createMetrics(): DojoAudioMetrics {
     autoplayBlockedCount: 0,
     ownershipConflictCount: 0,
     chunksAudible: 0,
+    chunksFailedBeforeAudible: 0,
+    chunksFailedAfterAudible: 0,
     voiceDeliveryCount: 0,
     textFallbackDeliveryCount: 0,
     voiceRestoreCount: 0,
+    tabHiddenCount: 0,
+    tabResumeCount: 0,
+    lastRestoreReason: null,
+    restoreReasons: [],
   };
 }
 
@@ -128,6 +145,16 @@ export function logChunkFailed(m: DojoAudioMetrics, chunkId: string, error: stri
     chunksFailed: m.chunksFailed + 1,
     autoplayBlockedCount: isAutoplay ? m.autoplayBlockedCount + 1 : m.autoplayBlockedCount,
   };
+}
+
+export function logChunkFailedAudibility(m: DojoAudioMetrics, state: ChunkAudibleState): DojoAudioMetrics {
+  if (state === 'failed_before_audible') {
+    return { ...m, chunksFailedBeforeAudible: m.chunksFailedBeforeAudible + 1 };
+  }
+  if (state === 'failed_after_audible') {
+    return { ...m, chunksFailedAfterAudible: m.chunksFailedAfterAudible + 1 };
+  }
+  return m;
 }
 
 export function logChunkTimedOut(m: DojoAudioMetrics, chunkId: string): DojoAudioMetrics {
@@ -210,6 +237,22 @@ export function logOwnershipConflict(m: DojoAudioMetrics): DojoAudioMetrics {
   return { ...m, ownershipConflictCount: m.ownershipConflictCount + 1 };
 }
 
+export function logTabHidden(m: DojoAudioMetrics): DojoAudioMetrics {
+  log.debug('tab_hidden');
+  return { ...m, tabHiddenCount: m.tabHiddenCount + 1 };
+}
+
+export function logTabResume(m: DojoAudioMetrics): DojoAudioMetrics {
+  log.debug('tab_resumed');
+  return { ...m, tabResumeCount: m.tabResumeCount + 1 };
+}
+
+export function logRestoreReason(m: DojoAudioMetrics, reason: RestoreReason): DojoAudioMetrics {
+  if (!reason) return m;
+  log.info('restore_reason', { reason });
+  return { ...m, lastRestoreReason: reason, restoreReasons: [...m.restoreReasons, reason] };
+}
+
 // ── Summary ────────────────────────────────────────────────────────
 
 export interface AudioSessionSummary {
@@ -234,14 +277,19 @@ export interface AudioSessionSummary {
   sessionDegrades: number;
   duplicateSuppressions: number;
   staleSuppressions: number;
-  // v2 fields
   transportRetries: number;
   autoplayBlocked: number;
   ownershipConflicts: number;
   chunksAudible: number;
+  chunksFailedBeforeAudible: number;
+  chunksFailedAfterAudible: number;
   voiceDeliveries: number;
   textFallbackDeliveries: number;
   voiceRestores: number;
+  tabHiddenCount: number;
+  tabResumeCount: number;
+  lastRestoreReason: RestoreReason;
+  restoreReasons: RestoreReason[];
 }
 
 export function summarizeSession(m: DojoAudioMetrics): AudioSessionSummary {
@@ -280,9 +328,15 @@ export function summarizeSession(m: DojoAudioMetrics): AudioSessionSummary {
     autoplayBlocked: m.autoplayBlockedCount,
     ownershipConflicts: m.ownershipConflictCount,
     chunksAudible: m.chunksAudible,
+    chunksFailedBeforeAudible: m.chunksFailedBeforeAudible,
+    chunksFailedAfterAudible: m.chunksFailedAfterAudible,
     voiceDeliveries: m.voiceDeliveryCount,
     textFallbackDeliveries: m.textFallbackDeliveryCount,
     voiceRestores: m.voiceRestoreCount,
+    tabHiddenCount: m.tabHiddenCount,
+    tabResumeCount: m.tabResumeCount,
+    lastRestoreReason: m.lastRestoreReason,
+    restoreReasons: m.restoreReasons,
   };
 }
 

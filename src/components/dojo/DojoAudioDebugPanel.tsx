@@ -9,23 +9,29 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bug, X, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import type { AudioControllerState, DeliveryMode, DegradationLevel } from '@/lib/dojo/dojoAudioController';
+import type { AudioControllerState, RestoreReason, ChunkAudibleState } from '@/lib/dojo/dojoAudioController';
 import type { ControllerDirective } from '@/lib/dojo/dojoAudioController';
 import type { DojoAudioMetrics } from '@/lib/dojo/dojoAudioAnalytics';
 import { loadSnapshot, clearSnapshot } from '@/lib/dojo/dojoSessionSnapshot';
 import { getOwnerInfo, TAB_ID } from '@/lib/dojo/dojoSessionOwnership';
+import { getCurrentVisibility } from '@/lib/dojo/dojoVisibilityGuard';
 
 interface Props {
   controllerState: AudioControllerState | null;
   lastDirective: ControllerDirective | null;
   metrics: DojoAudioMetrics;
   wasRecovered: boolean;
+  restoreReason?: RestoreReason;
+  ownershipConflict?: boolean;
   onSimulateInterrupt?: () => void;
   onSimulateTimeout?: () => void;
   onForceTextFallback?: () => void;
   onRestoreVoice?: () => void;
   onReplayLast?: () => void;
   onClearSnapshot?: () => void;
+  onSimulateHiddenTab?: () => void;
+  onSimulateOwnerConflict?: () => void;
+  onSimulateAutoplayBlock?: () => void;
 }
 
 function Row({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
@@ -42,12 +48,17 @@ export default function DojoAudioDebugPanel({
   lastDirective,
   metrics,
   wasRecovered,
+  restoreReason,
+  ownershipConflict,
   onSimulateInterrupt,
   onSimulateTimeout,
   onForceTextFallback,
   onRestoreVoice,
   onReplayLast,
   onClearSnapshot,
+  onSimulateHiddenTab,
+  onSimulateOwnerConflict,
+  onSimulateAutoplayBlock,
 }: Props) {
   const [visible, setVisible] = useState(false);
 
@@ -63,9 +74,11 @@ export default function DojoAudioDebugPanel({
   }, []);
 
   const exportState = useCallback(() => {
+    const ownerInfo = ctrl?.dojo.sessionId ? getOwnerInfo(ctrl.dojo.sessionId) : null;
     const payload = {
       timestamp: new Date().toISOString(),
       tabId: TAB_ID,
+      tabVisibility: getCurrentVisibility(),
       controllerState: ctrl
         ? {
             deliveryMode: ctrl.deliveryMode,
@@ -80,11 +93,18 @@ export default function DojoAudioDebugPanel({
             currentPlayingChunkId: ctrl.dojo.playback.currentPlayingChunkId,
             consecutiveFailures: ctrl.dojo.playback.consecutiveFailures,
             chunkStartedAt: ctrl.chunkStartedAt,
+            chunkAudibleState: ctrl.chunkAudibleState,
+            lastAudibleChunkId: ctrl.lastAudibleChunkId,
+            restoreReason: ctrl.restoreReason,
+            tabVisible: ctrl.tabVisible,
           }
         : null,
       lastDirective,
       metrics,
       wasRecovered,
+      restoreReason,
+      ownershipConflict,
+      ownerInfo,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -93,7 +113,7 @@ export default function DojoAudioDebugPanel({
     a.download = `dojo-audio-debug-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [ctrl, lastDirective, metrics, wasRecovered]);
+  }, [ctrl, lastDirective, metrics, wasRecovered, restoreReason, ownershipConflict]);
 
   if (!visible) return null;
 
@@ -133,6 +153,8 @@ export default function DojoAudioDebugPanel({
               <Row label="Mode" value={ctrl.deliveryMode} warn={ctrl.deliveryMode === 'text_fallback'} />
               <Row label="Degradation" value={ctrl.degradation} warn={ctrl.degradation !== 'none'} />
               <Row label="Recovered" value={wasRecovered ? 'yes' : 'no'} />
+              <Row label="Restore Reason" value={restoreReason ?? ctrl.restoreReason ?? '—'} warn={!!restoreReason} />
+              <Row label="Tab Visible" value={ctrl.tabVisible ? 'yes' : 'no'} warn={!ctrl.tabVisible} />
             </div>
 
             {/* Chunk state */}
@@ -142,6 +164,8 @@ export default function DojoAudioDebugPanel({
               <Row label="Current ID" value={currentChunk?.id.slice(0, 8) ?? '—'} />
               <Row label="Current Label" value={currentChunk?.label ?? '—'} />
               <Row label="Playing ID" value={playingId?.slice(0, 8) ?? '—'} />
+              <Row label="Audible State" value={ctrl.chunkAudibleState} warn={ctrl.chunkAudibleState.startsWith('failed')} />
+              <Row label="Last Audible" value={ctrl.lastAudibleChunkId?.slice(0, 8) ?? '—'} />
               <Row
                 label="Attempts"
                 value={currentChunk ? String(ctrl.chunkAttempts.get(currentChunk.id) ?? 0) : '—'}
@@ -164,12 +188,18 @@ export default function DojoAudioDebugPanel({
               <p className="text-[9px] text-muted-foreground/40 uppercase tracking-wider">Metrics</p>
               <Row label="Requested" value={String(metrics.chunksRequested)} />
               <Row label="Completed" value={String(metrics.chunksCompleted)} />
+              <Row label="Audible" value={String(metrics.chunksAudible)} />
               <Row label="Failed" value={String(metrics.chunksFailed)} warn={metrics.chunksFailed > 0} />
+              <Row label="Failed Pre-Audible" value={String(metrics.chunksFailedBeforeAudible)} warn={metrics.chunksFailedBeforeAudible > 0} />
+              <Row label="Failed Post-Audible" value={String(metrics.chunksFailedAfterAudible)} warn={metrics.chunksFailedAfterAudible > 0} />
               <Row label="Timed Out" value={String(metrics.chunksTimedOut)} warn={metrics.chunksTimedOut > 0} />
               <Row label="Retries" value={String(metrics.retryAttempts)} />
               <Row label="Crash Recoveries" value={String(metrics.crashRecoveryCount)} />
               <Row label="Dup Suppressed" value={String(metrics.duplicateCallbackSuppressions)} />
               <Row label="Stale Suppressed" value={String(metrics.staleCallbackSuppressions)} />
+              <Row label="Tab Hidden" value={String(metrics.tabHiddenCount)} />
+              <Row label="Tab Resume" value={String(metrics.tabResumeCount)} />
+              <Row label="Ownership Conflicts" value={String(metrics.ownershipConflictCount)} warn={metrics.ownershipConflictCount > 0} />
             </div>
 
             {/* Ownership */}
@@ -178,6 +208,7 @@ export default function DojoAudioDebugPanel({
                 <p className="text-[9px] text-muted-foreground/40 uppercase tracking-wider">Ownership</p>
                 <Row label="This Tab" value={TAB_ID.slice(0, 12)} />
                 <Row label="Owner" value={ownerInfo.isThisTab ? 'this tab' : ownerInfo.ownerTabId?.slice(0, 12) ?? '—'} warn={!ownerInfo.isThisTab && ownerInfo.hasOwner} />
+                <Row label="Conflict" value={ownershipConflict ? 'yes' : 'no'} warn={ownershipConflict} />
                 <Row label="Stale" value={ownerInfo.isStale ? 'yes' : 'no'} warn={ownerInfo.isStale} />
                 {ownerInfo.lastHeartbeatAge !== null && (
                   <Row label="Heartbeat Age" value={`${Math.round(ownerInfo.lastHeartbeatAge / 1000)}s`} />
@@ -237,6 +268,21 @@ export default function DojoAudioDebugPanel({
               {onReplayLast && (
                 <Button variant="outline" size="sm" className="h-6 text-[9px] px-2" onClick={onReplayLast}>
                   Replay
+                </Button>
+              )}
+              {onSimulateHiddenTab && (
+                <Button variant="outline" size="sm" className="h-6 text-[9px] px-2" onClick={onSimulateHiddenTab}>
+                  Sim Hidden
+                </Button>
+              )}
+              {onSimulateOwnerConflict && (
+                <Button variant="outline" size="sm" className="h-6 text-[9px] px-2" onClick={onSimulateOwnerConflict}>
+                  Sim Conflict
+                </Button>
+              )}
+              {onSimulateAutoplayBlock && (
+                <Button variant="outline" size="sm" className="h-6 text-[9px] px-2" onClick={onSimulateAutoplayBlock}>
+                  Sim Autoplay
                 </Button>
               )}
               {onClearSnapshot && (

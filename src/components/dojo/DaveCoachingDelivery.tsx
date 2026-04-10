@@ -8,8 +8,9 @@
  * - Claim session ownership (multi-tab protection)
  * - Render currently-speaking chunk with visual indicator
  * - Show text fallback inline when voice degrades
+ * - Show ownership conflict state with recovery options
  * - Provide replay / skip / interrupt controls
- * - Surface reliability status (speaking, degraded, recovered, interrupted, restored)
+ * - Surface reliability status (speaking, degraded, recovered, interrupted, restored, conflict)
  * - Optionally show debug panel (Ctrl+Shift+A)
  */
 
@@ -18,7 +19,8 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
   Volume2, VolumeX, SkipForward, RotateCcw,
-  Pause, Play, RefreshCw, CheckCircle, type LucideIcon,
+  Pause, Play, RefreshCw, CheckCircle, AlertTriangle,
+  type LucideIcon,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { summarizeSession } from '@/lib/dojo/dojoAudioAnalytics';
@@ -52,6 +54,7 @@ type DeliveryStatus =
   | 'replaying'
   | 'skipped'
   | 'recovered'
+  | 'ownership_conflict'
   | 'complete';
 
 function deriveStatus(
@@ -59,8 +62,10 @@ function deriveStatus(
   isPlaying: boolean,
   deliveryMode: 'voice' | 'text_fallback',
   wasRecovered: boolean,
+  ownershipConflict: boolean,
   prevStatus: DeliveryStatus
 ): DeliveryStatus {
+  if (ownershipConflict) return 'ownership_conflict';
   if (!directive) return wasRecovered ? 'recovered' : 'idle';
   if (directive.kind === 'delivery_complete') return 'complete';
 
@@ -85,6 +90,7 @@ const STATUS_CONFIG: Record<DeliveryStatus, { label: string; Icon: LucideIcon; c
   replaying: { label: 'Replaying last chunk', Icon: RotateCcw, className: 'text-blue-500' },
   skipped: { label: 'Skipped — moving on', Icon: SkipForward, className: 'text-muted-foreground' },
   recovered: { label: 'Session recovered — picking up where you left off', Icon: RefreshCw, className: 'text-green-500' },
+  ownership_conflict: { label: 'This session is active in another tab', Icon: AlertTriangle, className: 'text-amber-500' },
   complete: { label: 'Coaching complete', Icon: CheckCircle, className: 'text-green-500' },
 };
 
@@ -140,7 +146,7 @@ export default function DaveCoachingDelivery({
     const d = playback.lastDirective;
     if (!d) return;
 
-    const newStatus = deriveStatus(d, playback.isPlaying, playback.deliveryMode, playback.wasRecovered, status);
+    const newStatus = deriveStatus(d, playback.isPlaying, playback.deliveryMode, playback.wasRecovered, playback.ownershipConflict, status);
     setStatus(newStatus);
 
     // Auto-clear transient statuses
@@ -170,7 +176,7 @@ export default function DaveCoachingDelivery({
         .then(() => {});
       onDeliveryComplete?.();
     }
-  }, [playback.lastDirective, playback.isPlaying, playback.deliveryMode, playback.wasRecovered, onDeliveryComplete]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playback.lastDirective, playback.isPlaying, playback.deliveryMode, playback.wasRecovered, playback.ownershipConflict, onDeliveryComplete]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track completed chunks for text transcript
   useEffect(() => {
@@ -188,6 +194,13 @@ export default function DaveCoachingDelivery({
     });
   }, [playback.controllerState]);
 
+  // Update status on ownership conflict change
+  useEffect(() => {
+    if (playback.ownershipConflict) {
+      setStatus('ownership_conflict');
+    }
+  }, [playback.ownershipConflict]);
+
   const statusConfig = STATUS_CONFIG[status];
   const currentChunk = playback.controllerState?.dojo.chunks.find(
     (c) => c.id === playback.controllerState?.dojo.playback.currentPlayingChunkId
@@ -201,6 +214,7 @@ export default function DaveCoachingDelivery({
           'flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-300',
           status === 'voice_degraded' && 'bg-amber-500/5 border-amber-500/20',
           status === 'interrupted' && 'bg-amber-500/5 border-amber-500/20',
+          status === 'ownership_conflict' && 'bg-amber-500/5 border-amber-500/20',
           status === 'speaking' && 'bg-primary/5 border-primary/20',
           status === 'voice_restored' && 'bg-green-500/5 border-green-500/20',
           status === 'recovered' && 'bg-green-500/5 border-green-500/20',
@@ -236,8 +250,24 @@ export default function DaveCoachingDelivery({
         </div>
       )}
 
+      {/* Ownership Conflict Actions */}
+      {status === 'ownership_conflict' && (
+        <div className="flex items-center gap-2 px-3">
+          <Button
+            variant="outline" size="sm"
+            className="h-7 text-xs"
+            onClick={() => playback.retryOwnership()}
+          >
+            Take over session
+          </Button>
+          <span className="text-[10px] text-muted-foreground">
+            Or continue reading in text below
+          </span>
+        </div>
+      )}
+
       {/* Playback Controls */}
-      {playback.controllerState && status !== 'complete' && (
+      {playback.controllerState && status !== 'complete' && status !== 'ownership_conflict' && (
         <div className="flex items-center gap-2">
           {playback.isPlaying && (
             <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => playback.interrupt()}>
@@ -287,7 +317,7 @@ export default function DaveCoachingDelivery({
       )}
 
       {/* Text Transcript */}
-      {textChunks.length > 0 && playback.deliveryMode === 'text_fallback' && (
+      {textChunks.length > 0 && (playback.deliveryMode === 'text_fallback' || status === 'ownership_conflict') && (
         <div className="space-y-2">
           {textChunks.map((chunk) => (
             <div
@@ -316,6 +346,8 @@ export default function DaveCoachingDelivery({
           lastDirective={playback.lastDirective}
           metrics={playback.metrics}
           wasRecovered={playback.wasRecovered}
+          restoreReason={playback.restoreReason}
+          ownershipConflict={playback.ownershipConflict}
           onSimulateInterrupt={playback.interrupt}
           onForceTextFallback={() => playback.degradeToText('debug_forced')}
           onRestoreVoice={() => playback.restoreVoice('debug_restore')}
