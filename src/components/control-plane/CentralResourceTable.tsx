@@ -27,6 +27,7 @@ import {
 } from '@/lib/controlPlaneState';
 import { ActionPreviewDialog, buildActionPreview, type ActionPreview } from './ActionPreviewDialog';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
+import { normalizeSourceType } from '@/lib/sourceTypeNormalizer';
 import { getRowFlash, type RowFlashStatus } from '@/lib/actionOutcomeStore';
 
 interface Props {
