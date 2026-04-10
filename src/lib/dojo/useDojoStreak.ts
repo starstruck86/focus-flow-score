@@ -31,7 +31,7 @@ export function useDojoStats() {
       const [sessionsRes, turnsRes] = await Promise.all([
         supabase
           .from('dojo_sessions')
-          .select('started_at, best_score, latest_score, status, skill_focus')
+          .select('id, started_at, best_score, latest_score, status, skill_focus')
           .eq('user_id', user!.id)
           .eq('status', 'completed')
           .order('started_at', { ascending: false })
@@ -78,12 +78,6 @@ export function useDojoStats() {
         }
       }
 
-      // Build session-id → skill map
-      const sessionSkillMap = new Map<string, SkillFocus>();
-      for (const s of sessions) {
-        sessionSkillMap.set(s.started_at + s.skill_focus, s.skill_focus as SkillFocus);
-      }
-
       // Build skill breakdown with first-attempt data
       const bySkill = new Map<SkillFocus, {
         total: number;
@@ -91,33 +85,16 @@ export function useDojoStats() {
         firstAttemptScores: number[];
       }>();
 
-      // Count sessions per skill
+      const sessionIdToSkill = new Map<string, SkillFocus>();
       for (const s of sessions) {
         const skill = s.skill_focus as SkillFocus;
+        sessionIdToSkill.set(s.id, skill);
         if (!bySkill.has(skill)) {
           bySkill.set(skill, { total: 0, scoreSum: 0, firstAttemptScores: [] });
         }
         const entry = bySkill.get(skill)!;
         entry.total++;
         entry.scoreSum += s.latest_score ?? 0;
-      }
-
-      // Map first-attempt scores to skills via session lookup
-      // We need session_id → skill, so let's build that from a joined approach
-      // Since we have sessions ordered and turns ordered, match by session_id
-      const sessionIdToSkill = new Map<string, SkillFocus>();
-      // Re-fetch with id included for mapping
-      const { data: sessionIds } = await supabase
-        .from('dojo_sessions')
-        .select('id, skill_focus')
-        .eq('user_id', user!.id)
-        .eq('status', 'completed')
-        .limit(200);
-
-      if (sessionIds) {
-        for (const s of sessionIds) {
-          sessionIdToSkill.set(s.id, s.skill_focus as SkillFocus);
-        }
       }
 
       for (const turn of firstAttemptTurns) {

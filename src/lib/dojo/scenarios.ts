@@ -99,20 +99,13 @@ export function getAutopilotRecommendation(stats?: SkillStat[]): AutopilotResult
   if (withFirstAttempts.length > 0) {
     const sorted = [...withFirstAttempts].sort((a, b) => a.avgFirstAttempt - b.avgFirstAttempt);
     const weakest = sorted[0];
-
-    // Only use this signal if the score is meaningfully below others
-    const secondWeakest = sorted[1];
-    const isSignificant = !secondWeakest || weakest.avgFirstAttempt <= secondWeakest.avgFirstAttempt;
-
-    if (isSignificant) {
-      const scenario = getRandomScenario(weakest.skill);
-      const label = SKILL_LABELS[weakest.skill];
-      return {
-        scenario,
-        daveMessage: `Your recent ${label.toLowerCase()} first-attempts are averaging ${weakest.avgFirstAttempt}. That's your instinct score — let's sharpen it.`,
-        reason: `weak_first_attempt:${weakest.skill}:${weakest.avgFirstAttempt}`,
-      };
-    }
+    const scenario = getRandomScenario(weakest.skill);
+    const label = SKILL_LABELS[weakest.skill];
+    return {
+      scenario,
+      daveMessage: `Your recent ${label.toLowerCase()} first-attempts are averaging ${weakest.avgFirstAttempt}. That's your instinct score — let's sharpen it.`,
+      reason: `weak_first_attempt:${weakest.skill}:${weakest.avgFirstAttempt}`,
+    };
   }
 
   // 3. Least-practiced skill
