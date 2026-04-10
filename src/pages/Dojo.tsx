@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
-import { Flame, Play, Swords, Target, MessageSquare, Zap } from 'lucide-react';
+import { Flame, Play, Swords, Target, MessageSquare, Zap, Compass, ShieldCheck } from 'lucide-react';
 import { getAutopilotRecommendation, SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
 import { useDojoStats } from '@/lib/dojo/useDojoStreak';
 
@@ -83,7 +83,7 @@ export default function Dojo() {
             Custom Session
           </p>
           <div className="grid grid-cols-1 gap-2">
-            {(['objection_handling', 'discovery', 'executive_response'] as SkillFocus[]).map(skill => (
+            {(['objection_handling', 'discovery', 'executive_response', 'deal_control', 'qualification'] as SkillFocus[]).map(skill => (
               <button
                 key={skill}
                 onClick={() => startCustom(skill)}
@@ -121,6 +121,8 @@ function SkillIcon({ skill }: { skill: SkillFocus }) {
     objection_handling: Swords,
     discovery: Target,
     executive_response: MessageSquare,
+    deal_control: Compass,
+    qualification: ShieldCheck,
   };
   const Icon = icons[skill];
   return (
