@@ -456,6 +456,30 @@ async function remediateViolation(v: ValidationViolation): Promise<RemediationRe
         };
       }
 
+      case 'reset_enrichment_status': {
+        log.info('Auto-remediation: resetting enrichment_status for placeholder-enriched contradiction', {
+          resourceId: v.resource_id,
+          failureClass: v.failure_class,
+        });
+        const { error } = await supabase
+          .from('resources')
+          .update({
+            enrichment_status: 'not_enriched',
+            failure_reason: 'placeholder_enriched_contradiction — auto-corrected',
+            last_status_change_at: new Date().toISOString(),
+          })
+          .eq('id', v.resource_id);
+        const ok = !error;
+        return {
+          ...base,
+          action_taken: 'reset_enrichment_status',
+          success: ok,
+          detail: ok
+            ? 'Enrichment status reset from enriched → not_enriched (placeholder content detected)'
+            : `Failed to reset enrichment status: ${error?.message ?? 'unknown error'}`,
+        };
+      }
+
       default:
         return {
           ...base,
