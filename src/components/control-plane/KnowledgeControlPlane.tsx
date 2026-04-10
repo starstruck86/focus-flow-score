@@ -1,7 +1,7 @@
 /**
  * Knowledge Control Plane — trust-first, lifecycle-driven, operable workspace.
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { RefreshCw, Filter, Clock, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -18,7 +18,7 @@ import { BulkActionBar } from './BulkActionBar';
 import { NeedsAttentionQueue } from './NeedsAttentionQueue';
 import { RecentActionsPanel } from './RecentActionsPanel';
 import { BulkActionResultDialog } from './BulkActionResultDialog';
-import { TableFilterPresets } from './TableFilterPresets';
+import { TableFilterPresets, getPinnedPreset, setPinnedPreset as savePinnedPreset } from './TableFilterPresets';
 import { buildActionPreview } from './ActionPreviewDialog';
 import {
   type ControlPlaneFilter, type ControlPlaneState,
@@ -39,8 +39,11 @@ export function KnowledgeControlPlane() {
   } = useAutoOperationalize();
   const { runBatch, isRunning: extractRunning } = useExtractionPipeline();
   const [filter, setFilter] = useState<ControlPlaneFilter>('all');
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [customFilterIds, setCustomFilterIds] = useState<Set<string> | null>(null);
   const [customFilterLabel, setCustomFilterLabel] = useState<string | null>(null);
+
+  const [didApplyPinned, setDidApplyPinned] = useState(false);
 
   // Inspect drawer state
   const [inspectResource, setInspectResource] = useState<CanonicalResourceStatus | null>(null);
@@ -165,6 +168,9 @@ export function KnowledgeControlPlane() {
     setFilter(f);
     setCustomFilterIds(null);
     setCustomFilterLabel(null);
+    // Map filter back to preset id
+    const presetMap: Record<string, string> = { needs_review: 'cleanup', conflicts: 'mismatches', needs_extraction: 'extract' };
+    setActivePresetId(f === 'all' ? null : presetMap[f] || null);
   }, []);
 
   const handleFilterConflictCategory = useCallback((ids: Set<string>) => {
@@ -225,6 +231,21 @@ export function KnowledgeControlPlane() {
     };
     setCustomFilter(downstreamReadiness.ids[key], labels[key]);
   }, [downstreamReadiness, setCustomFilter]);
+
+  // Apply pinned preset on mount once resources load
+  useEffect(() => {
+    if (didApplyPinned || resources.length === 0) return;
+    const pinned = getPinnedPreset();
+    if (!pinned) { setDidApplyPinned(true); return; }
+    const filterMap: Record<string, ControlPlaneFilter> = { cleanup: 'needs_review', mismatches: 'conflicts', extract: 'needs_extraction' };
+    if (pinned === 'ai-ready') {
+      handleFilterReadiness('groundingEligible');
+      setActivePresetId('ai-ready');
+    } else if (filterMap[pinned]) {
+      handleFilterChange(filterMap[pinned]);
+    }
+    setDidApplyPinned(true);
+  }, [didApplyPinned, resources.length, handleFilterChange, handleFilterReadiness]);
 
   // Plain-English library summary
   const librarySummary = useMemo(() => {
@@ -358,10 +379,15 @@ export function KnowledgeControlPlane() {
         <TableFilterPresets
           activeFilter={filter}
           customFilterLabel={customFilterLabel}
+          activePresetId={activePresetId}
           onFilterChange={handleFilterChange}
           onCustomPreset={(key) => {
-            if (key === 'groundingEligible') handleFilterReadiness('groundingEligible');
+            if (key === 'groundingEligible') {
+              handleFilterReadiness('groundingEligible');
+              setActivePresetId('ai-ready');
+            }
           }}
+          onPinPreset={(id) => savePinnedPreset(id)}
         />
         <CentralResourceTable
           resources={resources}
