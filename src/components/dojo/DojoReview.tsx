@@ -1,6 +1,6 @@
 /**
  * DojoReview — Critique a weak response, then rewrite it.
- * Dave generates a bad answer, user identifies flaws and rewrites.
+ * Persists full score_json including review-specific fields.
  */
 
 import { useState, useRef, useEffect } from 'react';
@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import type { DojoScoreResult } from '@/lib/dojo/types';
 import { normalizeScoreResult } from '@/lib/dojo/types';
+import type { Json } from '@/integrations/supabase/types';
 
 type ReviewPhase = 'loading' | 'diagnose' | 'rewrite' | 'scoring';
 
@@ -46,20 +47,14 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
       try {
         const { data, error } = await supabase.functions.invoke('dojo-review-score', {
           body: {
-            scenario: {
-              skillFocus: scenario.skillFocus,
-              context: scenario.context,
-              objection: scenario.objection,
-            },
+            scenario: { skillFocus: scenario.skillFocus, context: scenario.context, objection: scenario.objection },
             skillFocus: scenario.skillFocus,
             action: 'generate_weak',
           },
         });
-
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
-
-        setWeakResponse(data.weakResponse || 'I understand your concern. Our platform is really great and has lots of features that could help you. Let me send over some materials and we can set up a follow-up call to discuss further.');
+        setWeakResponse(data.weakResponse || "I totally understand your concern. We actually have a lot of great features that address that. Our platform is used by hundreds of companies and they all love it. I'd love to set up another call to walk you through everything in detail — when works for you?");
         setPhase('diagnose');
       } catch (e) {
         console.error('Generate weak response error:', e);
@@ -88,11 +83,7 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
     try {
       const { data, error } = await supabase.functions.invoke('dojo-review-score', {
         body: {
-          scenario: {
-            skillFocus: scenario.skillFocus,
-            context: scenario.context,
-            objection: scenario.objection,
-          },
+          scenario: { skillFocus: scenario.skillFocus, context: scenario.context, objection: scenario.objection },
           skillFocus: scenario.skillFocus,
           action: 'score_review',
           weakResponse,
@@ -106,9 +97,20 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
 
       const result = normalizeScoreResult(data as Record<string, unknown>);
 
-      // Save review session
+      // Build full score_json with review-specific fields
+      const fullScoreJson: Record<string, unknown> = {
+        ...JSON.parse(JSON.stringify(result)),
+        diagnosisScore: typeof data.diagnosisScore === 'number' ? data.diagnosisScore : null,
+        rewriteScore: typeof data.rewriteScore === 'number' ? data.rewriteScore : null,
+        diagnosisFeedback: typeof data.diagnosisFeedback === 'string' ? data.diagnosisFeedback : '',
+        rewriteFeedback: typeof data.rewriteFeedback === 'string' ? data.rewriteFeedback : '',
+        diagnosisAccuracy: typeof data.diagnosisAccuracy === 'string' ? data.diagnosisAccuracy : '',
+        rewriteFixedIssue: typeof data.rewriteFixedIssue === 'boolean' ? data.rewriteFixedIssue : false,
+      };
+
+      // Save review session WITH turn + score_json
       try {
-        await supabase.from('dojo_sessions').insert({
+        const { data: session } = await supabase.from('dojo_sessions').insert({
           user_id: userId,
           mode: 'autopilot',
           session_type: 'review',
@@ -120,7 +122,22 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
           latest_score: result.score,
           status: 'completed',
           completed_at: new Date().toISOString(),
-        });
+        }).select('id').single();
+
+        if (session) {
+          await supabase.from('dojo_session_turns').insert({
+            session_id: session.id,
+            user_id: userId,
+            turn_index: 0,
+            prompt_text: scenario.objection,
+            user_response: `DIAGNOSIS: ${diagnosis}\n---\nREWRITE: ${rewrite}`,
+            score: result.score,
+            feedback: result.feedback,
+            top_mistake: result.topMistake,
+            improved_version: result.improvedVersion,
+            score_json: fullScoreJson as Json,
+          });
+        }
       } catch (saveErr) {
         console.error('Failed to save review session:', saveErr);
       }
@@ -165,13 +182,9 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
         <CardContent className="p-4 space-y-2">
           <div className="flex items-center gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
-            <p className="text-[10px] font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider">
-              Weak Response — Find the Problems
-            </p>
+            <p className="text-[10px] font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider">Weak Response — Find the Problems</p>
           </div>
-          <p className="text-sm text-foreground leading-relaxed italic">
-            "{weakResponse}"
-          </p>
+          <p className="text-sm text-foreground leading-relaxed italic">"{weakResponse}"</p>
         </CardContent>
       </Card>
 

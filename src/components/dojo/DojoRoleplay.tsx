@@ -1,7 +1,7 @@
 /**
  * DojoRoleplay — Multi-turn buyer simulation.
  * 3-5 turns, buyer responds dynamically, full conversation scored at end.
- * Uses non-streaming for reliability.
+ * Uses non-streaming for reliability. Persists full score_json including mode-specific fields.
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import type { DojoScoreResult } from '@/lib/dojo/types';
 import { normalizeScoreResult } from '@/lib/dojo/types';
+import type { Json } from '@/integrations/supabase/types';
 
 export interface ConversationMessage {
   role: 'buyer' | 'rep';
@@ -52,10 +53,8 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [conversation.length, isThinking]);
 
-  /** Extract clean text from possible SSE-wrapped response */
   function extractBuyerText(data: unknown): string {
     if (typeof data === 'string') {
-      // Try to extract from SSE chunks
       const lines = data.split('\n').filter(l => l.startsWith('data: '));
       if (lines.length > 0) {
         let text = '';
@@ -66,13 +65,10 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
             const chunk = JSON.parse(payload);
             const delta = chunk?.choices?.[0]?.delta?.content;
             if (delta) text += delta;
-          } catch {
-            // Not JSON, might be raw text
-          }
+          } catch { /* ignore */ }
         }
         if (text.trim()) return text.trim();
       }
-      // Fallback: clean raw string
       return data.replace(/data:\s*\[DONE\]/g, '').trim();
     }
     if (data && typeof data === 'object') {
@@ -105,6 +101,7 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
 
     setIsThinking(true);
     try {
+      const repTurnsSoFar = updated.filter(m => m.role === 'rep').length;
       const { data, error } = await supabase.functions.invoke('playbook-roleplay', {
         body: {
           messages: updated.map(m => ({
@@ -115,17 +112,27 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
 
 SCENARIO: ${scenario.context}
 SKILL BEING TESTED: ${SKILL_LABELS[scenario.skillFocus].toLowerCase()}
+CURRENT TURN: ${repTurnsSoFar} of ${MAX_TURNS}
 
-YOUR BEHAVIOR:
-- You are a real, skeptical buyer. Not hostile, but not easy.
-- Keep responses to 2-3 sentences maximum. Sound natural.
-- If the rep is vague, push for specifics: "What does that actually mean for us?"
-- If the rep pitches too early, deflect: "Hold on — I'm not there yet."
-- If the rep asks a good question, reward it with a real answer but add a new concern.
-- After turn 3, start moving toward resolution based on rep quality:
-  - Good rep → soften slightly, show openness
-  - Weak rep → get more impatient, start wrapping up
-- NEVER break character. NEVER coach the rep. You are the BUYER.`,
+YOUR BEHAVIOR RULES:
+- You are a real, skeptical buyer. Busy, direct, not hostile but not impressed easily.
+- Keep responses to 2-3 sentences MAX. Sound like a real person on a call, not an AI.
+- NEVER repeat yourself. Each response must introduce a new angle, concern, or reaction.
+- NEVER use generic phrases like "I hear you" or "That's interesting" — react specifically to what was said.
+
+ADAPTIVE PRESSURE (respond to rep quality):
+- If the rep is VAGUE or GENERIC: Push harder. "What does that actually mean for us?" / "Everyone says that." / "I've got 3 minutes."
+- If the rep PITCHES without understanding your situation: Deflect. "Hold on — you don't even know what we're dealing with yet."
+- If the rep asks a GOOD QUESTION: Reward with a real answer, but add a new concern or constraint.
+- If the rep shows SPECIFIC PROOF or INSIGHT: Soften slightly. Show curiosity. "Okay, that's more interesting. How does that work exactly?"
+- If the rep is RAMBLING: Cut them off. "Sorry, I'm losing the thread here. What's the bottom line?"
+
+TURN PROGRESSION:
+- Turn 1-2: Be skeptical. Test whether the rep listens or pitches.
+- Turn 3: Escalate or soften based on cumulative rep quality. If they've earned it, give them an opening. If not, start closing down.
+- Turn 4-5: Move toward resolution. Either give them a next step or politely end the conversation.
+
+NEVER break character. NEVER coach the rep. You are the BUYER.`,
           mode: 'roleplay',
           dojoMode: true,
         },
@@ -165,17 +172,17 @@ YOUR BEHAVIOR:
 
       const result = normalizeScoreResult(data as Record<string, unknown>);
 
-      // Attach roleplay-specific fields onto the result object for upstream consumption
-      const enrichedResult = {
-        ...result,
-        turnAnalysis: Array.isArray(data.turnAnalysis) ? data.turnAnalysis : undefined,
-        controlArc: typeof data.controlArc === 'string' ? data.controlArc : undefined,
-        adaptationNote: typeof data.adaptationNote === 'string' ? data.adaptationNote : undefined,
-      } as DojoScoreResult;
+      // Build full score_json including roleplay-specific fields
+      const fullScoreJson: Record<string, unknown> = {
+        ...JSON.parse(JSON.stringify(result)),
+        turnAnalysis: Array.isArray(data.turnAnalysis) ? data.turnAnalysis : [],
+        controlArc: typeof data.controlArc === 'string' ? data.controlArc : '',
+        adaptationNote: typeof data.adaptationNote === 'string' ? data.adaptationNote : '',
+      };
 
-      // Save roleplay session
+      // Save roleplay session WITH turn + score_json
       try {
-        await supabase.from('dojo_sessions').insert({
+        const { data: session } = await supabase.from('dojo_sessions').insert({
           user_id: userId,
           mode: 'autopilot',
           session_type: 'roleplay',
@@ -187,10 +194,33 @@ YOUR BEHAVIOR:
           latest_score: result.score,
           status: 'completed',
           completed_at: new Date().toISOString(),
-        });
+        }).select('id').single();
+
+        if (session) {
+          await supabase.from('dojo_session_turns').insert({
+            session_id: session.id,
+            user_id: userId,
+            turn_index: 0,
+            prompt_text: scenario.objection,
+            user_response: conv.filter(m => m.role === 'rep').map(m => m.content).join('\n---\n'),
+            score: result.score,
+            feedback: result.feedback,
+            top_mistake: result.topMistake,
+            improved_version: result.improvedVersion,
+            score_json: fullScoreJson as Json,
+          });
+        }
       } catch (saveErr) {
         console.error('Failed to save roleplay session:', saveErr);
       }
+
+      // Attach mode-specific fields for UI consumption
+      const enrichedResult = {
+        ...result,
+        turnAnalysis: fullScoreJson.turnAnalysis,
+        controlArc: fullScoreJson.controlArc,
+        adaptationNote: fullScoreJson.adaptationNote,
+      } as DojoScoreResult;
 
       onComplete(enrichedResult);
     } catch (e) {
