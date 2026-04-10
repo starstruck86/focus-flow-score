@@ -334,6 +334,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     lastDirective,
     deliveryMode: ctrlState?.deliveryMode ?? 'voice',
     isPlaying: ctrlState?.dojo.playback.currentPlayingChunkId !== null,
+    metrics: metricsRef.current,
 
     initialize,
     startDelivery,
