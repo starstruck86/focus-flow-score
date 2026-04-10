@@ -10,32 +10,23 @@ import {
   ArrowLeft, Send, RotateCcw, Loader2, Target, AlertTriangle,
   CheckCircle2, Lightbulb, Swords, ChevronRight, Crown, Sparkles,
   Crosshair, ListOrdered, MessageCircle, GraduationCap,
+  TrendingUp, TrendingDown, Minus, Zap, Shield,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
+import {
+  type DojoScoreResult,
+  normalizeScoreResult,
+  deriveRetryAssessment,
+  RETRY_OUTCOME_LABELS,
+  RETRY_OUTCOME_COLORS,
+  type RetryAssessment,
+} from '@/lib/dojo/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
-
-interface ScoreResult {
-  score: number;
-  feedback: string;
-  topMistake: string;
-  improvedVersion: string;
-  worldClassResponse?: string;
-  whyItWorks?: string[];
-  moveSequence?: string[];
-  patternTags?: string[];
-  focusPattern?: string;
-  focusReason?: string;
-  practiceCue?: string;
-  teachingNote?: string;
-  deltaNote?: string;
-  focusApplied?: 'yes' | 'partial' | 'no';
-  focusAppliedReason?: string;
-}
 
 const FOCUS_PATTERN_LABELS: Record<string, string> = {
   isolate_before_answering: 'Isolate before answering',
@@ -97,8 +88,9 @@ export default function DojoSession() {
   const [phase, setPhase] = useState<Phase>('respond');
   const [response, setResponse] = useState('');
   const [retryResponse, setRetryResponse] = useState('');
-  const [result, setResult] = useState<ScoreResult | null>(null);
-  const [retryResult, setRetryResult] = useState<ScoreResult | null>(null);
+  const [result, setResult] = useState<DojoScoreResult | null>(null);
+  const [retryResult, setRetryResult] = useState<DojoScoreResult | null>(null);
+  const [retryAssessment, setRetryAssessment] = useState<RetryAssessment | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [firstTurnId, setFirstTurnId] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -131,7 +123,7 @@ export default function DojoSession() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      const scoreData = data as ScoreResult;
+      const scoreData = normalizeScoreResult(data as Record<string, unknown>);
 
       if (user) {
         if (!isRetry) {
@@ -167,7 +159,7 @@ export default function DojoSession() {
                 feedback: scoreData.feedback,
                 top_mistake: scoreData.topMistake,
                 improved_version: scoreData.improvedVersion,
-                score_json: scoreData as any,
+                score_json: scoreData as unknown as Record<string, unknown>,
               })
               .select('id')
               .single();
@@ -203,19 +195,25 @@ export default function DojoSession() {
                 feedback: scoreData.feedback,
                 top_mistake: scoreData.topMistake,
                 improved_version: scoreData.improvedVersion,
-                score_json: scoreData as any,
+                score_json: scoreData as unknown as Record<string, unknown>,
                 retry_of_turn_id: firstTurnId,
               });
           }
 
           setRetryResult(scoreData);
+
+          // Derive retry assessment
+          if (result) {
+            setRetryAssessment(deriveRetryAssessment(result, scoreData));
+          }
         }
       }
 
       setPhase('feedback');
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to score response';
       console.error('Score error:', e);
-      toast.error(e.message || 'Failed to score response');
+      toast.error(msg);
       setPhase(isRetry ? 'retry' : 'respond');
     }
   }, [scenario, user, sessionId, firstTurnId, retryCount, result, retryResult, state?.mode]);
@@ -233,6 +231,7 @@ export default function DojoSession() {
   const handleStartRetry = () => {
     setRetryResponse('');
     setRetryResult(null);
+    setRetryAssessment(null);
     setPhase('retry');
   };
 
@@ -360,8 +359,70 @@ export default function DojoSession() {
                 </div>
               </div>
 
-              {/* Focus Application Badge (retry only) */}
-              {retryResult && currentResult.focusApplied && (
+              {/* ── Retry Outcome Summary ── */}
+              {retryAssessment && retryResult && (
+                <Card className="border-border/60">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {retryAssessment.retryOutcome === 'breakthrough' ? <TrendingUp className="h-4 w-4 text-green-500" /> :
+                         retryAssessment.retryOutcome === 'improved' ? <TrendingUp className="h-4 w-4 text-blue-500" /> :
+                         retryAssessment.retryOutcome === 'partial' ? <Minus className="h-4 w-4 text-amber-500" /> :
+                         <TrendingDown className="h-4 w-4 text-red-500" />}
+                        <span className={cn('text-sm font-semibold', RETRY_OUTCOME_COLORS[retryAssessment.retryOutcome])}>
+                          {RETRY_OUTCOME_LABELS[retryAssessment.retryOutcome]}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {retryAssessment.liveReady ? (
+                          <Badge className="text-xs bg-green-600 hover:bg-green-600">
+                            <Shield className="h-3 w-3 mr-1" />
+                            Live Ready
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">
+                            Keep Drilling
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Focus applied */}
+                    {currentResult.focusApplied && (
+                      <div className="flex items-center gap-2.5">
+                        <Badge
+                          variant={currentResult.focusApplied === 'yes' ? 'default' : 'outline'}
+                          className={cn(
+                            'text-xs font-semibold',
+                            currentResult.focusApplied === 'yes' && 'bg-green-600 hover:bg-green-600',
+                            currentResult.focusApplied === 'partial' && 'border-amber-500 text-amber-600 dark:text-amber-400',
+                            currentResult.focusApplied === 'no' && 'border-red-500 text-red-600 dark:text-red-400',
+                          )}
+                        >
+                          <Target className="h-3 w-3 mr-1" />
+                          {currentResult.focusApplied === 'yes' ? 'Focus Applied' :
+                           currentResult.focusApplied === 'partial' ? 'Partially Applied' :
+                           'Missed Focus'}
+                        </Badge>
+                        {currentResult.focusAppliedReason && (
+                          <p className="text-xs text-muted-foreground leading-tight flex-1">
+                            {currentResult.focusAppliedReason}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5 text-xs text-muted-foreground">
+                      <p><span className="font-medium text-foreground">Improved most:</span> {retryAssessment.whatImprovedMost}</p>
+                      <p><span className="font-medium text-foreground">Still needs work:</span> {retryAssessment.whatStillNeedsWork}</p>
+                      <p className="text-[11px] italic">{retryAssessment.liveReadyReason}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Non-retry focus applied badge (backward compat — shouldn't appear since we now have retryAssessment) */}
+              {retryResult && !retryAssessment && currentResult.focusApplied && (
                 <div className="flex items-center gap-2.5">
                   <Badge
                     variant={currentResult.focusApplied === 'yes' ? 'default' : 'outline'}
@@ -377,14 +438,10 @@ export default function DojoSession() {
                      currentResult.focusApplied === 'partial' ? 'Partially Applied' :
                      'Missed Focus'}
                   </Badge>
-                  {currentResult.focusAppliedReason && (
-                    <p className="text-xs text-muted-foreground leading-tight">
-                      {currentResult.focusAppliedReason}
-                    </p>
-                  )}
                 </div>
               )}
 
+              {/* Feedback */}
               <Card>
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start gap-2">
@@ -395,13 +452,15 @@ export default function DojoSession() {
               </Card>
 
               {/* Top mistake */}
-              <div className="flex items-center gap-2 px-1">
-                <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
-                <p className="text-sm">
-                  <span className="text-muted-foreground">Main issue: </span>
-                  <span className="font-medium">{MISTAKE_LABELS[currentResult.topMistake] || currentResult.topMistake}</span>
-                </p>
-              </div>
+              {currentResult.topMistake && (
+                <div className="flex items-center gap-2 px-1">
+                  <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Main issue: </span>
+                    <span className="font-medium">{MISTAKE_LABELS[currentResult.topMistake] || currentResult.topMistake.replace(/_/g, ' ')}</span>
+                  </p>
+                </div>
+              )}
 
               {/* ── Your Response ── */}
               <Card className="border-border/40">
@@ -417,19 +476,21 @@ export default function DojoSession() {
               </Card>
 
               {/* ── Stronger Answer ── */}
-              <Card className="border-green-500/20 bg-green-500/5">
-                <CardContent className="p-3 space-y-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <Lightbulb className="h-3.5 w-3.5 text-green-500" />
-                    <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">
-                      Stronger Answer
+              {currentResult.improvedVersion && (
+                <Card className="border-green-500/20 bg-green-500/5">
+                  <CardContent className="p-3 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Lightbulb className="h-3.5 w-3.5 text-green-500" />
+                      <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">
+                        Stronger Answer
+                      </p>
+                    </div>
+                    <p className="text-sm text-foreground leading-relaxed italic">
+                      "{currentResult.improvedVersion}"
                     </p>
-                  </div>
-                  <p className="text-sm text-foreground leading-relaxed italic">
-                    "{currentResult.improvedVersion}"
-                  </p>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* ── Delta Note (between Stronger and World-Class) ── */}
               {currentResult.deltaNote && currentResult.worldClassResponse && (
@@ -456,7 +517,7 @@ export default function DojoSession() {
                     </p>
 
                     {/* Why it works */}
-                    {currentResult.whyItWorks && currentResult.whyItWorks.length > 0 && (
+                    {currentResult.whyItWorks.length > 0 && (
                       <div className="pt-3 border-t border-primary/15 space-y-2">
                         <div className="flex items-center gap-1.5">
                           <Sparkles className="h-3.5 w-3.5 text-primary/70" />
@@ -476,7 +537,7 @@ export default function DojoSession() {
                     )}
 
                     {/* Move sequence */}
-                    {currentResult.moveSequence && currentResult.moveSequence.length > 0 && (
+                    {currentResult.moveSequence.length > 0 && (
                       <div className="pt-3 border-t border-primary/15 space-y-2">
                         <div className="flex items-center gap-1.5">
                           <ListOrdered className="h-3.5 w-3.5 text-primary/70" />
@@ -496,7 +557,7 @@ export default function DojoSession() {
                     )}
 
                     {/* Pattern tags */}
-                    {currentResult.patternTags && currentResult.patternTags.length > 0 && (
+                    {currentResult.patternTags.length > 0 && (
                       <div className="pt-3 border-t border-primary/15 space-y-2">
                         <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
                           Reusable Patterns
@@ -529,7 +590,7 @@ export default function DojoSession() {
                         </p>
                       </div>
                     </div>
-                    {currentResult?.focusReason && (
+                    {currentResult.focusReason && (
                       <p className="text-xs text-muted-foreground pl-6 leading-relaxed">
                         {currentResult.focusReason}
                       </p>
@@ -539,7 +600,7 @@ export default function DojoSession() {
               )}
 
               {/* ── Practice This on the Retry ── */}
-              {currentResult?.practiceCue && (
+              {currentResult.practiceCue && (
                 <Card className="border-amber-600/20 bg-amber-600/5">
                   <CardContent className="p-3">
                     <div className="flex items-start gap-2">
@@ -558,7 +619,7 @@ export default function DojoSession() {
               )}
 
               {/* ── Teaching Note (Coach's Takeaway) ── */}
-              {currentResult?.teachingNote && (
+              {currentResult.teachingNote && (
                 <div className="flex items-start gap-2.5 px-3 py-3 rounded-lg bg-muted/30 border border-border/40">
                   <GraduationCap className="h-4 w-4 text-muted-foreground/70 mt-0.5 shrink-0" />
                   <div>
