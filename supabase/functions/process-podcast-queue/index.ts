@@ -404,7 +404,11 @@ async function processItem(
     try {
       const kiResp = await fetch(`${supabaseUrl}/functions/v1/batch-actionize`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceRoleKey}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${serviceRoleKey}`,
+          "x-batch-key": serviceRoleKey,
+        },
         body: JSON.stringify({ batchSize: 1, resource_id: resourceId, user_id: queueItem.user_id }),
       });
 
