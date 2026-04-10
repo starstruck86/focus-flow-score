@@ -219,50 +219,83 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       }
     }
 
-    // Enforce: strip positive language from feedback when score < 70
-    if (parsed.score < 70 && typeof parsed.feedback === "string") {
-      parsed.feedback = parsed.feedback.replace(POSITIVE_PATTERNS, (match: string) => {
-        // Replace with neutral/critical alternatives
-        const replacements: Record<string, string> = {
-          'great job': 'the attempt',
-          'nice work': 'the approach',
-          'well done': 'the response',
-          'excellent': 'adequate',
-          'impressive': 'notable',
-          'strong response': 'the response',
-          'good job': 'the attempt',
-          'solid attempt': 'the attempt',
-          'good effort': 'the effort',
-          'nicely done': 'the response',
-          'smart move': 'the move',
-          'clever': 'intentional',
-        };
-        return replacements[match.toLowerCase()] || 'the response';
-      });
+    // ── Targeted regeneration for consistency issues ─────────────
+
+    const needsRegen: string[] = [];
+
+    // Check: praise in low-score feedback → regenerate feedback
+    if (parsed.score < 70 && typeof parsed.feedback === "string" && POSITIVE_PATTERNS.test(parsed.feedback)) {
+      needsRegen.push("feedback");
     }
 
-    // Enforce: if topMistake is no_business_impact, ensure improvedVersion has business language
-    if (parsed.topMistake === "no_business_impact" && typeof parsed.improvedVersion === "string") {
-      if (!BUSINESS_IMPACT_PATTERNS.test(parsed.improvedVersion)) {
-        // Append a business-impact closer
-        parsed.improvedVersion = parsed.improvedVersion.trimEnd();
-        if (!parsed.improvedVersion.endsWith('.')) parsed.improvedVersion += '.';
-        parsed.improvedVersion += " That's the kind of impact that shows up directly on your P&L.";
+    // Check: no_business_impact but improvedVersion lacks business language → regenerate improvedVersion
+    if (parsed.topMistake === "no_business_impact" && typeof parsed.improvedVersion === "string" && !BUSINESS_IMPACT_PATTERNS.test(parsed.improvedVersion)) {
+      needsRegen.push("improvedVersion");
+    }
+
+    // Check: too_long but improvedVersion is longer than rep's response → regenerate improvedVersion
+    if (parsed.topMistake === "too_long" && typeof parsed.improvedVersion === "string" && typeof userResponse === "string" && parsed.improvedVersion.length > userResponse.length) {
+      if (!needsRegen.includes("improvedVersion")) needsRegen.push("improvedVersion");
+    }
+
+    // Check: exec improvedVersion over 5 sentences → regenerate shorter
+    if (skill === "executive_response" && typeof parsed.improvedVersion === "string") {
+      const ivSentences = parsed.improvedVersion.split(/[.!?]+/).filter((s: string) => s.trim().length > 5).length;
+      if (ivSentences > 5 && !needsRegen.includes("improvedVersion")) {
+        needsRegen.push("improvedVersion");
       }
     }
 
-    // Enforce: if topMistake is too_long, ensure improvedVersion is shorter than user's response
-    if (parsed.topMistake === "too_long" && typeof parsed.improvedVersion === "string" && typeof userResponse === "string") {
-      if (parsed.improvedVersion.length > userResponse.length) {
-        // Truncate to roughly 60% of user's length, at sentence boundary
-        const targetLen = Math.floor(userResponse.length * 0.6);
-        const sentences = parsed.improvedVersion.split(/(?<=[.!?])\s+/);
-        let built = "";
-        for (const s of sentences) {
-          if ((built + s).length > targetLen && built.length > 0) break;
-          built += (built ? " " : "") + s;
+    if (needsRegen.length > 0) {
+      const regenParts: string[] = [];
+
+      if (needsRegen.includes("feedback")) {
+        regenParts.push(`REGENERATE "feedback": The current feedback is "${parsed.feedback}". The score is ${parsed.score} (below 70). Rewrite the feedback so it is critical and direct — no positive language, no softening. Keep it to exactly 2 sentences. Sentence 1: what they attempted. Sentence 2: the specific miss.`);
+      }
+
+      if (needsRegen.includes("improvedVersion")) {
+        const reasons: string[] = [];
+        if (parsed.topMistake === "no_business_impact") reasons.push("it must include specific business impact language (revenue, margin, cost, ROI, or a concrete metric)");
+        if (parsed.topMistake === "too_long") reasons.push("it must be significantly shorter than the rep's response — tight and punchy");
+        if (skill === "executive_response") reasons.push("it must be under 4 sentences — brevity is non-negotiable for exec communication");
+        regenParts.push(`REGENERATE "improvedVersion": The current version is "${parsed.improvedVersion}". Issues: ${reasons.join("; ")}. Write the exact words a top rep would say OUT LOUD. Spoken language, natural rhythm, 3-5 sentences max (3 preferred for exec). Must sound like a real person on a real call, not polished copy.`);
+      }
+
+      const regenPrompt = `You previously scored a sales rep's response. Some outputs need regeneration for consistency. Keep the same score (${parsed.score}) and topMistake (${parsed.topMistake}). Only regenerate the fields listed below.\n\n${regenParts.join("\n\n")}\n\nRespond with ONLY valid JSON containing the regenerated fields. Example: {"feedback": "...", "improvedVersion": "..."}. Only include fields that need regeneration.`;
+
+      try {
+        const regenResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: [
+              { role: "system", content: `You are Dave — an elite, direct sales coach. ${tone} Keep spoken language quality. Be sharp, not soft.` },
+              { role: "user", content: regenPrompt },
+            ],
+            temperature: 0.3,
+            max_tokens: 500,
+          }),
+        });
+
+        if (regenResp.ok) {
+          const regenData = await regenResp.json();
+          let regenContent = regenData.choices?.[0]?.message?.content || "";
+          regenContent = regenContent.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+          const regenParsed = JSON.parse(regenContent);
+
+          if (regenParsed.feedback && needsRegen.includes("feedback")) {
+            parsed.feedback = regenParsed.feedback;
+          }
+          if (regenParsed.improvedVersion && needsRegen.includes("improvedVersion")) {
+            parsed.improvedVersion = regenParsed.improvedVersion;
+          }
         }
-        if (built.length > 0) parsed.improvedVersion = built;
+      } catch (regenErr) {
+        console.error("Regeneration failed, keeping originals:", regenErr);
       }
     }
 
