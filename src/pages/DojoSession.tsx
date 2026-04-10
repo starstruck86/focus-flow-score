@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,7 +26,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import DojoRoleplay from '@/components/dojo/DojoRoleplay';
-import DojoReview from '@/components/dojo/DojoReview';
+import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview';
+import type { Json } from '@/integrations/supabase/types';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
 
@@ -75,6 +76,11 @@ const PATTERN_TAG_LABELS: Record<string, string> = {
   leads_with_outcome: 'Leads with outcome',
 };
 
+/** Safely cast DojoScoreResult to Json for DB storage */
+function scoreToJson(score: DojoScoreResult): Json {
+  return JSON.parse(JSON.stringify(score)) as Json;
+}
+
 export default function DojoSession() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -97,6 +103,7 @@ export default function DojoSession() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [firstTurnId, setFirstTurnId] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [reviewExtras, setReviewExtras] = useState<{ diagnosisScore?: number; rewriteScore?: number; diagnosisFeedback?: string; rewriteFeedback?: string } | null>(null);
 
   useEffect(() => {
     if (phase === 'respond' || phase === 'retry') {
@@ -162,7 +169,7 @@ export default function DojoSession() {
                 feedback: scoreData.feedback,
                 top_mistake: scoreData.topMistake,
                 improved_version: scoreData.improvedVersion,
-                score_json: scoreData as unknown as Record<string, unknown> as import('@/integrations/supabase/types').Json,
+                score_json: scoreToJson(scoreData),
               })
               .select('id')
               .single();
@@ -198,14 +205,13 @@ export default function DojoSession() {
                 feedback: scoreData.feedback,
                 top_mistake: scoreData.topMistake,
                 improved_version: scoreData.improvedVersion,
-                score_json: scoreData as unknown as Record<string, unknown> as import('@/integrations/supabase/types').Json,
+                score_json: scoreToJson(scoreData),
                 retry_of_turn_id: firstTurnId,
               });
           }
 
           setRetryResult(scoreData);
 
-          // Derive retry assessment
           if (result) {
             setRetryAssessment(deriveRetryAssessment(result, scoreData));
           }
@@ -241,6 +247,20 @@ export default function DojoSession() {
   const handleNextRep = () => {
     navigate('/dojo');
   };
+
+  // Handle roleplay completion
+  const handleRoleplayComplete = useCallback((scoreResult: DojoScoreResult) => {
+    setResult(scoreResult);
+    setPhase('feedback');
+  }, []);
+
+  // Handle review completion
+  const handleReviewComplete = useCallback((reviewResult: ReviewScoreResult) => {
+    const { diagnosisScore, rewriteScore, diagnosisFeedback, rewriteFeedback, ...baseResult } = reviewResult;
+    setResult(baseResult);
+    setReviewExtras({ diagnosisScore, rewriteScore, diagnosisFeedback, rewriteFeedback });
+    setPhase('feedback');
+  }, []);
 
   const currentResult = retryResult || result;
   const scoreDelta = retryResult && result ? retryResult.score - result.score : null;
@@ -280,10 +300,7 @@ export default function DojoSession() {
           <DojoRoleplay
             scenario={scenario}
             userId={user.id}
-            onComplete={(scoreResult) => {
-              setResult(scoreResult);
-              setPhase('feedback');
-            }}
+            onComplete={handleRoleplayComplete}
           />
         )}
 
@@ -292,14 +309,11 @@ export default function DojoSession() {
           <DojoReview
             scenario={scenario}
             userId={user.id}
-            onComplete={(scoreResult) => {
-              setResult(scoreResult);
-              setPhase('feedback');
-            }}
+            onComplete={handleReviewComplete}
           />
         )}
 
-        {/* ── Drill Mode (original) ── */}
+        {/* ── Drill Mode ── */}
         {sessionType === 'drill' && (
         <AnimatePresence mode="wait">
           {/* ── Phase: Respond ── */}
@@ -356,330 +370,19 @@ export default function DojoSession() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-4"
             >
-              {/* Score */}
-              <div className="flex items-center gap-4">
-                <div className={cn(
-                  'text-4xl font-bold',
-                  currentResult.score >= 80 ? 'text-green-500' :
-                  currentResult.score >= 65 ? 'text-yellow-500' :
-                  currentResult.score >= 50 ? 'text-orange-500' : 'text-red-500'
-                )}>
-                  {currentResult.score}
-                </div>
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">
-                      {currentResult.score >= 80 ? 'Strong' :
-                       currentResult.score >= 65 ? 'Solid' :
-                       currentResult.score >= 50 ? 'Average' : 'Needs Work'}
-                    </span>
-                    {scoreDelta !== null && (
-                      <Badge
-                        variant={scoreDelta > 0 ? 'default' : 'destructive'}
-                        className="text-xs"
-                      >
-                        {scoreDelta > 0 ? '+' : ''}{scoreDelta} pts
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {retryResult ? `Retry #${retryCount}` : 'First attempt'}
-                  </p>
-                </div>
-              </div>
-
-              {/* ── Retry Outcome Summary ── */}
-              {retryAssessment && retryResult && (
-                <Card className="border-border/60">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {retryAssessment.retryOutcome === 'breakthrough' ? <TrendingUp className="h-4 w-4 text-green-500" /> :
-                         retryAssessment.retryOutcome === 'improved' ? <TrendingUp className="h-4 w-4 text-blue-500" /> :
-                         retryAssessment.retryOutcome === 'partial' ? <Minus className="h-4 w-4 text-amber-500" /> :
-                         <TrendingDown className="h-4 w-4 text-red-500" />}
-                        <span className={cn('text-sm font-semibold', RETRY_OUTCOME_COLORS[retryAssessment.retryOutcome])}>
-                          {RETRY_OUTCOME_LABELS[retryAssessment.retryOutcome]}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {retryAssessment.liveReady ? (
-                          <Badge className="text-xs bg-green-600 hover:bg-green-600">
-                            <Shield className="h-3 w-3 mr-1" />
-                            Live Ready
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-xs">
-                            Keep Drilling
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Focus applied */}
-                    {currentResult.focusApplied && (
-                      <div className="flex items-center gap-2.5">
-                        <Badge
-                          variant={currentResult.focusApplied === 'yes' ? 'default' : 'outline'}
-                          className={cn(
-                            'text-xs font-semibold',
-                            currentResult.focusApplied === 'yes' && 'bg-green-600 hover:bg-green-600',
-                            currentResult.focusApplied === 'partial' && 'border-amber-500 text-amber-600 dark:text-amber-400',
-                            currentResult.focusApplied === 'no' && 'border-red-500 text-red-600 dark:text-red-400',
-                          )}
-                        >
-                          <Target className="h-3 w-3 mr-1" />
-                          {currentResult.focusApplied === 'yes' ? 'Focus Applied' :
-                           currentResult.focusApplied === 'partial' ? 'Partially Applied' :
-                           'Missed Focus'}
-                        </Badge>
-                        {currentResult.focusAppliedReason && (
-                          <p className="text-xs text-muted-foreground leading-tight flex-1">
-                            {currentResult.focusAppliedReason}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="space-y-1.5 text-xs text-muted-foreground">
-                      <p><span className="font-medium text-foreground">Improved most:</span> {retryAssessment.whatImprovedMost}</p>
-                      <p><span className="font-medium text-foreground">Still needs work:</span> {retryAssessment.whatStillNeedsWork}</p>
-                      <p className="text-[11px] italic">{retryAssessment.liveReadyReason}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Non-retry focus applied badge (backward compat — shouldn't appear since we now have retryAssessment) */}
-              {retryResult && !retryAssessment && currentResult.focusApplied && (
-                <div className="flex items-center gap-2.5">
-                  <Badge
-                    variant={currentResult.focusApplied === 'yes' ? 'default' : 'outline'}
-                    className={cn(
-                      'text-xs font-semibold',
-                      currentResult.focusApplied === 'yes' && 'bg-green-600 hover:bg-green-600',
-                      currentResult.focusApplied === 'partial' && 'border-amber-500 text-amber-600 dark:text-amber-400',
-                      currentResult.focusApplied === 'no' && 'border-red-500 text-red-600 dark:text-red-400',
-                    )}
-                  >
-                    <Target className="h-3 w-3 mr-1" />
-                    {currentResult.focusApplied === 'yes' ? 'Applied' :
-                     currentResult.focusApplied === 'partial' ? 'Partially Applied' :
-                     'Missed Focus'}
-                  </Badge>
-                </div>
-              )}
-
-              {/* Feedback */}
-              <Card>
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start gap-2">
-                    <Swords className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                    <p className="text-sm text-foreground leading-relaxed">{currentResult.feedback}</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Top mistake */}
-              {currentResult.topMistake && (
-                <div className="flex items-center gap-2 px-1">
-                  <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
-                  <p className="text-sm">
-                    <span className="text-muted-foreground">Main issue: </span>
-                    <span className="font-medium">{MISTAKE_LABELS[currentResult.topMistake] || currentResult.topMistake.replace(/_/g, ' ')}</span>
-                  </p>
-                </div>
-              )}
-
-              {/* ── Your Response ── */}
-              <Card className="border-border/40">
-                <CardContent className="p-3 space-y-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Response</p>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed italic">
-                    "{userText}"
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* ── Stronger Answer ── */}
-              {currentResult.improvedVersion && (
-                <Card className="border-green-500/20 bg-green-500/5">
-                  <CardContent className="p-3 space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <Lightbulb className="h-3.5 w-3.5 text-green-500" />
-                      <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">
-                        Stronger Answer
-                      </p>
-                    </div>
-                    <p className="text-sm text-foreground leading-relaxed italic">
-                      "{currentResult.improvedVersion}"
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* ── Delta Note (between Stronger and World-Class) ── */}
-              {currentResult.deltaNote && currentResult.worldClassResponse && (
-                <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-primary/5 border border-primary/15">
-                  <ChevronRight className="h-3.5 w-3.5 text-primary/60 mt-0.5 shrink-0" />
-                  <p className="text-xs text-muted-foreground leading-relaxed italic">
-                    {currentResult.deltaNote}
-                  </p>
-                </div>
-              )}
-
-              {/* ── World-Class Standard ── */}
-              {currentResult.worldClassResponse && (
-                <Card className="border-primary/40 bg-gradient-to-br from-primary/5 to-primary/10 shadow-md ring-1 ring-primary/10">
-                  <CardContent className="p-5 space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Crown className="h-4.5 w-4.5 text-primary" />
-                      <p className="text-xs font-bold text-primary uppercase tracking-wider">
-                        World-Class Standard
-                      </p>
-                    </div>
-                    <p className="text-sm text-foreground leading-relaxed italic pl-0.5">
-                      "{currentResult.worldClassResponse}"
-                    </p>
-
-                    {/* Why it works */}
-                    {currentResult.whyItWorks.length > 0 && (
-                      <div className="pt-3 border-t border-primary/15 space-y-2">
-                        <div className="flex items-center gap-1.5">
-                          <Sparkles className="h-3.5 w-3.5 text-primary/70" />
-                          <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
-                            Why It Works
-                          </p>
-                        </div>
-                        <ul className="space-y-1.5">
-                          {currentResult.whyItWorks.map((bullet, i) => (
-                            <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
-                              <span className="text-primary/50 mt-0.5 shrink-0">•</span>
-                              <span>{bullet}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Move sequence */}
-                    {currentResult.moveSequence.length > 0 && (
-                      <div className="pt-3 border-t border-primary/15 space-y-2">
-                        <div className="flex items-center gap-1.5">
-                          <ListOrdered className="h-3.5 w-3.5 text-primary/70" />
-                          <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
-                            Move Sequence
-                          </p>
-                        </div>
-                        <ol className="space-y-1">
-                          {currentResult.moveSequence.map((step, i) => (
-                            <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                              <span className="text-primary/60 font-bold shrink-0 w-4 text-right">{i + 1}.</span>
-                              <span className="capitalize">{step}</span>
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    )}
-
-                    {/* Pattern tags */}
-                    {currentResult.patternTags.length > 0 && (
-                      <div className="pt-3 border-t border-primary/15 space-y-2">
-                        <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
-                          Reusable Patterns
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {currentResult.patternTags.map((tag, i) => (
-                            <Badge key={i} variant="secondary" className="text-[10px] font-medium">
-                              {PATTERN_TAG_LABELS[tag] || tag.replace(/_/g, ' ')}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* ── Focus on This Next ── */}
-              {activeFocus && (
-                <Card className="border-amber-500/30 bg-amber-500/5">
-                  <CardContent className="p-4 space-y-2.5">
-                    <div className="flex items-center gap-2">
-                      <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                      <div>
-                        <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                          Focus on This Next
-                        </p>
-                        <p className="text-sm font-semibold text-foreground">
-                          {FOCUS_PATTERN_LABELS[activeFocus] || activeFocus.replace(/_/g, ' ')}
-                        </p>
-                      </div>
-                    </div>
-                    {currentResult.focusReason && (
-                      <p className="text-xs text-muted-foreground pl-6 leading-relaxed">
-                        {currentResult.focusReason}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* ── Practice This on the Retry ── */}
-              {currentResult.practiceCue && (
-                <Card className="border-amber-600/20 bg-amber-600/5">
-                  <CardContent className="p-3">
-                    <div className="flex items-start gap-2">
-                      <Target className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">
-                          Practice This on the Retry
-                        </p>
-                        <p className="text-sm font-medium text-foreground leading-relaxed">
-                          {currentResult.practiceCue}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* ── Teaching Note (Coach's Takeaway) ── */}
-              {currentResult.teachingNote && (
-                <div className="flex items-start gap-2.5 px-3 py-3 rounded-lg bg-muted/30 border border-border/40">
-                  <GraduationCap className="h-4 w-4 text-muted-foreground/70 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1">
-                      Coach's Takeaway
-                    </p>
-                    <p className="text-sm text-muted-foreground italic leading-relaxed">
-                      "{currentResult.teachingNote}"
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  className="flex-1 gap-2"
-                  onClick={handleStartRetry}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Try Again
-                </Button>
-                <Button
-                  className="flex-1 gap-2"
-                  onClick={handleNextRep}
-                >
-                  Next Rep
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+              <FeedbackView
+                currentResult={currentResult}
+                scoreDelta={scoreDelta}
+                retryCount={retryCount}
+                retryResult={retryResult}
+                retryAssessment={retryAssessment}
+                userText={userText}
+                activeFocus={activeFocus}
+                reviewExtras={reviewExtras}
+                sessionType={sessionType}
+                onRetry={handleStartRetry}
+                onNextRep={handleNextRep}
+              />
             </motion.div>
           )}
 
@@ -692,7 +395,6 @@ export default function DojoSession() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-3"
             >
-              {/* Focus reminder + practice cue for retry */}
               {activeFocus && (
                 <Card className="border-amber-500/30 bg-amber-500/5">
                   <CardContent className="p-3 space-y-1.5">
@@ -717,7 +419,6 @@ export default function DojoSession() {
                 </Card>
               )}
 
-              {/* Previous feedback reminder */}
               <div className="flex items-start gap-2 px-1">
                 <Swords className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                 <p className="text-xs text-muted-foreground">
@@ -748,7 +449,403 @@ export default function DojoSession() {
           )}
         </AnimatePresence>
         )}
+
+        {/* ── Feedback for Roleplay / Review (non-drill) ── */}
+        {sessionType !== 'drill' && phase === 'feedback' && currentResult && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4"
+          >
+            <FeedbackView
+              currentResult={currentResult}
+              scoreDelta={null}
+              retryCount={0}
+              retryResult={null}
+              retryAssessment={null}
+              userText=""
+              activeFocus={activeFocus}
+              reviewExtras={reviewExtras}
+              sessionType={sessionType}
+              onRetry={handleStartRetry}
+              onNextRep={handleNextRep}
+            />
+          </motion.div>
+        )}
       </div>
     </div>
+  );
+}
+
+// ── Extracted Feedback View ──────────────────────────────────────────
+
+interface FeedbackViewProps {
+  currentResult: DojoScoreResult;
+  scoreDelta: number | null;
+  retryCount: number;
+  retryResult: DojoScoreResult | null;
+  retryAssessment: RetryAssessment | null;
+  userText: string;
+  activeFocus: string | undefined;
+  reviewExtras: { diagnosisScore?: number; rewriteScore?: number; diagnosisFeedback?: string; rewriteFeedback?: string } | null;
+  sessionType: string;
+  onRetry: () => void;
+  onNextRep: () => void;
+}
+
+function FeedbackView({
+  currentResult,
+  scoreDelta,
+  retryCount,
+  retryResult,
+  retryAssessment,
+  userText,
+  activeFocus,
+  reviewExtras,
+  sessionType,
+  onRetry,
+  onNextRep,
+}: FeedbackViewProps) {
+  return (
+    <>
+      {/* Score */}
+      <div className="flex items-center gap-4">
+        <div className={cn(
+          'text-4xl font-bold',
+          currentResult.score >= 80 ? 'text-green-500' :
+          currentResult.score >= 65 ? 'text-yellow-500' :
+          currentResult.score >= 50 ? 'text-orange-500' : 'text-red-500'
+        )}>
+          {currentResult.score}
+        </div>
+        <div className="flex-1 space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">
+              {currentResult.score >= 80 ? 'Strong' :
+               currentResult.score >= 65 ? 'Solid' :
+               currentResult.score >= 50 ? 'Average' : 'Needs Work'}
+            </span>
+            {scoreDelta !== null && (
+              <Badge
+                variant={scoreDelta > 0 ? 'default' : 'destructive'}
+                className="text-xs"
+              >
+                {scoreDelta > 0 ? '+' : ''}{scoreDelta} pts
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {retryResult ? `Retry #${retryCount}` :
+             sessionType === 'roleplay' ? 'Roleplay' :
+             sessionType === 'review' ? 'Review' : 'First attempt'}
+          </p>
+        </div>
+      </div>
+
+      {/* ── Review-specific scores ── */}
+      {reviewExtras && (reviewExtras.diagnosisScore != null || reviewExtras.rewriteScore != null) && (
+        <div className="grid grid-cols-2 gap-2">
+          {reviewExtras.diagnosisScore != null && (
+            <Card className="border-border/60">
+              <CardContent className="p-3 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Diagnosis</p>
+                <p className="text-xl font-bold">{reviewExtras.diagnosisScore}<span className="text-xs text-muted-foreground font-normal">/50</span></p>
+                {reviewExtras.diagnosisFeedback && (
+                  <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{reviewExtras.diagnosisFeedback}</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          {reviewExtras.rewriteScore != null && (
+            <Card className="border-border/60">
+              <CardContent className="p-3 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Rewrite</p>
+                <p className="text-xl font-bold">{reviewExtras.rewriteScore}<span className="text-xs text-muted-foreground font-normal">/50</span></p>
+                {reviewExtras.rewriteFeedback && (
+                  <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{reviewExtras.rewriteFeedback}</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ── Retry Outcome Summary ── */}
+      {retryAssessment && retryResult && (
+        <Card className="border-border/60">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {retryAssessment.retryOutcome === 'breakthrough' ? <TrendingUp className="h-4 w-4 text-green-500" /> :
+                 retryAssessment.retryOutcome === 'improved' ? <TrendingUp className="h-4 w-4 text-blue-500" /> :
+                 retryAssessment.retryOutcome === 'partial' ? <Minus className="h-4 w-4 text-amber-500" /> :
+                 <TrendingDown className="h-4 w-4 text-red-500" />}
+                <span className={cn('text-sm font-semibold', RETRY_OUTCOME_COLORS[retryAssessment.retryOutcome])}>
+                  {RETRY_OUTCOME_LABELS[retryAssessment.retryOutcome]}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {retryAssessment.liveReady ? (
+                  <Badge className="text-xs bg-green-600 hover:bg-green-600">
+                    <Shield className="h-3 w-3 mr-1" />
+                    Live Ready
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs">
+                    Keep Drilling
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Focus applied */}
+            {currentResult.focusApplied && (
+              <div className="flex items-center gap-2.5">
+                <Badge
+                  variant={currentResult.focusApplied === 'yes' ? 'default' : 'outline'}
+                  className={cn(
+                    'text-xs font-semibold',
+                    currentResult.focusApplied === 'yes' && 'bg-green-600 hover:bg-green-600',
+                    currentResult.focusApplied === 'partial' && 'border-amber-500 text-amber-600 dark:text-amber-400',
+                    currentResult.focusApplied === 'no' && 'border-red-500 text-red-600 dark:text-red-400',
+                  )}
+                >
+                  <Target className="h-3 w-3 mr-1" />
+                  {currentResult.focusApplied === 'yes' ? 'Focus Applied' :
+                   currentResult.focusApplied === 'partial' ? 'Partially Applied' :
+                   'Missed Focus'}
+                </Badge>
+                {currentResult.focusAppliedReason && (
+                  <p className="text-xs text-muted-foreground leading-tight flex-1">
+                    {currentResult.focusAppliedReason}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1.5 text-xs text-muted-foreground">
+              <p><span className="font-medium text-foreground">Improved most:</span> {retryAssessment.whatImprovedMost}</p>
+              <p><span className="font-medium text-foreground">Still needs work:</span> {retryAssessment.whatStillNeedsWork}</p>
+              <p className="text-[11px] italic">{retryAssessment.liveReadyReason}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Feedback */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <Swords className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <p className="text-sm text-foreground leading-relaxed">{currentResult.feedback}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Top mistake */}
+      {currentResult.topMistake && (
+        <div className="flex items-center gap-2 px-1">
+          <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
+          <p className="text-sm">
+            <span className="text-muted-foreground">Main issue: </span>
+            <span className="font-medium">{MISTAKE_LABELS[currentResult.topMistake] || currentResult.topMistake.replace(/_/g, ' ')}</span>
+          </p>
+        </div>
+      )}
+
+      {/* ── Your Response (drill only) ── */}
+      {sessionType === 'drill' && userText && (
+        <Card className="border-border/40">
+          <CardContent className="p-3 space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Response</p>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed italic">
+              "{userText}"
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Stronger Answer ── */}
+      {currentResult.improvedVersion && (
+        <Card className="border-green-500/20 bg-green-500/5">
+          <CardContent className="p-3 space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <Lightbulb className="h-3.5 w-3.5 text-green-500" />
+              <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">
+                Stronger Answer
+              </p>
+            </div>
+            <p className="text-sm text-foreground leading-relaxed italic">
+              "{currentResult.improvedVersion}"
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Delta Note ── */}
+      {currentResult.deltaNote && currentResult.worldClassResponse && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-primary/5 border border-primary/15">
+          <ChevronRight className="h-3.5 w-3.5 text-primary/60 mt-0.5 shrink-0" />
+          <p className="text-xs text-muted-foreground leading-relaxed italic">
+            {currentResult.deltaNote}
+          </p>
+        </div>
+      )}
+
+      {/* ── World-Class Standard ── */}
+      {currentResult.worldClassResponse && (
+        <Card className="border-primary/40 bg-gradient-to-br from-primary/5 to-primary/10 shadow-md ring-1 ring-primary/10">
+          <CardContent className="p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <Crown className="h-4 w-4 text-primary" />
+              <p className="text-xs font-bold text-primary uppercase tracking-wider">
+                World-Class Standard
+              </p>
+            </div>
+            <p className="text-sm text-foreground leading-relaxed italic pl-0.5">
+              "{currentResult.worldClassResponse}"
+            </p>
+
+            {/* Why it works */}
+            {currentResult.whyItWorks.length > 0 && (
+              <div className="pt-3 border-t border-primary/15 space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary/70" />
+                  <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
+                    Why It Works
+                  </p>
+                </div>
+                <ul className="space-y-1.5">
+                  {currentResult.whyItWorks.map((bullet, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
+                      <span className="text-primary/50 mt-0.5 shrink-0">•</span>
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Move sequence */}
+            {currentResult.moveSequence.length > 0 && (
+              <div className="pt-3 border-t border-primary/15 space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <ListOrdered className="h-3.5 w-3.5 text-primary/70" />
+                  <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
+                    Move Sequence
+                  </p>
+                </div>
+                <ol className="space-y-1">
+                  {currentResult.moveSequence.map((step, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <span className="text-primary/60 font-bold shrink-0 w-4 text-right">{i + 1}.</span>
+                      <span className="capitalize">{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {/* Pattern tags */}
+            {currentResult.patternTags.length > 0 && (
+              <div className="pt-3 border-t border-primary/15 space-y-2">
+                <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
+                  Reusable Patterns
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {currentResult.patternTags.map((tag, i) => (
+                    <Badge key={i} variant="secondary" className="text-[10px] font-medium">
+                      {PATTERN_TAG_LABELS[tag] || tag.replace(/_/g, ' ')}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Focus on This Next ── */}
+      {activeFocus && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="p-4 space-y-2.5">
+            <div className="flex items-center gap-2">
+              <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <div>
+                <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                  Focus on This Next
+                </p>
+                <p className="text-sm font-semibold text-foreground">
+                  {FOCUS_PATTERN_LABELS[activeFocus] || activeFocus.replace(/_/g, ' ')}
+                </p>
+              </div>
+            </div>
+            {currentResult.focusReason && (
+              <p className="text-xs text-muted-foreground pl-6 leading-relaxed">
+                {currentResult.focusReason}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Practice Cue ── */}
+      {currentResult.practiceCue && (
+        <Card className="border-amber-600/20 bg-amber-600/5">
+          <CardContent className="p-3">
+            <div className="flex items-start gap-2">
+              <Target className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">
+                  {sessionType === 'drill' ? 'Practice This on the Retry' : 'Practice This Next'}
+                </p>
+                <p className="text-sm font-medium text-foreground leading-relaxed">
+                  {currentResult.practiceCue}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Teaching Note ── */}
+      {currentResult.teachingNote && (
+        <div className="flex items-start gap-2.5 px-3 py-3 rounded-lg bg-muted/30 border border-border/40">
+          <GraduationCap className="h-4 w-4 text-muted-foreground/70 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1">
+              Coach's Takeaway
+            </p>
+            <p className="text-sm text-muted-foreground italic leading-relaxed">
+              "{currentResult.teachingNote}"
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-3 pt-2">
+        {sessionType === 'drill' && (
+          <Button
+            variant="outline"
+            className="flex-1 gap-2"
+            onClick={onRetry}
+          >
+            <RotateCcw className="h-4 w-4" />
+            Try Again
+          </Button>
+        )}
+        <Button
+          className="flex-1 gap-2"
+          onClick={onNextRep}
+        >
+          Next Rep
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </>
   );
 }
