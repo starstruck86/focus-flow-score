@@ -157,7 +157,7 @@ export function deriveResourceTruth(
   const isContentBacked = !hasPlaceholder && (contentLength >= 200 || hasManualContent);
 
   if (hasPlaceholder && !isActivelyProcessing) {
-    blockers.push(blocker('placeholder_content', `Placeholder content detected — PDF parse incomplete. Stored: "${contentText.slice(0, 60)}"`));
+    blockers.push(blocker('placeholder_content', `Placeholder content detected — PDF parse incomplete. Stored: "${rawContent.slice(0, 60)}"`));
   } else if (!isContentBacked && !isActivelyProcessing) {
     blockers.push(blocker('missing_content', 'Content length < 200 chars and no manual content'));
   }
