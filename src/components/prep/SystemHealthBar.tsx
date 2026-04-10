@@ -1,9 +1,9 @@
 /**
  * SystemHealthBar — top-level overview showing total/ready/blocked/stalled
  * plus a "Needs Attention" summary with quick actions.
- * Now powered by canonical truth model.
+ * Processing count now driven by real active job queue, not resource state.
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, TrendingUp, XCircle, Zap, RefreshCw, Eye, Loader2, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,11 +11,12 @@ import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { deriveResourceTruth, type ResourceTruth, type LifecycleInfo } from '@/lib/resourceTruthState';
+import { useActiveJobQueue } from '@/hooks/useActiveJobQueue';
+import { ProcessingQueuePanel } from './ProcessingQueuePanel';
 
 interface HealthCounts {
   total: number;
   ready: number;
-  processing: number;
   blocked: number;
   stalled: number;
   qa_required: number;
@@ -39,18 +40,21 @@ interface Props {
 }
 
 export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilterChange, activeFilter }: Props) {
+  const [queuePanelOpen, setQueuePanelOpen] = useState(false);
+  const { jobs: queueJobs, summary: queueSummary, loading: queueLoading, refresh: queueRefresh } = useActiveJobQueue();
+
   const counts = useMemo<HealthCounts>(() => {
-    const c: HealthCounts = { total: resources.length, ready: 0, processing: 0, blocked: 0, stalled: 0, qa_required: 0 };
+    const c: HealthCounts = { total: resources.length, ready: 0, blocked: 0, stalled: 0, qa_required: 0 };
     for (const r of resources) {
       const lc = lifecycleMap.get(r.id);
       const truth = deriveResourceTruth(r, lc, audioJobsMap?.get(r.id));
       switch (truth.truth_state) {
         case 'ready': c.ready++; break;
-        case 'processing': c.processing++; break;
+        case 'processing': break; // no longer counted here
         case 'stalled': c.stalled++; break;
         case 'qa_required': c.qa_required++; break;
         case 'quarantined':
-        case 'reference_only': break; // reference-only not counted as blocked
+        case 'reference_only': break;
         case 'blocked':
         default: c.blocked++; break;
       }
@@ -64,7 +68,6 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
     let needsExtractionCount = 0;
     let emptyContentCount = 0;
     let needsReviewCount = 0;
-
     let stalledCount = 0;
     let contradictionCount = 0;
 
@@ -138,12 +141,12 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
         />
         <HealthPill
           label="Processing"
-          count={counts.processing}
+          count={queueSummary.total}
           colorClass="text-primary"
           bgClass="bg-primary/10"
-          icon={<Loader2 className="h-3 w-3" />}
-          active={activeFilter === 'processing'}
-          onClick={() => onFilterChange('processing')}
+          icon={queueSummary.total > 0 ? <Loader2 className="h-3 w-3 animate-spin" /> : <Loader2 className="h-3 w-3" />}
+          active={queuePanelOpen}
+          onClick={() => setQueuePanelOpen(true)}
         />
         {counts.stalled > 0 && (
           <HealthPill
@@ -201,6 +204,16 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
           ))}
         </div>
       )}
+
+      {/* Processing Queue Panel */}
+      <ProcessingQueuePanel
+        open={queuePanelOpen}
+        onOpenChange={setQueuePanelOpen}
+        jobs={queueJobs}
+        summary={queueSummary}
+        loading={queueLoading}
+        onRefresh={queueRefresh}
+      />
     </div>
   );
 }
