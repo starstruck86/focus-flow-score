@@ -20,6 +20,30 @@ import { createLogger } from './logger';
 
 const log = createLogger('PostIngestValidation');
 
+// ── Idempotency guard ─────────────────────────────────────
+// Prevents duplicate remediation dispatch within a short window.
+const DEDUP_WINDOW_MS = 60_000; // 60 seconds
+const recentRemediations = new Map<string, number>(); // resourceId → timestamp
+
+function isDuplicateRemediation(resourceId: string): boolean {
+  const lastTime = recentRemediations.get(resourceId);
+  if (lastTime && Date.now() - lastTime < DEDUP_WINDOW_MS) {
+    return true;
+  }
+  return false;
+}
+
+function markRemediated(resourceId: string): void {
+  recentRemediations.set(resourceId, Date.now());
+  // Garbage-collect old entries every 50 calls
+  if (recentRemediations.size > 200) {
+    const cutoff = Date.now() - DEDUP_WINDOW_MS;
+    for (const [id, ts] of recentRemediations) {
+      if (ts < cutoff) recentRemediations.delete(id);
+    }
+  }
+}
+
 // ── Failure class types ───────────────────────────────────
 
 export type FailureClass =
