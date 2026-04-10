@@ -209,7 +209,12 @@ serve(async (req) => {
     const focusPatternGuide = FOCUS_PATTERNS[skill] || FOCUS_PATTERNS.objection_handling;
 
     const retryBlock = retryCount > 0
-      ? `This is retry #${retryCount}.${focusReminder ? ` The rep was told to focus on: "${focusReminder}". You MUST explicitly assess whether they applied this pattern. If they did, name exactly how in your feedback. If they didn't, call it out directly: "You were asked to focus on ${focusReminder} — this attempt still doesn't do that." Do not ignore the focus reminder.` : ''} Compare to what a first attempt typically looks like. If they improved, name exactly what changed. If they didn't improve meaningfully, say so directly.`
+      ? `This is retry #${retryCount}.${focusReminder ? ` The rep was told to focus on: "${focusReminder}". You MUST explicitly assess whether they applied this pattern. If they did, name exactly how in your feedback. If they didn't, call it out directly: "You were asked to focus on ${focusReminder} — this attempt still doesn't do that." Do not ignore the focus reminder.
+
+FOCUS APPLICATION ASSESSMENT (REQUIRED for retries):
+You MUST return these two fields:
+- "focusApplied": "yes" if the rep clearly applied the assigned focus, "partial" if they attempted it but incompletely, "no" if they did not apply it at all.
+- "focusAppliedReason": One sentence explaining your assessment. Be specific: name what the rep did or didn't do relative to the focus pattern.` : ''} Compare to what a first attempt typically looks like. If they improved, name exactly what changed. If they didn't improve meaningfully, say so directly.`
       : '';
 
     const wcTone = WORLD_CLASS_TONE[skill] || 'calm, specific, commercially sharp, confident';
