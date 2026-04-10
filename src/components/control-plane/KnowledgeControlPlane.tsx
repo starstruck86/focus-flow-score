@@ -419,6 +419,7 @@ export function KnowledgeControlPlane() {
           processingIds={processingIds}
           conflictIds={conflictIds}
           customFilterIds={customFilterIds}
+          customFilterLabel={customFilterLabel}
           onAction={handleAction}
           onInspect={handleInspect}
           actionLoading={actionLoading}

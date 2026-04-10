@@ -4,7 +4,7 @@
  */
 import { useState, useMemo } from 'react';
 import {
-  Zap, AlertTriangle, ShieldAlert, XCircle,
+  Zap, AlertTriangle, ShieldAlert, XCircle, CheckCircle2,
   ChevronDown, ChevronUp, ArrowRight, Filter, Shield,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
