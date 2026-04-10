@@ -215,9 +215,9 @@ export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
   },
   processing: {
     label: 'Processing',
-    definition: 'Resources currently being processed by an active background job.',
-    formula: 'COUNT(resources WHERE active_job_status = "running")',
-    dataSources: ['resources table', 'background_jobs table'],
+    definition: 'All active jobs in flight across the pipeline — queued, running, retrying, or stalled. Derived from the actual job queue, not resource state.',
+    formula: 'COUNT(background_jobs WHERE status IN ("queued","running")) + COUNT(podcast_import_queue WHERE status IN ("queued","processing"))',
+    dataSources: ['background_jobs table', 'podcast_import_queue table'],
   },
   ingested: {
     label: 'Ingested',
