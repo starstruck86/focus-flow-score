@@ -116,6 +116,9 @@ export function useActiveJobQueue(): ActiveJobQueueState {
 
     if (!mountedRef.current) return;
 
+    console.log('[ActiveJobQueue] BG result:', bgResult.error, 'rows:', bgResult.data?.length);
+    console.log('[ActiveJobQueue] Podcast result:', podcastResult.error, 'rows:', podcastResult.data?.length);
+
     const allJobs: QueueJob[] = [];
 
     // Map background_jobs
