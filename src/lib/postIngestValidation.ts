@@ -328,6 +328,12 @@ export async function validateAndRemediate(resourceId: string): Promise<{
   violations: ValidationViolation[];
   remediations: RemediationResult[];
 }> {
+  // Idempotency: skip if already remediated within the dedup window
+  if (isDuplicateRemediation(resourceId)) {
+    log.info('Skipping duplicate remediation', { resourceId, windowMs: DEDUP_WINDOW_MS });
+    return { violations: [], remediations: [] };
+  }
+
   const { data, error } = await supabase
     .from('resources')
     .select('id, title, resource_type, content, content_length, enrichment_status, file_url, current_resource_ki_count, extraction_attempt_count, host_platform, access_type')
@@ -343,6 +349,9 @@ export async function validateAndRemediate(resourceId: string): Promise<{
   if (violations.length === 0) {
     return { violations: [], remediations: [] };
   }
+
+  // Mark as remediated BEFORE dispatching to prevent re-entrant calls
+  markRemediated(resourceId);
 
   log.info('Post-ingest violations found — running auto-remediation', {
     resourceId,
