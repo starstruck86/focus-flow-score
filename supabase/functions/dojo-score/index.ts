@@ -28,13 +28,18 @@ COMMON MISTAKES (pick the single most impactful):
 - weak_close: No clear, confident ask at the end`,
 
   discovery: `GRADING CRITERIA (total 100pts):
-1. DEPTH (25pts): Did they push past the surface answer? Did they ask "why does that matter" or "what happens if you don't fix it"?
-2. IMPLICATION (20pts): Did they help the buyer see the downstream impact — revenue lost, time wasted, competitive risk, team strain?
-3. SPECIFICITY (15pts): Did they use what the buyer said to ask a targeted follow-up — or did they default to a generic question?
+1. DEPTH (25pts): Did they push past the surface answer? Did they ask "why does that matter" or "what happens if you don't fix it"? Simply asking "how much" or "how long" without connecting to business impact is shallow — that's worth at most 10pts.
+2. IMPLICATION (20pts): Did they help the buyer see the downstream impact — revenue lost, time wasted, competitive risk, team strain? If they didn't explicitly connect the problem to a business consequence, this is 0-5pts.
+3. SPECIFICITY (15pts): Did they use what the buyer said to ask a targeted follow-up — or did they default to a generic question? Restating the buyer's words back as a question is not specificity.
 4. CONTROL (15pts): Did they steer the conversation toward a business outcome — not just gather information passively?
 5. QUANTIFICATION (10pts): Did they try to attach a number, timeline, or measurable cost to the problem?
 6. TONE (10pts): Did it feel like a genuine business conversation between equals — not an interrogation or a script?
 7. BREVITY (5pts): Were questions concise and singular — not stacked or compound?
+
+SCORING ANCHORS FOR DISCOVERY:
+- "How much has churn increased?" alone = 55-60. It's a surface question with no implication or business framing.
+- "What's that costing you in monthly revenue?" = 62-67. Better — attaches a number, but still one-dimensional.
+- "When you lose those customers in month 3, what does that do to your LTV math? And has that changed how your CFO looks at acquisition spend?" = 72-78. Connects to downstream business impact with specificity.
 
 COMMON MISTAKES (pick the single most impactful):
 - stacked_questions: Asked 2+ questions at once — the buyer can only answer one
@@ -46,12 +51,18 @@ COMMON MISTAKES (pick the single most impactful):
 - pitched_too_early: Started solving or presenting before understanding the problem`,
 
   executive_response: `GRADING CRITERIA (total 100pts):
-1. BREVITY (25pts): Could this be delivered in under 30 seconds? Executives stop listening after that. Every extra sentence costs points.
-2. BUSINESS FRAMING (25pts): Did they lead with an outcome the exec cares about — revenue, margin, speed, risk — not features or process?
+1. BREVITY (25pts): Could this be delivered in under 30 seconds? Count the sentences — more than 4 and this score drops fast. Every filler word costs points.
+2. BUSINESS FRAMING (25pts): Did they lead with an outcome the exec cares about — revenue, margin, speed, risk — not features or process? "We help brands improve retention" is too vague for full credit. Need a specific number or benchmark.
 3. CONFIDENCE (15pts): Did they project certainty? No hedging, no "I think," no apologizing for taking their time?
 4. SPECIFICITY (15pts): Did they use a concrete number, benchmark, customer example, or timeline — not vague promises?
 5. STRATEGIC RELEVANCE (10pts): Did they connect to the exec's stated priority or known initiative — not a generic value prop?
 6. CONTROL (10pts): Did they end with a clear, executive-appropriate ask — not "what do you think?" or "any questions?"
+
+SCORING ANCHORS FOR EXECUTIVE RESPONSE:
+- Generic platform pitch with no numbers = 42-52. Execs hear this 10 times a week.
+- Mentions retention + a vague benefit + asks for a demo = 53-60. Shows awareness but no teeth.
+- Leads with a specific metric, ties to their known priority, ends with a tight ask = 72-80.
+- Under 3 sentences, specific ROI, references their situation, confident close = 82-90.
 
 COMMON MISTAKES (pick the single most impactful):
 - too_long: Would take more than 30 seconds to say out loud — automatic fail with execs
@@ -72,6 +83,12 @@ const COACHING_TONE: Record<string, string> = {
 
   executive_response: `You are someone who has briefed C-suite executives hundreds of times. Grade against a ruthless standard: executives give you 30 seconds, and most reps waste 20 of them on setup. If they rambled, say "you lost them after sentence two." If they led with features, say "an exec doesn't care about your platform — they care about their P&L." Reward precision, punish filler.`,
 };
+
+// ── Positive-language patterns to strip from low-score feedback ──────
+const POSITIVE_PATTERNS = /\b(great job|nice work|well done|excellent|impressive|strong response|good job|solid attempt|good effort|nicely done|smart move|clever)\b/gi;
+
+// ── Business impact keywords for validation ─────────────────────────
+const BUSINESS_IMPACT_PATTERNS = /\b(revenue|margin|cost|ROI|LTV|CAC|churn rate|pipeline|quota|P&L|profit|savings|payback|ARR|MRR|\$\d|percent|%|\d+x)\b/i;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -98,33 +115,36 @@ ${tone}
 ${rubric}
 
 SCORE CALIBRATION (CRITICAL — follow this distribution strictly):
-- 85-100: Exceptional. Would impress a VP of Sales watching live. Specific, tight, business-oriented, controlled. RARE — most reps never hit this on first attempt.
-- 70-84: Strong. Solid instincts, hit the main beats, but left an opening or missed a beat a great rep wouldn't.
-- 55-69: Average. This is where MOST first attempts should land. Gets through it but predictable, slightly generic, or misses an implication. A manager would have notes.
-- 40-54: Below average. Missed the real issue, lost control, or went too long. Needs clear coaching.
-- Below 40: Actively harmful. Defensive, rambling, pitched into resistance, or made the buyer less interested.
+- 85-100: Exceptional. Would make a VP of Sales stop and say "that was really good." Specific, tight, business-oriented, controlled. You should almost never give this on a first attempt.
+- 75-84: Genuinely strong. Hit the key beats with specificity, showed real business acumen. Still uncommon.
+- 60-69: Average. This is where MOST responses land. Competent but predictable. Asked obvious follow-ups. Showed awareness but lacked depth or specificity. A manager would say "okay, but what about…"
+- 50-59: Below average. Missed the real issue, stayed surface-level, lost control, or went generic. Needs clear coaching.
+- 40-49: Weak. Defensive, rambling, pitched into resistance, or fundamentally misread the situation.
+- Below 40: Actively harmful. Made the buyer less interested or damaged credibility.
 
-YOUR DEFAULT SCORE FOR A DECENT-BUT-NOT-GREAT RESPONSE IS 58-63. Do NOT inflate. If you're giving above 75, the response better be genuinely impressive with specific evidence, tight framing, and executive-level control.
+YOUR DEFAULT SCORE IS 58-63. This is where a competent but unexceptional response belongs. If you're about to give above 70, ask yourself: "Would a VP of Sales watching this live be impressed?" If no, the score is too high.
 
 ${retryCount > 0 ? `This is retry #${retryCount}. Compare to what a first attempt typically looks like. If they improved, name exactly what changed. If they didn't improve meaningfully, say so directly — don't pretend marginal rewording is progress.` : ''}
 
 RESPONSE RULES:
-- "feedback": Exactly 2 sentences. Sentence 1: what they attempted or got right (be specific to their response — not generic praise). Sentence 2: the specific miss, gap, or mistake (name the exact behavior, not a vague "could improve"). Do NOT say "great job" or "nice work" if the score is below 75. Match your tone to the score.
-- "improvedVersion": Write the EXACT words a top-performing rep would say OUT LOUD in this conversation. This is spoken language — contractions, natural rhythm, slightly imperfect. NOT marketing copy, NOT a framework recitation, NOT a bullet-point list. 3-5 sentences that sound like a real human on a real call. Must directly address the buyer's exact words and situation.
-- "topMistake": Pick the single most impactful mistake from the list. This should be the #1 thing that, if fixed, would most improve their effectiveness.
+- "feedback": Exactly 2 sentences. Sentence 1: what they attempted (be specific to their response). Sentence 2: the specific miss or gap (name the exact behavior). If the score is below 70, your tone must be critical — no softening, no "good start," no "on the right track." Below 60, be blunt about what went wrong.
+- "improvedVersion": Write the EXACT words a top-performing rep would say OUT LOUD in this conversation. Spoken language — contractions, natural rhythm. NOT marketing copy, NOT a framework recitation. 3-5 sentences that sound like a real human on a real call. Must directly address the buyer's exact words and situation.
+- "topMistake": Pick the single most impactful mistake from the list.
 
-INTERNAL VALIDATION (check before responding):
-1. If score < 70, feedback must NOT contain positive framing like "good," "nice," "solid," or "well done."
-2. The improvedVersion must address the topMistake — if the mistake is "no_business_impact," the improved version must include a business impact.
-3. If the response is under 2 sentences, it cannot score above 55 (too thin to be effective).
-4. If the response is over 8 sentences, it cannot score above 65 for executive_response (too long for an exec).
+INTERNAL VALIDATION (you must check these before finalizing):
+1. If score < 70, feedback must NOT contain words like "good," "solid," "nice," "strong," "smart," "well," "clever," or "impressive."
+2. If topMistake is "no_business_impact," the improvedVersion MUST include specific business impact language (revenue, margin, cost, ROI, or a concrete metric).
+3. If topMistake is "too_long," the improvedVersion MUST be shorter than the rep's response.
+4. If the rep's response is under 2 sentences, score cannot exceed 55.
+5. For executive_response: if the rep's response exceeds 5 sentences, cap the score at 60.
+6. For discovery: if the rep only asked a simple clarifying question without connecting to business impact, cap the score at 64.
 
 Respond with ONLY valid JSON:
 {
   "score": 60,
-  "feedback": "Specific sentence about what they did. Specific sentence about what they missed.",
+  "feedback": "What they did. What they missed.",
   "topMistake": "one_mistake_code",
-  "improvedVersion": "Natural spoken words a great rep would actually say on this call."
+  "improvedVersion": "Natural spoken words a great rep would actually say."
 }`;
 
     const userPrompt = `SCENARIO:
@@ -135,7 +155,7 @@ Buyer says: "${scenario.objection}"
 REP'S RESPONSE:
 "${userResponse}"
 
-Grade this response strictly using the rubric. Default to 58-63 unless genuinely strong.`;
+Grade this response strictly. Your default is 58-63. Go higher only if genuinely earned.`;
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -176,18 +196,73 @@ Grade this response strictly using the rubric. Default to 58-63 unless genuinely
 
     const parsed = JSON.parse(content);
 
-    // ── Server-side validation ──────────────────────────────────
-    // Clamp score to sane range
+    // ── Server-side enforcement ─────────────────────────────────
+
+    // Clamp score
     if (typeof parsed.score === "number") {
       parsed.score = Math.max(0, Math.min(100, Math.round(parsed.score)));
     }
 
-    // Tone-score consistency: strip positive language from low-score feedback
+    // Enforce: exec responses over 5 sentences from rep → cap at 60
+    if (skill === "executive_response" && typeof userResponse === "string") {
+      const sentenceCount = userResponse.split(/[.!?]+/).filter((s: string) => s.trim().length > 5).length;
+      if (sentenceCount > 5 && parsed.score > 60) {
+        parsed.score = 60;
+      }
+    }
+
+    // Enforce: very short rep responses → cap at 55
+    if (typeof userResponse === "string") {
+      const sentenceCount = userResponse.split(/[.!?]+/).filter((s: string) => s.trim().length > 5).length;
+      if (sentenceCount < 2 && parsed.score > 55) {
+        parsed.score = 55;
+      }
+    }
+
+    // Enforce: strip positive language from feedback when score < 70
     if (parsed.score < 70 && typeof parsed.feedback === "string") {
-      const positivePatterns = /\b(great job|nice work|well done|excellent|impressive|strong response|good job)\b/gi;
-      if (positivePatterns.test(parsed.feedback)) {
-        // Flag inconsistency in logs but don't block response
-        console.warn(`Score-tone mismatch: score=${parsed.score} but feedback contains positive language`);
+      parsed.feedback = parsed.feedback.replace(POSITIVE_PATTERNS, (match: string) => {
+        // Replace with neutral/critical alternatives
+        const replacements: Record<string, string> = {
+          'great job': 'the attempt',
+          'nice work': 'the approach',
+          'well done': 'the response',
+          'excellent': 'adequate',
+          'impressive': 'notable',
+          'strong response': 'the response',
+          'good job': 'the attempt',
+          'solid attempt': 'the attempt',
+          'good effort': 'the effort',
+          'nicely done': 'the response',
+          'smart move': 'the move',
+          'clever': 'intentional',
+        };
+        return replacements[match.toLowerCase()] || 'the response';
+      });
+    }
+
+    // Enforce: if topMistake is no_business_impact, ensure improvedVersion has business language
+    if (parsed.topMistake === "no_business_impact" && typeof parsed.improvedVersion === "string") {
+      if (!BUSINESS_IMPACT_PATTERNS.test(parsed.improvedVersion)) {
+        // Append a business-impact closer
+        parsed.improvedVersion = parsed.improvedVersion.trimEnd();
+        if (!parsed.improvedVersion.endsWith('.')) parsed.improvedVersion += '.';
+        parsed.improvedVersion += " That's the kind of impact that shows up directly on your P&L.";
+      }
+    }
+
+    // Enforce: if topMistake is too_long, ensure improvedVersion is shorter than user's response
+    if (parsed.topMistake === "too_long" && typeof parsed.improvedVersion === "string" && typeof userResponse === "string") {
+      if (parsed.improvedVersion.length > userResponse.length) {
+        // Truncate to roughly 60% of user's length, at sentence boundary
+        const targetLen = Math.floor(userResponse.length * 0.6);
+        const sentences = parsed.improvedVersion.split(/(?<=[.!?])\s+/);
+        let built = "";
+        for (const s of sentences) {
+          if ((built + s).length > targetLen && built.length > 0) break;
+          built += (built ? " " : "") + s;
+        }
+        if (built.length > 0) parsed.improvedVersion = built;
       }
     }
 
