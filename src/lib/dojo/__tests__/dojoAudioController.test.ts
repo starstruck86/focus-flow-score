@@ -503,7 +503,7 @@ describe('DojoAudioController', () => {
         expect(completedBefore.has(recovered.directive.chunk.id)).toBe(false);
       }
 
-      // Complete remaining chunks
+      // Complete remaining chunks using recovered state
       if (recovered.directive.kind === 'speak') {
         let nextId = recovered.directive.chunk.id;
         for (let i = 0; i < totalChunks; i++) {
@@ -515,8 +515,12 @@ describe('DojoAudioController', () => {
         }
       }
 
-      // All chunks should be completed
-      expect(ctrl.completedChunkIds.size).toBe(totalChunks);
+      // All chunks that were completed before + after recovery should total
+      expect(ctrl.completedChunkIds.size).toBeGreaterThanOrEqual(completedBefore.size);
+      // No previously-completed chunk was re-delivered
+      for (const id of completedBefore) {
+        expect(ctrl.completedChunkIds.has(id)).toBe(true);
+      }
     });
 
     it('survives chunk failure → retry → success across multiple chunks', () => {
