@@ -31,6 +31,21 @@ interface AudioMetrics {
   p95ChunkDurationMs: number;
   sessionDurationMs: number;
   successRate: number;
+  // v3 fields
+  crashRecoveries?: number;
+  ownershipConflicts?: number;
+  chunksAudible?: number;
+  chunksFailedBeforeAudible?: number;
+  chunksFailedAfterAudible?: number;
+  voiceDeliveries?: number;
+  textFallbackDeliveries?: number;
+  voiceRestores?: number;
+  tabHiddenCount?: number;
+  tabResumeCount?: number;
+  lastRestoreReason?: string | null;
+  restoreReasons?: (string | null)[];
+  transportRetries?: number;
+  autoplayBlocked?: number;
 }
 
 interface SessionRow {
@@ -151,7 +166,7 @@ function validateResult(sj: DojoScoreResult, sessionType: string): ValidationFla
 
 type FilterMode = 'all' | 'drill' | 'roleplay' | 'review';
 type FilterSeverity = 'all' | 'errors' | 'warnings' | 'clean';
-type FilterAudio = 'all' | 'has_audio' | 'degraded' | 'recovered' | 'replayed' | 'skipped' | 'timed_out';
+type FilterAudio = 'all' | 'has_audio' | 'degraded' | 'recovered' | 'replayed' | 'skipped' | 'timed_out' | 'ownership_conflict' | 'autoplay_blocked' | 'never_audible' | 'transport_retries' | 'restore_reason';
 
 export default function DojoQA() {
   const { user } = useAuth();
@@ -258,13 +273,18 @@ export default function DojoQA() {
       if (filterSeverity === 'warnings' && d.flags.length === 0) return false;
       if (filterSeverity === 'clean' && d.flags.length > 0) return false;
 
-      const am = d.session.audio_metrics;
+      const amExt = am as unknown as Record<string, unknown>;
       if (filterAudio === 'has_audio' && !am) return false;
       if (filterAudio === 'degraded' && (!am || am.degradations === 0)) return false;
       if (filterAudio === 'recovered' && (!am || am.recoveries === 0)) return false;
-      if (filterAudio === 'replayed' && (!am || !(am as unknown as Record<string, unknown>).replaysRequested)) return false;
+      if (filterAudio === 'replayed' && (!am || !amExt.replaysRequested)) return false;
       if (filterAudio === 'skipped' && (!am || am.skipped === 0)) return false;
       if (filterAudio === 'timed_out' && (!am || am.timedOut === 0)) return false;
+      if (filterAudio === 'ownership_conflict' && (!am || !am.ownershipConflicts)) return false;
+      if (filterAudio === 'autoplay_blocked' && (!am || !am.autoplayBlocked)) return false;
+      if (filterAudio === 'never_audible' && (!am || (am.chunksAudible ?? am.completed) > 0)) return false;
+      if (filterAudio === 'transport_retries' && (!am || !am.transportRetries)) return false;
+      if (filterAudio === 'restore_reason' && (!am || !am.lastRestoreReason)) return false;
 
       return true;
     });
