@@ -377,6 +377,7 @@ export function KnowledgeControlPlane() {
         onAction={handleAction}
         onInspect={openResourceById}
         onBatchCategoryAction={handleQueueBatchAction}
+        onFilterToIds={setCustomFilter}
         batchLoading={actionLoading}
       />
 
