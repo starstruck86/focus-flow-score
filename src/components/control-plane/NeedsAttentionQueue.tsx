@@ -28,12 +28,12 @@ interface QueueItem {
 }
 
 const CATEGORY_CONFIG: Record<Category, {
-  icon: React.ElementType; label: string; color: string; actionLabel: string; hint: string;
+  icon: React.ElementType; label: string; color: string; actionLabel: string; batchLabel: string; hint: string;
 }> = {
-  mismatched: { icon: ShieldAlert, label: 'Mismatched', color: 'text-amber-600', actionLabel: 'Inspect', hint: 'Inspect and re-run the last action, or manually verify state.' },
-  failed: { icon: XCircle, label: 'Failed', color: 'text-destructive', actionLabel: 'Retry', hint: 'Retry the failed action or diagnose the root cause.' },
-  needs_review: { icon: AlertTriangle, label: 'Blocked', color: 'text-destructive', actionLabel: 'Diagnose', hint: 'Fix the blocking issue — usually re-enrich or review content.' },
-  needs_extraction: { icon: Zap, label: 'Needs Extraction', color: 'text-amber-600', actionLabel: 'Extract', hint: 'Run Extract to mine knowledge items from available content.' },
+  mismatched: { icon: ShieldAlert, label: 'Mismatched', color: 'text-amber-600', actionLabel: 'Inspect', batchLabel: 'Inspect All', hint: 'Inspect and re-run, or manually verify state.' },
+  failed: { icon: XCircle, label: 'Failed', color: 'text-destructive', actionLabel: 'Retry', batchLabel: 'Retry All', hint: 'Retry the failed action or diagnose root cause.' },
+  needs_review: { icon: AlertTriangle, label: 'Blocked', color: 'text-destructive', actionLabel: 'Diagnose', batchLabel: 'Diagnose All', hint: 'Fix blockers — re-enrich or review content.' },
+  needs_extraction: { icon: Zap, label: 'Needs Extraction', color: 'text-amber-600', actionLabel: 'Extract', batchLabel: 'Extract All', hint: 'Run Extract on available content.' },
 };
 
 const CATEGORY_ORDER: Category[] = ['mismatched', 'failed', 'needs_review', 'needs_extraction'];
