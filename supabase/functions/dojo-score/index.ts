@@ -304,8 +304,14 @@ Respond with ONLY valid JSON:
   "focusPattern": "single_focus_pattern",
   "focusReason": "Because the biggest gap here was X.",
   "practiceCue": "Short behavioral instruction.",
-  "teachingNote": "General coaching principle from this rep."
-}`;
+  "teachingNote": "General coaching principle from this rep.",
+  "deltaNote": "One sentence on the biggest difference between improvedVersion and worldClassResponse."
+}` + (retryCount > 0 ? `
+
+RETRY-ONLY FIELDS (you MUST include these since this is a retry):
+Add these to your JSON response:
+  "focusApplied": "yes" or "partial" or "no",
+  "focusAppliedReason": "One sentence."` : '');
 
     const userPrompt = `SCENARIO:
 Skill being tested: ${skill}
