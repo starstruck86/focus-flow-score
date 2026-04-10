@@ -1,7 +1,6 @@
 /**
  * Control Plane Summary Bar — clickable metric cards with inspect popovers.
  */
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Database, CheckCircle2, Zap, AlertTriangle, Loader2, Inbox, Info } from 'lucide-react';
 import {
@@ -17,6 +16,10 @@ interface Props {
   onFilterChange: (filter: ControlPlaneFilter) => void;
   loading?: boolean;
   sampleResources?: Record<string, CanonicalResourceStatus[]>;
+  processingCount?: number;
+  processingLoading?: boolean;
+  processingActive?: boolean;
+  onProcessingClick?: () => void;
 }
 
 const METRIC_KEY_MAP: Record<string, string> = {
@@ -37,20 +40,38 @@ const CARDS: { key: ControlPlaneFilter; label: string; icon: React.ElementType; 
   { key: 'ingested', label: 'Ingested', icon: Inbox, valueKey: 'ingested', color: 'text-muted-foreground', activeBg: 'bg-muted/50' },
 ];
 
-export function ControlPlaneSummaryBar({ summary, activeFilter, onFilterChange, loading, sampleResources }: Props) {
+export function ControlPlaneSummaryBar({
+  summary,
+  activeFilter,
+  onFilterChange,
+  loading,
+  sampleResources,
+  processingCount,
+  processingLoading,
+  processingActive,
+  onProcessingClick,
+}: Props) {
   return (
     <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
       {CARDS.map(({ key, label, icon: Icon, valueKey, color, activeBg }) => {
-        const isActive = activeFilter === key;
-        const value = summary[valueKey];
+        const isProcessing = key === 'processing';
+        const isActive = isProcessing ? !!processingActive : activeFilter === key;
+        const value = isProcessing ? (processingCount ?? summary.processing) : summary[valueKey];
         const metricKey = METRIC_KEY_MAP[key];
         const def = metricKey ? METRIC_DEFINITIONS[metricKey] : null;
         const samples = sampleResources?.[key] ?? [];
+        const showSpinner = isProcessing ? (processingLoading || value > 0) : false;
 
         return (
           <div key={key} className="relative">
             <button
-              onClick={() => onFilterChange(isActive ? 'all' : key)}
+              onClick={() => {
+                if (isProcessing && onProcessingClick) {
+                  onProcessingClick();
+                  return;
+                }
+                onFilterChange(isActive ? 'all' : key);
+              }}
               className={cn(
                 'flex flex-col items-center gap-1 rounded-lg border p-3 transition-all w-full',
                 'hover:border-primary/50 cursor-pointer',
@@ -59,16 +80,15 @@ export function ControlPlaneSummaryBar({ summary, activeFilter, onFilterChange, 
                   : 'border-border bg-card',
               )}
             >
-              <Icon className={cn('h-4 w-4', color, key === 'processing' && loading && 'animate-spin')} />
+              <Icon className={cn('h-4 w-4', color, showSpinner && 'animate-spin')} />
               <span className={cn('text-xl font-bold tabular-nums', color)}>
-                {loading ? '…' : value}
+                {isProcessing ? (processingLoading ? '…' : value) : (loading ? '…' : value)}
               </span>
               <span className="text-[10px] text-muted-foreground font-medium leading-tight text-center">
                 {label}
               </span>
             </button>
 
-            {/* Metric inspect popover */}
             {def && (
               <Popover>
                 <PopoverTrigger asChild>

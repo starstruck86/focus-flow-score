@@ -1,6 +1,6 @@
 /**
  * useActiveJobQueue — Canonical hook for real job-based Processing counts.
- * 
+ *
  * Queries background_jobs + podcast_import_queue for actual in-flight work.
  * Refreshes via realtime subscription + periodic polling.
  */
@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-const STALE_THRESHOLD_MS = 5 * 60_000; // 5 minutes no heartbeat = stale
+const STALE_THRESHOLD_MS = 5 * 60_000;
 const POLL_INTERVAL_MS = 15_000;
 
 export type QueueJobStatus = 'running' | 'queued' | 'retrying' | 'stalled';
@@ -47,14 +47,12 @@ export interface ActiveJobQueueState {
   refresh: () => void;
 }
 
-function classifyStatus(
-  status: string,
-  updatedAt: string,
-  substatus?: string | null,
-): QueueJobStatus {
-  if (substatus === 'retrying') return 'retrying';
-  if (status === 'queued') return 'queued';
-  if (status === 'running') {
+function classifyStatus(status: string, updatedAt: string, substatus?: string | null): QueueJobStatus {
+  if (substatus === 'retrying' || status === 'retrying') return 'retrying';
+  if (status === 'queued' || status === 'waiting_on_dependency' || substatus === 'waiting_on_dependency') {
+    return 'queued';
+  }
+  if (status === 'running' || status === 'processing' || status === 'awaiting_review') {
     const elapsed = Date.now() - new Date(updatedAt).getTime();
     if (elapsed > STALE_THRESHOLD_MS) return 'stalled';
     return 'running';
@@ -64,18 +62,27 @@ function classifyStatus(
 
 function normalizeJobType(type: string): string {
   const map: Record<string, string> = {
-    'extraction': 'extraction',
-    're_extraction': 'extraction',
+    extraction: 'extraction',
+    re_extraction: 'extraction',
+    batch_extract_kis: 'extraction',
     'batch-extract-kis': 'extraction',
+    extract_tactics: 'extraction',
     'extract-tactics': 'extraction',
-    'enrichment': 'enrichment',
-    're_enrichment': 'enrichment',
-    'deep_enrich': 'enrichment',
-    'podcast_import': 'podcast import',
-    'ki_generation': 'extraction',
-    'transcript_preprocessing': 'transcript',
-    'bulk_action': 'bulk action',
-    'playbook_generation': 'playbook',
+    enrichment: 'enrichment',
+    re_enrichment: 'enrichment',
+    deep_enrich: 'enrichment',
+    remediation: 'remediation',
+    activation: 'activation',
+    digest_generation: 'digest',
+    auth_re_import: 'auth re-import',
+    podcast_import: 'podcast import',
+    ki_generation: 'extraction',
+    transcript_preprocessing: 'transcript',
+    transcribe_audio: 'transcript',
+    bulk_action: 'bulk action',
+    playbook_generation: 'playbook',
+    parse: 'parse',
+    pdf_parse: 'parse',
   };
   return map[type] || type.replace(/_/g, ' ');
 }
@@ -88,19 +95,19 @@ export function useActiveJobQueue(): ActiveJobQueueState {
 
   const fetchJobs = useCallback(async () => {
     if (!user?.id) {
-      console.log('[ActiveJobQueue] No user id, skipping fetch');
+      if (mountedRef.current) {
+        setJobs([]);
+        setLoading(false);
+      }
       return;
     }
 
-    console.log('[ActiveJobQueue] Fetching jobs for user', user.id);
-
-    // Fetch both sources in parallel
     const [bgResult, podcastResult] = await Promise.all([
       supabase
         .from('background_jobs')
         .select('id, type, title, status, substatus, step_label, started_at, created_at, updated_at, progress_percent, progress_current, progress_total, error, entity_id')
         .eq('user_id', user.id)
-        .in('status', ['queued', 'running', 'awaiting_review'])
+        .in('status', ['queued', 'running', 'retrying', 'waiting_on_dependency', 'awaiting_review'])
         .order('created_at', { ascending: false })
         .limit(200),
       supabase
@@ -114,14 +121,10 @@ export function useActiveJobQueue(): ActiveJobQueueState {
 
     if (!mountedRef.current) return;
 
-    console.log('[ActiveJobQueue] BG result:', bgResult.error, 'rows:', bgResult.data?.length);
-    console.log('[ActiveJobQueue] Podcast result:', podcastResult.error, 'rows:', podcastResult.data?.length);
-
     const allJobs: QueueJob[] = [];
 
-    // Map background_jobs
     if (bgResult.data) {
-      for (const row of bgResult.data as any[]) {
+      for (const row of bgResult.data) {
         allJobs.push({
           id: row.id,
           resourceTitle: row.title || 'Unknown',
@@ -141,14 +144,13 @@ export function useActiveJobQueue(): ActiveJobQueueState {
       }
     }
 
-    // Map podcast_import_queue
     if (podcastResult.data) {
-      for (const row of podcastResult.data as any[]) {
+      for (const row of podcastResult.data) {
         allJobs.push({
           id: row.id,
           resourceTitle: row.episode_title || 'Podcast Episode',
           jobType: 'podcast import',
-          status: row.status === 'queued' ? 'queued' : classifyStatus('running', row.updated_at),
+          status: row.status === 'queued' ? 'queued' : classifyStatus('processing', row.updated_at),
           stepLabel: row.pipeline_stage || null,
           startedAt: row.status === 'processing' ? row.updated_at : null,
           createdAt: row.created_at,
@@ -167,7 +169,6 @@ export function useActiveJobQueue(): ActiveJobQueueState {
     setLoading(false);
   }, [user?.id]);
 
-  // Initial fetch + polling
   useEffect(() => {
     mountedRef.current = true;
     fetchJobs();
@@ -178,33 +179,55 @@ export function useActiveJobQueue(): ActiveJobQueueState {
     };
   }, [fetchJobs]);
 
-  // Realtime subscription for background_jobs
   useEffect(() => {
     if (!user?.id) return;
+
     const channel = supabase
-      .channel('active-job-queue')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'background_jobs',
-        filter: `user_id=eq.${user.id}`,
-      }, () => {
-        // Refetch on any change
-        fetchJobs();
-      })
+      .channel(`active-job-queue:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'background_jobs',
+          filter: `user_id=eq.${user.id}`,
+        },
+        fetchJobs,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'podcast_import_queue',
+          filter: `user_id=eq.${user.id}`,
+        },
+        fetchJobs,
+      )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user?.id, fetchJobs]);
 
   const summary = useMemo<QueueSummary>(() => {
-    const s: QueueSummary = { total: 0, running: 0, queued: 0, retrying: 0, stalled: 0, byType: {} };
-    for (const j of jobs) {
-      s.total++;
-      s[j.status]++;
-      s.byType[j.jobType] = (s.byType[j.jobType] || 0) + 1;
+    const next: QueueSummary = {
+      total: 0,
+      running: 0,
+      queued: 0,
+      retrying: 0,
+      stalled: 0,
+      byType: {},
+    };
+
+    for (const job of jobs) {
+      next.total += 1;
+      next[job.status] += 1;
+      next.byType[job.jobType] = (next.byType[job.jobType] || 0) + 1;
     }
-    return s;
+
+    return next;
   }, [jobs]);
 
   return { jobs, summary, loading, refresh: fetchJobs };
