@@ -360,7 +360,31 @@ export default function DojoSession() {
                 </div>
               </div>
 
-              {/* Feedback */}
+              {/* Focus Application Badge (retry only) */}
+              {retryResult && currentResult.focusApplied && (
+                <div className="flex items-center gap-2.5">
+                  <Badge
+                    variant={currentResult.focusApplied === 'yes' ? 'default' : 'outline'}
+                    className={cn(
+                      'text-xs font-semibold',
+                      currentResult.focusApplied === 'yes' && 'bg-green-600 hover:bg-green-600',
+                      currentResult.focusApplied === 'partial' && 'border-amber-500 text-amber-600 dark:text-amber-400',
+                      currentResult.focusApplied === 'no' && 'border-red-500 text-red-600 dark:text-red-400',
+                    )}
+                  >
+                    <Target className="h-3 w-3 mr-1" />
+                    {currentResult.focusApplied === 'yes' ? 'Applied' :
+                     currentResult.focusApplied === 'partial' ? 'Partially Applied' :
+                     'Missed Focus'}
+                  </Badge>
+                  {currentResult.focusAppliedReason && (
+                    <p className="text-xs text-muted-foreground leading-tight">
+                      {currentResult.focusAppliedReason}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <Card>
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start gap-2">
