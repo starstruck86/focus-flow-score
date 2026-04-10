@@ -774,9 +774,21 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                       ar.parsed = true;
                       ar.text_length = parsedTextLength;
                       ar.detail = `Server-parsed ${parsedTextLength.toLocaleString()} chars, child resource created`;
+                      // Post-ingest validation: auto-remediate if needed
+                      try {
+                        const { validateAndRemediate } = await import('@/lib/postIngestValidation');
+                        await validateAndRemediate(childResourceId!);
+                      } catch { /* non-critical */ }
                     } else {
                       ar.detail = `Server parse returned no content for ${asset.filename}`;
                       ar.parsed = false;
+                      // Parse failed — run validation to detect placeholder state
+                      if (childResourceId) {
+                        try {
+                          const { validateAndRemediate } = await import('@/lib/postIngestValidation');
+                          await validateAndRemediate(childResourceId);
+                        } catch { /* non-critical */ }
+                      }
                     }
                   }
                 } catch (parseErr: any) {

@@ -20,6 +20,30 @@ import { createLogger } from './logger';
 
 const log = createLogger('PostIngestValidation');
 
+// ── Idempotency guard ─────────────────────────────────────
+// Prevents duplicate remediation dispatch within a short window.
+const DEDUP_WINDOW_MS = 60_000; // 60 seconds
+const recentRemediations = new Map<string, number>(); // resourceId → timestamp
+
+function isDuplicateRemediation(resourceId: string): boolean {
+  const lastTime = recentRemediations.get(resourceId);
+  if (lastTime && Date.now() - lastTime < DEDUP_WINDOW_MS) {
+    return true;
+  }
+  return false;
+}
+
+function markRemediated(resourceId: string): void {
+  recentRemediations.set(resourceId, Date.now());
+  // Garbage-collect old entries every 50 calls
+  if (recentRemediations.size > 200) {
+    const cutoff = Date.now() - DEDUP_WINDOW_MS;
+    for (const [id, ts] of recentRemediations) {
+      if (ts < cutoff) recentRemediations.delete(id);
+    }
+  }
+}
+
 // ── Failure class types ───────────────────────────────────
 
 export type FailureClass =
@@ -304,6 +328,12 @@ export async function validateAndRemediate(resourceId: string): Promise<{
   violations: ValidationViolation[];
   remediations: RemediationResult[];
 }> {
+  // Idempotency: skip if already remediated within the dedup window
+  if (isDuplicateRemediation(resourceId)) {
+    log.info('Skipping duplicate remediation', { resourceId, windowMs: DEDUP_WINDOW_MS });
+    return { violations: [], remediations: [] };
+  }
+
   const { data, error } = await supabase
     .from('resources')
     .select('id, title, resource_type, content, content_length, enrichment_status, file_url, current_resource_ki_count, extraction_attempt_count, host_platform, access_type')
@@ -319,6 +349,9 @@ export async function validateAndRemediate(resourceId: string): Promise<{
   if (violations.length === 0) {
     return { violations: [], remediations: [] };
   }
+
+  // Mark as remediated BEFORE dispatching to prevent re-entrant calls
+  markRemediated(resourceId);
 
   log.info('Post-ingest violations found — running auto-remediation', {
     resourceId,

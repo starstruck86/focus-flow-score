@@ -143,6 +143,13 @@ export async function transitionToEnriched(
     // Non-critical
   }
 
+  // ── Post-transition validation + auto-remediation ────────
+  // Fire-and-forget: detect and self-heal any invalid states
+  try {
+    const { validateAndRemediate } = await import('./postIngestValidation');
+    validateAndRemediate(resourceId).catch(() => { /* non-critical */ });
+  } catch { /* dynamic import safety */ }
+
   return { success: true, qualityResult: qr, newStatus };
 }
 
