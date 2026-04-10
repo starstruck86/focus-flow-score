@@ -18,7 +18,8 @@ import {
   Volume2, VolumeX, SkipForward, RotateCcw,
   Pause, Play, AlertTriangle, RefreshCw, type LucideIcon,
 } from 'lucide-react';
-import type { DojoScoreResult } from '@/lib/dojo/types';
+import { supabase } from '@/integrations/supabase/client';
+import { summarizeSession } from '@/lib/dojo/dojoAudioAnalytics';
 import type { SpeechChunk } from '@/lib/dojo/conversationEngine';
 import { createSession, loadResult } from '@/lib/dojo/conversationEngine';
 import { withPlayback, type PlaybackState } from '@/lib/dojo/playbackAdapter';
