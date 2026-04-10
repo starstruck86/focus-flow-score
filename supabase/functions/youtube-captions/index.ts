@@ -28,13 +28,16 @@ function extractVideoId(url: string): string | null {
 // so we fetch the watch page and extract ytInitialPlayerResponse.
 async function fetchPlayerResponse(videoId: string): Promise<any> {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const resp = await fetch(watchUrl, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Cookie": "CONSENT=YES+cb.20210328-17-p0.en+FX+299",
-    },
-  });
+  // Try multiple approaches to get the watch page with full player response
+  // YouTube may serve consent pages from EU — use bot-like headers and consent cookie
+  const headers: Record<string, string> = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Cookie": "CONSENT=PENDING+987; SOCS=CAESEwgDEgk2NjI1MjcyNjAaAmVuIAEaBgiA_L2aBg",
+  };
+
+  let resp = await fetch(watchUrl, { headers, redirect: "follow" });
 
   if (!resp.ok) {
     throw new Error(`Watch page fetch failed: ${resp.status}`);
