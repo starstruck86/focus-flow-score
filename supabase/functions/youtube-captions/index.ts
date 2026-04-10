@@ -377,8 +377,8 @@ Deno.serve(async (req) => {
 
     console.log(`[youtube-captions] Extracting captions for video: ${resolvedVideoId}`);
 
-    // 1. Fetch player response via watch page scraping
-    const playerResponse = await fetchPlayerResponse(resolvedVideoId);
+    // 1. Fetch watch page and extract player response + initial data
+    const { playerResponse, html } = await fetchWatchPageData(resolvedVideoId);
 
     // Check playability
     const playability = playerResponse?.playabilityStatus;
@@ -396,7 +396,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. Extract caption tracks
+    // 2. Extract metadata
     const tracks = extractCaptionTracksFromPlayer(playerResponse);
     const title = extractVideoTitle(playerResponse);
     const author = extractVideoAuthor(playerResponse);
@@ -404,36 +404,33 @@ Deno.serve(async (req) => {
 
     console.log(`[youtube-captions] Found ${tracks.length} caption tracks for "${title}"`);
 
-    if (tracks.length === 0) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "no_captions",
-          reason: "No caption tracks available for this video",
-          video_id: resolvedVideoId,
-          title,
-          author,
-          duration_seconds: durationSecs,
-          has_captions: false,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // 3. Try innertube get_transcript first (most reliable from server)
+    let transcript = "";
+    const transcriptParams = extractTranscriptParams(html);
+    if (transcriptParams) {
+      transcript = await fetchTranscriptViaInnertube(transcriptParams);
     }
 
-    // 3. Pick best track and fetch
-    const bestTrack = pickBestTrack(tracks)!;
-    console.log(`[youtube-captions] Using track: lang=${bestTrack.lang}`);
-
-    const transcript = await fetchAndParseCaptions(bestTrack.url, resolvedVideoId, bestTrack.lang);
+    // 4. Fall back to caption URL fetching
+    if ((!transcript || transcript.length < 50) && tracks.length > 0) {
+      const bestTrack = pickBestTrack(tracks)!;
+      console.log(`[youtube-captions] Falling back to caption URL: lang=${bestTrack.lang}`);
+      transcript = await fetchAndParseCaptions(bestTrack.url, resolvedVideoId, bestTrack.lang);
+    }
 
     if (!transcript || transcript.length < 50) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "caption_parse_failed",
-          reason: "Captions found but could not be parsed into usable text",
+          error: tracks.length === 0 ? "no_captions" : "caption_parse_failed",
+          reason: tracks.length === 0
+            ? "No caption tracks available for this video"
+            : "Captions found but could not be parsed into usable text",
           video_id: resolvedVideoId,
           title,
+          author,
+          duration_seconds: durationSecs,
+          has_captions: tracks.length > 0,
           tracks_found: tracks.length,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
