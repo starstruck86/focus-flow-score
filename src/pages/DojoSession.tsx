@@ -275,6 +275,32 @@ export default function DojoSession() {
           </CardContent>
         </Card>
 
+        {/* ── Roleplay Mode ── */}
+        {sessionType === 'roleplay' && phase !== 'feedback' && !currentResult && user && (
+          <DojoRoleplay
+            scenario={scenario}
+            userId={user.id}
+            onComplete={(scoreResult) => {
+              setResult(scoreResult);
+              setPhase('feedback');
+            }}
+          />
+        )}
+
+        {/* ── Review Mode ── */}
+        {sessionType === 'review' && phase !== 'feedback' && !currentResult && user && (
+          <DojoReview
+            scenario={scenario}
+            userId={user.id}
+            onComplete={(scoreResult) => {
+              setResult(scoreResult);
+              setPhase('feedback');
+            }}
+          />
+        )}
+
+        {/* ── Drill Mode (original) ── */}
+        {sessionType === 'drill' && (
         <AnimatePresence mode="wait">
           {/* ── Phase: Respond ── */}
           {phase === 'respond' && (
