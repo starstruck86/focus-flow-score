@@ -1,0 +1,1 @@
+ALTER TABLE public.dojo_sessions ADD COLUMN IF NOT EXISTS audio_metrics JSONB DEFAULT NULL;
