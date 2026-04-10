@@ -128,6 +128,7 @@ export interface LifecycleSummary {
     auth_capture_incomplete: number;
     enriched_no_extraction: number;
     extraction_ready_not_queued: number;
+    placeholder_enriched_contradiction: number;
   };
   resources: CanonicalResourceStatus[];
 }
