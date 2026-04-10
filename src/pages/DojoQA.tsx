@@ -505,6 +505,16 @@ export default function DojoQA() {
             <option value="all">All Skills</option>
             {Object.entries(SKILL_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
           </select>
+          <span className="text-muted-foreground text-[10px]">|</span>
+          <select value={filterAudio} onChange={e => setFilterAudio(e.target.value as FilterAudio)} className="text-[10px] bg-transparent border border-border rounded px-1.5 py-0.5">
+            <option value="all">Audio: All</option>
+            <option value="has_audio">Has Audio</option>
+            <option value="degraded">Degraded</option>
+            <option value="recovered">Recovered</option>
+            <option value="replayed">Replayed</option>
+            <option value="skipped">Skipped</option>
+            <option value="timed_out">Timed Out</option>
+          </select>
         </div>
 
         <p className="text-[10px] text-muted-foreground">{filtered.length} sessions shown</p>
