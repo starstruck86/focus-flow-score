@@ -81,7 +81,8 @@ export default function DojoSession() {
   const { user } = useAuth();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string } | null;
+  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string } | null;
+  const sessionType = state?.sessionType || 'drill';
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
     return getRandomScenario(state?.skillFocus);
