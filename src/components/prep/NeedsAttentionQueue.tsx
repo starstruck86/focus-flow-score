@@ -58,6 +58,7 @@ const BLOCKER_PRIORITY: Record<BlockerType, number> = {
   stalled_extraction: 1,
   stalled_enrichment: 2,
   missing_content: 3,
+  placeholder_content: 3.5,
   needs_enrichment: 4,
   needs_extraction: 5,
   needs_activation: 6,

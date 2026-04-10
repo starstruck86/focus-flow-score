@@ -57,6 +57,7 @@ export interface Blocker {
 
 export const BLOCKER_META: Record<BlockerType, { severity: BlockerSeverity; fixability: BlockerFixability; ownership: BlockerOwnership; label: string }> = {
   missing_content:          { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'pipeline',       label: 'Missing Content' },
+  placeholder_content:      { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'pipeline',       label: 'Parse Incomplete' },
   needs_enrichment:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'pipeline',       label: 'Needs Enrichment' },
   needs_extraction:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'extraction',     label: 'Needs Extraction' },
   needs_activation:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'activation',     label: 'Needs Activation' },
