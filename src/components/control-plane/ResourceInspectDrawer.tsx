@@ -66,7 +66,7 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:w-[440px] md:w-[500px] sm:max-w-[500px] overflow-y-auto p-0">
+      <SheetContent className="w-full sm:w-[440px] md:w-[500px] !sm:max-w-[500px] overflow-y-auto p-0">
         {/* ── Header ── */}
         <div className="px-6 pt-6 pb-3 space-y-2">
           <SheetTitle className="text-sm font-semibold leading-tight pr-6">
