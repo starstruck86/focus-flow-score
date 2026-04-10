@@ -14,7 +14,6 @@ function extractVideoId(url: string): string | null {
     if (u.hostname.includes("youtube.com")) {
       const v = u.searchParams.get("v");
       if (v) return v;
-      // /embed/ID or /v/ID
       const embedMatch = u.pathname.match(/\/(embed|v)\/([\w-]{11})/);
       if (embedMatch) return embedMatch[2];
     }
@@ -24,40 +23,38 @@ function extractVideoId(url: string): string | null {
   }
 }
 
-// ── Caption extraction via innertube ───────────────────────
-// YouTube exposes caption tracks in the player response.
-// We fetch the watch page, extract the captions URL from ytInitialPlayerResponse,
-// then fetch the timedtext XML and convert to plain text.
-
+// ── Fetch player response by scraping watch page HTML ──────
+// The innertube API returns UNPLAYABLE from server environments,
+// so we fetch the watch page and extract ytInitialPlayerResponse.
 async function fetchPlayerResponse(videoId: string): Promise<any> {
-  // Use innertube API — no key needed
-  const body = {
-    context: {
-      client: {
-        clientName: "WEB",
-        clientVersion: "2.20240101.00.00",
-        hl: "en",
-      },
+  const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const resp = await fetch(watchUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
     },
-    videoId,
-  };
-
-  const resp = await fetch(
-    "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }
-  );
+  });
 
   if (!resp.ok) {
-    throw new Error(`Innertube player request failed: ${resp.status}`);
+    throw new Error(`Watch page fetch failed: ${resp.status}`);
   }
 
-  return resp.json();
+  const html = await resp.text();
+
+  // Extract ytInitialPlayerResponse from the page
+  const match = html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;/);
+  if (!match) {
+    throw new Error("Could not extract player response from watch page");
+  }
+
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    throw new Error("Failed to parse player response JSON");
+  }
 }
 
+// ── Caption track extraction ──────────────────────────────
 function extractCaptionTracksFromPlayer(playerResponse: any): Array<{ url: string; lang: string; name: string; kind?: string }> {
   const captions = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
   if (!Array.isArray(captions)) return [];
@@ -73,7 +70,6 @@ function extractCaptionTracksFromPlayer(playerResponse: any): Array<{ url: strin
 function pickBestTrack(tracks: Array<{ url: string; lang: string; name: string; kind?: string }>): { url: string; lang: string } | null {
   if (tracks.length === 0) return null;
 
-  // Prefer English manual captions, then English auto, then any manual, then any auto
   const enManual = tracks.find(t => t.lang.startsWith("en") && t.kind !== "asr");
   if (enManual) return enManual;
 
@@ -86,18 +82,17 @@ function pickBestTrack(tracks: Array<{ url: string; lang: string; name: string; 
   return tracks[0];
 }
 
+// ── Caption text parsing ──────────────────────────────────
 async function fetchCaptionXml(captionUrl: string): Promise<string> {
-  // Request plain text format (fmt=3 = srv3 JSON, but raw XML is default)
   const url = new URL(captionUrl);
-  url.searchParams.set("fmt", "3"); // srv3 format — structured JSON
-  
+  url.searchParams.set("fmt", "3"); // srv3 format
   const resp = await fetch(url.toString());
   if (!resp.ok) throw new Error(`Caption fetch failed: ${resp.status}`);
   return resp.text();
 }
 
 function parseSrv3ToText(srv3: string): string {
-  // srv3 format is JSON with events array
+  // Try JSON (srv3) first
   try {
     const data = JSON.parse(srv3);
     if (data.events && Array.isArray(data.events)) {
@@ -111,11 +106,10 @@ function parseSrv3ToText(srv3: string): string {
       return lines.join(" ").replace(/\s+/g, " ").trim();
     }
   } catch {
-    // Not JSON — try XML parsing
+    // Not JSON — try XML
   }
 
   // Fallback: XML timedtext format
-  // Extract text from <text> elements
   const textMatches = srv3.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/gi);
   const lines: string[] = [];
   for (const match of textMatches) {
@@ -132,14 +126,13 @@ function parseSrv3ToText(srv3: string): string {
   return lines.join(" ").replace(/\s+/g, " ").trim();
 }
 
-// Fallback: fetch raw XML captions (fmt=1, default timedtext)
 async function fetchCaptionRawXml(captionUrl: string): Promise<string> {
   const resp = await fetch(captionUrl);
   if (!resp.ok) throw new Error(`Caption raw XML fetch failed: ${resp.status}`);
   return resp.text();
 }
 
-// ── Title extraction ───────────────────────────────────────
+// ── Metadata extraction ───────────────────────────────────
 function extractVideoTitle(playerResponse: any): string | null {
   return playerResponse?.videoDetails?.title || null;
 }
@@ -160,25 +153,33 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Support both authenticated (user) and service-role calls
     const authHeader = req.headers.get("Authorization");
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader! } } }
-    );
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const isServiceRole = authHeader?.includes(serviceRoleKey);
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let userId: string | null = null;
+
+    if (!isServiceRole) {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader! } } }
+      );
+
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = user.id;
     }
 
     const body = await req.json();
     const { url, video_id, resource_id } = body;
 
-    // Resolve video ID
     const resolvedVideoId = video_id || (url ? extractVideoId(url) : null);
     if (!resolvedVideoId) {
       return new Response(
@@ -189,7 +190,7 @@ Deno.serve(async (req) => {
 
     console.log(`[youtube-captions] Extracting captions for video: ${resolvedVideoId}`);
 
-    // 1. Fetch player response via innertube
+    // 1. Fetch player response via watch page scraping
     const playerResponse = await fetchPlayerResponse(resolvedVideoId);
 
     // Check playability
@@ -217,7 +218,6 @@ Deno.serve(async (req) => {
     console.log(`[youtube-captions] Found ${tracks.length} caption tracks for "${title}"`);
 
     if (tracks.length === 0) {
-      // No captions available
       return new Response(
         JSON.stringify({
           success: false,
@@ -239,7 +239,6 @@ Deno.serve(async (req) => {
 
     let transcript = "";
 
-    // Try srv3 JSON first
     try {
       const srv3 = await fetchCaptionXml(bestTrack.url);
       transcript = parseSrv3ToText(srv3);
@@ -247,7 +246,6 @@ Deno.serve(async (req) => {
       console.log(`[youtube-captions] srv3 failed, trying raw XML: ${(e as Error).message}`);
     }
 
-    // Fallback to raw XML
     if (!transcript || transcript.length < 100) {
       try {
         const rawXml = await fetchCaptionRawXml(bestTrack.url);
@@ -273,6 +271,12 @@ Deno.serve(async (req) => {
 
     // 4. If resource_id provided, update the resource directly
     if (resource_id) {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        isServiceRole ? serviceRoleKey : Deno.env.get("SUPABASE_ANON_KEY")!,
+        isServiceRole ? {} : { global: { headers: { Authorization: authHeader! } } }
+      );
+
       const now = new Date().toISOString();
       await supabase.from("resources").update({
         content: transcript.slice(0, 60_000),
