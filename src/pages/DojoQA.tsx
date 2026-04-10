@@ -173,7 +173,7 @@ export default function DojoQA() {
     queryFn: async () => {
       const { data } = await supabase
         .from('dojo_sessions')
-        .select('id, session_type, skill_focus, best_score, latest_score, created_at, scenario_title, retry_count')
+        .select('id, session_type, skill_focus, best_score, latest_score, created_at, scenario_title, retry_count, audio_metrics')
         .eq('user_id', user!.id)
         .eq('status', 'completed')
         .order('created_at', { ascending: false })
