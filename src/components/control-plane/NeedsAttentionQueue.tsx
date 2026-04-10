@@ -42,7 +42,7 @@ const CATEGORY_CONFIG: Record<Category, {
   mismatched: {
     icon: ShieldAlert, label: 'Mismatched', color: 'text-amber-600',
     actionLabel: 'Inspect', batchLabel: 'Filter & Inspect',
-    hint: 'Inspect and re-run, or manually verify state.',
+    hint: 'Open each to verify state, then re-run the intended action.',
     batchReason: 'These resources had outcomes that did not match expected state transitions — reconciliation detected a mismatch.',
     batchPipeline: 'Opens filtered table view for manual inspection',
     batchIsFilter: true,
@@ -50,21 +50,21 @@ const CATEGORY_CONFIG: Record<Category, {
   failed: {
     icon: XCircle, label: 'Failed', color: 'text-destructive',
     actionLabel: 'Retry', batchLabel: 'Retry All',
-    hint: 'Retry the failed action or diagnose root cause.',
+    hint: 'Retry once — if it fails again, open to diagnose the root cause.',
     batchReason: 'These resources failed during their last pipeline action — the operation did not complete successfully.',
     batchPipeline: 'Diagnostic pipeline (detect root cause → apply fix → re-validate)',
   },
   needs_review: {
     icon: AlertTriangle, label: 'Blocked', color: 'text-destructive',
     actionLabel: 'Diagnose', batchLabel: 'Diagnose All',
-    hint: 'Fix blockers — re-enrich or review content.',
+    hint: 'Run Diagnose to auto-fix, or open to review manually.',
     batchReason: 'These resources are blocked by detected issues — empty content, failed extraction, or stale state.',
     batchPipeline: 'Diagnostic pipeline (detect root cause → apply fix → re-validate)',
   },
   needs_extraction: {
     icon: Zap, label: 'Needs Extraction', color: 'text-amber-600',
     actionLabel: 'Extract', batchLabel: 'Extract All',
-    hint: 'Run Extract on available content.',
+    hint: 'Run Extract to generate knowledge items from available content.',
     batchReason: 'These resources have parseable content but no knowledge items extracted yet.',
     batchPipeline: 'AI extraction on each resource (segment → extract → validate → deduplicate)',
   },
