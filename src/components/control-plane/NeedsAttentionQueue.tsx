@@ -4,7 +4,7 @@
  */
 import { useState, useMemo } from 'react';
 import {
-  Zap, AlertTriangle, ShieldAlert, XCircle,
+  Zap, AlertTriangle, ShieldAlert, XCircle, CheckCircle2,
   ChevronDown, ChevronUp, ArrowRight, Filter, Shield,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -351,7 +351,16 @@ export function NeedsAttentionQueue({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resources, processingIds, outcomeRefreshKey]);
 
-  if (totalCount === 0) return null;
+  if (totalCount === 0) {
+    return (
+      <div className="border rounded-lg bg-card px-3 py-2.5 flex items-center gap-2">
+        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+        <span className="text-xs text-muted-foreground">
+          No resources need attention — all clear.
+        </span>
+      </div>
+    );
+  }
 
   const handleBatchClick = (cat: Category, items: QueueItem[]) => {
     const cfg = CATEGORY_CONFIG[cat];
