@@ -102,6 +102,13 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
               {summaryText}
             </p>
 
+            {/* Orientation hint when resources moved out of current view */}
+            {outcome.succeeded > 0 && outcome.failed === 0 && outcome.unchanged === 0 && (
+              <p className="text-[10px] text-muted-foreground bg-muted/50 rounded px-2 py-1">
+                Resources that moved forward may no longer appear in your current filter. Clear the filter to see them in their new state.
+              </p>
+            )}
+
             {/* Execution counts */}
             <div className="grid grid-cols-2 gap-2">
               <Stat icon={CheckCircle2} label={successVerb(outcome).charAt(0).toUpperCase() + successVerb(outcome).slice(1)} value={outcome.succeeded} color="text-emerald-600" />
