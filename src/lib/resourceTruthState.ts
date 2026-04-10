@@ -18,6 +18,7 @@ import { deriveProcessingState } from '@/lib/processingState';
 import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, ASSET_LABELS } from '@/lib/processingRoute';
 import { isJobStale, STALE_JOB_TIMEOUT_MS } from '@/store/useResourceJobProgress';
 import { detectAttachmentReferences } from '@/lib/attachmentDetection';
+import { isPlaceholderContent } from '@/lib/canonicalLifecycle';
 
 // ── Blocker Taxonomy ──────────────────────────────────────
 
