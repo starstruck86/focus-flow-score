@@ -404,6 +404,34 @@ export function useDeepReExtraction() {
   const [excludedResourceIds, setExcludedResourceIds] = useState<Set<string>>(new Set());
   const pendingAutoRunRef = useRef(false);
 
+  /**
+   * Check eligibility without executing — returns breakdown of eligible vs skipped.
+   */
+  const checkEligibility = useCallback((resources: ResourceAuditRow[]): {
+    eligible: ResourceAuditRow[];
+    skipped: { resource: ResourceAuditRow; reason: string }[];
+  } => {
+    const eligible: ResourceAuditRow[] = [];
+    const skipped: { resource: ResourceAuditRow; reason: string }[] = [];
+
+    for (const r of resources) {
+      const hasIncompleteBatches = !!r.extraction_is_resumable || ((r.extraction_batch_total ?? 0) > 0 && (r.extraction_batches_completed ?? 0) < (r.extraction_batch_total ?? 0));
+      if (!hasIncompleteBatches && r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5) {
+        skipped.push({ resource: r, reason: 'Already strong density (≥1.5 KIs/1k)' });
+      } else if (r.resource_type === 'reference_only') {
+        skipped.push({ resource: r, reason: 'Reference-only resource' });
+      } else if (r.content_length < 1500) {
+        skipped.push({ resource: r, reason: 'Content too short (<1500 chars)' });
+      } else if (excludedResourceIds.has(r.resource_id)) {
+        skipped.push({ resource: r, reason: 'Manually excluded from re-extraction' });
+      } else {
+        eligible.push(r);
+      }
+    }
+
+    return { eligible, skipped };
+  }, [excludedResourceIds]);
+
   const flagForReExtraction = useCallback(async (resources: ResourceAuditRow[], reason: string, autoRun = false) => {
     console.log('[QUEUE PATH] flagForReExtraction called', {
       count: resources.length,
@@ -412,33 +440,27 @@ export function useDeepReExtraction() {
       titles: resources.map(r => r.title).slice(0, 3),
     });
 
-    // Safeguard: warn if resumable resources are hitting the queue-only path
-    const resumableInBatch = resources.filter(r =>
-      r.extraction_is_resumable ||
-      ((r.extraction_batch_total ?? 0) > 0 && (r.extraction_batches_completed ?? 0) < (r.extraction_batch_total ?? 0))
-    );
-    if (resumableInBatch.length > 0) {
-      console.warn('[BUG] resumable resource was routed to queue-only path', {
-        resumableCount: resumableInBatch.length,
-        titles: resumableInBatch.map(r => r.title),
-      });
+    const { eligible, skipped } = checkEligibility(resources);
+
+    // Log skip reasons for transparency
+    if (skipped.length > 0) {
+      const skipReasons = new Map<string, number>();
+      for (const s of skipped) {
+        skipReasons.set(s.reason, (skipReasons.get(s.reason) || 0) + 1);
+      }
+      console.log('[QUEUE PATH] Skip breakdown:', Object.fromEntries(skipReasons));
     }
 
-    const eligible = resources.filter(r => {
-      const hasIncompleteBatches = !!r.extraction_is_resumable || ((r.extraction_batch_total ?? 0) > 0 && (r.extraction_batches_completed ?? 0) < (r.extraction_batch_total ?? 0));
-      if (!hasIncompleteBatches && r.extraction_depth_bucket === 'strong' && r.kis_per_1k_chars >= 1.5) return false;
-      if (r.resource_type === 'reference_only') return false;
-      if (r.content_length < 1500) return false;
-      if (excludedResourceIds.has(r.resource_id)) return false;
-      return true;
-    });
-
     if (eligible.length === 0) {
-      toast.info('No eligible resources to re-extract');
+      const skipReasons = new Map<string, number>();
+      for (const s of skipped) {
+        skipReasons.set(s.reason, (skipReasons.get(s.reason) || 0) + 1);
+      }
+      const topReason = [...skipReasons.entries()].sort((a, b) => b[1] - a[1])[0];
+      toast.info(`No eligible resources to re-extract. ${resources.length} skipped${topReason ? ` (top reason: ${topReason[0]})` : ''}`);
       return;
     }
 
-    const skipped = resources.length - eligible.length;
     const newItems: ReExtractQueueItem[] = await Promise.all(eligible.map(async (r) => {
       const base: ReExtractQueueItem = {
         resource_id: r.resource_id,
@@ -486,17 +508,28 @@ export function useDeepReExtraction() {
       }
       return Array.from(merged.values());
     });
-    const msg = skipped > 0
-      ? `${newItems.length} flagged for re-extraction (${skipped} skipped)`
-      : `${newItems.length} resources flagged for deep re-extraction`;
-    console.log('[QUEUE PATH] showing flagged toast', { msg });
-    toast.success(autoRun ? `Running extraction on ${newItems.length} resources…` : msg);
+
+    // Transparent messaging about eligible vs skipped
+    if (skipped.length > 0) {
+      const skipReasons = new Map<string, number>();
+      for (const s of skipped) {
+        skipReasons.set(s.reason, (skipReasons.get(s.reason) || 0) + 1);
+      }
+      const topReason = [...skipReasons.entries()].sort((a, b) => b[1] - a[1])[0];
+      const msg = `${newItems.length} of ${resources.length} eligible for re-extraction (${skipped.length} skipped: ${topReason[0]})`;
+      console.log('[QUEUE PATH]', msg);
+      toast.success(autoRun ? `Running extraction on ${newItems.length} resources (${skipped.length} skipped)…` : msg);
+    } else {
+      const msg = `${newItems.length} resources flagged for deep re-extraction`;
+      console.log('[QUEUE PATH]', msg);
+      toast.success(autoRun ? `Running extraction on ${newItems.length} resources…` : msg);
+    }
 
     // Auto-run: set flag so useEffect triggers runDeepExtraction after queue state updates
     if (autoRun && newItems.length > 0) {
       pendingAutoRunRef.current = true;
     }
-  }, [excludedResourceIds]);
+  }, [excludedResourceIds, checkEligibility]);
 
   const removeFromQueue = useCallback((resourceId: string) => {
     setQueue(prev => prev.filter(i => i.resource_id !== resourceId));
@@ -909,6 +942,7 @@ export function useDeepReExtraction() {
     const queued = queue.filter(i => i.status === 'queued' || i.status === 'partial_complete_resumable');
     if (queued.length === 0) return;
 
+    console.log(`[BATCH RUN] Starting deep re-extraction for ${queued.length} resources`);
     setIsRunning(true);
     let succeeded = 0;
     let totalDelta = 0;
@@ -922,34 +956,57 @@ export function useDeepReExtraction() {
     const preKisArr: number[] = [];
     const postKisArr: number[] = [];
 
-    for (const item of queued) {
-      try {
-        const result = await runSingleExtraction(item) as any;
+    // Process in concurrent waves of CONCURRENCY_LIMIT
+    const CONCURRENCY_LIMIT = 3;
+    let processed = 0;
 
-        if (result.finalStatus === 'completed' || result.finalStatus === 'partial' || result.finalStatus === 'partial_complete_resumable') {
-          succeeded++;
-          totalDelta += result.kiDelta;
-          totalNetNew += result.netNewUnique;
-          totalNewActive += Math.max(0, result.activeDelta);
-          totalNewCtx += Math.max(0, result.contextDelta);
-          const isUpgrade = (item.pre_depth_bucket === 'none' || item.pre_depth_bucket === 'shallow') &&
-            result.postKisPer1k >= 0.75;
-          if (isUpgrade) depthUpgrades++;
-          if (result.liftStatus === 'no_lift') {
-            noLiftCount++;
-            if (result.noLiftReason) noLiftReasons.push(result.noLiftReason);
-            if (result.dominantBottleneck && result.dominantBottleneck !== 'none') bottlenecks.push(result.dominantBottleneck);
+    for (let waveStart = 0; waveStart < queued.length; waveStart += CONCURRENCY_LIMIT) {
+      const wave = queued.slice(waveStart, waveStart + CONCURRENCY_LIMIT);
+      console.log(`[BATCH RUN] Wave ${Math.floor(waveStart / CONCURRENCY_LIMIT) + 1}: processing ${wave.length} resources (${processed}/${queued.length} done)`);
+
+      const waveResults = await Promise.allSettled(
+        wave.map(async (item) => {
+          try {
+            const result = await runSingleExtraction(item) as any;
+            return { item, result, error: null };
+          } catch (err: any) {
+            setQueue(prev => prev.map(i =>
+              i.resource_id === item.resource_id ? { ...i, status: 'failed' as const, error: err.message } : i
+            ));
+            return { item, result: null, error: err.message };
           }
+        })
+      );
+
+      for (const settled of waveResults) {
+        const { item, result, error } = settled.status === 'fulfilled' ? settled.value : { item: wave[0], result: null, error: 'Promise rejected' };
+        processed++;
+
+        if (result) {
+          if (result.finalStatus === 'completed' || result.finalStatus === 'partial' || result.finalStatus === 'partial_complete_resumable') {
+            succeeded++;
+            totalDelta += result.kiDelta;
+            totalNetNew += result.netNewUnique;
+            totalNewActive += Math.max(0, result.activeDelta);
+            totalNewCtx += Math.max(0, result.contextDelta);
+            const isUpgrade = (item.pre_depth_bucket === 'none' || item.pre_depth_bucket === 'shallow') &&
+              result.postKisPer1k >= 0.75;
+            if (isUpgrade) depthUpgrades++;
+            if (result.liftStatus === 'no_lift') {
+              noLiftCount++;
+              if (result.noLiftReason) noLiftReasons.push(result.noLiftReason);
+              if (result.dominantBottleneck && result.dominantBottleneck !== 'none') bottlenecks.push(result.dominantBottleneck);
+            }
+          }
+          preKisArr.push(item.pre_kis_per_1k);
+          postKisArr.push(result.postKisPer1k);
+        } else {
+          preKisArr.push(item.pre_kis_per_1k);
+          postKisArr.push(item.pre_kis_per_1k);
         }
-        preKisArr.push(item.pre_kis_per_1k);
-        postKisArr.push(result.postKisPer1k);
-      } catch (err: any) {
-        setQueue(prev => prev.map(i =>
-          i.resource_id === item.resource_id ? { ...i, status: 'failed' as const, error: err.message } : i
-        ));
-        preKisArr.push(item.pre_kis_per_1k);
-        postKisArr.push(item.pre_kis_per_1k);
       }
+
+      console.log(`[BATCH RUN] Wave complete: ${processed}/${queued.length} total, ${succeeded} succeeded`);
     }
 
     const avgBefore = preKisArr.length > 0 ? preKisArr.reduce((a, b) => a + b, 0) / preKisArr.length : 0;
@@ -1148,7 +1205,7 @@ export function useDeepReExtraction() {
 
   return {
     queue, isRunning, liftSummary, excludedResourceIds,
-    flagForReExtraction, removeFromQueue, clearQueue, runDeepExtraction, markExcluded,
+    flagForReExtraction, checkEligibility, removeFromQueue, clearQueue, runDeepExtraction, markExcluded,
     resumeAndRunSingle,
   };
 }
