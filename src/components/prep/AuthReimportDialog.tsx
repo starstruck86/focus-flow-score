@@ -70,15 +70,14 @@ export function AuthReimportDialog({ resource, open, onOpenChange }: Props) {
         .limit(1)
         .maybeSingle();
 
-      // Fallback: use file_url or derive from title
-      const lessonUrl = lessonRow?.lesson_url || resource.file_url;
-      const courseUrl = lessonRow?.original_course_url || '';
-
-      if (!lessonUrl) {
+      if (!lessonRow?.lesson_url) {
         setStage('failed');
-        setError('Cannot determine the original lesson URL. Manual content paste may be required.');
+        setError('Cannot determine the original lesson URL — no course_lesson_imports record found. Manual content paste may be required.');
         return;
       }
+
+      const lessonUrl = lessonRow.lesson_url;
+      const courseUrl = lessonRow.original_course_url || '';
 
       setStageMessage('Authenticating and fetching lesson content…');
 
@@ -178,8 +177,16 @@ export function AuthReimportDialog({ resource, open, onOpenChange }: Props) {
           .eq('resource_id', resource.id);
       }
 
-      // Step 5: Invalidate caches
-      setStageMessage('Running validation…');
+      // Step 5: Run post-ingest validation + remediation pipeline
+      setStageMessage('Running validation & remediation…');
+      try {
+        const { validateAndRemediate } = await import('@/lib/postIngestValidation');
+        await validateAndRemediate(resource.id);
+      } catch (valErr) {
+        console.warn('[AuthReimport] Post-ingest validation failed (non-fatal):', valErr);
+      }
+
+      // Step 6: Invalidate caches
       await queryClient.invalidateQueries({ queryKey: ['resources'] });
       await queryClient.invalidateQueries({ queryKey: ['canonical-lifecycle'] });
       await queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
