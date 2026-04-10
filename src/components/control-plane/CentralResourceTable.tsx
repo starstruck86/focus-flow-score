@@ -42,7 +42,19 @@ interface Props {
   outcomeRefreshKey?: number;
 }
 
-function inferSourceType(title: string): string {
+function inferSourceType(title: string, resourceType?: string | null, fileUrl?: string | null): string {
+  // Use canonical normalizer for accurate type
+  if (resourceType || fileUrl) {
+    const canonical = normalizeSourceType(resourceType, fileUrl);
+    const CANONICAL_LABELS: Record<string, string> = {
+      youtube: 'YouTube', zoom: 'Zoom', thinkific: 'Course',
+      pdf: 'PDF', webpage: 'Webpage', document: 'Document',
+      audio: 'Audio', video: 'Video', transcript: 'Transcript',
+    };
+    // transcript type from normalizer
+    if (canonical !== 'unknown') return CANONICAL_LABELS[canonical] ?? canonical;
+  }
+  // Fallback: title heuristics
   const lower = title.toLowerCase();
   if (lower.includes(' > ')) return 'Lesson';
   if (lower.includes('podcast') || lower.includes('episode')) return 'Podcast';
