@@ -213,6 +213,7 @@ export function deriveBlockedReason(
     manual_input_required?: boolean | null;
     recovery_queue_bucket?: string | null;
     failure_reason?: string | null;
+    file_url?: string | null;
   },
   ki: { total: number; active: number; activeWithContexts: number },
 ): BlockedReason {
@@ -222,6 +223,9 @@ export function deriveBlockedReason(
 
   // Rule B: Placeholder content is NOT real content
   if (isPlaceholderContent(actualContent) && !resource.manual_content_present) {
+    if (actualLength > 0 && !resource.file_url) {
+      return 'auth_capture_incomplete';
+    }
     return actualLength > 0 ? 'placeholder_content' : 'empty_content';
   }
 
