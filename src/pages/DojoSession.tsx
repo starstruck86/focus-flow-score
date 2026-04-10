@@ -8,7 +8,7 @@ import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
 import {
   ArrowLeft, Send, RotateCcw, Loader2, Target, AlertTriangle,
-  CheckCircle2, Lightbulb, Swords, ChevronRight,
+  CheckCircle2, Lightbulb, Swords, ChevronRight, Crown, Sparkles,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,6 +23,8 @@ interface ScoreResult {
   feedback: string;
   topMistake: string;
   improvedVersion: string;
+  worldClassResponse?: string;
+  whyItWorks?: string[];
 }
 
 export default function DojoSession() {
@@ -46,7 +48,6 @@ export default function DojoSession() {
   const [firstTurnId, setFirstTurnId] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
-  // Auto-focus textarea
   useEffect(() => {
     if (phase === 'respond' || phase === 'retry') {
       setTimeout(() => textareaRef.current?.focus(), 300);
@@ -74,10 +75,8 @@ export default function DojoSession() {
 
       const scoreData = data as ScoreResult;
 
-      // Save to DB
       if (user) {
         if (!isRetry) {
-          // Create session
           const { data: session, error: sessionErr } = await supabase
             .from('dojo_sessions')
             .insert({
@@ -98,7 +97,6 @@ export default function DojoSession() {
 
           if (!sessionErr && session) {
             setSessionId(session.id);
-            // Save turn
             const { data: turn } = await supabase
               .from('dojo_session_turns')
               .insert({
@@ -121,7 +119,6 @@ export default function DojoSession() {
 
           setResult(scoreData);
         } else {
-          // Retry — update session + save new turn
           const newRetryCount = retryCount + 1;
           setRetryCount(newRetryCount);
 
@@ -187,6 +184,7 @@ export default function DojoSession() {
 
   const currentResult = retryResult || result;
   const scoreDelta = retryResult && result ? retryResult.score - result.score : null;
+  const userText = retryResult ? retryResponse : response;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -322,20 +320,77 @@ export default function DojoSession() {
                 </p>
               </div>
 
-              {/* Improved version */}
-              <Card className="border-green-500/20 bg-green-500/5">
-                <CardContent className="p-4 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Lightbulb className="h-4 w-4 text-green-500" />
-                    <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">
-                      Stronger Answer
+              {/* ── Side-by-side comparison ── */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
+                  Compare Responses
+                </p>
+
+                {/* Your response */}
+                <Card className="border-border/40">
+                  <CardContent className="p-3 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Response</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed italic">
+                      "{userText}"
                     </p>
-                  </div>
-                  <p className="text-sm text-foreground leading-relaxed italic">
-                    "{currentResult.improvedVersion}"
-                  </p>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+
+                {/* Improved version */}
+                <Card className="border-green-500/20 bg-green-500/5">
+                  <CardContent className="p-3 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Lightbulb className="h-3.5 w-3.5 text-green-500" />
+                      <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">
+                        Stronger Answer
+                      </p>
+                    </div>
+                    <p className="text-sm text-foreground leading-relaxed italic">
+                      "{currentResult.improvedVersion}"
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* World-class response */}
+                {currentResult.worldClassResponse && (
+                  <Card className="border-primary/30 bg-primary/5">
+                    <CardContent className="p-3 space-y-2">
+                      <div className="flex items-center gap-1.5">
+                        <Crown className="h-3.5 w-3.5 text-primary" />
+                        <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">
+                          World-Class Standard
+                        </p>
+                      </div>
+                      <p className="text-sm text-foreground leading-relaxed italic">
+                        "{currentResult.worldClassResponse}"
+                      </p>
+
+                      {/* Why it works */}
+                      {currentResult.whyItWorks && currentResult.whyItWorks.length > 0 && (
+                        <div className="pt-1.5 border-t border-primary/10 space-y-1">
+                          <div className="flex items-center gap-1">
+                            <Sparkles className="h-3 w-3 text-primary/70" />
+                            <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
+                              Why it works
+                            </p>
+                          </div>
+                          <ul className="space-y-0.5">
+                            {currentResult.whyItWorks.map((bullet, i) => (
+                              <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                <span className="text-primary/50 mt-0.5 shrink-0">•</span>
+                                <span>{bullet}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
 
               {/* Actions */}
               <div className="flex gap-3 pt-2">

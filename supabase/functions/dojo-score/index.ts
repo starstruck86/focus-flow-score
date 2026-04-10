@@ -244,7 +244,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
           { role: "user", content: userPrompt },
         ],
         temperature: 0.3,
-        max_tokens: 800,
+        max_tokens: 1200,
       }),
     });
 
