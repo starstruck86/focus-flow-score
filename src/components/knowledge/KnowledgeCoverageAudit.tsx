@@ -46,6 +46,11 @@ export function KnowledgeCoverageAudit() {
   const [showTop20, setShowTop20] = useState(false);
   const [auditFilter, setAuditFilter] = useState<AuditFilter>('all');
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
+  const [eligibilityPreview, setEligibilityPreview] = useState<{
+    eligible: ResourceAuditRow[];
+    skipped: { resource: ResourceAuditRow; reason: string }[];
+    total: number;
+  } | null>(null);
 
   const selectedResource = useMemo(() => {
     if (!selectedResourceId || !audit) return null;
