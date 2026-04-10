@@ -42,6 +42,17 @@ export function RecentActionsPanel({ refreshKey, onOpenResource, onOpenBulkResul
   const shown = expanded ? actions.slice(0, 20) : [];
   const shownBulk = expanded ? bulkActions.slice(0, 5) : [];
 
+  // Compact inline summary for collapsed state
+  const lastAction = actions[0];
+  const lastBulk = bulkActions[0];
+  const collapsedSummary = !expanded ? (
+    lastBulk
+      ? `${lastBulk.actionLabel}: ${lastBulk.succeeded}/${lastBulk.attempted} succeeded${lastBulk.mismatched > 0 ? ` · ${lastBulk.mismatched} mismatched` : ''}`
+      : lastAction
+        ? `${lastAction.actionLabel} → ${lastAction.resourceTitle}: ${STATUS_CONFIG[lastAction.status]?.label ?? lastAction.status}`
+        : null
+  ) : null;
+
   return (
     <div className="border rounded-lg bg-card">
       <button
@@ -51,6 +62,11 @@ export function RecentActionsPanel({ refreshKey, onOpenResource, onOpenBulkResul
         <span className="flex items-center gap-1.5">
           <History className="h-3 w-3 text-muted-foreground" />
           Recent Actions ({actions.length + bulkActions.length})
+          {collapsedSummary && (
+            <span className="text-[10px] font-normal text-muted-foreground ml-1 truncate max-w-[300px]">
+              — {collapsedSummary}
+            </span>
+          )}
         </span>
         {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
       </button>

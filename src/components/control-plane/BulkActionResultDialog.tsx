@@ -102,10 +102,20 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
               {summaryText}
             </p>
 
-            {/* Orientation hint when resources moved out of current view */}
-            {outcome.succeeded > 0 && outcome.failed === 0 && outcome.unchanged === 0 && (
+            {/* Orientation hint — contextual */}
+            {outcome.succeeded > 0 && outcome.failed === 0 && outcome.unchanged === 0 && outcome.stillNeedAttention.length === 0 && (
               <p className="text-[10px] text-muted-foreground bg-muted/50 rounded px-2 py-1">
-                Resources that moved forward may no longer appear in your current filter. Clear the filter to see them in their new state.
+                ✓ All done. Resources moved forward and may now appear under a different filter.
+              </p>
+            )}
+            {outcome.succeeded > 0 && outcome.failed > 0 && (
+              <p className="text-[10px] text-muted-foreground bg-muted/50 rounded px-2 py-1">
+                {outcome.succeeded} moved forward. {outcome.failed} remaining — open each to diagnose individually.
+              </p>
+            )}
+            {outcome.succeeded === 0 && outcome.failed > 0 && outcome.stillNeedAttention.length > 0 && (
+              <p className="text-[10px] text-muted-foreground bg-muted/50 rounded px-2 py-1">
+                None moved forward. Use "Show in table" below to inspect each resource.
               </p>
             )}
 
@@ -192,7 +202,16 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
           </div>
         </AlertDialogDescription>
         <AlertDialogFooter>
-          <AlertDialogAction className="text-xs h-8" onClick={onClose}>Done</AlertDialogAction>
+          {outcome.stillNeedAttention.length > 0 && onFilterAttention ? (
+            <>
+              <AlertDialogAction className="text-xs h-8 bg-secondary text-secondary-foreground hover:bg-secondary/80" onClick={onClose}>Dismiss</AlertDialogAction>
+              <AlertDialogAction className="text-xs h-8" onClick={handleFilterAttention}>
+                Show {outcome.stillNeedAttention.length} in table
+              </AlertDialogAction>
+            </>
+          ) : (
+            <AlertDialogAction className="text-xs h-8" onClick={onClose}>Done</AlertDialogAction>
+          )}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
