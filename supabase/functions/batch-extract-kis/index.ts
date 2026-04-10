@@ -1146,13 +1146,13 @@ function wordOverlap(a: string, b: string): number {
 // Post-extraction invariant: minimum KI floor
 // ═══════════════════════════════════════════
 
-function computeMinKiFloor(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }): number {
-  const details = computeMinKiFloorDetailed(contentLength, isLesson, densitySignals);
+function computeMinKiFloor(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }, resourceType?: string): number {
+  const details = computeMinKiFloorDetailed(contentLength, isLesson, densitySignals, resourceType);
   return details.final;
 }
 
 /** Returns base, density-adjusted, and final floor with logging */
-function computeMinKiFloorDetailed(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }): { base: number; densityAdjusted: number; final: number } {
+function computeMinKiFloorDetailed(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }, resourceType?: string): { base: number; densityAdjusted: number; final: number } {
   if (contentLength < 500) return { base: 0, densityAdjusted: 0, final: 0 };
 
   // Base floor (no density adjustment)
@@ -1162,6 +1162,16 @@ function computeMinKiFloorDetailed(contentLength: number, isLesson: boolean, den
   } else {
     // Non-lesson: conservative floors — single-topic transcripts should not be forced to retry
     baseFloor = contentLength < 4000 ? 1 : contentLength < 8000 ? 2 : 3;
+  }
+
+  // CRITICAL: Skip density boosting for transcript-type resources.
+  // Transcripts use markdown headings for speaker turns (## Host:, ## Guest:),
+  // which inflates sectionCount but does NOT indicate dense multi-topic teaching content.
+  // Density boosting should only apply to structured documents/articles.
+  const isTranscript = isTranscriptType(resourceType);
+  if (isTranscript) {
+    console.log(`[extract-floor] base=${baseFloor} density=skipped_transcript final=${baseFloor} (type=${resourceType})`);
+    return { base: baseFloor, densityAdjusted: baseFloor, final: baseFloor };
   }
 
   if (!densitySignals?.isDense) {
