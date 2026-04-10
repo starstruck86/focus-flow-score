@@ -8,8 +8,7 @@ import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import { useAutoOperationalize } from '@/hooks/useAutoOperationalize';
 import { useExtractionPipeline } from '@/hooks/useExtractionPipeline';
-import { SystemHealthStrip } from './SystemHealthStrip';
-import { ResourceHealthStrip } from './ResourceHealthStrip';
+import { UnifiedHealthStrip } from './UnifiedHealthStrip';
 import { DaveReadinessStrip } from './DaveReadinessStrip';
 import { ControlPlaneSummaryBar } from './ControlPlaneSummaryBar';
 import { CentralResourceTable } from './CentralResourceTable';
@@ -19,6 +18,7 @@ import { BulkActionBar } from './BulkActionBar';
 import { NeedsAttentionQueue } from './NeedsAttentionQueue';
 import { RecentActionsPanel } from './RecentActionsPanel';
 import { BulkActionResultDialog } from './BulkActionResultDialog';
+import { TableFilterPresets } from './TableFilterPresets';
 import { buildActionPreview } from './ActionPreviewDialog';
 import {
   type ControlPlaneFilter, type ControlPlaneState,
@@ -273,14 +273,13 @@ export function KnowledgeControlPlane() {
         </div>
       </div>
 
-      {/* System Health — reconciliation & trust */}
-      <SystemHealthStrip refreshKey={outcomeRefreshKey} onOpenResource={openResourceById} />
-
-      {/* Resource Health — blocked, extraction, conflicts */}
-      <ResourceHealthStrip
+      {/* Unified Health — system trust + resource issues */}
+      <UnifiedHealthStrip
         summary={cpSummary}
         conflictCount={conflicts.length}
+        outcomeRefreshKey={outcomeRefreshKey}
         onFilterChange={handleFilterChange}
+        onOpenResource={openResourceById}
       />
 
       {/* AI Readiness — secondary downstream layer */}
@@ -354,18 +353,28 @@ export function KnowledgeControlPlane() {
         onOpenBulkResult={handleOpenBulkResult}
       />
 
-      {/* Central Table */}
-      <CentralResourceTable
-        resources={resources}
-        filter={filter}
-        processingIds={processingIds}
-        conflictIds={conflictIds}
-        customFilterIds={customFilterIds}
-        onAction={handleAction}
-        onInspect={handleInspect}
-        actionLoading={actionLoading}
-        outcomeRefreshKey={outcomeRefreshKey}
-      />
+      {/* Quick Filter Presets + Central Table */}
+      <div className="space-y-1.5">
+        <TableFilterPresets
+          activeFilter={filter}
+          customFilterLabel={customFilterLabel}
+          onFilterChange={handleFilterChange}
+          onCustomPreset={(key) => {
+            if (key === 'groundingEligible') handleFilterReadiness('groundingEligible');
+          }}
+        />
+        <CentralResourceTable
+          resources={resources}
+          filter={filter}
+          processingIds={processingIds}
+          conflictIds={conflictIds}
+          customFilterIds={customFilterIds}
+          onAction={handleAction}
+          onInspect={handleInspect}
+          actionLoading={actionLoading}
+          outcomeRefreshKey={outcomeRefreshKey}
+        />
+      </div>
 
       {/* Inspect Drawer */}
       <ResourceInspectDrawer
