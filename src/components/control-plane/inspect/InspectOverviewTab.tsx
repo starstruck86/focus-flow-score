@@ -43,7 +43,7 @@ export function InspectOverviewTab({ canonical, state, detail, loading, onNaviga
           </Row>
           <Row label="Internal Stage" value={canonical.canonical_stage} mono />
           {canonical.blocked_reason !== 'none' && (
-            <Row label="Blocked" value={canonical.blocked_reason.replace(/_/g, ' ')} destructive />
+            <Row label="Blocked" value={BLOCKED_LABELS[canonical.blocked_reason] ?? canonical.blocked_reason.replace(/_/g, ' ')} destructive />
           )}
           <Row label="Content Status" value={detail?.content_status ?? '—'} />
           <Row label="Enrichment" value={detail?.enrichment_status ?? '—'} />

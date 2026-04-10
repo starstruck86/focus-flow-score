@@ -230,8 +230,8 @@ function getActionsForState(state: ControlPlaneState, resource: CanonicalResourc
       if (resource.blocked_reason === 'no_activation' || resource.blocked_reason === 'missing_contexts') {
         actions.push({ key: 'activate', label: 'Activate', icon: Play, primary: true });
       }
-      if (resource.blocked_reason === 'empty_content') {
-        actions.push({ key: 'enrich', label: 'Enrich', icon: FileText, primary: true });
+      if (resource.blocked_reason === 'empty_content' || resource.blocked_reason === 'placeholder_content') {
+        actions.push({ key: 'enrich', label: resource.blocked_reason === 'placeholder_content' ? 'Retry Parse' : 'Enrich', icon: FileText, primary: true });
       }
       return actions;
     }
