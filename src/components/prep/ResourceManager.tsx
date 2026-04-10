@@ -27,6 +27,7 @@ import { ResourceLibraryTable } from './ResourceLibraryTable';
 import { LibraryResourceDrawer } from './LibraryResourceDrawer';
 import { ResourceAudioInspector } from './ResourceAudioInspector';
 import { ManualTranscriptAssist } from './ManualTranscriptAssist';
+import { AuthReimportDialog } from './AuthReimportDialog';
 import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
@@ -151,6 +152,7 @@ export function ResourceManager() {
   const [showDeepEnrich, setShowDeepEnrich] = useState(false);
   const [inspectingAudioResource, setInspectingAudioResource] = useState<Resource | null>(null);
   const [manualAssistResource, setManualAssistResource] = useState<Resource | null>(null);
+  const [authReimportResource, setAuthReimportResource] = useState<Resource | null>(null);
   const [drawerResource, setDrawerResource] = useState<Resource | null>(null);
   const [lastFixResult, setLastFixResult] = useState<import('@/lib/fixAllAutoBlockers').FixAllResult | null>(null);
   const [isFixAllRunning, setIsFixAllRunning] = useState(false);
@@ -1450,6 +1452,9 @@ export function ResourceManager() {
                 case 'manual_assist':
                   setManualAssistResource(resource);
                   break;
+                case 'auth_reimport':
+                  setAuthReimportResource(resource);
+                  break;
                 case 'retry_resolve': {
                   const job = audioJobsMap?.get(resource.id);
                   if (job) {
@@ -1809,6 +1814,13 @@ export function ResourceManager() {
           }
           setManualAssistResource(null);
         }}
+      />
+
+      {/* Auth Re-import Dialog */}
+      <AuthReimportDialog
+        resource={authReimportResource}
+        open={!!authReimportResource}
+        onOpenChange={(open) => { if (!open) setAuthReimportResource(null); }}
       />
 
       {/* Bulk selection bar moved into ResourceLibraryTable */}
