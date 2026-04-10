@@ -159,6 +159,7 @@ export default function DojoQA() {
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [filterSeverity, setFilterSeverity] = useState<FilterSeverity>('all');
   const [filterSkill, setFilterSkill] = useState<string>('all');
+  const [filterAudio, setFilterAudio] = useState<FilterAudio>('all');
   const [expandedJson, setExpandedJson] = useState<Set<string>>(new Set());
 
   // Fixture runner state
