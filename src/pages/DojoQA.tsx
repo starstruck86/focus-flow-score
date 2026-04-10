@@ -262,7 +262,7 @@ export default function DojoQA() {
       if (filterAudio === 'has_audio' && !am) return false;
       if (filterAudio === 'degraded' && (!am || am.degradations === 0)) return false;
       if (filterAudio === 'recovered' && (!am || am.recoveries === 0)) return false;
-      if (filterAudio === 'replayed' && (!am || (am as Record<string, unknown>).replaysRequested === undefined)) return false;
+      if (filterAudio === 'replayed' && (!am || !(am as unknown as Record<string, unknown>).replaysRequested)) return false;
       if (filterAudio === 'skipped' && (!am || am.skipped === 0)) return false;
       if (filterAudio === 'timed_out' && (!am || am.timedOut === 0)) return false;
 
