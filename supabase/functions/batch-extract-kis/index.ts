@@ -1658,7 +1658,7 @@ Deno.serve(async (req) => {
         // Persist attempt record to table
         const thisAttempt = buildAttemptRecord({
           attemptNumber, strategy, kiCount: 0, rawItemCount: 0, validatedCount: 0, dedupedCount: 0,
-          minKiFloor: computeMinKiFloor(resource.content.length, isLesson, densitySignals),
+          minKiFloor: computeMinKiFloor(resource.content.length, isLesson, densitySignals, resource.resource_type),
           failureType, status: newStatus, durationMs: Date.now() - startTime, startedAt,
         });
         await persistAttemptRecord(supabase, resourceId, resource.user_id, thisAttempt);
