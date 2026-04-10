@@ -279,6 +279,19 @@ export function validateResource(r: {
     }
   }
 
+  // Rule 2b: IMPOSSIBLE STATE — placeholder content must never coexist with enriched/deep_enriched
+  // Auto-correct the enrichment status immediately.
+  if (isPlaceholder && isEnriched) {
+    violations.push({
+      resource_id: r.id,
+      title: r.title,
+      failure_class: 'placeholder_enriched_contradiction',
+      detail: `Placeholder content ("${content.slice(0, 40)}…") with enrichment_status="${r.enrichment_status}" — impossible state, auto-correcting.`,
+      auto_repairable: true,
+      repair_action: 'reset_enrichment_status',
+    });
+  }
+
   // Rule 4: Enriched but 0 KIs and 0 attempts (non-transcript only —
   // transcripts are already covered by Rule 1 with a more specific class)
   if (!isTranscript && hasRealContent && isEnriched && kiCount === 0 && attempts === 0) {
