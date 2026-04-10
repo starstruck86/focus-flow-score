@@ -28,12 +28,12 @@ interface QueueItem {
 }
 
 const CATEGORY_CONFIG: Record<Category, {
-  icon: React.ElementType; label: string; color: string; actionLabel: string;
+  icon: React.ElementType; label: string; color: string; actionLabel: string; hint: string;
 }> = {
-  mismatched: { icon: ShieldAlert, label: 'Mismatched', color: 'text-amber-600', actionLabel: 'Inspect' },
-  failed: { icon: XCircle, label: 'Failed', color: 'text-destructive', actionLabel: 'Retry' },
-  needs_review: { icon: AlertTriangle, label: 'Blocked', color: 'text-destructive', actionLabel: 'Diagnose' },
-  needs_extraction: { icon: Zap, label: 'Needs Extraction', color: 'text-amber-600', actionLabel: 'Extract' },
+  mismatched: { icon: ShieldAlert, label: 'Mismatched', color: 'text-amber-600', actionLabel: 'Inspect', hint: 'Inspect and re-run the last action, or manually verify state.' },
+  failed: { icon: XCircle, label: 'Failed', color: 'text-destructive', actionLabel: 'Retry', hint: 'Retry the failed action or diagnose the root cause.' },
+  needs_review: { icon: AlertTriangle, label: 'Blocked', color: 'text-destructive', actionLabel: 'Diagnose', hint: 'Fix the blocking issue — usually re-enrich or review content.' },
+  needs_extraction: { icon: Zap, label: 'Needs Extraction', color: 'text-amber-600', actionLabel: 'Extract', hint: 'Run Extract to mine knowledge items from available content.' },
 };
 
 const CATEGORY_ORDER: Category[] = ['mismatched', 'failed', 'needs_review', 'needs_extraction'];
@@ -167,12 +167,15 @@ export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKe
 
             return (
               <div key={cat}>
-                {/* Category header */}
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-muted/30 border-b">
-                  <Icon className={cn('h-3 w-3', cfg.color)} />
-                  <span className={cn('text-[10px] font-semibold uppercase tracking-wider', cfg.color)}>
-                    {cfg.label} ({items.length})
-                  </span>
+                {/* Category header with resolution hint */}
+                <div className="px-3 py-1 bg-muted/30 border-b">
+                  <div className="flex items-center gap-1.5">
+                    <Icon className={cn('h-3 w-3', cfg.color)} />
+                    <span className={cn('text-[10px] font-semibold uppercase tracking-wider', cfg.color)}>
+                      {cfg.label} ({items.length})
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground mt-0.5 pl-[18px]">{cfg.hint}</p>
                 </div>
 
                 {/* Items */}
