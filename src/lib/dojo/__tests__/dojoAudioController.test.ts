@@ -41,6 +41,12 @@ const MOCK_RESULT: DojoScoreResult = {
   practiceCue: 'Ask one question before making your point.',
   focusPattern: 'discovery_question_first',
   topMistake: 'Skipped discovery',
+  whyItWorks: ['Maps buying committee', 'Builds trust early'],
+  moveSequence: ['Ask discovery question', 'Map stakeholders'],
+  patternTags: ['discovery', 'questioning'],
+  focusReason: 'Discovery is the foundation of every deal.',
+  teachingNote: 'Elite reps never pitch before they understand.',
+  deltaNote: 'You jumped to solution before understanding the problem.',
 };
 
 function setupController(mode: 'voice' | 'text_fallback' = 'voice'): AudioControllerState {
