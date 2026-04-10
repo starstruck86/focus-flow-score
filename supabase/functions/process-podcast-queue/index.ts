@@ -422,8 +422,8 @@ async function processItem(
 
       if (kiResp.ok) {
         const kiResult = await kiResp.json();
-        // extract-tactics returns items array + saved count
-        kiCount = kiResult?.saved || kiResult?.items?.length || 0;
+        // extract-tactics returns persistence.saved_count
+        kiCount = kiResult?.persistence?.saved_count || kiResult?.items?.length || 0;
         console.log(`[${queueItem.id}] Generated ${kiCount} KIs for resource ${resourceId}`);
       } else {
         const errText = await kiResp.text();
