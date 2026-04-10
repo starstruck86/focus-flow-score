@@ -401,6 +401,7 @@ interface FeedbackViewProps {
   reviewExtras: ReviewExtras | null;
   roleplayExtras: RoleplayExtras | null;
   sessionType: string;
+  sessionId: string | null;
   onRetry: () => void;
   onNextRep: () => void;
 }
