@@ -241,14 +241,38 @@ async function processItem(
     const validation = validateContent(transcriptText);
     await updateQueueItem(supabase, queueItem.id, { content_validation: validation.details });
 
-    if (!validation.valid) {
-      await supabase.from("podcast_import_queue").update({
-        status: "failed", pipeline_stage: "failed",
-        transcript_status: "transcript_failed", failure_type: validation.reason,
-        error_message: `Content validation failed: ${validation.reason}`,
-        processed_at: now(), content_validation: validation.details, updated_at: now(),
-      }).eq("id", queueItem.id);
-      return { result: "content_invalid", error: validation.reason || undefined };
+    // ── Trailer detection + YouTube fallback ──
+    // If transcript is very short (< 500 words), it's likely a trailer/teaser clip
+    const wordCount = transcriptText.split(/\s+/).filter(Boolean).length;
+    const isLikelyTrailer = validation.valid && wordCount < 500;
+    const isInvalid = !validation.valid;
+
+    if (isLikelyTrailer || isInvalid) {
+      const showTitle = queueItem.show_author || queueItem.show_title || "";
+      const episodeTitle = queueItem.episode_title || "";
+      console.log(`[${queueItem.id}] ${isLikelyTrailer ? `Short transcript (${wordCount} words) — likely trailer` : `Invalid content: ${validation.reason}`}. Trying YouTube fallback...`);
+
+      await updateQueueItem(supabase, queueItem.id, { pipeline_stage: "youtube_fallback" });
+
+      const ytTranscript = await tryYouTubeFallback(supabaseUrl, serviceRoleKey, showTitle, episodeTitle);
+
+      if (ytTranscript && ytTranscript.length > transcriptText.length) {
+        console.log(`[${queueItem.id}] YouTube fallback succeeded: ${ytTranscript.length} chars (was ${transcriptText.length})`);
+        transcriptText = ytTranscript;
+        resolvedMeta.resolution_method = "youtube_fallback";
+        await updateQueueItem(supabase, queueItem.id, { resolution_method: "youtube_fallback" });
+      } else if (isInvalid) {
+        // Original was invalid and YouTube fallback didn't help
+        await supabase.from("podcast_import_queue").update({
+          status: "failed", pipeline_stage: "failed",
+          transcript_status: "transcript_failed", failure_type: validation.reason,
+          error_message: `Content validation failed: ${validation.reason}. YouTube fallback also failed.`,
+          processed_at: now(), content_validation: validation.details, updated_at: now(),
+        }).eq("id", queueItem.id);
+        return { result: "content_invalid", error: validation.reason || undefined };
+      } else {
+        console.log(`[${queueItem.id}] YouTube fallback returned nothing better, using short transcript as-is`);
+      }
     }
 
     await updateQueueItem(supabase, queueItem.id, {
