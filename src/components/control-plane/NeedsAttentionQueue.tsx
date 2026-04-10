@@ -88,15 +88,14 @@ function categoryToAction(cat: Category): string {
 function assessRisk(cat: Category, count: number): { level: 'low' | 'moderate' | 'review'; label: string } {
   switch (cat) {
     case 'needs_extraction':
-      if (count <= 5) return { level: 'low', label: 'Safe to run — extraction rarely fails on parseable content' };
-      if (count <= 20) return { level: 'low', label: `Safe to run — ${count} resources will extract sequentially` };
-      return { level: 'moderate', label: `Large batch (${count}) — will take several minutes, safe to run in background` };
+      if (count <= 20) return { level: 'low', label: 'Safe to run' };
+      return { level: 'moderate', label: `Large batch — may take several minutes` };
     case 'failed':
-      if (count <= 3) return { level: 'moderate', label: 'Worth retrying — transient errors (timeouts, rate limits) often self-resolve' };
-      return { level: 'review', label: `${count} failures — likely different root causes, consider diagnosing individually` };
+      if (count <= 3) return { level: 'moderate', label: 'Worth retrying — transient errors often self-resolve' };
+      return { level: 'review', label: `${count} failures — consider diagnosing individually` };
     case 'needs_review':
-      if (count <= 3) return { level: 'moderate', label: 'Auto-repair handles common blockers (empty content, stale state)' };
-      return { level: 'review', label: `${count} blocked — some may need manual diagnosis after auto-repair` };
+      if (count <= 3) return { level: 'moderate', label: 'Auto-repair handles common blockers' };
+      return { level: 'review', label: `Some may need manual diagnosis after auto-repair` };
     default:
       return { level: 'low', label: 'Safe to run' };
   }

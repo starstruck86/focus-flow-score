@@ -102,14 +102,11 @@ export function RecentActionsPanel({ refreshKey, onOpenResource, onOpenBulkResul
                 onClick={() => onOpenResource?.(a.resourceId)}
                 className="w-full px-3 py-1 flex items-center gap-2 text-xs hover:bg-muted/30 transition-colors text-left"
               >
-                <Icon className={cn('h-3 w-3 shrink-0', cfg.color)} />
+              <Icon className={cn('h-3 w-3 shrink-0', cfg.color)} />
                 <span className="font-medium truncate max-w-[100px]">{a.actionLabel}</span>
                 <span className="text-muted-foreground truncate max-w-[120px]">{a.resourceTitle}</span>
-                <RIcon className={cn('h-3 w-3 shrink-0', rcfg.color)} title={`Reconciliation: ${a.reconciliation}`} />
-                {a.mismatchExplanation && (
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 text-amber-600 border-amber-200 max-w-[120px] truncate">
-                    {a.reconciliation}
-                  </Badge>
+                {a.reconciliation !== 'confirmed' && a.reconciliation !== 'pending' && (
+                  <RIcon className={cn('h-3 w-3 shrink-0', rcfg.color)} title={rcfg.label} />
                 )}
                 <span className="ml-auto text-[10px] text-muted-foreground/70 whitespace-nowrap">
                   {new Date(a.timestamp).toLocaleTimeString()}
