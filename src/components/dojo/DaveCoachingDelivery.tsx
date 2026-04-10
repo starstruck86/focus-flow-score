@@ -4,6 +4,7 @@
  *
  * Responsibilities:
  * - Initialize the audio stack when a score result arrives
+ * - Recover from crash/refresh via localStorage snapshot
  * - Render currently-speaking chunk with visual indicator
  * - Show text fallback inline when voice degrades
  * - Provide replay / skip / interrupt controls
@@ -15,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
   Volume2, VolumeX, SkipForward, RotateCcw,
-  Pause, Play, AlertTriangle, RefreshCw, type LucideIcon,
+  Pause, Play, RefreshCw, CheckCircle, type LucideIcon,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { summarizeSession } from '@/lib/dojo/dojoAudioAnalytics';
@@ -53,9 +54,10 @@ function deriveStatus(
   directive: ControllerDirective | null,
   isPlaying: boolean,
   deliveryMode: 'voice' | 'text_fallback',
+  wasRecovered: boolean,
   prevStatus: DeliveryStatus
 ): DeliveryStatus {
-  if (!directive) return 'idle';
+  if (!directive) return wasRecovered ? 'recovered' : 'idle';
   if (directive.kind === 'delivery_complete') return 'complete';
 
   if (directive.kind === 'mode_changed') {
@@ -73,13 +75,13 @@ function deriveStatus(
 const STATUS_CONFIG: Record<DeliveryStatus, { label: string; Icon: LucideIcon; className: string } | null> = {
   idle: null,
   speaking: { label: 'Dave is speaking', Icon: Volume2, className: 'text-primary' },
-  interrupted: { label: 'Dave was interrupted', Icon: Pause, className: 'text-amber-500' },
+  interrupted: { label: 'Paused — tap Resume to continue', Icon: Pause, className: 'text-amber-500' },
   voice_degraded: { label: 'Voice issue — continuing in text', Icon: VolumeX, className: 'text-amber-500' },
   voice_restored: { label: 'Voice restored', Icon: Volume2, className: 'text-green-500' },
   replaying: { label: 'Replaying last chunk', Icon: RotateCcw, className: 'text-blue-500' },
-  skipped: { label: 'Skipped current chunk', Icon: SkipForward, className: 'text-muted-foreground' },
-  recovered: { label: 'Session recovered after refresh', Icon: RefreshCw, className: 'text-green-500' },
-  complete: null,
+  skipped: { label: 'Skipped — moving on', Icon: SkipForward, className: 'text-muted-foreground' },
+  recovered: { label: 'Session recovered — picking up where you left off', Icon: RefreshCw, className: 'text-green-500' },
+  complete: { label: 'Coaching complete', Icon: CheckCircle, className: 'text-green-500' },
 };
 
 // ── Component ──────────────────────────────────────────────────────
@@ -92,7 +94,6 @@ export default function DaveCoachingDelivery({
 }: DaveCoachingDeliveryProps) {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '';
-
   const config: TransportConfig = { supabaseUrl, supabaseAnonKey };
 
   const playback = useDojoPlayback(config);
@@ -102,24 +103,23 @@ export default function DaveCoachingDelivery({
   const deliveryCompleteRef = useRef(false);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialize and start delivery when score result arrives
+  // Initialize: try crash recovery first, then fresh start
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
     deliveryCompleteRef.current = false;
 
-    // Try recovery first
+    // Try crash recovery from localStorage
     if (playback.tryRecover(sessionId)) {
       setStatus('recovered');
-      // Auto-clear recovered status after 3s
-      statusTimerRef.current = setTimeout(() => setStatus('idle'), 3000);
+      statusTimerRef.current = setTimeout(() => setStatus((s) => s === 'recovered' ? 'idle' : s), 4000);
       return;
     }
 
+    // Fresh start
     const session = createSession(sessionId);
     const loaded = loadResult(session, scoreResult);
     const withPb = withPlayback(loaded);
-
     const mode = enableVoice ? 'voice' : 'text_fallback';
     playback.initialize(withPb, mode);
 
@@ -136,11 +136,11 @@ export default function DaveCoachingDelivery({
     const d = playback.lastDirective;
     if (!d) return;
 
-    const newStatus = deriveStatus(d, playback.isPlaying, playback.deliveryMode, status);
+    const newStatus = deriveStatus(d, playback.isPlaying, playback.deliveryMode, playback.wasRecovered, status);
     setStatus(newStatus);
 
     // Auto-clear transient statuses
-    if (newStatus === 'voice_restored' || newStatus === 'skipped' || newStatus === 'interrupted') {
+    if (['voice_restored', 'skipped', 'interrupted', 'recovered'].includes(newStatus)) {
       if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
       statusTimerRef.current = setTimeout(() => {
         setStatus((s) => (s === newStatus ? 'idle' : s));
@@ -151,24 +151,22 @@ export default function DaveCoachingDelivery({
     if (d.kind === 'show_text' || d.kind === 'chunk_skipped_max_retries') {
       const chunk = d.chunk;
       setTextChunks((prev) => {
-        if (prev.some((c) => c.id === chunk.id)) return prev;
+        if (prev.some((c) => c.id === chunk.id)) return prev; // exact-once for text display
         return [...prev, chunk].sort((a, b) => a.index - b.index);
       });
     }
 
     if (d.kind === 'delivery_complete' && !deliveryCompleteRef.current) {
       deliveryCompleteRef.current = true;
-
       const summary = summarizeSession(playback.metrics);
       supabase
         .from('dojo_sessions')
         .update({ audio_metrics: JSON.parse(JSON.stringify(summary)) })
         .eq('id', sessionId)
         .then(() => {});
-
       onDeliveryComplete?.();
     }
-  }, [playback.lastDirective, playback.isPlaying, playback.deliveryMode, onDeliveryComplete]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playback.lastDirective, playback.isPlaying, playback.deliveryMode, playback.wasRecovered, onDeliveryComplete]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track completed chunks for text transcript
   useEffect(() => {
@@ -191,21 +189,6 @@ export default function DaveCoachingDelivery({
     (c) => c.id === playback.controllerState?.dojo.playback.currentPlayingChunkId
   );
 
-  const handleReplay = () => {
-    setStatus('replaying');
-    playback.replay();
-  };
-
-  const handleSkip = () => {
-    setStatus('skipped');
-    playback.skip();
-  };
-
-  const handleInterrupt = () => {
-    playback.interrupt();
-    // Status will be set by directive reaction
-  };
-
   return (
     <div className="space-y-3">
       {/* Status Banner */}
@@ -217,6 +200,7 @@ export default function DaveCoachingDelivery({
           status === 'speaking' && 'bg-primary/5 border-primary/20',
           status === 'voice_restored' && 'bg-green-500/5 border-green-500/20',
           status === 'recovered' && 'bg-green-500/5 border-green-500/20',
+          status === 'complete' && 'bg-green-500/5 border-green-500/20',
           status === 'replaying' && 'bg-blue-500/5 border-blue-500/20',
           (status === 'skipped' || status === 'idle') && 'bg-muted/30 border-border/40',
         )}>
@@ -230,7 +214,7 @@ export default function DaveCoachingDelivery({
             </span>
           )}
 
-          {/* Speaking pulse animation */}
+          {/* Speaking pulse */}
           {status === 'speaking' && (
             <div className="ml-auto flex items-center gap-0.5">
               {[0, 1, 2].map((i) => (
@@ -252,7 +236,7 @@ export default function DaveCoachingDelivery({
       {playback.controllerState && status !== 'complete' && (
         <div className="flex items-center gap-2">
           {playback.isPlaying && (
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={handleInterrupt}>
+            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => playback.interrupt()}>
               <Pause className="h-3.5 w-3.5" />
               Pause
             </Button>
@@ -265,13 +249,13 @@ export default function DaveCoachingDelivery({
             </Button>
           )}
 
-          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={handleReplay}>
+          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setStatus('replaying'); playback.replay(); }}>
             <RotateCcw className="h-3.5 w-3.5" />
             Replay
           </Button>
 
           {playback.isPlaying && (
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={handleSkip}>
+            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={playback.skip}>
               <SkipForward className="h-3.5 w-3.5" />
               Skip
             </Button>
@@ -288,19 +272,17 @@ export default function DaveCoachingDelivery({
             </Button>
           )}
 
-          {/* Delivery progress */}
-          {playback.controllerState && (
-            <span className="ml-auto text-[10px] text-muted-foreground">
-              {Math.min(
-                playback.controllerState.dojo.currentChunkIndex,
-                playback.controllerState.dojo.chunks.length
-              )}/{playback.controllerState.dojo.chunks.length}
-            </span>
-          )}
+          {/* Progress */}
+          <span className="ml-auto text-[10px] text-muted-foreground">
+            {Math.min(
+              playback.controllerState.dojo.currentChunkIndex,
+              playback.controllerState.dojo.chunks.length
+            )}/{playback.controllerState.dojo.chunks.length}
+          </span>
         </div>
       )}
 
-      {/* Text Transcript (accumulated delivered chunks) */}
+      {/* Text Transcript */}
       {textChunks.length > 0 && playback.deliveryMode === 'text_fallback' && (
         <div className="space-y-2">
           {textChunks.map((chunk) => (

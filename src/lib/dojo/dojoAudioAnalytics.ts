@@ -30,6 +30,17 @@ export interface DojoAudioMetrics {
   totalPlaybackMs: number;
   chunkDurations: number[]; // individual durations for avg/p95
   sessionStartedAt: number | null;
+
+  // ── Crash/recovery debugging metrics ──
+  crashRecoveryCount: number;
+  snapshotRestoreCount: number;
+  resumedFromAmbiguousCount: number;
+  replayDeliveryCount: number;
+  normalDeliveryCount: number;
+  chunkLevelDegradeCount: number;
+  sessionLevelDegradeCount: number;
+  duplicateCallbackSuppressions: number;
+  staleCallbackSuppressions: number;
 }
 
 export function createMetrics(): DojoAudioMetrics {
@@ -49,6 +60,15 @@ export function createMetrics(): DojoAudioMetrics {
     totalPlaybackMs: 0,
     chunkDurations: [],
     sessionStartedAt: null,
+    crashRecoveryCount: 0,
+    snapshotRestoreCount: 0,
+    resumedFromAmbiguousCount: 0,
+    replayDeliveryCount: 0,
+    normalDeliveryCount: 0,
+    chunkLevelDegradeCount: 0,
+    sessionLevelDegradeCount: 0,
+    duplicateCallbackSuppressions: 0,
+    staleCallbackSuppressions: 0,
   };
 }
 
@@ -56,7 +76,7 @@ export function createMetrics(): DojoAudioMetrics {
 
 export function logChunkRequested(m: DojoAudioMetrics, chunkId: string): DojoAudioMetrics {
   log.debug('chunk_requested', { chunkId });
-  return { ...m, chunksRequested: m.chunksRequested + 1 };
+  return { ...m, chunksRequested: m.chunksRequested + 1, normalDeliveryCount: m.normalDeliveryCount + 1 };
 }
 
 export function logChunkStarted(m: DojoAudioMetrics, chunkId: string): DojoAudioMetrics {
@@ -115,14 +135,34 @@ export function logDegradation(m: DojoAudioMetrics, reason: string): DojoAudioMe
   return { ...m, degradationEvents: m.degradationEvents + 1 };
 }
 
+export function logChunkLevelDegrade(m: DojoAudioMetrics, chunkId: string): DojoAudioMetrics {
+  log.warn('chunk_level_degrade', { chunkId });
+  return { ...m, chunkLevelDegradeCount: m.chunkLevelDegradeCount + 1 };
+}
+
+export function logSessionLevelDegrade(m: DojoAudioMetrics, reason: string): DojoAudioMetrics {
+  log.warn('session_level_degrade', { reason });
+  return { ...m, sessionLevelDegradeCount: m.sessionLevelDegradeCount + 1 };
+}
+
 export function logRecovery(m: DojoAudioMetrics, context: string): DojoAudioMetrics {
   log.info('session_recovered', { context });
   return { ...m, recoveryEvents: m.recoveryEvents + 1 };
 }
 
+export function logCrashRecovery(m: DojoAudioMetrics, context: string): DojoAudioMetrics {
+  log.info('crash_recovery', { context });
+  return { ...m, crashRecoveryCount: m.crashRecoveryCount + 1, snapshotRestoreCount: m.snapshotRestoreCount + 1 };
+}
+
+export function logAmbiguousResume(m: DojoAudioMetrics): DojoAudioMetrics {
+  log.warn('resumed_from_ambiguous_state');
+  return { ...m, resumedFromAmbiguousCount: m.resumedFromAmbiguousCount + 1 };
+}
+
 export function logReplay(m: DojoAudioMetrics, chunkId: string): DojoAudioMetrics {
   log.info('replay_requested', { chunkId });
-  return { ...m, replaysRequested: m.replaysRequested + 1 };
+  return { ...m, replaysRequested: m.replaysRequested + 1, replayDeliveryCount: m.replayDeliveryCount + 1 };
 }
 
 export function logSkip(m: DojoAudioMetrics, chunkId: string): DojoAudioMetrics {
@@ -133,6 +173,16 @@ export function logSkip(m: DojoAudioMetrics, chunkId: string): DojoAudioMetrics 
 export function logInterruption(m: DojoAudioMetrics): DojoAudioMetrics {
   log.info('user_interrupted');
   return { ...m, interruptions: m.interruptions + 1 };
+}
+
+export function logDuplicateSuppressed(m: DojoAudioMetrics, chunkId: string): DojoAudioMetrics {
+  log.debug('duplicate_callback_suppressed', { chunkId });
+  return { ...m, duplicateCallbackSuppressions: m.duplicateCallbackSuppressions + 1 };
+}
+
+export function logStaleSuppressed(m: DojoAudioMetrics, chunkId: string): DojoAudioMetrics {
+  log.debug('stale_callback_suppressed', { chunkId });
+  return { ...m, staleCallbackSuppressions: m.staleCallbackSuppressions + 1 };
 }
 
 // ── Summary ────────────────────────────────────────────────────────
@@ -150,6 +200,15 @@ export interface AudioSessionSummary {
   p95ChunkDurationMs: number;
   sessionDurationMs: number;
   successRate: number;
+  crashRecoveries: number;
+  snapshotRestores: number;
+  ambiguousResumes: number;
+  replayDeliveries: number;
+  normalDeliveries: number;
+  chunkDegrades: number;
+  sessionDegrades: number;
+  duplicateSuppressions: number;
+  staleSuppressions: number;
 }
 
 export function summarizeSession(m: DojoAudioMetrics): AudioSessionSummary {
@@ -175,6 +234,15 @@ export function summarizeSession(m: DojoAudioMetrics): AudioSessionSummary {
       m.chunksRequested > 0
         ? Math.round((m.chunksCompleted / m.chunksRequested) * 100)
         : 0,
+    crashRecoveries: m.crashRecoveryCount,
+    snapshotRestores: m.snapshotRestoreCount,
+    ambiguousResumes: m.resumedFromAmbiguousCount,
+    replayDeliveries: m.replayDeliveryCount,
+    normalDeliveries: m.normalDeliveryCount,
+    chunkDegrades: m.chunkLevelDegradeCount,
+    sessionDegrades: m.sessionLevelDegradeCount,
+    duplicateSuppressions: m.duplicateCallbackSuppressions,
+    staleSuppressions: m.staleCallbackSuppressions,
   };
 }
 
