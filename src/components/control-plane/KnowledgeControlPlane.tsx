@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import { useAutoOperationalize } from '@/hooks/useAutoOperationalize';
 import { useExtractionPipeline } from '@/hooks/useExtractionPipeline';
+import { useActiveJobQueue } from '@/hooks/useActiveJobQueue';
 import { UnifiedHealthStrip } from './UnifiedHealthStrip';
 import { DaveReadinessStrip } from './DaveReadinessStrip';
 import { ControlPlaneSummaryBar } from './ControlPlaneSummaryBar';
@@ -20,6 +21,7 @@ import { RecentActionsPanel } from './RecentActionsPanel';
 import { BulkActionResultDialog } from './BulkActionResultDialog';
 import { TableFilterPresets, getPinnedPreset, setPinnedPreset as savePinnedPreset } from './TableFilterPresets';
 import { buildActionPreview } from './ActionPreviewDialog';
+import { ProcessingQueuePanel } from '@/components/prep/ProcessingQueuePanel';
 import {
   type ControlPlaneFilter, type ControlPlaneState,
   computeControlPlaneSummary,
@@ -38,11 +40,12 @@ export function KnowledgeControlPlane() {
     isRunning: opRunning, lastBulkOutcome, setLastBulkOutcome, outcomeRefreshKey,
   } = useAutoOperationalize();
   const { runBatch, isRunning: extractRunning } = useExtractionPipeline();
+  const { jobs: queueJobs, summary: queueSummary, loading: queueLoading, refresh: queueRefresh } = useActiveJobQueue();
   const [filter, setFilter] = useState<ControlPlaneFilter>('all');
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [customFilterIds, setCustomFilterIds] = useState<Set<string> | null>(null);
   const [customFilterLabel, setCustomFilterLabel] = useState<string | null>(null);
-
+  const [queuePanelOpen, setQueuePanelOpen] = useState(false);
   const [didApplyPinned, setDidApplyPinned] = useState(false);
 
   // Inspect drawer state
@@ -65,8 +68,11 @@ export function KnowledgeControlPlane() {
         ids.add(r.resource_id);
       }
     }
+    for (const job of queueJobs) {
+      if (job.entityId) ids.add(job.entityId);
+    }
     return ids;
-  }, [resources]);
+  }, [resources, queueJobs]);
 
   const cpSummary = useMemo(
     () => computeControlPlaneSummary(resources, processingIds),
@@ -174,7 +180,8 @@ export function KnowledgeControlPlane() {
     setBulkResultOutcome(outcome);
     setBulkResultOpen(true);
     refetch();
-  }, [resources, processingIds, conflictIds, operationalizeBatchWithOutcome, refetch]);
+    queueRefresh();
+  }, [resources, processingIds, conflictIds, operationalizeBatchWithOutcome, refetch, queueRefresh]);
 
   // ── Queue group batch action handler ────────────────────
   const handleQueueBatchAction = useCallback(async (
@@ -194,7 +201,8 @@ export function KnowledgeControlPlane() {
     setBulkResultOutcome(outcome);
     setBulkResultOpen(true);
     refetch();
-  }, [resources, processingIds, operationalizeBatchWithOutcome, refetch]);
+    queueRefresh();
+  }, [resources, processingIds, operationalizeBatchWithOutcome, refetch, queueRefresh]);
 
   // handleInspect defined above (line ~117)
 
@@ -320,7 +328,7 @@ export function KnowledgeControlPlane() {
           )}
           <Button
             variant="outline" size="sm"
-            onClick={() => refetch()} disabled={isRefetching}
+            onClick={() => { refetch(); queueRefresh(); }} disabled={isRefetching}
             className="h-7 text-xs gap-1.5"
           >
             <RefreshCw className={`h-3 w-3 ${isRefetching ? 'animate-spin' : ''}`} />
@@ -356,6 +364,10 @@ export function KnowledgeControlPlane() {
         onFilterChange={handleFilterChange}
         loading={loading}
         sampleResources={sampleResources}
+        processingCount={queueSummary.total}
+        processingLoading={queueLoading}
+        processingActive={queuePanelOpen}
+        onProcessingClick={() => setQueuePanelOpen(true)}
       />
 
       {/* Active Filter Banner with explanation */}
@@ -459,6 +471,15 @@ export function KnowledgeControlPlane() {
         onClose={() => setBulkResultOpen(false)}
         onFilterAttention={(ids) => setCustomFilter(ids, `${ids.size} need attention`)}
         onOpenResource={(id) => { setBulkResultOpen(false); openResourceById(id); }}
+      />
+
+      <ProcessingQueuePanel
+        open={queuePanelOpen}
+        onOpenChange={setQueuePanelOpen}
+        jobs={queueJobs}
+        summary={queueSummary}
+        loading={queueLoading}
+        onRefresh={queueRefresh}
       />
     </div>
   );
