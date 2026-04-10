@@ -31,31 +31,7 @@ import type { Json } from '@/integrations/supabase/types';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
 
-const FOCUS_PATTERN_LABELS: Record<string, string> = {
-  isolate_before_answering: 'Isolate before answering',
-  reframe_to_business_impact: 'Reframe to business impact',
-  use_specific_proof: 'Use specific proof',
-  control_next_step: 'Control the next step',
-  stay_concise_under_pressure: 'Stay concise under pressure',
-  deepen_one_level: 'Deepen one level',
-  tie_to_business_impact: 'Tie to business impact',
-  ask_singular_questions: 'Ask singular questions',
-  test_urgency: 'Test urgency',
-  quantify_the_pain: 'Quantify the pain',
-  lead_with_the_number: 'Lead with the number',
-  cut_to_three_sentences: 'Cut to 3 sentences',
-  anchor_to_their_priority: 'Anchor to their priority',
-  project_certainty: 'Project certainty',
-  close_with_a_specific_ask: 'Close with a specific ask',
-  name_the_risk: 'Name the risk',
-  lock_mutual_commitment: 'Lock mutual commitment',
-  test_before_accepting: 'Test before accepting',
-  create_urgency_without_pressure: 'Create urgency without pressure',
-  validate_real_pain: 'Validate real pain',
-  map_stakeholders: 'Map stakeholders',
-  disqualify_weak_opportunities: 'Disqualify weak opportunities',
-  tie_problem_to_business_impact: 'Tie problem to business impact',
-};
+import { FOCUS_PATTERN_LABELS, formatFocusPattern } from '@/lib/dojo/focusPatterns';
 
 const PATTERN_TAG_LABELS: Record<string, string> = {
   isolates_real_issue: 'Isolates real issue',
