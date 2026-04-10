@@ -45,6 +45,23 @@ import {
   destroyTransport,
 } from './elevenlabsTransport';
 import { getNextMessage } from './conversationEngine';
+import {
+  createMetrics,
+  logChunkRequested,
+  logChunkStarted,
+  logChunkCompleted,
+  logChunkFailed,
+  logChunkTimedOut,
+  logChunkSkipped,
+  logRetryAttempt,
+  logDegradation,
+  logRecovery,
+  logReplay,
+  logSkip,
+  logInterruption,
+  logSessionSummary,
+  type DojoAudioMetrics,
+} from './dojoAudioAnalytics';
 
 // ── Storage key ────────────────────────────────────────────────────
 
@@ -97,12 +114,35 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const ctrlRef = useRef<AudioControllerState | null>(null);
   const handleRef = useRef<TransportHandle>(createTransportHandle());
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const metricsRef = useRef<DojoAudioMetrics>(createMetrics());
 
-  // Keep ref in sync with state
+  // Keep ref in sync with state + track metrics
   const applyResult = useCallback((result: ControllerResult) => {
     ctrlRef.current = result.state;
     setCtrlState(result.state);
     setLastDirective(result.directive);
+
+    // Track metrics based on directive
+    const m = metricsRef.current;
+    switch (result.directive.kind) {
+      case 'speak':
+        metricsRef.current = logChunkRequested(m, result.directive.chunk.id);
+        break;
+      case 'retry_speak':
+        metricsRef.current = logRetryAttempt(m, result.directive.chunk.id, result.directive.attempt);
+        break;
+      case 'show_text':
+        metricsRef.current = logChunkCompleted(m, result.directive.chunk.id, 0);
+        break;
+      case 'mode_changed':
+        if (result.directive.mode === 'text_fallback') {
+          metricsRef.current = logDegradation(m, result.directive.reason);
+        }
+        break;
+      case 'chunk_skipped_max_retries':
+        metricsRef.current = logChunkSkipped(m, result.directive.chunkId);
+        break;
+    }
 
     // Persist snapshot for recovery
     if (result.state.dojo.sessionId) {
@@ -176,6 +216,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     handleRef.current = stopPlayback(handleRef.current);
+    metricsRef.current = logInterruption(metricsRef.current);
     applyResult(onUserInterrupted(ctrl));
   }, [applyResult]);
 
@@ -183,6 +224,9 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     const result = onUserRequestedReplay(ctrl);
+    if (result.directive.kind === 'speak') {
+      metricsRef.current = logReplay(metricsRef.current, result.directive.chunk.id);
+    }
     applyResult(result);
 
     if (result.directive.kind === 'speak') {
@@ -201,6 +245,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     handleRef.current = stopPlayback(handleRef.current);
+    const chunkId = ctrl.dojo.playback.currentPlayingChunkId;
+    if (chunkId) metricsRef.current = logSkip(metricsRef.current, chunkId);
     const result = onUserRequestedSkip(ctrl);
     handleTransportEvent(result);
   }, [handleTransportEvent]);
@@ -232,6 +278,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
 
       const snap: ControllerSnapshot = JSON.parse(raw);
       const result = recoverSession(snap);
+      metricsRef.current = logRecovery(metricsRef.current, `refresh_recovery:${sessionId}`);
       handleTransportEvent(result);
       return true;
     } catch {
@@ -244,6 +291,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
       clearInterval(watchdogRef.current);
       watchdogRef.current = null;
     }
+    logSessionSummary(metricsRef.current);
+    metricsRef.current = createMetrics();
     destroyTransport(handleRef.current);
     handleRef.current = createTransportHandle();
     ctrlRef.current = null;
