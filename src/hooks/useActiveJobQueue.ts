@@ -6,7 +6,7 @@
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 
 const BG_TABLE = 'background_jobs' as any;
 const PODCAST_TABLE = 'podcast_import_queue' as any;
