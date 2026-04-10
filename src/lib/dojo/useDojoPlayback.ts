@@ -216,6 +216,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     handleRef.current = stopPlayback(handleRef.current);
+    metricsRef.current = logInterruption(metricsRef.current);
     applyResult(onUserInterrupted(ctrl));
   }, [applyResult]);
 
@@ -223,6 +224,9 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     const result = onUserRequestedReplay(ctrl);
+    if (result.directive.kind === 'speak') {
+      metricsRef.current = logReplay(metricsRef.current, result.directive.chunk.id);
+    }
     applyResult(result);
 
     if (result.directive.kind === 'speak') {
@@ -241,6 +245,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     handleRef.current = stopPlayback(handleRef.current);
+    const chunkId = ctrl.dojo.playback.currentPlayingChunkId;
+    if (chunkId) metricsRef.current = logSkip(metricsRef.current, chunkId);
     const result = onUserRequestedSkip(ctrl);
     handleTransportEvent(result);
   }, [handleTransportEvent]);
