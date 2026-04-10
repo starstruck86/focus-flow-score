@@ -243,5 +243,9 @@ export function restoreFromSnapshot(snap: SessionSnapshot): AudioControllerState
     degradation: snap.isSessionDegraded ? 'session' : 'none',
     replayedChunkIds: new Set(snap.replayedChunkIds),
     skippedChunkIds: new Set(snap.skippedChunkIds),
+    chunkAudibleState: 'none' as const,
+    lastAudibleChunkId: null,
+    restoreReason: snap.isSessionDegraded ? 'resumed_text_fallback' as const : 'crash_recovery' as const,
+    tabVisible: true,
   };
 }
