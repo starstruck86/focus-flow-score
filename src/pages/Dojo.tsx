@@ -7,16 +7,21 @@ import { Badge } from '@/components/ui/badge';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
 import { Flame, Play, Swords, Target, MessageSquare, Zap } from 'lucide-react';
-import { getAutopilotRecommendation, SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
+import { getAutopilotScenario, getAutopilotMessage, SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
 import { useDojoStats } from '@/lib/dojo/useDojoStreak';
 
 export default function Dojo() {
   const navigate = useNavigate();
   const { data: stats } = useDojoStats();
-  const recommendation = useMemo(() => getAutopilotRecommendation(), []);
+
+  const { scenario, daveMessage } = useMemo(() => {
+    const s = getAutopilotScenario(stats?.skillBreakdown);
+    const msg = getAutopilotMessage(s, stats?.skillBreakdown);
+    return { scenario: s, daveMessage: msg };
+  }, [stats?.skillBreakdown]);
 
   const startAutopilot = () => {
-    navigate('/dojo/session', { state: { scenario: recommendation.scenario, mode: 'autopilot' } });
+    navigate('/dojo/session', { state: { scenario, mode: 'autopilot' } });
   };
 
   const startCustom = (skill: SkillFocus) => {
@@ -35,7 +40,7 @@ export default function Dojo() {
           <div className="space-y-1 pt-0.5">
             <p className="text-sm font-medium text-foreground">Dave</p>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {recommendation.daveMessage}
+              {daveMessage}
             </p>
           </div>
         </div>
@@ -55,13 +60,13 @@ export default function Dojo() {
           <CardContent className="p-4 space-y-2">
             <div className="flex items-center justify-between">
               <Badge variant="secondary" className="text-xs">
-                {SKILL_LABELS[recommendation.scenario.skillFocus]}
+                {SKILL_LABELS[scenario.skillFocus]}
               </Badge>
               <span className="text-xs text-muted-foreground">~5 min</span>
             </div>
-            <p className="text-sm font-medium">{recommendation.scenario.title}</p>
+            <p className="text-sm font-medium">{scenario.title}</p>
             <p className="text-xs text-muted-foreground line-clamp-2">
-              {recommendation.scenario.context}
+              {scenario.context}
             </p>
           </CardContent>
         </Card>
