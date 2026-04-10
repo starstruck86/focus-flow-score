@@ -1,16 +1,14 @@
 /**
- * Dojo Audio Controller
+ * Dojo Audio Controller v2
  *
  * Pure orchestration contract for Dave's voice delivery inside Sales Dojo.
- * Sits between playbackAdapter (state) and a future ElevenLabs transport layer.
+ * Sits between playbackAdapter (state) and elevenlabsTransport (I/O).
  *
- * Responsibilities:
- * - Maps controller events → playback adapter state transitions
- * - Manages explicit delivery mode (voice / text_fallback)
- * - Protects against duplicate events, stale chunks, and hung playback
- * - Guarantees text fallback path without session reset
- *
- * No SDK code. No UI. No side effects. Pure state-in → state-out.
+ * v2 additions over v1:
+ * - Per-chunk retry tracking (chunkAttempts map)
+ * - Serializable state for reconnect/refresh recovery
+ * - Richer UI directives (voice_degraded, voice_restored, chunk_skipped_max_retries)
+ * - All state remains pure (state-in → state-out), no side effects
  */
 
 import type { SpeechChunk } from './conversationEngine';
@@ -41,15 +39,24 @@ export interface AudioControllerState {
   chunkStartedAt: number | null;
   /** Set of chunk IDs already completed — prevents duplicate advancement. */
   completedChunkIds: Set<string>;
+  /** Per-chunk attempt counts — prevents infinite retry loops. */
+  chunkAttempts: Map<string, number>;
 }
+
+/** Max attempts per individual chunk before giving up on it. */
+const MAX_CHUNK_ATTEMPTS = 3;
+
+/** If a chunk is playing longer than this, treat as hung. */
+const CHUNK_TIMEOUT_MS = 45_000;
 
 // ── Controller Output ──────────────────────────────────────────────
 
 export type ControllerDirective =
   | { kind: 'speak'; chunk: SpeechChunk; previousText?: string; nextText?: string }
   | { kind: 'show_text'; chunk: SpeechChunk }
-  | { kind: 'retry_speak'; chunk: SpeechChunk }
+  | { kind: 'retry_speak'; chunk: SpeechChunk; attempt: number }
   | { kind: 'mode_changed'; mode: DeliveryMode; reason: string }
+  | { kind: 'chunk_skipped_max_retries'; chunkId: string; chunk: SpeechChunk }
   | { kind: 'delivery_complete' }
   | { kind: 'no_op'; reason: string };
 
@@ -58,10 +65,67 @@ export interface ControllerResult {
   directive: ControllerDirective;
 }
 
-// ── Constants ──────────────────────────────────────────────────────
+// ── Serializable snapshot for recovery ─────────────────────────────
 
-/** If a chunk is playing longer than this, treat as hung. */
-const CHUNK_TIMEOUT_MS = 45_000;
+export interface ControllerSnapshot {
+  dojo: PlaybackState;
+  deliveryMode: DeliveryMode;
+  completedChunkIds: string[];
+  chunkAttempts: [string, number][];
+}
+
+export function snapshotController(ctrl: AudioControllerState): ControllerSnapshot {
+  return {
+    dojo: ctrl.dojo,
+    deliveryMode: ctrl.deliveryMode,
+    completedChunkIds: Array.from(ctrl.completedChunkIds),
+    chunkAttempts: Array.from(ctrl.chunkAttempts.entries()),
+  };
+}
+
+export function restoreController(snap: ControllerSnapshot): AudioControllerState {
+  return {
+    dojo: snap.dojo,
+    deliveryMode: snap.deliveryMode,
+    chunkStartedAt: null, // never restore mid-playback timestamp
+    completedChunkIds: new Set(snap.completedChunkIds),
+    chunkAttempts: new Map(snap.chunkAttempts),
+  };
+}
+
+/**
+ * Decide delivery mode on restore:
+ * - If was voice and no recent failures → stay voice
+ * - If degraded → stay text_fallback
+ * - Skip already-completed chunks by advancing currentChunkIndex
+ */
+export function recoverSession(snap: ControllerSnapshot): ControllerResult {
+  const ctrl = restoreController(snap);
+
+  // Advance past completed chunks
+  let { dojo } = ctrl;
+  while (
+    dojo.currentChunkIndex < dojo.chunks.length &&
+    ctrl.completedChunkIds.has(dojo.chunks[dojo.currentChunkIndex].id)
+  ) {
+    dojo = { ...dojo, currentChunkIndex: dojo.currentChunkIndex + 1 };
+  }
+
+  const hasRemaining = dojo.currentChunkIndex < dojo.chunks.length;
+  const recovered: AudioControllerState = {
+    ...ctrl,
+    dojo: {
+      ...dojo,
+      phase: hasRemaining ? 'delivering' : dojo.postDeliveryPhase,
+    },
+  };
+
+  if (!hasRemaining) {
+    return { state: recovered, directive: { kind: 'delivery_complete' } };
+  }
+
+  return advanceToNext(recovered);
+}
 
 // ── Initialisation ─────────────────────────────────────────────────
 
@@ -74,10 +138,11 @@ export function createAudioController(
     deliveryMode: mode,
     chunkStartedAt: null,
     completedChunkIds: new Set(),
+    chunkAttempts: new Map(),
   };
 }
 
-// ── Stitching context helper ───────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────
 
 function getStitchingContext(
   chunks: SpeechChunk[],
@@ -88,11 +153,17 @@ function getStitchingContext(
   return { previousText: prev, nextText: next };
 }
 
-// ── Helpers ────────────────────────────────────────────────────────
-
-/** Preserve playback checkpoint when core engine returns ConversationState. */
-function liftPlayback(base: ReturnType<typeof getNextMessage>['nextState'], pb: PlaybackState): PlaybackState {
+function liftPlayback(
+  base: ReturnType<typeof getNextMessage>['nextState'],
+  pb: PlaybackState
+): PlaybackState {
   return { ...base, playback: (base as Partial<PlaybackState>).playback ?? pb.playback };
+}
+
+function incrementAttempts(map: Map<string, number>, chunkId: string): Map<string, number> {
+  const next = new Map(map);
+  next.set(chunkId, (next.get(chunkId) ?? 0) + 1);
+  return next;
 }
 
 // ── Core: advance to next chunk ────────────────────────────────────
@@ -124,33 +195,32 @@ function advanceToNext(ctrl: AudioControllerState): ControllerResult {
 
 // ── Event Handlers ─────────────────────────────────────────────────
 
-/** TTS transport requests audio for a chunk. */
 export function onTtsRequested(
   ctrl: AudioControllerState,
   chunkId: string
 ): ControllerResult {
-  // Duplicate guard
   if (ctrl.dojo.playback.currentPlayingChunkId === chunkId) {
     return { state: ctrl, directive: { kind: 'no_op', reason: 'already_playing' } };
   }
-
   const dojo = markChunkStarted(ctrl.dojo, chunkId);
   return {
-    state: { ...ctrl, dojo, chunkStartedAt: Date.now() },
+    state: {
+      ...ctrl,
+      dojo,
+      chunkStartedAt: Date.now(),
+      chunkAttempts: incrementAttempts(ctrl.chunkAttempts, chunkId),
+    },
     directive: { kind: 'no_op', reason: 'tts_requested_ack' },
   };
 }
 
-/** TTS playback has begun (audio is audible). */
 export function onTtsStarted(
   ctrl: AudioControllerState,
   chunkId: string
 ): ControllerResult {
-  // Already tracked via onTtsRequested — just update timestamp if needed
   if (ctrl.dojo.playback.currentPlayingChunkId === chunkId && ctrl.chunkStartedAt) {
     return { state: ctrl, directive: { kind: 'no_op', reason: 'already_started' } };
   }
-
   const dojo = markChunkStarted(ctrl.dojo, chunkId);
   return {
     state: { ...ctrl, dojo, chunkStartedAt: Date.now() },
@@ -158,17 +228,13 @@ export function onTtsStarted(
   };
 }
 
-/** TTS playback finished successfully for a chunk. */
 export function onTtsCompleted(
   ctrl: AudioControllerState,
   chunkId: string
 ): ControllerResult {
-  // Duplicate guard — never advance twice for same chunk
   if (ctrl.completedChunkIds.has(chunkId)) {
     return { state: ctrl, directive: { kind: 'no_op', reason: 'duplicate_completed' } };
   }
-
-  // Stale guard — ignore if a different chunk is now playing
   if (ctrl.dojo.playback.currentPlayingChunkId && ctrl.dojo.playback.currentPlayingChunkId !== chunkId) {
     return { state: ctrl, directive: { kind: 'no_op', reason: 'stale_chunk_completed' } };
   }
@@ -177,26 +243,39 @@ export function onTtsCompleted(
   completed.add(chunkId);
   const dojo = markChunkCompleted(ctrl.dojo, chunkId);
 
-  const next = advanceToNext({ ...ctrl, dojo, completedChunkIds: completed, chunkStartedAt: null });
-  return next;
+  return advanceToNext({ ...ctrl, dojo, completedChunkIds: completed, chunkStartedAt: null });
 }
 
-/** TTS playback failed for a chunk. */
 export function onTtsFailed(
   ctrl: AudioControllerState,
   chunkId: string,
   error: string
 ): ControllerResult {
   const dojo = markChunkFailed(ctrl.dojo, chunkId, error);
-  const { action, nextState } = recoverFromPlaybackFailure(dojo);
+  const attempts = ctrl.chunkAttempts.get(chunkId) ?? 0;
 
+  // Per-chunk limit reached → skip this chunk, show as text, continue
+  if (attempts >= MAX_CHUNK_ATTEMPTS) {
+    const chunk = dojo.chunks.find((c) => c.id === chunkId);
+    if (chunk) {
+      // Mark completed so we don't retry, then advance
+      const completed = new Set(ctrl.completedChunkIds);
+      completed.add(chunkId);
+      const advanced = advanceToNext({ ...ctrl, dojo, completedChunkIds: completed, chunkStartedAt: null });
+      return {
+        state: advanced.state,
+        directive: { kind: 'chunk_skipped_max_retries', chunkId, chunk },
+      };
+    }
+  }
+
+  // Global recovery (retry or degrade)
+  const { action, nextState } = recoverFromPlaybackFailure(dojo);
   return applyRecovery({ ...ctrl, dojo: nextState, chunkStartedAt: null }, action);
 }
 
-/** User interrupted Dave mid-speech. */
 export function onUserInterrupted(ctrl: AudioControllerState): ControllerResult {
   const playingId = ctrl.dojo.playback.currentPlayingChunkId;
-
   if (playingId) {
     const dojo = markChunkInterrupted(ctrl.dojo, playingId);
     return {
@@ -204,8 +283,6 @@ export function onUserInterrupted(ctrl: AudioControllerState): ControllerResult 
       directive: { kind: 'no_op', reason: 'interrupted' },
     };
   }
-
-  // Not currently playing — just cancel delivery if in progress
   const base = cancelDelivery(ctrl.dojo);
   const dojo: PlaybackState = { ...base, playback: ctrl.dojo.playback };
   return {
@@ -214,60 +291,39 @@ export function onUserInterrupted(ctrl: AudioControllerState): ControllerResult 
   };
 }
 
-/** User requested replay of the last chunk. */
 export function onUserRequestedReplay(ctrl: AudioControllerState): ControllerResult {
   const { chunk, nextState } = replayWithChunk(ctrl.dojo);
-
   if (!chunk) {
-    return {
-      state: { ...ctrl, dojo: nextState },
-      directive: { kind: 'no_op', reason: 'nothing_to_replay' },
-    };
+    return { state: { ...ctrl, dojo: nextState }, directive: { kind: 'no_op', reason: 'nothing_to_replay' } };
   }
-
   if (ctrl.deliveryMode === 'text_fallback') {
-    return {
-      state: { ...ctrl, dojo: nextState },
-      directive: { kind: 'show_text', chunk },
-    };
+    return { state: { ...ctrl, dojo: nextState }, directive: { kind: 'show_text', chunk } };
   }
-
   const context = getStitchingContext(nextState.chunks, chunk.index);
-  return {
-    state: { ...ctrl, dojo: nextState },
-    directive: { kind: 'speak', chunk, ...context },
-  };
+  return { state: { ...ctrl, dojo: nextState }, directive: { kind: 'speak', chunk, ...context } };
 }
 
-/** User requested skip of current chunk. */
 export function onUserRequestedSkip(ctrl: AudioControllerState): ControllerResult {
   const base = skipCurrentMessage(ctrl.dojo);
   const dojo = liftPlayback(base, ctrl.dojo);
   return advanceToNext({ ...ctrl, dojo, chunkStartedAt: null });
 }
 
-// ── Timeout check ──────────────────────────────────────────────────
+// ── Timeout ────────────────────────────────────────────────────────
 
-/**
- * Call periodically (e.g. every 5s). If the current chunk has been
- * "playing" longer than CHUNK_TIMEOUT_MS, treat it as a failure.
- */
 export function checkForTimeout(ctrl: AudioControllerState): ControllerResult {
   if (!ctrl.chunkStartedAt || !ctrl.dojo.playback.currentPlayingChunkId) {
     return { state: ctrl, directive: { kind: 'no_op', reason: 'no_active_playback' } };
   }
-
   const elapsed = Date.now() - ctrl.chunkStartedAt;
   if (elapsed < CHUNK_TIMEOUT_MS) {
     return { state: ctrl, directive: { kind: 'no_op', reason: 'within_timeout' } };
   }
-
   return onTtsFailed(ctrl, ctrl.dojo.playback.currentPlayingChunkId, `Chunk timed out after ${elapsed}ms`);
 }
 
-// ── Resume after interruption ──────────────────────────────────────
+// ── Resume ─────────────────────────────────────────────────────────
 
-/** Resume delivery after interruption/follow-up. */
 export function resumeAfterInterruption(ctrl: AudioControllerState): ControllerResult {
   const dojo = resumeDeliveryStrict(ctrl.dojo);
   if (dojo.phase !== 'delivering') {
@@ -276,32 +332,21 @@ export function resumeAfterInterruption(ctrl: AudioControllerState): ControllerR
   return advanceToNext({ ...ctrl, dojo });
 }
 
-// ── Explicit mode switch ───────────────────────────────────────────
+// ── Mode switching ─────────────────────────────────────────────────
 
-/** Force switch to text fallback (e.g. user preference or manual trigger). */
-export function switchToTextFallback(
-  ctrl: AudioControllerState,
-  reason: string
-): ControllerResult {
+export function switchToTextFallback(ctrl: AudioControllerState, reason: string): ControllerResult {
   return {
     state: { ...ctrl, deliveryMode: 'text_fallback', chunkStartedAt: null },
     directive: { kind: 'mode_changed', mode: 'text_fallback', reason },
   };
 }
 
-/** Attempt to restore voice mode (e.g. after connectivity recovery). */
-export function switchToVoice(
-  ctrl: AudioControllerState,
-  reason: string
-): ControllerResult {
+export function switchToVoice(ctrl: AudioControllerState, reason: string): ControllerResult {
   return {
     state: {
       ...ctrl,
       deliveryMode: 'voice',
-      dojo: {
-        ...ctrl.dojo,
-        playback: { ...ctrl.dojo.playback, consecutiveFailures: 0 },
-      },
+      dojo: { ...ctrl.dojo, playback: { ...ctrl.dojo.playback, consecutiveFailures: 0 } },
     },
     directive: { kind: 'mode_changed', mode: 'voice', reason },
   };
@@ -309,41 +354,25 @@ export function switchToVoice(
 
 // ── Recovery routing ───────────────────────────────────────────────
 
-function applyRecovery(
-  ctrl: AudioControllerState,
-  action: RecoveryAction
-): ControllerResult {
+function applyRecovery(ctrl: AudioControllerState, action: RecoveryAction): ControllerResult {
   switch (action.kind) {
-    case 'retry_chunk':
+    case 'retry_chunk': {
+      const attempt = ctrl.chunkAttempts.get(action.chunkId) ?? 0;
       if (ctrl.deliveryMode === 'text_fallback') {
-        return {
-          state: ctrl,
-          directive: { kind: 'show_text', chunk: action.chunk },
-        };
+        return { state: ctrl, directive: { kind: 'show_text', chunk: action.chunk } };
       }
-      return {
-        state: ctrl,
-        directive: { kind: 'retry_speak', chunk: action.chunk },
-      };
+      return { state: ctrl, directive: { kind: 'retry_speak', chunk: action.chunk, attempt } };
+    }
 
     case 'degrade_to_text': {
       const degraded: AudioControllerState = { ...ctrl, deliveryMode: 'text_fallback' };
-
-      // Find the failed chunk to show immediately as text
       const failedId = ctrl.dojo.playback.lastFailedChunkId;
       const failedChunk = failedId ? ctrl.dojo.chunks.find((c) => c.id === failedId) : null;
 
       if (failedChunk) {
-        return {
-          state: degraded,
-          directive: { kind: 'show_text', chunk: failedChunk },
-        };
+        return { state: degraded, directive: { kind: 'show_text', chunk: failedChunk } };
       }
-
-      return {
-        state: degraded,
-        directive: { kind: 'mode_changed', mode: 'text_fallback', reason: action.reason },
-      };
+      return { state: degraded, directive: { kind: 'mode_changed', mode: 'text_fallback', reason: action.reason } };
     }
 
     case 'no_action':
@@ -363,4 +392,8 @@ export function isTextFallback(ctrl: AudioControllerState): boolean {
 
 export function isChunkPlaying(ctrl: AudioControllerState): boolean {
   return ctrl.dojo.playback.currentPlayingChunkId !== null;
+}
+
+export function getChunkAttempts(ctrl: AudioControllerState, chunkId: string): number {
+  return ctrl.chunkAttempts.get(chunkId) ?? 0;
 }
