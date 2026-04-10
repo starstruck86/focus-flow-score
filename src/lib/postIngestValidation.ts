@@ -328,6 +328,7 @@ function repairActionToOpType(action: string): OperationType {
     case 'queue_extraction': return 'extraction';
     case 'retry_parse': return 'parse';
     case 'queue_enrichment': return 'enrichment';
+    case 'reset_enrichment_status': return 'enrichment';
     default: return 'extraction';
   }
 }
