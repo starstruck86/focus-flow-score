@@ -23,6 +23,8 @@ export interface ReviewScoreResult extends DojoScoreResult {
   rewriteScore?: number;
   diagnosisFeedback?: string;
   rewriteFeedback?: string;
+  diagnosisAccuracy?: string;
+  rewriteFixedIssue?: boolean;
 }
 
 interface Props {
@@ -129,6 +131,8 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
         rewriteScore: typeof data.rewriteScore === 'number' ? data.rewriteScore : undefined,
         diagnosisFeedback: typeof data.diagnosisFeedback === 'string' ? data.diagnosisFeedback : undefined,
         rewriteFeedback: typeof data.rewriteFeedback === 'string' ? data.rewriteFeedback : undefined,
+        diagnosisAccuracy: typeof data.diagnosisAccuracy === 'string' ? data.diagnosisAccuracy : undefined,
+        rewriteFixedIssue: typeof data.rewriteFixedIssue === 'boolean' ? data.rewriteFixedIssue : undefined,
       });
     } catch (e) {
       console.error('Score review error:', e);
@@ -172,69 +176,24 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
       </Card>
 
       {phase === 'diagnose' && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-3"
-        >
-          <p className="text-sm text-muted-foreground font-medium">
-            What's wrong with this response? Be specific.
-          </p>
-          <Textarea
-            ref={textareaRef}
-            value={diagnosis}
-            onChange={(e) => setDiagnosis(e.target.value)}
-            placeholder="Identify the specific problems — what mistakes did this rep make?"
-            className="min-h-[100px] text-sm"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmitDiagnosis();
-            }}
-          />
-          <Button
-            className="w-full gap-2"
-            disabled={!diagnosis.trim()}
-            onClick={handleSubmitDiagnosis}
-          >
-            <Eye className="h-4 w-4" />
-            Submit Diagnosis
-          </Button>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+          <p className="text-sm text-muted-foreground font-medium">What's wrong with this response? Be specific.</p>
+          <Textarea ref={textareaRef} value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Identify the specific problems — what mistakes did this rep make?" className="min-h-[100px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmitDiagnosis(); }} />
+          <Button className="w-full gap-2" disabled={!diagnosis.trim()} onClick={handleSubmitDiagnosis}><Eye className="h-4 w-4" />Submit Diagnosis</Button>
         </motion.div>
       )}
 
       {phase === 'rewrite' && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-3"
-        >
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
           <Card className="border-border/40">
             <CardContent className="p-3">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Your Diagnosis</p>
               <p className="text-xs text-muted-foreground italic">"{diagnosis}"</p>
             </CardContent>
           </Card>
-
-          <p className="text-sm text-muted-foreground font-medium">
-            Now rewrite it. What should this rep have said instead?
-          </p>
-          <Textarea
-            ref={textareaRef}
-            value={rewrite}
-            onChange={(e) => setRewrite(e.target.value)}
-            placeholder="Write what a strong rep would actually say..."
-            className="min-h-[120px] text-sm"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmitRewrite();
-            }}
-          />
-          <Button
-            className="w-full gap-2"
-            disabled={!rewrite.trim()}
-            onClick={handleSubmitRewrite}
-          >
-            <Send className="h-4 w-4" />
-            Submit Rewrite
-          </Button>
+          <p className="text-sm text-muted-foreground font-medium">Now rewrite it. What should this rep have said instead?</p>
+          <Textarea ref={textareaRef} value={rewrite} onChange={(e) => setRewrite(e.target.value)} placeholder="Write what a strong rep would actually say..." className="min-h-[120px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmitRewrite(); }} />
+          <Button className="w-full gap-2" disabled={!rewrite.trim()} onClick={handleSubmitRewrite}><Send className="h-4 w-4" />Submit Rewrite</Button>
         </motion.div>
       )}
     </div>

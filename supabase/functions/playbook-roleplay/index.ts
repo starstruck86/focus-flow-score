@@ -1,8 +1,8 @@
 /**
  * Playbook Roleplay Edge Function
  * 
- * Streams AI buyer responses during playbook roleplay sessions.
- * Hardened: realistic pressure, anti-pattern detection, direct coaching.
+ * AI buyer responses during roleplay sessions.
+ * Supports streaming (default) and non-streaming (dojoMode) for reliability.
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -30,15 +30,13 @@ serve(async (req) => {
       });
     }
 
-    const { messages, scenario, mode, knowledgeGrounding } = await req.json();
+    const { messages, scenario, mode, knowledgeGrounding, dojoMode } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Build system prompt based on mode
     let systemPrompt = scenario;
 
-    // Inject knowledge grounding if provided
     if (knowledgeGrounding && mode !== 'feedback') {
       systemPrompt = `${scenario}\n\n--- ACTIVE KNOWLEDGE GROUNDING ---\n${knowledgeGrounding}\n--- END KNOWLEDGE ---\nUse the above knowledge to evaluate the rep's responses. Reward when they use these tactics correctly. Punish when they deviate.`;
     }
@@ -76,6 +74,9 @@ If they retry right now, the ONE thing to focus on improving.
 Be direct. Be specific. Quote their actual words. This is coaching, not praise.`;
     }
 
+    // Non-streaming mode for Dojo — more reliable parsing
+    const useStream = !dojoMode;
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -88,7 +89,7 @@ Be direct. Be specific. Quote their actual words. This is coaching, not praise.`
           { role: "system", content: systemPrompt },
           ...messages,
         ],
-        stream: true,
+        stream: useStream,
       }),
     });
 
@@ -110,8 +111,17 @@ Be direct. Be specific. Quote their actual words. This is coaching, not praise.`
       });
     }
 
-    return new Response(response.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+    if (useStream) {
+      return new Response(response.body, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
+    }
+
+    // Non-streaming: return clean JSON
+    const aiData = await response.json();
+    const content = aiData.choices?.[0]?.message?.content || "";
+    return new Response(JSON.stringify(content), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("playbook-roleplay error:", e);

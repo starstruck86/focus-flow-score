@@ -1,6 +1,7 @@
 /**
  * DojoRoleplay — Multi-turn buyer simulation.
  * 3-5 turns, buyer responds dynamically, full conversation scored at end.
+ * Uses non-streaming for reliability.
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -51,6 +52,42 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [conversation.length, isThinking]);
 
+  /** Extract clean text from possible SSE-wrapped response */
+  function extractBuyerText(data: unknown): string {
+    if (typeof data === 'string') {
+      // Try to extract from SSE chunks
+      const lines = data.split('\n').filter(l => l.startsWith('data: '));
+      if (lines.length > 0) {
+        let text = '';
+        for (const line of lines) {
+          const payload = line.replace(/^data:\s*/, '').trim();
+          if (payload === '[DONE]') continue;
+          try {
+            const chunk = JSON.parse(payload);
+            const delta = chunk?.choices?.[0]?.delta?.content;
+            if (delta) text += delta;
+          } catch {
+            // Not JSON, might be raw text
+          }
+        }
+        if (text.trim()) return text.trim();
+      }
+      // Fallback: clean raw string
+      return data.replace(/data:\s*\[DONE\]/g, '').trim();
+    }
+    if (data && typeof data === 'object') {
+      const obj = data as Record<string, unknown>;
+      if (obj.choices && Array.isArray(obj.choices)) {
+        const content = (obj.choices[0] as Record<string, unknown>)?.message;
+        if (content && typeof content === 'object') {
+          const msg = content as Record<string, unknown>;
+          if (typeof msg.content === 'string') return msg.content;
+        }
+      }
+    }
+    return '';
+  }
+
   const sendMessage = useCallback(async () => {
     if (!input.trim() || isThinking || isScoring) return;
 
@@ -74,27 +111,29 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
             role: m.role === 'buyer' ? 'assistant' : 'user',
             content: m.content,
           })),
-          scenario: `You are a buyer in a sales roleplay. Scenario: ${scenario.context}\n\nYou are testing the rep's ${SKILL_LABELS[scenario.skillFocus].toLowerCase()} skills. Be realistic — push back naturally, escalate pressure across turns, don't make it easy. Stay in character. Keep responses to 2-3 sentences. After turn 3, start moving toward a resolution (either softening or hardening your position based on how the rep has performed).`,
+          scenario: `You are a buyer in a sales roleplay. Stay in character at all times.
+
+SCENARIO: ${scenario.context}
+SKILL BEING TESTED: ${SKILL_LABELS[scenario.skillFocus].toLowerCase()}
+
+YOUR BEHAVIOR:
+- You are a real, skeptical buyer. Not hostile, but not easy.
+- Keep responses to 2-3 sentences maximum. Sound natural.
+- If the rep is vague, push for specifics: "What does that actually mean for us?"
+- If the rep pitches too early, deflect: "Hold on — I'm not there yet."
+- If the rep asks a good question, reward it with a real answer but add a new concern.
+- After turn 3, start moving toward resolution based on rep quality:
+  - Good rep → soften slightly, show openness
+  - Weak rep → get more impatient, start wrapping up
+- NEVER break character. NEVER coach the rep. You are the BUYER.`,
           mode: 'roleplay',
+          dojoMode: true,
         },
       });
 
       if (error) throw error;
 
-      let buyerResponse = '';
-      if (typeof data === 'string') {
-        buyerResponse = data;
-      } else if (data?.choices?.[0]?.message?.content) {
-        buyerResponse = data.choices[0].message.content;
-      } else if (data) {
-        buyerResponse = String(data);
-      }
-
-      buyerResponse = buyerResponse
-        .replace(/data:\s*\{[^}]*"content":"([^"]*)"/g, '$1')
-        .replace(/data:\s*\[DONE\]/g, '')
-        .trim();
-
+      let buyerResponse = extractBuyerText(data);
       if (!buyerResponse) buyerResponse = "I hear you, but I'm still not convinced. What else can you tell me?";
 
       setConversation(prev => [...prev, { role: 'buyer', content: buyerResponse }]);
@@ -126,6 +165,14 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
 
       const result = normalizeScoreResult(data as Record<string, unknown>);
 
+      // Attach roleplay-specific fields onto the result object for upstream consumption
+      const enrichedResult = {
+        ...result,
+        turnAnalysis: Array.isArray(data.turnAnalysis) ? data.turnAnalysis : undefined,
+        controlArc: typeof data.controlArc === 'string' ? data.controlArc : undefined,
+        adaptationNote: typeof data.adaptationNote === 'string' ? data.adaptationNote : undefined,
+      } as DojoScoreResult;
+
       // Save roleplay session
       try {
         await supabase.from('dojo_sessions').insert({
@@ -145,7 +192,7 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
         console.error('Failed to save roleplay session:', saveErr);
       }
 
-      onComplete(result);
+      onComplete(enrichedResult);
     } catch (e) {
       console.error('Scoring error:', e);
       toast.error('Failed to score roleplay');
@@ -172,23 +219,13 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
     <div className="space-y-3">
       <div ref={scrollRef} className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
         {conversation.map((msg, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={cn('flex gap-2.5', msg.role === 'rep' ? 'justify-end' : '')}
-          >
+          <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={cn('flex gap-2.5', msg.role === 'rep' ? 'justify-end' : '')}>
             {msg.role === 'buyer' && (
               <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
                 <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
               </div>
             )}
-            <div className={cn(
-              'rounded-lg px-3 py-2 max-w-[80%] text-sm',
-              msg.role === 'buyer'
-                ? 'bg-muted text-foreground'
-                : 'bg-primary text-primary-foreground'
-            )}>
+            <div className={cn('rounded-lg px-3 py-2 max-w-[80%] text-sm', msg.role === 'buyer' ? 'bg-muted text-foreground' : 'bg-primary text-primary-foreground')}>
               {msg.content}
             </div>
             {msg.role === 'rep' && (
@@ -218,31 +255,12 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
       <div className="flex items-center justify-between px-1">
         <span className="text-[10px] text-muted-foreground">Turn {turnCount}/{MAX_TURNS}</span>
         {turnCount >= MIN_TURNS && (
-          <Button variant="ghost" size="sm" className="text-xs h-7" onClick={handleEndEarly}>
-            End & Score
-          </Button>
+          <Button variant="ghost" size="sm" className="text-xs h-7" onClick={handleEndEarly}>End & Score</Button>
         )}
       </div>
 
-      <Textarea
-        ref={textareaRef}
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Respond to the buyer..."
-        className="min-h-[80px] text-sm"
-        disabled={isThinking}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendMessage();
-        }}
-      />
-      <Button
-        className="w-full gap-2"
-        disabled={!input.trim() || isThinking}
-        onClick={sendMessage}
-      >
-        <Send className="h-4 w-4" />
-        Send
-      </Button>
+      <Textarea ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder="Respond to the buyer..." className="min-h-[80px] text-sm" disabled={isThinking} onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendMessage(); }} />
+      <Button className="w-full gap-2" disabled={!input.trim() || isThinking} onClick={sendMessage}><Send className="h-4 w-4" />Send</Button>
     </div>
   );
 }

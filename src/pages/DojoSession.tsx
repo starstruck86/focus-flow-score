@@ -10,7 +10,8 @@ import {
   ArrowLeft, Send, RotateCcw, Loader2, Target, AlertTriangle,
   CheckCircle2, Lightbulb, Swords, ChevronRight, Crown, Sparkles,
   Crosshair, ListOrdered, MessageCircle, GraduationCap,
-  TrendingUp, TrendingDown, Minus, Zap, Shield,
+  TrendingUp, TrendingDown, Minus, Zap, Shield, XCircle,
+  Eye, PenLine,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import {
@@ -52,14 +53,26 @@ const PATTERN_TAG_LABELS: Record<string, string> = {
   leads_with_outcome: 'Leads with outcome',
 };
 
-/** Format focus pattern label with fallback */
-function getFocusLabel(pattern: string): string {
-  return FOCUS_PATTERN_LABELS[pattern] || formatFocusPattern(pattern);
-}
-
 /** Safely cast DojoScoreResult to Json for DB storage */
 function scoreToJson(score: DojoScoreResult): Json {
   return JSON.parse(JSON.stringify(score)) as Json;
+}
+
+/** Extended review extras now include accuracy/fixed fields */
+interface ReviewExtras {
+  diagnosisScore?: number;
+  rewriteScore?: number;
+  diagnosisFeedback?: string;
+  rewriteFeedback?: string;
+  diagnosisAccuracy?: string;
+  rewriteFixedIssue?: boolean;
+}
+
+/** Roleplay extras from the edge function */
+interface RoleplayExtras {
+  turnAnalysis?: Array<{ turn: number; assessment: string; verdict: string }>;
+  controlArc?: string;
+  adaptationNote?: string;
 }
 
 export default function DojoSession() {
@@ -84,7 +97,8 @@ export default function DojoSession() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [firstTurnId, setFirstTurnId] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [reviewExtras, setReviewExtras] = useState<{ diagnosisScore?: number; rewriteScore?: number; diagnosisFeedback?: string; rewriteFeedback?: string } | null>(null);
+  const [reviewExtras, setReviewExtras] = useState<ReviewExtras | null>(null);
+  const [roleplayExtras, setRoleplayExtras] = useState<RoleplayExtras | null>(null);
 
   useEffect(() => {
     if (phase === 'respond' || phase === 'retry') {
@@ -229,8 +243,14 @@ export default function DojoSession() {
     navigate('/dojo');
   };
 
-  // Handle roleplay completion
+  // Handle roleplay completion — extract roleplay-specific extras
   const handleRoleplayComplete = useCallback((scoreResult: DojoScoreResult) => {
+    const raw = scoreResult as unknown as Record<string, unknown>;
+    setRoleplayExtras({
+      turnAnalysis: Array.isArray(raw.turnAnalysis) ? raw.turnAnalysis as RoleplayExtras['turnAnalysis'] : undefined,
+      controlArc: typeof raw.controlArc === 'string' ? raw.controlArc : undefined,
+      adaptationNote: typeof raw.adaptationNote === 'string' ? raw.adaptationNote : undefined,
+    });
     setResult(scoreResult);
     setPhase('feedback');
   }, []);
@@ -239,7 +259,15 @@ export default function DojoSession() {
   const handleReviewComplete = useCallback((reviewResult: ReviewScoreResult) => {
     const { diagnosisScore, rewriteScore, diagnosisFeedback, rewriteFeedback, ...baseResult } = reviewResult;
     setResult(baseResult);
-    setReviewExtras({ diagnosisScore, rewriteScore, diagnosisFeedback, rewriteFeedback });
+    const raw = reviewResult as unknown as Record<string, unknown>;
+    setReviewExtras({
+      diagnosisScore,
+      rewriteScore,
+      diagnosisFeedback,
+      rewriteFeedback,
+      diagnosisAccuracy: typeof raw.diagnosisAccuracy === 'string' ? raw.diagnosisAccuracy : undefined,
+      rewriteFixedIssue: typeof raw.rewriteFixedIssue === 'boolean' ? raw.rewriteFixedIssue : undefined,
+    });
     setPhase('feedback');
   }, []);
 
@@ -297,135 +325,52 @@ export default function DojoSession() {
         {/* ── Drill Mode ── */}
         {sessionType === 'drill' && (
         <AnimatePresence mode="wait">
-          {/* ── Phase: Respond ── */}
           {phase === 'respond' && (
-            <motion.div
-              key="respond"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-3"
-            >
+            <motion.div key="respond" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
               <p className="text-sm text-muted-foreground font-medium">Your response:</p>
-              <Textarea
-                ref={textareaRef}
-                value={response}
-                onChange={(e) => setResponse(e.target.value)}
-                placeholder="Type your response to the buyer..."
-                className="min-h-[120px] text-sm"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit();
-                }}
-              />
-              <Button
-                className="w-full gap-2"
-                disabled={!response.trim()}
-                onClick={handleSubmit}
-              >
-                <Send className="h-4 w-4" />
-                Submit Response
-              </Button>
+              <Textarea ref={textareaRef} value={response} onChange={(e) => setResponse(e.target.value)} placeholder="Type your response to the buyer..." className="min-h-[120px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(); }} />
+              <Button className="w-full gap-2" disabled={!response.trim()} onClick={handleSubmit}><Send className="h-4 w-4" />Submit Response</Button>
             </motion.div>
           )}
 
-          {/* ── Phase: Scoring ── */}
           {phase === 'scoring' && (
-            <motion.div
-              key="scoring"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center py-12 gap-3"
-            >
+            <motion.div key="scoring" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center py-12 gap-3">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-sm text-muted-foreground">Dave is reviewing your response...</p>
             </motion.div>
           )}
 
-          {/* ── Phase: Feedback ── */}
           {phase === 'feedback' && currentResult && (
-            <motion.div
-              key="feedback"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-4"
-            >
-              <FeedbackView
-                currentResult={currentResult}
-                scoreDelta={scoreDelta}
-                retryCount={retryCount}
-                retryResult={retryResult}
-                retryAssessment={retryAssessment}
-                userText={userText}
-                activeFocus={activeFocus}
-                reviewExtras={reviewExtras}
-                sessionType={sessionType}
-                onRetry={handleStartRetry}
-                onNextRep={handleNextRep}
-              />
+            <motion.div key="feedback" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
+              <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} onRetry={handleStartRetry} onNextRep={handleNextRep} />
             </motion.div>
           )}
 
-          {/* ── Phase: Retry ── */}
           {phase === 'retry' && (
-            <motion.div
-              key="retry"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-3"
-            >
+            <motion.div key="retry" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
               {activeFocus && (
                 <Card className="border-amber-500/30 bg-amber-500/5">
                   <CardContent className="p-3 space-y-1.5">
                     <div className="flex items-center gap-2">
                       <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                      <p className="text-sm">
-                        <span className="text-muted-foreground">Focus on: </span>
-                        <span className="font-semibold text-foreground">
-                          {FOCUS_PATTERN_LABELS[activeFocus] || activeFocus.replace(/_/g, ' ')}
-                        </span>
-                      </p>
+                      <p className="text-sm"><span className="text-muted-foreground">Focus on: </span><span className="font-semibold text-foreground">{FOCUS_PATTERN_LABELS[activeFocus] || activeFocus.replace(/_/g, ' ')}</span></p>
                     </div>
                     {currentResult?.practiceCue && (
                       <div className="flex items-start gap-1.5 pl-6">
                         <MessageCircle className="h-3 w-3 text-amber-500/70 mt-0.5 shrink-0" />
-                        <p className="text-xs font-medium text-foreground">
-                          {currentResult.practiceCue}
-                        </p>
+                        <p className="text-xs font-medium text-foreground">{currentResult.practiceCue}</p>
                       </div>
                     )}
                   </CardContent>
                 </Card>
               )}
-
               <div className="flex items-start gap-2 px-1">
                 <Swords className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                <p className="text-xs text-muted-foreground">
-                  {currentResult?.feedback}
-                </p>
+                <p className="text-xs text-muted-foreground">{currentResult?.feedback}</p>
               </div>
-
               <p className="text-sm text-muted-foreground font-medium">Try again:</p>
-              <Textarea
-                ref={textareaRef}
-                value={retryResponse}
-                onChange={(e) => setRetryResponse(e.target.value)}
-                placeholder="Give it another shot..."
-                className="min-h-[120px] text-sm"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRetrySubmit();
-                }}
-              />
-              <Button
-                className="w-full gap-2"
-                disabled={!retryResponse.trim()}
-                onClick={handleRetrySubmit}
-              >
-                <Send className="h-4 w-4" />
-                Submit Retry
-              </Button>
+              <Textarea ref={textareaRef} value={retryResponse} onChange={(e) => setRetryResponse(e.target.value)} placeholder="Give it another shot..." className="min-h-[120px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRetrySubmit(); }} />
+              <Button className="w-full gap-2" disabled={!retryResponse.trim()} onClick={handleRetrySubmit}><Send className="h-4 w-4" />Submit Retry</Button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -433,24 +378,8 @@ export default function DojoSession() {
 
         {/* ── Feedback for Roleplay / Review (non-drill) ── */}
         {sessionType !== 'drill' && phase === 'feedback' && currentResult && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-4"
-          >
-            <FeedbackView
-              currentResult={currentResult}
-              scoreDelta={null}
-              retryCount={0}
-              retryResult={null}
-              retryAssessment={null}
-              userText=""
-              activeFocus={activeFocus}
-              reviewExtras={reviewExtras}
-              sessionType={sessionType}
-              onRetry={handleStartRetry}
-              onNextRep={handleNextRep}
-            />
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} onRetry={handleStartRetry} onNextRep={handleNextRep} />
           </motion.div>
         )}
       </div>
@@ -468,24 +397,17 @@ interface FeedbackViewProps {
   retryAssessment: RetryAssessment | null;
   userText: string;
   activeFocus: string | undefined;
-  reviewExtras: { diagnosisScore?: number; rewriteScore?: number; diagnosisFeedback?: string; rewriteFeedback?: string } | null;
+  reviewExtras: ReviewExtras | null;
+  roleplayExtras: RoleplayExtras | null;
   sessionType: string;
   onRetry: () => void;
   onNextRep: () => void;
 }
 
 function FeedbackView({
-  currentResult,
-  scoreDelta,
-  retryCount,
-  retryResult,
-  retryAssessment,
-  userText,
-  activeFocus,
-  reviewExtras,
-  sessionType,
-  onRetry,
-  onNextRep,
+  currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
+  userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
+  onRetry, onNextRep,
 }: FeedbackViewProps) {
   return (
     <>
@@ -507,10 +429,7 @@ function FeedbackView({
                currentResult.score >= 50 ? 'Average' : 'Needs Work'}
             </span>
             {scoreDelta !== null && (
-              <Badge
-                variant={scoreDelta > 0 ? 'default' : 'destructive'}
-                className="text-xs"
-              >
+              <Badge variant={scoreDelta > 0 ? 'default' : 'destructive'} className="text-xs">
                 {scoreDelta > 0 ? '+' : ''}{scoreDelta} pts
               </Badge>
             )}
@@ -523,28 +442,79 @@ function FeedbackView({
         </div>
       </div>
 
-      {/* ── Review-specific scores ── */}
-      {reviewExtras && (reviewExtras.diagnosisScore != null || reviewExtras.rewriteScore != null) && (
-        <div className="grid grid-cols-2 gap-2">
-          {reviewExtras.diagnosisScore != null && (
-            <Card className="border-border/60">
-              <CardContent className="p-3 text-center">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Diagnosis</p>
-                <p className="text-xl font-bold">{reviewExtras.diagnosisScore}<span className="text-xs text-muted-foreground font-normal">/50</span></p>
-                {reviewExtras.diagnosisFeedback && (
-                  <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{reviewExtras.diagnosisFeedback}</p>
-                )}
+      {/* ── Review-specific: Diagnosis & Rewrite badges ── */}
+      {reviewExtras && sessionType === 'review' && (
+        <div className="space-y-3">
+          {/* Score cards */}
+          {(reviewExtras.diagnosisScore != null || reviewExtras.rewriteScore != null) && (
+            <div className="grid grid-cols-2 gap-2">
+              {reviewExtras.diagnosisScore != null && (
+                <Card className="border-border/60">
+                  <CardContent className="p-3 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Diagnosis</p>
+                    <p className="text-xl font-bold">{reviewExtras.diagnosisScore}<span className="text-xs text-muted-foreground font-normal">/50</span></p>
+                  </CardContent>
+                </Card>
+              )}
+              {reviewExtras.rewriteScore != null && (
+                <Card className="border-border/60">
+                  <CardContent className="p-3 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Rewrite</p>
+                    <p className="text-xl font-bold">{reviewExtras.rewriteScore}<span className="text-xs text-muted-foreground font-normal">/50</span></p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* Accuracy + Fixed badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {reviewExtras.diagnosisAccuracy && (
+              <Badge variant="outline" className={cn('text-xs font-semibold gap-1',
+                reviewExtras.diagnosisAccuracy === 'correct' && 'border-green-500 text-green-600 dark:text-green-400',
+                reviewExtras.diagnosisAccuracy === 'partial' && 'border-amber-500 text-amber-600 dark:text-amber-400',
+                reviewExtras.diagnosisAccuracy === 'missed' && 'border-red-500 text-red-600 dark:text-red-400',
+              )}>
+                <Eye className="h-3 w-3" />
+                {reviewExtras.diagnosisAccuracy === 'correct' ? 'Diagnosis Correct' :
+                 reviewExtras.diagnosisAccuracy === 'partial' ? 'Partial Diagnosis' :
+                 'Missed the Issue'}
+              </Badge>
+            )}
+            {reviewExtras.rewriteFixedIssue != null && (
+              <Badge variant="outline" className={cn('text-xs font-semibold gap-1',
+                reviewExtras.rewriteFixedIssue
+                  ? 'border-green-500 text-green-600 dark:text-green-400'
+                  : 'border-red-500 text-red-600 dark:text-red-400',
+              )}>
+                <PenLine className="h-3 w-3" />
+                {reviewExtras.rewriteFixedIssue ? 'Rewrite Fixed the Issue' : 'Rewrite Still Missed the Issue'}
+              </Badge>
+            )}
+          </div>
+
+          {/* Diagnosis feedback card */}
+          {reviewExtras.diagnosisFeedback && (
+            <Card className="border-border/40">
+              <CardContent className="p-3 space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Diagnosis Assessment</p>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{reviewExtras.diagnosisFeedback}</p>
               </CardContent>
             </Card>
           )}
-          {reviewExtras.rewriteScore != null && (
-            <Card className="border-border/60">
-              <CardContent className="p-3 text-center">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Rewrite</p>
-                <p className="text-xl font-bold">{reviewExtras.rewriteScore}<span className="text-xs text-muted-foreground font-normal">/50</span></p>
-                {reviewExtras.rewriteFeedback && (
-                  <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{reviewExtras.rewriteFeedback}</p>
-                )}
+
+          {/* Rewrite feedback card */}
+          {reviewExtras.rewriteFeedback && (
+            <Card className="border-border/40">
+              <CardContent className="p-3 space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <PenLine className="h-3.5 w-3.5 text-muted-foreground" />
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Rewrite Assessment</p>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{reviewExtras.rewriteFeedback}</p>
               </CardContent>
             </Card>
           )}
@@ -567,43 +537,25 @@ function FeedbackView({
               </div>
               <div className="flex items-center gap-1.5">
                 {retryAssessment.liveReady ? (
-                  <Badge className="text-xs bg-green-600 hover:bg-green-600">
-                    <Shield className="h-3 w-3 mr-1" />
-                    Live Ready
-                  </Badge>
+                  <Badge className="text-xs bg-green-600 hover:bg-green-600"><Shield className="h-3 w-3 mr-1" />Live Ready</Badge>
                 ) : (
-                  <Badge variant="outline" className="text-xs">
-                    Keep Drilling
-                  </Badge>
+                  <Badge variant="outline" className="text-xs">Keep Drilling</Badge>
                 )}
               </div>
             </div>
-
-            {/* Focus applied */}
             {currentResult.focusApplied && (
               <div className="flex items-center gap-2.5">
-                <Badge
-                  variant={currentResult.focusApplied === 'yes' ? 'default' : 'outline'}
-                  className={cn(
-                    'text-xs font-semibold',
-                    currentResult.focusApplied === 'yes' && 'bg-green-600 hover:bg-green-600',
-                    currentResult.focusApplied === 'partial' && 'border-amber-500 text-amber-600 dark:text-amber-400',
-                    currentResult.focusApplied === 'no' && 'border-red-500 text-red-600 dark:text-red-400',
-                  )}
-                >
+                <Badge variant={currentResult.focusApplied === 'yes' ? 'default' : 'outline'} className={cn('text-xs font-semibold',
+                  currentResult.focusApplied === 'yes' && 'bg-green-600 hover:bg-green-600',
+                  currentResult.focusApplied === 'partial' && 'border-amber-500 text-amber-600 dark:text-amber-400',
+                  currentResult.focusApplied === 'no' && 'border-red-500 text-red-600 dark:text-red-400',
+                )}>
                   <Target className="h-3 w-3 mr-1" />
-                  {currentResult.focusApplied === 'yes' ? 'Focus Applied' :
-                   currentResult.focusApplied === 'partial' ? 'Partially Applied' :
-                   'Missed Focus'}
+                  {currentResult.focusApplied === 'yes' ? 'Focus Applied' : currentResult.focusApplied === 'partial' ? 'Partially Applied' : 'Missed Focus'}
                 </Badge>
-                {currentResult.focusAppliedReason && (
-                  <p className="text-xs text-muted-foreground leading-tight flex-1">
-                    {currentResult.focusAppliedReason}
-                  </p>
-                )}
+                {currentResult.focusAppliedReason && <p className="text-xs text-muted-foreground leading-tight flex-1">{currentResult.focusAppliedReason}</p>}
               </div>
             )}
-
             <div className="space-y-1.5 text-xs text-muted-foreground">
               <p><span className="font-medium text-foreground">Improved most:</span> {retryAssessment.whatImprovedMost}</p>
               <p><span className="font-medium text-foreground">Still needs work:</span> {retryAssessment.whatStillNeedsWork}</p>
@@ -634,6 +586,60 @@ function FeedbackView({
         </div>
       )}
 
+      {/* ── Roleplay-specific: Turn Analysis ── */}
+      {sessionType === 'roleplay' && roleplayExtras?.turnAnalysis && roleplayExtras.turnAnalysis.length > 0 && (
+        <Card className="border-border/60">
+          <CardContent className="p-4 space-y-3">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Turn-by-Turn Analysis</p>
+            <div className="space-y-2.5">
+              {roleplayExtras.turnAnalysis.map((ta, i) => (
+                <div key={i} className="flex items-start gap-2.5">
+                  <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                    <span className="text-[10px] font-bold text-muted-foreground w-5 text-right">T{ta.turn}</span>
+                    <Badge variant="outline" className={cn('text-[9px] px-1.5 py-0',
+                      ta.verdict === 'strong' && 'border-green-500 text-green-600 dark:text-green-400',
+                      ta.verdict === 'adequate' && 'border-amber-500 text-amber-600 dark:text-amber-400',
+                      ta.verdict === 'weak' && 'border-red-500 text-red-600 dark:text-red-400',
+                    )}>
+                      {ta.verdict}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{ta.assessment}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Roleplay-specific: Control Arc + Adaptation ── */}
+      {sessionType === 'roleplay' && (roleplayExtras?.controlArc || roleplayExtras?.adaptationNote) && (
+        <div className="grid grid-cols-1 gap-2">
+          {roleplayExtras?.controlArc && (
+            <Card className="border-border/40">
+              <CardContent className="p-3 space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5 text-primary/70" />
+                  <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Conversation Control</p>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{roleplayExtras.controlArc}</p>
+              </CardContent>
+            </Card>
+          )}
+          {roleplayExtras?.adaptationNote && (
+            <Card className="border-border/40">
+              <CardContent className="p-3 space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <Zap className="h-3.5 w-3.5 text-primary/70" />
+                  <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Adaptation</p>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{roleplayExtras.adaptationNote}</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
       {/* ── Your Response (drill only) ── */}
       {sessionType === 'drill' && userText && (
         <Card className="border-border/40">
@@ -642,9 +648,7 @@ function FeedbackView({
               <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Response</p>
             </div>
-            <p className="text-sm text-muted-foreground leading-relaxed italic">
-              "{userText}"
-            </p>
+            <p className="text-sm text-muted-foreground leading-relaxed italic">"{userText}"</p>
           </CardContent>
         </Card>
       )}
@@ -655,13 +659,9 @@ function FeedbackView({
           <CardContent className="p-3 space-y-1.5">
             <div className="flex items-center gap-1.5">
               <Lightbulb className="h-3.5 w-3.5 text-green-500" />
-              <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">
-                Stronger Answer
-              </p>
+              <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">Stronger Answer</p>
             </div>
-            <p className="text-sm text-foreground leading-relaxed italic">
-              "{currentResult.improvedVersion}"
-            </p>
+            <p className="text-sm text-foreground leading-relaxed italic">"{currentResult.improvedVersion}"</p>
           </CardContent>
         </Card>
       )}
@@ -670,9 +670,7 @@ function FeedbackView({
       {currentResult.deltaNote && currentResult.worldClassResponse && (
         <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-primary/5 border border-primary/15">
           <ChevronRight className="h-3.5 w-3.5 text-primary/60 mt-0.5 shrink-0" />
-          <p className="text-xs text-muted-foreground leading-relaxed italic">
-            {currentResult.deltaNote}
-          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed italic">{currentResult.deltaNote}</p>
         </div>
       )}
 
@@ -682,22 +680,15 @@ function FeedbackView({
           <CardContent className="p-5 space-y-4">
             <div className="flex items-center gap-2">
               <Crown className="h-4 w-4 text-primary" />
-              <p className="text-xs font-bold text-primary uppercase tracking-wider">
-                World-Class Standard
-              </p>
+              <p className="text-xs font-bold text-primary uppercase tracking-wider">World-Class Standard</p>
             </div>
-            <p className="text-sm text-foreground leading-relaxed italic pl-0.5">
-              "{currentResult.worldClassResponse}"
-            </p>
+            <p className="text-sm text-foreground leading-relaxed italic pl-0.5">"{currentResult.worldClassResponse}"</p>
 
-            {/* Why it works */}
             {currentResult.whyItWorks.length > 0 && (
               <div className="pt-3 border-t border-primary/15 space-y-2">
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-primary/70" />
-                  <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
-                    Why It Works
-                  </p>
+                  <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Why It Works</p>
                 </div>
                 <ul className="space-y-1.5">
                   {currentResult.whyItWorks.map((bullet, i) => (
@@ -710,14 +701,11 @@ function FeedbackView({
               </div>
             )}
 
-            {/* Move sequence */}
             {currentResult.moveSequence.length > 0 && (
               <div className="pt-3 border-t border-primary/15 space-y-2">
                 <div className="flex items-center gap-1.5">
                   <ListOrdered className="h-3.5 w-3.5 text-primary/70" />
-                  <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
-                    Move Sequence
-                  </p>
+                  <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Move Sequence</p>
                 </div>
                 <ol className="space-y-1">
                   {currentResult.moveSequence.map((step, i) => (
@@ -730,12 +718,9 @@ function FeedbackView({
               </div>
             )}
 
-            {/* Pattern tags */}
             {currentResult.patternTags.length > 0 && (
               <div className="pt-3 border-t border-primary/15 space-y-2">
-                <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
-                  Reusable Patterns
-                </p>
+                <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Reusable Patterns</p>
                 <div className="flex flex-wrap gap-1.5">
                   {currentResult.patternTags.map((tag, i) => (
                     <Badge key={i} variant="secondary" className="text-[10px] font-medium">
@@ -756,18 +741,12 @@ function FeedbackView({
             <div className="flex items-center gap-2">
               <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <div>
-                <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                  Focus on This Next
-                </p>
-                <p className="text-sm font-semibold text-foreground">
-                  {FOCUS_PATTERN_LABELS[activeFocus] || activeFocus.replace(/_/g, ' ')}
-                </p>
+                <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Focus on This Next</p>
+                <p className="text-sm font-semibold text-foreground">{FOCUS_PATTERN_LABELS[activeFocus] || activeFocus.replace(/_/g, ' ')}</p>
               </div>
             </div>
             {currentResult.focusReason && (
-              <p className="text-xs text-muted-foreground pl-6 leading-relaxed">
-                {currentResult.focusReason}
-              </p>
+              <p className="text-xs text-muted-foreground pl-6 leading-relaxed">{currentResult.focusReason}</p>
             )}
           </CardContent>
         </Card>
@@ -783,9 +762,7 @@ function FeedbackView({
                 <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">
                   {sessionType === 'drill' ? 'Practice This on the Retry' : 'Practice This Next'}
                 </p>
-                <p className="text-sm font-medium text-foreground leading-relaxed">
-                  {currentResult.practiceCue}
-                </p>
+                <p className="text-sm font-medium text-foreground leading-relaxed">{currentResult.practiceCue}</p>
               </div>
             </div>
           </CardContent>
@@ -797,12 +774,8 @@ function FeedbackView({
         <div className="flex items-start gap-2.5 px-3 py-3 rounded-lg bg-muted/30 border border-border/40">
           <GraduationCap className="h-4 w-4 text-muted-foreground/70 mt-0.5 shrink-0" />
           <div>
-            <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1">
-              Coach's Takeaway
-            </p>
-            <p className="text-sm text-muted-foreground italic leading-relaxed">
-              "{currentResult.teachingNote}"
-            </p>
+            <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1">Coach's Takeaway</p>
+            <p className="text-sm text-muted-foreground italic leading-relaxed">"{currentResult.teachingNote}"</p>
           </div>
         </div>
       )}
@@ -810,21 +783,12 @@ function FeedbackView({
       {/* Actions */}
       <div className="flex gap-3 pt-2">
         {sessionType === 'drill' && (
-          <Button
-            variant="outline"
-            className="flex-1 gap-2"
-            onClick={onRetry}
-          >
-            <RotateCcw className="h-4 w-4" />
-            Try Again
+          <Button variant="outline" className="flex-1 gap-2" onClick={onRetry}>
+            <RotateCcw className="h-4 w-4" />Try Again
           </Button>
         )}
-        <Button
-          className="flex-1 gap-2"
-          onClick={onNextRep}
-        >
-          Next Rep
-          <ChevronRight className="h-4 w-4" />
+        <Button className="flex-1 gap-2" onClick={onNextRep}>
+          Next Rep<ChevronRight className="h-4 w-4" />
         </Button>
       </div>
     </>
