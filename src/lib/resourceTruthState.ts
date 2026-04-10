@@ -24,6 +24,7 @@ import { isPlaceholderContent } from '@/lib/canonicalLifecycle';
 
 export type BlockerType =
   | 'missing_content'
+  | 'placeholder_content'
   | 'needs_enrichment'
   | 'needs_extraction'
   | 'needs_activation'
