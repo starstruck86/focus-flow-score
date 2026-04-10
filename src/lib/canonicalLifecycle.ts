@@ -110,10 +110,19 @@ export interface LifecycleSummary {
   operationalized: number;
   blocked: {
     empty_content: number;
+    placeholder_content: number;
     no_extraction: number;
     no_activation: number;
     missing_contexts: number;
     stale_blocker_state: number;
+  };
+  /** Failure-class observability counters */
+  failure_classes: {
+    transcript_extraction_not_triggered: number;
+    pdf_parse_incomplete: number;
+    auth_capture_incomplete: number;
+    enriched_no_extraction: number;
+    extraction_ready_not_queued: number;
   };
   resources: CanonicalResourceStatus[];
 }
@@ -244,7 +253,7 @@ export function deriveBlockedReason(
 export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
   const { data: resources, error: rErr } = await supabase
     .from('resources')
-    .select('id, title, content, content_length, enrichment_status, tags, updated_at, manual_content_present, manual_input_required, recovery_queue_bucket, failure_reason')
+    .select('id, title, content, content_length, enrichment_status, tags, updated_at, manual_content_present, manual_input_required, recovery_queue_bucket, failure_reason, resource_type, file_url')
     .order('updated_at', { ascending: false });
 
   if (rErr || !resources) {
@@ -279,10 +288,18 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
     operationalized: 0,
     blocked: {
       empty_content: 0,
+      placeholder_content: 0,
       no_extraction: 0,
       no_activation: 0,
       missing_contexts: 0,
       stale_blocker_state: 0,
+    },
+    failure_classes: {
+      transcript_extraction_not_triggered: 0,
+      pdf_parse_incomplete: 0,
+      auth_capture_incomplete: 0,
+      enriched_no_extraction: 0,
+      extraction_ready_not_queued: 0,
     },
     resources: [],
   };
@@ -318,7 +335,32 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
 
     // Blocked aggregation
     if (blocked !== 'none') {
-      summary.blocked[blocked]++;
+      if (blocked in summary.blocked) {
+        (summary.blocked as any)[blocked]++;
+      }
+    }
+
+    // Failure-class observability
+    const contentStr = (r as any).content ?? '';
+    const rType = (r as any).resource_type ?? '';
+    const isTranscriptType = ['transcript', 'podcast', 'audio'].includes(rType);
+    const hasRealContent = !isPlaceholderContent(contentStr) && (r.content_length ?? 0) >= MIN_CONTENT_LENGTH;
+    const isPlaceholder = isPlaceholderContent(contentStr) && contentStr.length > 0;
+
+    if (isTranscriptType && hasRealContent && ki.total === 0) {
+      summary.failure_classes.transcript_extraction_not_triggered++;
+    }
+    if (isPlaceholder && (r as any).file_url) {
+      summary.failure_classes.pdf_parse_incomplete++;
+    }
+    if (isPlaceholder && !(r as any).file_url) {
+      summary.failure_classes.auth_capture_incomplete++;
+    }
+    if (!isTranscriptType && hasRealContent && isEnriched && ki.total === 0) {
+      summary.failure_classes.enriched_no_extraction++;
+    }
+    if (hasRealContent && !isEnriched && ki.total === 0 && !isPlaceholder) {
+      summary.failure_classes.extraction_ready_not_queued++;
     }
   }
 
@@ -339,7 +381,14 @@ function emptySummary(): LifecycleSummary {
   return {
     total_resources: 0, enriched: 0, content_ready: 0,
     with_knowledge: 0, activated: 0, operationalized: 0,
-    blocked: { empty_content: 0, no_extraction: 0, no_activation: 0, missing_contexts: 0, stale_blocker_state: 0 },
+    blocked: { empty_content: 0, placeholder_content: 0, no_extraction: 0, no_activation: 0, missing_contexts: 0, stale_blocker_state: 0 },
+    failure_classes: {
+      transcript_extraction_not_triggered: 0,
+      pdf_parse_incomplete: 0,
+      auth_capture_incomplete: 0,
+      enriched_no_extraction: 0,
+      extraction_ready_not_queued: 0,
+    },
     resources: [],
   };
 }
