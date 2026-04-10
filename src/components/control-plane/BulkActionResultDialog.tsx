@@ -1,12 +1,13 @@
 /**
- * Bulk Action Result Dialog — outcome summary with clickable attention items.
+ * Bulk Action Result Dialog — outcome summary with category-aware language
+ * and clickable attention items.
  */
 import {
   AlertDialog, AlertDialogAction,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { CheckCircle2, XCircle, AlertTriangle, MinusCircle, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, MinusCircle, ShieldCheck, ShieldAlert, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { CONTROL_PLANE_LABELS, CONTROL_PLANE_COLORS } from '@/lib/controlPlaneState';
@@ -20,8 +21,41 @@ interface Props {
   onOpenResource?: (resourceId: string) => void;
 }
 
+/** Build a plain-English summary sentence for the outcome */
+function buildOutcomeSummary(outcome: BulkActionOutcome): string {
+  const parts: string[] = [];
+
+  if (outcome.succeeded > 0) {
+    parts.push(`${outcome.succeeded} moved forward`);
+  }
+  if (outcome.unchanged > 0) {
+    parts.push(`${outcome.unchanged} unchanged`);
+  }
+  if (outcome.failed > 0) {
+    parts.push(`${outcome.failed} failed`);
+  }
+  if (outcome.needsReview > 0) {
+    parts.push(`${outcome.needsReview} need review`);
+  }
+
+  if (parts.length === 0) return 'No resources were affected.';
+
+  const summary = parts.join(', ');
+
+  // Add reconciliation note if relevant
+  if (outcome.mismatched > 0) {
+    return `${summary}. ${outcome.mismatched} had unexpected outcomes — inspect recommended.`;
+  }
+  if (outcome.confirmed > 0 && outcome.failed === 0 && outcome.mismatched === 0) {
+    return `${summary}. All transitions confirmed by reconciliation.`;
+  }
+  return `${summary}.`;
+}
+
 export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttention, onOpenResource }: Props) {
   if (!outcome) return null;
+
+  const summaryText = buildOutcomeSummary(outcome);
 
   const handleFilterAttention = () => {
     if (!onFilterAttention || outcome.stillNeedAttention.length === 0) return;
@@ -41,12 +75,17 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
         </AlertDialogHeader>
         <AlertDialogDescription asChild>
           <div className="space-y-4">
+            {/* Plain-English summary */}
+            <p className="text-xs text-foreground font-medium leading-relaxed">
+              {summaryText}
+            </p>
+
             {/* Execution counts */}
             <div className="grid grid-cols-2 gap-2">
-              <Stat icon={CheckCircle2} label="Succeeded" value={outcome.succeeded} color="text-emerald-600" />
+              <Stat icon={CheckCircle2} label="Moved forward" value={outcome.succeeded} color="text-emerald-600" />
               <Stat icon={XCircle} label="Failed" value={outcome.failed} color="text-destructive" />
               <Stat icon={MinusCircle} label="Unchanged" value={outcome.unchanged} color="text-muted-foreground" />
-              <Stat icon={AlertTriangle} label="Needs Review" value={outcome.needsReview} color="text-amber-600" />
+              <Stat icon={AlertTriangle} label="Needs review" value={outcome.needsReview} color="text-amber-600" />
             </div>
 
             {/* Reconciliation summary */}
@@ -74,11 +113,11 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
                         <Badge variant="outline" className={cn('text-[9px]', fromC.text, fromC.bg, fromC.border)}>
                           {CONTROL_PLANE_LABELS[t.from]}
                         </Badge>
-                        <span className="text-muted-foreground">→</span>
+                        <ArrowRight className="h-2.5 w-2.5 text-muted-foreground" />
                         <Badge variant="outline" className={cn('text-[9px]', toC.text, toC.bg, toC.border)}>
                           {CONTROL_PLANE_LABELS[t.to]}
                         </Badge>
-                        <span className="ml-auto text-xs text-muted-foreground">×{t.count}</span>
+                        <span className="ml-auto text-xs text-muted-foreground tabular-nums">×{t.count}</span>
                       </div>
                     );
                   })}

@@ -5,7 +5,7 @@
 import { useState, useMemo } from 'react';
 import {
   Zap, AlertTriangle, ShieldAlert, XCircle,
-  ChevronDown, ChevronUp, ArrowRight,
+  ChevronDown, ChevronUp, ArrowRight, Filter, Shield,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -36,20 +36,23 @@ const CATEGORY_CONFIG: Record<Category, {
   icon: React.ElementType; label: string; color: string; actionLabel: string;
   batchLabel: string; hint: string;
   batchReason: string; batchPipeline: string;
+  /** If true, batch action filters table instead of running pipeline */
+  batchIsFilter?: boolean;
 }> = {
   mismatched: {
     icon: ShieldAlert, label: 'Mismatched', color: 'text-amber-600',
-    actionLabel: 'Inspect', batchLabel: 'Inspect All',
+    actionLabel: 'Inspect', batchLabel: 'Filter & Inspect',
     hint: 'Inspect and re-run, or manually verify state.',
     batchReason: 'These resources had outcomes that did not match expected state transitions — reconciliation detected a mismatch.',
-    batchPipeline: 'Re-inspect each resource and re-run the last failed action',
+    batchPipeline: 'Opens filtered table view for manual inspection',
+    batchIsFilter: true,
   },
   failed: {
     icon: XCircle, label: 'Failed', color: 'text-destructive',
     actionLabel: 'Retry', batchLabel: 'Retry All',
     hint: 'Retry the failed action or diagnose root cause.',
     batchReason: 'These resources failed during their last pipeline action — the operation did not complete successfully.',
-    batchPipeline: 'Retry the failed pipeline step on each resource',
+    batchPipeline: 'Diagnostic pipeline (detect root cause → apply fix → re-validate)',
   },
   needs_review: {
     icon: AlertTriangle, label: 'Blocked', color: 'text-destructive',
@@ -89,6 +92,32 @@ function categoryToAction(cat: Category): string {
   }
 }
 
+/** Assess batch risk level based on category and item count */
+function assessRisk(cat: Category, count: number): { level: 'low' | 'moderate' | 'review'; label: string } {
+  if (cat === 'needs_extraction') {
+    return count <= 10
+      ? { level: 'low', label: 'Low risk — standard extraction pipeline' }
+      : { level: 'moderate', label: `Moderate — ${count} resources will be processed sequentially` };
+  }
+  if (cat === 'needs_review' || cat === 'failed') {
+    return count <= 5
+      ? { level: 'moderate', label: 'Moderate — auto-repair may not resolve all blockers' }
+      : { level: 'review', label: `Review recommended — ${count} blocked resources with potentially different root causes` };
+  }
+  return { level: 'low', label: 'Low risk' };
+}
+
+/** Group items by their current state for sub-state breakdown */
+function groupByState(items: QueueItem[]): { state: ControlPlaneState; count: number }[] {
+  const counts = new Map<ControlPlaneState, number>();
+  for (const item of items) {
+    counts.set(item.state, (counts.get(item.state) || 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([state, count]) => ({ state, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 // ── Queue Group Preview Dialog ─────────────────────────────
 
 interface QueueGroupPreview {
@@ -112,8 +141,10 @@ function QueueGroupPreviewDialog({
   if (!preview) return null;
   const cfg = CATEGORY_CONFIG[preview.category];
   const Icon = cfg.icon;
+  const risk = assessRisk(preview.category, preview.items.length);
+  const subStates = groupByState(preview.items);
 
-  // Determine dominant from → to transition
+  // Determine dominant transition
   const fromState = preview.items[0]?.state ?? 'ingested';
   const toState = preview.items[0]?.expectedNextState ?? 'has_content';
   const fromColors = CONTROL_PLANE_COLORS[fromState];
@@ -138,33 +169,71 @@ function QueueGroupPreviewDialog({
               <p className="text-xs text-foreground mt-0.5">{cfg.batchReason}</p>
             </div>
 
+            {/* Sub-state breakdown */}
+            {subStates.length > 1 && (
+              <div>
+                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Current states</span>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {subStates.map(({ state, count }) => {
+                    const c = CONTROL_PLANE_COLORS[state];
+                    return (
+                      <Badge key={state} variant="outline" className={cn('text-[9px]', c.text, c.bg, c.border)}>
+                        {count} {CONTROL_PLANE_LABELS[state]}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div>
               <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Will run</span>
               <p className="text-xs text-foreground mt-0.5 font-mono">{cfg.batchPipeline}</p>
             </div>
 
+            {/* Expected transition */}
+            {!cfg.batchIsFilter && (
+              <div>
+                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Expected transition</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="outline" className={cn('text-[10px]', fromColors.text, fromColors.bg, fromColors.border)}>
+                    {CONTROL_PLANE_LABELS[fromState]}
+                  </Badge>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <Badge variant="outline" className={cn('text-[10px]', toColors.text, toColors.bg, toColors.border)}>
+                    {CONTROL_PLANE_LABELS[toState]}
+                  </Badge>
+                </div>
+              </div>
+            )}
+
+            {/* Risk assessment */}
             <div>
-              <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Expected transition</span>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className={cn('text-[10px]', fromColors.text, fromColors.bg, fromColors.border)}>
-                  {CONTROL_PLANE_LABELS[fromState]}
-                </Badge>
-                <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                <Badge variant="outline" className={cn('text-[10px]', toColors.text, toColors.bg, toColors.border)}>
-                  {CONTROL_PLANE_LABELS[toState]}
-                </Badge>
+              <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Risk</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Shield className={cn('h-3 w-3', {
+                  'text-emerald-600': risk.level === 'low',
+                  'text-amber-600': risk.level === 'moderate',
+                  'text-destructive': risk.level === 'review',
+                })} />
+                <p className="text-xs text-foreground">{risk.label}</p>
               </div>
             </div>
 
+            {/* Sample resources */}
             <div>
               <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Resources</span>
               <ul className="mt-1 space-y-0.5">
-                {preview.items.slice(0, 5).map((item, i) => (
-                  <li key={i} className="text-xs text-muted-foreground truncate">• {item.title}</li>
+                {preview.items.slice(0, 4).map((item, i) => (
+                  <li key={i} className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                    <span>•</span>
+                    <span className="truncate">{item.title}</span>
+                    <span className="text-[9px] text-muted-foreground/60 shrink-0">({CONTROL_PLANE_LABELS[item.state]})</span>
+                  </li>
                 ))}
-                {preview.items.length > 5 && (
+                {preview.items.length > 4 && (
                   <li className="text-[10px] text-muted-foreground/70 italic">
-                    …and {preview.items.length - 5} more
+                    …and {preview.items.length - 4} more
                   </li>
                 )}
               </ul>
@@ -174,7 +243,9 @@ function QueueGroupPreviewDialog({
         <AlertDialogFooter>
           <AlertDialogCancel className="text-xs h-8" disabled={loading}>Cancel</AlertDialogCancel>
           <AlertDialogAction className="text-xs h-8" onClick={onConfirm} disabled={loading}>
-            {loading ? 'Running…' : `Run on ${preview.items.length} resources`}
+            {loading ? 'Running…' : cfg.batchIsFilter
+              ? `Show ${preview.items.length} in table`
+              : `Run on ${preview.items.length} resources`}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -191,6 +262,8 @@ interface Props {
   onAction: (resourceId: string, action: string) => void;
   onInspect: (resourceId: string) => void;
   onBatchCategoryAction?: (ids: string[], action: string, category: Category, items: QueueItem[]) => void;
+  /** Filter table to show specific resource IDs (used for "Filter & Inspect") */
+  onFilterToIds?: (ids: Set<string>, label: string) => void;
   batchLoading?: boolean;
 }
 
@@ -198,7 +271,7 @@ export type { Category as QueueCategory, QueueItem };
 
 export function NeedsAttentionQueue({
   resources, processingIds, outcomeRefreshKey,
-  onAction, onInspect, onBatchCategoryAction, batchLoading,
+  onAction, onInspect, onBatchCategoryAction, onFilterToIds, batchLoading,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [previewState, setPreviewState] = useState<QueueGroupPreview | null>(null);
@@ -278,12 +351,33 @@ export function NeedsAttentionQueue({
   if (totalCount === 0) return null;
 
   const handleBatchClick = (cat: Category, items: QueueItem[]) => {
+    const cfg = CATEGORY_CONFIG[cat];
+    // Filter-only categories skip preview and go straight to table
+    if (cfg.batchIsFilter && onFilterToIds) {
+      onFilterToIds(new Set(items.map(i => i.id)), `${items.length} ${cfg.label.toLowerCase()}`);
+      return;
+    }
     setPreviewState({ category: cat, items });
     setPreviewOpen(true);
   };
 
   const handlePreviewConfirm = () => {
-    if (!previewState || !onBatchCategoryAction) return;
+    if (!previewState) return;
+    const cfg = CATEGORY_CONFIG[previewState.category];
+
+    // Filter-based actions
+    if (cfg.batchIsFilter && onFilterToIds) {
+      onFilterToIds(
+        new Set(previewState.items.map(i => i.id)),
+        `${previewState.items.length} ${cfg.label.toLowerCase()}`,
+      );
+      setPreviewOpen(false);
+      setPreviewState(null);
+      return;
+    }
+
+    // Pipeline actions
+    if (!onBatchCategoryAction) return;
     const action = categoryToAction(previewState.category);
     onBatchCategoryAction(
       previewState.items.map(i => i.id),
@@ -345,16 +439,17 @@ export function NeedsAttentionQueue({
                       </div>
                       <p className="text-[9px] text-muted-foreground mt-0.5 pl-[18px]">{cfg.hint}</p>
                     </div>
-                    {onBatchCategoryAction && items.length > 1 && (
+                    {(onBatchCategoryAction || onFilterToIds) && items.length > 1 && (
                       <button
                         onClick={() => handleBatchClick(cat, items)}
                         disabled={batchLoading}
                         className={cn(
-                          'text-[9px] font-medium px-2 py-0.5 rounded border border-current/20 hover:bg-muted transition-colors',
+                          'text-[9px] font-medium px-2 py-0.5 rounded border border-current/20 hover:bg-muted transition-colors flex items-center gap-1',
                           batchLoading ? 'opacity-50 cursor-not-allowed' : '',
                           cfg.color,
                         )}
                       >
+                        {cfg.batchIsFilter && <Filter className="h-2.5 w-2.5" />}
                         {cfg.batchLabel}
                       </button>
                     )}
