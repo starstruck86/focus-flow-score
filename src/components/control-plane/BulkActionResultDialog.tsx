@@ -130,7 +130,7 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
             {/* Reconciliation summary */}
             {(outcome.confirmed > 0 || outcome.partial > 0 || outcome.mismatched > 0) && (
               <div>
-                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Reconciliation</span>
+                <span className="text-[10px] font-medium text-muted-foreground">Reconciliation</span>
                 <div className="mt-1 grid grid-cols-3 gap-2">
                   <Stat icon={ShieldCheck} label="Confirmed" value={outcome.confirmed} color="text-emerald-600" />
                   <Stat icon={AlertTriangle} label="Partial" value={outcome.partial} color="text-amber-600" />
@@ -142,7 +142,7 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
             {/* State transitions */}
             {outcome.transitions.length > 0 && (
               <div>
-                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Transitions achieved</span>
+                <span className="text-[10px] font-medium text-muted-foreground">State transitions</span>
                 <div className="mt-1 space-y-1">
                   {outcome.transitions.map((t, i) => {
                     const fromC = CONTROL_PLANE_COLORS[t.from];
@@ -168,7 +168,7 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
             {outcome.stillNeedAttention.length > 0 && (
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">
+                  <span className="text-[10px] font-medium text-muted-foreground">
                     Still need attention ({outcome.stillNeedAttention.length})
                   </span>
                   {onFilterAttention && (
