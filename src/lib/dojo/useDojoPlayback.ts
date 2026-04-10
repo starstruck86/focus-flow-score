@@ -278,6 +278,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
 
       const snap: ControllerSnapshot = JSON.parse(raw);
       const result = recoverSession(snap);
+      metricsRef.current = logRecovery(metricsRef.current, `refresh_recovery:${sessionId}`);
       handleTransportEvent(result);
       return true;
     } catch {
@@ -290,6 +291,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
       clearInterval(watchdogRef.current);
       watchdogRef.current = null;
     }
+    logSessionSummary(metricsRef.current);
+    metricsRef.current = createMetrics();
     destroyTransport(handleRef.current);
     handleRef.current = createTransportHandle();
     ctrlRef.current = null;
