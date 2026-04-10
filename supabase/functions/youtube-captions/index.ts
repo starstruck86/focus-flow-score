@@ -23,13 +23,9 @@ function extractVideoId(url: string): string | null {
   }
 }
 
-// ── Fetch player response by scraping watch page HTML ──────
-// The innertube API returns UNPLAYABLE from server environments,
-// so we fetch the watch page and extract ytInitialPlayerResponse.
-async function fetchPlayerResponse(videoId: string): Promise<any> {
+// ── Fetch watch page and extract data ──────────────────────
+async function fetchWatchPageData(videoId: string): Promise<{ playerResponse: any; html: string }> {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  // Try multiple approaches to get the watch page with full player response
-  // YouTube may serve consent pages from EU — use bot-like headers and consent cookie
   const headers: Record<string, string> = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9",
@@ -37,60 +33,123 @@ async function fetchPlayerResponse(videoId: string): Promise<any> {
     "Cookie": "CONSENT=PENDING+987; SOCS=CAESEwgDEgk2NjI1MjcyNjAaAmVuIAEaBgiA_L2aBg",
   };
 
-  let resp = await fetch(watchUrl, { headers, redirect: "follow" });
-
-  if (!resp.ok) {
-    throw new Error(`Watch page fetch failed: ${resp.status}`);
-  }
+  const resp = await fetch(watchUrl, { headers, redirect: "follow" });
+  if (!resp.ok) throw new Error(`Watch page fetch failed: ${resp.status}`);
 
   const html = await resp.text();
   console.log(`[youtube-captions] Watch page fetched: ${html.length} chars`);
 
-  // Extract ytInitialPlayerResponse — find the JSON by tracking brace depth
-  const startMarker = "ytInitialPlayerResponse = ";
-  const startIdx = html.indexOf(startMarker);
-  if (startIdx === -1) {
-    throw new Error("Could not find ytInitialPlayerResponse in watch page");
-  }
+  const playerResponse = extractJsonVar(html, "ytInitialPlayerResponse");
+  if (!playerResponse) throw new Error("Could not find ytInitialPlayerResponse in watch page");
 
-  // Extract JSON using semicolon-based boundary detection
-  // ytInitialPlayerResponse ends with `};` — find the matching end
+  return { playerResponse, html };
+}
+
+function extractJsonVar(html: string, varName: string): any | null {
+  const startMarker = `${varName} = `;
+  const startIdx = html.indexOf(startMarker);
+  if (startIdx === -1) return null;
+
   const jsonStart = startIdx + startMarker.length;
-  
-  // Find the end by looking for the pattern `;\nvar ` or `};` at depth 0
-  // Use a simpler approach: find `var ytInitialData` or end-of-script which comes after
   const endMarkers = [";\nvar ", ";var ", ";</script>"];
-  let jsonEnd = -1;
   for (const marker of endMarkers) {
-    // Search from a reasonable offset (player response is usually 50k-500k chars)
     let searchFrom = jsonStart + 1000;
-    while (searchFrom < html.length && searchFrom < jsonStart + 1_000_000) {
+    while (searchFrom < html.length && searchFrom < jsonStart + 2_000_000) {
       const idx = html.indexOf(marker, searchFrom);
       if (idx === -1) break;
-      // Try to parse from jsonStart to idx
-      const candidate = html.slice(jsonStart, idx);
       try {
-        JSON.parse(candidate);
-        jsonEnd = idx;
-        break;
+        return JSON.parse(html.slice(jsonStart, idx));
       } catch {
         searchFrom = idx + 1;
       }
     }
-    if (jsonEnd > 0) break;
+  }
+  return null;
+}
+
+// ── Extract transcript params from ytInitialData ──────────
+function extractTranscriptParams(html: string): string | null {
+  const initialData = extractJsonVar(html, "ytInitialData");
+  if (!initialData) {
+    console.log(`[youtube-captions] Could not find ytInitialData`);
+    return null;
   }
 
-  if (jsonEnd <= 0) {
-    throw new Error("Could not find end of ytInitialPlayerResponse JSON");
+  const panels = initialData?.engagementPanels;
+  if (!Array.isArray(panels)) {
+    console.log(`[youtube-captions] No engagement panels found`);
+    return null;
   }
 
-  const jsonStr = html.slice(jsonStart, jsonEnd);
-  console.log(`[youtube-captions] Extracted JSON: ${jsonStr.length} chars`);
-  try {
-    return JSON.parse(jsonStr);
-  } catch (e) {
-    throw new Error(`Failed to parse player response JSON: ${(e as Error).message}`);
+  for (const panel of panels) {
+    const renderer = panel?.engagementPanelSectionListRenderer;
+    const panelId = renderer?.panelIdentifier;
+    if (panelId === "engagement-panel-searchable-transcript") {
+      const content = renderer?.content?.continuationItemRenderer?.continuationEndpoint?.getTranscriptEndpoint?.params;
+      if (content) {
+        console.log(`[youtube-captions] Found transcript params: ${content.slice(0, 50)}...`);
+        return content;
+      }
+    }
   }
+  console.log(`[youtube-captions] No transcript panel found in ${panels.length} panels`);
+  return null;
+}
+
+// ── Fetch transcript via innertube get_transcript ──────────
+async function fetchTranscriptViaInnertube(params: string): Promise<string> {
+  const url = "https://www.youtube.com/youtubei/v1/get_transcript?prettyPrint=false";
+  const payload = {
+    context: {
+      client: {
+        clientName: "WEB",
+        clientVersion: "2.20250401.00.00",
+      }
+    },
+    params,
+  };
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Cookie": "CONSENT=PENDING+987; SOCS=CAESEwgDEgk2NjI1MjcyNjAaAmVuIAEaBgiA_L2aBg",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!resp.ok) {
+    console.log(`[youtube-captions] innertube get_transcript status: ${resp.status}`);
+    return "";
+  }
+
+  const data = await resp.json();
+  console.log(`[youtube-captions] innertube response keys: ${Object.keys(data).join(", ")}`);
+
+  const actions = data?.actions;
+  if (!Array.isArray(actions)) return "";
+
+  const lines: string[] = [];
+  for (const action of actions) {
+    const panelContent = action?.updateEngagementPanelAction?.content;
+    const transcriptRenderer = panelContent?.transcriptRenderer;
+    const body = transcriptRenderer?.content?.transcriptSearchPanelRenderer?.body?.transcriptSegmentListRenderer?.initialSegments;
+    
+    if (Array.isArray(body)) {
+      for (const segment of body) {
+        const text = segment?.transcriptSegmentRenderer?.snippet?.runs;
+        if (Array.isArray(text)) {
+          const segmentText = text.map((r: any) => r.text || "").join("");
+          if (segmentText.trim()) lines.push(segmentText.trim());
+        }
+      }
+    }
+  }
+
+  const transcript = lines.join(" ").replace(/\s+/g, " ").trim();
+  console.log(`[youtube-captions] innertube transcript: ${transcript.length} chars, ${lines.length} segments`);
+  return transcript;
 }
 
 // ── Caption track extraction ──────────────────────────────
