@@ -1,5 +1,5 @@
 /**
- * Dojo Session Snapshot — Crash-safe persistence for Sales Dojo coaching delivery.
+ * Dojo Session Snapshot v2 — Crash-safe persistence for Sales Dojo coaching delivery.
  *
  * Versioned snapshot schema ensures forward/backward compatibility.
  * Stored in localStorage (survives refresh + crash, unlike sessionStorage).
@@ -17,7 +17,22 @@ import type { DeliveryMode, AudioControllerState } from './dojoAudioController';
 // ── Schema version ─────────────────────────────────────────────────
 
 /** Bump this when the snapshot shape changes in a breaking way. */
-const SNAPSHOT_VERSION = 2;
+const SNAPSHOT_VERSION = 3;
+
+/** Max age for a snapshot to be considered valid (2 hours). */
+const MAX_SNAPSHOT_AGE_MS = 2 * 60 * 60 * 1000;
+
+// ── Restore reason codes ───────────────────────────────────────────
+
+export type RestoreReason =
+  | 'crash_recovery'
+  | 'refresh_recovery'
+  | 'rejected_corrupt'
+  | 'rejected_version_mismatch'
+  | 'rejected_stale'
+  | 'rejected_owner_conflict'
+  | 'resumed_voice'
+  | 'resumed_text_fallback';
 
 // ── Snapshot shape ─────────────────────────────────────────────────
 
@@ -37,11 +52,8 @@ export interface SessionSnapshot {
   totalChunks: number;
 
   // ── Exact-once tracking ──
-  /** Chunk IDs that have been fully delivered (voice or text). */
   completedChunkIds: string[];
-  /** Chunk IDs that were intentionally replayed (separate from normal delivery). */
   replayedChunkIds: string[];
-  /** Chunk IDs that were intentionally skipped. */
   skippedChunkIds: string[];
 
   // ── Attempt tracking ──
@@ -90,8 +102,8 @@ export function saveSnapshot(
       currentChunkIndex: ctrl.dojo.currentChunkIndex,
       totalChunks: ctrl.dojo.chunks.length,
       completedChunkIds: Array.from(ctrl.completedChunkIds),
-      replayedChunkIds: opts.replayedChunkIds ?? [],
-      skippedChunkIds: opts.skippedChunkIds ?? [],
+      replayedChunkIds: opts.replayedChunkIds ?? Array.from(ctrl.replayedChunkIds),
+      skippedChunkIds: opts.skippedChunkIds ?? Array.from(ctrl.skippedChunkIds),
       chunkAttempts: Array.from(ctrl.chunkAttempts.entries()),
       phase: ctrl.dojo.phase,
       postDeliveryPhase: ctrl.dojo.postDeliveryPhase,
@@ -109,8 +121,8 @@ export function saveSnapshot(
 // ── Load ───────────────────────────────────────────────────────────
 
 export type SnapshotLoadResult =
-  | { ok: true; snapshot: SessionSnapshot }
-  | { ok: false; reason: 'not_found' | 'version_mismatch' | 'corrupt' };
+  | { ok: true; snapshot: SessionSnapshot; restoreReason: RestoreReason }
+  | { ok: false; reason: 'not_found' | 'version_mismatch' | 'corrupt' | 'stale' };
 
 export function loadSnapshot(sessionId: string): SnapshotLoadResult {
   try {
@@ -125,6 +137,15 @@ export function loadSnapshot(sessionId: string): SnapshotLoadResult {
       return { ok: false, reason: 'version_mismatch' };
     }
 
+    // Staleness check
+    if (parsed.savedAt) {
+      const age = Date.now() - new Date(parsed.savedAt).getTime();
+      if (age > MAX_SNAPSHOT_AGE_MS) {
+        clearSnapshot(sessionId);
+        return { ok: false, reason: 'stale' };
+      }
+    }
+
     // Minimal structural validation
     if (
       !parsed.sessionId ||
@@ -135,7 +156,11 @@ export function loadSnapshot(sessionId: string): SnapshotLoadResult {
       return { ok: false, reason: 'corrupt' };
     }
 
-    return { ok: true, snapshot: parsed as SessionSnapshot };
+    const restoreReason: RestoreReason = parsed.isSessionDegraded
+      ? 'resumed_text_fallback'
+      : 'crash_recovery';
+
+    return { ok: true, snapshot: parsed as SessionSnapshot, restoreReason };
   } catch {
     clearSnapshot(sessionId);
     return { ok: false, reason: 'corrupt' };
@@ -150,6 +175,20 @@ export function clearSnapshot(sessionId: string): void {
   } catch { /* noop */ }
 }
 
+// ── Snapshot age query ─────────────────────────────────────────────
+
+export function getSnapshotAge(sessionId: string): number | null {
+  try {
+    const raw = localStorage.getItem(storageKey(sessionId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<SessionSnapshot>;
+    if (!parsed.savedAt) return null;
+    return Date.now() - new Date(parsed.savedAt).getTime();
+  } catch {
+    return null;
+  }
+}
+
 // ── Restore to controller state ────────────────────────────────────
 
 /**
@@ -158,6 +197,9 @@ export function clearSnapshot(sessionId: string): void {
  * INVARIANT: chunkStartedAt is always null after restore.
  * Any chunk that was "requested but not completed" before crash
  * will be retried from scratch.
+ *
+ * INVARIANT: currentPlayingChunkId is always null after restore.
+ * We never assume that "requested audio" means "audible audio."
  *
  * INVARIANT: If the snapshot is ambiguous (e.g., phase is delivering
  * but no chunks remain), we fail safe to text_fallback.
