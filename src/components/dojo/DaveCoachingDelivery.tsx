@@ -145,6 +145,15 @@ export default function DaveCoachingDelivery({
 
     if (d.kind === 'delivery_complete' && !deliveryCompleteRef.current) {
       deliveryCompleteRef.current = true;
+
+      // Persist audio metrics to dojo_sessions
+      const summary = summarizeSession(playback.metrics);
+      supabase
+        .from('dojo_sessions')
+        .update({ audio_metrics: summary as unknown as Record<string, unknown> })
+        .eq('id', sessionId)
+        .then(() => {});
+
       onDeliveryComplete?.();
     }
   }, [playback.lastDirective, playback.isPlaying, playback.deliveryMode, onDeliveryComplete]);
