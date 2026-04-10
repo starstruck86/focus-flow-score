@@ -54,6 +54,7 @@ interface Props {
   outcomeRefreshKey: number;
   onAction: (resourceId: string, action: string) => void;
   onInspect: (resourceId: string) => void;
+  onBatchCategoryAction?: (ids: string[], action: string) => void;
 }
 
 export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKey, onAction, onInspect }: Props) {
