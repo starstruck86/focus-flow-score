@@ -57,7 +57,7 @@ interface Props {
   onBatchCategoryAction?: (ids: string[], action: string) => void;
 }
 
-export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKey, onAction, onInspect }: Props) {
+export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKey, onAction, onInspect, onBatchCategoryAction }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const { grouped, totalCount, categoryCounts } = useMemo(() => {
