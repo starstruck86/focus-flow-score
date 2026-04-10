@@ -3,11 +3,10 @@
  * Dave generates a bad answer, user identifies flaws and rewrites.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
 import { Send, Loader2, Eye, AlertTriangle } from 'lucide-react';
 import type { DojoScenario } from '@/lib/dojo/scenarios';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,10 +17,18 @@ import { normalizeScoreResult } from '@/lib/dojo/types';
 
 type ReviewPhase = 'loading' | 'diagnose' | 'rewrite' | 'scoring';
 
+/** Extended result that includes review-specific scores */
+export interface ReviewScoreResult extends DojoScoreResult {
+  diagnosisScore?: number;
+  rewriteScore?: number;
+  diagnosisFeedback?: string;
+  rewriteFeedback?: string;
+}
+
 interface Props {
   scenario: DojoScenario;
   userId: string;
-  onComplete: (result: DojoScoreResult & { diagnosisScore?: number; rewriteScore?: number; diagnosisFeedback?: string; rewriteFeedback?: string }) => void;
+  onComplete: (result: ReviewScoreResult) => void;
 }
 
 export default function DojoReview({ scenario, userId, onComplete }: Props) {
@@ -32,7 +39,6 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
   const [diagnosis, setDiagnosis] = useState('');
   const [rewrite, setRewrite] = useState('');
 
-  // Generate weak response on mount
   useEffect(() => {
     const generate = async () => {
       try {
@@ -55,7 +61,6 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
         setPhase('diagnose');
       } catch (e) {
         console.error('Generate weak response error:', e);
-        // Fallback
         setWeakResponse("I totally understand your concern. We actually have a lot of great features that address that. Our platform is used by hundreds of companies and they all love it. I'd love to set up another call to walk you through everything in detail — when works for you?");
         setPhase('diagnose');
       }
@@ -98,12 +103,32 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
       if (data?.error) throw new Error(data.error);
 
       const result = normalizeScoreResult(data as Record<string, unknown>);
+
+      // Save review session
+      try {
+        await supabase.from('dojo_sessions').insert({
+          user_id: userId,
+          mode: 'autopilot',
+          session_type: 'review',
+          skill_focus: scenario.skillFocus,
+          scenario_title: scenario.title,
+          scenario_context: scenario.context,
+          scenario_objection: scenario.objection,
+          best_score: result.score,
+          latest_score: result.score,
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        });
+      } catch (saveErr) {
+        console.error('Failed to save review session:', saveErr);
+      }
+
       onComplete({
         ...result,
-        diagnosisScore: data.diagnosisScore,
-        rewriteScore: data.rewriteScore,
-        diagnosisFeedback: data.diagnosisFeedback,
-        rewriteFeedback: data.rewriteFeedback,
+        diagnosisScore: typeof data.diagnosisScore === 'number' ? data.diagnosisScore : undefined,
+        rewriteScore: typeof data.rewriteScore === 'number' ? data.rewriteScore : undefined,
+        diagnosisFeedback: typeof data.diagnosisFeedback === 'string' ? data.diagnosisFeedback : undefined,
+        rewriteFeedback: typeof data.rewriteFeedback === 'string' ? data.rewriteFeedback : undefined,
       });
     } catch (e) {
       console.error('Score review error:', e);
@@ -132,7 +157,6 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Weak response to critique */}
       <Card className="border-red-500/20 bg-red-500/5">
         <CardContent className="p-4 space-y-2">
           <div className="flex items-center gap-1.5">
@@ -183,7 +207,6 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-3"
         >
-          {/* Show their diagnosis */}
           <Card className="border-border/40">
             <CardContent className="p-3">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Your Diagnosis</p>

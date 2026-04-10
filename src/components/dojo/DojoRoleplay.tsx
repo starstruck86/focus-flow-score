@@ -7,7 +7,6 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Send, Loader2, MessageSquare, User } from 'lucide-react';
 import type { DojoScenario } from '@/lib/dojo/scenarios';
@@ -17,9 +16,8 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import type { DojoScoreResult } from '@/lib/dojo/types';
 import { normalizeScoreResult } from '@/lib/dojo/types';
-import type { Json } from '@/integrations/supabase/types';
 
-interface ConversationMessage {
+export interface ConversationMessage {
   role: 'buyer' | 'rep';
   content: string;
 }
@@ -27,7 +25,7 @@ interface ConversationMessage {
 interface Props {
   scenario: DojoScenario;
   userId: string;
-  onComplete: (result: DojoScoreResult, conversation: ConversationMessage[]) => void;
+  onComplete: (result: DojoScoreResult) => void;
 }
 
 const MAX_TURNS = 5;
@@ -63,13 +61,11 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
 
     const newTurnCount = updated.filter(m => m.role === 'rep').length;
 
-    // If we've hit max turns, score immediately
     if (newTurnCount >= MAX_TURNS) {
       await scoreConversation(updated);
       return;
     }
 
-    // Get buyer response
     setIsThinking(true);
     try {
       const { data, error } = await supabase.functions.invoke('playbook-roleplay', {
@@ -85,7 +81,6 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
 
       if (error) throw error;
 
-      // Handle streaming response
       let buyerResponse = '';
       if (typeof data === 'string') {
         buyerResponse = data;
@@ -95,7 +90,6 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
         buyerResponse = String(data);
       }
 
-      // Clean up SSE artifacts if present
       buyerResponse = buyerResponse
         .replace(/data:\s*\{[^}]*"content":"([^"]*)"/g, '$1')
         .replace(/data:\s*\[DONE\]/g, '')
@@ -106,7 +100,6 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
       setConversation(prev => [...prev, { role: 'buyer', content: buyerResponse }]);
     } catch (e) {
       console.error('Buyer response error:', e);
-      // Fallback buyer response
       setConversation(prev => [...prev, { role: 'buyer', content: "Hmm, interesting. But I'm still not sure this is the right move for us right now." }]);
     } finally {
       setIsThinking(false);
@@ -132,7 +125,27 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
       if (data?.error) throw new Error(data.error);
 
       const result = normalizeScoreResult(data as Record<string, unknown>);
-      onComplete(result, conv);
+
+      // Save roleplay session
+      try {
+        await supabase.from('dojo_sessions').insert({
+          user_id: userId,
+          mode: 'autopilot',
+          session_type: 'roleplay',
+          skill_focus: scenario.skillFocus,
+          scenario_title: scenario.title,
+          scenario_context: scenario.context,
+          scenario_objection: scenario.objection,
+          best_score: result.score,
+          latest_score: result.score,
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        });
+      } catch (saveErr) {
+        console.error('Failed to save roleplay session:', saveErr);
+      }
+
+      onComplete(result);
     } catch (e) {
       console.error('Scoring error:', e);
       toast.error('Failed to score roleplay');
@@ -157,7 +170,6 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
 
   return (
     <div className="space-y-3">
-      {/* Conversation */}
       <div ref={scrollRef} className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
         {conversation.map((msg, i) => (
           <motion.div
@@ -203,7 +215,6 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
         )}
       </div>
 
-      {/* Progress */}
       <div className="flex items-center justify-between px-1">
         <span className="text-[10px] text-muted-foreground">Turn {turnCount}/{MAX_TURNS}</span>
         {turnCount >= MIN_TURNS && (
@@ -213,7 +224,6 @@ export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
         )}
       </div>
 
-      {/* Input */}
       <Textarea
         ref={textareaRef}
         value={input}

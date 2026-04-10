@@ -1,16 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { SkillFocus } from './scenarios';
+import type { SkillFocus, SkillStat } from './scenarios';
 
-export interface SkillStat {
-  skill: SkillFocus;
-  count: number;
-  avgScore: number;
-  /** Average score of first attempts only (turn_index = 0) */
-  avgFirstAttempt: number;
-  recentFirstAttempts: number[];
-}
+export type { SkillStat };
 
 export interface DojoStats {
   totalSessions: number;
@@ -27,7 +20,6 @@ export function useDojoStats() {
     queryKey: ['dojo-stats', user?.id],
     enabled: !!user?.id,
     queryFn: async (): Promise<DojoStats> => {
-      // Fetch sessions + first-attempt turns in parallel
       const [sessionsRes, turnsRes] = await Promise.all([
         supabase
           .from('dojo_sessions')
@@ -105,7 +97,7 @@ export function useDojoStats() {
       }
 
       const skillBreakdown: SkillStat[] = Array.from(bySkill.entries()).map(([skill, data]) => {
-        const recentFirst = data.firstAttemptScores.slice(0, 10); // last 10
+        const recentFirst = data.firstAttemptScores.slice(0, 10);
         return {
           skill,
           count: data.total,
