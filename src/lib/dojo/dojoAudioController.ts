@@ -198,7 +198,8 @@ export function onUserInterrupted(ctrl: AudioControllerState): ControllerResult 
   }
 
   // Not currently playing — just cancel delivery if in progress
-  const dojo = cancelDelivery(ctrl.dojo) as PlaybackState;
+  const base = cancelDelivery(ctrl.dojo);
+  const dojo: PlaybackState = { ...base, playback: ctrl.dojo.playback };
   return {
     state: { ...ctrl, dojo, chunkStartedAt: null },
     directive: { kind: 'no_op', reason: 'interrupted_idle' },
