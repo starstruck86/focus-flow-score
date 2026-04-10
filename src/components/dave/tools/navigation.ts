@@ -42,11 +42,17 @@ export function createNavigationTools(ctx: ToolContext): ToolMap {
     },
 
     start_drill: () => {
-      ctx.navigate('/coach');
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('voice-start-drill'));
-      }, 500);
-      return 'Opening objection drills';
+      ctx.navigate('/dojo');
+      return 'Opening the Dojo — pick your rep or I\'ll choose one for you.';
+    },
+
+    start_training: (params: { skill?: string }) => {
+      if (params?.skill) {
+        ctx.navigate('/dojo/session', { state: { skillFocus: params.skill, mode: 'custom' } });
+        return `Starting ${params.skill} drill in the Dojo.`;
+      }
+      ctx.navigate('/dojo');
+      return 'Opening the Dojo — let\'s get a rep in.';
     },
 
     grade_call: () => {

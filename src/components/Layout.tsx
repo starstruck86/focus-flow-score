@@ -47,6 +47,7 @@ const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/coach': { page: 'coach', description: 'Sales Coach — call analysis, roleplay, and skill development' },
   '/trends': { page: 'trends', description: 'Trends — performance trends and analytics over time' },
   '/quota': { page: 'quota', description: 'Quota — quota attainment, commission, and pipeline math' },
+  '/dojo': { page: 'dojo', description: 'Sales Dojo — Dave-led training drills, scoring, and skill practice' },
   '/settings': { page: 'settings', description: 'Settings — app configuration and preferences' },
 };
 
