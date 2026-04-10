@@ -87,17 +87,16 @@ export function auditImpossibleExtractionStates(
       violations.push(v);
     }
 
-    // INVARIANT: ki_count > 0 → stage must not be 'tagged' (which means "has tags but 0 KIs")
-    // This is a softer violation — the stage derivation should prevent it,
-    // but if stale data sneaks through, catch it here.
-    if (r.knowledge_item_count > 0 && r.canonical_stage === 'tagged') {
+    // INVARIANT: ki_count > 0 → stage must not remain in a pre-extraction state
+    // such states are what power "Needs Extraction" counts/views.
+    if (r.knowledge_item_count > 0 && ['content_ready', 'tagged', 'uploaded'].includes(r.canonical_stage)) {
       const v: ImpossibleStateViolation = {
         resourceId: r.resource_id,
         title: r.title,
         violation: 'ki_count_positive_but_needs_extraction',
         kiCount: r.knowledge_item_count,
         staleField: 'canonical_stage',
-        staleValue: 'tagged',
+        staleValue: r.canonical_stage,
         correctedAt: now,
       };
       violations.push(v);
