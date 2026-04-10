@@ -667,15 +667,23 @@ Deno.serve(async (req) => {
         // STEP 2c: Tactic extraction
         if (routes.includes('tactic')) {
           try {
+            const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
             const extractRes = await fetch(
               `${Deno.env.get('SUPABASE_URL')}/functions/v1/extract-tactics`,
               {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${serviceRoleKey}`,
+                  'x-batch-key': serviceRoleKey,
+                },
                 body: JSON.stringify({
                   title: resource.title, content: content.slice(0, resource.resource_type === 'transcript' ? 60000 : 12000),
                   description: resource.description, tags: resource.tags,
                   resourceType: resource.resource_type,
+                  resourceId: resource.id,
+                  userId,
+                  persist: true,
                   strict: strictMode,
                 }),
               }
