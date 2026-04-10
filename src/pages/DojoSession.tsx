@@ -159,7 +159,7 @@ export default function DojoSession() {
                 feedback: scoreData.feedback,
                 top_mistake: scoreData.topMistake,
                 improved_version: scoreData.improvedVersion,
-                score_json: scoreData as unknown as Record<string, unknown>,
+                score_json: scoreData as unknown as Record<string, unknown> as import('@/integrations/supabase/types').Json,
               })
               .select('id')
               .single();
@@ -195,7 +195,7 @@ export default function DojoSession() {
                 feedback: scoreData.feedback,
                 top_mistake: scoreData.topMistake,
                 improved_version: scoreData.improvedVersion,
-                score_json: scoreData as unknown as Record<string, unknown>,
+                score_json: scoreData as unknown as Record<string, unknown> as import('@/integrations/supabase/types').Json,
                 retry_of_turn_id: firstTurnId,
               });
           }
