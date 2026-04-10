@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import {
   ArrowLeft, Send, RotateCcw, Loader2, Target, AlertTriangle,
   CheckCircle2, Lightbulb, Swords, ChevronRight, Crown, Sparkles,
-  Crosshair, ListOrdered, MessageCircle,
+  Crosshair, ListOrdered, MessageCircle, GraduationCap,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,6 +31,7 @@ interface ScoreResult {
   focusPattern?: string;
   focusReason?: string;
   practiceCue?: string;
+  teachingNote?: string;
 }
 
 const FOCUS_PATTERN_LABELS: Record<string, string> = {
@@ -375,7 +376,7 @@ export default function DojoSession() {
                 </p>
               </div>
 
-              {/* ── Side-by-side comparison ── */}
+              {/* ── Response Comparison ── */}
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
                   Compare Responses
@@ -411,10 +412,10 @@ export default function DojoSession() {
 
                 {/* World-class response */}
                 {currentResult.worldClassResponse && (
-                  <Card className="border-primary/30 bg-primary/5">
-                    <CardContent className="p-3 space-y-2">
+                  <Card className="border-primary/30 bg-primary/5 shadow-sm">
+                    <CardContent className="p-4 space-y-3">
                       <div className="flex items-center gap-1.5">
-                        <Crown className="h-3.5 w-3.5 text-primary" />
+                        <Crown className="h-4 w-4 text-primary" />
                         <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">
                           World-Class Standard
                         </p>
@@ -423,19 +424,18 @@ export default function DojoSession() {
                         "{currentResult.worldClassResponse}"
                       </p>
 
-
                       {/* Why it works */}
                       {currentResult.whyItWorks && currentResult.whyItWorks.length > 0 && (
-                        <div className="pt-1.5 border-t border-primary/10 space-y-1">
+                        <div className="pt-2 border-t border-primary/10 space-y-1.5">
                           <div className="flex items-center gap-1">
                             <Sparkles className="h-3 w-3 text-primary/70" />
                             <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
-                              Why it works
+                              Why It Works
                             </p>
                           </div>
-                          <ul className="space-y-0.5">
+                          <ul className="space-y-1">
                             {currentResult.whyItWorks.map((bullet, i) => (
-                              <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                              <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground leading-relaxed">
                                 <span className="text-primary/50 mt-0.5 shrink-0">•</span>
                                 <span>{bullet}</span>
                               </li>
@@ -446,17 +446,17 @@ export default function DojoSession() {
 
                       {/* Move sequence */}
                       {currentResult.moveSequence && currentResult.moveSequence.length > 0 && (
-                        <div className="pt-1.5 border-t border-primary/10 space-y-1">
+                        <div className="pt-2 border-t border-primary/10 space-y-1.5">
                           <div className="flex items-center gap-1">
                             <ListOrdered className="h-3 w-3 text-primary/70" />
                             <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
                               Move Sequence
                             </p>
                           </div>
-                          <ol className="space-y-0.5">
+                          <ol className="space-y-1">
                             {currentResult.moveSequence.map((step, i) => (
                               <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                                <span className="text-primary/60 font-semibold shrink-0">{i + 1}.</span>
+                                <span className="text-primary/60 font-bold shrink-0 w-4 text-right">{i + 1}.</span>
                                 <span className="capitalize">{step}</span>
                               </li>
                             ))}
@@ -466,7 +466,7 @@ export default function DojoSession() {
 
                       {/* Pattern tags */}
                       {currentResult.patternTags && currentResult.patternTags.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-primary/10">
+                        <div className="flex flex-wrap gap-1.5 pt-2 border-t border-primary/10">
                           {currentResult.patternTags.map((tag, i) => (
                             <Badge key={i} variant="secondary" className="text-[10px] font-medium">
                               {PATTERN_TAG_LABELS[tag] || tag.replace(/_/g, ' ')}
@@ -482,7 +482,7 @@ export default function DojoSession() {
               {/* ── Focus on This Next ── */}
               {activeFocus && (
                 <Card className="border-amber-500/30 bg-amber-500/5">
-                  <CardContent className="p-3 space-y-1.5">
+                  <CardContent className="p-4 space-y-2">
                     <div className="flex items-center gap-2">
                       <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <div>
@@ -495,20 +495,30 @@ export default function DojoSession() {
                       </div>
                     </div>
                     {currentResult?.focusReason && (
-                      <p className="text-xs text-muted-foreground pl-6">
+                      <p className="text-xs text-muted-foreground pl-6 leading-relaxed">
                         {currentResult.focusReason}
                       </p>
                     )}
                     {currentResult?.practiceCue && (
-                      <div className="flex items-start gap-1.5 pl-6 pt-0.5">
+                      <div className="flex items-start gap-1.5 pl-6 pt-1">
                         <MessageCircle className="h-3 w-3 text-amber-500/70 mt-0.5 shrink-0" />
-                        <p className="text-xs font-medium text-foreground">
+                        <p className="text-xs font-medium text-foreground leading-relaxed">
                           {currentResult.practiceCue}
                         </p>
                       </div>
                     )}
                   </CardContent>
                 </Card>
+              )}
+
+              {/* ── Teaching Note (Coach's Takeaway) ── */}
+              {currentResult?.teachingNote && (
+                <div className="flex items-start gap-2.5 px-2 py-2">
+                  <GraduationCap className="h-4 w-4 text-muted-foreground/60 mt-0.5 shrink-0" />
+                  <p className="text-xs text-muted-foreground italic leading-relaxed">
+                    {currentResult.teachingNote}
+                  </p>
+                </div>
               )}
 
               {/* Actions */}
