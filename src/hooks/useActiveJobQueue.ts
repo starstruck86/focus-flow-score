@@ -89,19 +89,24 @@ export function useActiveJobQueue(): ActiveJobQueueState {
   const mountedRef = useRef(true);
 
   const fetchJobs = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.log('[ActiveJobQueue] No user id, skipping fetch');
+      return;
+    }
+
+    console.log('[ActiveJobQueue] Fetching jobs for user', user.id);
 
     // Fetch both sources in parallel
     const [bgResult, podcastResult] = await Promise.all([
       supabase
-        .from(BG_TABLE)
+        .from('background_jobs')
         .select('id, type, title, status, substatus, step_label, started_at, created_at, updated_at, progress_percent, progress_current, progress_total, error, entity_id')
         .eq('user_id', user.id)
         .in('status', ['queued', 'running', 'awaiting_review'])
         .order('created_at', { ascending: false })
         .limit(200),
       supabase
-        .from(PODCAST_TABLE)
+        .from('podcast_import_queue')
         .select('id, episode_title, status, pipeline_stage, created_at, updated_at, error_message, resource_id')
         .eq('user_id', user.id)
         .in('status', ['queued', 'processing'])
