@@ -66,34 +66,38 @@ serve(async (req) => {
           messages: [
             {
               role: "system",
-              content: `You are generating a DELIBERATELY WEAK sales response for training purposes.
+              content: `You are generating a SUBTLY FLAWED sales response for training purposes. The user will try to diagnose what's wrong, so the mistakes must require real skill to identify.
 
 SCENARIO:
 Skill: ${skillFocus}
 Context: ${scenario.context}
 Buyer says: "${scenario.objection}"
 
-Write a response that a mediocre rep would give. It should be PLAUSIBLE — something a real rep might actually say on a call. But it must contain 2-3 SPECIFIC, identifiable mistakes.
+Write a response that sounds like a REAL rep on a REAL call — someone who is trying, has decent instincts, but makes 2-3 specific mistakes that separate them from elite.
 
-IMPORTANT — make the mistakes SUBTLE enough to be instructive, not cartoonishly bad:
-- Being too generic (could be said about any product to any buyer)
-- Missing business impact (staying at feature level)
-- Losing control (not proposing a next step)
-- Pitching too early (solving before understanding)
-- Being too long/rambling (4+ sentences when 2 would do)
-- Not addressing the real concern (answering the stated objection, not the real one)
+CRITICAL RULES FOR REALISM:
+1. The response must sound NATURAL — like spoken language on a call, not written text
+2. It should sound COMPETENT on the surface — not obviously bad
+3. The mistakes must be STRUCTURAL, not cosmetic:
+   - Addressing the STATED concern but missing the REAL one (e.g., they say "timing" but mean "trust")
+   - Using proof that is GENERIC instead of SPECIFIC to this buyer's situation
+   - Asking a follow-up question but not the RIGHT follow-up question
+   - Proposing a next step but ceding CONTROL of that step to the buyer
+   - Showing knowledge but not CONNECTING it to this buyer's business impact
+   - Being responsive but not ADVANCING the conversation
+4. AVOID cartoonish mistakes like: "Our product is amazing!" / rambling nonsense / obvious feature-dumping
+5. The response should be 2-4 sentences. A mediocre rep on their best day, not their worst.
 
-The response should be 3-5 sentences, conversational tone, and feel realistic — like something you'd actually hear on a recorded sales call.
+A GOOD weak response makes you think "that's not terrible" on first read, but falls apart when you analyze what it ACTUALLY accomplishes.
 
 Respond with ONLY valid JSON:
 {
-  "weakResponse": "The deliberately flawed response (spoken language, 3-5 sentences)",
-  "hiddenMistakes": ["mistake_code_1", "mistake_code_2", "mistake_code_3"],
-  "primaryMistake": "the_main_mistake_code",
+  "weakResponse": "The subtly flawed response (2-4 sentences, natural spoken tone)",
+  "hiddenMistakes": ["mistake_code_1", "mistake_code_2"],
+  "primaryMistake": "the_main_structural_mistake",
   "mistakeExplanations": {
-    "mistake_code_1": "One sentence explaining why this is a problem in this context",
-    "mistake_code_2": "One sentence explanation",
-    "mistake_code_3": "One sentence explanation"
+    "mistake_code_1": "Why this specific choice weakens the response in THIS context",
+    "mistake_code_2": "Why this matters for THIS buyer"
   }
 }`
             },
