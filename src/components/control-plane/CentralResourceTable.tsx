@@ -198,9 +198,25 @@ export function CentralResourceTable({
       ingested: { title: 'No raw resources', hint: 'All resources have been enriched or are further along the lifecycle.' },
       conflicts: { title: 'No conflicts detected', hint: 'All lifecycle signals are consistent.' },
     };
-    const customEmpty = customFilterLabel
-      ? { title: 'No matching resources', hint: 'The resources in this filter may have moved to a different state.' }
-      : null;
+
+    // Custom filter empty states — match by label keywords
+    let customEmpty: { title: string; hint: string } | null = null;
+    if (customFilterLabel) {
+      if (customFilterLabel.includes('Grounding-Ready')) {
+        customEmpty = { title: 'No grounding-ready resources yet', hint: 'Resources need active KIs, usage contexts, and no blockers to qualify.' };
+      } else if (customFilterLabel.includes('Active KIs')) {
+        customEmpty = { title: 'No resources with active KIs', hint: 'Run Extract on resources with content to generate knowledge items.' };
+      } else if (customFilterLabel.includes('With Contexts')) {
+        customEmpty = { title: 'No resources with contexts yet', hint: 'Add usage contexts to extracted knowledge items to reach this stage.' };
+      } else if (customFilterLabel.includes('mismatched')) {
+        customEmpty = { title: 'No mismatched resources', hint: 'All recent actions landed in the expected state — reconciliation passed.' };
+      } else if (customFilterLabel.includes('attention')) {
+        customEmpty = { title: 'All clear after last batch', hint: 'Every resource from the last action moved forward successfully.' };
+      } else {
+        customEmpty = { title: 'No matching resources', hint: 'These resources may have advanced to a different state since the filter was set.' };
+      }
+    }
+
     const msg = customEmpty ?? emptyMessages[filter] ?? { title: 'No resources match', hint: 'Try a different filter or clear the current one.' };
     return (
       <div className="text-center py-10 space-y-1">
