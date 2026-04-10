@@ -160,18 +160,27 @@ function parseSrv3Json(json: string): string {
   return "";
 }
 
+const captionFetchHeaders: Record<string, string> = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Cookie": "CONSENT=PENDING+987; SOCS=CAESEwgDEgk2NjI1MjcyNjAaAmVuIAEaBgiA_L2aBg",
+};
+
 async function fetchAndParseCaptions(captionUrl: string): Promise<string> {
-  // Strategy 1: Default XML format (most reliable)
+  // Strategy 1: Default XML format with proper headers
   try {
-    const resp = await fetch(captionUrl);
+    const resp = await fetch(captionUrl, { headers: captionFetchHeaders });
     if (resp.ok) {
       const text = await resp.text();
-      console.log(`[youtube-captions] Default format response: ${text.length} chars, starts with: ${text.slice(0, 100)}`);
+      console.log(`[youtube-captions] Default format response: ${text.length} chars, starts with: ${text.slice(0, 200)}`);
       const parsed = parseXmlCaptions(text);
       if (parsed.length > 50) {
         console.log(`[youtube-captions] XML parse success: ${parsed.length} chars`);
         return parsed;
       }
+      // Try as JSON too
+      const jsonParsed = parseSrv3Json(text);
+      if (jsonParsed.length > 50) return jsonParsed;
     }
   } catch (e) {
     console.log(`[youtube-captions] Default format failed: ${(e as Error).message}`);
@@ -181,16 +190,12 @@ async function fetchAndParseCaptions(captionUrl: string): Promise<string> {
   try {
     const url = new URL(captionUrl);
     url.searchParams.set("fmt", "srv3");
-    const resp = await fetch(url.toString());
+    const resp = await fetch(url.toString(), { headers: captionFetchHeaders });
     if (resp.ok) {
       const text = await resp.text();
-      console.log(`[youtube-captions] srv3 response: ${text.length} chars, starts with: ${text.slice(0, 100)}`);
+      console.log(`[youtube-captions] srv3 response: ${text.length} chars`);
       const parsed = parseSrv3Json(text);
-      if (parsed.length > 50) {
-        console.log(`[youtube-captions] srv3 JSON parse success: ${parsed.length} chars`);
-        return parsed;
-      }
-      // Maybe srv3 returned XML anyway
+      if (parsed.length > 50) return parsed;
       const xmlParsed = parseXmlCaptions(text);
       if (xmlParsed.length > 50) return xmlParsed;
     }
@@ -202,7 +207,7 @@ async function fetchAndParseCaptions(captionUrl: string): Promise<string> {
   try {
     const url = new URL(captionUrl);
     url.searchParams.set("fmt", "1");
-    const resp = await fetch(url.toString());
+    const resp = await fetch(url.toString(), { headers: captionFetchHeaders });
     if (resp.ok) {
       const text = await resp.text();
       const parsed = parseXmlCaptions(text);
