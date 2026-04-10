@@ -4,8 +4,14 @@
  * Wires together:
  * - dojoAudioController (pure state machine)
  * - elevenlabsTransport (ElevenLabs TTS I/O)
+ * - dojoSessionSnapshot (crash-safe localStorage persistence)
  * - Watchdog polling for hung playback
- * - Session recovery from sessionStorage
+ *
+ * CRASH RESILIENCE:
+ * - Snapshots are saved to localStorage after every state transition
+ * - On mount, tryRecover() checks for an existing snapshot and resumes
+ * - Recovery advances past completed chunks and never replays them
+ * - Ambiguous states (requested-but-not-completed) are retried safely
  *
  * Scoped to Sales Dojo only. Not a generic voice agent hook.
  */
@@ -17,7 +23,6 @@ import type {
   AudioControllerState,
   ControllerDirective,
   ControllerResult,
-  ControllerSnapshot,
   DeliveryMode,
 } from './dojoAudioController';
 import {
@@ -34,7 +39,6 @@ import {
   switchToTextFallback,
   switchToVoice,
   snapshotController,
-  restoreController,
   recoverSession,
 } from './dojoAudioController';
 import type { TransportConfig, TransportHandle } from './elevenlabsTransport';
@@ -46,6 +50,12 @@ import {
 } from './elevenlabsTransport';
 import { getNextMessage } from './conversationEngine';
 import {
+  saveSnapshot,
+  loadSnapshot,
+  clearSnapshot,
+  restoreFromSnapshot,
+} from './dojoSessionSnapshot';
+import {
   createMetrics,
   logChunkRequested,
   logChunkStarted,
@@ -55,55 +65,41 @@ import {
   logChunkSkipped,
   logRetryAttempt,
   logDegradation,
+  logChunkLevelDegrade,
+  logSessionLevelDegrade,
   logRecovery,
+  logCrashRecovery,
+  logAmbiguousResume,
   logReplay,
   logSkip,
   logInterruption,
+  logDuplicateSuppressed,
+  logStaleSuppressed,
   logSessionSummary,
   type DojoAudioMetrics,
 } from './dojoAudioAnalytics';
 
-// ── Storage key ────────────────────────────────────────────────────
-
-const STORAGE_KEY_PREFIX = 'dojo_playback_';
-
-function storageKey(sessionId: string): string {
-  return `${STORAGE_KEY_PREFIX}${sessionId}`;
-}
-
 // ── Hook return type ───────────────────────────────────────────────
 
 export interface DojoPlaybackControls {
-  /** Current controller state. */
   controllerState: AudioControllerState | null;
-  /** Last directive emitted — UI should react to this. */
   lastDirective: ControllerDirective | null;
-  /** Current delivery mode. */
   deliveryMode: DeliveryMode;
-  /** Whether audio is actively playing. */
   isPlaying: boolean;
-  /** Current audio metrics snapshot. */
   metrics: DojoAudioMetrics;
+  /** Whether this session was recovered from a crash/refresh. */
+  wasRecovered: boolean;
 
-  /** Initialize controller for a Dojo session. */
   initialize: (dojo: PlaybackState, mode?: DeliveryMode) => void;
-  /** Start delivering chunks (voice or text based on mode). */
   startDelivery: () => void;
-  /** User interrupted Dave. */
   interrupt: () => void;
-  /** User requested replay. */
   replay: () => void;
-  /** User requested skip. */
   skip: () => void;
-  /** Resume after interruption / follow-up. */
   resume: () => void;
-  /** Force text fallback. */
   degradeToText: (reason: string) => void;
-  /** Restore voice mode. */
   restoreVoice: (reason: string) => void;
-  /** Try to recover from sessionStorage. Returns true if recovered. */
+  /** Try to recover from localStorage snapshot. Returns true if recovered. */
   tryRecover: (sessionId: string) => boolean;
-  /** Full teardown. */
   destroy: () => void;
 }
 
@@ -112,6 +108,7 @@ export interface DojoPlaybackControls {
 export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const [ctrlState, setCtrlState] = useState<AudioControllerState | null>(null);
   const [lastDirective, setLastDirective] = useState<ControllerDirective | null>(null);
+  const [wasRecovered, setWasRecovered] = useState(false);
 
   const ctrlRef = useRef<AudioControllerState | null>(null);
   const handleRef = useRef<TransportHandle>(createTransportHandle());
@@ -139,30 +136,37 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
       case 'mode_changed':
         if (result.directive.mode === 'text_fallback') {
           metricsRef.current = logDegradation(m, result.directive.reason);
+          if (result.directive.level === 'session') {
+            metricsRef.current = logSessionLevelDegrade(metricsRef.current, result.directive.reason);
+          }
         }
         break;
       case 'chunk_skipped_max_retries':
         metricsRef.current = logChunkSkipped(m, result.directive.chunkId);
+        metricsRef.current = logChunkLevelDegrade(metricsRef.current, result.directive.chunkId);
+        break;
+      case 'no_op':
+        if (result.directive.reason === 'duplicate_completed') {
+          metricsRef.current = logDuplicateSuppressed(m, '');
+        } else if (result.directive.reason === 'stale_chunk_completed') {
+          metricsRef.current = logStaleSuppressed(m, '');
+        }
         break;
     }
 
-    // Persist snapshot for recovery
+    // Persist snapshot for crash recovery (localStorage)
     if (result.state.dojo.sessionId) {
-      try {
-        const snap = snapshotController(result.state);
-        sessionStorage.setItem(
-          storageKey(result.state.dojo.sessionId),
-          JSON.stringify(snap)
-        );
-      } catch { /* sessionStorage full or unavailable */ }
+      saveSnapshot(result.state, {
+        replayedChunkIds: Array.from(result.state.replayedChunkIds),
+        skippedChunkIds: Array.from(result.state.skippedChunkIds),
+      });
     }
   }, []);
 
-  // Transport callback — called by elevenlabsTransport on audio events
+  // Transport callback
   const handleTransportEvent = useCallback((result: ControllerResult) => {
     applyResult(result);
 
-    // If directive says speak/retry_speak, trigger transport
     if (result.directive.kind === 'speak' || result.directive.kind === 'retry_speak') {
       const chunk = result.directive.chunk;
       const opts = result.directive.kind === 'speak'
@@ -181,14 +185,13 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     ctrlRef.current = ctrl;
     setCtrlState(ctrl);
     setLastDirective(null);
+    setWasRecovered(false);
   }, []);
 
   const startDelivery = useCallback(() => {
     const ctrl = ctrlRef.current;
     if (!ctrl || ctrl.dojo.phase !== 'delivering') return;
 
-    // Get first chunk via advanceToNext (triggered by onTtsCompleted-like flow)
-    // We simulate by calling the controller's internal advance
     const { chunk, nextState } = getNextMessage(ctrl.dojo);
     if (!chunk) return;
 
@@ -196,7 +199,9 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     const updated: AudioControllerState = { ...ctrl, dojo: liftedState as PlaybackState };
 
     if (ctrl.deliveryMode === 'text_fallback') {
-      applyResult({ state: updated, directive: { kind: 'show_text', chunk } });
+      const completed = new Set(ctrl.completedChunkIds);
+      completed.add(chunk.id);
+      applyResult({ state: { ...updated, completedChunkIds: completed }, directive: { kind: 'show_text', chunk } });
       return;
     }
 
@@ -247,7 +252,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     handleRef.current = stopPlayback(handleRef.current);
-    const chunkId = ctrl.dojo.playback.currentPlayingChunkId;
+    const chunkId = ctrl.dojo.playback.currentPlayingChunkId ?? ctrl.dojo.chunks[ctrl.dojo.currentChunkIndex]?.id;
     if (chunkId) metricsRef.current = logSkip(metricsRef.current, chunkId);
     const result = onUserRequestedSkip(ctrl);
     handleTransportEvent(result);
@@ -274,18 +279,24 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   }, [applyResult]);
 
   const tryRecover = useCallback((sessionId: string): boolean => {
-    try {
-      const raw = sessionStorage.getItem(storageKey(sessionId));
-      if (!raw) return false;
-
-      const snap: ControllerSnapshot = JSON.parse(raw);
-      const result = recoverSession(snap);
-      metricsRef.current = logRecovery(metricsRef.current, `refresh_recovery:${sessionId}`);
-      handleTransportEvent(result);
-      return true;
-    } catch {
+    const loaded = loadSnapshot(sessionId);
+    if (!loaded.ok) {
+      if (loaded.reason === 'version_mismatch') {
+        metricsRef.current = logAmbiguousResume(metricsRef.current);
+      }
       return false;
     }
+
+    const snap = loaded.snapshot;
+    const ctrl = restoreFromSnapshot(snap);
+    metricsRef.current = logCrashRecovery(metricsRef.current, `crash_recovery:${sessionId}`);
+    setWasRecovered(true);
+
+    // Use the controller's own recovery path to get the right directive
+    const controllerSnap = snapshotController(ctrl);
+    const result = recoverSession(controllerSnap);
+    handleTransportEvent(result);
+    return true;
   }, [handleTransportEvent]);
 
   const destroy = useCallback(() => {
@@ -311,6 +322,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
 
       const result = checkForTimeout(ctrl);
       if (result.directive.kind !== 'no_op') {
+        metricsRef.current = logChunkTimedOut(metricsRef.current, ctrl.dojo.playback.currentPlayingChunkId ?? '');
         handleTransportEvent(result);
       }
     }, 5_000);
@@ -335,6 +347,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     deliveryMode: ctrlState?.deliveryMode ?? 'voice',
     isPlaying: ctrlState?.dojo.playback.currentPlayingChunkId !== null,
     metrics: metricsRef.current,
+    wasRecovered,
 
     initialize,
     startDelivery,
