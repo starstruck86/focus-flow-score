@@ -250,13 +250,18 @@ export function useUploadResource() {
               if (parseResult.success) {
                 toast.success(`Parsed: ${parseResult.content_length?.toLocaleString()} chars extracted`);
                 // Now auto-operationalize with real content
-                autoOperationalizeResource(data.id).then(result => {
+                autoOperationalizeResource(data.id).then(async result => {
                   qc.invalidateQueries({ queryKey: ['knowledge-items'] });
                   if (result.operationalized) {
                     toast.success(`Auto-operationalized — ${result.knowledgeExtracted} extracted, ${result.knowledgeActivated} activated`);
                   } else if (result.stagesCompleted.includes('knowledge_extracted')) {
                     toast.info(`${result.knowledgeExtracted} knowledge items extracted — review to activate`);
                   }
+                  // Post-ingest validation: catch and self-heal any remaining issues
+                  try {
+                    const { validateAndRemediate } = await import('@/lib/postIngestValidation');
+                    await validateAndRemediate(data.id);
+                  } catch { /* non-critical */ }
                 }).catch(() => { /* non-fatal */ });
               } else {
                 toast.warning('File parsing returned limited content — may need manual review');
@@ -266,13 +271,18 @@ export function useUploadResource() {
             });
           } else {
             // Text-based files: auto-operationalize directly
-            autoOperationalizeResource(data.id).then(result => {
+            autoOperationalizeResource(data.id).then(async result => {
               qc.invalidateQueries({ queryKey: ['knowledge-items'] });
               if (result.operationalized) {
                 toast.success(`Auto-operationalized — ${result.knowledgeExtracted} extracted, ${result.knowledgeActivated} activated`);
               } else if (result.stagesCompleted.includes('knowledge_extracted')) {
                 toast.info(`${result.knowledgeExtracted} knowledge items extracted — review to activate`);
               }
+              // Post-ingest validation: catch and self-heal any remaining issues
+              try {
+                const { validateAndRemediate } = await import('@/lib/postIngestValidation');
+                await validateAndRemediate(data.id);
+              } catch { /* non-critical */ }
             }).catch(() => { /* non-fatal */ });
           }
         }
