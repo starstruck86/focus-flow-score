@@ -94,17 +94,20 @@ function categoryToAction(cat: Category): string {
 
 /** Assess batch risk level based on category and item count */
 function assessRisk(cat: Category, count: number): { level: 'low' | 'moderate' | 'review'; label: string } {
-  if (cat === 'needs_extraction') {
-    return count <= 10
-      ? { level: 'low', label: 'Low risk — standard extraction pipeline' }
-      : { level: 'moderate', label: `Moderate — ${count} resources will be processed sequentially` };
+  switch (cat) {
+    case 'needs_extraction':
+      if (count <= 5) return { level: 'low', label: 'Low risk — standard extraction, typically completes without issues' };
+      if (count <= 20) return { level: 'low', label: `Low risk — ${count} resources queued for extraction sequentially` };
+      return { level: 'moderate', label: `Moderate — ${count} resources is a large batch; extraction will take several minutes` };
+    case 'failed':
+      if (count <= 3) return { level: 'moderate', label: 'Moderate — retry may resolve transient failures' };
+      return { level: 'review', label: `Review recommended — ${count} failures likely have different root causes` };
+    case 'needs_review':
+      if (count <= 3) return { level: 'moderate', label: 'Moderate — auto-repair works for common blockers (empty content, stale state)' };
+      return { level: 'review', label: `Review recommended — ${count} blocked resources may need individual diagnosis` };
+    default:
+      return { level: 'low', label: 'Low risk' };
   }
-  if (cat === 'needs_review' || cat === 'failed') {
-    return count <= 5
-      ? { level: 'moderate', label: 'Moderate — auto-repair may not resolve all blockers' }
-      : { level: 'review', label: `Review recommended — ${count} blocked resources with potentially different root causes` };
-  }
-  return { level: 'low', label: 'Low risk' };
 }
 
 /** Group items by their current state for sub-state breakdown */
