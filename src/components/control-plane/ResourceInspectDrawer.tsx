@@ -68,8 +68,8 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full sm:w-[440px] md:w-[500px] overflow-y-auto p-0">
         {/* ── Header ── */}
-        <div className="px-4 sm:px-6 pt-6 pb-3 space-y-2">
-          <SheetTitle className="text-sm font-semibold leading-tight pr-6">
+        <div className="px-4 sm:px-6 pt-10 sm:pt-6 pb-3 space-y-2">
+          <SheetTitle className="text-sm font-semibold leading-tight pr-8">
             {resource.title}
           </SheetTitle>
           <div className="flex items-center gap-2">
