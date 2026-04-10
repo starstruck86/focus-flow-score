@@ -35,6 +35,7 @@ interface Props {
   processingIds?: Set<string>;
   conflictIds?: Set<string>;
   customFilterIds?: Set<string> | null;
+  customFilterLabel?: string | null;
   onAction: (resourceId: string, action: string) => void;
   onInspect: (resource: CanonicalResourceStatus, state: ControlPlaneState) => void;
   actionLoading?: boolean;
@@ -121,7 +122,7 @@ function getRowActions(state: ControlPlaneState, resource: CanonicalResourceStat
 }
 
 export function CentralResourceTable({
-  resources, filter, processingIds, conflictIds, customFilterIds,
+  resources, filter, processingIds, conflictIds, customFilterIds, customFilterLabel,
   onAction, onInspect, actionLoading, outcomeRefreshKey,
 }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -189,9 +190,22 @@ export function CentralResourceTable({
   }, []);
 
   if (rows.length === 0) {
+    const emptyMessages: Record<string, { title: string; hint: string }> = {
+      ready: { title: 'No resources ready yet', hint: 'Extract knowledge from resources with content to move them here.' },
+      needs_extraction: { title: 'Nothing to extract', hint: 'All resources with content have been processed — nice work.' },
+      needs_review: { title: 'No blocked resources', hint: 'Everything is progressing through the lifecycle normally.' },
+      processing: { title: 'Nothing processing right now', hint: 'Run an action from the queue or table to start a pipeline.' },
+      ingested: { title: 'No raw resources', hint: 'All resources have been enriched or are further along the lifecycle.' },
+      conflicts: { title: 'No conflicts detected', hint: 'All lifecycle signals are consistent.' },
+    };
+    const customEmpty = customFilterLabel
+      ? { title: 'No matching resources', hint: 'The resources in this filter may have moved to a different state.' }
+      : null;
+    const msg = customEmpty ?? emptyMessages[filter] ?? { title: 'No resources match', hint: 'Try a different filter or clear the current one.' };
     return (
-      <div className="text-center py-12 text-muted-foreground text-sm">
-        No resources match the current filter.
+      <div className="text-center py-10 space-y-1">
+        <p className="text-sm text-muted-foreground font-medium">{msg.title}</p>
+        <p className="text-xs text-muted-foreground/70">{msg.hint}</p>
       </div>
     );
   }

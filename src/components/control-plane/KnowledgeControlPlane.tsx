@@ -234,12 +234,12 @@ export function KnowledgeControlPlane() {
       return null;
     }
     switch (filter) {
-      case 'ready': return 'Resources with extracted knowledge — usable downstream. Includes both Extracted and Activated states.';
-      case 'needs_extraction': return 'Resources with parseable content but no knowledge items yet. Run Extract to process them.';
-      case 'needs_review': return 'Resources blocked by an issue — empty content, failed extraction, missing activation, or stale state.';
-      case 'processing': return 'Resources currently being processed by a background job.';
-      case 'ingested': return 'Resources in the library with no usable content yet. Run Enrich to fetch and parse content.';
-      case 'conflicts': return 'Resources where lifecycle signals contradict each other — e.g. marked enriched but no content found.';
+      case 'ready': return 'Extracted or activated — usable for downstream AI and playbooks.';
+      case 'needs_extraction': return 'Content available but no knowledge items yet. Run Extract to process.';
+      case 'needs_review': return 'Blocked by an issue — empty content, failed extraction, or stale state. Diagnose to unblock.';
+      case 'processing': return 'Currently being processed by a background pipeline.';
+      case 'ingested': return 'In the library with no usable content. Run Enrich to fetch and parse.';
+      case 'conflicts': return 'Lifecycle signals contradict each other — e.g. marked enriched but no content found.';
       default: return null;
     }
   }, [filter, customFilterLabel]);
