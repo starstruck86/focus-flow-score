@@ -37,6 +37,7 @@ const TYPE_MAP: Record<string, CanonicalSourceType> = {
   document: 'document',
   note: 'document',
   transcript: 'transcript',
+  article: 'webpage',
   web_page: 'webpage',
   webpage: 'webpage',
   blog_post: 'webpage',
