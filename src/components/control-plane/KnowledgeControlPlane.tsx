@@ -169,6 +169,9 @@ export function KnowledgeControlPlane() {
     setFilter(f);
     setCustomFilterIds(null);
     setCustomFilterLabel(null);
+    // Map filter back to preset id
+    const presetMap: Record<string, string> = { needs_review: 'cleanup', conflicts: 'mismatches', needs_extraction: 'extract' };
+    setActivePresetId(f === 'all' ? null : presetMap[f] || null);
   }, []);
 
   const handleFilterConflictCategory = useCallback((ids: Set<string>) => {
@@ -362,10 +365,15 @@ export function KnowledgeControlPlane() {
         <TableFilterPresets
           activeFilter={filter}
           customFilterLabel={customFilterLabel}
+          activePresetId={activePresetId}
           onFilterChange={handleFilterChange}
           onCustomPreset={(key) => {
-            if (key === 'groundingEligible') handleFilterReadiness('groundingEligible');
+            if (key === 'groundingEligible') {
+              handleFilterReadiness('groundingEligible');
+              setActivePresetId('ai-ready');
+            }
           }}
+          onPinPreset={(id) => savePinnedPreset(id)}
         />
         <CentralResourceTable
           resources={resources}
