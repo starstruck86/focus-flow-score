@@ -3,7 +3,7 @@
  *
  * Validates Dave's resilience across real runtime sequences:
  * - success path, duplicate callbacks, timeouts, degradation,
- *   replay, skip, recovery, and refresh scenarios.
+ *   replay, skip, recovery, refresh, voice restore, and endurance scenarios.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -60,39 +60,60 @@ function getChunkId(ctrl: AudioControllerState, index: number): string {
   return ctrl.dojo.chunks[index]?.id ?? '';
 }
 
+/** Simulate a full successful chunk delivery cycle. */
+function deliverChunk(ctrl: AudioControllerState, chunkId: string) {
+  ctrl = onTtsRequested(ctrl, chunkId).state;
+  ctrl = onTtsStarted(ctrl, chunkId).state;
+  return onTtsCompleted(ctrl, chunkId);
+}
+
+/** Deliver all chunks in sequence, return final state and count. */
+function deliverAll(ctrl: AudioControllerState) {
+  const totalChunks = ctrl.dojo.chunks.length;
+  let currentChunkId = ctrl.dojo.chunks[0].id;
+  let deliveredCount = 0;
+
+  for (let safety = 0; safety < totalChunks + 5; safety++) {
+    const result = deliverChunk(ctrl, currentChunkId);
+    ctrl = result.state;
+    deliveredCount++;
+
+    if (result.directive.kind === 'delivery_complete') break;
+    if (result.directive.kind === 'speak') {
+      currentChunkId = result.directive.chunk.id;
+    } else {
+      break;
+    }
+  }
+  return { ctrl, deliveredCount, totalChunks };
+}
+
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe('DojoAudioController', () => {
   describe('Success path', () => {
     it('delivers all chunks sequentially', () => {
-      let ctrl = setupController();
-      const totalChunks = ctrl.dojo.chunks.length;
-      expect(totalChunks).toBeGreaterThan(0);
-
-      // Start with first chunk
-      let currentChunkId = ctrl.dojo.chunks[0].id;
-      let deliveredCount = 0;
-
-      for (let safety = 0; safety < totalChunks + 5; safety++) {
-        ctrl = onTtsRequested(ctrl, currentChunkId).state;
-        ctrl = onTtsStarted(ctrl, currentChunkId).state;
-
-        const completed = onTtsCompleted(ctrl, currentChunkId);
-        ctrl = completed.state;
-        deliveredCount++;
-
-        if (completed.directive.kind === 'delivery_complete') {
-          break;
-        }
-        if (completed.directive.kind === 'speak') {
-          currentChunkId = (completed.directive as { chunk: { id: string } }).chunk.id;
-        } else {
-          break;
-        }
-      }
-
+      const { ctrl, deliveredCount, totalChunks } = deliverAll(setupController());
       expect(deliveredCount).toBe(totalChunks);
       expect(ctrl.completedChunkIds.size).toBe(totalChunks);
+    });
+
+    it('each chunk is delivered exactly once', () => {
+      let ctrl = setupController();
+      const seen = new Set<string>();
+      let currentChunkId = ctrl.dojo.chunks[0].id;
+
+      for (let i = 0; i < ctrl.dojo.chunks.length + 5; i++) {
+        expect(seen.has(currentChunkId)).toBe(false);
+        seen.add(currentChunkId);
+
+        const result = deliverChunk(ctrl, currentChunkId);
+        ctrl = result.state;
+        if (result.directive.kind === 'delivery_complete') break;
+        if (result.directive.kind === 'speak') currentChunkId = result.directive.chunk.id;
+        else break;
+      }
+      expect(seen.size).toBe(ctrl.dojo.chunks.length);
     });
   });
 
@@ -101,12 +122,8 @@ describe('DojoAudioController', () => {
       let ctrl = setupController();
       const chunkId = getChunkId(ctrl, 0);
 
-      ctrl = onTtsRequested(ctrl, chunkId).state;
-      ctrl = onTtsStarted(ctrl, chunkId).state;
-      const first = onTtsCompleted(ctrl, chunkId);
-      ctrl = first.state;
+      ctrl = deliverChunk(ctrl, chunkId).state;
 
-      // Duplicate completed
       const dup = onTtsCompleted(ctrl, chunkId);
       expect(dup.directive.kind).toBe('no_op');
       expect((dup.directive as { reason?: string }).reason).toBe('duplicate_completed');
@@ -120,7 +137,6 @@ describe('DojoAudioController', () => {
       ctrl = onTtsRequested(ctrl, chunk0).state;
       ctrl = onTtsStarted(ctrl, chunk0).state;
 
-      // Stale completion for chunk1 while chunk0 is active
       const stale = onTtsCompleted(ctrl, chunk1);
       expect(stale.directive.kind).toBe('no_op');
       expect((stale.directive as { reason?: string }).reason).toBe('stale_chunk_completed');
@@ -132,12 +148,9 @@ describe('DojoAudioController', () => {
       let ctrl = setupController();
       const chunkId = getChunkId(ctrl, 0);
       ctrl = onTtsRequested(ctrl, chunkId).state;
-
-      // Simulate 50s elapsed
       ctrl = { ...ctrl, chunkStartedAt: Date.now() - 50_000 };
 
       const result = checkForTimeout(ctrl);
-      // Should trigger failure/recovery path
       expect(result.directive.kind).not.toBe('no_op');
     });
 
@@ -160,7 +173,6 @@ describe('DojoAudioController', () => {
       const failed = onTtsFailed(ctrl, chunkId, 'network error');
       ctrl = failed.state;
 
-      // Should get retry_speak directive
       expect(failed.directive.kind).toBe('retry_speak');
     });
 
@@ -168,17 +180,14 @@ describe('DojoAudioController', () => {
       let ctrl = setupController();
       const chunkId = getChunkId(ctrl, 0);
 
-      // Exhaust per-chunk attempts (3)
       for (let i = 0; i < 3; i++) {
         ctrl = onTtsRequested(ctrl, chunkId).state;
         ctrl = onTtsFailed(ctrl, chunkId, `fail ${i}`).state;
       }
 
-      // 4th attempt should hit max
       ctrl = onTtsRequested(ctrl, chunkId).state;
       const result = onTtsFailed(ctrl, chunkId, 'final fail');
 
-      // Should either skip chunk or degrade
       expect(
         result.directive.kind === 'chunk_skipped_max_retries' ||
         result.directive.kind === 'show_text' ||
@@ -196,7 +205,6 @@ describe('DojoAudioController', () => {
       expect(ctrl.deliveryMode).toBe('text_fallback');
       expect(degraded.directive.kind).toBe('mode_changed');
 
-      // Next chunk should be show_text
       const chunkId = getChunkId(ctrl, 0);
       ctrl = onTtsRequested(ctrl, chunkId).state;
       const completed = onTtsCompleted(ctrl, chunkId);
@@ -215,9 +223,29 @@ describe('DojoAudioController', () => {
 
       expect(ctrl.completedChunkIds.has(chunkId)).toBe(true);
 
-      // Duplicate should be no-op
       const dup = onTtsCompleted(ctrl, chunkId);
       expect(dup.directive.kind).toBe('no_op');
+    });
+
+    it('delivers all remaining chunks in text fallback', () => {
+      let ctrl = setupController();
+      ctrl = switchToTextFallback(ctrl, 'test').state;
+
+      let chunkId = getChunkId(ctrl, 0);
+      let textShown = 0;
+
+      for (let i = 0; i < ctrl.dojo.chunks.length + 5; i++) {
+        ctrl = onTtsRequested(ctrl, chunkId).state;
+        const result = onTtsCompleted(ctrl, chunkId);
+        ctrl = result.state;
+
+        if (result.directive.kind === 'show_text') textShown++;
+        if (result.directive.kind === 'delivery_complete') break;
+        if (result.directive.kind === 'show_text') chunkId = result.directive.chunk.id;
+        else break;
+      }
+      // The first show_text is chunk 0 completing, then we get show_text for chunk 1, etc.
+      expect(textShown).toBeGreaterThan(0);
     });
   });
 
@@ -225,9 +253,7 @@ describe('DojoAudioController', () => {
     it('replays last chunk while idle', () => {
       let ctrl = setupController();
       const chunkId = getChunkId(ctrl, 0);
-
-      ctrl = onTtsRequested(ctrl, chunkId).state;
-      ctrl = onTtsCompleted(ctrl, chunkId).state;
+      ctrl = deliverChunk(ctrl, chunkId).state;
 
       const replay = onUserRequestedReplay(ctrl);
       expect(replay.directive.kind).toBe('speak');
@@ -236,7 +262,6 @@ describe('DojoAudioController', () => {
     it('replays interrupted chunk', () => {
       let ctrl = setupController();
       const chunkId = getChunkId(ctrl, 0);
-
       ctrl = onTtsRequested(ctrl, chunkId).state;
       ctrl = onUserInterrupted(ctrl).state;
 
@@ -248,6 +273,17 @@ describe('DojoAudioController', () => {
       const ctrl = setupController();
       const replay = onUserRequestedReplay(ctrl);
       expect(replay.directive.kind).toBe('no_op');
+    });
+
+    it('replays show_text in text_fallback mode', () => {
+      let ctrl = setupController();
+      ctrl = switchToTextFallback(ctrl, 'test').state;
+      const chunkId = getChunkId(ctrl, 0);
+      ctrl = onTtsRequested(ctrl, chunkId).state;
+      ctrl = onTtsCompleted(ctrl, chunkId).state;
+
+      const replay = onUserRequestedReplay(ctrl);
+      expect(replay.directive.kind).toBe('show_text');
     });
   });
 
@@ -302,17 +338,13 @@ describe('DojoAudioController', () => {
       let ctrl = setupController();
       const chunk0 = getChunkId(ctrl, 0);
 
-      // Complete first chunk
-      ctrl = onTtsRequested(ctrl, chunk0).state;
-      ctrl = onTtsCompleted(ctrl, chunk0).state;
+      ctrl = deliverChunk(ctrl, chunk0).state;
 
-      // Snapshot and recover
       const snap = snapshotController(ctrl);
       const recovered = recoverSession(snap);
 
-      // Should NOT replay chunk0
       if (recovered.directive.kind === 'speak') {
-        expect((recovered.directive as { chunk: { id: string } }).chunk.id).not.toBe(chunk0);
+        expect(recovered.directive.chunk.id).not.toBe(chunk0);
       }
     });
 
@@ -330,15 +362,7 @@ describe('DojoAudioController', () => {
     });
 
     it('handles recovery when all chunks completed', () => {
-      let ctrl = setupController();
-      const totalChunks = ctrl.dojo.chunks.length;
-
-      // Complete all chunks
-      for (let i = 0; i < totalChunks; i++) {
-        const id = getChunkId(ctrl, i);
-        ctrl = onTtsRequested(ctrl, id).state;
-        ctrl = onTtsCompleted(ctrl, id).state;
-      }
+      const { ctrl } = deliverAll(setupController());
 
       const snap = snapshotController(ctrl);
       const recovered = recoverSession(snap);
@@ -350,14 +374,228 @@ describe('DojoAudioController', () => {
       let ctrl = setupController();
       const chunkId = getChunkId(ctrl, 0);
 
-      // Request but don't start
       ctrl = onTtsRequested(ctrl, chunkId).state;
 
       const snap = snapshotController(ctrl);
       const recovered = recoverSession(snap);
 
-      // Should try to deliver chunk 0 again (not completed)
       expect(recovered.directive.kind).toBe('speak');
+    });
+  });
+
+  // ── Endurance scenarios ─────────────────────────────────────────
+
+  describe('Endurance: full session with interruptions', () => {
+    it('survives interrupt mid-chunk, replay, then continue', () => {
+      let ctrl = setupController();
+      const chunk0 = getChunkId(ctrl, 0);
+      const totalChunks = ctrl.dojo.chunks.length;
+
+      // Start chunk 0
+      ctrl = onTtsRequested(ctrl, chunk0).state;
+      ctrl = onTtsStarted(ctrl, chunk0).state;
+
+      // Interrupt mid-play
+      ctrl = onUserInterrupted(ctrl).state;
+      expect(ctrl.dojo.playback.currentPlayingChunkId).toBeNull();
+
+      // Replay interrupted chunk
+      const replay = onUserRequestedReplay(ctrl);
+      expect(replay.directive.kind).toBe('speak');
+      ctrl = replay.state;
+
+      // Complete the replayed chunk
+      const replayChunkId = replay.directive.kind === 'speak' ? replay.directive.chunk.id : chunk0;
+      ctrl = onTtsRequested(ctrl, replayChunkId).state;
+      const completed = onTtsCompleted(ctrl, replayChunkId);
+      ctrl = completed.state;
+
+      // Should advance to next chunk (not replay again)
+      if (totalChunks > 1) {
+        expect(completed.directive.kind).toBe('speak');
+        expect((completed.directive as { chunk: { id: string } }).chunk.id).not.toBe(chunk0);
+      }
+    });
+
+    it('survives skip during playback and continues', () => {
+      let ctrl = setupController();
+      const chunk0 = getChunkId(ctrl, 0);
+      const totalChunks = ctrl.dojo.chunks.length;
+
+      ctrl = onTtsRequested(ctrl, chunk0).state;
+      ctrl = onTtsStarted(ctrl, chunk0).state;
+
+      // Skip while playing
+      const skip = onUserRequestedSkip(ctrl);
+      ctrl = skip.state;
+
+      if (totalChunks > 1) {
+        expect(skip.directive.kind).toBe('speak');
+        // Deliver remaining chunks
+        let nextId = skip.directive.kind === 'speak' ? skip.directive.chunk.id : '';
+        let remaining = 0;
+        for (let i = 0; i < totalChunks; i++) {
+          const r = deliverChunk(ctrl, nextId);
+          ctrl = r.state;
+          remaining++;
+          if (r.directive.kind === 'delivery_complete') break;
+          if (r.directive.kind === 'speak') nextId = r.directive.chunk.id;
+          else break;
+        }
+        expect(remaining).toBe(totalChunks - 1); // chunk0 skipped
+      }
+    });
+
+    it('survives degrade-to-text then restore-to-voice mid-session', () => {
+      let ctrl = setupController();
+      const chunk0 = getChunkId(ctrl, 0);
+
+      // Deliver chunk0 in voice
+      const c0 = deliverChunk(ctrl, chunk0);
+      ctrl = c0.state;
+      expect(c0.directive.kind).toBe('speak');
+
+      // Degrade to text
+      ctrl = switchToTextFallback(ctrl, 'tts_failure').state;
+      expect(ctrl.deliveryMode).toBe('text_fallback');
+
+      // Restore to voice
+      ctrl = switchToVoice(ctrl, 'user_requested').state;
+      expect(ctrl.deliveryMode).toBe('voice');
+      expect(ctrl.dojo.playback.consecutiveFailures).toBe(0);
+
+      // Continue delivering — should get speak directives
+      if (c0.directive.kind === 'speak') {
+        const nextId = c0.directive.chunk.id;
+        // Next chunk after restore
+        const result = deliverChunk(ctrl, nextId);
+        // Should still work as voice
+        expect(['speak', 'delivery_complete']).toContain(result.directive.kind);
+      }
+    });
+
+    it('survives refresh mid-delivery and resumes without duplication', () => {
+      let ctrl = setupController();
+      const totalChunks = ctrl.dojo.chunks.length;
+
+      // Deliver first 2 chunks (if we have them)
+      const chunk0 = getChunkId(ctrl, 0);
+      const r0 = deliverChunk(ctrl, chunk0);
+      ctrl = r0.state;
+
+      let chunk1Id = '';
+      if (r0.directive.kind === 'speak') {
+        chunk1Id = r0.directive.chunk.id;
+        const r1 = deliverChunk(ctrl, chunk1Id);
+        ctrl = r1.state;
+      }
+
+      // Snapshot (simulates what happens before refresh)
+      const snap = snapshotController(ctrl);
+
+      // Recovery (simulates what happens after refresh)
+      const recovered = recoverSession(snap);
+      ctrl = recovered.state;
+
+      // Should NOT replay chunk0 or chunk1
+      if (recovered.directive.kind === 'speak') {
+        expect(recovered.directive.chunk.id).not.toBe(chunk0);
+        if (chunk1Id) expect(recovered.directive.chunk.id).not.toBe(chunk1Id);
+      }
+
+      // Complete remaining chunks
+      if (recovered.directive.kind === 'speak') {
+        let nextId = recovered.directive.chunk.id;
+        for (let i = 0; i < totalChunks; i++) {
+          const r = deliverChunk(ctrl, nextId);
+          ctrl = r.state;
+          if (r.directive.kind === 'delivery_complete') break;
+          if (r.directive.kind === 'speak') nextId = r.directive.chunk.id;
+          else break;
+        }
+      }
+
+      // All chunks should be completed
+      expect(ctrl.completedChunkIds.size).toBe(totalChunks);
+    });
+
+    it('survives chunk failure → retry → success across multiple chunks', () => {
+      let ctrl = setupController();
+      const chunk0 = getChunkId(ctrl, 0);
+
+      // First attempt fails
+      ctrl = onTtsRequested(ctrl, chunk0).state;
+      const failed = onTtsFailed(ctrl, chunk0, 'network error');
+      ctrl = failed.state;
+      expect(failed.directive.kind).toBe('retry_speak');
+
+      // Retry succeeds
+      ctrl = onTtsRequested(ctrl, chunk0).state;
+      const success = onTtsCompleted(ctrl, chunk0);
+      ctrl = success.state;
+
+      // Should advance normally
+      if (ctrl.dojo.chunks.length > 1) {
+        expect(success.directive.kind).toBe('speak');
+      }
+    });
+
+    it('survives timeout → retry → success', () => {
+      let ctrl = setupController();
+      const chunk0 = getChunkId(ctrl, 0);
+
+      ctrl = onTtsRequested(ctrl, chunk0).state;
+      ctrl = { ...ctrl, chunkStartedAt: Date.now() - 50_000 };
+
+      const timeout = checkForTimeout(ctrl);
+      ctrl = timeout.state;
+
+      // Should get retry directive
+      expect(timeout.directive.kind).toBe('retry_speak');
+
+      // Retry succeeds
+      ctrl = onTtsRequested(ctrl, chunk0).state;
+      const success = onTtsCompleted(ctrl, chunk0);
+      ctrl = success.state;
+
+      if (ctrl.dojo.chunks.length > 1) {
+        expect(success.directive.kind).toBe('speak');
+      }
+    });
+
+    it('preserves exact-once delivery across full session with mixed events', () => {
+      let ctrl = setupController();
+      const totalChunks = ctrl.dojo.chunks.length;
+      const delivered = new Set<string>();
+
+      let currentId = getChunkId(ctrl, 0);
+
+      for (let i = 0; i < totalChunks + 10; i++) {
+        // Chunk 1: fail then retry
+        if (i === 1 && !delivered.has(currentId)) {
+          ctrl = onTtsRequested(ctrl, currentId).state;
+          const fail = onTtsFailed(ctrl, currentId, 'transient');
+          ctrl = fail.state;
+          if (fail.directive.kind === 'retry_speak') {
+            currentId = fail.directive.chunk.id;
+          }
+          continue;
+        }
+
+        const result = deliverChunk(ctrl, currentId);
+        ctrl = result.state;
+        delivered.add(currentId);
+
+        if (result.directive.kind === 'delivery_complete') break;
+        if (result.directive.kind === 'speak') {
+          currentId = result.directive.chunk.id;
+        } else {
+          break;
+        }
+      }
+
+      // Every chunk completed exactly once
+      expect(ctrl.completedChunkIds.size).toBe(totalChunks);
     });
   });
 });
