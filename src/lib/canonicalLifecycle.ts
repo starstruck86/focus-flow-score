@@ -102,6 +102,7 @@ export interface CanonicalResourceStatus {
   active_ki_with_context_count: number;
   blocked_reason: BlockedReason;
   last_transition_at: string | null;
+  active_job_status: string | null;
 }
 
 // ── Lifecycle summary ──────────────────────────────────────
@@ -268,7 +269,7 @@ export function deriveBlockedReason(
 export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
   const { data: resources, error: rErr } = await supabase
     .from('resources')
-    .select('id, title, content, content_length, enrichment_status, tags, updated_at, manual_content_present, manual_input_required, recovery_queue_bucket, failure_reason, resource_type, file_url')
+    .select('id, title, content, content_length, enrichment_status, tags, updated_at, manual_content_present, manual_input_required, recovery_queue_bucket, failure_reason, resource_type, file_url, active_job_status')
     .order('updated_at', { ascending: false });
 
   if (rErr || !resources) {
@@ -340,6 +341,7 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
       active_ki_with_context_count: ki.activeWithContexts,
       blocked_reason: blocked,
       last_transition_at: r.updated_at ?? null,
+      active_job_status: r.active_job_status ?? null,
     };
 
     summary.resources.push(status);

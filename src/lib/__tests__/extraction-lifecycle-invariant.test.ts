@@ -38,6 +38,7 @@ function makeCanonicalResource(overrides: Partial<CanonicalResourceStatus> = {})
     active_ki_with_context_count: 0,
     blocked_reason: 'none',
     last_transition_at: null,
+    active_job_status: null,
     ...overrides,
   };
 }
