@@ -151,6 +151,7 @@ function validateResult(sj: DojoScoreResult, sessionType: string): ValidationFla
 
 type FilterMode = 'all' | 'drill' | 'roleplay' | 'review';
 type FilterSeverity = 'all' | 'errors' | 'warnings' | 'clean';
+type FilterAudio = 'all' | 'has_audio' | 'degraded' | 'recovered' | 'replayed' | 'skipped' | 'timed_out';
 
 export default function DojoQA() {
   const { user } = useAuth();
