@@ -82,6 +82,8 @@ export interface DojoPlaybackControls {
   deliveryMode: DeliveryMode;
   /** Whether audio is actively playing. */
   isPlaying: boolean;
+  /** Current audio metrics snapshot. */
+  metrics: DojoAudioMetrics;
 
   /** Initialize controller for a Dojo session. */
   initialize: (dojo: PlaybackState, mode?: DeliveryMode) => void;
