@@ -12,7 +12,7 @@ serve(async (req) => {
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
     if (!ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY is not configured");
 
-    const { text, voiceId } = await req.json();
+    const { text, voiceId, previous_text, next_text } = await req.json();
     if (!text) throw new Error("Missing text parameter");
     if (text.length > 5000) throw new Error("Text too long — max 5000 characters per request");
 
@@ -31,11 +31,14 @@ serve(async (req) => {
           text,
           model_id: "eleven_turbo_v2_5",
           voice_settings: {
-            stability: 0.4,
-            similarity_boost: 0.75,
-            style: 0.3,
+            stability: 0.45,
+            similarity_boost: 0.8,
+            style: 0.25,
             use_speaker_boost: true,
+            speed: 1.0,
           },
+          ...(previous_text ? { previous_text } : {}),
+          ...(next_text ? { next_text } : {}),
         }),
       }
     );

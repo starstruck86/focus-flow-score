@@ -1693,6 +1693,7 @@ export type Database = {
       }
       dojo_sessions: {
         Row: {
+          audio_metrics: Json | null
           best_score: number | null
           completed_at: string | null
           created_at: string
@@ -1712,6 +1713,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          audio_metrics?: Json | null
           best_score?: number | null
           completed_at?: string | null
           created_at?: string
@@ -1731,6 +1733,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          audio_metrics?: Json | null
           best_score?: number | null
           completed_at?: string | null
           created_at?: string

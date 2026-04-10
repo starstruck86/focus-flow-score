@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import DojoRoleplay from '@/components/dojo/DojoRoleplay';
 import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview';
+import DaveCoachingDelivery from '@/components/dojo/DaveCoachingDelivery';
 import type { Json } from '@/integrations/supabase/types';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
@@ -342,7 +343,7 @@ export default function DojoSession() {
 
           {phase === 'feedback' && currentResult && (
             <motion.div key="feedback" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-              <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+              <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} onRetry={handleStartRetry} onNextRep={handleNextRep} />
             </motion.div>
           )}
 
@@ -379,7 +380,7 @@ export default function DojoSession() {
         {/* ── Feedback for Roleplay / Review (non-drill) ── */}
         {sessionType !== 'drill' && phase === 'feedback' && currentResult && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} onRetry={handleStartRetry} onNextRep={handleNextRep} />
           </motion.div>
         )}
       </div>
@@ -400,6 +401,7 @@ interface FeedbackViewProps {
   reviewExtras: ReviewExtras | null;
   roleplayExtras: RoleplayExtras | null;
   sessionType: string;
+  sessionId: string | null;
   onRetry: () => void;
   onNextRep: () => void;
 }
@@ -407,10 +409,18 @@ interface FeedbackViewProps {
 function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
-  onRetry, onNextRep,
+  sessionId, onRetry, onNextRep,
 }: FeedbackViewProps) {
   return (
     <>
+      {/* Dave's Audio/Text Coaching Delivery */}
+      {sessionId && (
+        <DaveCoachingDelivery
+          scoreResult={currentResult}
+          sessionId={sessionId}
+          enableVoice={true}
+        />
+      )}
       {/* Score */}
       <div className="flex items-center gap-4">
         <div className={cn(
