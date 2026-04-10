@@ -34,39 +34,31 @@ interface QueueItem {
 
 const CATEGORY_CONFIG: Record<Category, {
   icon: React.ElementType; label: string; color: string; actionLabel: string;
-  batchLabel: string; hint: string;
-  batchReason: string; batchPipeline: string;
+  batchLabel: string;
+  batchReason: string;
   /** If true, batch action filters table instead of running pipeline */
   batchIsFilter?: boolean;
 }> = {
   mismatched: {
     icon: ShieldAlert, label: 'Mismatched', color: 'text-amber-600',
     actionLabel: 'Inspect', batchLabel: 'Filter & Inspect',
-    hint: 'Open each to verify state, then re-run the intended action.',
-    batchReason: 'Reconciliation found these resources in an unexpected state after the last action.',
-    batchPipeline: 'Filter the table to review each one manually.',
+    batchReason: 'Reconciliation found unexpected states — filter the table to review each one.',
     batchIsFilter: true,
   },
   failed: {
     icon: XCircle, label: 'Failed', color: 'text-destructive',
     actionLabel: 'Retry', batchLabel: 'Retry All',
-    hint: 'Retry once — if it fails again, open to diagnose the root cause.',
-    batchReason: 'These resources did not complete their last action.',
-    batchPipeline: 'Diagnose root cause, apply fix, and re-validate each resource.',
+    batchReason: 'These resources did not complete their last action. Will diagnose and re-validate each.',
   },
   needs_review: {
     icon: AlertTriangle, label: 'Blocked', color: 'text-destructive',
     actionLabel: 'Diagnose', batchLabel: 'Diagnose All',
-    hint: 'Run Diagnose to auto-fix, or open to review manually.',
-    batchReason: 'These resources are stuck — empty content, failed extraction, or stale state.',
-    batchPipeline: 'Detect the blocker, attempt auto-fix, and re-validate.',
+    batchReason: 'These resources are stuck. Will detect blockers, attempt auto-fix, and re-validate.',
   },
   needs_extraction: {
     icon: Zap, label: 'Needs Extraction', color: 'text-amber-600',
     actionLabel: 'Extract', batchLabel: 'Extract All',
-    hint: 'Run Extract to generate knowledge items from available content.',
-    batchReason: 'These resources have content but no knowledge items yet.',
-    batchPipeline: 'Extract knowledge items from each resource.',
+    batchReason: 'Content available but no knowledge items yet. Will extract from each resource.',
   },
 };
 
@@ -169,7 +161,7 @@ function QueueGroupPreviewDialog({
           <div className="space-y-3">
             <p className="text-xs text-foreground">{cfg.batchReason}</p>
 
-            {/* Sub-state breakdown */}
+            {/* Sub-state breakdown — only when mixed states */}
             {subStates.length > 1 && (
               <div className="flex flex-wrap gap-1.5">
                 {subStates.map(({ state, count }) => {
@@ -182,8 +174,6 @@ function QueueGroupPreviewDialog({
                 })}
               </div>
             )}
-
-            <p className="text-xs text-muted-foreground">{cfg.batchPipeline}</p>
 
             {/* Expected transition */}
             {!cfg.batchIsFilter && (
@@ -427,14 +417,11 @@ export function NeedsAttentionQueue({
               return (
                 <div key={cat}>
                   <div className="px-3 py-1 bg-muted/30 border-b flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <Icon className={cn('h-3 w-3', cfg.color)} />
-                        <span className={cn('text-[10px] font-semibold uppercase tracking-wider', cfg.color)}>
-                          {cfg.label} ({items.length})
-                        </span>
-                      </div>
-                      <p className="text-[9px] text-muted-foreground mt-0.5 pl-[18px]">{cfg.hint}</p>
+                    <div className="flex items-center gap-1.5">
+                      <Icon className={cn('h-3 w-3', cfg.color)} />
+                      <span className={cn('text-[10px] font-semibold uppercase tracking-wider', cfg.color)}>
+                        {cfg.label} ({items.length})
+                      </span>
                     </div>
                     {(onBatchCategoryAction || onFilterToIds) && items.length > 1 && (
                       <button
@@ -464,12 +451,6 @@ export function NeedsAttentionQueue({
                         >
                           {item.title}
                         </button>
-
-                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
-                          <span>{CONTROL_PLANE_LABELS[item.state]}</span>
-                          <ArrowRight className="h-2.5 w-2.5" />
-                          <span className="text-foreground">{CONTROL_PLANE_LABELS[item.expectedNextState]}</span>
-                        </span>
 
                         <span className="text-muted-foreground truncate max-w-[180px] hidden md:inline text-[10px]">
                           {item.reason}
@@ -520,13 +501,11 @@ export function NeedsAttentionQueue({
                   >
                     {item.title}
                   </button>
-                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
-                    <span>{CONTROL_PLANE_LABELS[item.state]}</span>
-                    <ArrowRight className="h-2.5 w-2.5" />
-                    <span className="text-foreground">{CONTROL_PLANE_LABELS[item.expectedNextState]}</span>
+                  <span className="text-muted-foreground truncate max-w-[140px] text-[10px] hidden sm:inline">
+                    {item.reason}
                   </span>
                   <button
-                    onClick={() => {
+                     onClick={() => {
                       if (item.category === 'needs_extraction') onAction(item.id, 'extract');
                       else if (item.category === 'needs_review' || item.category === 'failed') onAction(item.id, 'fix');
                       else onInspect(item.id);

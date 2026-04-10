@@ -102,20 +102,10 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
               {summaryText}
             </p>
 
-            {/* Orientation hint — contextual */}
+            {/* Orientation hint — only when it adds information beyond the summary */}
             {outcome.succeeded > 0 && outcome.failed === 0 && outcome.unchanged === 0 && outcome.stillNeedAttention.length === 0 && (
               <p className="text-[10px] text-muted-foreground bg-muted/50 rounded px-2 py-1">
-                ✓ All done. Resources moved forward and may now appear under a different filter.
-              </p>
-            )}
-            {outcome.succeeded > 0 && outcome.failed > 0 && (
-              <p className="text-[10px] text-muted-foreground bg-muted/50 rounded px-2 py-1">
-                {outcome.succeeded} moved forward. {outcome.failed} remaining — open each to diagnose individually.
-              </p>
-            )}
-            {outcome.succeeded === 0 && outcome.failed > 0 && outcome.stillNeedAttention.length > 0 && (
-              <p className="text-[10px] text-muted-foreground bg-muted/50 rounded px-2 py-1">
-                None moved forward. Use "Show in table" below to inspect each resource.
+                ✓ Resources may now appear under a different filter.
               </p>
             )}
 
