@@ -19,7 +19,7 @@ import { NeedsAttentionQueue } from './NeedsAttentionQueue';
 import { RecentActionsPanel } from './RecentActionsPanel';
 import { BulkActionResultDialog } from './BulkActionResultDialog';
 import { TableFilterPresets, getPinnedPreset, PRESET_EXPLANATIONS } from './TableFilterPresets';
-import { setPinnedPreset as savePinnedPreset } from './TableFilterPresets';
+import { buildActionPreview } from './ActionPreviewDialog';
 import {
   type ControlPlaneFilter, type ControlPlaneState,
   computeControlPlaneSummary,
