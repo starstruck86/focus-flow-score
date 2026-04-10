@@ -204,7 +204,7 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
         <AlertDialogFooter>
           {outcome.stillNeedAttention.length > 0 && onFilterAttention ? (
             <>
-              <AlertDialogAction className="text-xs h-8" variant="outline" onClick={onClose}>Dismiss</AlertDialogAction>
+              <AlertDialogAction className="text-xs h-8 bg-secondary text-secondary-foreground hover:bg-secondary/80" onClick={onClose}>Dismiss</AlertDialogAction>
               <AlertDialogAction className="text-xs h-8" onClick={handleFilterAttention}>
                 Show {outcome.stillNeedAttention.length} in table
               </AlertDialogAction>
