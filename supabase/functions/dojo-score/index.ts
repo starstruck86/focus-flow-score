@@ -392,6 +392,11 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     if (typeof parsed.focusReason !== "string") parsed.focusReason = "";
     if (typeof parsed.practiceCue !== "string") parsed.practiceCue = "";
     if (typeof parsed.teachingNote !== "string") parsed.teachingNote = "";
+    if (typeof parsed.deltaNote !== "string") parsed.deltaNote = "";
+    if (retryCount > 0) {
+      if (typeof parsed.focusApplied !== "string" || !["yes", "partial", "no"].includes(parsed.focusApplied)) parsed.focusApplied = "no";
+      if (typeof parsed.focusAppliedReason !== "string") parsed.focusAppliedReason = "";
+    }
 
     // ── Targeted regeneration for consistency issues ─────────────
 
