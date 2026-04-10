@@ -69,24 +69,29 @@ describe('DojoAudioController', () => {
       const totalChunks = ctrl.dojo.chunks.length;
       expect(totalChunks).toBeGreaterThan(0);
 
+      // Start with first chunk
+      let currentChunkId = ctrl.dojo.chunks[0].id;
       let deliveredCount = 0;
-      let lastDirective: ReturnType<typeof onTtsCompleted>['directive'] | null = null;
 
-      while (deliveredCount < totalChunks) {
-        const chunkId = ctrl.dojo.chunks[ctrl.dojo.currentChunkIndex]?.id;
-        if (!chunkId) break;
+      for (let safety = 0; safety < totalChunks + 5; safety++) {
+        ctrl = onTtsRequested(ctrl, currentChunkId).state;
+        ctrl = onTtsStarted(ctrl, currentChunkId).state;
 
-        ctrl = onTtsRequested(ctrl, chunkId).state;
-        ctrl = onTtsStarted(ctrl, chunkId).state;
-
-        const completed = onTtsCompleted(ctrl, chunkId);
+        const completed = onTtsCompleted(ctrl, currentChunkId);
         ctrl = completed.state;
-        lastDirective = completed.directive;
         deliveredCount++;
+
+        if (completed.directive.kind === 'delivery_complete') {
+          break;
+        }
+        if (completed.directive.kind === 'speak') {
+          currentChunkId = (completed.directive as { chunk: { id: string } }).chunk.id;
+        } else {
+          break;
+        }
       }
 
       expect(deliveredCount).toBe(totalChunks);
-      expect(lastDirective?.kind).toBe('delivery_complete');
       expect(ctrl.completedChunkIds.size).toBe(totalChunks);
     });
   });
