@@ -169,14 +169,27 @@ export function NeedsAttentionQueue({ resources, processingIds, outcomeRefreshKe
             return (
               <div key={cat}>
                 {/* Category header with resolution hint */}
-                <div className="px-3 py-1 bg-muted/30 border-b">
-                  <div className="flex items-center gap-1.5">
-                    <Icon className={cn('h-3 w-3', cfg.color)} />
-                    <span className={cn('text-[10px] font-semibold uppercase tracking-wider', cfg.color)}>
-                      {cfg.label} ({items.length})
-                    </span>
+                <div className="px-3 py-1 bg-muted/30 border-b flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Icon className={cn('h-3 w-3', cfg.color)} />
+                      <span className={cn('text-[10px] font-semibold uppercase tracking-wider', cfg.color)}>
+                        {cfg.label} ({items.length})
+                      </span>
+                    </div>
+                    <p className="text-[9px] text-muted-foreground mt-0.5 pl-[18px]">{cfg.hint}</p>
                   </div>
-                  <p className="text-[9px] text-muted-foreground mt-0.5 pl-[18px]">{cfg.hint}</p>
+                  {onBatchCategoryAction && items.length > 1 && (
+                    <button
+                      onClick={() => {
+                        const action = cat === 'needs_extraction' ? 'extract' : cat === 'needs_review' || cat === 'failed' ? 'fix' : 'inspect';
+                        onBatchCategoryAction(items.map(i => i.id), action);
+                      }}
+                      className={cn('text-[9px] font-medium px-2 py-0.5 rounded border border-current/20 hover:bg-muted transition-colors', cfg.color)}
+                    >
+                      {cfg.batchLabel}
+                    </button>
+                  )}
                 </div>
 
                 {/* Items */}
