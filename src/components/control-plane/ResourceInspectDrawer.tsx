@@ -66,9 +66,9 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-[440px] sm:w-[500px] overflow-y-auto p-0">
+      <SheetContent className="w-full sm:w-[440px] md:w-[500px] overflow-y-auto p-0">
         {/* ── Header ── */}
-        <div className="px-6 pt-6 pb-3 space-y-2">
+        <div className="px-4 sm:px-6 pt-6 pb-3 space-y-2">
           <SheetTitle className="text-sm font-semibold leading-tight pr-6">
             {resource.title}
           </SheetTitle>
@@ -103,7 +103,7 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
 
         {/* ── Tabs ── */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1">
-          <TabsList className="mx-6 mt-3 mb-0 h-8 w-auto self-start">
+          <TabsList className="mx-4 sm:mx-6 mt-3 mb-0 h-8 w-auto self-start">
             <TabsTrigger value="overview" className="text-[11px] px-3 h-6">Overview</TabsTrigger>
             <TabsTrigger value="content" className="text-[11px] px-3 h-6">Content</TabsTrigger>
             <TabsTrigger value="knowledge" className="text-[11px] px-3 h-6">
@@ -116,7 +116,7 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
             </TabsTrigger>
           </TabsList>
 
-          <div className="px-6 pb-6">
+          <div className="px-4 sm:px-6 pb-6">
             <TabsContent value="overview" className="mt-3">
               <InspectOverviewTab
                 canonical={resource}

@@ -58,7 +58,7 @@ export function InspectKnowledgeTab({ knowledgeItems, loading, onJumpToContent }
       </div>
 
       {/* ── Filters ── */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
         {(['all', 'active', 'inactive', 'no_context'] as FilterMode[]).map(mode => (
           <Button
             key={mode}
