@@ -409,10 +409,18 @@ interface FeedbackViewProps {
 function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
-  onRetry, onNextRep,
+  sessionId, onRetry, onNextRep,
 }: FeedbackViewProps) {
   return (
     <>
+      {/* Dave's Audio/Text Coaching Delivery */}
+      {sessionId && (
+        <DaveCoachingDelivery
+          scoreResult={currentResult}
+          sessionId={sessionId}
+          enableVoice={true}
+        />
+      )}
       {/* Score */}
       <div className="flex items-center gap-4">
         <div className={cn(
