@@ -355,6 +355,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     if (!Array.isArray(parsed.moveSequence)) parsed.moveSequence = [];
     if (typeof parsed.focusReason !== "string") parsed.focusReason = "";
     if (typeof parsed.practiceCue !== "string") parsed.practiceCue = "";
+    if (typeof parsed.teachingNote !== "string") parsed.teachingNote = "";
 
     // ── Targeted regeneration for consistency issues ─────────────
 
