@@ -1205,7 +1205,7 @@ export function useDeepReExtraction() {
 
   return {
     queue, isRunning, liftSummary, excludedResourceIds,
-    flagForReExtraction, removeFromQueue, clearQueue, runDeepExtraction, markExcluded,
+    flagForReExtraction, checkEligibility, removeFromQueue, clearQueue, runDeepExtraction, markExcluded,
     resumeAndRunSingle,
   };
 }
