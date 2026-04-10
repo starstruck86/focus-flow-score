@@ -116,11 +116,33 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const metricsRef = useRef<DojoAudioMetrics>(createMetrics());
 
-  // Keep ref in sync with state
+  // Keep ref in sync with state + track metrics
   const applyResult = useCallback((result: ControllerResult) => {
     ctrlRef.current = result.state;
     setCtrlState(result.state);
     setLastDirective(result.directive);
+
+    // Track metrics based on directive
+    const m = metricsRef.current;
+    switch (result.directive.kind) {
+      case 'speak':
+        metricsRef.current = logChunkRequested(m, result.directive.chunk.id);
+        break;
+      case 'retry_speak':
+        metricsRef.current = logRetryAttempt(m, result.directive.chunk.id, result.directive.attempt);
+        break;
+      case 'show_text':
+        metricsRef.current = logChunkCompleted(m, result.directive.chunk.id, 0);
+        break;
+      case 'mode_changed':
+        if (result.directive.mode === 'text_fallback') {
+          metricsRef.current = logDegradation(m, result.directive.reason);
+        }
+        break;
+      case 'chunk_skipped_max_retries':
+        metricsRef.current = logChunkSkipped(m, result.directive.chunkId);
+        break;
+    }
 
     // Persist snapshot for recovery
     if (result.state.dojo.sessionId) {
