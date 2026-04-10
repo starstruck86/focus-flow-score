@@ -475,17 +475,20 @@ describe('DojoAudioController', () => {
     it('survives refresh mid-delivery and resumes without duplication', () => {
       let ctrl = setupController();
       const totalChunks = ctrl.dojo.chunks.length;
+      const completedBefore = new Set<string>();
 
-      // Deliver first 2 chunks (if we have them)
+      // Deliver first chunk
       const chunk0 = getChunkId(ctrl, 0);
       const r0 = deliverChunk(ctrl, chunk0);
       ctrl = r0.state;
+      completedBefore.add(chunk0);
 
       let chunk1Id = '';
       if (r0.directive.kind === 'speak') {
         chunk1Id = r0.directive.chunk.id;
         const r1 = deliverChunk(ctrl, chunk1Id);
         ctrl = r1.state;
+        completedBefore.add(chunk1Id);
       }
 
       // Snapshot (simulates what happens before refresh)
@@ -495,10 +498,9 @@ describe('DojoAudioController', () => {
       const recovered = recoverSession(snap);
       ctrl = recovered.state;
 
-      // Should NOT replay chunk0 or chunk1
+      // Should NOT replay completed chunks
       if (recovered.directive.kind === 'speak') {
-        expect(recovered.directive.chunk.id).not.toBe(chunk0);
-        if (chunk1Id) expect(recovered.directive.chunk.id).not.toBe(chunk1Id);
+        expect(completedBefore.has(recovered.directive.chunk.id)).toBe(false);
       }
 
       // Complete remaining chunks
