@@ -437,9 +437,10 @@ export function KnowledgeControlPlane() {
         resource={inspectResource}
         state={inspectState}
         open={!!inspectResource}
-        onClose={() => { setInspectResource(null); setInspectState(null); }}
+        onClose={() => { setInspectResource(null); setInspectState(null); setInspectInitialTab(undefined); }}
         onAction={handleAction}
         actionLoading={actionLoading}
+        initialTab={inspectInitialTab}
       />
 
       {/* Bulk Action Result Dialog */}
