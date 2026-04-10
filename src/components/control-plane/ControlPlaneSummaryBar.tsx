@@ -60,7 +60,7 @@ export function ControlPlaneSummaryBar({
         const metricKey = METRIC_KEY_MAP[key];
         const def = metricKey ? METRIC_DEFINITIONS[metricKey] : null;
         const samples = sampleResources?.[key] ?? [];
-        const showSpinner = isProcessing ? (processingLoading || value > 0) : false;
+        const showSpinner = isProcessing ? (processingLoading || Number(value) > 0) : false;
 
         return (
           <div key={key} className="relative">
