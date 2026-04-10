@@ -315,6 +315,7 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
       auth_capture_incomplete: 0,
       enriched_no_extraction: 0,
       extraction_ready_not_queued: 0,
+      placeholder_enriched_contradiction: 0,
     },
     resources: [],
   };
@@ -445,6 +446,7 @@ function emptySummary(): LifecycleSummary {
       auth_capture_incomplete: 0,
       enriched_no_extraction: 0,
       extraction_ready_not_queued: 0,
+      placeholder_enriched_contradiction: 0,
     },
     resources: [],
   };
