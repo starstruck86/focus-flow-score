@@ -1,0 +1,1 @@
+ALTER TABLE public.resources ADD COLUMN IF NOT EXISTS last_remediation_at timestamptz DEFAULT NULL;
