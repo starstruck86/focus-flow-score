@@ -187,7 +187,7 @@ export function validateQAResult(fixture: QAFixture, result: DojoScoreResult): Q
   }
 
   // Mode-specific checks
-  const raw = result as Record<string, unknown>;
+  const raw = result as unknown as Record<string, unknown>;
 
   let turnAnalysisPresent: boolean | undefined;
   let controlArcPresent: boolean | undefined;

@@ -245,7 +245,7 @@ export default function DojoSession() {
 
   // Handle roleplay completion — extract roleplay-specific extras
   const handleRoleplayComplete = useCallback((scoreResult: DojoScoreResult) => {
-    const raw = scoreResult as Record<string, unknown>;
+    const raw = scoreResult as unknown as Record<string, unknown>;
     setRoleplayExtras({
       turnAnalysis: Array.isArray(raw.turnAnalysis) ? raw.turnAnalysis as RoleplayExtras['turnAnalysis'] : undefined,
       controlArc: typeof raw.controlArc === 'string' ? raw.controlArc : undefined,
@@ -259,7 +259,7 @@ export default function DojoSession() {
   const handleReviewComplete = useCallback((reviewResult: ReviewScoreResult) => {
     const { diagnosisScore, rewriteScore, diagnosisFeedback, rewriteFeedback, ...baseResult } = reviewResult;
     setResult(baseResult);
-    const raw = reviewResult as Record<string, unknown>;
+    const raw = reviewResult as unknown as Record<string, unknown>;
     setReviewExtras({
       diagnosisScore,
       rewriteScore,

@@ -100,7 +100,7 @@ function validateResult(sj: DojoScoreResult, sessionType: string): ValidationFla
 
   // Roleplay-specific
   if (sessionType === 'roleplay') {
-    const raw = sj as Record<string, unknown>;
+    const raw = sj as unknown as Record<string, unknown>;
     if (!raw.turnAnalysis || !Array.isArray(raw.turnAnalysis) || (raw.turnAnalysis as unknown[]).length === 0) {
       flags.push({ type: 'warning', code: 'missing_turn_analysis', message: 'Missing turnAnalysis for roleplay' });
     }
@@ -111,7 +111,7 @@ function validateResult(sj: DojoScoreResult, sessionType: string): ValidationFla
 
   // Review-specific
   if (sessionType === 'review') {
-    const raw = sj as Record<string, unknown>;
+    const raw = sj as unknown as Record<string, unknown>;
     if (typeof raw.diagnosisAccuracy !== 'string') {
       flags.push({ type: 'warning', code: 'missing_diagnosis_accuracy', message: 'Missing diagnosisAccuracy for review' });
     }
