@@ -492,7 +492,7 @@ export default function DojoSession() {
               {/* ── Focus on This Next ── */}
               {activeFocus && (
                 <Card className="border-amber-500/30 bg-amber-500/5">
-                  <CardContent className="p-3">
+                  <CardContent className="p-3 space-y-1.5">
                     <div className="flex items-center gap-2">
                       <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <div>
@@ -504,6 +504,19 @@ export default function DojoSession() {
                         </p>
                       </div>
                     </div>
+                    {currentResult?.focusReason && (
+                      <p className="text-xs text-muted-foreground pl-6">
+                        {currentResult.focusReason}
+                      </p>
+                    )}
+                    {currentResult?.practiceCue && (
+                      <div className="flex items-start gap-1.5 pl-6 pt-0.5">
+                        <MessageCircle className="h-3 w-3 text-amber-500/70 mt-0.5 shrink-0" />
+                        <p className="text-xs font-medium text-foreground">
+                          {currentResult.practiceCue}
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -538,10 +551,10 @@ export default function DojoSession() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-3"
             >
-              {/* Focus reminder for retry */}
+              {/* Focus reminder + practice cue for retry */}
               {activeFocus && (
                 <Card className="border-amber-500/30 bg-amber-500/5">
-                  <CardContent className="p-3">
+                  <CardContent className="p-3 space-y-1.5">
                     <div className="flex items-center gap-2">
                       <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <p className="text-sm">
@@ -551,6 +564,14 @@ export default function DojoSession() {
                         </span>
                       </p>
                     </div>
+                    {currentResult?.practiceCue && (
+                      <div className="flex items-start gap-1.5 pl-6">
+                        <MessageCircle className="h-3 w-3 text-amber-500/70 mt-0.5 shrink-0" />
+                        <p className="text-xs font-medium text-foreground">
+                          {currentResult.practiceCue}
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
