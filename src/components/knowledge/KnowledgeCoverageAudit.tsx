@@ -52,8 +52,6 @@ export function KnowledgeCoverageAudit() {
     total: number;
   } | null>(null);
   const [showRunSummary, setShowRunSummary] = useState(false);
-
-  const [showRunSummary, setShowRunSummary] = useState(false);
   const prevLiftSummaryRef = useRef(deepReExtract.liftSummary);
 
   // Auto-open summary dialog when a run completes
