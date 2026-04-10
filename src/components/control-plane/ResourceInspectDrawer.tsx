@@ -233,6 +233,9 @@ function getActionsForState(state: ControlPlaneState, resource: CanonicalResourc
       if (resource.blocked_reason === 'empty_content' || resource.blocked_reason === 'placeholder_content') {
         actions.push({ key: 'enrich', label: resource.blocked_reason === 'placeholder_content' ? 'Retry Parse' : 'Enrich', icon: FileText, primary: true });
       }
+      if (resource.blocked_reason === 'auth_capture_incomplete') {
+        actions.push({ key: 'manual_assist', label: 'Re-import with Auth', icon: Shield, primary: true });
+      }
       return actions;
     }
     case 'processing':
