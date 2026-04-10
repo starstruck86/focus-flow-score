@@ -453,6 +453,37 @@ export default function DojoSession() {
                           </ul>
                         </div>
                       )}
+
+                      {/* Move sequence */}
+                      {currentResult.moveSequence && currentResult.moveSequence.length > 0 && (
+                        <div className="pt-1.5 border-t border-primary/10 space-y-1">
+                          <div className="flex items-center gap-1">
+                            <ListOrdered className="h-3 w-3 text-primary/70" />
+                            <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
+                              Move Sequence
+                            </p>
+                          </div>
+                          <ol className="space-y-0.5">
+                            {currentResult.moveSequence.map((step, i) => (
+                              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <span className="text-primary/60 font-semibold shrink-0">{i + 1}.</span>
+                                <span className="capitalize">{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+
+                      {/* Pattern tags */}
+                      {currentResult.patternTags && currentResult.patternTags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-primary/10">
+                          {currentResult.patternTags.map((tag, i) => (
+                            <Badge key={i} variant="secondary" className="text-[10px] font-medium">
+                              {PATTERN_TAG_LABELS[tag] || tag.replace(/_/g, ' ')}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}
