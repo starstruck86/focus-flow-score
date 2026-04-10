@@ -132,7 +132,7 @@ function getActionForBlocker(b: Blocker): { label: string; key: string } {
     case 'needs_extraction': return { label: 'Extract', key: 'extract' };
     case 'needs_activation': return { label: 'Activate', key: 'activate' };
     case 'needs_auth': return { label: 'Add Content', key: 'manual_assist' };
-    case 'auth_capture_incomplete': return { label: 'Re-import with Auth', key: 'manual_assist' };
+    case 'auth_capture_incomplete': return { label: 'Re-import with Auth', key: 'auth_reimport' };
     case 'missing_context': return { label: 'Add Contexts', key: 'repair_contexts' };
     case 'route_low_confidence':
     case 'route_manual_assist': return { label: 'Review', key: 'view' };
