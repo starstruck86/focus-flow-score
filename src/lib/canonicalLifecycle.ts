@@ -13,6 +13,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { createLogger } from './logger';
+import { auditImpossibleExtractionStates, recordReconciliationMetrics } from './postExtractionReconciliation';
 
 const log = createLogger('CanonicalLifecycle');
 
@@ -368,6 +369,45 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
     }
   }
 
+  // ── Impossible-state audit (auto-correction layer) ───────
+  const violations = auditImpossibleExtractionStates(summary.resources);
+  if (violations.length > 0) {
+    // Auto-correct: patch the in-memory summary so downstream consumers never see impossible states
+    for (const v of violations) {
+      const res = summary.resources.find(r => r.resource_id === v.resourceId);
+      if (!res) continue;
+      if (v.violation === 'ki_count_positive_but_blocked_no_extraction') {
+        // Correct blocked_reason from no_extraction → none (or no_activation if active=0)
+        if (res.active_ki_count === 0) {
+          res.blocked_reason = 'no_activation';
+          summary.blocked.no_extraction--;
+          summary.blocked.no_activation = (summary.blocked.no_activation ?? 0) + 1;
+        } else {
+          res.blocked_reason = 'none';
+          summary.blocked.no_extraction--;
+        }
+      }
+      if (v.violation === 'ki_count_positive_but_needs_extraction') {
+        // Correct stage from tagged → knowledge_extracted (at minimum)
+        res.canonical_stage = res.active_ki_count > 0
+          ? (res.active_ki_with_context_count > 0 ? 'operationalized' : 'activated')
+          : 'knowledge_extracted';
+      }
+    }
+    log.warn('Auto-corrected impossible extraction states in lifecycle summary', {
+      corrected: violations.length,
+    });
+  }
+
+  // Record reconciliation metrics for observability
+  recordReconciliationMetrics({
+    totalAudited: summary.total_resources,
+    impossibleStatesFound: violations.length,
+    impossibleStatesCorrected: violations.length,
+    cacheInvalidations: 0,
+    timestamp: new Date().toISOString(),
+  });
+
   log.info('Canonical lifecycle audit complete', {
     total: summary.total_resources,
     enriched: summary.enriched,
@@ -376,6 +416,7 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
     activated: summary.activated,
     operationalized: summary.operationalized,
     blocked: summary.blocked,
+    impossibleStatesCorrected: violations.length,
   });
 
   return summary;
