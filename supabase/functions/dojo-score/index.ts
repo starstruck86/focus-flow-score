@@ -226,41 +226,46 @@ SCORE CALIBRATION (CRITICAL — follow this distribution strictly):
 
 YOUR DEFAULT SCORE IS 58-63. This is where a competent but unexceptional response belongs. If you're about to give above 70, ask yourself: "Would a VP of Sales watching this live be impressed?" If no, the score is too high.
 
-${retryCount > 0 ? `This is retry #${retryCount}.${focusReminder ? ` The rep was told to focus on: "${focusReminder}". Grade whether they applied this pattern. If they did, acknowledge it specifically. If they didn't, name that they missed the focus area.` : ''} Compare to what a first attempt typically looks like. If they improved, name exactly what changed. If they didn't improve meaningfully, say so directly.` : ''}
+${retryCount > 0 ? `This is retry #${retryCount}.${focusReminder ? ` The rep was told to focus on: "${focusReminder}". You MUST explicitly assess whether they applied this pattern. If they did, name exactly how in your feedback. If they didn't, call it out directly: "You were asked to focus on ${focusReminder} — this attempt still doesn't do that." Do not ignore the focus reminder.` : ''} Compare to what a first attempt typically looks like. If they improved, name exactly what changed. If they didn't improve meaningfully, say so directly.` : ''}
 
 RESPONSE RULES:
-- "feedback": Exactly 2 sentences. Encouraging but specific. Sentence 1: what they attempted or got right (be specific — not generic praise). Sentence 2: the ONE thing that would make this significantly better. Frame as a growth opportunity, not a failure. Examples of good tone: "You slowed down and qualified instead of chasing — that's the right instinct. Now tighten the urgency test by asking what happens if they wait." / "You're close, but you stayed too surface-level here. Push one level deeper and connect to what that costs them."
-- "improvedVersion": Write the EXACT words a better version of the rep's response would sound like OUT LOUD. Fix their specific mistakes while keeping their general approach. Spoken language — contractions, natural rhythm. 3-5 sentences. Must directly address the buyer's exact words and situation.
-- "worldClassResponse": Write what a top 1% rep would ACTUALLY SAY in this exact moment — not an improved version of the user's answer, but what elite instinct sounds like from scratch. This must be materially stronger than improvedVersion. Requirements:
+- "feedback": Exactly 2 sentences. Encouraging but specific. Sentence 1: what they attempted or got right (be specific — not generic praise). Sentence 2: the ONE thing that would make this significantly better.
+- "improvedVersion": Write the EXACT words a better version of the rep's response would sound like OUT LOUD. Fix their specific mistakes while keeping their general approach. 3-5 sentences. This should feel achievable — a realistic upgrade from where they are.
+- "worldClassResponse": Write what a top 1% rep would ACTUALLY SAY — not an improved version of the user's answer, but what elite instinct sounds like from scratch. This must be MATERIALLY STRONGER than improvedVersion — more commercially sharp, more controlled, more precise. improvedVersion = better rep. worldClassResponse = elite rep. The gap should be visible. Requirements:
   * Exact spoken words — natural, conversational, believable on a real call
-  * NOT marketing copy, NOT a framework recitation, NOT polished prose
-  * Must include business impact, control, specificity, and judgment where relevant
+  * NOT marketing copy, NOT a framework recitation
   * For ${skill}: ${WORLD_CLASS_TONE[skill] || 'calm, specific, commercially sharp, confident'}
-  * If score < 70: this should feel SIGNIFICANTLY sharper and more controlled than improvedVersion
-  * If score 70-84: gap should be visible but narrower
-  * If score > 84: show a subtle level-up in precision and judgment
-- "whyItWorks": Array of exactly 2-3 short bullets (one sentence each) explaining WHY the worldClassResponse is elite. Focus on reusable patterns — e.g. "isolates the real issue before responding," "reframes to revenue risk," "tests urgency instead of accepting vague interest." These teach the user what to internalize, not just what to say.
-- "moveSequence": Array of exactly 2-4 short steps showing the STRUCTURE of the worldClassResponse in order. Each step is a verb-first phrase describing the move. Examples: "isolate the real concern", "reframe to business risk", "quantify the cost", "lock the next step". This teaches the rep the order of operations — not just what the final answer sounds like. Keep each step under 8 words.
-- "patternTags": Array of 2-4 short reusable labels describing the elite moves used in the worldClassResponse. Examples: "isolates_real_issue", "reframes_to_business_impact", "quantifies_pain", "tests_urgency", "maps_stakeholders", "controls_next_step", "locks_mutual_plan", "disqualifies_weak_opportunity", "stays_concise_under_pressure", "names_the_risk", "uses_specific_proof", "projects_certainty". These should teach repeatable behaviors.
-- "focusPattern": The single most valuable pattern for this rep to practice on their next attempt. Pick from the FOCUS PATTERNS list above. This is the ONE lesson from this rep — not five.
-- "focusReason": One short sentence explaining WHY this is the highest-leverage thing to practice next. Start with "Because" — e.g. "Because you answered before isolating the real concern." / "Because the biggest gap here was urgency, not tone." / "Because this deal stalls unless you lock a real next step." This reduces ambiguity.
-- "practiceCue": One short, behaviorally specific coaching instruction for the retry. NOT a label — a concrete action. Examples: "Ask one sharp question before making your point." / "Tie the problem to dollars, not inconvenience." / "Don't accept the delay — test what's behind it." / "End with a date and a deliverable." This is the bridge between feedback and behavior change.
+  * If score < 70: gap between improvedVersion and worldClassResponse should be SIGNIFICANT
+  * If score 70-84: gap visible but narrower
+  * If score > 84: subtle level-up in precision
+- "whyItWorks": Array of exactly 2-3 bullets (one sentence each) explaining the UNDERLYING PATTERN that makes the worldClassResponse elite. Must teach reusable principles — not restate the response. Good: "It slows the conversation down long enough to isolate whether the objection is real or reflexive." Bad: "It is specific."
+- "moveSequence": Array of 2-4 short steps showing the STRUCTURE of the worldClassResponse in sequential order. Verb-first, under 8 words, specific to this scenario, reflects a real move in the worldClassResponse. Good: "isolate the real concern", "reframe to pipeline risk". Bad: "communicate clearly", "be confident".
+- "patternTags": Array of 2-4 snake_case labels representing repeatable selling behaviors. Must feel like moves a rep can name and practice.
+- "focusPattern": Single most valuable pattern from the FOCUS PATTERNS list.
+- "focusReason": One sentence starting with "Because" explaining why this is the highest-leverage fix. Must reference the rep's actual miss.
+- "practiceCue": One short behavioral instruction for the retry — concrete and immediately usable. Good: "Ask one sharp question before making your point." Bad: "Focus on qualification."
+- "teachingNote": One sentence that generalizes the lesson BEYOND this scenario. Should sound like a world-class coach's final takeaway. Good: "The rep who wins this moment is usually the one who slows the objection down before trying to solve it." Different from whyItWorks — this turns the moment into a broader lesson.
 - "topMistake": Pick the single most impactful mistake from the list.
 
-INTERNAL VALIDATION (you must check these before finalizing):
-1. If score < 70, feedback must NOT contain words like "great job," "solid," "nice work," "strong," "impressive," or "clever." It CAN contain encouraging language like "you're close," "right instinct," "getting there."
-2. If topMistake is "no_business_impact," the improvedVersion MUST include specific business impact language (revenue, margin, cost, ROI, or a concrete metric).
-3. If topMistake is "too_long," the improvedVersion MUST be shorter than the rep's response.
-4. If the rep's response is under 2 sentences, score cannot exceed 55.
-5. For executive_response: if the rep's response exceeds 5 sentences, cap the score at 60.
-6. For discovery: if the rep only asked a simple clarifying question without connecting to business impact, cap the score at 64.
-7. worldClassResponse MUST be different from improvedVersion — not a rewording, but a fundamentally better approach.
-8. whyItWorks must describe patterns, not just restate what the response says.
-9. focusPattern must be a single pattern string, not a sentence. It must come from the FOCUS PATTERNS list.
-10. patternTags must be 2-4 items, each a short snake_case label.
-11. moveSequence must be 2-4 items, each a verb-first phrase under 8 words.
-12. focusReason must start with "Because" and be one sentence.
-13. practiceCue must be one actionable instruction, not a label or pattern name.
+TONE RULES:
+- Direct, constructive, confidence-building, high-standard. NOT soft, flattering, generic, or overly intense.
+- Below 70: encouraging but NOT falsely positive. AVOID "great job", "solid work", "nice answer". Encouraging ≠ praising.
+
+INTERNAL VALIDATION:
+1. If score < 70, feedback must NOT contain "great job," "solid," "nice work," "strong," "impressive," or "clever."
+2. If topMistake is "no_business_impact," improvedVersion MUST include business impact language.
+3. If topMistake is "too_long," improvedVersion MUST be shorter than rep's response.
+4. If rep's response under 2 sentences, cap score at 55.
+5. For executive_response: if rep exceeds 5 sentences, cap at 60.
+6. For discovery: simple question without business impact → cap at 64.
+7. worldClassResponse MUST be meaningfully different from and stronger than improvedVersion.
+8. whyItWorks: reusable patterns only, no generic bullets.
+9. focusPattern: from FOCUS PATTERNS list.
+10. patternTags: 2-4, snake_case, teachable.
+11. moveSequence: 2-4, verb-first, under 8 words, sequential, scenario-specific.
+12. focusReason: starts with "Because", references rep's miss.
+13. practiceCue: one behavioral instruction, not a label.
+14. teachingNote: one sentence generalizing beyond this scenario.
 
 Respond with ONLY valid JSON:
 {
@@ -269,12 +274,13 @@ Respond with ONLY valid JSON:
   "topMistake": "one_mistake_code",
   "improvedVersion": "Better version of the rep's approach.",
   "worldClassResponse": "What an elite rep would naturally say from scratch.",
-  "whyItWorks": ["Pattern principle 1", "Pattern principle 2"],
-  "moveSequence": ["step 1 verb-first", "step 2 verb-first", "step 3 verb-first"],
-  "patternTags": ["pattern_one", "pattern_two", "pattern_three"],
+  "whyItWorks": ["Reusable pattern 1", "Reusable pattern 2"],
+  "moveSequence": ["step 1", "step 2", "step 3"],
+  "patternTags": ["pattern_one", "pattern_two"],
   "focusPattern": "single_focus_pattern",
   "focusReason": "Because the biggest gap here was X.",
-  "practiceCue": "Short instruction for the retry."
+  "practiceCue": "Short behavioral instruction.",
+  "teachingNote": "General coaching principle from this rep."
 }`;
 
     const userPrompt = `SCENARIO:
@@ -300,7 +306,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
           { role: "user", content: userPrompt },
         ],
         temperature: 0.3,
-        max_tokens: 1800,
+        max_tokens: 2000,
       }),
     });
 
