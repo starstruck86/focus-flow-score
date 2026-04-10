@@ -101,10 +101,10 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
 
             {/* Execution counts */}
             <div className="grid grid-cols-2 gap-2">
-              <Stat icon={CheckCircle2} label="Moved forward" value={outcome.succeeded} color="text-emerald-600" />
-              <Stat icon={XCircle} label="Failed" value={outcome.failed} color="text-destructive" />
+              <Stat icon={CheckCircle2} label={successVerb(outcome).charAt(0).toUpperCase() + successVerb(outcome).slice(1)} value={outcome.succeeded} color="text-emerald-600" />
+              <Stat icon={XCircle} label={failurePhrase(outcome).charAt(0).toUpperCase() + failurePhrase(outcome).slice(1)} value={outcome.failed} color="text-destructive" />
               <Stat icon={MinusCircle} label="Unchanged" value={outcome.unchanged} color="text-muted-foreground" />
-              <Stat icon={AlertTriangle} label="Needs review" value={outcome.needsReview} color="text-amber-600" />
+              <Stat icon={AlertTriangle} label="Still need review" value={outcome.needsReview} color="text-amber-600" />
             </div>
 
             {/* Reconciliation summary */}
