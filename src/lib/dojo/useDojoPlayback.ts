@@ -45,6 +45,23 @@ import {
   destroyTransport,
 } from './elevenlabsTransport';
 import { getNextMessage } from './conversationEngine';
+import {
+  createMetrics,
+  logChunkRequested,
+  logChunkStarted,
+  logChunkCompleted,
+  logChunkFailed,
+  logChunkTimedOut,
+  logChunkSkipped,
+  logRetryAttempt,
+  logDegradation,
+  logRecovery,
+  logReplay,
+  logSkip,
+  logInterruption,
+  logSessionSummary,
+  type DojoAudioMetrics,
+} from './dojoAudioAnalytics';
 
 // ── Storage key ────────────────────────────────────────────────────
 
@@ -97,6 +114,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const ctrlRef = useRef<AudioControllerState | null>(null);
   const handleRef = useRef<TransportHandle>(createTransportHandle());
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const metricsRef = useRef<DojoAudioMetrics>(createMetrics());
 
   // Keep ref in sync with state
   const applyResult = useCallback((result: ControllerResult) => {
