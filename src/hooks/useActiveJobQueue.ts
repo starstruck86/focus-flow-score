@@ -8,8 +8,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-const BG_TABLE = 'background_jobs' as any;
-const PODCAST_TABLE = 'podcast_import_queue' as any;
 const STALE_THRESHOLD_MS = 5 * 60_000; // 5 minutes no heartbeat = stale
 const POLL_INTERVAL_MS = 15_000;
 
