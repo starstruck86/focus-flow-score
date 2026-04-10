@@ -365,7 +365,7 @@ Deno.serve(async (req) => {
     const bestTrack = pickBestTrack(tracks)!;
     console.log(`[youtube-captions] Using track: lang=${bestTrack.lang}`);
 
-    const transcript = await fetchAndParseCaptions(bestTrack.url);
+    const transcript = await fetchAndParseCaptions(bestTrack.url, resolvedVideoId, bestTrack.lang);
 
     if (!transcript || transcript.length < 50) {
       return new Response(
