@@ -3,7 +3,7 @@
  * Includes: verification queue, re-extraction workflow, audit drilldown, filters.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -51,6 +51,16 @@ export function KnowledgeCoverageAudit() {
     skipped: { resource: ResourceAuditRow; reason: string }[];
     total: number;
   } | null>(null);
+  const [showRunSummary, setShowRunSummary] = useState(false);
+  const prevLiftSummaryRef = useRef(deepReExtract.liftSummary);
+
+  // Auto-open summary dialog when a run completes
+  useEffect(() => {
+    if (deepReExtract.liftSummary && deepReExtract.liftSummary !== prevLiftSummaryRef.current) {
+      setShowRunSummary(true);
+    }
+    prevLiftSummaryRef.current = deepReExtract.liftSummary;
+  }, [deepReExtract.liftSummary]);
 
   const selectedResource = useMemo(() => {
     if (!selectedResourceId || !audit) return null;
@@ -272,34 +282,43 @@ export function KnowledgeCoverageAudit() {
       />
 
       {/* Under-Extracted Recovery */}
-      {audit.resourcesUnderExtracted > 0 && (
-        <Card className="border-amber-500/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-amber-500" />
-              Under-Extracted Resources ({audit.resourcesUnderExtracted})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-[11px] text-muted-foreground">
-              These resources have rich content but low KI density. Deep re-extraction could yield significantly more knowledge.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs gap-1.5"
-              onClick={() => {
-                const underExtracted = filterByPanel(audit.resources, 'under_extracted');
-                const preview = deepReExtract.checkEligibility(underExtracted);
-                setEligibilityPreview({ ...preview, total: underExtracted.length });
-              }}
-            >
-              <Zap className="h-3 w-3" />
-              Flag {audit.resourcesUnderExtracted} for Deep Re-Extraction
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+      {audit.resourcesUnderExtracted > 0 && (() => {
+        const underExtracted = filterByPanel(audit.resources, 'under_extracted');
+        const preview = deepReExtract.checkEligibility(underExtracted);
+        const actionableCount = preview.eligible.length;
+        return (
+          <Card className="border-amber-500/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-amber-500" />
+                Under-Extracted Resources ({audit.resourcesUnderExtracted})
+                {actionableCount < audit.resourcesUnderExtracted && (
+                  <Badge variant="secondary" className="text-[9px]">{actionableCount} actionable</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-[11px] text-muted-foreground">
+                These resources have rich content but low KI density. Deep re-extraction could yield significantly more knowledge.
+                {actionableCount < audit.resourcesUnderExtracted && (
+                  <span className="text-muted-foreground/70"> ({audit.resourcesUnderExtracted - actionableCount} are ineligible due to content length, density, or exclusion rules.)</span>
+                )}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs gap-1.5"
+                onClick={() => {
+                  setEligibilityPreview({ ...preview, total: underExtracted.length });
+                }}
+              >
+                <Zap className="h-3 w-3" />
+                Review {audit.resourcesUnderExtracted} Re-Extraction Candidates
+              </Button>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Count Integrity Check */}
       <Card className={cn(!countIntegrityPass && 'border-destructive/30')}>
@@ -578,6 +597,61 @@ export function KnowledgeCoverageAudit() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Post-Run Summary Dialog */}
+      <Dialog open={showRunSummary} onOpenChange={setShowRunSummary}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              Re-Extraction Run Summary
+            </DialogTitle>
+          </DialogHeader>
+          {deepReExtract.liftSummary && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <SummaryStat label="Selected" value={deepReExtract.liftSummary.resourcesProcessed} />
+                <SummaryStat label="Succeeded" value={deepReExtract.liftSummary.resourcesSucceeded} color="text-emerald-600" />
+                <SummaryStat label="Failed" value={deepReExtract.liftSummary.resourcesProcessed - deepReExtract.liftSummary.resourcesSucceeded} color={deepReExtract.liftSummary.resourcesProcessed - deepReExtract.liftSummary.resourcesSucceeded > 0 ? 'text-destructive' : undefined} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <SummaryStat label="Net New KIs" value={deepReExtract.liftSummary.totalNetNewUnique} color="text-emerald-600" />
+                <SummaryStat label="Depth Upgrades" value={deepReExtract.liftSummary.depthUpgrades} color="text-primary" />
+                <SummaryStat label="No Lift" value={deepReExtract.liftSummary.noLiftCount} color={deepReExtract.liftSummary.noLiftCount > 0 ? 'text-amber-500' : undefined} />
+                <SummaryStat label="Success Rate" value={`${deepReExtract.liftSummary.successRate}%`} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs border border-border rounded p-2">
+                <div><span className="text-muted-foreground">Avg KIs/1k Before:</span> <span className="font-mono">{deepReExtract.liftSummary.avgKisPer1kBefore}</span></div>
+                <div><span className="text-muted-foreground">Avg KIs/1k After:</span> <span className="font-mono">{deepReExtract.liftSummary.avgKisPer1kAfter}</span></div>
+              </div>
+              {deepReExtract.liftSummary.topNoLiftReason && (
+                <div className="rounded border border-amber-500/20 bg-amber-500/5 p-2 text-xs">
+                  <span className="font-medium">Top skip reason:</span>{' '}
+                  <span className="text-muted-foreground">{deepReExtract.liftSummary.topNoLiftReason.replace(/_/g, ' ')}</span>
+                </div>
+              )}
+              {deepReExtract.liftSummary.topBottleneck && deepReExtract.liftSummary.topBottleneck !== 'none' && (
+                <div className="rounded border border-amber-500/20 bg-amber-500/5 p-2 text-xs">
+                  <span className="font-medium">Top bottleneck:</span>{' '}
+                  <span className="text-muted-foreground">{deepReExtract.liftSummary.topBottleneck.replace(/_/g, ' ')}</span>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowRunSummary(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function SummaryStat({ label, value, color }: { label: string; value: number | string; color?: string }) {
+  return (
+    <div className="border border-border rounded-md p-2 text-center">
+      <div className={cn("text-lg font-bold", color)}>{value}</div>
+      <div className="text-[10px] text-muted-foreground">{label}</div>
     </div>
   );
 }
