@@ -8,8 +8,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-const BG_TABLE = 'background_jobs' as any;
-const PODCAST_TABLE = 'podcast_import_queue' as any;
 const STALE_THRESHOLD_MS = 5 * 60_000; // 5 minutes no heartbeat = stale
 const POLL_INTERVAL_MS = 15_000;
 
@@ -89,19 +87,24 @@ export function useActiveJobQueue(): ActiveJobQueueState {
   const mountedRef = useRef(true);
 
   const fetchJobs = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.log('[ActiveJobQueue] No user id, skipping fetch');
+      return;
+    }
+
+    console.log('[ActiveJobQueue] Fetching jobs for user', user.id);
 
     // Fetch both sources in parallel
     const [bgResult, podcastResult] = await Promise.all([
       supabase
-        .from(BG_TABLE)
+        .from('background_jobs')
         .select('id, type, title, status, substatus, step_label, started_at, created_at, updated_at, progress_percent, progress_current, progress_total, error, entity_id')
         .eq('user_id', user.id)
         .in('status', ['queued', 'running', 'awaiting_review'])
         .order('created_at', { ascending: false })
         .limit(200),
       supabase
-        .from(PODCAST_TABLE)
+        .from('podcast_import_queue')
         .select('id, episode_title, status, pipeline_stage, created_at, updated_at, error_message, resource_id')
         .eq('user_id', user.id)
         .in('status', ['queued', 'processing'])
@@ -110,6 +113,9 @@ export function useActiveJobQueue(): ActiveJobQueueState {
     ]);
 
     if (!mountedRef.current) return;
+
+    console.log('[ActiveJobQueue] BG result:', bgResult.error, 'rows:', bgResult.data?.length);
+    console.log('[ActiveJobQueue] Podcast result:', podcastResult.error, 'rows:', podcastResult.data?.length);
 
     const allJobs: QueueJob[] = [];
 
