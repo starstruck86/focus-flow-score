@@ -1,9 +1,9 @@
 /**
- * Dojo Audio Analytics
+ * Dojo Audio Analytics v2
  *
  * Structured telemetry for Dave's audio delivery inside Sales Dojo.
- * Tracks chunk lifecycle, failures, retries, degradation, and recovery
- * so we can measure whether Dave is truly reliable in production.
+ * Tracks chunk lifecycle, failures, retries, degradation, recovery,
+ * transport details, and ownership conflicts.
  *
  * No side effects beyond logging. No UI coupling.
  */
@@ -28,7 +28,7 @@ export interface DojoAudioMetrics {
   skipsRequested: number;
   interruptions: number;
   totalPlaybackMs: number;
-  chunkDurations: number[]; // individual durations for avg/p95
+  chunkDurations: number[];
   sessionStartedAt: number | null;
 
   // ── Crash/recovery debugging metrics ──
@@ -41,6 +41,18 @@ export interface DojoAudioMetrics {
   sessionLevelDegradeCount: number;
   duplicateCallbackSuppressions: number;
   staleCallbackSuppressions: number;
+
+  // ── Transport-level metrics ──
+  transportRetryCount: number;
+  autoplayBlockedCount: number;
+  ownershipConflictCount: number;
+  /** How many chunks actually became audible (got 'playing' event). */
+  chunksAudible: number;
+  /** How many chunks were voice vs text fallback vs replay vs skip. */
+  voiceDeliveryCount: number;
+  textFallbackDeliveryCount: number;
+  /** How many voice restores after degradation. */
+  voiceRestoreCount: number;
 }
 
 export function createMetrics(): DojoAudioMetrics {
@@ -69,6 +81,13 @@ export function createMetrics(): DojoAudioMetrics {
     sessionLevelDegradeCount: 0,
     duplicateCallbackSuppressions: 0,
     staleCallbackSuppressions: 0,
+    transportRetryCount: 0,
+    autoplayBlockedCount: 0,
+    ownershipConflictCount: 0,
+    chunksAudible: 0,
+    voiceDeliveryCount: 0,
+    textFallbackDeliveryCount: 0,
+    voiceRestoreCount: 0,
   };
 }
 
@@ -84,31 +103,31 @@ export function logChunkStarted(m: DojoAudioMetrics, chunkId: string): DojoAudio
   return {
     ...m,
     chunksStarted: m.chunksStarted + 1,
+    chunksAudible: m.chunksAudible + 1,
     sessionStartedAt: m.sessionStartedAt ?? Date.now(),
   };
 }
 
-export function logChunkCompleted(
-  m: DojoAudioMetrics,
-  chunkId: string,
-  durationMs: number
-): DojoAudioMetrics {
+export function logChunkCompleted(m: DojoAudioMetrics, chunkId: string, durationMs: number): DojoAudioMetrics {
   log.info('chunk_completed', { chunkId, durationMs });
   return {
     ...m,
     chunksCompleted: m.chunksCompleted + 1,
+    voiceDeliveryCount: durationMs > 0 ? m.voiceDeliveryCount + 1 : m.voiceDeliveryCount,
+    textFallbackDeliveryCount: durationMs === 0 ? m.textFallbackDeliveryCount + 1 : m.textFallbackDeliveryCount,
     totalPlaybackMs: m.totalPlaybackMs + durationMs,
-    chunkDurations: [...m.chunkDurations, durationMs],
+    chunkDurations: durationMs > 0 ? [...m.chunkDurations, durationMs] : m.chunkDurations,
   };
 }
 
-export function logChunkFailed(
-  m: DojoAudioMetrics,
-  chunkId: string,
-  error: string
-): DojoAudioMetrics {
+export function logChunkFailed(m: DojoAudioMetrics, chunkId: string, error: string): DojoAudioMetrics {
   log.warn('chunk_failed', { chunkId, error });
-  return { ...m, chunksFailed: m.chunksFailed + 1 };
+  const isAutoplay = error.includes('autoplay_blocked');
+  return {
+    ...m,
+    chunksFailed: m.chunksFailed + 1,
+    autoplayBlockedCount: isAutoplay ? m.autoplayBlockedCount + 1 : m.autoplayBlockedCount,
+  };
 }
 
 export function logChunkTimedOut(m: DojoAudioMetrics, chunkId: string): DojoAudioMetrics {
@@ -121,13 +140,9 @@ export function logChunkSkipped(m: DojoAudioMetrics, chunkId: string): DojoAudio
   return { ...m, chunksSkipped: m.chunksSkipped + 1 };
 }
 
-export function logRetryAttempt(
-  m: DojoAudioMetrics,
-  chunkId: string,
-  attempt: number
-): DojoAudioMetrics {
+export function logRetryAttempt(m: DojoAudioMetrics, chunkId: string, attempt: number): DojoAudioMetrics {
   log.info('chunk_retry', { chunkId, attempt });
-  return { ...m, retryAttempts: m.retryAttempts + 1 };
+  return { ...m, retryAttempts: m.retryAttempts + 1, transportRetryCount: m.transportRetryCount + 1 };
 }
 
 export function logDegradation(m: DojoAudioMetrics, reason: string): DojoAudioMetrics {
@@ -147,7 +162,12 @@ export function logSessionLevelDegrade(m: DojoAudioMetrics, reason: string): Doj
 
 export function logRecovery(m: DojoAudioMetrics, context: string): DojoAudioMetrics {
   log.info('session_recovered', { context });
-  return { ...m, recoveryEvents: m.recoveryEvents + 1 };
+  const isVoiceRestore = context.includes('voice') || context.includes('reconnect') || context.includes('user_requested');
+  return {
+    ...m,
+    recoveryEvents: m.recoveryEvents + 1,
+    voiceRestoreCount: isVoiceRestore ? m.voiceRestoreCount + 1 : m.voiceRestoreCount,
+  };
 }
 
 export function logCrashRecovery(m: DojoAudioMetrics, context: string): DojoAudioMetrics {
@@ -185,6 +205,11 @@ export function logStaleSuppressed(m: DojoAudioMetrics, chunkId: string): DojoAu
   return { ...m, staleCallbackSuppressions: m.staleCallbackSuppressions + 1 };
 }
 
+export function logOwnershipConflict(m: DojoAudioMetrics): DojoAudioMetrics {
+  log.warn('ownership_conflict');
+  return { ...m, ownershipConflictCount: m.ownershipConflictCount + 1 };
+}
+
 // ── Summary ────────────────────────────────────────────────────────
 
 export interface AudioSessionSummary {
@@ -209,6 +234,14 @@ export interface AudioSessionSummary {
   sessionDegrades: number;
   duplicateSuppressions: number;
   staleSuppressions: number;
+  // v2 fields
+  transportRetries: number;
+  autoplayBlocked: number;
+  ownershipConflicts: number;
+  chunksAudible: number;
+  voiceDeliveries: number;
+  textFallbackDeliveries: number;
+  voiceRestores: number;
 }
 
 export function summarizeSession(m: DojoAudioMetrics): AudioSessionSummary {
@@ -243,6 +276,13 @@ export function summarizeSession(m: DojoAudioMetrics): AudioSessionSummary {
     sessionDegrades: m.sessionLevelDegradeCount,
     duplicateSuppressions: m.duplicateCallbackSuppressions,
     staleSuppressions: m.staleCallbackSuppressions,
+    transportRetries: m.transportRetryCount,
+    autoplayBlocked: m.autoplayBlockedCount,
+    ownershipConflicts: m.ownershipConflictCount,
+    chunksAudible: m.chunksAudible,
+    voiceDeliveries: m.voiceDeliveryCount,
+    textFallbackDeliveries: m.textFallbackDeliveryCount,
+    voiceRestores: m.voiceRestoreCount,
   };
 }
 
