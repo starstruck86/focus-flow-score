@@ -247,22 +247,26 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     }
 
     if (needsRegen.length > 0) {
+      const triggerReasons: Record<string, string> = {};
       const regenParts: string[] = [];
 
       if (needsRegen.includes("feedback")) {
+        triggerReasons.feedback = "positive_language_in_low_score";
         regenParts.push(`REGENERATE "feedback": The current feedback is "${parsed.feedback}". The score is ${parsed.score} (below 70). Rewrite the feedback so it is critical and direct — no positive language, no softening. Keep it to exactly 2 sentences. Sentence 1: what they attempted. Sentence 2: the specific miss.`);
       }
 
       if (needsRegen.includes("improvedVersion")) {
         const reasons: string[] = [];
-        if (parsed.topMistake === "no_business_impact") reasons.push("it must include specific business impact language (revenue, margin, cost, ROI, or a concrete metric)");
-        if (parsed.topMistake === "too_long") reasons.push("it must be significantly shorter than the rep's response — tight and punchy");
-        if (skill === "executive_response") reasons.push("it must be under 4 sentences — brevity is non-negotiable for exec communication");
+        if (parsed.topMistake === "no_business_impact") { reasons.push("it must include specific business impact language (revenue, margin, cost, ROI, or a concrete metric)"); triggerReasons.improvedVersion = "missing_business_impact"; }
+        if (parsed.topMistake === "too_long") { reasons.push("it must be significantly shorter than the rep's response — tight and punchy"); triggerReasons.improvedVersion = "too_long_improved_version"; }
+        if (skill === "executive_response") { reasons.push("it must be under 4 sentences — brevity is non-negotiable for exec communication"); triggerReasons.improvedVersion = triggerReasons.improvedVersion || "exec_too_verbose"; }
+        if (!triggerReasons.improvedVersion) triggerReasons.improvedVersion = "consistency_check_failed";
         regenParts.push(`REGENERATE "improvedVersion": The current version is "${parsed.improvedVersion}". Issues: ${reasons.join("; ")}. Write the exact words a top rep would say OUT LOUD. Spoken language, natural rhythm, 3-5 sentences max (3 preferred for exec). Must sound like a real person on a real call, not polished copy.`);
       }
 
       const regenPrompt = `You previously scored a sales rep's response. Some outputs need regeneration for consistency. Keep the same score (${parsed.score}) and topMistake (${parsed.topMistake}). Only regenerate the fields listed below.\n\n${regenParts.join("\n\n")}\n\nRespond with ONLY valid JSON containing the regenerated fields. Example: {"feedback": "...", "improvedVersion": "..."}. Only include fields that need regeneration.`;
 
+      let regenSucceeded = false;
       try {
         const regenResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
@@ -293,9 +297,29 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
           if (regenParsed.improvedVersion && needsRegen.includes("improvedVersion")) {
             parsed.improvedVersion = regenParsed.improvedVersion;
           }
+          regenSucceeded = true;
         }
       } catch (regenErr) {
         console.error("Regeneration failed, keeping originals:", regenErr);
+      }
+
+      // Structured regeneration log
+      console.log(JSON.stringify({
+        event: "dojo_regen",
+        skill,
+        score: parsed.score,
+        topMistake: parsed.topMistake,
+        fieldsRegenerated: needsRegen,
+        triggerReasons,
+        succeeded: regenSucceeded,
+      }));
+
+      // Lightweight post-regen validation: flag if topMistake and improvedVersion may diverge
+      if (regenSucceeded && parsed.topMistake === "no_business_impact" && typeof parsed.improvedVersion === "string" && !BUSINESS_IMPACT_PATTERNS.test(parsed.improvedVersion)) {
+        console.log(JSON.stringify({ event: "dojo_regen_drift", detail: "improvedVersion still lacks business impact after regen", topMistake: parsed.topMistake, skill }));
+      }
+      if (regenSucceeded && parsed.topMistake === "too_long" && typeof parsed.improvedVersion === "string" && typeof userResponse === "string" && parsed.improvedVersion.length > userResponse.length) {
+        console.log(JSON.stringify({ event: "dojo_regen_drift", detail: "improvedVersion still longer than rep response after regen", topMistake: parsed.topMistake, skill }));
       }
     }
 
