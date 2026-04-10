@@ -277,7 +277,8 @@ export function validateResource(r: {
     }
   }
 
-  // Rule 4: Enriched but 0 KIs and 0 attempts (non-transcript)
+  // Rule 4: Enriched but 0 KIs and 0 attempts (non-transcript only —
+  // transcripts are already covered by Rule 1 with a more specific class)
   if (!isTranscript && hasRealContent && isEnriched && kiCount === 0 && attempts === 0) {
     violations.push({
       resource_id: r.id,
