@@ -89,6 +89,8 @@ export const BLOCKED_LABELS: Record<BlockedReason, string> = {
 export interface CanonicalResourceStatus {
   resource_id: string;
   title: string;
+  resource_type: string | null;
+  file_url: string | null;
   canonical_stage: LifecycleStage;
   is_enriched: boolean;
   is_content_backed: boolean;
@@ -314,6 +316,8 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
     const status: CanonicalResourceStatus = {
       resource_id: r.id,
       title: r.title ?? '(untitled)',
+      resource_type: r.resource_type ?? null,
+      file_url: r.file_url ?? null,
       canonical_stage: stage,
       is_enriched: isEnriched,
       is_content_backed: isContentBacked,

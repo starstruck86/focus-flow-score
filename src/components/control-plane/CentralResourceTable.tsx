@@ -27,6 +27,7 @@ import {
 } from '@/lib/controlPlaneState';
 import { ActionPreviewDialog, buildActionPreview, type ActionPreview } from './ActionPreviewDialog';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
+import { normalizeSourceType } from '@/lib/sourceTypeNormalizer';
 import { getRowFlash, type RowFlashStatus } from '@/lib/actionOutcomeStore';
 
 interface Props {
@@ -42,7 +43,19 @@ interface Props {
   outcomeRefreshKey?: number;
 }
 
-function inferSourceType(title: string): string {
+function inferSourceType(title: string, resourceType?: string | null, fileUrl?: string | null): string {
+  // Use canonical normalizer for accurate type
+  if (resourceType || fileUrl) {
+    const canonical = normalizeSourceType(resourceType, fileUrl);
+    const CANONICAL_LABELS: Record<string, string> = {
+      youtube: 'YouTube', zoom: 'Zoom', thinkific: 'Course',
+      pdf: 'PDF', webpage: 'Webpage', document: 'Document',
+      audio: 'Audio', video: 'Video', transcript: 'Transcript',
+    };
+    // transcript type from normalizer
+    if (canonical !== 'unknown') return CANONICAL_LABELS[canonical] ?? canonical;
+  }
+  // Fallback: title heuristics
   const lower = title.toLowerCase();
   if (lower.includes(' > ')) return 'Lesson';
   if (lower.includes('podcast') || lower.includes('episode')) return 'Podcast';
@@ -293,7 +306,7 @@ export function CentralResourceTable({
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="text-xs text-muted-foreground">{inferSourceType(r.title)}</span>
+                        <span className="text-xs text-muted-foreground">{inferSourceType(r.title, r.resource_type, r.file_url)}</span>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5">
