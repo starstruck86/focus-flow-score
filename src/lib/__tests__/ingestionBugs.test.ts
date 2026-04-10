@@ -84,8 +84,12 @@ describe('Bug 2 — Pclub PDF placeholder (exercise_-_add_or_remove_steps)', () 
     expect(deriveCanonicalStage(pclubResource, noKIs)).toBe('uploaded');
   });
 
-  it('should return placeholder_content as blocked reason', () => {
-    expect(deriveBlockedReason(pclubResource, noKIs)).toBe('placeholder_content');
+  it('should return auth_capture_incomplete as blocked reason (no file_url)', () => {
+    expect(deriveBlockedReason(pclubResource, noKIs)).toBe('auth_capture_incomplete');
+  });
+
+  it('should return placeholder_content when file_url exists', () => {
+    expect(deriveBlockedReason({ ...pclubResource, file_url: 'https://example.com/file.pdf' }, noKIs)).toBe('placeholder_content');
   });
 
   it('post-ingest validation: with file_url → pdf_parse_incomplete', () => {
