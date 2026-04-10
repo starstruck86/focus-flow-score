@@ -8,6 +8,7 @@ import {
   Brain, Mic, GitBranch, Eye, Zap, Wrench, Play,
 } from 'lucide-react';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
+import { BLOCKED_LABELS } from '@/lib/canonicalLifecycle';
 import type { ControlPlaneState } from '@/lib/controlPlaneState';
 import { CONTROL_PLANE_LABELS, CONTROL_PLANE_COLORS, deriveStateEvidence, detectConflicts } from '@/lib/controlPlaneState';
 import type { ResourceDetail } from '@/hooks/useResourceInspectData';
