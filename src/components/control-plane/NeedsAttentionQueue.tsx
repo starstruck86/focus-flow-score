@@ -96,17 +96,17 @@ function categoryToAction(cat: Category): string {
 function assessRisk(cat: Category, count: number): { level: 'low' | 'moderate' | 'review'; label: string } {
   switch (cat) {
     case 'needs_extraction':
-      if (count <= 5) return { level: 'low', label: 'Low risk — standard extraction, typically completes without issues' };
-      if (count <= 20) return { level: 'low', label: `Low risk — ${count} resources queued for extraction sequentially` };
-      return { level: 'moderate', label: `Moderate — ${count} resources is a large batch; extraction will take several minutes` };
+      if (count <= 5) return { level: 'low', label: 'Safe to run — extraction rarely fails on parseable content' };
+      if (count <= 20) return { level: 'low', label: `Safe to run — ${count} resources will extract sequentially` };
+      return { level: 'moderate', label: `Large batch (${count}) — will take several minutes, safe to run in background` };
     case 'failed':
-      if (count <= 3) return { level: 'moderate', label: 'Moderate — retry may resolve transient failures' };
-      return { level: 'review', label: `Review recommended — ${count} failures likely have different root causes` };
+      if (count <= 3) return { level: 'moderate', label: 'Worth retrying — transient errors (timeouts, rate limits) often self-resolve' };
+      return { level: 'review', label: `${count} failures — likely different root causes, consider diagnosing individually` };
     case 'needs_review':
-      if (count <= 3) return { level: 'moderate', label: 'Moderate — auto-repair works for common blockers (empty content, stale state)' };
-      return { level: 'review', label: `Review recommended — ${count} blocked resources may need individual diagnosis` };
+      if (count <= 3) return { level: 'moderate', label: 'Auto-repair handles common blockers (empty content, stale state)' };
+      return { level: 'review', label: `${count} blocked — some may need manual diagnosis after auto-repair` };
     default:
-      return { level: 'low', label: 'Low risk' };
+      return { level: 'low', label: 'Safe to run' };
   }
 }
 

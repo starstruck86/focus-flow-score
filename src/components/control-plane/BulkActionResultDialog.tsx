@@ -49,13 +49,13 @@ function buildOutcomeSummary(outcome: BulkActionOutcome): string {
     parts.push(`${outcome.succeeded} ${verb}`);
   }
   if (outcome.unchanged > 0) {
-    parts.push(`${outcome.unchanged} unchanged`);
+    parts.push(`${outcome.unchanged} already in target state`);
   }
   if (outcome.failed > 0) {
     parts.push(`${outcome.failed} ${failurePhrase(outcome)}`);
   }
   if (outcome.needsReview > 0) {
-    parts.push(`${outcome.needsReview} still need review`);
+    parts.push(`${outcome.needsReview} still need attention`);
   }
 
   if (parts.length === 0) return 'No resources were affected.';
@@ -63,10 +63,13 @@ function buildOutcomeSummary(outcome: BulkActionOutcome): string {
   const summary = parts.join(', ');
 
   if (outcome.mismatched > 0) {
-    return `${summary}. ${outcome.mismatched} had unexpected outcomes — inspect recommended.`;
+    return `${summary}. ${outcome.mismatched} ended in an unexpected state — open each to verify.`;
   }
   if (outcome.confirmed > 0 && outcome.failed === 0 && outcome.mismatched === 0) {
-    return `${summary}. All transitions confirmed.`;
+    return `${summary}. All transitions confirmed by reconciliation.`;
+  }
+  if (outcome.failed > 0 && outcome.succeeded === 0) {
+    return `${summary}. Consider diagnosing individually.`;
   }
   return `${summary}.`;
 }
@@ -103,8 +106,8 @@ export function BulkActionResultDialog({ outcome, open, onClose, onFilterAttenti
             <div className="grid grid-cols-2 gap-2">
               <Stat icon={CheckCircle2} label={successVerb(outcome).charAt(0).toUpperCase() + successVerb(outcome).slice(1)} value={outcome.succeeded} color="text-emerald-600" />
               <Stat icon={XCircle} label={failurePhrase(outcome).charAt(0).toUpperCase() + failurePhrase(outcome).slice(1)} value={outcome.failed} color="text-destructive" />
-              <Stat icon={MinusCircle} label="Unchanged" value={outcome.unchanged} color="text-muted-foreground" />
-              <Stat icon={AlertTriangle} label="Still need review" value={outcome.needsReview} color="text-amber-600" />
+              <Stat icon={MinusCircle} label="Already in target state" value={outcome.unchanged} color="text-muted-foreground" />
+              <Stat icon={AlertTriangle} label="Still need attention" value={outcome.needsReview} color="text-amber-600" />
             </div>
 
             {/* Reconciliation summary */}

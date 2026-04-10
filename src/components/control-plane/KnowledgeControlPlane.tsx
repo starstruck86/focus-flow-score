@@ -230,7 +230,7 @@ export function KnowledgeControlPlane() {
       if (customFilterLabel.includes('Grounding-Ready')) return 'Resources eligible for Dave grounding — active KIs, contexts, and no blockers.';
       if (customFilterLabel.includes('conflicted')) return 'Resources with contradictory lifecycle signals that may need manual review.';
       if (customFilterLabel.includes('attention')) return 'Resources that failed or had unexpected outcomes in the last batch action.';
-      if (customFilterLabel.includes('mismatched')) return 'Reconciliation detected a state mismatch on these resources. Check each resource\'s current state and re-run the intended action if needed.';
+      if (customFilterLabel.includes('mismatched')) return 'Reconciliation detected a state mismatch on these resources. For each: ① verify current lifecycle state ② check recent action history ③ re-run the intended action if state is still wrong.';
       return null;
     }
     switch (filter) {
