@@ -376,120 +376,118 @@ export default function DojoSession() {
                 </p>
               </div>
 
-              {/* ── Response Comparison ── */}
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
-                  Compare Responses
-                </p>
+              {/* ── Your Response ── */}
+              <Card className="border-border/40">
+                <CardContent className="p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Response</p>
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed italic">
+                    "{userText}"
+                  </p>
+                </CardContent>
+              </Card>
 
-                {/* Your response */}
-                <Card className="border-border/40">
-                  <CardContent className="p-3 space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Response</p>
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed italic">
-                      "{userText}"
+              {/* ── Stronger Answer ── */}
+              <Card className="border-green-500/20 bg-green-500/5">
+                <CardContent className="p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Lightbulb className="h-3.5 w-3.5 text-green-500" />
+                    <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">
+                      Stronger Answer
                     </p>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <p className="text-sm text-foreground leading-relaxed italic">
+                    "{currentResult.improvedVersion}"
+                  </p>
+                </CardContent>
+              </Card>
 
-                {/* Improved version */}
-                <Card className="border-green-500/20 bg-green-500/5">
-                  <CardContent className="p-3 space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <Lightbulb className="h-3.5 w-3.5 text-green-500" />
-                      <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">
-                        Stronger Answer
+              {/* ── World-Class Standard ── */}
+              {currentResult.worldClassResponse && (
+                <Card className="border-primary/40 bg-gradient-to-br from-primary/5 to-primary/10 shadow-md ring-1 ring-primary/10">
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Crown className="h-4.5 w-4.5 text-primary" />
+                      <p className="text-xs font-bold text-primary uppercase tracking-wider">
+                        World-Class Standard
                       </p>
                     </div>
-                    <p className="text-sm text-foreground leading-relaxed italic">
-                      "{currentResult.improvedVersion}"
+                    <p className="text-sm text-foreground leading-relaxed italic pl-0.5">
+                      "{currentResult.worldClassResponse}"
                     </p>
-                  </CardContent>
-                </Card>
 
-                {/* World-class response */}
-                {currentResult.worldClassResponse && (
-                  <Card className="border-primary/30 bg-primary/5 shadow-sm">
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-center gap-1.5">
-                        <Crown className="h-4 w-4 text-primary" />
-                        <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">
-                          World-Class Standard
-                        </p>
+                    {/* Why it works */}
+                    {currentResult.whyItWorks && currentResult.whyItWorks.length > 0 && (
+                      <div className="pt-3 border-t border-primary/15 space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="h-3.5 w-3.5 text-primary/70" />
+                          <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
+                            Why It Works
+                          </p>
+                        </div>
+                        <ul className="space-y-1.5">
+                          {currentResult.whyItWorks.map((bullet, i) => (
+                            <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
+                              <span className="text-primary/50 mt-0.5 shrink-0">•</span>
+                              <span>{bullet}</span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                      <p className="text-sm text-foreground leading-relaxed italic">
-                        "{currentResult.worldClassResponse}"
-                      </p>
+                    )}
 
-                      {/* Why it works */}
-                      {currentResult.whyItWorks && currentResult.whyItWorks.length > 0 && (
-                        <div className="pt-2 border-t border-primary/10 space-y-1.5">
-                          <div className="flex items-center gap-1">
-                            <Sparkles className="h-3 w-3 text-primary/70" />
-                            <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
-                              Why It Works
-                            </p>
-                          </div>
-                          <ul className="space-y-1">
-                            {currentResult.whyItWorks.map((bullet, i) => (
-                              <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground leading-relaxed">
-                                <span className="text-primary/50 mt-0.5 shrink-0">•</span>
-                                <span>{bullet}</span>
-                              </li>
-                            ))}
-                          </ul>
+                    {/* Move sequence */}
+                    {currentResult.moveSequence && currentResult.moveSequence.length > 0 && (
+                      <div className="pt-3 border-t border-primary/15 space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <ListOrdered className="h-3.5 w-3.5 text-primary/70" />
+                          <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
+                            Move Sequence
+                          </p>
                         </div>
-                      )}
+                        <ol className="space-y-1">
+                          {currentResult.moveSequence.map((step, i) => (
+                            <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                              <span className="text-primary/60 font-bold shrink-0 w-4 text-right">{i + 1}.</span>
+                              <span className="capitalize">{step}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
 
-                      {/* Move sequence */}
-                      {currentResult.moveSequence && currentResult.moveSequence.length > 0 && (
-                        <div className="pt-2 border-t border-primary/10 space-y-1.5">
-                          <div className="flex items-center gap-1">
-                            <ListOrdered className="h-3 w-3 text-primary/70" />
-                            <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
-                              Move Sequence
-                            </p>
-                          </div>
-                          <ol className="space-y-1">
-                            {currentResult.moveSequence.map((step, i) => (
-                              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                                <span className="text-primary/60 font-bold shrink-0 w-4 text-right">{i + 1}.</span>
-                                <span className="capitalize">{step}</span>
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      )}
-
-                      {/* Pattern tags */}
-                      {currentResult.patternTags && currentResult.patternTags.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-2 border-t border-primary/10">
+                    {/* Pattern tags */}
+                    {currentResult.patternTags && currentResult.patternTags.length > 0 && (
+                      <div className="pt-3 border-t border-primary/15 space-y-2">
+                        <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
+                          Reusable Patterns
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
                           {currentResult.patternTags.map((tag, i) => (
                             <Badge key={i} variant="secondary" className="text-[10px] font-medium">
                               {PATTERN_TAG_LABELS[tag] || tag.replace(/_/g, ' ')}
                             </Badge>
                           ))}
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* ── Focus on This Next ── */}
               {activeFocus && (
                 <Card className="border-amber-500/30 bg-amber-500/5">
-                  <CardContent className="p-4 space-y-2">
+                  <CardContent className="p-4 space-y-2.5">
                     <div className="flex items-center gap-2">
                       <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <div>
                         <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
                           Focus on This Next
                         </p>
-                        <p className="text-sm font-medium text-foreground">
+                        <p className="text-sm font-semibold text-foreground">
                           {FOCUS_PATTERN_LABELS[activeFocus] || activeFocus.replace(/_/g, ' ')}
                         </p>
                       </div>
@@ -499,25 +497,41 @@ export default function DojoSession() {
                         {currentResult.focusReason}
                       </p>
                     )}
-                    {currentResult?.practiceCue && (
-                      <div className="flex items-start gap-1.5 pl-6 pt-1">
-                        <MessageCircle className="h-3 w-3 text-amber-500/70 mt-0.5 shrink-0" />
-                        <p className="text-xs font-medium text-foreground leading-relaxed">
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── Practice This on the Retry ── */}
+              {currentResult?.practiceCue && (
+                <Card className="border-amber-600/20 bg-amber-600/5">
+                  <CardContent className="p-3">
+                    <div className="flex items-start gap-2">
+                      <Target className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">
+                          Practice This on the Retry
+                        </p>
+                        <p className="text-sm font-medium text-foreground leading-relaxed">
                           {currentResult.practiceCue}
                         </p>
                       </div>
-                    )}
+                    </div>
                   </CardContent>
                 </Card>
               )}
 
               {/* ── Teaching Note (Coach's Takeaway) ── */}
               {currentResult?.teachingNote && (
-                <div className="flex items-start gap-2.5 px-2 py-2">
-                  <GraduationCap className="h-4 w-4 text-muted-foreground/60 mt-0.5 shrink-0" />
-                  <p className="text-xs text-muted-foreground italic leading-relaxed">
-                    {currentResult.teachingNote}
-                  </p>
+                <div className="flex items-start gap-2.5 px-3 py-3 rounded-lg bg-muted/30 border border-border/40">
+                  <GraduationCap className="h-4 w-4 text-muted-foreground/70 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1">
+                      Coach's Takeaway
+                    </p>
+                    <p className="text-sm text-muted-foreground italic leading-relaxed">
+                      "{currentResult.teachingNote}"
+                    </p>
+                  </div>
                 </div>
               )}
 
