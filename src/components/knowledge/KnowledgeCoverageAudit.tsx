@@ -290,7 +290,8 @@ export function KnowledgeCoverageAudit() {
               className="text-xs gap-1.5"
               onClick={() => {
                 const underExtracted = filterByPanel(audit.resources, 'under_extracted');
-                handleFlagForReExtraction(underExtracted, 'Under-extracted — auto-flagged');
+                const preview = deepReExtract.checkEligibility(underExtracted);
+                setEligibilityPreview({ ...preview, total: underExtracted.length });
               }}
             >
               <Zap className="h-3 w-3" />
