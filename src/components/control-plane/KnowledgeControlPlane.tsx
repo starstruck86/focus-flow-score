@@ -353,18 +353,28 @@ export function KnowledgeControlPlane() {
         onOpenBulkResult={handleOpenBulkResult}
       />
 
-      {/* Central Table */}
-      <CentralResourceTable
-        resources={resources}
-        filter={filter}
-        processingIds={processingIds}
-        conflictIds={conflictIds}
-        customFilterIds={customFilterIds}
-        onAction={handleAction}
-        onInspect={handleInspect}
-        actionLoading={actionLoading}
-        outcomeRefreshKey={outcomeRefreshKey}
-      />
+      {/* Quick Filter Presets + Central Table */}
+      <div className="space-y-1.5">
+        <TableFilterPresets
+          activeFilter={filter}
+          customFilterLabel={customFilterLabel}
+          onFilterChange={handleFilterChange}
+          onCustomPreset={(key) => {
+            if (key === 'groundingEligible') handleFilterReadiness('groundingEligible');
+          }}
+        />
+        <CentralResourceTable
+          resources={resources}
+          filter={filter}
+          processingIds={processingIds}
+          conflictIds={conflictIds}
+          customFilterIds={customFilterIds}
+          onAction={handleAction}
+          onInspect={handleInspect}
+          actionLoading={actionLoading}
+          outcomeRefreshKey={outcomeRefreshKey}
+        />
+      </div>
 
       {/* Inspect Drawer */}
       <ResourceInspectDrawer
