@@ -1,7 +1,7 @@
 /**
- * Dojo QA Inspection Panel — Triage + inspection for all 3 modes.
+ * Dojo QA Inspection Panel — Triage + inspection + fixture runner for all 3 modes.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,13 +9,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, CheckCircle2, XCircle, ArrowLeft, ChevronDown, ChevronUp, Filter } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, XCircle, ArrowLeft, ChevronDown, ChevronUp, Filter, Play, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { SKILL_LABELS } from '@/lib/dojo/scenarios';
 import { VALID_FOCUS_PATTERN_IDS, formatFocusPattern } from '@/lib/dojo/focusPatterns';
 import { normalizeScoreResult, type DojoScoreResult } from '@/lib/dojo/types';
+import { QA_FIXTURES, validateQAResult, type QAResult } from '@/lib/dojo/qaHarness';
 
 interface SessionRow {
   id: string;
@@ -98,7 +99,7 @@ function validateResult(sj: DojoScoreResult, sessionType: string): ValidationFla
     }
   }
 
-  // Roleplay-specific
+  // Roleplay-specific flags
   if (sessionType === 'roleplay') {
     const raw = sj as unknown as Record<string, unknown>;
     if (!raw.turnAnalysis || !Array.isArray(raw.turnAnalysis) || (raw.turnAnalysis as unknown[]).length === 0) {
@@ -107,13 +108,25 @@ function validateResult(sj: DojoScoreResult, sessionType: string): ValidationFla
     if (!raw.controlArc || (typeof raw.controlArc === 'string' && raw.controlArc.length < 10)) {
       flags.push({ type: 'warning', code: 'missing_control_arc', message: 'Missing or weak controlArc' });
     }
+    if (!raw.adaptationNote || (typeof raw.adaptationNote === 'string' && raw.adaptationNote.length < 10)) {
+      flags.push({ type: 'warning', code: 'missing_adaptation_note', message: 'Missing or weak adaptationNote' });
+    }
   }
 
-  // Review-specific
+  // Review-specific flags
   if (sessionType === 'review') {
     const raw = sj as unknown as Record<string, unknown>;
-    if (typeof raw.diagnosisAccuracy !== 'string') {
+    if (typeof raw.diagnosisAccuracy !== 'string' || !raw.diagnosisAccuracy) {
       flags.push({ type: 'warning', code: 'missing_diagnosis_accuracy', message: 'Missing diagnosisAccuracy for review' });
+    }
+    if (typeof raw.rewriteFixedIssue !== 'boolean') {
+      flags.push({ type: 'warning', code: 'missing_rewrite_fixed', message: 'Missing rewriteFixedIssue for review' });
+    }
+    if (typeof raw.diagnosisFeedback !== 'string' || !raw.diagnosisFeedback) {
+      flags.push({ type: 'warning', code: 'missing_diagnosis_feedback', message: 'Missing diagnosisFeedback for review' });
+    }
+    if (typeof raw.rewriteFeedback !== 'string' || !raw.rewriteFeedback) {
+      flags.push({ type: 'warning', code: 'missing_rewrite_feedback', message: 'Missing rewriteFeedback for review' });
     }
   }
 
@@ -130,6 +143,11 @@ export default function DojoQA() {
   const [filterSeverity, setFilterSeverity] = useState<FilterSeverity>('all');
   const [filterSkill, setFilterSkill] = useState<string>('all');
   const [expandedJson, setExpandedJson] = useState<Set<string>>(new Set());
+
+  // Fixture runner state
+  const [fixtureResults, setFixtureResults] = useState<QAResult[]>([]);
+  const [fixtureRunning, setFixtureRunning] = useState(false);
+  const [fixtureProgress, setFixtureProgress] = useState(0);
 
   const { data: sessions } = useQuery({
     queryKey: ['dojo-qa-sessions', user?.id],
@@ -170,19 +188,20 @@ export default function DojoQA() {
     return map;
   }, [turns]);
 
-  // Build enriched session data
   const sessionData = useMemo(() => {
     return (sessions || []).map(s => {
       const sTurns = turnsBySession.get(s.id) || [];
       const latestTurn = [...sTurns].sort((a, b) => b.turn_index - a.turn_index)[0];
       const sj = latestTurn?.score_json ? normalizeScoreResult(latestTurn.score_json) : null;
-      const rawJson = latestTurn?.score_json || null;
-      const flags = sj ? validateResult(sj, s.session_type) : [];
-      return { session: s, turns: sTurns, sj, rawJson, flags };
+      // For mode-specific validation, we need the raw JSON which may have extra fields
+      const rawSj = latestTurn?.score_json || null;
+      // Merge raw fields onto normalized for validation
+      const merged = rawSj ? { ...sj, ...rawSj } as unknown as DojoScoreResult : sj;
+      const flags = merged ? validateResult(merged, s.session_type) : [];
+      return { session: s, turns: sTurns, sj: merged, rawJson: rawSj, flags };
     });
   }, [sessions, turnsBySession]);
 
-  // Stats by mode
   const statsByMode = useMemo(() => {
     const stats: Record<string, { total: number; clean: number; flagged: number }> = {
       drill: { total: 0, clean: 0, flagged: 0 },
@@ -200,7 +219,6 @@ export default function DojoQA() {
     return stats;
   }, [sessionData]);
 
-  // Top recurring problems
   const recurringProblems = useMemo(() => {
     const counts = new Map<string, number>();
     for (const d of sessionData) {
@@ -210,11 +228,10 @@ export default function DojoQA() {
     }
     return [...counts.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
+      .slice(0, 8)
       .map(([code, count]) => ({ code, count, label: code.replace(/_/g, ' ') }));
   }, [sessionData]);
 
-  // Filtered data
   const filtered = useMemo(() => {
     return sessionData.filter(d => {
       if (filterMode !== 'all' && d.session.session_type !== filterMode) return false;
@@ -244,6 +261,94 @@ export default function DojoQA() {
     });
   };
 
+  // ── Fixture Runner ──
+  const runFixtures = useCallback(async () => {
+    setFixtureRunning(true);
+    setFixtureResults([]);
+    setFixtureProgress(0);
+
+    const drillFixtures = QA_FIXTURES.filter(f => f.mode === 'drill');
+    const roleplayFixtures = QA_FIXTURES.filter(f => f.mode === 'roleplay');
+    const reviewFixtures = QA_FIXTURES.filter(f => f.mode === 'review');
+    const allFixtures = [...drillFixtures, ...roleplayFixtures, ...reviewFixtures];
+    const results: QAResult[] = [];
+
+    for (let i = 0; i < allFixtures.length; i++) {
+      const fixture = allFixtures[i];
+      setFixtureProgress(i + 1);
+
+      try {
+        let data: Record<string, unknown>;
+
+        if (fixture.mode === 'drill') {
+          const resp = await supabase.functions.invoke('dojo-score', {
+            body: {
+              scenario: { skillFocus: fixture.skill, context: fixture.context, objection: fixture.objection },
+              userResponse: fixture.userResponse,
+              retryCount: 0,
+            },
+          });
+          if (resp.error) throw resp.error;
+          data = resp.data as Record<string, unknown>;
+        } else if (fixture.mode === 'roleplay' && fixture.conversation) {
+          const resp = await supabase.functions.invoke('dojo-roleplay-score', {
+            body: {
+              scenario: { skillFocus: fixture.skill, context: fixture.context, objection: fixture.objection },
+              conversation: fixture.conversation,
+              skillFocus: fixture.skill,
+            },
+          });
+          if (resp.error) throw resp.error;
+          data = resp.data as Record<string, unknown>;
+        } else if (fixture.mode === 'review' && fixture.weakResponse) {
+          const resp = await supabase.functions.invoke('dojo-review-score', {
+            body: {
+              scenario: { skillFocus: fixture.skill, context: fixture.context, objection: fixture.objection },
+              skillFocus: fixture.skill,
+              action: 'score_review',
+              weakResponse: fixture.weakResponse,
+              userDiagnosis: fixture.userDiagnosis || '',
+              userRewrite: fixture.userRewrite || '',
+            },
+          });
+          if (resp.error) throw resp.error;
+          data = resp.data as Record<string, unknown>;
+        } else {
+          continue;
+        }
+
+        if (data?.error) throw new Error(String(data.error));
+        const scoreResult = normalizeScoreResult(data);
+        // Merge raw mode-specific fields onto score result for validation
+        const merged = { ...scoreResult, ...data } as unknown as DojoScoreResult;
+        results.push(validateQAResult(fixture, merged));
+      } catch (e) {
+        console.error(`Fixture ${fixture.id} error:`, e);
+        const emptyResult = normalizeScoreResult({});
+        results.push({
+          fixture,
+          result: emptyResult,
+          scoreInRange: false,
+          mistakeMatch: false,
+          coherenceCheck: { feedbackAligned: false, focusPatternAligned: false, practiceCueActionable: false, deltaNotePresent: false },
+          issues: [`Fixture error: ${e instanceof Error ? e.message : 'Unknown'}`],
+        });
+      }
+    }
+
+    setFixtureResults(results);
+    setFixtureRunning(false);
+  }, []);
+
+  const fixturesByMode = useMemo(() => {
+    const grouped: Record<string, QAResult[]> = { drill: [], roleplay: [], review: [] };
+    for (const r of fixtureResults) {
+      const mode = r.fixture.mode;
+      if (grouped[mode]) grouped[mode].push(r);
+    }
+    return grouped;
+  }, [fixtureResults]);
+
   return (
     <Layout>
       <div className={cn('px-4 pt-4 space-y-4', SHELL.main.bottomPad)}>
@@ -258,6 +363,72 @@ export default function DojoQA() {
             </p>
           </div>
         </div>
+
+        {/* ── Fixture Runner ── */}
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold">Fixture Runner</p>
+                <p className="text-[10px] text-muted-foreground">{QA_FIXTURES.length} fixtures across drill, roleplay, review</p>
+              </div>
+              <Button size="sm" className="gap-1.5" onClick={runFixtures} disabled={fixtureRunning}>
+                {fixtureRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                {fixtureRunning ? `Running ${fixtureProgress}/${QA_FIXTURES.length}` : 'Run Fixtures'}
+              </Button>
+            </div>
+
+            {fixtureResults.length > 0 && (
+              <div className="space-y-3">
+                {/* Summary */}
+                <div className="flex gap-3">
+                  <Badge className="text-xs bg-green-600 hover:bg-green-600">{fixtureResults.filter(r => r.issues.length === 0).length} passed</Badge>
+                  <Badge variant="destructive" className="text-xs">{fixtureResults.filter(r => r.issues.length > 0).length} failed</Badge>
+                </div>
+
+                {/* Results by mode */}
+                {(['drill', 'roleplay', 'review'] as const).map(mode => {
+                  const modeResults = fixturesByMode[mode] || [];
+                  if (modeResults.length === 0) return null;
+                  return (
+                    <div key={mode} className="space-y-1.5">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider capitalize">{mode} ({modeResults.filter(r => r.issues.length === 0).length}/{modeResults.length} pass)</p>
+                      {modeResults.map(r => (
+                        <div key={r.fixture.id} className={cn('rounded-md border p-2.5 text-xs space-y-1',
+                          r.issues.length === 0 ? 'border-green-500/30 bg-green-500/5' : 'border-red-500/30 bg-red-500/5'
+                        )}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              {r.issues.length === 0 ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
+                              <span className="font-medium">{r.fixture.id}</span>
+                              <Badge variant="outline" className="text-[9px]">{r.fixture.skill}</Badge>
+                            </div>
+                            <span className="font-mono text-[10px]">
+                              {r.result.score} <span className="text-muted-foreground">(expect {r.fixture.expectedScoreRange[0]}-{r.fixture.expectedScoreRange[1]})</span>
+                            </span>
+                          </div>
+                          {r.fixture.expectedMistake && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Mistake: <span className={r.mistakeMatch ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>{r.result.topMistake || '—'}</span>
+                              {!r.mistakeMatch && <span> (expected: {r.fixture.expectedMistake})</span>}
+                            </p>
+                          )}
+                          {r.issues.length > 0 && (
+                            <div className="space-y-0.5 pt-1 border-t border-border/30">
+                              {r.issues.map((issue, i) => (
+                                <p key={i} className="text-[10px] text-red-600 dark:text-red-400">• {issue}</p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Stats by mode */}
         <div className="grid grid-cols-3 gap-2">
@@ -296,22 +467,16 @@ export default function DojoQA() {
         <div className="flex items-center gap-2 flex-wrap">
           <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           {(['all', 'errors', 'warnings', 'clean'] as const).map(s => (
-            <Badge key={s} variant={filterSeverity === s ? 'default' : 'outline'} className="text-[10px] cursor-pointer capitalize" onClick={() => setFilterSeverity(s)}>
-              {s}
-            </Badge>
+            <Badge key={s} variant={filterSeverity === s ? 'default' : 'outline'} className="text-[10px] cursor-pointer capitalize" onClick={() => setFilterSeverity(s)}>{s}</Badge>
           ))}
           <span className="text-muted-foreground text-[10px]">|</span>
           {(['all', 'drill', 'roleplay', 'review'] as const).map(m => (
-            <Badge key={m} variant={filterMode === m ? 'default' : 'outline'} className="text-[10px] cursor-pointer capitalize" onClick={() => setFilterMode(m)}>
-              {m}
-            </Badge>
+            <Badge key={m} variant={filterMode === m ? 'default' : 'outline'} className="text-[10px] cursor-pointer capitalize" onClick={() => setFilterMode(m)}>{m}</Badge>
           ))}
           <span className="text-muted-foreground text-[10px]">|</span>
           <select value={filterSkill} onChange={e => setFilterSkill(e.target.value)} className="text-[10px] bg-transparent border border-border rounded px-1.5 py-0.5">
             <option value="all">All Skills</option>
-            {Object.entries(SKILL_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
+            {Object.entries(SKILL_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
           </select>
         </div>
 
@@ -329,9 +494,7 @@ export default function DojoQA() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-[10px]">{session.session_type}</Badge>
-                    <Badge variant="secondary" className="text-[10px]">
-                      {SKILL_LABELS[session.skill_focus as keyof typeof SKILL_LABELS] || session.skill_focus}
-                    </Badge>
+                    <Badge variant="secondary" className="text-[10px]">{SKILL_LABELS[session.skill_focus as keyof typeof SKILL_LABELS] || session.skill_focus}</Badge>
                     {flags.length === 0 && <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />}
                     {flags.some(f => f.type === 'error') && <XCircle className="h-3.5 w-3.5 text-red-500" />}
                     {!flags.some(f => f.type === 'error') && flags.length > 0 && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
@@ -347,9 +510,6 @@ export default function DojoQA() {
                     <div><span className="text-muted-foreground">Mistake:</span> <span className="font-medium">{sj.topMistake?.replace(/_/g, ' ') || '—'}</span></div>
                     <div><span className="text-muted-foreground">Focus:</span> <span className="font-medium">{sj.focusPattern ? formatFocusPattern(sj.focusPattern) : '—'}</span></div>
                     <div><span className="text-muted-foreground">Retries:</span> <span className="font-medium">{session.retry_count}</span></div>
-                    {sj.focusApplied && (
-                      <div className="col-span-2"><span className="text-muted-foreground">Focus Applied:</span> <span className="font-medium">{sj.focusApplied}</span></div>
-                    )}
                   </div>
                 )}
 
@@ -364,18 +524,13 @@ export default function DojoQA() {
                   <div className="space-y-0.5 pt-1 border-t border-border/40">
                     {flags.map((f, i) => (
                       <div key={i} className="flex items-start gap-1.5">
-                        {f.type === 'error'
-                          ? <XCircle className="h-3 w-3 text-red-500 mt-0.5 shrink-0" />
-                          : <AlertTriangle className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />}
-                        <p className={cn('text-[10px]', f.type === 'error' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400')}>
-                          {f.message}
-                        </p>
+                        {f.type === 'error' ? <XCircle className="h-3 w-3 text-red-500 mt-0.5 shrink-0" /> : <AlertTriangle className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />}
+                        <p className={cn('text-[10px]', f.type === 'error' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400')}>{f.message}</p>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* JSON inspector toggle */}
                 {rawJson && (
                   <div className="pt-1 border-t border-border/30">
                     <button onClick={() => toggleJson(session.id)} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
