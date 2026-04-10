@@ -118,31 +118,31 @@ export function ActionPreviewDialog({ preview, resourceTitle, open, onConfirm, o
 
   return (
     <AlertDialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <AlertDialogContent className="max-w-md">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="text-sm">{preview.actionLabel}</AlertDialogTitle>
+      <AlertDialogContent className="max-w-md bg-card border border-border/60 rounded-2xl shadow-xl p-6">
+        <AlertDialogHeader className="space-y-1.5">
+          <AlertDialogTitle className="text-base font-bold">{preview.actionLabel}</AlertDialogTitle>
           {resourceTitle && (
-            <p className="text-xs text-muted-foreground truncate">{resourceTitle}</p>
+            <p className="text-sm text-muted-foreground truncate">{resourceTitle}</p>
           )}
         </AlertDialogHeader>
         <AlertDialogDescription asChild>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {/* Why */}
             <div>
               <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Why</span>
-              <p className="text-xs text-foreground mt-0.5">{preview.reason}</p>
+              <p className="text-sm text-foreground mt-1">{preview.reason}</p>
             </div>
 
             {/* Pipeline step */}
             <div>
               <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Will run</span>
-              <p className="text-xs text-foreground mt-0.5 font-mono">{preview.pipelineStep}</p>
+              <p className="text-sm text-foreground mt-1 font-mono">{preview.pipelineStep}</p>
             </div>
 
             {/* State transition */}
             <div>
               <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Expected transition</span>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1.5">
                 <Badge variant="outline" className={cn('text-[10px]', fromColors.text, fromColors.bg, fromColors.border)}>
                   {CONTROL_PLANE_LABELS[preview.fromState]}
                 </Badge>
@@ -156,16 +156,16 @@ export function ActionPreviewDialog({ preview, resourceTitle, open, onConfirm, o
             {/* Success criteria */}
             <div>
               <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Success criteria</span>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
-                <p className="text-xs text-foreground">{preview.successCriteria}</p>
+              <div className="flex items-center gap-1.5 mt-1">
+                <CheckCircle2 className="h-3 w-3 text-recovery shrink-0" />
+                <p className="text-sm text-foreground">{preview.successCriteria}</p>
               </div>
             </div>
           </div>
         </AlertDialogDescription>
-        <AlertDialogFooter>
-          <AlertDialogCancel className="text-xs h-8" disabled={loading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction className="text-xs h-8" onClick={onConfirm} disabled={loading}>
+        <AlertDialogFooter className="flex justify-end gap-3 mt-4">
+          <AlertDialogCancel className="text-sm" disabled={loading}>Cancel</AlertDialogCancel>
+          <AlertDialogAction className="text-sm" onClick={onConfirm} disabled={loading}>
             {loading ? 'Running…' : `Run ${preview.actionLabel}`}
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -249,38 +249,38 @@ export function BulkActionPreviewDialog({ preview, open, onConfirm, onCancel, lo
 
   return (
     <AlertDialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <AlertDialogContent className="max-w-md">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="text-sm">{preview.actionLabel}</AlertDialogTitle>
-          <p className="text-xs text-muted-foreground">
+      <AlertDialogContent className="max-w-md bg-card border border-border/60 rounded-2xl shadow-xl p-6">
+        <AlertDialogHeader className="space-y-1.5">
+          <AlertDialogTitle className="text-base font-bold">{preview.actionLabel}</AlertDialogTitle>
+          <p className="text-sm text-muted-foreground">
             {preview.count} resource{preview.count !== 1 ? 's' : ''} selected
           </p>
         </AlertDialogHeader>
         <AlertDialogDescription asChild>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
               <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Why these resources</span>
-              <p className="text-xs text-foreground mt-0.5">{preview.reason}</p>
+              <p className="text-sm text-foreground mt-1">{preview.reason}</p>
             </div>
 
             <div>
               <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Will run</span>
-              <p className="text-xs text-foreground mt-0.5 font-mono">{preview.pipelineStep}</p>
+              <p className="text-sm text-foreground mt-1">{preview.pipelineStep}</p>
             </div>
 
             <div>
               <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Expected transition</span>
-              <p className="text-xs text-foreground mt-0.5">{preview.expectedTransition}</p>
+              <p className="text-sm text-foreground mt-1">{preview.expectedTransition}</p>
             </div>
 
             <div>
               <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Sample resources</span>
-              <ul className="mt-1 space-y-0.5">
+              <ul className="mt-1.5 space-y-1">
                 {preview.sampleTitles.map((t, i) => (
-                  <li key={i} className="text-xs text-muted-foreground truncate">• {t}</li>
+                  <li key={i} className="text-sm text-muted-foreground truncate">• {t}</li>
                 ))}
                 {preview.count > preview.sampleTitles.length && (
-                  <li className="text-[10px] text-muted-foreground/70 italic">
+                  <li className="text-xs text-muted-foreground/70 italic">
                     …and {preview.count - preview.sampleTitles.length} more
                   </li>
                 )}
@@ -288,10 +288,10 @@ export function BulkActionPreviewDialog({ preview, open, onConfirm, onCancel, lo
             </div>
           </div>
         </AlertDialogDescription>
-        <AlertDialogFooter>
-          <AlertDialogCancel className="text-xs h-8" disabled={loading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction className="text-xs h-8" onClick={onConfirm} disabled={loading}>
-            {loading ? 'Running…' : `Run on ${preview.count} resources`}
+        <AlertDialogFooter className="flex justify-end gap-3 mt-4">
+          <AlertDialogCancel className="text-sm" disabled={loading}>Cancel</AlertDialogCancel>
+          <AlertDialogAction className="text-sm" onClick={onConfirm} disabled={loading}>
+            {loading ? 'Running…' : `Run on ${preview.count} resource${preview.count !== 1 ? 's' : ''}`}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
