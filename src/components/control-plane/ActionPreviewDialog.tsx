@@ -189,7 +189,12 @@ export function buildBulkActionPreview(
   action: string,
   resources: CanonicalResourceStatus[],
 ): BulkActionPreview {
-  const sampleTitles = resources.slice(0, 4).map(r => r.title);
+  const decodeHtml = (s: string) => {
+    const el = document.createElement('textarea');
+    el.innerHTML = s;
+    return el.value;
+  };
+  const sampleTitles = resources.slice(0, 4).map(r => decodeHtml(r.title));
 
   switch (action) {
     case 'bulk_extract':
