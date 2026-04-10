@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { summarizeSession } from '@/lib/dojo/dojoAudioAnalytics';
+import type { DojoScoreResult } from '@/lib/dojo/types';
 import type { SpeechChunk } from '@/lib/dojo/conversationEngine';
 import { createSession, loadResult } from '@/lib/dojo/conversationEngine';
 import { withPlayback, type PlaybackState } from '@/lib/dojo/playbackAdapter';
