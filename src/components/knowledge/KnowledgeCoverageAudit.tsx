@@ -31,6 +31,9 @@ import { ResourceAuditDrilldown } from './ResourceAuditDrilldown';
 import { RealBottleneckReview } from './RealBottleneckReview';
 import { toast } from 'sonner';
 import { filterByPanel, filterByState, derivePostExtractionState } from '@/lib/postExtractionState';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 
 type AuditFilter = 'all' | 'resumable' | 'under_extracted' | 'shallow' | 'rich_weak' | 'zero_kis' | 'recently_extracted' | 'biggest_lift';
 
