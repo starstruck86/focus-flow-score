@@ -407,6 +407,16 @@ export default function DojoSession() {
                 </CardContent>
               </Card>
 
+              {/* ── Delta Note (between Stronger and World-Class) ── */}
+              {currentResult.deltaNote && currentResult.worldClassResponse && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-primary/5 border border-primary/15">
+                  <ChevronRight className="h-3.5 w-3.5 text-primary/60 mt-0.5 shrink-0" />
+                  <p className="text-xs text-muted-foreground leading-relaxed italic">
+                    {currentResult.deltaNote}
+                  </p>
+                </div>
+              )}
+
               {/* ── World-Class Standard ── */}
               {currentResult.worldClassResponse && (
                 <Card className="border-primary/40 bg-gradient-to-br from-primary/5 to-primary/10 shadow-md ring-1 ring-primary/10">
