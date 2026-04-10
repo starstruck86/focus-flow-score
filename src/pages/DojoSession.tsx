@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import {
   ArrowLeft, Send, RotateCcw, Loader2, Target, AlertTriangle,
   CheckCircle2, Lightbulb, Swords, ChevronRight, Crown, Sparkles,
-  Crosshair,
+  Crosshair, ListOrdered, MessageCircle,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,8 +26,11 @@ interface ScoreResult {
   improvedVersion: string;
   worldClassResponse?: string;
   whyItWorks?: string[];
+  moveSequence?: string[];
   patternTags?: string[];
   focusPattern?: string;
+  focusReason?: string;
+  practiceCue?: string;
 }
 
 const FOCUS_PATTERN_LABELS: Record<string, string> = {
