@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import {
   ArrowLeft, Send, RotateCcw, Loader2, Target, AlertTriangle,
   CheckCircle2, Lightbulb, Swords, ChevronRight, Crown, Sparkles,
-  Crosshair,
+  Crosshair, ListOrdered, MessageCircle,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,8 +26,11 @@ interface ScoreResult {
   improvedVersion: string;
   worldClassResponse?: string;
   whyItWorks?: string[];
+  moveSequence?: string[];
   patternTags?: string[];
   focusPattern?: string;
+  focusReason?: string;
+  practiceCue?: string;
 }
 
 const FOCUS_PATTERN_LABELS: Record<string, string> = {
@@ -420,16 +423,6 @@ export default function DojoSession() {
                         "{currentResult.worldClassResponse}"
                       </p>
 
-                      {/* Pattern tags */}
-                      {currentResult.patternTags && currentResult.patternTags.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {currentResult.patternTags.map((tag, i) => (
-                            <Badge key={i} variant="secondary" className="text-[10px] font-medium">
-                              {PATTERN_TAG_LABELS[tag] || tag.replace(/_/g, ' ')}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
 
                       {/* Why it works */}
                       {currentResult.whyItWorks && currentResult.whyItWorks.length > 0 && (
@@ -450,6 +443,37 @@ export default function DojoSession() {
                           </ul>
                         </div>
                       )}
+
+                      {/* Move sequence */}
+                      {currentResult.moveSequence && currentResult.moveSequence.length > 0 && (
+                        <div className="pt-1.5 border-t border-primary/10 space-y-1">
+                          <div className="flex items-center gap-1">
+                            <ListOrdered className="h-3 w-3 text-primary/70" />
+                            <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">
+                              Move Sequence
+                            </p>
+                          </div>
+                          <ol className="space-y-0.5">
+                            {currentResult.moveSequence.map((step, i) => (
+                              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <span className="text-primary/60 font-semibold shrink-0">{i + 1}.</span>
+                                <span className="capitalize">{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+
+                      {/* Pattern tags */}
+                      {currentResult.patternTags && currentResult.patternTags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-primary/10">
+                          {currentResult.patternTags.map((tag, i) => (
+                            <Badge key={i} variant="secondary" className="text-[10px] font-medium">
+                              {PATTERN_TAG_LABELS[tag] || tag.replace(/_/g, ' ')}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}
@@ -458,7 +482,7 @@ export default function DojoSession() {
               {/* ── Focus on This Next ── */}
               {activeFocus && (
                 <Card className="border-amber-500/30 bg-amber-500/5">
-                  <CardContent className="p-3">
+                  <CardContent className="p-3 space-y-1.5">
                     <div className="flex items-center gap-2">
                       <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <div>
@@ -470,6 +494,19 @@ export default function DojoSession() {
                         </p>
                       </div>
                     </div>
+                    {currentResult?.focusReason && (
+                      <p className="text-xs text-muted-foreground pl-6">
+                        {currentResult.focusReason}
+                      </p>
+                    )}
+                    {currentResult?.practiceCue && (
+                      <div className="flex items-start gap-1.5 pl-6 pt-0.5">
+                        <MessageCircle className="h-3 w-3 text-amber-500/70 mt-0.5 shrink-0" />
+                        <p className="text-xs font-medium text-foreground">
+                          {currentResult.practiceCue}
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -504,10 +541,10 @@ export default function DojoSession() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-3"
             >
-              {/* Focus reminder for retry */}
+              {/* Focus reminder + practice cue for retry */}
               {activeFocus && (
                 <Card className="border-amber-500/30 bg-amber-500/5">
-                  <CardContent className="p-3">
+                  <CardContent className="p-3 space-y-1.5">
                     <div className="flex items-center gap-2">
                       <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <p className="text-sm">
@@ -517,6 +554,14 @@ export default function DojoSession() {
                         </span>
                       </p>
                     </div>
+                    {currentResult?.practiceCue && (
+                      <div className="flex items-start gap-1.5 pl-6">
+                        <MessageCircle className="h-3 w-3 text-amber-500/70 mt-0.5 shrink-0" />
+                        <p className="text-xs font-medium text-foreground">
+                          {currentResult.practiceCue}
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}

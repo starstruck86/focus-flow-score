@@ -240,8 +240,11 @@ RESPONSE RULES:
   * If score 70-84: gap should be visible but narrower
   * If score > 84: show a subtle level-up in precision and judgment
 - "whyItWorks": Array of exactly 2-3 short bullets (one sentence each) explaining WHY the worldClassResponse is elite. Focus on reusable patterns — e.g. "isolates the real issue before responding," "reframes to revenue risk," "tests urgency instead of accepting vague interest." These teach the user what to internalize, not just what to say.
+- "moveSequence": Array of exactly 2-4 short steps showing the STRUCTURE of the worldClassResponse in order. Each step is a verb-first phrase describing the move. Examples: "isolate the real concern", "reframe to business risk", "quantify the cost", "lock the next step". This teaches the rep the order of operations — not just what the final answer sounds like. Keep each step under 8 words.
 - "patternTags": Array of 2-4 short reusable labels describing the elite moves used in the worldClassResponse. Examples: "isolates_real_issue", "reframes_to_business_impact", "quantifies_pain", "tests_urgency", "maps_stakeholders", "controls_next_step", "locks_mutual_plan", "disqualifies_weak_opportunity", "stays_concise_under_pressure", "names_the_risk", "uses_specific_proof", "projects_certainty". These should teach repeatable behaviors.
 - "focusPattern": The single most valuable pattern for this rep to practice on their next attempt. Pick from the FOCUS PATTERNS list above. This is the ONE lesson from this rep — not five.
+- "focusReason": One short sentence explaining WHY this is the highest-leverage thing to practice next. Start with "Because" — e.g. "Because you answered before isolating the real concern." / "Because the biggest gap here was urgency, not tone." / "Because this deal stalls unless you lock a real next step." This reduces ambiguity.
+- "practiceCue": One short, behaviorally specific coaching instruction for the retry. NOT a label — a concrete action. Examples: "Ask one sharp question before making your point." / "Tie the problem to dollars, not inconvenience." / "Don't accept the delay — test what's behind it." / "End with a date and a deliverable." This is the bridge between feedback and behavior change.
 - "topMistake": Pick the single most impactful mistake from the list.
 
 INTERNAL VALIDATION (you must check these before finalizing):
@@ -255,6 +258,9 @@ INTERNAL VALIDATION (you must check these before finalizing):
 8. whyItWorks must describe patterns, not just restate what the response says.
 9. focusPattern must be a single pattern string, not a sentence. It must come from the FOCUS PATTERNS list.
 10. patternTags must be 2-4 items, each a short snake_case label.
+11. moveSequence must be 2-4 items, each a verb-first phrase under 8 words.
+12. focusReason must start with "Because" and be one sentence.
+13. practiceCue must be one actionable instruction, not a label or pattern name.
 
 Respond with ONLY valid JSON:
 {
@@ -264,8 +270,11 @@ Respond with ONLY valid JSON:
   "improvedVersion": "Better version of the rep's approach.",
   "worldClassResponse": "What an elite rep would naturally say from scratch.",
   "whyItWorks": ["Pattern principle 1", "Pattern principle 2"],
+  "moveSequence": ["step 1 verb-first", "step 2 verb-first", "step 3 verb-first"],
   "patternTags": ["pattern_one", "pattern_two", "pattern_three"],
-  "focusPattern": "single_focus_pattern"
+  "focusPattern": "single_focus_pattern",
+  "focusReason": "Because the biggest gap here was X.",
+  "practiceCue": "Short instruction for the retry."
 }`;
 
     const userPrompt = `SCENARIO:
@@ -291,7 +300,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
           { role: "user", content: userPrompt },
         ],
         temperature: 0.3,
-        max_tokens: 1500,
+        max_tokens: 1800,
       }),
     });
 
@@ -340,9 +349,12 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       }
     }
 
-    // Ensure patternTags and focusPattern exist
+    // Ensure new teaching fields exist
     if (!Array.isArray(parsed.patternTags)) parsed.patternTags = [];
     if (typeof parsed.focusPattern !== "string") parsed.focusPattern = "";
+    if (!Array.isArray(parsed.moveSequence)) parsed.moveSequence = [];
+    if (typeof parsed.focusReason !== "string") parsed.focusReason = "";
+    if (typeof parsed.practiceCue !== "string") parsed.practiceCue = "";
 
     // ── Targeted regeneration for consistency issues ─────────────
 
