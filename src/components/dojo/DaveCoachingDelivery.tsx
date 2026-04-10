@@ -5,13 +5,15 @@
  * Responsibilities:
  * - Initialize the audio stack when a score result arrives
  * - Recover from crash/refresh via localStorage snapshot
+ * - Claim session ownership (multi-tab protection)
  * - Render currently-speaking chunk with visual indicator
  * - Show text fallback inline when voice degrades
  * - Provide replay / skip / interrupt controls
  * - Surface reliability status (speaking, degraded, recovered, interrupted, restored)
+ * - Optionally show debug panel (Ctrl+Shift+A)
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
@@ -27,6 +29,8 @@ import { withPlayback } from '@/lib/dojo/playbackAdapter';
 import { useDojoPlayback } from '@/lib/dojo/useDojoPlayback';
 import type { TransportConfig } from '@/lib/dojo/elevenlabsTransport';
 import type { ControllerDirective } from '@/lib/dojo/dojoAudioController';
+
+const DojoAudioDebugPanel = lazy(() => import('./DojoAudioDebugPanel'));
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -151,7 +155,7 @@ export default function DaveCoachingDelivery({
     if (d.kind === 'show_text' || d.kind === 'chunk_skipped_max_retries') {
       const chunk = d.chunk;
       setTextChunks((prev) => {
-        if (prev.some((c) => c.id === chunk.id)) return prev; // exact-once for text display
+        if (prev.some((c) => c.id === chunk.id)) return prev;
         return [...prev, chunk].sort((a, b) => a.index - b.index);
       });
     }
@@ -304,6 +308,21 @@ export default function DaveCoachingDelivery({
           ))}
         </div>
       )}
+
+      {/* Debug Panel (Ctrl+Shift+A) */}
+      <Suspense fallback={null}>
+        <DojoAudioDebugPanel
+          controllerState={playback.controllerState}
+          lastDirective={playback.lastDirective}
+          metrics={playback.metrics}
+          wasRecovered={playback.wasRecovered}
+          onSimulateInterrupt={playback.interrupt}
+          onForceTextFallback={() => playback.degradeToText('debug_forced')}
+          onRestoreVoice={() => playback.restoreVoice('debug_restore')}
+          onReplayLast={playback.replay}
+          onClearSnapshot={() => {}}
+        />
+      </Suspense>
     </div>
   );
 }
