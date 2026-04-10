@@ -151,6 +151,7 @@ export function ResourceManager() {
   const [showDeepEnrich, setShowDeepEnrich] = useState(false);
   const [inspectingAudioResource, setInspectingAudioResource] = useState<Resource | null>(null);
   const [manualAssistResource, setManualAssistResource] = useState<Resource | null>(null);
+  const [authReimportResource, setAuthReimportResource] = useState<Resource | null>(null);
   const [drawerResource, setDrawerResource] = useState<Resource | null>(null);
   const [lastFixResult, setLastFixResult] = useState<import('@/lib/fixAllAutoBlockers').FixAllResult | null>(null);
   const [isFixAllRunning, setIsFixAllRunning] = useState(false);
@@ -1449,6 +1450,9 @@ export function ResourceManager() {
                   break;
                 case 'manual_assist':
                   setManualAssistResource(resource);
+                  break;
+                case 'auth_reimport':
+                  setAuthReimportResource(resource);
                   break;
                 case 'retry_resolve': {
                   const job = audioJobsMap?.get(resource.id);
