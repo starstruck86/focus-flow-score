@@ -273,6 +273,7 @@ export default function DojoQA() {
       if (filterSeverity === 'warnings' && d.flags.length === 0) return false;
       if (filterSeverity === 'clean' && d.flags.length > 0) return false;
 
+      const am = d.session.audio_metrics;
       const amExt = am as unknown as Record<string, unknown>;
       if (filterAudio === 'has_audio' && !am) return false;
       if (filterAudio === 'degraded' && (!am || am.degradations === 0)) return false;
