@@ -169,8 +169,18 @@ function incrementAttempts(map: Map<string, number>, chunkId: string): Map<strin
 // ── Core: advance to next chunk ────────────────────────────────────
 
 function advanceToNext(ctrl: AudioControllerState): ControllerResult {
-  const { chunk, nextState: raw } = getNextMessage(ctrl.dojo);
-  const nextState = liftPlayback(raw, ctrl.dojo);
+  // Skip past any already-completed chunks before fetching next
+  let dojo = ctrl.dojo;
+  while (
+    dojo.phase === 'delivering' &&
+    dojo.currentChunkIndex < dojo.chunks.length &&
+    ctrl.completedChunkIds.has(dojo.chunks[dojo.currentChunkIndex].id)
+  ) {
+    dojo = { ...dojo, currentChunkIndex: dojo.currentChunkIndex + 1 };
+  }
+
+  const { chunk, nextState: raw } = getNextMessage(dojo);
+  const nextState = liftPlayback(raw, dojo);
 
   if (!chunk) {
     return {
