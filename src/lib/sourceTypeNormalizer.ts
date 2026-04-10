@@ -10,6 +10,7 @@ export type CanonicalSourceType =
   | 'pdf'
   | 'webpage'
   | 'document'
+  | 'transcript'
   | 'audio'
   | 'video'
   | 'unknown';
@@ -35,7 +36,7 @@ const TYPE_MAP: Record<string, CanonicalSourceType> = {
   pdf: 'pdf',
   document: 'document',
   note: 'document',
-  article: 'webpage',
+  transcript: 'transcript',
   web_page: 'webpage',
   webpage: 'webpage',
   blog_post: 'webpage',
