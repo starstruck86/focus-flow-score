@@ -136,6 +136,15 @@ const COACHING_TONE: Record<string, string> = {
   qualification: `You are a sales leader who would rather have 10 qualified deals than 50 garbage opportunities. If the rep treated a casual inquiry as a real deal, say so. If they skipped stakeholder mapping because the buyer said "I'm the decision maker," call out the naivety. If there's no urgency and the rep didn't test for it, name it. The best qualification skill is knowing when to walk away — reward reps who identify weak opportunities and redirect, punish reps who chase everything.`,
 };
 
+// ── World-class response tone by skill ──────────────────────────────
+const WORLD_CLASS_TONE: Record<string, string> = {
+  objection_handling: 'calm, specific, isolates before pitching, reframes to business value, moves the conversation forward with control',
+  discovery: 'deepens pain fast, connects to business implications, asks sharp singular questions, sounds like a business advisor not an interrogator',
+  executive_response: 'concise, commercially sharp, confident, outcome-led, zero filler, under 30 seconds spoken',
+  deal_control: 'disciplined, clear about next steps, unafraid to name drift or risk, locks mutual accountability',
+  qualification: 'rigorous, skeptical in the right way, willing to disqualify, tests urgency and stakeholders and real pain before advancing',
+};
+
 // ── Positive-language patterns to strip from low-score feedback ──────
 const POSITIVE_PATTERNS = /\b(great job|nice work|well done|excellent|impressive|strong response|good job|solid attempt|good effort|nicely done|smart move|clever)\b/gi;
 
