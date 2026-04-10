@@ -418,7 +418,9 @@ describe('DojoAudioController v3.1', () => {
       expect(ctrl.lastAudibleChunkId).toBe(chunkId);
 
       const result = onTtsCompleted(ctrl, chunkId);
-      expect(result.state.chunkAudibleState).toBe('ended');
+      // After completion, advanceToNext requests the next chunk, so state is 'requested' (not 'ended')
+      // for multi-chunk sessions. 'ended' only persists if there are no more chunks.
+      expect(result.state.chunkAudibleState).toBe('requested');
     });
 
     it('failure before audible is tracked correctly', () => {
@@ -768,7 +770,8 @@ describe('DojoAudioController v3.1', () => {
       const restored = recoverSession(snap, 'crash_recovery');
       expect(restored.state.restoreReason).toBe('crash_recovery');
       expect(restored.state.tabVisible).toBe(true);
-      expect(restored.state.chunkAudibleState).toBe('none');
+      // Recovery calls advanceToNext which requests the first undelivered chunk
+      expect(restored.state.chunkAudibleState).toBe('requested');
     });
   });
 });
