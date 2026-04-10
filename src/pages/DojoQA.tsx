@@ -585,6 +585,7 @@ export default function DojoQA() {
                   </div>
                 )}
 
+                {rawJson && (
                   <div className="pt-1 border-t border-border/30">
                     <button onClick={() => toggleJson(session.id)} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
                       {expandedJson.has(session.id) ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
