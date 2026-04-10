@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -7,21 +7,20 @@ import { Badge } from '@/components/ui/badge';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
 import { Flame, Play, Swords, Target, MessageSquare, Zap } from 'lucide-react';
-import { getAutopilotScenario, getAutopilotMessage, SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
+import { getAutopilotRecommendation, SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
 import { useDojoStats } from '@/lib/dojo/useDojoStreak';
 
 export default function Dojo() {
   const navigate = useNavigate();
   const { data: stats } = useDojoStats();
 
-  const { scenario, daveMessage } = useMemo(() => {
-    const s = getAutopilotScenario(stats?.skillBreakdown);
-    const msg = getAutopilotMessage(s, stats?.skillBreakdown);
-    return { scenario: s, daveMessage: msg };
-  }, [stats?.skillBreakdown]);
+  const recommendation = useMemo(
+    () => getAutopilotRecommendation(stats?.skillBreakdown),
+    [stats?.skillBreakdown]
+  );
 
   const startAutopilot = () => {
-    navigate('/dojo/session', { state: { scenario, mode: 'autopilot' } });
+    navigate('/dojo/session', { state: { scenario: recommendation.scenario, mode: 'autopilot' } });
   };
 
   const startCustom = (skill: SkillFocus) => {
@@ -40,7 +39,7 @@ export default function Dojo() {
           <div className="space-y-1 pt-0.5">
             <p className="text-sm font-medium text-foreground">Dave</p>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {daveMessage}
+              {recommendation.daveMessage}
             </p>
           </div>
         </div>
@@ -60,37 +59,22 @@ export default function Dojo() {
           <CardContent className="p-4 space-y-2">
             <div className="flex items-center justify-between">
               <Badge variant="secondary" className="text-xs">
-                {SKILL_LABELS[scenario.skillFocus]}
+                {SKILL_LABELS[recommendation.scenario.skillFocus]}
               </Badge>
               <span className="text-xs text-muted-foreground">~5 min</span>
             </div>
-            <p className="text-sm font-medium">{scenario.title}</p>
+            <p className="text-sm font-medium">{recommendation.scenario.title}</p>
             <p className="text-xs text-muted-foreground line-clamp-2">
-              {scenario.context}
+              {recommendation.scenario.context}
             </p>
           </CardContent>
         </Card>
 
         {/* ── Stats row ── */}
         <div className="grid grid-cols-3 gap-3">
-          <StatCard
-            icon={Flame}
-            label="Streak"
-            value={`${stats?.streak ?? 0}d`}
-            color="text-orange-500"
-          />
-          <StatCard
-            icon={Target}
-            label="Last Score"
-            value={stats?.lastScore != null ? `${stats.lastScore}` : '—'}
-            color="text-blue-500"
-          />
-          <StatCard
-            icon={Zap}
-            label="Best"
-            value={stats?.bestScore ? `${stats.bestScore}` : '—'}
-            color="text-yellow-500"
-          />
+          <StatCard icon={Flame} label="Streak" value={`${stats?.streak ?? 0}d`} color="text-orange-500" />
+          <StatCard icon={Target} label="Last Score" value={stats?.lastScore != null ? `${stats.lastScore}` : '—'} color="text-blue-500" />
+          <StatCard icon={Zap} label="Best" value={stats?.bestScore ? `${stats.bestScore}` : '—'} color="text-yellow-500" />
         </div>
 
         {/* ── Custom Session ── */}
