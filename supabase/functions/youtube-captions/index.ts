@@ -79,10 +79,12 @@ async function fetchPlayerResponse(videoId: string): Promise<any> {
     throw new Error("Could not parse ytInitialPlayerResponse JSON boundaries");
   }
 
+  const jsonStr = html.slice(jsonStart, jsonEnd);
+  console.log(`[youtube-captions] Extracted JSON: ${jsonStr.length} chars, depth=${depth}, first 100: ${jsonStr.slice(0, 100)}`);
   try {
-    return JSON.parse(html.slice(jsonStart, jsonEnd));
-  } catch {
-    throw new Error("Failed to parse player response JSON");
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    throw new Error(`Failed to parse player response JSON (${jsonStr.length} chars): ${(e as Error).message}`);
   }
 }
 
