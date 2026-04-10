@@ -5,6 +5,36 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-trace-id",
 };
 
+// ── Canonical focus pattern IDs ─────────────────────────────────────
+const VALID_FOCUS_PATTERNS: Record<string, string[]> = {
+  objection_handling: ['isolate_before_answering', 'reframe_to_business_impact', 'use_specific_proof', 'control_next_step', 'stay_concise_under_pressure'],
+  discovery: ['deepen_one_level', 'tie_to_business_impact', 'ask_singular_questions', 'test_urgency', 'quantify_the_pain'],
+  executive_response: ['lead_with_the_number', 'cut_to_three_sentences', 'anchor_to_their_priority', 'project_certainty', 'close_with_a_specific_ask'],
+  deal_control: ['control_next_step', 'name_the_risk', 'lock_mutual_commitment', 'test_before_accepting', 'create_urgency_without_pressure'],
+  qualification: ['test_urgency', 'validate_real_pain', 'map_stakeholders', 'disqualify_weak_opportunities', 'tie_problem_to_business_impact'],
+};
+
+const ALL_VALID_IDS = new Set(Object.values(VALID_FOCUS_PATTERNS).flat());
+
+function normalizeFocusPattern(raw: string, skill: string): string {
+  if (!raw) return '';
+  if (ALL_VALID_IDS.has(raw)) return raw;
+  const cleaned = raw.toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z_]/g, '');
+  if (ALL_VALID_IDS.has(cleaned)) return cleaned;
+  // Fuzzy: find best keyword match within skill
+  const candidates = VALID_FOCUS_PATTERNS[skill] || [];
+  const rawWords = raw.toLowerCase().replace(/_/g, ' ').split(' ').filter(w => w.length >= 3);
+  let best = ''; let bestScore = 0;
+  for (const id of candidates) {
+    const idWords = id.split('_');
+    let score = 0;
+    for (const w of rawWords) { if (idWords.some(k => k.includes(w) || w.includes(k))) score++; }
+    if (score > bestScore) { bestScore = score; best = id; }
+  }
+  if (bestScore >= 1 && best) return best;
+  return candidates[0] || raw;
+}
+
 // ── Skill-specific rubrics ──────────────────────────────────────────
 
 const RUBRICS: Record<string, string> = {
@@ -30,163 +60,103 @@ COMMON MISTAKES (pick the single most impactful):
   discovery: `GRADING CRITERIA (total 100pts):
 1. DEPTH (25pts): Did they push past the surface answer? Did they ask "why does that matter" or "what happens if you don't fix it"? Simply asking "how much" or "how long" without connecting to business impact is shallow — that's worth at most 10pts.
 2. IMPLICATION (20pts): Did they help the buyer see the downstream impact — revenue lost, time wasted, competitive risk, team strain? If they didn't explicitly connect the problem to a business consequence, this is 0-5pts.
-3. SPECIFICITY (15pts): Did they use what the buyer said to ask a targeted follow-up — or did they default to a generic question? Restating the buyer's words back as a question is not specificity.
+3. SPECIFICITY (15pts): Did they use what the buyer said to ask a targeted follow-up — or did they default to a generic question?
 4. CONTROL (15pts): Did they steer the conversation toward a business outcome — not just gather information passively?
 5. QUANTIFICATION (10pts): Did they try to attach a number, timeline, or measurable cost to the problem?
 6. TONE (10pts): Did it feel like a genuine business conversation between equals — not an interrogation or a script?
 7. BREVITY (5pts): Were questions concise and singular — not stacked or compound?
 
-SCORING ANCHORS FOR DISCOVERY:
-- "How much has churn increased?" alone = 55-60. It's a surface question with no implication or business framing.
-- "What's that costing you in monthly revenue?" = 62-67. Better — attaches a number, but still one-dimensional.
-- "When you lose those customers in month 3, what does that do to your LTV math? And has that changed how your CFO looks at acquisition spend?" = 72-78. Connects to downstream business impact with specificity.
+SCORING ANCHORS:
+- "How much has churn increased?" alone = 55-60.
+- "What's that costing you in monthly revenue?" = 62-67.
+- "When you lose those customers in month 3, what does that do to your LTV math? And has that changed how your CFO looks at acquisition spend?" = 72-78.
 
 COMMON MISTAKES (pick the single most impactful):
-- stacked_questions: Asked 2+ questions at once — the buyer can only answer one
-- failed_to_deepen: Accepted a surface answer without probing further
-- no_business_impact: Never connected the problem to a business outcome the buyer cares about
-- too_generic: Asked a textbook question that ignores what the buyer just said
-- lack_of_control: Let the conversation drift without steering toward next step or commitment
-- weak_close: Ended without a transition, next step, or reason to continue
-- pitched_too_early: Started solving or presenting before understanding the problem`,
+- stacked_questions / failed_to_deepen / no_business_impact / too_generic / lack_of_control / weak_close / pitched_too_early`,
 
   executive_response: `GRADING CRITERIA (total 100pts):
-1. BREVITY (25pts): Could this be delivered in under 30 seconds? Count the sentences — more than 4 and this score drops fast. Every filler word costs points.
-2. BUSINESS FRAMING (25pts): Did they lead with an outcome the exec cares about — revenue, margin, speed, risk — not features or process? "We help brands improve retention" is too vague for full credit. Need a specific number or benchmark.
-3. CONFIDENCE (15pts): Did they project certainty? No hedging, no "I think," no apologizing for taking their time?
-4. SPECIFICITY (15pts): Did they use a concrete number, benchmark, customer example, or timeline — not vague promises?
-5. STRATEGIC RELEVANCE (10pts): Did they connect to the exec's stated priority or known initiative — not a generic value prop?
-6. CONTROL (10pts): Did they end with a clear, executive-appropriate ask — not "what do you think?" or "any questions?"
+1. BREVITY (25pts): Could this be delivered in under 30 seconds? More than 4 sentences drops fast.
+2. BUSINESS FRAMING (25pts): Did they lead with an outcome the exec cares about — revenue, margin, speed, risk?
+3. CONFIDENCE (15pts): Did they project certainty? No hedging.
+4. SPECIFICITY (15pts): Concrete number, benchmark, customer example?
+5. STRATEGIC RELEVANCE (10pts): Connected to the exec's stated priority?
+6. CONTROL (10pts): Clear, executive-appropriate ask at the end?
 
-SCORING ANCHORS FOR EXECUTIVE RESPONSE:
-- Generic platform pitch with no numbers = 42-52. Execs hear this 10 times a week.
-- Mentions retention + a vague benefit + asks for a demo = 53-60. Shows awareness but no teeth.
-- Leads with a specific metric, ties to their known priority, ends with a tight ask = 72-80.
-- Under 3 sentences, specific ROI, references their situation, confident close = 82-90.
-
-COMMON MISTAKES (pick the single most impactful):
-- too_long: Would take more than 30 seconds to say out loud — automatic fail with execs
-- no_business_impact: Talked about features, process, or "the platform" instead of business outcomes
-- too_generic: Could be said by any vendor about any product to any exec
-- weak_close: Ended passively or without a specific ask
-- lack_of_control: Deferred authority, hedged, or sounded uncertain
-- no_proof: Made bold claims without a single proof point
-- pitched_too_early: Led with product description instead of insight or outcome`,
+COMMON MISTAKES: too_long / no_business_impact / too_generic / weak_close / lack_of_control / no_proof / pitched_too_early`,
 
   deal_control: `GRADING CRITERIA (total 100pts):
-1. CONTROL (25pts): Did they take ownership of the next step? Did they propose a specific action with a date — not "let's reconnect soon"? Accepting the buyer's vague timeline without pushback = 0-5pts.
-2. CLARITY (20pts): Did they define what happens next in concrete, unambiguous terms? The buyer should leave knowing exactly what's expected from both sides.
-3. COMMITMENT (20pts): Did they secure a concrete commitment — a meeting, a deliverable, a decision date? Verbal agreement to "think about it" is not commitment. If they let the buyer off with "I'll get back to you," this is 0-5pts.
-4. RISK DETECTION (15pts): Did they identify and address the real risk in the deal — stalling, competitor, missing stakeholder, lack of urgency? If they ignored obvious warning signs, 0pts.
-5. TONE (10pts): Confident and firm without being pushy or transactional. Did it feel like a trusted advisor holding the buyer accountable, not a desperate rep chasing?
-6. BREVITY (10pts): Tight and purposeful. No rambling justifications or over-explaining.
+1. CONTROL (25pts): Did they take ownership of the next step? Propose a specific action with a date?
+2. CLARITY (20pts): Did they define what happens next in concrete, unambiguous terms?
+3. COMMITMENT (20pts): Did they secure a concrete commitment — a meeting, a deliverable, a decision date?
+4. RISK DETECTION (15pts): Did they identify and address the real risk in the deal?
+5. TONE (10pts): Confident and firm without being pushy or transactional?
+6. BREVITY (10pts): Tight and purposeful?
 
-SCORING ANCHORS FOR DEAL CONTROL:
-- "Sounds good, just let me know when you're ready" = 38-45. Zero control. The deal is now in the buyer's hands.
-- "Can we schedule something for next week?" without addressing the underlying issue = 52-58. Shows awareness but no teeth.
-- Names the risk, proposes a specific plan, and secures agreement = 72-80.
-- Reframes the delay as business risk, locks a commitment, and defines mutual accountability = 82-90.
-
-COMMON MISTAKES (pick the single most impactful):
-- lack_of_control: Accepted the buyer's timeline or vague plan without pushback
-- weak_close: Ended without a concrete, time-bound next step
-- vague_next_step: Proposed a next step but left it ambiguous — "let's touch base" is not a plan
-- too_passive: Waited for the buyer to lead instead of driving the conversation
-- accepted_delay: Let the buyer push the timeline without exploring what's really happening
-- no_mutual_plan: Didn't establish shared accountability — next steps were one-sided
-- too_generic: Response didn't address the specific deal dynamics or warning signs
-- too_long: Over-explained or justified when directness was needed`,
+COMMON MISTAKES: lack_of_control / weak_close / vague_next_step / too_passive / accepted_delay / no_mutual_plan / too_generic / too_long`,
 
   qualification: `GRADING CRITERIA (total 100pts):
-1. DEPTH (25pts): Did they push past the buyer's surface statement to understand whether real pain exists? Simply asking "tell me more" is worth 5pts. Probing for impact, cost, and consequence is worth full credit.
-2. PAIN VALIDATION (20pts): Did they distinguish between genuine business pain and casual interest? If the buyer said "we're just exploring" and the rep treated it as a real opportunity, 0pts.
-3. URGENCY (15pts): Did they test whether there's a timeline, a trigger event, or a consequence of inaction? If they accepted "no rush" without probing, 0-5pts.
-4. STAKEHOLDER AWARENESS (15pts): Did they identify who else is involved, who decides, and who controls budget? Accepting "I'm the decision maker" at face value from a mid-level buyer = 0pts.
-5. BUSINESS IMPACT (15pts): Did they connect the stated problem to a measurable business outcome — revenue, cost, competitive risk, team capacity?
-6. CONTROL (10pts): Did they steer toward a qualifying or disqualifying conclusion — not just gather information?
+1. DEPTH (25pts): Did they push past the buyer's surface statement?
+2. PAIN VALIDATION (20pts): Did they distinguish between genuine business pain and casual interest?
+3. URGENCY (15pts): Did they test whether there's a timeline or trigger event?
+4. STAKEHOLDER AWARENESS (15pts): Did they identify who else is involved?
+5. BUSINESS IMPACT (15pts): Did they connect the stated problem to a measurable business outcome?
+6. CONTROL (10pts): Did they steer toward a qualifying or disqualifying conclusion?
 
-SCORING ANCHORS FOR QUALIFICATION:
-- "That sounds great, let me send you pricing" without qualifying = 35-45. The rep is chasing, not qualifying.
-- Asks surface questions but accepts vague answers = 52-58. Going through motions without rigor.
-- Probes for real pain, tests urgency, maps stakeholders, and decides whether to invest more time = 72-80.
-- Identifies that this isn't a real opportunity and professionally redirects or disqualifies = 82-90 (disqualifying well is a top-tier skill).
-
-COMMON MISTAKES (pick the single most impactful):
-- failed_to_qualify: Treated a casual inquiry as a real opportunity without testing
-- accepted_weak_pain: Buyer described a minor inconvenience and the rep treated it as critical
-- no_urgency: Didn't test whether there's a timeline or consequence of waiting
-- skipped_stakeholders: Didn't ask who else is involved in the decision
-- too_generic: Asked textbook qualification questions without adapting to the situation
-- pitched_too_early: Jumped to solution or pricing before understanding if opportunity is real
-- no_disqualification: Failed to consider whether this deal is worth pursuing
-- no_business_impact: Never connected the problem to a measurable outcome`,
+COMMON MISTAKES: failed_to_qualify / accepted_weak_pain / no_urgency / skipped_stakeholders / too_generic / pitched_too_early / no_disqualification / no_business_impact`,
 };
 
-// ── Skill-specific coaching tone ────────────────────────────────────
+// ── Coaching tone ───────────────────────────────────────────────────
 
 const COACHING_TONE: Record<string, string> = {
   objection_handling: `You are an elite sales coach doing a post-call debrief. Be direct and specific — name the exact moment they lost the thread or missed the opening. But be encouraging: you believe this rep can get sharper with focused practice. Don't pad with fake praise, but do acknowledge real progress. Your tone is: "You're close — here's the one thing that would level this up."`,
-
-  discovery: `You are a veteran sales leader who has run thousands of discoveries. Point out exactly where they stayed surface-level when they should have gone deeper. Be specific about what question they should have asked and why. But frame it as a growth opportunity: "You had the right instinct — push one level deeper next time." Never condescending, always constructive.`,
-
-  executive_response: `You are someone who coaches reps for C-suite meetings. Grade against a high standard: executives give you 30 seconds. If they rambled, say "tighten this to 2 sentences and it lands." If they led with features, say "lead with the number, not the platform." Your tone is confident and encouraging: "The insight is there — now make it hit faster."`,
-
-  deal_control: `You are a sales leader reviewing pipeline discipline. If they accepted a vague timeline, name it directly. If they proposed a weak next step, call it out. But your tone should build confidence: "You spotted the risk — now lock down the commitment." You're coaching a rep you believe in, not lecturing them.`,
-
-  qualification: `You are a sales leader who values pipeline quality over quantity. If the rep chased a weak opportunity, say so clearly. If they skipped stakeholder mapping, name it. But frame coaching around judgment: "Your instinct to engage was right — but test urgency before investing more time." Reward reps who show rigor.`,
+  discovery: `You are a veteran sales leader who has run thousands of discoveries. Point out exactly where they stayed surface-level when they should have gone deeper. Be specific about what question they should have asked and why.`,
+  executive_response: `You are someone who coaches reps for C-suite meetings. Grade against a high standard: executives give you 30 seconds. If they rambled, say "tighten this to 2 sentences." Your tone is confident and encouraging.`,
+  deal_control: `You are a sales leader reviewing pipeline discipline. If they accepted a vague timeline, name it directly. Build confidence: "You spotted the risk — now lock down the commitment."`,
+  qualification: `You are a sales leader who values pipeline quality over quantity. If the rep chased a weak opportunity, say so clearly. Frame coaching around judgment.`,
 };
 
-// ── World-class response tone by skill ──────────────────────────────
 const WORLD_CLASS_TONE: Record<string, string> = {
-  objection_handling: 'calm, specific, isolates before pitching, reframes to business value, moves the conversation forward with control',
-  discovery: 'deepens pain fast, connects to business implications, asks sharp singular questions, sounds like a business advisor not an interrogator',
+  objection_handling: 'calm, specific, isolates before pitching, reframes to business value, moves forward with control',
+  discovery: 'deepens pain fast, connects to business implications, asks sharp singular questions, sounds like a business advisor',
   executive_response: 'concise, commercially sharp, confident, outcome-led, zero filler, under 30 seconds spoken',
   deal_control: 'disciplined, clear about next steps, unafraid to name drift or risk, locks mutual accountability',
-  qualification: 'rigorous, skeptical in the right way, willing to disqualify, tests urgency and stakeholders and real pain before advancing',
+  qualification: 'rigorous, skeptical in the right way, willing to disqualify, tests urgency and stakeholders before advancing',
 };
 
-// ── Focus pattern definitions by skill ──────────────────────────────
-const FOCUS_PATTERNS: Record<string, string> = {
-  objection_handling: `FOCUS PATTERNS (pick the single most valuable one for this rep to practice next):
-- isolate_before_answering: Pause and surface the real concern before responding
-- reframe_to_business_impact: Shift from feature/cost to revenue/margin/risk
-- use_specific_proof: Anchor claims with a concrete customer story or metric
-- control_next_step: End with a clear, time-bound ask
-- stay_concise_under_pressure: Say less, land harder`,
-
-  discovery: `FOCUS PATTERNS (pick the single most valuable one for this rep to practice next):
-- deepen_one_level: When the buyer gives a surface answer, ask "what does that cost you?"
-- tie_to_business_impact: Connect every problem to revenue, cost, or competitive risk
-- ask_singular_questions: One question at a time — let the buyer go deep
-- test_urgency: Probe for timeline, trigger event, or consequence of inaction
-- quantify_the_pain: Attach a number, dollar amount, or timeline to the problem`,
-
-  executive_response: `FOCUS PATTERNS (pick the single most valuable one for this rep to practice next):
-- lead_with_the_number: Open with a specific metric or outcome, not context
-- cut_to_three_sentences: Brevity is the skill — say it in 3 sentences or fewer
-- anchor_to_their_priority: Reference the exec's known initiative or stated goal
-- project_certainty: No hedging, no "I think" — speak with authority
-- close_with_a_specific_ask: End with exactly what you want — not "thoughts?"`,
-
-  deal_control: `FOCUS PATTERNS (pick the single most valuable one for this rep to practice next):
-- control_next_step: Propose a specific action with a specific date
-- name_the_risk: Call out deal drift, stalling, or missing stakeholders directly
-- lock_mutual_commitment: Define what both sides will do by when
-- test_before_accepting: Don't accept "let's circle back" — probe what's really happening
-- create_urgency_without_pressure: Show the cost of waiting without being aggressive`,
-
-  qualification: `FOCUS PATTERNS (pick the single most valuable one for this rep to practice next):
-- test_urgency: Ask about timeline, trigger, or consequence of inaction
-- validate_real_pain: Distinguish between genuine business pain and casual interest
-- map_stakeholders: Identify who decides, who influences, who controls budget
-- disqualify_weak_opportunities: Be willing to walk away from low-quality pipeline
-- tie_problem_to_business_impact: Connect the stated issue to a measurable outcome`,
+const FOCUS_PATTERN_GUIDE: Record<string, string> = {
+  objection_handling: `FOCUS PATTERNS (pick ONE from this EXACT list):
+- isolate_before_answering
+- reframe_to_business_impact
+- use_specific_proof
+- control_next_step
+- stay_concise_under_pressure`,
+  discovery: `FOCUS PATTERNS (pick ONE from this EXACT list):
+- deepen_one_level
+- tie_to_business_impact
+- ask_singular_questions
+- test_urgency
+- quantify_the_pain`,
+  executive_response: `FOCUS PATTERNS (pick ONE from this EXACT list):
+- lead_with_the_number
+- cut_to_three_sentences
+- anchor_to_their_priority
+- project_certainty
+- close_with_a_specific_ask`,
+  deal_control: `FOCUS PATTERNS (pick ONE from this EXACT list):
+- control_next_step
+- name_the_risk
+- lock_mutual_commitment
+- test_before_accepting
+- create_urgency_without_pressure`,
+  qualification: `FOCUS PATTERNS (pick ONE from this EXACT list):
+- test_urgency
+- validate_real_pain
+- map_stakeholders
+- disqualify_weak_opportunities
+- tie_problem_to_business_impact`,
 };
 
-// ── Positive-language patterns to strip from low-score feedback ──────
 const POSITIVE_PATTERNS = /\b(great job|nice work|well done|excellent|impressive|strong response|good job|solid attempt|good effort|nicely done|smart move|clever)\b/gi;
-
-// ── Business impact keywords for validation ─────────────────────────
 const BUSINESS_IMPACT_PATTERNS = /\b(revenue|margin|cost|ROI|LTV|CAC|churn rate|pipeline|quota|P&L|profit|savings|payback|ARR|MRR|\$\d|percent|%|\d+x)\b/i;
 
 serve(async (req) => {
@@ -206,7 +176,7 @@ serve(async (req) => {
     const skill = scenario.skillFocus || "objection_handling";
     const rubric = RUBRICS[skill] || RUBRICS.objection_handling;
     const tone = COACHING_TONE[skill] || COACHING_TONE.objection_handling;
-    const focusPatternGuide = FOCUS_PATTERNS[skill] || FOCUS_PATTERNS.objection_handling;
+    const focusPatternGuide = FOCUS_PATTERN_GUIDE[skill] || FOCUS_PATTERN_GUIDE.objection_handling;
 
     const retryBlock = retryCount > 0
       ? `This is retry #${retryCount}.${focusReminder ? ` The rep was told to focus on: "${focusReminder}". You MUST explicitly assess whether they applied this pattern. If they did, name exactly how in your feedback. If they didn't, call it out directly: "You were asked to focus on ${focusReminder} — this attempt still doesn't do that." Do not ignore the focus reminder.
@@ -227,69 +197,39 @@ ${rubric}
 
 ${focusPatternGuide}
 
-SCORE CALIBRATION (CRITICAL — follow this distribution strictly):
-- 85-100: Exceptional. Would make a VP of Sales stop and say "that was really good." Specific, tight, business-oriented, controlled. You should almost never give this on a first attempt.
-- 75-84: Genuinely strong. Hit the key beats with specificity, showed real business acumen. Still uncommon.
-- 60-69: Average. This is where MOST responses land. Competent but predictable. Asked obvious follow-ups. Showed awareness but lacked depth or specificity. A manager would say "okay, but what about…"
-- 50-59: Below average. Missed the real issue, stayed surface-level, lost control, or went generic. Needs clear coaching.
-- 40-49: Weak. Defensive, rambling, pitched into resistance, or fundamentally misread the situation.
-- Below 40: Actively harmful. Made the buyer less interested or damaged credibility.
+CRITICAL: focusPattern MUST be selected from the EXACT list above. Do not invent new pattern names.
 
-YOUR DEFAULT SCORE IS 58-63. This is where a competent but unexceptional response belongs. If you're about to give above 70, ask yourself: "Would a VP of Sales watching this live be impressed?" If no, the score is too high.
+SCORE CALIBRATION (CRITICAL — follow this distribution strictly):
+- 85-100: Exceptional. Would make a VP of Sales stop and say "that was really good." Almost never on first attempt.
+- 75-84: Genuinely strong. Hit the key beats with specificity. Uncommon.
+- 60-69: Average. This is where MOST responses land. Competent but predictable.
+- 50-59: Below average. Missed the real issue, stayed surface-level, lost control, or went generic.
+- 40-49: Weak. Defensive, rambling, pitched into resistance, or misread the situation.
+- Below 40: Actively harmful.
+
+YOUR DEFAULT SCORE IS 58-63. If you're about to give above 70, ask yourself: "Would a VP of Sales watching this live be impressed?" If no, the score is too high.
 
 ${retryBlock}
 
 RESPONSE RULES:
-- "feedback": Exactly 2 sentences. Encouraging but specific. Sentence 1: what they attempted or got right (be specific — not generic praise). Sentence 2: the ONE thing that would make this significantly better.
-- "improvedVersion": Write the EXACT words a better version of the rep's response would sound like OUT LOUD. Fix their specific mistakes while keeping their general approach. 3-5 sentences. This should feel achievable — a realistic upgrade from where they are.
-- "worldClassResponse": Write what a top 1% rep would ACTUALLY SAY — not an improved version of the user's answer, but what elite instinct sounds like from scratch. This must be MATERIALLY STRONGER than improvedVersion — more commercially sharp, more controlled, more precise. improvedVersion = better rep. worldClassResponse = elite rep. The gap should be obvious. If they feel too similar, rewrite worldClassResponse from scratch. Requirements:
-  * Exact spoken words — natural, conversational, believable on a real call
-  * NOT marketing copy, NOT a framework recitation
-  * For ${skill}: ${wcTone}
-  * If score < 70: gap between improvedVersion and worldClassResponse should be SIGNIFICANT
-  * If score 70-84: gap visible but narrower
-  * If score > 84: subtle level-up in precision
-- "whyItWorks": Array of exactly 2-3 bullets (one sentence each) explaining the UNDERLYING PATTERN that makes the worldClassResponse elite. Must teach reusable principles — not restate the response. Good: "It slows the conversation down long enough to isolate whether the objection is real or reflexive." Bad: "It is specific." "It sounds confident." These are too generic — rewrite.
-- "moveSequence": Array of 2-4 short steps showing the STRUCTURE of the worldClassResponse in sequential order. These are SITUATIONAL — the exact moves used in THIS scenario. Verb-first, under 8 words, specific to this scenario, each step reflects a real move in the worldClassResponse. Good: "isolate the real concern", "tie it to pipeline risk", "test what is driving the delay", "lock a date and mutual next step". Bad: "communicate clearly", "be confident", "handle objection well". moveSequence is NOT the same as patternTags — moveSequence = what to do in this scenario, patternTags = portable behaviors across scenarios.
-- "patternTags": Array of 2-4 snake_case labels representing REUSABLE selling behaviors that apply across scenarios. Abstracted — portable concepts a rep can name and practice in other situations. Do NOT restate moveSequence in tag form.
-- "focusPattern": Single most valuable pattern from the FOCUS PATTERNS list.
-- "focusReason": One sentence starting with "Because" explaining why this is the highest-leverage fix. Must reference the rep's actual miss and explain why this matters more than other gaps. Good: "Because you answered the objection before isolating whether price was the real issue." Bad: "Because you should focus on this."
-- "practiceCue": One short behavioral instruction for the retry — concrete and immediately executable. The rep must be able to do this on the very next attempt with zero interpretation. Good: "Ask one sharp question before making your point." "Tie the pain to dollars before you mention the solution." "Do not accept the delay — test what is behind it." Bad: "Focus on qualification." "Improve urgency." "Show more control." If the cue requires interpretation, it is too vague — rewrite it.
-- "teachingNote": One sentence that generalizes the lesson BEYOND this scenario. Should sound like a world-class coach's final line — memorable, sharp, transferable. Good: "Vague next steps are where deals go to die." "Executives reward clarity and consequence, not context and setup." Different from whyItWorks — whyItWorks explains the elite answer, teachingNote turns the moment into a broader principle.
-- "deltaNote": One sentence explaining the BIGGEST DIFFERENCE between improvedVersion and worldClassResponse. improvedVersion = a better version of the rep's current approach. worldClassResponse = elite instinct from scratch. deltaNote makes the gap obvious in plain English. Good: "The improved answer responds better; the world-class answer slows the moment down and diagnoses the real issue before advancing." "The improved answer sounds tighter; the world-class answer ties the problem to business risk and regains control." Bad: "The world-class answer is better." (too vague)
+- "feedback": Exactly 2 sentences. Sentence 1: what they attempted or got right (specific). Sentence 2: the ONE thing that would make this significantly better.
+- "improvedVersion": Exact words a better rep would say OUT LOUD. 3-5 sentences. Achievable upgrade.
+- "worldClassResponse": What a top 1% rep would ACTUALLY SAY from scratch. MATERIALLY STRONGER than improvedVersion. For ${skill}: ${wcTone}
+- "whyItWorks": 2-3 bullets explaining UNDERLYING PATTERNS of worldClassResponse. Reusable principles.
+- "moveSequence": 2-4 verb-first steps showing the STRUCTURE of worldClassResponse. Scenario-specific.
+- "patternTags": 2-4 snake_case REUSABLE selling behaviors. Portable across scenarios.
+- "focusPattern": Single pattern from the FOCUS PATTERNS list above. MUST be from that exact list.
+- "focusReason": One sentence starting with "Because" explaining why this is highest-leverage.
+- "practiceCue": One concrete behavioral instruction for the retry. Immediately executable.
+- "teachingNote": One sentence generalizing the lesson beyond this scenario.
+- "deltaNote": One sentence explaining the BIGGEST DIFFERENCE between improvedVersion and worldClassResponse.
 - "topMistake": Pick the single most impactful mistake from the list.
 
 COHERENCE RULE (CRITICAL):
-feedback, topMistake, focusPattern, focusReason, and practiceCue MUST all point at the SAME core coaching lesson. They are one teaching thread, not five independent observations.
-- If topMistake is about urgency, focusPattern must be urgency-related, focusReason must explain why urgency was the biggest miss, and practiceCue must tell the rep exactly how to test urgency on the retry.
-- If they drift from each other, regenerate them until they align.
-- Test: could a reader predict focusPattern from topMistake? Could they predict practiceCue from focusPattern? If not, they are not aligned.
-
-COHERENCE VALIDATION CHECKS (apply these in order):
-1. focusPattern MUST be a plausible remedy for topMistake. If topMistake is "pitched_too_early", focusPattern cannot be "stay_concise_under_pressure" — it must address premature pitching.
-2. practiceCue MUST operationalize focusPattern in one immediately executable behavior. If focusPattern is "isolate_before_answering", practiceCue must tell the rep HOW to isolate (e.g., "Ask 'What's driving that concern?' before you respond"). A cue that doesn't clearly execute the pattern fails this check.
-3. If topMistake, focusPattern, focusReason, and practiceCue do not clearly align around ONE lesson, regenerate them until they do. Do not ship misaligned outputs.
+feedback, topMistake, focusPattern, focusReason, and practiceCue MUST all point at the SAME core coaching lesson.
 
 TONE RULES:
-- Direct, constructive, confidence-building, high-standard. NOT soft, flattering, generic, or overly intense.
-- Below 70: encouraging but NOT falsely positive. AVOID "great job", "solid work", "nice answer". Encouraging is not praising. Right tone: "You're close." "Right instinct, wrong execution." "This is the move to sharpen."
-
-INTERNAL VALIDATION:
-1. If score < 70, feedback must NOT contain "great job," "solid," "nice work," "strong," "impressive," or "clever."
-2. If topMistake is "no_business_impact," improvedVersion MUST include business impact language.
-3. If topMistake is "too_long," improvedVersion MUST be shorter than rep's response.
-4. If rep's response under 2 sentences, cap score at 55.
-5. For executive_response: if rep exceeds 5 sentences, cap at 60.
-6. For discovery: simple question without business impact -> cap at 64.
-7. worldClassResponse MUST be meaningfully different from and stronger than improvedVersion. If they feel similar, rewrite worldClassResponse.
-8. whyItWorks: reusable patterns only, no generic bullets like "it is specific" or "it sounds confident."
-9. focusPattern: from FOCUS PATTERNS list.
-10. patternTags: 2-4, snake_case, teachable, PORTABLE across scenarios (not scenario-specific steps).
-11. moveSequence: 2-4, verb-first, under 8 words, sequential, SCENARIO-SPECIFIC (not abstract behaviors).
-12. focusReason: starts with "Because", references rep's actual miss, explains why this matters most.
-13. practiceCue: one immediately executable behavioral instruction. If it requires interpretation, rewrite it.
-14. teachingNote: one sentence generalizing beyond this scenario. Memorable. Sharp.
-15. COHERENCE CHECK: feedback + topMistake + focusPattern + focusReason + practiceCue must form one teaching thread. If they do not align, regenerate until they do.
+- Below 70: encouraging but NOT falsely positive. AVOID "great job", "solid work", etc.
 
 Respond with ONLY valid JSON:
 {
@@ -343,49 +283,29 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     if (!aiResp.ok) {
       const errText = await aiResp.text();
       console.error("AI error:", aiResp.status, errText);
-      if (aiResp.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limited — try again in a moment." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (aiResp.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      if (aiResp.status === 429) return new Response(JSON.stringify({ error: "Rate limited — try again in a moment." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (aiResp.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       throw new Error(`AI request failed: ${aiResp.status}`);
     }
 
     const aiData = await aiResp.json();
     let content = aiData.choices?.[0]?.message?.content || "";
     content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-
     const parsed = JSON.parse(content);
 
     // ── Server-side enforcement ─────────────────────────────────
+    if (typeof parsed.score === "number") parsed.score = Math.max(0, Math.min(100, Math.round(parsed.score)));
 
-    // Clamp score
-    if (typeof parsed.score === "number") {
-      parsed.score = Math.max(0, Math.min(100, Math.round(parsed.score)));
-    }
-
-    // Enforce: exec responses over 5 sentences from rep → cap at 60
     if (skill === "executive_response" && typeof userResponse === "string") {
-      const sentenceCount = userResponse.split(/[.!?]+/).filter((s: string) => s.trim().length > 5).length;
-      if (sentenceCount > 5 && parsed.score > 60) {
-        parsed.score = 60;
-      }
+      const sc = userResponse.split(/[.!?]+/).filter((s: string) => s.trim().length > 5).length;
+      if (sc > 5 && parsed.score > 60) parsed.score = 60;
     }
-
-    // Enforce: very short rep responses → cap at 55
     if (typeof userResponse === "string") {
-      const sentenceCount = userResponse.split(/[.!?]+/).filter((s: string) => s.trim().length > 5).length;
-      if (sentenceCount < 2 && parsed.score > 55) {
-        parsed.score = 55;
-      }
+      const sc = userResponse.split(/[.!?]+/).filter((s: string) => s.trim().length > 5).length;
+      if (sc < 2 && parsed.score > 55) parsed.score = 55;
     }
 
-    // Ensure new teaching fields exist
+    // Ensure fields exist
     if (!Array.isArray(parsed.patternTags)) parsed.patternTags = [];
     if (typeof parsed.focusPattern !== "string") parsed.focusPattern = "";
     if (!Array.isArray(parsed.moveSequence)) parsed.moveSequence = [];
@@ -393,64 +313,56 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     if (typeof parsed.practiceCue !== "string") parsed.practiceCue = "";
     if (typeof parsed.teachingNote !== "string") parsed.teachingNote = "";
     if (typeof parsed.deltaNote !== "string") parsed.deltaNote = "";
+    if (!Array.isArray(parsed.whyItWorks)) parsed.whyItWorks = [];
     if (retryCount > 0) {
       if (typeof parsed.focusApplied !== "string" || !["yes", "partial", "no"].includes(parsed.focusApplied)) parsed.focusApplied = "no";
       if (typeof parsed.focusAppliedReason !== "string") parsed.focusAppliedReason = "";
     }
 
-    // ── Targeted regeneration for consistency issues ─────────────
+    // ── Normalize focusPattern to canonical list ─────────────────
+    if (parsed.focusPattern) {
+      parsed.focusPattern = normalizeFocusPattern(parsed.focusPattern, skill);
+    }
 
+    // ── Targeted regeneration ───────────────────────────────────
     const needsRegen: string[] = [];
 
-    // Check: praise in low-score feedback → regenerate feedback
     if (parsed.score < 70 && typeof parsed.feedback === "string" && POSITIVE_PATTERNS.test(parsed.feedback)) {
       needsRegen.push("feedback");
     }
-
-    // Check: no_business_impact but improvedVersion lacks business language → regenerate improvedVersion
     if (parsed.topMistake === "no_business_impact" && typeof parsed.improvedVersion === "string" && !BUSINESS_IMPACT_PATTERNS.test(parsed.improvedVersion)) {
       needsRegen.push("improvedVersion");
     }
-
-    // Check: too_long but improvedVersion is longer than rep's response → regenerate improvedVersion
     if (parsed.topMistake === "too_long" && typeof parsed.improvedVersion === "string" && typeof userResponse === "string" && parsed.improvedVersion.length > userResponse.length) {
       if (!needsRegen.includes("improvedVersion")) needsRegen.push("improvedVersion");
     }
-
-    // Check: exec improvedVersion over 5 sentences → regenerate shorter
     if (skill === "executive_response" && typeof parsed.improvedVersion === "string") {
-      const ivSentences = parsed.improvedVersion.split(/[.!?]+/).filter((s: string) => s.trim().length > 5).length;
-      if (ivSentences > 5 && !needsRegen.includes("improvedVersion")) {
-        needsRegen.push("improvedVersion");
-      }
+      const ivS = parsed.improvedVersion.split(/[.!?]+/).filter((s: string) => s.trim().length > 5).length;
+      if (ivS > 5 && !needsRegen.includes("improvedVersion")) needsRegen.push("improvedVersion");
     }
-
-    // Check: coherence — focusReason should start with "Because"
     if (typeof parsed.focusReason === "string" && parsed.focusReason.length > 0 && !parsed.focusReason.startsWith("Because")) {
       needsRegen.push("focusReason");
     }
-
-    // Check: practiceCue too vague (fewer than 5 words or matches vague patterns)
     const VAGUE_CUE_PATTERNS = /^(focus on|improve|show more|be more|work on|try to)/i;
     if (typeof parsed.practiceCue === "string" && (parsed.practiceCue.split(" ").length < 4 || VAGUE_CUE_PATTERNS.test(parsed.practiceCue))) {
       if (!needsRegen.includes("practiceCue")) needsRegen.push("practiceCue");
     }
 
-    // Check: coherence — focusPattern should plausibly remedy topMistake
-    // and practiceCue should operationalize focusPattern
-    if (parsed.focusPattern && parsed.topMistake && parsed.practiceCue) {
-      const topMistakeWords = parsed.topMistake.replace(/_/g, ' ').toLowerCase();
-      const focusWords = parsed.focusPattern.replace(/_/g, ' ').toLowerCase();
-      const cueWords = parsed.practiceCue.toLowerCase();
-      // If focusPattern shares no semantic overlap with topMistake, flag for regen
-      const mistakeTokens = topMistakeWords.split(' ');
-      const focusTokens = focusWords.split(' ');
-      const hasOverlap = mistakeTokens.some((t: string) => focusTokens.includes(t)) || 
-        (topMistakeWords.includes('impact') && focusWords.includes('impact')) ||
-        (topMistakeWords.includes('control') && focusWords.includes('control')) ||
-        (topMistakeWords.includes('close') && focusWords.includes('step')) ||
-        (topMistakeWords.includes('generic') && (focusWords.includes('specific') || focusWords.includes('proof'))) ||
-        (topMistakeWords.includes('long') && focusWords.includes('concise'));
+    // Coherence: focusPattern should remedy topMistake
+    if (parsed.focusPattern && parsed.topMistake) {
+      const tmWords = parsed.topMistake.replace(/_/g, ' ').toLowerCase();
+      const fpWords = parsed.focusPattern.replace(/_/g, ' ').toLowerCase();
+      const tmTokens = tmWords.split(' ');
+      const fpTokens = fpWords.split(' ');
+      const hasOverlap = tmTokens.some((t: string) => fpTokens.includes(t)) ||
+        (tmWords.includes('impact') && fpWords.includes('impact')) ||
+        (tmWords.includes('control') && fpWords.includes('control')) ||
+        (tmWords.includes('close') && fpWords.includes('step')) ||
+        (tmWords.includes('generic') && (fpWords.includes('specific') || fpWords.includes('proof'))) ||
+        (tmWords.includes('long') && fpWords.includes('concise')) ||
+        (tmWords.includes('deepen') && fpWords.includes('deepen')) ||
+        (tmWords.includes('qualify') && (fpWords.includes('pain') || fpWords.includes('urgency') || fpWords.includes('stakeholder'))) ||
+        (tmWords.includes('passive') && fpWords.includes('control'));
       if (!hasOverlap) {
         if (!needsRegen.includes("focusPattern")) needsRegen.push("focusPattern");
         if (!needsRegen.includes("practiceCue")) needsRegen.push("practiceCue");
@@ -464,47 +376,41 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
 
       if (needsRegen.includes("feedback")) {
         triggerReasons.feedback = "positive_language_in_low_score";
-        regenParts.push(`REGENERATE "feedback": The current feedback is "${parsed.feedback}". The score is ${parsed.score} (below 70). Rewrite the feedback to be direct but encouraging — no generic praise words, but CAN use phrases like "you're close," "right instinct," "getting there." Keep it to exactly 2 sentences. Sentence 1: what they attempted or got right. Sentence 2: the ONE thing to improve.`);
+        regenParts.push(`REGENERATE "feedback": Rewrite to be direct but encouraging — no generic praise. 2 sentences.`);
       }
-
       if (needsRegen.includes("improvedVersion")) {
         const reasons: string[] = [];
-        if (parsed.topMistake === "no_business_impact") { reasons.push("it must include specific business impact language (revenue, margin, cost, ROI, or a concrete metric)"); triggerReasons.improvedVersion = "missing_business_impact"; }
-        if (parsed.topMistake === "too_long") { reasons.push("it must be significantly shorter than the rep's response — tight and punchy"); triggerReasons.improvedVersion = "too_long_improved_version"; }
-        if (skill === "executive_response") { reasons.push("it must be under 4 sentences — brevity is non-negotiable for exec communication"); triggerReasons.improvedVersion = triggerReasons.improvedVersion || "exec_too_verbose"; }
-        if (!triggerReasons.improvedVersion) triggerReasons.improvedVersion = "consistency_check_failed";
-        regenParts.push(`REGENERATE "improvedVersion": The current version is "${parsed.improvedVersion}". Issues: ${reasons.join("; ")}. Write the exact words a top rep would say OUT LOUD. Spoken language, natural rhythm, 3-5 sentences max (3 preferred for exec). Must sound like a real person on a real call, not polished copy.`);
+        if (parsed.topMistake === "no_business_impact") reasons.push("must include business impact language");
+        if (parsed.topMistake === "too_long") reasons.push("must be shorter than rep's response");
+        if (skill === "executive_response") reasons.push("must be under 4 sentences");
+        triggerReasons.improvedVersion = reasons.join("; ") || "consistency_check_failed";
+        regenParts.push(`REGENERATE "improvedVersion": Issues: ${reasons.join("; ")}. Write exact words a top rep would say OUT LOUD.`);
       }
-
       if (needsRegen.includes("focusReason")) {
         triggerReasons.focusReason = "missing_because_prefix";
-        regenParts.push(`REGENERATE "focusReason": The current focusReason is "${parsed.focusReason}". It must start with "Because" and reference the rep's actual miss. Explain why this is the highest-leverage fix. One sentence only.`);
+        regenParts.push(`REGENERATE "focusReason": Must start with "Because" and reference rep's actual miss.`);
       }
-
       if (needsRegen.includes("practiceCue")) {
         triggerReasons.practiceCue = "too_vague";
-        regenParts.push(`REGENERATE "practiceCue": The current practiceCue is "${parsed.practiceCue}". It is too vague or abstract. Rewrite as one concrete behavioral instruction the rep can immediately execute on the next attempt. Good: "Ask one sharp question before making any point." Bad: "Focus on qualification." Must pass the test: can the rep do this right now without interpretation?`);
+        regenParts.push(`REGENERATE "practiceCue": Rewrite as one concrete behavioral instruction the rep can immediately execute.`);
       }
-
       if (needsRegen.includes("focusPattern")) {
+        const validList = (VALID_FOCUS_PATTERNS[skill] || []).join(', ');
         triggerReasons.focusPattern = "misaligned_with_topMistake";
-        regenParts.push(`REGENERATE "focusPattern", "focusReason", and "practiceCue": The topMistake is "${parsed.topMistake}" but focusPattern is "${parsed.focusPattern}" — these don't align. Pick a focusPattern from the FOCUS PATTERNS list that is a PLAUSIBLE REMEDY for "${parsed.topMistake}". Then write focusReason starting with "Because" that explains why this focus addresses the mistake. Then write practiceCue as one concrete behavioral instruction that operationalizes the new focusPattern. All three must form ONE coherent teaching thread.`);
+        regenParts.push(`REGENERATE "focusPattern", "focusReason", and "practiceCue": topMistake="${parsed.topMistake}" but focusPattern="${parsed.focusPattern}" don't align. Pick from: ${validList}. Then write aligned focusReason and practiceCue.`);
       }
 
-      const regenPrompt = `You previously scored a sales rep's response. Some outputs need regeneration for consistency. Keep the same score (${parsed.score}) and topMistake (${parsed.topMistake}).\n\n${regenParts.join("\n\n")}\n\nRespond with ONLY valid JSON containing the regenerated fields.`;
+      const regenPrompt = `You previously scored a sales rep's response. Some outputs need regeneration.\n\n${regenParts.join("\n\n")}\n\nRespond with ONLY valid JSON containing the regenerated fields.`;
 
       let regenSucceeded = false;
       try {
         const regenResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
           body: JSON.stringify({
             model: "google/gemini-2.5-flash",
             messages: [
-              { role: "system", content: `You are Dave — an elite, encouraging sales coach. ${tone} Be sharp but constructive.` },
+              { role: "system", content: `You are Dave — an elite, encouraging sales coach. ${tone}` },
               { role: "user", content: regenPrompt },
             ],
             temperature: 0.3,
@@ -513,23 +419,21 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
         });
 
         if (regenResp.ok) {
-          const regenData = await regenResp.json();
-          let regenContent = regenData.choices?.[0]?.message?.content || "";
-          regenContent = regenContent.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-          const regenParsed = JSON.parse(regenContent);
-
+          const rd = await regenResp.json();
+          let rc = rd.choices?.[0]?.message?.content || "";
+          rc = rc.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+          const rp = JSON.parse(rc);
           for (const field of needsRegen) {
-            if (regenParsed[field]) {
-              parsed[field] = regenParsed[field];
-            }
+            if (rp[field]) parsed[field] = rp[field];
           }
           regenSucceeded = true;
+          // Re-normalize focusPattern after regen
+          if (parsed.focusPattern) parsed.focusPattern = normalizeFocusPattern(parsed.focusPattern, skill);
         }
       } catch (regenErr) {
         console.error("Regeneration failed, keeping originals:", regenErr);
       }
 
-      // Structured regeneration log
       console.log(JSON.stringify({
         event: "dojo_regen",
         skill,
@@ -539,14 +443,6 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
         triggerReasons,
         succeeded: regenSucceeded,
       }));
-
-      // Lightweight post-regen validation
-      if (regenSucceeded && parsed.topMistake === "no_business_impact" && typeof parsed.improvedVersion === "string" && !BUSINESS_IMPACT_PATTERNS.test(parsed.improvedVersion)) {
-        console.log(JSON.stringify({ event: "dojo_regen_drift", detail: "improvedVersion still lacks business impact after regen", topMistake: parsed.topMistake, skill }));
-      }
-      if (regenSucceeded && parsed.topMistake === "too_long" && typeof parsed.improvedVersion === "string" && typeof userResponse === "string" && parsed.improvedVersion.length > userResponse.length) {
-        console.log(JSON.stringify({ event: "dojo_regen_drift", detail: "improvedVersion still longer than rep response after regen", topMistake: parsed.topMistake, skill }));
-      }
     }
 
     return new Response(JSON.stringify(parsed), {
