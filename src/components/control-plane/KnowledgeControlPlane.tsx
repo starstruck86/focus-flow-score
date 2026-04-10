@@ -57,7 +57,16 @@ export function KnowledgeControlPlane() {
   const resources = summary?.resources ?? [];
   const actionLoading = opRunning || extractRunning;
 
-  const processingIds = useMemo(() => new Set<string>(), []);
+  const processingIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of resources) {
+      const status = r.active_job_status;
+      if (status === 'running' || status === 'queued' || status === 'partial') {
+        ids.add(r.resource_id);
+      }
+    }
+    return ids;
+  }, [resources]);
 
   const cpSummary = useMemo(
     () => computeControlPlaneSummary(resources, processingIds),
