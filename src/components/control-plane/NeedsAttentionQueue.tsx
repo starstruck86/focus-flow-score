@@ -43,30 +43,30 @@ const CATEGORY_CONFIG: Record<Category, {
     icon: ShieldAlert, label: 'Mismatched', color: 'text-amber-600',
     actionLabel: 'Inspect', batchLabel: 'Filter & Inspect',
     hint: 'Open each to verify state, then re-run the intended action.',
-    batchReason: 'These resources had outcomes that did not match expected state transitions — reconciliation detected a mismatch.',
-    batchPipeline: 'Opens filtered table view for manual inspection',
+    batchReason: 'Reconciliation found these resources in an unexpected state after the last action.',
+    batchPipeline: 'Filter the table to review each one manually.',
     batchIsFilter: true,
   },
   failed: {
     icon: XCircle, label: 'Failed', color: 'text-destructive',
     actionLabel: 'Retry', batchLabel: 'Retry All',
     hint: 'Retry once — if it fails again, open to diagnose the root cause.',
-    batchReason: 'These resources failed during their last pipeline action — the operation did not complete successfully.',
-    batchPipeline: 'Diagnostic pipeline (detect root cause → apply fix → re-validate)',
+    batchReason: 'These resources did not complete their last action.',
+    batchPipeline: 'Diagnose root cause, apply fix, and re-validate each resource.',
   },
   needs_review: {
     icon: AlertTriangle, label: 'Blocked', color: 'text-destructive',
     actionLabel: 'Diagnose', batchLabel: 'Diagnose All',
     hint: 'Run Diagnose to auto-fix, or open to review manually.',
-    batchReason: 'These resources are blocked by detected issues — empty content, failed extraction, or stale state.',
-    batchPipeline: 'Diagnostic pipeline (detect root cause → apply fix → re-validate)',
+    batchReason: 'These resources are stuck — empty content, failed extraction, or stale state.',
+    batchPipeline: 'Detect the blocker, attempt auto-fix, and re-validate.',
   },
   needs_extraction: {
     icon: Zap, label: 'Needs Extraction', color: 'text-amber-600',
     actionLabel: 'Extract', batchLabel: 'Extract All',
     hint: 'Run Extract to generate knowledge items from available content.',
-    batchReason: 'These resources have parseable content but no knowledge items extracted yet.',
-    batchPipeline: 'AI extraction on each resource (segment → extract → validate → deduplicate)',
+    batchReason: 'These resources have content but no knowledge items yet.',
+    batchPipeline: 'Extract knowledge items from each resource.',
   },
 };
 
@@ -167,80 +167,65 @@ function QueueGroupPreviewDialog({
         </AlertDialogHeader>
         <AlertDialogDescription asChild>
           <div className="space-y-3">
-            <div>
-              <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Why these resources</span>
-              <p className="text-xs text-foreground mt-0.5">{cfg.batchReason}</p>
-            </div>
+            <p className="text-xs text-foreground">{cfg.batchReason}</p>
 
             {/* Sub-state breakdown */}
             {subStates.length > 1 && (
-              <div>
-                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Current states</span>
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  {subStates.map(({ state, count }) => {
-                    const c = CONTROL_PLANE_COLORS[state];
-                    return (
-                      <Badge key={state} variant="outline" className={cn('text-[9px]', c.text, c.bg, c.border)}>
-                        {count} {CONTROL_PLANE_LABELS[state]}
-                      </Badge>
-                    );
-                  })}
-                </div>
+              <div className="flex flex-wrap gap-1.5">
+                {subStates.map(({ state, count }) => {
+                  const c = CONTROL_PLANE_COLORS[state];
+                  return (
+                    <Badge key={state} variant="outline" className={cn('text-[9px]', c.text, c.bg, c.border)}>
+                      {count} {CONTROL_PLANE_LABELS[state]}
+                    </Badge>
+                  );
+                })}
               </div>
             )}
 
-            <div>
-              <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Will run</span>
-              <p className="text-xs text-foreground mt-0.5 font-mono">{cfg.batchPipeline}</p>
-            </div>
+            <p className="text-xs text-muted-foreground">{cfg.batchPipeline}</p>
 
             {/* Expected transition */}
             {!cfg.batchIsFilter && (
-              <div>
-                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Expected transition</span>
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="outline" className={cn('text-[10px]', fromColors.text, fromColors.bg, fromColors.border)}>
-                    {CONTROL_PLANE_LABELS[fromState]}
-                  </Badge>
-                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                  <Badge variant="outline" className={cn('text-[10px]', toColors.text, toColors.bg, toColors.border)}>
-                    {CONTROL_PLANE_LABELS[toState]}
-                  </Badge>
-                </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className={cn('text-[10px]', fromColors.text, fromColors.bg, fromColors.border)}>
+                  {CONTROL_PLANE_LABELS[fromState]}
+                </Badge>
+                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                <Badge variant="outline" className={cn('text-[10px]', toColors.text, toColors.bg, toColors.border)}>
+                  {CONTROL_PLANE_LABELS[toState]}
+                </Badge>
               </div>
             )}
 
-            {/* Risk assessment */}
-            <div>
-              <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Risk</span>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <Shield className={cn('h-3 w-3', {
-                  'text-emerald-600': risk.level === 'low',
-                  'text-amber-600': risk.level === 'moderate',
-                  'text-destructive': risk.level === 'review',
-                })} />
-                <p className="text-xs text-foreground">{risk.label}</p>
-              </div>
+            {/* Risk */}
+            <div className="flex items-center gap-1.5">
+              <Shield className={cn('h-3 w-3', {
+                'text-emerald-600': risk.level === 'low',
+                'text-amber-600': risk.level === 'moderate',
+                'text-destructive': risk.level === 'review',
+              })} />
+              <p className="text-xs text-muted-foreground">{risk.label}</p>
             </div>
 
-            {/* Sample resources */}
-            <div>
-              <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Resources</span>
-              <ul className="mt-1 space-y-0.5">
-                {preview.items.slice(0, 4).map((item, i) => (
-                  <li key={i} className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                    <span>•</span>
-                    <span className="truncate">{item.title}</span>
-                    <span className="text-[9px] text-muted-foreground/60 shrink-0">({CONTROL_PLANE_LABELS[item.state]})</span>
-                  </li>
-                ))}
-                {preview.items.length > 4 && (
-                  <li className="text-[10px] text-muted-foreground/70 italic">
-                    …and {preview.items.length - 4} more
-                  </li>
-                )}
-              </ul>
-            </div>
+            {/* Sample resources — only show if >4 to avoid restating header */}
+            {preview.items.length > 3 && (
+              <div className="border-t pt-2">
+                <ul className="space-y-0.5">
+                  {preview.items.slice(0, 4).map((item, i) => (
+                    <li key={i} className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                      <span>•</span>
+                      <span className="truncate">{item.title}</span>
+                    </li>
+                  ))}
+                  {preview.items.length > 4 && (
+                    <li className="text-[10px] text-muted-foreground/70 italic">
+                      …and {preview.items.length - 4} more
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
           </div>
         </AlertDialogDescription>
         <AlertDialogFooter>
