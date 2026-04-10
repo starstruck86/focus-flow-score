@@ -273,14 +273,13 @@ export function KnowledgeControlPlane() {
         </div>
       </div>
 
-      {/* System Health — reconciliation & trust */}
-      <SystemHealthStrip refreshKey={outcomeRefreshKey} onOpenResource={openResourceById} />
-
-      {/* Resource Health — blocked, extraction, conflicts */}
-      <ResourceHealthStrip
+      {/* Unified Health — system trust + resource issues */}
+      <UnifiedHealthStrip
         summary={cpSummary}
         conflictCount={conflicts.length}
+        outcomeRefreshKey={outcomeRefreshKey}
         onFilterChange={handleFilterChange}
+        onOpenResource={openResourceById}
       />
 
       {/* AI Readiness — secondary downstream layer */}
