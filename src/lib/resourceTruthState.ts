@@ -25,6 +25,7 @@ import { isPlaceholderContent } from '@/lib/canonicalLifecycle';
 export type BlockerType =
   | 'missing_content'
   | 'placeholder_content'
+  | 'auth_capture_incomplete'
   | 'needs_enrichment'
   | 'needs_extraction'
   | 'needs_activation'
@@ -58,6 +59,7 @@ export interface Blocker {
 export const BLOCKER_META: Record<BlockerType, { severity: BlockerSeverity; fixability: BlockerFixability; ownership: BlockerOwnership; label: string }> = {
   missing_content:          { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'pipeline',       label: 'Missing Content' },
   placeholder_content:      { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'pipeline',       label: 'Parse Incomplete' },
+  auth_capture_incomplete:  { severity: 'critical', fixability: 'manual_only',       ownership: 'manual_review',  label: 'Auth Re-import Needed' },
   needs_enrichment:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'pipeline',       label: 'Needs Enrichment' },
   needs_extraction:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'extraction',     label: 'Needs Extraction' },
   needs_activation:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'activation',     label: 'Needs Activation' },
@@ -158,10 +160,13 @@ export function deriveResourceTruth(
 
   if (hasPlaceholder && !isActivelyProcessing) {
     const hasRawFile = !!(rAny.file_url);
-    const repairDetail = hasRawFile
-      ? `PDF found but content not captured during authenticated ingest. Raw file exists — retry parse. Stored: "${rawContent.slice(0, 60)}"`
-      : `PDF found but content not captured during authenticated ingest. No raw file stored — re-import with authentication required. Stored: "${rawContent.slice(0, 60)}"`;
-    blockers.push(blocker('placeholder_content', repairDetail));
+    if (hasRawFile) {
+      const repairDetail = `PDF found but content not captured during authenticated ingest. Raw file exists — retry parse. Stored: "${rawContent.slice(0, 60)}"`;
+      blockers.push(blocker('placeholder_content', repairDetail));
+    } else {
+      const repairDetail = `PDF found but content not captured during authenticated ingest. No raw file stored — re-import with authentication required. Stored: "${rawContent.slice(0, 60)}"`;
+      blockers.push(blocker('auth_capture_incomplete', repairDetail));
+    }
   } else if (!isContentBacked && !isActivelyProcessing) {
     blockers.push(blocker('missing_content', 'Content length < 200 chars and no manual content'));
   }

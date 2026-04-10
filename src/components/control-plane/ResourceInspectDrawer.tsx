@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import {
-  Zap, Play, Eye, Wrench, FileText, RotateCcw,
+  Zap, Play, Eye, Wrench, FileText, RotateCcw, Shield,
   History, ArrowRight, ShieldCheck, ShieldAlert, Clock, MinusCircle,
 } from 'lucide-react';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
@@ -232,6 +232,9 @@ function getActionsForState(state: ControlPlaneState, resource: CanonicalResourc
       }
       if (resource.blocked_reason === 'empty_content' || resource.blocked_reason === 'placeholder_content') {
         actions.push({ key: 'enrich', label: resource.blocked_reason === 'placeholder_content' ? 'Retry Parse' : 'Enrich', icon: FileText, primary: true });
+      }
+      if (resource.blocked_reason === 'auth_capture_incomplete') {
+        actions.push({ key: 'manual_assist', label: 'Re-import with Auth', icon: Shield, primary: true });
       }
       return actions;
     }

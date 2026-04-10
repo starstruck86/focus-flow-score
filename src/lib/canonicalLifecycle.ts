@@ -69,6 +69,7 @@ export const STAGE_COLORS: Record<LifecycleStage, string> = {
 export type BlockedReason =
   | 'empty_content'
   | 'placeholder_content'
+  | 'auth_capture_incomplete'
   | 'no_extraction'
   | 'no_activation'
   | 'missing_contexts'
@@ -78,6 +79,7 @@ export type BlockedReason =
 export const BLOCKED_LABELS: Record<BlockedReason, string> = {
   empty_content: 'Empty content',
   placeholder_content: 'PDF found but content not captured during ingest',
+  auth_capture_incomplete: 'Auth-gated content — re-import with authentication required',
   no_extraction: 'Transcript content exists — extraction not yet run',
   no_activation: 'No activation',
   missing_contexts: 'Missing contexts',
@@ -211,6 +213,7 @@ export function deriveBlockedReason(
     manual_input_required?: boolean | null;
     recovery_queue_bucket?: string | null;
     failure_reason?: string | null;
+    file_url?: string | null;
   },
   ki: { total: number; active: number; activeWithContexts: number },
 ): BlockedReason {
@@ -220,6 +223,9 @@ export function deriveBlockedReason(
 
   // Rule B: Placeholder content is NOT real content
   if (isPlaceholderContent(actualContent) && !resource.manual_content_present) {
+    if (actualLength > 0 && !resource.file_url) {
+      return 'auth_capture_incomplete';
+    }
     return actualLength > 0 ? 'placeholder_content' : 'empty_content';
   }
 

@@ -59,6 +59,7 @@ const BLOCKER_PRIORITY: Record<BlockerType, number> = {
   stalled_enrichment: 2,
   missing_content: 3,
   placeholder_content: 3.5,
+  auth_capture_incomplete: 3.6,
   needs_enrichment: 4,
   needs_extraction: 5,
   needs_activation: 6,
@@ -83,6 +84,7 @@ const BLOCKER_ICON: Partial<Record<BlockerType, React.ElementType>> = {
   needs_extraction: Zap,
   needs_activation: Activity,
   needs_auth: Shield,
+  auth_capture_incomplete: Shield,
   missing_context: HelpCircle,
   route_low_confidence: Eye,
   route_manual_assist: Eye,
@@ -102,6 +104,7 @@ const BLOCKER_COLOR: Partial<Record<BlockerType, string>> = {
   needs_extraction: 'text-amber-600',
   needs_activation: 'text-amber-600',
   needs_auth: 'text-amber-600',
+  auth_capture_incomplete: 'text-destructive',
   missing_context: 'text-amber-600',
   route_low_confidence: 'text-amber-600',
   route_manual_assist: 'text-amber-600',
@@ -129,6 +132,7 @@ function getActionForBlocker(b: Blocker): { label: string; key: string } {
     case 'needs_extraction': return { label: 'Extract', key: 'extract' };
     case 'needs_activation': return { label: 'Activate', key: 'activate' };
     case 'needs_auth': return { label: 'Add Content', key: 'manual_assist' };
+    case 'auth_capture_incomplete': return { label: 'Re-import with Auth', key: 'manual_assist' };
     case 'missing_context': return { label: 'Add Contexts', key: 'repair_contexts' };
     case 'route_low_confidence':
     case 'route_manual_assist': return { label: 'Review', key: 'view' };
