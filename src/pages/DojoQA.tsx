@@ -568,7 +568,23 @@ export default function DojoQA() {
                   </div>
                 )}
 
-                {rawJson && (
+                {session.audio_metrics && (
+                  <div className="pt-1 border-t border-border/40">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Audio Metrics</p>
+                    <div className="grid grid-cols-3 gap-x-3 gap-y-0.5 text-[10px]">
+                      <div><span className="text-muted-foreground">Chunks:</span> {session.audio_metrics.completed}/{session.audio_metrics.totalChunks}</div>
+                      <div><span className="text-muted-foreground">Success:</span> {session.audio_metrics.successRate}%</div>
+                      <div><span className="text-muted-foreground">Avg ms:</span> {session.audio_metrics.avgChunkDurationMs}</div>
+                      {session.audio_metrics.failed > 0 && <div className="text-red-500">Failed: {session.audio_metrics.failed}</div>}
+                      {session.audio_metrics.timedOut > 0 && <div className="text-amber-500">Timed out: {session.audio_metrics.timedOut}</div>}
+                      {session.audio_metrics.retries > 0 && <div className="text-amber-500">Retries: {session.audio_metrics.retries}</div>}
+                      {session.audio_metrics.degradations > 0 && <div className="text-red-500">Degraded: {session.audio_metrics.degradations}</div>}
+                      {session.audio_metrics.recoveries > 0 && <div className="text-green-500">Recovered: {session.audio_metrics.recoveries}</div>}
+                      {session.audio_metrics.skipped > 0 && <div className="text-muted-foreground">Skipped: {session.audio_metrics.skipped}</div>}
+                    </div>
+                  </div>
+                )}
+
                   <div className="pt-1 border-t border-border/30">
                     <button onClick={() => toggleJson(session.id)} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
                       {expandedJson.has(session.id) ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
