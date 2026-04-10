@@ -18,11 +18,13 @@ import { deriveProcessingState } from '@/lib/processingState';
 import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, ASSET_LABELS } from '@/lib/processingRoute';
 import { isJobStale, STALE_JOB_TIMEOUT_MS } from '@/store/useResourceJobProgress';
 import { detectAttachmentReferences } from '@/lib/attachmentDetection';
+import { isPlaceholderContent } from '@/lib/canonicalLifecycle';
 
 // ── Blocker Taxonomy ──────────────────────────────────────
 
 export type BlockerType =
   | 'missing_content'
+  | 'placeholder_content'
   | 'needs_enrichment'
   | 'needs_extraction'
   | 'needs_activation'
@@ -55,6 +57,7 @@ export interface Blocker {
 
 export const BLOCKER_META: Record<BlockerType, { severity: BlockerSeverity; fixability: BlockerFixability; ownership: BlockerOwnership; label: string }> = {
   missing_content:          { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'pipeline',       label: 'Missing Content' },
+  placeholder_content:      { severity: 'critical', fixability: 'semi_auto_fixable', ownership: 'pipeline',       label: 'Parse Incomplete' },
   needs_enrichment:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'pipeline',       label: 'Needs Enrichment' },
   needs_extraction:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'extraction',     label: 'Needs Extraction' },
   needs_activation:         { severity: 'high',     fixability: 'auto_fixable',      ownership: 'activation',     label: 'Needs Activation' },
@@ -144,12 +147,18 @@ export function deriveResourceTruth(
   const ps = deriveProcessingState(resource, audioJob);
   const isActivelyProcessing = ps.state === 'RUNNING' && !hasStuckJob;
 
+  // ── Placeholder content detection (Rule B) ──────────────
+  const rawContent = (rAny.content as string) ?? '';
+  const hasPlaceholder = isPlaceholderContent(rawContent) && rawContent.length > 0;
+
   // ── Content blockers ────────────────────────────────────
   const contentLength = rAny.content_length ?? 0;
   const hasManualContent = rAny.manual_content_present === true;
-  const isContentBacked = contentLength >= 200 || hasManualContent;
+  const isContentBacked = !hasPlaceholder && (contentLength >= 200 || hasManualContent);
 
-  if (!isContentBacked && !isActivelyProcessing) {
+  if (hasPlaceholder && !isActivelyProcessing) {
+    blockers.push(blocker('placeholder_content', `Placeholder content detected — PDF parse incomplete. Stored: "${rawContent.slice(0, 60)}"`));
+  } else if (!isContentBacked && !isActivelyProcessing) {
     blockers.push(blocker('missing_content', 'Content length < 200 chars and no manual content'));
   }
 
@@ -308,6 +317,9 @@ export function deriveResourceTruth(
     switch (primaryBlocker.type) {
       case 'missing_content':
         next_required_action = { label: 'Add Content', actionKey: 'manual_assist', variant: 'default' };
+        break;
+      case 'placeholder_content':
+        next_required_action = { label: 'Retry Parse', actionKey: 'deep_enrich', variant: 'default' };
         break;
       case 'needs_enrichment':
         next_required_action = { label: 'Enrich', actionKey: 'deep_enrich', variant: 'default' };

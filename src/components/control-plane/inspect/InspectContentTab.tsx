@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronRight, FileText, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { isPlaceholderContent } from '@/lib/canonicalLifecycle';
 import type { ResourceDetail } from '@/hooks/useResourceInspectData';
 
 interface Props {
@@ -34,10 +35,16 @@ export function InspectContentTab({ detail, loading }: Props) {
 
   // Detect potential issues
   const issues: string[] = [];
+
+  // Rule B: Placeholder content detection
+  if (isPlaceholderContent(content)) {
+    issues.push('Placeholder content only — PDF parse incomplete. Real content has not been extracted yet.');
+  }
+
   if (contentLength === 0 && detail.content_length && detail.content_length > 0) {
     issues.push('content_length is set but stored content is empty — possible truncation or fetch failure');
   }
-  if (contentLength > 0 && contentLength < 200) {
+  if (contentLength > 0 && contentLength < 200 && !isPlaceholderContent(content)) {
     issues.push('Content is very short (<200 chars) — may be incomplete');
   }
   if (content.includes('<nav') || content.includes('<footer') || content.includes('<aside')) {

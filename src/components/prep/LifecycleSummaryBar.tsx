@@ -20,6 +20,7 @@ import { ChevronDown } from 'lucide-react';
 /** Human-readable blocked labels */
 const HUMAN_BLOCKED_LABELS: Record<string, string> = {
   empty_content: 'Empty content',
+  placeholder_content: 'Parse incomplete',
   no_extraction: 'Needs extraction',
   no_activation: 'Needs activation',
   missing_contexts: 'Needs context repair',

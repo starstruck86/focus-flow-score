@@ -402,7 +402,8 @@ const HUMAN_STAGE_LABELS: Record<string, string> = {
 
 const HUMAN_BLOCKED_LABELS: Record<string, string> = {
   empty_content: 'Missing Content',
-  no_extraction: 'Needs Extraction',
+  placeholder_content: 'PDF Parse Incomplete',
+  no_extraction: 'Transcript content exists — extraction not triggered',
   no_activation: 'Needs Activation',
   missing_contexts: 'Needs Context Repair',
   stale_blocker_state: 'Needs Review',
@@ -411,6 +412,7 @@ const HUMAN_BLOCKED_LABELS: Record<string, string> = {
 
 const BLOCKED_ACTIONS: Record<string, string> = {
   empty_content: 'Add content via enrichment or manual paste',
+  placeholder_content: 'Retry PDF parsing to extract real content',
   no_extraction: 'Run knowledge extraction on this resource',
   no_activation: 'Activate extracted knowledge items',
   missing_contexts: 'Add context tags to active knowledge items',

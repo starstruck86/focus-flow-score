@@ -16,6 +16,21 @@ import { createLogger } from './logger';
 
 const log = createLogger('CanonicalLifecycle');
 
+// ── Placeholder detection ──────────────────────────────────
+
+const PLACEHOLDER_PATTERNS = [
+  /^\[Pending parse:\s*.+\]$/,
+  /^\[Pending parse\]$/i,
+  /^\[placeholder\]$/i,
+];
+
+export function isPlaceholderContent(content: string | null | undefined): boolean {
+  if (!content) return true;
+  const trimmed = content.trim();
+  if (trimmed.length === 0) return true;
+  return PLACEHOLDER_PATTERNS.some(p => p.test(trimmed));
+}
+
 // ── Lifecycle stages ───────────────────────────────────────
 
 export type LifecycleStage =
@@ -52,6 +67,7 @@ export const STAGE_COLORS: Record<LifecycleStage, string> = {
 
 export type BlockedReason =
   | 'empty_content'
+  | 'placeholder_content'
   | 'no_extraction'
   | 'no_activation'
   | 'missing_contexts'
@@ -60,7 +76,8 @@ export type BlockedReason =
 
 export const BLOCKED_LABELS: Record<BlockedReason, string> = {
   empty_content: 'Empty content',
-  no_extraction: 'No extraction',
+  placeholder_content: 'Parse incomplete — placeholder content only',
+  no_extraction: 'Content exists but extraction not triggered',
   no_activation: 'No activation',
   missing_contexts: 'Missing contexts',
   stale_blocker_state: 'Stale blocker state',
@@ -139,6 +156,7 @@ async function fetchKnowledgeItemsForResources(resourceIds: string[]) {
 export function deriveCanonicalStage(
   resource: {
     content_length?: number | null;
+    content?: string | null;
     manual_content_present?: boolean | null;
     tags?: string[] | null;
     enrichment_status?: string | null;
@@ -146,6 +164,10 @@ export function deriveCanonicalStage(
   ki: { total: number; active: number; activeWithContexts: number },
 ): LifecycleStage {
   const contentLength = resource.content_length ?? 0;
+  // Placeholder content is NOT real content
+  if (isPlaceholderContent(resource.content ?? null) && !resource.manual_content_present) {
+    return 'uploaded';
+  }
   const isContentBacked = contentLength >= MIN_CONTENT_LENGTH || resource.manual_content_present === true;
 
   if (!isContentBacked) return 'uploaded';
@@ -176,7 +198,14 @@ export function deriveBlockedReason(
   ki: { total: number; active: number; activeWithContexts: number },
 ): BlockedReason {
   const contentLength = resource.content_length ?? 0;
-  const actualLength = resource.content?.length ?? 0;
+  const actualContent = resource.content ?? '';
+  const actualLength = actualContent.length;
+
+  // Rule B: Placeholder content is NOT real content
+  if (isPlaceholderContent(actualContent) && !resource.manual_content_present) {
+    return actualLength > 0 ? 'placeholder_content' : 'empty_content';
+  }
+
   const isContentBacked = Math.max(contentLength, actualLength) >= MIN_CONTENT_LENGTH || resource.manual_content_present === true;
 
   // Stale blocker: content-backed but stuck in failed/blocked state
@@ -196,7 +225,7 @@ export function deriveBlockedReason(
 
   if (!isContentBacked) return 'empty_content';
 
-  // Has content but no KI
+  // Rule A/C: Has real content but no KI — needs extraction (not "blocked")
   if (ki.total === 0 && ENRICHED_STATUSES.includes(resource.enrichment_status ?? '')) {
     return 'no_extraction';
   }
