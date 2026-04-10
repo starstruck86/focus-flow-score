@@ -52,6 +52,11 @@ const PATTERN_TAG_LABELS: Record<string, string> = {
   leads_with_outcome: 'Leads with outcome',
 };
 
+/** Format focus pattern label with fallback */
+function getFocusLabel(pattern: string): string {
+  return FOCUS_PATTERN_LABELS[pattern] || formatFocusPattern(pattern);
+}
+
 /** Safely cast DojoScoreResult to Json for DB storage */
 function scoreToJson(score: DojoScoreResult): Json {
   return JSON.parse(JSON.stringify(score)) as Json;

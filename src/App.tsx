@@ -41,6 +41,7 @@ const BulkExtractRunner = lazy(() => import("./pages/BulkExtractRunner"));
 const ExtractionAdmin = lazy(() => import("./pages/ExtractionAdmin"));
 const Dojo = lazy(() => import("./pages/Dojo"));
 const DojoSession = lazy(() => import("./pages/DojoSession"));
+const DojoQA = lazy(() => import("./pages/DojoQA"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -151,6 +152,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
                         <DojoSession />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/dojo/qa" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                        <DojoQA />
                       </Suspense>
                     </ProtectedRoute>
                   } />
