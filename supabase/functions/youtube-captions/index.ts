@@ -44,8 +44,9 @@ async function fetchPlayerResponse(videoId: string): Promise<any> {
   }
 
   const html = await resp.text();
+  console.log(`[youtube-captions] Watch page: ${html.length} chars, hasPlayerResp: ${html.includes("ytInitialPlayerResponse")}, hasConsent: ${html.includes("consent.youtube.com")}`);
 
-  // Extract ytInitialPlayerResponse — use greedy match up to the closing semicolon pattern
+  // Extract ytInitialPlayerResponse — find the JSON by tracking brace depth
   const startMarker = "ytInitialPlayerResponse = ";
   const startIdx = html.indexOf(startMarker);
   if (startIdx === -1) {
