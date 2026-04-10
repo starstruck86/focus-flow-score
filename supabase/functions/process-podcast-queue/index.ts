@@ -104,6 +104,82 @@ function validateStructuredTranscript(structured: string, rawLength: number): { 
 }
 
 // ══════════════════════════════════════════════════════════════
+// YouTube fallback — search YouTube for the episode and pull captions
+// ══════════════════════════════════════════════════════════════
+async function searchYouTubeVideoId(showTitle: string, episodeTitle: string): Promise<string | null> {
+  const query = `${showTitle} ${episodeTitle}`.trim();
+  if (!query) return null;
+
+  try {
+    const body = {
+      context: {
+        client: { clientName: "WEB", clientVersion: "2.20240101.00.00", hl: "en" },
+      },
+      query,
+    };
+
+    const resp = await fetch("https://www.youtube.com/youtubei/v1/search?prettyPrint=false", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      console.warn(`YouTube search API returned ${resp.status}`);
+      return null;
+    }
+
+    const data = await resp.json();
+    const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+    if (!Array.isArray(contents)) return null;
+
+    for (const section of contents) {
+      const items = section?.itemSectionRenderer?.contents;
+      if (!Array.isArray(items)) continue;
+      for (const item of items) {
+        const videoId = item?.videoRenderer?.videoId;
+        if (videoId) return videoId;
+      }
+    }
+  } catch (e) {
+    console.warn(`YouTube search error: ${(e as Error).message}`);
+  }
+  return null;
+}
+
+async function fetchYouTubeTranscript(supabaseUrl: string, serviceRoleKey: string, videoId: string): Promise<string | null> {
+  try {
+    const resp = await fetch(`${supabaseUrl}/functions/v1/youtube-captions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({ video_id: videoId }),
+    });
+
+    if (!resp.ok) return null;
+    const result = await resp.json();
+    if (result.success && result.transcript && result.transcript.length > 200) {
+      return result.transcript;
+    }
+  } catch (e) {
+    console.warn(`YouTube captions fetch error: ${(e as Error).message}`);
+  }
+  return null;
+}
+
+async function tryYouTubeFallback(supabaseUrl: string, serviceRoleKey: string, showTitle: string, episodeTitle: string): Promise<string | null> {
+  const videoId = await searchYouTubeVideoId(showTitle, episodeTitle);
+  if (!videoId) {
+    console.log(`YouTube fallback: no video found for "${showTitle}" "${episodeTitle}"`);
+    return null;
+  }
+  console.log(`YouTube fallback: found video ${videoId}, fetching captions...`);
+  return fetchYouTubeTranscript(supabaseUrl, serviceRoleKey, videoId);
+}
+
+// ══════════════════════════════════════════════════════════════
 // Per-item pipeline — runs the full flow for one queue item
 // ══════════════════════════════════════════════════════════════
 async function processItem(
@@ -241,14 +317,38 @@ async function processItem(
     const validation = validateContent(transcriptText);
     await updateQueueItem(supabase, queueItem.id, { content_validation: validation.details });
 
-    if (!validation.valid) {
-      await supabase.from("podcast_import_queue").update({
-        status: "failed", pipeline_stage: "failed",
-        transcript_status: "transcript_failed", failure_type: validation.reason,
-        error_message: `Content validation failed: ${validation.reason}`,
-        processed_at: now(), content_validation: validation.details, updated_at: now(),
-      }).eq("id", queueItem.id);
-      return { result: "content_invalid", error: validation.reason || undefined };
+    // ── Trailer detection + YouTube fallback ──
+    // If transcript is very short (< 500 words), it's likely a trailer/teaser clip
+    const wordCount = transcriptText.split(/\s+/).filter(Boolean).length;
+    const isLikelyTrailer = validation.valid && wordCount < 500;
+    const isInvalid = !validation.valid;
+
+    if (isLikelyTrailer || isInvalid) {
+      const showTitle = queueItem.show_author || queueItem.show_title || "";
+      const episodeTitle = queueItem.episode_title || "";
+      console.log(`[${queueItem.id}] ${isLikelyTrailer ? `Short transcript (${wordCount} words) — likely trailer` : `Invalid content: ${validation.reason}`}. Trying YouTube fallback...`);
+
+      await updateQueueItem(supabase, queueItem.id, { pipeline_stage: "youtube_fallback" });
+
+      const ytTranscript = await tryYouTubeFallback(supabaseUrl, serviceRoleKey, showTitle, episodeTitle);
+
+      if (ytTranscript && ytTranscript.length > transcriptText.length) {
+        console.log(`[${queueItem.id}] YouTube fallback succeeded: ${ytTranscript.length} chars (was ${transcriptText.length})`);
+        transcriptText = ytTranscript;
+        resolvedMeta.resolution_method = "youtube_fallback";
+        await updateQueueItem(supabase, queueItem.id, { resolution_method: "youtube_fallback" });
+      } else if (isInvalid) {
+        // Original was invalid and YouTube fallback didn't help
+        await supabase.from("podcast_import_queue").update({
+          status: "failed", pipeline_stage: "failed",
+          transcript_status: "transcript_failed", failure_type: validation.reason,
+          error_message: `Content validation failed: ${validation.reason}. YouTube fallback also failed.`,
+          processed_at: now(), content_validation: validation.details, updated_at: now(),
+        }).eq("id", queueItem.id);
+        return { result: "content_invalid", error: validation.reason || undefined };
+      } else {
+        console.log(`[${queueItem.id}] YouTube fallback returned nothing better, using short transcript as-is`);
+      }
     }
 
     await updateQueueItem(supabase, queueItem.id, {
