@@ -1816,6 +1816,13 @@ export function ResourceManager() {
         }}
       />
 
+      {/* Auth Re-import Dialog */}
+      <AuthReimportDialog
+        resource={authReimportResource}
+        open={!!authReimportResource}
+        onOpenChange={(open) => { if (!open) setAuthReimportResource(null); }}
+      />
+
       {/* Bulk selection bar moved into ResourceLibraryTable */}
 
       {/* Library resource detail drawer */}
