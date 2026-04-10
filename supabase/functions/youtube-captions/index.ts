@@ -53,38 +53,43 @@ async function fetchPlayerResponse(videoId: string): Promise<any> {
     throw new Error("Could not find ytInitialPlayerResponse in watch page");
   }
 
-  // Find the JSON object by tracking brace depth (string-aware to handle braces inside strings)
+  // Extract JSON using semicolon-based boundary detection
+  // ytInitialPlayerResponse ends with `};` — find the matching end
   const jsonStart = startIdx + startMarker.length;
-  let depth = 0;
-  let jsonEnd = jsonStart;
-  let inString = false;
-  let escapeNext = false;
-  for (let i = jsonStart; i < html.length && i < jsonStart + 1_000_000; i++) {
-    const c = html[i];
-    if (escapeNext) { escapeNext = false; continue; }
-    if (c === "\\" && inString) { escapeNext = true; continue; }
-    if (c === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    if (c === "{") depth++;
-    else if (c === "}") {
-      depth--;
-      if (depth === 0) {
-        jsonEnd = i + 1;
+  
+  // Find the end by looking for the pattern `;\nvar ` or `};` at depth 0
+  // Use a simpler approach: find `var ytInitialData` or end-of-script which comes after
+  const endMarkers = [";\nvar ", ";var ", ";</script>"];
+  let jsonEnd = -1;
+  for (const marker of endMarkers) {
+    // Search from a reasonable offset (player response is usually 50k-500k chars)
+    let searchFrom = jsonStart + 1000;
+    while (searchFrom < html.length && searchFrom < jsonStart + 1_000_000) {
+      const idx = html.indexOf(marker, searchFrom);
+      if (idx === -1) break;
+      // Try to parse from jsonStart to idx
+      const candidate = html.slice(jsonStart, idx);
+      try {
+        JSON.parse(candidate);
+        jsonEnd = idx;
         break;
+      } catch {
+        searchFrom = idx + 1;
       }
     }
+    if (jsonEnd > 0) break;
   }
 
-  if (depth !== 0) {
-    throw new Error("Could not parse ytInitialPlayerResponse JSON boundaries");
+  if (jsonEnd <= 0) {
+    throw new Error("Could not find end of ytInitialPlayerResponse JSON");
   }
 
   const jsonStr = html.slice(jsonStart, jsonEnd);
-  console.log(`[youtube-captions] Extracted JSON: ${jsonStr.length} chars, depth=${depth}, first 100: ${jsonStr.slice(0, 100)}`);
+  console.log(`[youtube-captions] Extracted JSON: ${jsonStr.length} chars`);
   try {
     return JSON.parse(jsonStr);
   } catch (e) {
-    throw new Error(`Failed to parse player response JSON (${jsonStr.length} chars): ${(e as Error).message}`);
+    throw new Error(`Failed to parse player response JSON: ${(e as Error).message}`);
   }
 }
 
