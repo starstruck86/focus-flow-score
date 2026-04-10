@@ -1628,6 +1628,129 @@ export type Database = {
         }
         Relationships: []
       }
+      dojo_session_turns: {
+        Row: {
+          created_at: string
+          feedback: string | null
+          id: string
+          improved_version: string | null
+          prompt_text: string
+          retry_of_turn_id: string | null
+          score: number | null
+          score_json: Json | null
+          session_id: string
+          top_mistake: string | null
+          turn_index: number
+          user_id: string
+          user_response: string | null
+        }
+        Insert: {
+          created_at?: string
+          feedback?: string | null
+          id?: string
+          improved_version?: string | null
+          prompt_text: string
+          retry_of_turn_id?: string | null
+          score?: number | null
+          score_json?: Json | null
+          session_id: string
+          top_mistake?: string | null
+          turn_index?: number
+          user_id: string
+          user_response?: string | null
+        }
+        Update: {
+          created_at?: string
+          feedback?: string | null
+          id?: string
+          improved_version?: string | null
+          prompt_text?: string
+          retry_of_turn_id?: string | null
+          score?: number | null
+          score_json?: Json | null
+          session_id?: string
+          top_mistake?: string | null
+          turn_index?: number
+          user_id?: string
+          user_response?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dojo_session_turns_retry_of_turn_id_fkey"
+            columns: ["retry_of_turn_id"]
+            isOneToOne: false
+            referencedRelation: "dojo_session_turns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dojo_session_turns_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "dojo_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dojo_sessions: {
+        Row: {
+          best_score: number | null
+          completed_at: string | null
+          created_at: string
+          difficulty: string
+          id: string
+          latest_score: number | null
+          mode: string
+          retry_count: number
+          scenario_context: string | null
+          scenario_objection: string | null
+          scenario_title: string | null
+          session_type: string
+          skill_focus: string
+          started_at: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          best_score?: number | null
+          completed_at?: string | null
+          created_at?: string
+          difficulty?: string
+          id?: string
+          latest_score?: number | null
+          mode?: string
+          retry_count?: number
+          scenario_context?: string | null
+          scenario_objection?: string | null
+          scenario_title?: string | null
+          session_type?: string
+          skill_focus?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          best_score?: number | null
+          completed_at?: string | null
+          created_at?: string
+          difficulty?: string
+          id?: string
+          latest_score?: number | null
+          mode?: string
+          retry_count?: number
+          scenario_context?: string | null
+          scenario_objection?: string | null
+          scenario_title?: string | null
+          session_type?: string
+          skill_focus?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       enrichment_attempts: {
         Row: {
           attempt_type: string
