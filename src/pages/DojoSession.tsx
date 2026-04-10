@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import DojoRoleplay from '@/components/dojo/DojoRoleplay';
 import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview';
+import DaveCoachingDelivery from '@/components/dojo/DaveCoachingDelivery';
 import type { Json } from '@/integrations/supabase/types';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
