@@ -318,6 +318,9 @@ export function deriveResourceTruth(
       case 'missing_content':
         next_required_action = { label: 'Add Content', actionKey: 'manual_assist', variant: 'default' };
         break;
+      case 'placeholder_content':
+        next_required_action = { label: 'Retry Parse', actionKey: 'deep_enrich', variant: 'default' };
+        break;
       case 'needs_enrichment':
         next_required_action = { label: 'Enrich', actionKey: 'deep_enrich', variant: 'default' };
         break;
