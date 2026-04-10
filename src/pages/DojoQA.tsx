@@ -18,6 +18,21 @@ import { VALID_FOCUS_PATTERN_IDS, formatFocusPattern } from '@/lib/dojo/focusPat
 import { normalizeScoreResult, type DojoScoreResult } from '@/lib/dojo/types';
 import { QA_FIXTURES, validateQAResult, type QAResult } from '@/lib/dojo/qaHarness';
 
+interface AudioMetrics {
+  totalChunks: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+  timedOut: number;
+  retries: number;
+  degradations: number;
+  recoveries: number;
+  avgChunkDurationMs: number;
+  p95ChunkDurationMs: number;
+  sessionDurationMs: number;
+  successRate: number;
+}
+
 interface SessionRow {
   id: string;
   session_type: string;
@@ -27,6 +42,7 @@ interface SessionRow {
   created_at: string;
   scenario_title: string | null;
   retry_count: number;
+  audio_metrics: AudioMetrics | null;
 }
 
 interface TurnRow {
@@ -135,6 +151,7 @@ function validateResult(sj: DojoScoreResult, sessionType: string): ValidationFla
 
 type FilterMode = 'all' | 'drill' | 'roleplay' | 'review';
 type FilterSeverity = 'all' | 'errors' | 'warnings' | 'clean';
+type FilterAudio = 'all' | 'has_audio' | 'degraded' | 'recovered' | 'replayed' | 'skipped' | 'timed_out';
 
 export default function DojoQA() {
   const { user } = useAuth();
@@ -142,6 +159,7 @@ export default function DojoQA() {
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [filterSeverity, setFilterSeverity] = useState<FilterSeverity>('all');
   const [filterSkill, setFilterSkill] = useState<string>('all');
+  const [filterAudio, setFilterAudio] = useState<FilterAudio>('all');
   const [expandedJson, setExpandedJson] = useState<Set<string>>(new Set());
 
   // Fixture runner state
@@ -155,12 +173,12 @@ export default function DojoQA() {
     queryFn: async () => {
       const { data } = await supabase
         .from('dojo_sessions')
-        .select('id, session_type, skill_focus, best_score, latest_score, created_at, scenario_title, retry_count')
+        .select('id, session_type, skill_focus, best_score, latest_score, created_at, scenario_title, retry_count, audio_metrics')
         .eq('user_id', user!.id)
         .eq('status', 'completed')
         .order('created_at', { ascending: false })
         .limit(100);
-      return (data || []) as SessionRow[];
+      return (data || []) as unknown as SessionRow[];
     },
   });
 
@@ -239,9 +257,18 @@ export default function DojoQA() {
       if (filterSeverity === 'errors' && !d.flags.some(f => f.type === 'error')) return false;
       if (filterSeverity === 'warnings' && d.flags.length === 0) return false;
       if (filterSeverity === 'clean' && d.flags.length > 0) return false;
+
+      const am = d.session.audio_metrics;
+      if (filterAudio === 'has_audio' && !am) return false;
+      if (filterAudio === 'degraded' && (!am || am.degradations === 0)) return false;
+      if (filterAudio === 'recovered' && (!am || am.recoveries === 0)) return false;
+      if (filterAudio === 'replayed' && (!am || !(am as unknown as Record<string, unknown>).replaysRequested)) return false;
+      if (filterAudio === 'skipped' && (!am || am.skipped === 0)) return false;
+      if (filterAudio === 'timed_out' && (!am || am.timedOut === 0)) return false;
+
       return true;
     });
-  }, [sessionData, filterMode, filterSeverity, filterSkill]);
+  }, [sessionData, filterMode, filterSeverity, filterSkill, filterAudio]);
 
   const totalFlags = useMemo(() => {
     const t = { errors: 0, warnings: 0 };
@@ -478,6 +505,16 @@ export default function DojoQA() {
             <option value="all">All Skills</option>
             {Object.entries(SKILL_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
           </select>
+          <span className="text-muted-foreground text-[10px]">|</span>
+          <select value={filterAudio} onChange={e => setFilterAudio(e.target.value as FilterAudio)} className="text-[10px] bg-transparent border border-border rounded px-1.5 py-0.5">
+            <option value="all">Audio: All</option>
+            <option value="has_audio">Has Audio</option>
+            <option value="degraded">Degraded</option>
+            <option value="recovered">Recovered</option>
+            <option value="replayed">Replayed</option>
+            <option value="skipped">Skipped</option>
+            <option value="timed_out">Timed Out</option>
+          </select>
         </div>
 
         <p className="text-[10px] text-muted-foreground">{filtered.length} sessions shown</p>
@@ -528,6 +565,23 @@ export default function DojoQA() {
                         <p className={cn('text-[10px]', f.type === 'error' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400')}>{f.message}</p>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {session.audio_metrics && (
+                  <div className="pt-1 border-t border-border/40">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Audio Metrics</p>
+                    <div className="grid grid-cols-3 gap-x-3 gap-y-0.5 text-[10px]">
+                      <div><span className="text-muted-foreground">Chunks:</span> {session.audio_metrics.completed}/{session.audio_metrics.totalChunks}</div>
+                      <div><span className="text-muted-foreground">Success:</span> {session.audio_metrics.successRate}%</div>
+                      <div><span className="text-muted-foreground">Avg ms:</span> {session.audio_metrics.avgChunkDurationMs}</div>
+                      {session.audio_metrics.failed > 0 && <div className="text-red-500">Failed: {session.audio_metrics.failed}</div>}
+                      {session.audio_metrics.timedOut > 0 && <div className="text-amber-500">Timed out: {session.audio_metrics.timedOut}</div>}
+                      {session.audio_metrics.retries > 0 && <div className="text-amber-500">Retries: {session.audio_metrics.retries}</div>}
+                      {session.audio_metrics.degradations > 0 && <div className="text-red-500">Degraded: {session.audio_metrics.degradations}</div>}
+                      {session.audio_metrics.recoveries > 0 && <div className="text-green-500">Recovered: {session.audio_metrics.recoveries}</div>}
+                      {session.audio_metrics.skipped > 0 && <div className="text-muted-foreground">Skipped: {session.audio_metrics.skipped}</div>}
+                    </div>
                   </div>
                 )}
 
