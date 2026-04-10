@@ -1146,13 +1146,13 @@ function wordOverlap(a: string, b: string): number {
 // Post-extraction invariant: minimum KI floor
 // ═══════════════════════════════════════════
 
-function computeMinKiFloor(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }): number {
-  const details = computeMinKiFloorDetailed(contentLength, isLesson, densitySignals);
+function computeMinKiFloor(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }, resourceType?: string): number {
+  const details = computeMinKiFloorDetailed(contentLength, isLesson, densitySignals, resourceType);
   return details.final;
 }
 
 /** Returns base, density-adjusted, and final floor with logging */
-function computeMinKiFloorDetailed(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }): { base: number; densityAdjusted: number; final: number } {
+function computeMinKiFloorDetailed(contentLength: number, isLesson: boolean, densitySignals?: { enumeratedCount: number; sectionCount: number; isDense: boolean }, resourceType?: string): { base: number; densityAdjusted: number; final: number } {
   if (contentLength < 500) return { base: 0, densityAdjusted: 0, final: 0 };
 
   // Base floor (no density adjustment)
@@ -1162,6 +1162,16 @@ function computeMinKiFloorDetailed(contentLength: number, isLesson: boolean, den
   } else {
     // Non-lesson: conservative floors — single-topic transcripts should not be forced to retry
     baseFloor = contentLength < 4000 ? 1 : contentLength < 8000 ? 2 : 3;
+  }
+
+  // CRITICAL: Skip density boosting for transcript-type resources.
+  // Transcripts use markdown headings for speaker turns (## Host:, ## Guest:),
+  // which inflates sectionCount but does NOT indicate dense multi-topic teaching content.
+  // Density boosting should only apply to structured documents/articles.
+  const isTranscript = isTranscriptType(resourceType);
+  if (isTranscript) {
+    console.log(`[extract-floor] base=${baseFloor} density=skipped_transcript final=${baseFloor} (type=${resourceType})`);
+    return { base: baseFloor, densityAdjusted: baseFloor, final: baseFloor };
   }
 
   if (!densitySignals?.isDense) {
@@ -1626,7 +1636,7 @@ Deno.serve(async (req) => {
       }
       log.rawAiResponse = rawResponse;
     } catch (aiErr: any) {
-      const failureType = classifyFailure(aiErr, 0, computeMinKiFloor(resource.content.length, isLesson, densitySignals), 0);
+      const failureType = classifyFailure(aiErr, 0, computeMinKiFloor(resource.content.length, isLesson, densitySignals, resource.resource_type), 0);
       log.outcome = 'ai_error';
       log.error = aiErr.message;
       log.failureType = failureType;
@@ -1635,7 +1645,7 @@ Deno.serve(async (req) => {
       // Telemetry
       logTelemetry({
         resource_id: resourceId, title: resource.title, content_length: resource.content.length,
-        is_structured_lesson: isLesson, ki_count: 0, min_ki_floor: computeMinKiFloor(resource.content.length, isLesson, densitySignals),
+        is_structured_lesson: isLesson, ki_count: 0, min_ki_floor: computeMinKiFloor(resource.content.length, isLesson, densitySignals, resource.resource_type),
         attempt_number: attemptNumber, extractor_strategy: strategy, failure_reason: failureType,
         duration_ms: Date.now() - startTime, routing_basis: routingBasis,
       });
@@ -1648,7 +1658,7 @@ Deno.serve(async (req) => {
         // Persist attempt record to table
         const thisAttempt = buildAttemptRecord({
           attemptNumber, strategy, kiCount: 0, rawItemCount: 0, validatedCount: 0, dedupedCount: 0,
-          minKiFloor: computeMinKiFloor(resource.content.length, isLesson, densitySignals),
+          minKiFloor: computeMinKiFloor(resource.content.length, isLesson, densitySignals, resource.resource_type),
           failureType, status: newStatus, durationMs: Date.now() - startTime, startedAt,
         });
         await persistAttemptRecord(supabase, resourceId, resource.user_id, thisAttempt);
@@ -1735,9 +1745,9 @@ Deno.serve(async (req) => {
     // High KI density is NOT a problem if KIs are distinct and high-quality.
     // Log for observability but do NOT trim — quality/dedup gates handle bad KIs.
     if (isLesson) {
-      const observationalCeiling = Math.max(computeMinKiFloor(resource.content.length, isLesson, densitySignals), Math.floor(resource.content.length / 500));
+      const observationalCeiling = Math.max(computeMinKiFloor(resource.content.length, isLesson, densitySignals, resource.resource_type), Math.floor(resource.content.length / 500));
       if (deduped.length > observationalCeiling) {
-        console.log(`[extract-ceiling] 📊 HIGH DENSITY (observational): "${resource.title}" | content=${resource.content.length} chars | kis=${deduped.length} | ref_ceiling=${observationalCeiling} | floor=${computeMinKiFloor(resource.content.length, isLesson, densitySignals)} | KEPT ALL — all KIs passed quality+dedup gates`);
+        console.log(`[extract-ceiling] 📊 HIGH DENSITY (observational): "${resource.title}" | content=${resource.content.length} chars | kis=${deduped.length} | ref_ceiling=${observationalCeiling} | floor=${computeMinKiFloor(resource.content.length, isLesson, densitySignals, resource.resource_type)} | KEPT ALL — all KIs passed quality+dedup gates`);
       }
     }
 
@@ -1785,7 +1795,7 @@ Deno.serve(async (req) => {
     }
 
     // ── 6. Quality threshold gate + post-extraction invariant ──
-    const floorDetails = computeMinKiFloorDetailed(resource.content.length, isLesson, densitySignals);
+    const floorDetails = computeMinKiFloorDetailed(resource.content.length, isLesson, densitySignals, resource.resource_type);
     const minKiFloor = floorDetails.final;
     const durationMs = Date.now() - startTime;
 
