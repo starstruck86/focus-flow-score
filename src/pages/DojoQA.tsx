@@ -178,7 +178,7 @@ export default function DojoQA() {
         .eq('status', 'completed')
         .order('created_at', { ascending: false })
         .limit(100);
-      return (data || []) as SessionRow[];
+      return (data || []) as unknown as SessionRow[];
     },
   });
 
