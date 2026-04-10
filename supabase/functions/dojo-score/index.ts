@@ -180,7 +180,16 @@ ${retryCount > 0 ? `This is retry #${retryCount}. Compare to what a first attemp
 
 RESPONSE RULES:
 - "feedback": Exactly 2 sentences. Sentence 1: what they attempted (be specific to their response). Sentence 2: the specific miss or gap (name the exact behavior). If the score is below 70, your tone must be critical — no softening, no "good start," no "on the right track." Below 60, be blunt about what went wrong.
-- "improvedVersion": Write the EXACT words a top-performing rep would say OUT LOUD in this conversation. Spoken language — contractions, natural rhythm. NOT marketing copy, NOT a framework recitation. 3-5 sentences that sound like a real human on a real call. Must directly address the buyer's exact words and situation.
+- "improvedVersion": Write the EXACT words a better version of the rep's response would sound like OUT LOUD. Fix their specific mistakes while keeping their general approach. Spoken language — contractions, natural rhythm. 3-5 sentences. Must directly address the buyer's exact words and situation.
+- "worldClassResponse": Write what a top 1% rep would ACTUALLY SAY in this exact moment — not an improved version of the user's answer, but what elite instinct sounds like from scratch. This must be materially stronger than improvedVersion. Requirements:
+  * Exact spoken words — natural, conversational, believable on a real call
+  * NOT marketing copy, NOT a framework recitation, NOT polished prose
+  * Must include business impact, control, specificity, and judgment where relevant
+  * For ${skill}: ${WORLD_CLASS_TONE[skill] || 'calm, specific, commercially sharp, confident'}
+  * If score < 70: this should feel SIGNIFICANTLY sharper and more controlled than improvedVersion
+  * If score 70-84: gap should be visible but narrower
+  * If score > 84: show a subtle level-up in precision and judgment
+- "whyItWorks": Array of exactly 2-3 short bullets (one sentence each) explaining WHY the worldClassResponse is elite. Focus on patterns and principles — e.g. "isolates the real issue before responding," "reframes to revenue risk," "tests urgency instead of accepting vague interest." These teach the user what to internalize, not just what to say.
 - "topMistake": Pick the single most impactful mistake from the list.
 
 INTERNAL VALIDATION (you must check these before finalizing):
@@ -190,13 +199,17 @@ INTERNAL VALIDATION (you must check these before finalizing):
 4. If the rep's response is under 2 sentences, score cannot exceed 55.
 5. For executive_response: if the rep's response exceeds 5 sentences, cap the score at 60.
 6. For discovery: if the rep only asked a simple clarifying question without connecting to business impact, cap the score at 64.
+7. worldClassResponse MUST be different from improvedVersion — not a rewording, but a fundamentally better approach.
+8. whyItWorks must describe patterns, not just restate what the response says.
 
 Respond with ONLY valid JSON:
 {
   "score": 60,
   "feedback": "What they did. What they missed.",
   "topMistake": "one_mistake_code",
-  "improvedVersion": "Natural spoken words a great rep would actually say."
+  "improvedVersion": "Better version of the rep's approach.",
+  "worldClassResponse": "What an elite rep would naturally say from scratch.",
+  "whyItWorks": ["Pattern principle 1", "Pattern principle 2", "Pattern principle 3"]
 }`;
 
     const userPrompt = `SCENARIO:
