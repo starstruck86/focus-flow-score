@@ -69,6 +69,7 @@ export const STAGE_COLORS: Record<LifecycleStage, string> = {
 export type BlockedReason =
   | 'empty_content'
   | 'placeholder_content'
+  | 'auth_capture_incomplete'
   | 'no_extraction'
   | 'no_activation'
   | 'missing_contexts'
@@ -78,6 +79,7 @@ export type BlockedReason =
 export const BLOCKED_LABELS: Record<BlockedReason, string> = {
   empty_content: 'Empty content',
   placeholder_content: 'PDF found but content not captured during ingest',
+  auth_capture_incomplete: 'Auth-gated content — re-import with authentication required',
   no_extraction: 'Transcript content exists — extraction not yet run',
   no_activation: 'No activation',
   missing_contexts: 'Missing contexts',

@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import {
-  Zap, Play, Eye, Wrench, FileText, RotateCcw,
+  Zap, Play, Eye, Wrench, FileText, RotateCcw, Shield,
   History, ArrowRight, ShieldCheck, ShieldAlert, Clock, MinusCircle,
 } from 'lucide-react';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
