@@ -167,12 +167,14 @@ const captionFetchHeaders: Record<string, string> = {
 };
 
 async function fetchAndParseCaptions(captionUrl: string): Promise<string> {
+  console.log(`[youtube-captions] Caption URL: ${captionUrl.slice(0, 200)}`);
   // Strategy 1: Default XML format with proper headers
   try {
-    const resp = await fetch(captionUrl, { headers: captionFetchHeaders });
-    if (resp.ok) {
-      const text = await resp.text();
-      console.log(`[youtube-captions] Default format response: ${text.length} chars, starts with: ${text.slice(0, 200)}`);
+    const resp = await fetch(captionUrl, { headers: captionFetchHeaders, redirect: "follow" });
+    console.log(`[youtube-captions] Caption fetch status: ${resp.status}, headers: ${JSON.stringify(Object.fromEntries(resp.headers.entries())).slice(0, 300)}`);
+    const text = await resp.text();
+    console.log(`[youtube-captions] Default format response: ${text.length} chars, starts with: ${text.slice(0, 300)}`);
+    if (resp.ok && text.length > 0) {
       const parsed = parseXmlCaptions(text);
       if (parsed.length > 50) {
         console.log(`[youtube-captions] XML parse success: ${parsed.length} chars`);
