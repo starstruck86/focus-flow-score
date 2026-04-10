@@ -4,7 +4,7 @@
  * Bug 2: Pclub PDF placeholders treated as real content
  */
 import { describe, it, expect } from 'vitest';
-import { deriveCanonicalStage, deriveBlockedReason, isPlaceholderContent } from '../canonicalLifecycle';
+import { deriveCanonicalStage, deriveBlockedReason, isPlaceholderContent, BLOCKED_LABELS } from '../canonicalLifecycle';
 
 // ── Bug 1: Challenger podcast transcript ────────────────────
 
@@ -32,8 +32,6 @@ describe('Bug 1 — Transcript with content blocked as no_extraction', () => {
   });
 
   it('no_extraction label should be descriptive', () => {
-    // Import the label map
-    const { BLOCKED_LABELS } = require('../canonicalLifecycle');
     expect(BLOCKED_LABELS['no_extraction']).toContain('extraction not triggered');
   });
 
