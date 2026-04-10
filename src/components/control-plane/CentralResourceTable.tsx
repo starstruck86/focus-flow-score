@@ -306,7 +306,7 @@ export function CentralResourceTable({
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="text-xs text-muted-foreground">{inferSourceType(r.title)}</span>
+                        <span className="text-xs text-muted-foreground">{inferSourceType(r.title, r.resource_type, r.file_url)}</span>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5">
