@@ -7,7 +7,6 @@ import {
   TrendingUp,
   DollarSign,
   Settings,
-  Compass,
   Brain,
   Crosshair,
   Swords,
