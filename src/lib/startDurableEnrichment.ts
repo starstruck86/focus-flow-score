@@ -61,7 +61,7 @@ export async function dispatchEnrichmentJob(jobId: string): Promise<void> {
   try {
     const response = await authenticatedFetch({
       functionName: 'run-enrichment-job',
-      body: { job_id: jobId },
+      body: { job_id: jobId, mode: 'protected' },
       componentName: 'DurableEnrichment',
       timeoutMs: 10_000, // Just confirm dispatch, don't wait for completion
     });
