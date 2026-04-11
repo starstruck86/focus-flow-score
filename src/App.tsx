@@ -42,6 +42,7 @@ const ExtractionAdmin = lazy(() => import("./pages/ExtractionAdmin"));
 const Dojo = lazy(() => import("./pages/Dojo"));
 const DojoSession = lazy(() => import("./pages/DojoSession"));
 const DojoQA = lazy(() => import("./pages/DojoQA"));
+const ReliabilityQA = lazy(() => import("./pages/ReliabilityQA"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
