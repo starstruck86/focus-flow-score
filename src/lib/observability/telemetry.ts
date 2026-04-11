@@ -3,9 +3,9 @@
  *
  * Phase 1: Safe Stabilization Through Observability Only.
  *
- * This module provides a structured event buffer for inspecting job lifecycle,
- * enrichment lifecycle, and edge function invocation patterns WITHOUT changing
- * any existing behavior.
+ * IMPORTANT: This telemetry is SESSION-LOCAL, IN-MEMORY, NON-PERSISTENT,
+ * and BEST-EFFORT. Events are lost on page refresh. No data leaves the
+ * browser. This is purely for live debugging and inspection.
  *
  * All functions are defensive, never throw, and safe to call in any context.
  */
@@ -22,6 +22,7 @@ export type TelemetryEventType =
   | 'job:failed'
   | 'job:cancelled'
   | 'job:stuck'
+  | 'job:removed_from_store'
   // Enrichment lifecycle
   | 'enrich:dispatched'
   | 'enrich:invoke_start'
@@ -48,20 +49,39 @@ const MAX_BUFFER_SIZE = 500;
 const buffer: TelemetryEvent[] = [];
 let enabled = true;
 
-/** Safely redact known sensitive field names from data */
-function redact(data: Record<string, unknown>): Record<string, unknown> {
-  const SENSITIVE_KEYS = ['token', 'access_token', 'refresh_token', 'apikey', 'api_key', 'secret', 'password', 'authorization'];
-  const safe: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (SENSITIVE_KEYS.includes(key.toLowerCase())) {
-      safe[key] = '[REDACTED]';
-    } else if (typeof value === 'string' && value.length > 500) {
-      safe[key] = value.slice(0, 200) + `...[truncated ${value.length} chars]`;
-    } else {
-      safe[key] = value;
-    }
+const SENSITIVE_KEYS = ['token', 'access_token', 'refresh_token', 'apikey', 'api_key', 'secret', 'password', 'authorization'];
+
+/** Recursively redact known sensitive field names from data */
+function redact(value: unknown, depth = 0): unknown {
+  // Guard against infinite recursion
+  if (depth > 6) return '[depth_limit]';
+
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'boolean' || typeof value === 'number') return value;
+
+  if (typeof value === 'string') {
+    return value.length > 500
+      ? value.slice(0, 200) + `...[truncated ${value.length} chars]`
+      : value;
   }
-  return safe;
+
+  if (Array.isArray(value)) {
+    return value.map(item => redact(item, depth + 1));
+  }
+
+  if (typeof value === 'object') {
+    const safe: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_KEYS.includes(key.toLowerCase())) {
+        safe[key] = '[REDACTED]';
+      } else {
+        safe[key] = redact(v, depth + 1);
+      }
+    }
+    return safe;
+  }
+
+  return String(value);
 }
 
 /** Record a telemetry event. Never throws. */
@@ -71,7 +91,7 @@ export function recordTelemetryEvent(type: TelemetryEventType, data: Record<stri
     const event: TelemetryEvent = {
       type,
       ts: Date.now(),
-      data: redact(data),
+      data: redact(data) as Record<string, unknown>,
     };
     buffer.push(event);
     // Trim oldest if over capacity
@@ -122,8 +142,8 @@ export function getTelemetrySummary(): Record<string, number> {
   return counts;
 }
 
-/** Expose on window for console debugging */
-if (typeof window !== 'undefined') {
+/** Expose on window for console debugging — dev mode only */
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
   (window as any).__telemetry = {
     getEvents: getTelemetryEvents,
     getRecent: getRecentEvents,

@@ -146,12 +146,12 @@ export async function trackedInvoke<T = unknown>(
     if (result.error) {
       recordError(result.error);
       logger.warn(`${functionName} failed`, { traceId, attempts, message: result.error.message });
-      recordFnInvocation({ functionName, authenticated: true, outcome: 'error', durationMs: Date.now() - invokeStartMs, traceId, errorMessage: result.error.message });
+      recordFnInvocation({ functionName, outcome: 'error', durationMs: Date.now() - invokeStartMs, traceId, errorMessage: result.error.message });
       return { data: null, error: result.error, traceId, attempts };
     }
 
     logger.debug(`${functionName} OK`, { traceId, attempts });
-    recordFnInvocation({ functionName, authenticated: true, outcome: 'success', durationMs: Date.now() - invokeStartMs, traceId });
+    recordFnInvocation({ functionName, outcome: 'success', durationMs: Date.now() - invokeStartMs, traceId });
     return { data: result.data, error: null, traceId, attempts };
   };
 

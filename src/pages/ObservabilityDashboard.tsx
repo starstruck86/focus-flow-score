@@ -3,6 +3,11 @@
  * job lifecycle, enrichment events, and edge function invocation patterns.
  *
  * Phase 1: Observability Only. No destructive controls.
+ *
+ * IMPORTANT: Telemetry shown here is session-local, in-memory,
+ * non-persistent, and best-effort. Data is lost on page refresh.
+ *
+ * Access: gated to approved users only via useApprovalCheck.
  */
 import { useState, useMemo } from 'react';
 import { useBackgroundJobs, selectActiveJobs, selectFailedJobs, formatElapsed, getJobPercent } from '@/store/useBackgroundJobs';
@@ -12,9 +17,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Activity, AlertTriangle, CheckCircle, Clock, RefreshCw, Trash2, Download } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle, RefreshCw, Trash2, Download } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
+import { useApprovalCheck } from '@/hooks/useApprovalCheck';
 
 function StatusBadge({ status }: { status: string }) {
   const variant = status === 'running' ? 'default' :
@@ -64,7 +70,7 @@ function JobsPanel() {
       </div>
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">All Jobs (in-memory)</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">All Jobs (in-memory, session-local)</CardTitle></CardHeader>
         <CardContent className="max-h-96 overflow-y-auto">
           {allJobs.length === 0 && <p className="text-sm text-muted-foreground">No jobs in store</p>}
           {allJobs.map(job => (
@@ -167,7 +173,7 @@ function TelemetryPanel() {
       </div>
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Event Summary</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Event Summary (session-local, best-effort)</CardTitle></CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
             {Object.entries(summary).map(([type, count]) => (
@@ -242,6 +248,29 @@ function FnInvocationPanel() {
 }
 
 export default function ObservabilityDashboard() {
+  const approvalStatus = useApprovalCheck();
+
+  // Gate: only approved users can access
+  if (approvalStatus === 'loading') {
+    return (
+      <Layout>
+        <div className="min-h-screen flex items-center justify-center">
+          <p className="text-muted-foreground text-sm">Loading…</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (approvalStatus === 'denied') {
+    return (
+      <Layout>
+        <div className="min-h-screen flex items-center justify-center">
+          <p className="text-muted-foreground text-sm">Access denied.</p>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="max-w-5xl mx-auto p-4 space-y-4 pb-24">
@@ -251,8 +280,8 @@ export default function ObservabilityDashboard() {
           <Badge variant="outline" className="text-[10px]">Phase 1 — Read Only</Badge>
         </div>
         <p className="text-xs text-muted-foreground">
-          Internal debug surface for inspecting job lifecycle, enrichment events, and edge function invocations.
-          Console: <code className="bg-muted px-1 rounded">window.__telemetry</code>
+          Internal debug surface. All data is session-local, in-memory, and best-effort — lost on refresh.
+          {import.meta.env.DEV && <> Console: <code className="bg-muted px-1 rounded">window.__telemetry</code></>}
         </p>
 
         <Tabs defaultValue="jobs" className="w-full">
