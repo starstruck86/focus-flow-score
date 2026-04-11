@@ -1,12 +1,14 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 // ElevenLabs TTS has a 5000 char limit per request
 const TTS_CHUNK_LIMIT = 4500;
+/** Max time to wait for a single audio element to finish playing */
+const PLAYBACK_TIMEOUT_MS = 120_000; // 2 minutes
 
 /** Split text into chunks at sentence boundaries, respecting the char limit */
-function splitTextForTTS(text: string): string[] {
+export function splitTextForTTS(text: string): string[] {
   if (text.length <= TTS_CHUNK_LIMIT) return [text];
 
   const sentences = text.match(/[^.!?]+[.!?]+[\s]*/g) || [text];
@@ -34,6 +36,44 @@ export function useVoiceMode() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const playbackAbortRef = useRef(false);
+  const mountedRef = useRef(true);
+  /** Tracks all active AbortControllers so we can abort on unmount/stop */
+  const activeAbortControllersRef = useRef<Set<AbortController>>(new Set());
+  /** Tracks object URLs that need cleanup */
+  const activeObjectUrlsRef = useRef<Set<string>>(new Set());
+
+  // Unmount guard
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      // Abort all in-flight fetches
+      activeAbortControllersRef.current.forEach((ac) => ac.abort());
+      activeAbortControllersRef.current.clear();
+      // Revoke all object URLs
+      activeObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      activeObjectUrlsRef.current.clear();
+      // Stop any playing audio
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      // Stop media stream
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  const safeSetIsPlaying = useCallback((v: boolean) => {
+    if (mountedRef.current) setIsPlaying(v);
+  }, []);
+
+  const safeSetIsTranscribing = useCallback((v: boolean) => {
+    if (mountedRef.current) setIsTranscribing(v);
+  }, []);
+
+  const safeSetIsRecording = useCallback((v: boolean) => {
+    if (mountedRef.current) setIsRecording(v);
+  }, []);
 
   const startRecording = useCallback(async (): Promise<void> => {
     try {
@@ -51,26 +91,26 @@ export function useVoiceMode() {
       };
 
       mediaRecorder.start(100);
-      setIsRecording(true);
+      safeSetIsRecording(true);
     } catch (err) {
       toast.error('Microphone access denied', {
         description: 'Please enable microphone access to use voice mode.',
       });
       throw err;
     }
-  }, []);
+  }, [safeSetIsRecording]);
 
   const stopRecording = useCallback(async (): Promise<string> => {
     return new Promise((resolve, reject) => {
       const mediaRecorder = mediaRecorderRef.current;
       if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-        setIsRecording(false);
+        safeSetIsRecording(false);
         reject(new Error('No active recording'));
         return;
       }
 
       mediaRecorder.onstop = async () => {
-        setIsRecording(false);
+        safeSetIsRecording(false);
         streamRef.current?.getTracks().forEach((t) => t.stop());
 
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
@@ -79,43 +119,51 @@ export function useVoiceMode() {
           return;
         }
 
-        setIsTranscribing(true);
+        safeSetIsTranscribing(true);
         try {
           const text = await transcribeWithRetry(audioBlob);
           resolve(text);
         } catch (err) {
           reject(err);
         } finally {
-          setIsTranscribing(false);
+          safeSetIsTranscribing(false);
         }
       };
 
       mediaRecorder.stop();
     });
-  }, []);
+  }, [safeSetIsRecording, safeSetIsTranscribing]);
 
-  /** Transcribe audio — retry is handled by authenticatedFetch reliability layer */
+  /** Transcribe audio with per-attempt abort isolation */
   const transcribeWithRetry = async (audioBlob: Blob): Promise<string> => {
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
+    const ac = new AbortController();
+    activeAbortControllersRef.current.add(ac);
 
-    const resp = await authenticatedFetch({
-      functionName: 'elevenlabs-stt',
-      body: formData,
-      retry: { maxAttempts: 3, baseDelayMs: 500 },
-      timeoutMs: 30_000,
-      componentName: 'VoiceMode-STT',
-    });
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ error: 'Transcription failed' }));
-      throw new Error(err.error || `STT error ${resp.status}`);
+      const resp = await authenticatedFetch({
+        functionName: 'elevenlabs-stt',
+        body: formData,
+        retry: { maxAttempts: 3, baseDelayMs: 500 },
+        timeoutMs: 30_000,
+        componentName: 'VoiceMode-STT',
+        signal: ac.signal,
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: 'Transcription failed' }));
+        throw new Error(err.error || `STT error ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      const text = data.text?.trim();
+      if (!text) throw new Error('No speech detected');
+      return text;
+    } finally {
+      activeAbortControllersRef.current.delete(ac);
     }
-
-    const data = await resp.json();
-    const text = data.text?.trim();
-    if (!text) throw new Error('No speech detected');
-    return text;
   };
 
   const cancelRecording = useCallback(() => {
@@ -124,18 +172,23 @@ export function useVoiceMode() {
       mediaRecorder.stop();
     }
     streamRef.current?.getTracks().forEach((t) => t.stop());
-    setIsRecording(false);
+    safeSetIsRecording(false);
     audioChunksRef.current = [];
-  }, []);
+  }, [safeSetIsRecording]);
 
-  /** Fetch a single TTS chunk and return an Audio element */
-  const fetchTTSChunk = async (text: string, voiceId?: string): Promise<HTMLAudioElement> => {
+  /** Fetch a single TTS chunk with abort isolation and return an Audio element */
+  const fetchTTSChunk = async (
+    text: string,
+    voiceId: string | undefined,
+    signal: AbortSignal,
+  ): Promise<HTMLAudioElement> => {
     const resp = await authenticatedFetch({
       functionName: 'elevenlabs-tts-stream',
       body: { text, voiceId },
       retry: { maxAttempts: 2, baseDelayMs: 1_000 },
       timeoutMs: 30_000,
       componentName: 'VoiceMode-TTS',
+      signal,
     });
 
     if (!resp.ok) {
@@ -145,107 +198,101 @@ export function useVoiceMode() {
 
     const audioBlob = await resp.blob();
     const audioUrl = URL.createObjectURL(audioBlob);
+    activeObjectUrlsRef.current.add(audioUrl);
+
     const audio = new Audio(audioUrl);
-
-    // Clean up object URL when done
-    audio.onended = () => URL.revokeObjectURL(audioUrl);
-    audio.onerror = () => URL.revokeObjectURL(audioUrl);
-
     return audio;
   };
 
-  /** Play TTS with chunking for long text and sequential playback */
+  /** Safely revoke an object URL and remove from tracking */
+  const revokeUrl = (url: string) => {
+    URL.revokeObjectURL(url);
+    activeObjectUrlsRef.current.delete(url);
+  };
+
+  /** Play a single audio element with a hard timeout guard */
+  const playAudioWithTimeout = (audio: HTMLAudioElement): Promise<void> => {
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const settle = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn();
+      };
+
+      const timer = setTimeout(() => {
+        settle(() => {
+          audio.pause();
+          reject(new Error('Audio playback timed out'));
+        });
+      }, PLAYBACK_TIMEOUT_MS);
+
+      audio.onended = () => settle(() => {
+        revokeUrl(audio.src);
+        resolve();
+      });
+
+      audio.onerror = () => settle(() => {
+        revokeUrl(audio.src);
+        reject(new Error('Audio playback failed'));
+      });
+
+      audio.play().catch((err) => settle(() => {
+        revokeUrl(audio.src);
+        reject(err);
+      }));
+    });
+  };
+
+  /** Play TTS with sequential chunk delivery — no skip bugs */
   const playTTS = useCallback(async (text: string, voiceId?: string): Promise<void> => {
     // Stop any currently playing audio
     stopPlayback();
     playbackAbortRef.current = false;
 
+    const ac = new AbortController();
+    activeAbortControllersRef.current.add(ac);
+
     const chunks = splitTextForTTS(text);
-    setIsPlaying(true);
+    safeSetIsPlaying(true);
 
     try {
-      // For single chunks, simple playback
-      if (chunks.length === 1) {
-        const audio = await fetchTTSChunk(chunks[0], voiceId);
-        if (playbackAbortRef.current) return;
+      for (let i = 0; i < chunks.length; i++) {
+        if (playbackAbortRef.current || ac.signal.aborted) break;
+
+        // Fetch current chunk
+        const audio = await fetchTTSChunk(chunks[i], voiceId, ac.signal);
+        if (playbackAbortRef.current) {
+          revokeUrl(audio.src);
+          break;
+        }
 
         audioRef.current = audio;
-        await new Promise<void>((resolve, reject) => {
-          audio.onended = () => {
-            URL.revokeObjectURL(audio.src);
-            resolve();
-          };
-          audio.onerror = () => {
-            URL.revokeObjectURL(audio.src);
-            reject(new Error('Audio playback failed'));
-          };
-          audio.play().catch(reject);
-        });
-        return;
-      }
-
-      // For multiple chunks: prefetch next while playing current
-      for (let i = 0; i < chunks.length; i++) {
-        if (playbackAbortRef.current) break;
-
-        // Fetch current chunk (and prefetch next)
-        const [currentAudio, nextAudioPromise] = await Promise.all([
-          fetchTTSChunk(chunks[i], voiceId),
-          i + 1 < chunks.length ? fetchTTSChunk(chunks[i + 1], voiceId) : Promise.resolve(null),
-        ]);
-
-        if (playbackAbortRef.current) break;
-
-        audioRef.current = currentAudio;
-        await new Promise<void>((resolve, reject) => {
-          currentAudio.onended = () => {
-            URL.revokeObjectURL(currentAudio.src);
-            resolve();
-          };
-          currentAudio.onerror = () => {
-            URL.revokeObjectURL(currentAudio.src);
-            reject(new Error('Audio playback failed'));
-          };
-          currentAudio.play().catch(reject);
-        });
-
-        // Skip next fetch since we prefetched it
-        if (nextAudioPromise && i + 1 < chunks.length) {
-          i++; // skip next iteration
-          if (playbackAbortRef.current) break;
-          const nextAudio = await nextAudioPromise;
-          if (!nextAudio || playbackAbortRef.current) break;
-
-          audioRef.current = nextAudio;
-          await new Promise<void>((resolve, reject) => {
-            nextAudio.onended = () => {
-              URL.revokeObjectURL(nextAudio.src);
-              resolve();
-            };
-            nextAudio.onerror = () => {
-              URL.revokeObjectURL(nextAudio.src);
-              reject(new Error('Audio playback failed'));
-            };
-            nextAudio.play().catch(reject);
-          });
-        }
+        await playAudioWithTimeout(audio);
       }
     } catch (err) {
-      if (!playbackAbortRef.current) throw err;
+      if (!playbackAbortRef.current && !(err instanceof DOMException && err.name === 'AbortError')) {
+        throw err;
+      }
     } finally {
-      setIsPlaying(false);
+      activeAbortControllersRef.current.delete(ac);
+      safeSetIsPlaying(false);
     }
-  }, []);
+  }, [safeSetIsPlaying]);
 
   const stopPlayback = useCallback(() => {
     playbackAbortRef.current = true;
+    // Abort all in-flight TTS fetches
+    activeAbortControllersRef.current.forEach((ac) => ac.abort());
+    activeAbortControllersRef.current.clear();
     if (audioRef.current) {
       audioRef.current.pause();
-      if (audioRef.current.src) URL.revokeObjectURL(audioRef.current.src);
+      if (audioRef.current.src) revokeUrl(audioRef.current.src);
       audioRef.current = null;
     }
-    setIsPlaying(false);
-  }, []);
+    safeSetIsPlaying(false);
+  }, [safeSetIsPlaying]);
 
   return {
     isRecording,
