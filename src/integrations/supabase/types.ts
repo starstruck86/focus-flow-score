@@ -2761,6 +2761,218 @@ export type Database = {
         }
         Relationships: []
       }
+      learning_courses: {
+        Row: {
+          created_at: string
+          description: string | null
+          difficulty_level: string
+          id: string
+          is_active: boolean
+          slug: string
+          title: string
+          topic: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          difficulty_level?: string
+          id?: string
+          is_active?: boolean
+          slug: string
+          title: string
+          topic: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          difficulty_level?: string
+          id?: string
+          is_active?: boolean
+          slug?: string
+          title?: string
+          topic?: string
+        }
+        Relationships: []
+      }
+      learning_lessons: {
+        Row: {
+          created_at: string
+          difficulty_level: string
+          generated_at: string | null
+          generation_model: string | null
+          generation_status: string
+          id: string
+          is_active: boolean
+          lesson_content: Json | null
+          module_id: string
+          order_index: number
+          quiz_content: Json | null
+          source_ki_ids: string[] | null
+          title: string
+          topic: string
+        }
+        Insert: {
+          created_at?: string
+          difficulty_level?: string
+          generated_at?: string | null
+          generation_model?: string | null
+          generation_status?: string
+          id?: string
+          is_active?: boolean
+          lesson_content?: Json | null
+          module_id: string
+          order_index?: number
+          quiz_content?: Json | null
+          source_ki_ids?: string[] | null
+          title: string
+          topic: string
+        }
+        Update: {
+          created_at?: string
+          difficulty_level?: string
+          generated_at?: string | null
+          generation_model?: string | null
+          generation_status?: string
+          id?: string
+          is_active?: boolean
+          lesson_content?: Json | null
+          module_id?: string
+          order_index?: number
+          quiz_content?: Json | null
+          source_ki_ids?: string[] | null
+          title?: string
+          topic?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_lessons_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "learning_modules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_modules: {
+        Row: {
+          course_id: string
+          created_at: string
+          description: string | null
+          id: string
+          order_index: number
+          title: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          order_index?: number
+          title: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          order_index?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_modules_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "learning_courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_progress: {
+        Row: {
+          created_at: string
+          id: string
+          last_attempt_at: string | null
+          lesson_id: string
+          mastery_score: number | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_attempt_at?: string | null
+          lesson_id: string
+          mastery_score?: number | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_attempt_at?: string | null
+          lesson_id?: string
+          mastery_score?: number | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_progress_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "learning_lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_quiz_answers: {
+        Row: {
+          ai_feedback: string | null
+          created_at: string
+          id: string
+          is_correct: boolean | null
+          lesson_id: string
+          question_id: string
+          question_type: string
+          score: number | null
+          user_answer: Json | null
+          user_id: string
+        }
+        Insert: {
+          ai_feedback?: string | null
+          created_at?: string
+          id?: string
+          is_correct?: boolean | null
+          lesson_id: string
+          question_id: string
+          question_type: string
+          score?: number | null
+          user_answer?: Json | null
+          user_id: string
+        }
+        Update: {
+          ai_feedback?: string | null
+          created_at?: string
+          id?: string
+          is_correct?: boolean | null
+          lesson_id?: string
+          question_id?: string
+          question_type?: string
+          score?: number | null
+          user_answer?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_quiz_answers_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "learning_lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lesson_assets: {
         Row: {
           child_resource_id: string | null
