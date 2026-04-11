@@ -72,17 +72,45 @@ Deno.serve(async (req: Request) => {
 
   const jobId = body.job_id;
   const isProtectedMode = body.mode === "protected";
+  const isInternalContinuation = body.mode === "internal_continuation";
   const isContinuation = body.is_continuation === true;
 
   logValidationWarnings('run-enrichment-job', body, ['job_id']);
 
-  // ── Protected path enforcement ──
-  // When mode="protected", enforce strict auth + scope.
-  // Legacy path (no mode) is unchanged.
-  if (isProtectedMode) {
+  // ── Lane routing ──
+  // Three explicit lanes: protected (user-driven), internal_continuation, legacy.
+  if (isInternalContinuation) {
+    // ── Explicit internal continuation lane ──
+    // Only self-dispatched continuations should use this mode.
+    // Requires: service-role auth + is_continuation flag + job_id.
+    if (!isContinuation) {
+      logEnforcementEvent('run-enrichment-job', 'fn:internal_request_rejected' as any, {
+        reason: 'internal_continuation_without_flag',
+        authMethod,
+      });
+      return new Response(JSON.stringify({ error: "internal_continuation requires is_continuation" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (authMethod !== 'service-role-continuation') {
+      logEnforcementEvent('run-enrichment-job', 'fn:internal_request_rejected' as any, {
+        reason: 'internal_continuation_wrong_auth',
+        authMethod,
+      });
+      return new Response(JSON.stringify({ error: "internal_continuation requires service-role auth" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    logEnforcementEvent('run-enrichment-job', 'fn:internal_path_used' as any, {
+      lane: 'internal_continuation',
+      jobId,
+    });
+  } else if (isProtectedMode) {
+    // ── Protected user-driven path (unchanged) ──
     logEnforcementEvent('run-enrichment-job', 'fn:protected_path_used', { authMethod });
 
-    // Enforcement: require authenticated caller (not service-role continuation for initial dispatch)
     if (!isContinuation && authMethod !== 'jwt') {
       logEnforcementEvent('run-enrichment-job', 'fn:request_rejected_protected_path', {
         reason: 'missing_jwt_auth',
@@ -94,7 +122,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Enforcement: require job_id
     if (!jobId) {
       logEnforcementEvent('run-enrichment-job', 'fn:request_rejected_protected_path', {
         reason: 'missing_job_id',
@@ -105,8 +132,17 @@ Deno.serve(async (req: Request) => {
       });
     }
   } else {
-    // Legacy path telemetry
-    logEnforcementEvent('run-enrichment-job', 'fn:legacy_path_used', { authMethod, isContinuation });
+    // ── Legacy path ──
+    // If this is a continuation arriving without explicit internal mode, log as fallback
+    if (isContinuation) {
+      logEnforcementEvent('run-enrichment-job', 'fn:internal_fallback_used' as any, {
+        authMethod,
+        reason: 'continuation_without_explicit_mode',
+        jobId,
+      });
+    } else {
+      logEnforcementEvent('run-enrichment-job', 'fn:legacy_path_used', { authMethod, isContinuation });
+    }
   }
 
   if (!jobId) {
@@ -224,11 +260,17 @@ Deno.serve(async (req: Request) => {
         metadata: { ...meta, resume_from_index: i, success_count: successCount, failed_count: failedCount },
       }).eq("id", jobId);
 
-      // Self-continue (continuations always use service-role, no mode flag — legacy path)
+      // Self-continue via explicit internal continuation lane
       try {
         const continueUrl = `${supabaseUrl}/functions/v1/run-enrichment-job`;
         const controller = new AbortController();
         setTimeout(() => controller.abort(), 5000);
+
+        logEnforcementEvent('run-enrichment-job', 'fn:continuation_lane_used' as any, {
+          jobId,
+          resumeFromIndex: i,
+          totalResources: resourceIds.length,
+        });
 
         await fetch(continueUrl, {
           method: "POST",
@@ -236,7 +278,7 @@ Deno.serve(async (req: Request) => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${serviceKey}`,
           },
-          body: JSON.stringify({ job_id: jobId, is_continuation: true }),
+          body: JSON.stringify({ job_id: jobId, is_continuation: true, mode: "internal_continuation" }),
           signal: controller.signal,
         }).catch(() => {});
       } catch {
