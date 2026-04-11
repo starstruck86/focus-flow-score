@@ -11,7 +11,7 @@
  * Also supports generic "retry" — any background_jobs row in 'queued' status
  * with a known type gets dispatched to the right handler.
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logServiceRoleUsage, logMissingUserScope, logCrossUserAccess, logValidationWarnings, logAuthMethod } from '../_shared/securityLog.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,6 +36,7 @@ Deno.serve(async (req: Request) => {
   const token = authHeader.replace("Bearer ", "");
 
   const supabase = createClient(supabaseUrl, serviceKey);
+  logServiceRoleUsage('run-enrichment-job', 'single_user', { reason: 'db_operations_and_continuation' });
 
   // Validate caller
   let callerUserId: string | null = null;
@@ -44,6 +45,11 @@ Deno.serve(async (req: Request) => {
     if (!error && data?.user) {
       callerUserId = data.user.id;
     }
+    logAuthMethod('run-enrichment-job', 'jwt', { resolved: !!callerUserId });
+  } else if (token === serviceKey) {
+    logAuthMethod('run-enrichment-job', 'service-role-continuation');
+  } else {
+    logAuthMethod('run-enrichment-job', 'none');
   }
 
   let body: any;
@@ -57,6 +63,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const jobId = body.job_id;
+  logValidationWarnings('run-enrichment-job', body, ['job_id']);
   if (!jobId) {
     return new Response(JSON.stringify({ error: "job_id required" }), {
       status: 400,
@@ -90,6 +97,7 @@ Deno.serve(async (req: Request) => {
 
   // Auth check: user must own the job (unless service-role continuation)
   if (callerUserId && callerUserId !== job.user_id) {
+    logCrossUserAccess('run-enrichment-job', callerUserId, job.user_id, { jobId });
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 403,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
