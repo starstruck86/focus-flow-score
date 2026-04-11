@@ -14,6 +14,8 @@
 
 import { useRef, useCallback, useEffect, useState } from 'react';
 import type { SpeechChunk } from './conversationEngine';
+import { getInterChunkDelay } from './dojoChunkPacing';
+import { markAudioUnlocked, isAudioUnlocked } from './dojoAutoplayGate';
 import type { PlaybackState } from './playbackAdapter';
 import type {
   AudioControllerState,
@@ -103,6 +105,8 @@ export interface DojoPlaybackControls {
   restoreReason: RestoreReason;
   /** Whether another tab owns this session (for ownership conflict UX). */
   ownershipConflict: boolean;
+  /** Whether autoplay is blocked and user gesture is needed. */
+  autoplayBlocked: boolean;
 
   initialize: (dojo: PlaybackState, mode?: DeliveryMode) => void;
   startDelivery: () => void;
@@ -114,6 +118,8 @@ export interface DojoPlaybackControls {
   restoreVoice: (reason: string) => void;
   tryRecover: (sessionId: string) => boolean;
   retryOwnership: () => boolean;
+  /** User tapped to unlock audio after autoplay block. */
+  unlockAudio: () => void;
   destroy: () => void;
 }
 
