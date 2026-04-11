@@ -202,14 +202,19 @@ function FnInvocationPanel() {
   const refresh = () => setEvents(getEventsByPrefix('fn:'));
 
   const fnSummary = useMemo(() => {
-    const map: Record<string, { success: number; error: number; timeout: number }> = {};
+    const map: Record<string, { invoked: number; success: number; error: number; timeout: number }> = {};
     for (const e of events) {
       const name = String(e.data.functionName ?? 'unknown');
-      if (!map[name]) map[name] = { success: 0, error: 0, timeout: 0 };
-      const outcome = String(e.data.outcome ?? e.type);
-      if (outcome.includes('success') || outcome.includes('result')) map[name].success++;
-      else if (outcome.includes('timeout')) map[name].timeout++;
-      else map[name].error++;
+      if (!map[name]) map[name] = { invoked: 0, success: 0, error: 0, timeout: 0 };
+      if (e.type === 'fn:invoke') {
+        map[name].invoked++;
+      } else if (e.type === 'fn:result') {
+        map[name].success++;
+      } else if (e.type === 'fn:error') {
+        const outcome = String(e.data.outcome ?? '');
+        if (outcome === 'timeout') map[name].timeout++;
+        else map[name].error++;
+      }
     }
     return map;
   }, [events]);
@@ -227,6 +232,7 @@ function FnInvocationPanel() {
           {Object.entries(fnSummary).map(([name, counts]) => (
             <div key={name} className="flex items-center gap-2 text-xs py-1 border-b border-border/50">
               <span className="font-mono flex-1">{name}</span>
+              <Badge variant="outline" className="text-[10px]">↗ {counts.invoked}</Badge>
               <Badge variant="secondary" className="text-[10px]">✓ {counts.success}</Badge>
               {counts.error > 0 && <Badge variant="destructive" className="text-[10px]">✗ {counts.error}</Badge>}
               {counts.timeout > 0 && <Badge variant="outline" className="text-[10px]">⏱ {counts.timeout}</Badge>}
