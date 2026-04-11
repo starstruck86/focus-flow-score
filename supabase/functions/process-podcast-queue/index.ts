@@ -10,6 +10,7 @@
  * Batch rollup is updated after each invocation.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logServiceRoleUsage, logAuthMethod } from '../_shared/securityLog.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -564,6 +565,8 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceRoleKey);
+  logAuthMethod('process-podcast-queue', 'none', { reason: 'system_cron' });
+  logServiceRoleUsage('process-podcast-queue', 'multi_user', { reason: 'queue_processing' });
 
   try {
     // ── Early exit: nothing to process ──

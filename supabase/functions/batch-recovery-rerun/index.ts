@@ -2,6 +2,7 @@
  * batch-recovery-rerun - Staggered dispatcher for extract-tactics
  * Dispatches resources in waves of 2, waiting for each wave to complete.
  */
+import { logServiceRoleUsage, logAuthMethod } from '../_shared/securityLog.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -45,6 +46,8 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  logAuthMethod('batch-recovery-rerun', 'none', { reason: 'hardcoded_recovery_script' });
+  logServiceRoleUsage('batch-recovery-rerun', 'single_user', { hardcodedUserId: USER_ID, sliceStart: start, sliceCount: count });
 
   // Process this small slice in parallel (2-4 at a time is safe)
   const results = await Promise.all(
