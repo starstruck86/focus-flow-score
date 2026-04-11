@@ -161,6 +161,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const handleRef = useRef<TransportHandle>(createTransportHandle());
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const metricsRef = useRef<DojoAudioMetrics>(createMetrics());
+  const reliabilityRef = useRef<ReliabilityMetrics>(createReliabilityMetrics());
   const ownershipCleanupRef = useRef<(() => void) | null>(null);
   const visibilityCleanupRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -602,6 +603,11 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     };
   }, []);
 
+  const reliabilitySummary = useMemo(
+    () => ctrlState ? summarizeReliability(reliabilityRef.current) : null,
+    [ctrlState]
+  );
+
   return {
     controllerState: ctrlState,
     lastDirective,
@@ -613,6 +619,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     restoreReason,
     ownershipConflict,
     autoplayBlocked,
+    sessionHealth: reliabilityRef.current.health.status,
+    reliabilitySummary,
 
     initialize,
     startDelivery,
