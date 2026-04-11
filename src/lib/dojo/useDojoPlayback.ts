@@ -567,9 +567,12 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   // ── Cleanup on unmount ───────────────────────────────────────────
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       destroyTransport(handleRef.current);
       if (watchdogRef.current) clearInterval(watchdogRef.current);
+      if (pacingTimerRef.current) clearTimeout(pacingTimerRef.current);
       if (sessionIdRef.current) releaseOwnership(sessionIdRef.current);
       if (ownershipCleanupRef.current) ownershipCleanupRef.current();
       if (visibilityCleanupRef.current) visibilityCleanupRef.current();
