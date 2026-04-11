@@ -143,6 +143,10 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const sessionIdRef = useRef<string | null>(null);
   const pacingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastChunkRoleRef = useRef<string | undefined>(undefined);
+  const mountedRef = useRef(true);
+  /** Throttle rapid user actions (replay/skip/interrupt) — min 200ms between actions. */
+  const lastActionTimeRef = useRef(0);
+  const ACTION_THROTTLE_MS = 200;
 
   // Keep ref in sync with state + track metrics
   const applyResult = useCallback((result: ControllerResult) => {
