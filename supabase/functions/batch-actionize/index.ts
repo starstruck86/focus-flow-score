@@ -339,6 +339,7 @@ Deno.serve(async (req) => {
     logValidationWarnings('batch-actionize', body, ['user_id']);
 
     const isProtectedMode = body.mode === 'protected';
+    let supabaseUserScoped: ReturnType<typeof createClient> | null = null;
 
     // ── Protected Path Enforcement (Phase 3, Slice 3) ──────────
     if (isProtectedMode) {
