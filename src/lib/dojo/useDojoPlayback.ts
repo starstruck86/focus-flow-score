@@ -126,6 +126,10 @@ export interface DojoPlaybackControls {
   ownershipConflict: boolean;
   /** Whether autoplay is blocked and user gesture is needed. */
   autoplayBlocked: boolean;
+  /** V3 reliability health status */
+  sessionHealth: SessionHealth;
+  /** V3 reliability summary for debug panel */
+  reliabilitySummary: ReliabilitySummary | null;
 
   initialize: (dojo: PlaybackState, mode?: DeliveryMode) => void;
   startDelivery: () => void;
