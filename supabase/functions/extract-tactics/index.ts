@@ -1949,7 +1949,29 @@ Deno.serve(async (req) => {
       logEnforcementEvent('extract-tactics', 'fn:scope_enforced', { callerUserId: userId, bodyUserId, resourceId });
       logEnforcementEvent('extract-tactics', 'fn:auth_enforced', { authMethod, rejected: false });
     } else {
-      // Legacy path — log usage for observability, no enforcement changes
+      // ── Legacy path: classify and fence ──
+      // No behavior change — classification and telemetry only.
+      const hasBatchKey = !!req.headers.get('x-batch-key');
+      const legacyClass = isContinuation
+        ? 'legacy_continuation'           // self-invocation (jobMode continuation)
+        : isServiceRole
+          ? 'legacy_batch_path'           // orchestrator call via service-role + x-batch-key
+          : userId
+            ? 'legacy_user_path'          // JWT-authed but no mode="protected"
+            : 'legacy_unknown_path';      // no JWT, no batch key — unexpected
+
+      logEnforcementEvent('extract-tactics', 'fn:legacy_path_classified' as any, {
+        legacyClass,
+        authMethod: isServiceRole ? 'x-batch-key' : (userId ? 'jwt' : 'none'),
+        hasBatchKey,
+        hasBodyUserId: !!bodyUserId,
+        resourceId,
+        isContinuation: !!isContinuation,
+        hasProtectedAlternative: legacyClass === 'legacy_user_path' || legacyClass === 'legacy_batch_path',
+        migrationCandidate: legacyClass === 'legacy_user_path',
+      });
+
+      // Preserve original telemetry for backwards compatibility
       logEnforcementEvent('extract-tactics', 'fn:legacy_path_used', { isServiceRole, hasBodyUserId: !!bodyUserId, resourceId });
     }
 
