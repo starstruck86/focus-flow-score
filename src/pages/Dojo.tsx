@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
 import { SHELL } from '@/lib/layout';
@@ -9,6 +9,7 @@ import { getSmartAutopilotRecommendation } from '@/lib/dojo/smartAutopilot';
 import { buildPatternMemory, deriveCoachingInsights } from '@/lib/dojo/patternMemory';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PatternMemory, CoachingInsights } from '@/lib/dojo/types';
+import type { LessonContext } from '@/lib/learning/practiceMapping';
 
 import { TodaysFocus } from '@/components/dojo/TodaysFocus';
 import { TrainingModes } from '@/components/dojo/TrainingModes';
@@ -16,8 +17,13 @@ import { PerformanceSignals } from '@/components/dojo/PerformanceSignals';
 
 export default function Dojo() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { data: stats } = useDojoStats();
+
+  const lessonContext = (location.state as LessonContext | null)?.fromLesson
+    ? (location.state as LessonContext)
+    : null;
 
   const { data: patternMemory } = useQuery<PatternMemory | null>({
     queryKey: ['dojo-pattern-memory', user?.id],
@@ -56,12 +62,14 @@ export default function Dojo() {
           lastScore={stats?.lastScore ?? null}
           bestScore={stats?.bestScore ?? null}
           onStartAutopilot={startAutopilot}
+          lessonContext={lessonContext}
         />
 
         {/* Section 2: Training Modes */}
         <TrainingModes
           skillStats={skillStats}
           onStartAutopilot={startAutopilot}
+          highlightMode={lessonContext?.recommendedMode ?? null}
         />
 
         {/* Section 3: Performance + Coaching Signals */}
