@@ -171,8 +171,29 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  // ── Phase D, Slice 4: User-scoped client for protected path reads ──
+  const supabaseUserScoped = (isProtectedMode && authHeader && token && token !== serviceKey)
+    ? createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } })
+    : null;
+
   // Load the job row
-  const { data: job, error: jobErr } = await supabase
+  // On protected path, use user-scoped client (RLS enforces ownership at DB level)
+  const jobFetchClient = supabaseUserScoped || supabase;
+  if (supabaseUserScoped) {
+    logEnforcementEvent('run-enrichment-job', 'fn:service_role_reduced_path' as any, {
+      reason: 'protected_path_user_scoped_read',
+      jobId,
+      operation: 'job_fetch',
+    });
+  } else {
+    logEnforcementEvent('run-enrichment-job', 'fn:service_role_retained' as any, {
+      reason: isProtectedMode ? 'no_user_client_available' : 'legacy_or_internal_path',
+      jobId,
+      operation: 'job_fetch',
+    });
+  }
+  console.log(`[run-enrichment-job] Fetching job ${jobId} (client: ${supabaseUserScoped ? 'user-scoped' : 'service-role'})`);
+  const { data: job, error: jobErr } = await jobFetchClient
     .from("background_jobs")
     .select("*")
     .eq("id", jobId)
