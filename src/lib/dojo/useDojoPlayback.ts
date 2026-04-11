@@ -255,8 +255,9 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
 
       if (delay > 150) {
         pacingTimerRef.current = setTimeout(() => {
+          if (!mountedRef.current) return; // Guard against unmount during pacing delay
           speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts, getCtrl)
-            .then((h) => { handleRef.current = h; });
+            .then((h) => { if (mountedRef.current) handleRef.current = h; });
         }, delay);
       } else {
         speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts, getCtrl)
