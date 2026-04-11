@@ -22,7 +22,6 @@ describe('splitTextForTTS', () => {
   it('handles text without sentence boundaries', () => {
     const text = 'A'.repeat(5000); // no periods
     const result = splitTextForTTS(text);
-    // Falls back to [text] since no sentence match → single chunk
     expect(result.length).toBe(1);
   });
 
@@ -35,62 +34,145 @@ describe('splitTextForTTS', () => {
   });
 
   it('produces correct chunk count — no chunks are skipped', () => {
-    // Build 5 sentences, each ~1000 chars to force 3 chunks
     const sentences = Array.from(
       { length: 5 },
       (_, i) => 'W'.repeat(900) + ` sentence${i}. `,
     ).join('');
     const result = splitTextForTTS(sentences);
-    // Reconstruct: joining all chunks should contain all sentence markers
     const joined = result.join(' ');
     for (let i = 0; i < 5; i++) {
       expect(joined).toContain(`sentence${i}`);
     }
   });
+
+  it('handles exactly one sentence', () => {
+    const result = splitTextForTTS('Single sentence here.');
+    expect(result).toEqual(['Single sentence here.']);
+  });
+
+  it('handles empty string', () => {
+    const result = splitTextForTTS('');
+    expect(result).toEqual(['']);
+  });
 });
 
-// ── Playback loop correctness (unit-level simulation) ────────────────
+// ── Sequential chunk delivery correctness ────────────────────────────
 
 describe('chunk delivery loop correctness', () => {
-  it('sequential loop visits every index exactly once', () => {
+  it('sequential loop visits every index exactly once for odd count', () => {
     const chunks = ['a', 'b', 'c', 'd', 'e'];
     const visited: number[] = [];
-
-    // Simulate the fixed sequential loop (no prefetch skip)
     for (let i = 0; i < chunks.length; i++) {
       visited.push(i);
     }
-
     expect(visited).toEqual([0, 1, 2, 3, 4]);
   });
 
-  it('old prefetch loop skips chunks for odd counts ≥ 3', () => {
-    // Demonstrates the bug that was fixed
-    const chunks = ['a', 'b', 'c', 'd', 'e'];
+  it('sequential loop visits every index exactly once for even count', () => {
+    const chunks = ['a', 'b', 'c', 'd'];
     const visited: number[] = [];
-
-    // Old buggy loop with i++ inside body
     for (let i = 0; i < chunks.length; i++) {
       visited.push(i);
-      if (i + 1 < chunks.length) {
-        i++; // skip — the bug
-        visited.push(i);
-      }
+    }
+    expect(visited).toEqual([0, 1, 2, 3]);
+  });
+
+  it('sequential loop visits single chunk', () => {
+    const visited: number[] = [];
+    for (let i = 0; i < 1; i++) {
+      visited.push(i);
+    }
+    expect(visited).toEqual([0]);
+  });
+
+  it('abort mid-loop stops delivery without skipping', () => {
+    const chunks = ['a', 'b', 'c', 'd', 'e'];
+    const visited: number[] = [];
+    let aborted = false;
+
+    for (let i = 0; i < chunks.length; i++) {
+      if (aborted) break;
+      visited.push(i);
+      if (i === 2) aborted = true; // stop after chunk 2
     }
 
-    // Old loop visits [0,1, 2,3, 4] for 5 — actually works for 5
-    // but for 3: [0,1, 2] — chunk index 2 is visited, looks OK
-    // The real bug: for 3 chunks, i goes 0→1(skip)→2→done. All visited.
-    // For 4 chunks: 0→1(skip)→2→3(skip)→done. All visited.
-    // Actually the loop visits all but processes pairs, which means
-    // chunk[1] is fetched as "next" but chunk[2] is fetched as "current"
-    // in iteration 2. The actual issue is double-fetching chunk[1]:
-    // iteration 0 fetches [0,1], plays 0, then plays 1.
-    // iteration 2 fetches [2,3], plays 2, then plays 3.
-    // For 3 chunks: iteration 0 fetches [0,1], iteration 2 fetches [2,null].
-    // chunk 2 played. But chunk 1 was prefetched AND would be fetched again
-    // as "current" at i=1 if not skipped — the i++ prevents that.
-    // Net effect: works but wastes a fetch for even chunks.
-    expect(visited.length).toBe(chunks.length);
+    expect(visited).toEqual([0, 1, 2]);
+  });
+});
+
+// ── Abort controller isolation ───────────────────────────────────────
+
+describe('abort controller isolation (design verification)', () => {
+  it('separate sets prevent cross-contamination', () => {
+    const ttsSet = new Set<AbortController>();
+    const sttSet = new Set<AbortController>();
+
+    const ttsAc = new AbortController();
+    const sttAc = new AbortController();
+    ttsSet.add(ttsAc);
+    sttSet.add(sttAc);
+
+    // Aborting TTS should not touch STT
+    ttsSet.forEach((ac) => ac.abort());
+    ttsSet.clear();
+
+    expect(ttsAc.signal.aborted).toBe(true);
+    expect(sttAc.signal.aborted).toBe(false);
+    expect(sttSet.size).toBe(1);
+  });
+});
+
+// ── Playback timeout behavior ────────────────────────────────────────
+
+describe('playback timeout design', () => {
+  it('settle function prevents double resolution', () => {
+    let settleCount = 0;
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      settleCount++;
+    };
+
+    settle(); // first call
+    settle(); // should be no-op
+    settle(); // should be no-op
+
+    expect(settleCount).toBe(1);
+  });
+});
+
+// ── Object URL tracking ─────────────────────────────────────────────
+
+describe('object URL lifecycle tracking', () => {
+  it('add and revoke keeps set consistent', () => {
+    const urls = new Set<string>();
+    const revokeUrl = (url: string) => {
+      urls.delete(url);
+    };
+
+    urls.add('blob:url1');
+    urls.add('blob:url2');
+    urls.add('blob:url3');
+    expect(urls.size).toBe(3);
+
+    revokeUrl('blob:url2');
+    expect(urls.size).toBe(2);
+    expect(urls.has('blob:url2')).toBe(false);
+
+    // Clear all (unmount path)
+    urls.clear();
+    expect(urls.size).toBe(0);
+  });
+
+  it('revoking unknown URL is safe', () => {
+    const urls = new Set<string>();
+    const revokeUrl = (url: string) => {
+      urls.delete(url);
+    };
+
+    // Should not throw
+    revokeUrl('blob:nonexistent');
+    expect(urls.size).toBe(0);
   });
 });

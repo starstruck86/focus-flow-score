@@ -27,6 +27,18 @@ export function splitTextForTTS(text: string): string[] {
   return chunks;
 }
 
+// ── Diagnostics (exported for QA/debug surfaces) ─────────────────
+
+export interface VoiceModeDiagnostics {
+  activeTtsAbortControllers: number;
+  activeSttAbortControllers: number;
+  activeObjectUrls: number;
+  isPlaying: boolean;
+  isRecording: boolean;
+  isTranscribing: boolean;
+  mounted: boolean;
+}
+
 export function useVoiceMode() {
   const [isRecording, setIsRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -37,8 +49,10 @@ export function useVoiceMode() {
   const streamRef = useRef<MediaStream | null>(null);
   const playbackAbortRef = useRef(false);
   const mountedRef = useRef(true);
-  /** Tracks all active AbortControllers so we can abort on unmount/stop */
-  const activeAbortControllersRef = useRef<Set<AbortController>>(new Set());
+
+  // Separate tracking for TTS vs STT abort controllers to prevent cross-contamination
+  const ttsAbortControllersRef = useRef<Set<AbortController>>(new Set());
+  const sttAbortControllersRef = useRef<Set<AbortController>>(new Set());
   /** Tracks object URLs that need cleanup */
   const activeObjectUrlsRef = useRef<Set<string>>(new Set());
 
@@ -47,9 +61,11 @@ export function useVoiceMode() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      // Abort all in-flight fetches
-      activeAbortControllersRef.current.forEach((ac) => ac.abort());
-      activeAbortControllersRef.current.clear();
+      // Abort all in-flight fetches (both TTS and STT)
+      ttsAbortControllersRef.current.forEach((ac) => ac.abort());
+      ttsAbortControllersRef.current.clear();
+      sttAbortControllersRef.current.forEach((ac) => ac.abort());
+      sttAbortControllersRef.current.clear();
       // Revoke all object URLs
       activeObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
       activeObjectUrlsRef.current.clear();
@@ -134,10 +150,10 @@ export function useVoiceMode() {
     });
   }, [safeSetIsRecording, safeSetIsTranscribing]);
 
-  /** Transcribe audio with per-attempt abort isolation */
+  /** Transcribe audio with per-attempt abort isolation (tracked separately from TTS) */
   const transcribeWithRetry = async (audioBlob: Blob): Promise<string> => {
     const ac = new AbortController();
-    activeAbortControllersRef.current.add(ac);
+    sttAbortControllersRef.current.add(ac);
 
     try {
       const formData = new FormData();
@@ -162,7 +178,7 @@ export function useVoiceMode() {
       if (!text) throw new Error('No speech detected');
       return text;
     } finally {
-      activeAbortControllersRef.current.delete(ac);
+      sttAbortControllersRef.current.delete(ac);
     }
   };
 
@@ -172,9 +188,13 @@ export function useVoiceMode() {
       mediaRecorder.stop();
     }
     streamRef.current?.getTracks().forEach((t) => t.stop());
+    // Abort any in-flight STT requests
+    sttAbortControllersRef.current.forEach((ac) => ac.abort());
+    sttAbortControllersRef.current.clear();
     safeSetIsRecording(false);
+    safeSetIsTranscribing(false);
     audioChunksRef.current = [];
-  }, [safeSetIsRecording]);
+  }, [safeSetIsRecording, safeSetIsTranscribing]);
 
   /** Fetch a single TTS chunk with abort isolation and return an Audio element */
   const fetchTTSChunk = async (
@@ -224,6 +244,8 @@ export function useVoiceMode() {
       const timer = setTimeout(() => {
         settle(() => {
           audio.pause();
+          // Fix: revoke URL on timeout to prevent leak
+          revokeUrl(audio.src);
           reject(new Error('Audio playback timed out'));
         });
       }, PLAYBACK_TIMEOUT_MS);
@@ -247,12 +269,12 @@ export function useVoiceMode() {
 
   /** Play TTS with sequential chunk delivery — no skip bugs */
   const playTTS = useCallback(async (text: string, voiceId?: string): Promise<void> => {
-    // Stop any currently playing audio
+    // Stop any currently playing audio (TTS only — does not touch STT)
     stopPlayback();
     playbackAbortRef.current = false;
 
     const ac = new AbortController();
-    activeAbortControllersRef.current.add(ac);
+    ttsAbortControllersRef.current.add(ac);
 
     const chunks = splitTextForTTS(text);
     safeSetIsPlaying(true);
@@ -276,16 +298,16 @@ export function useVoiceMode() {
         throw err;
       }
     } finally {
-      activeAbortControllersRef.current.delete(ac);
+      ttsAbortControllersRef.current.delete(ac);
       safeSetIsPlaying(false);
     }
   }, [safeSetIsPlaying]);
 
   const stopPlayback = useCallback(() => {
     playbackAbortRef.current = true;
-    // Abort all in-flight TTS fetches
-    activeAbortControllersRef.current.forEach((ac) => ac.abort());
-    activeAbortControllersRef.current.clear();
+    // Abort only TTS fetches — do NOT touch STT
+    ttsAbortControllersRef.current.forEach((ac) => ac.abort());
+    ttsAbortControllersRef.current.clear();
     if (audioRef.current) {
       audioRef.current.pause();
       if (audioRef.current.src) revokeUrl(audioRef.current.src);
@@ -293,6 +315,17 @@ export function useVoiceMode() {
     }
     safeSetIsPlaying(false);
   }, [safeSetIsPlaying]);
+
+  /** Diagnostics snapshot for debug/QA surfaces */
+  const getDiagnostics = useCallback((): VoiceModeDiagnostics => ({
+    activeTtsAbortControllers: ttsAbortControllersRef.current.size,
+    activeSttAbortControllers: sttAbortControllersRef.current.size,
+    activeObjectUrls: activeObjectUrlsRef.current.size,
+    isPlaying,
+    isRecording,
+    isTranscribing,
+    mounted: mountedRef.current,
+  }), [isPlaying, isRecording, isTranscribing]);
 
   return {
     isRecording,
@@ -303,5 +336,6 @@ export function useVoiceMode() {
     cancelRecording,
     playTTS,
     stopPlayback,
+    getDiagnostics,
   };
 }
