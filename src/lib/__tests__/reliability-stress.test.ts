@@ -231,7 +231,13 @@ describe('Resource leak patterns', () => {
   });
 
   it('URL.createObjectURL / revokeObjectURL pattern', () => {
-    // Simulate creating and cleaning up blob URLs
+    // In jsdom, URL.createObjectURL may not be available, so we mock it
+    const origCreate = URL.createObjectURL;
+    const origRevoke = URL.revokeObjectURL;
+    let counter = 0;
+    URL.createObjectURL = () => `blob:mock-${counter++}`;
+    URL.revokeObjectURL = () => {};
+
     const urls: string[] = [];
     for (let i = 0; i < 5; i++) {
       const blob = new Blob(['test'], { type: 'audio/mpeg' });
@@ -239,9 +245,13 @@ describe('Resource leak patterns', () => {
       urls.push(url);
     }
     
-    // All should be revocable without error
     for (const url of urls) {
       expect(() => URL.revokeObjectURL(url)).not.toThrow();
     }
+    
+    expect(urls.length).toBe(5);
+    
+    URL.createObjectURL = origCreate;
+    URL.revokeObjectURL = origRevoke;
   });
 });
