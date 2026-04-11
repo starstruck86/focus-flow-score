@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logServiceRoleUsage, logCrossUserAccess, logValidationWarnings, logAuthMethod } from '../_shared/securityLog.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -329,10 +330,12 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       serviceRoleKey,
     );
+    logServiceRoleUsage('batch-actionize', 'single_user', { reason: 'pipeline_operations' });
 
     // Parse body early so we can check for user_id
     const bodyText = await req.text();
     const body = JSON.parse(bodyText);
+    logValidationWarnings('batch-actionize', body, ['user_id']);
 
     let userId: string;
 
@@ -342,10 +345,12 @@ Deno.serve(async (req) => {
 
     if (isServiceRole && body.user_id) {
       // Service-role caller — trust body.user_id directly
+      logAuthMethod('batch-actionize', 'x-batch-key', { bodyUserId: !!body.user_id });
       console.log('batch-actionize: service-role auth via x-batch-key, user_id:', body.user_id);
       userId = body.user_id;
     } else {
       // Try JWT auth
+      logAuthMethod('batch-actionize', 'jwt');
       const supabaseUser = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_ANON_KEY')!,
