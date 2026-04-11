@@ -753,6 +753,15 @@ Deno.serve(async (req) => {
         if (routes.includes('tactic')) {
           try {
             const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+            // Chain-awareness: log downstream legacy call (do NOT propagate mode:"protected")
+            logEnforcementEvent('batch-actionize', 'fn:downstream_legacy_call' as any, {
+              target: 'extract-tactics',
+              modePropagated: false,
+              resourceCount: 1,
+              parentMode: isProtectedMode ? 'protected' : (body.mode || 'standard'),
+            });
+
             const extractRes = await fetch(
               `${Deno.env.get('SUPABASE_URL')}/functions/v1/extract-tactics`,
               {
@@ -770,6 +779,7 @@ Deno.serve(async (req) => {
                   userId,
                   persist: true,
                   strict: strictMode,
+                  // NOTE: intentionally NOT passing mode:"protected" downstream (Slice 3 rule)
                 }),
               }
             );
