@@ -11,11 +11,12 @@ import {
   Brain,
   Crosshair,
   Swords,
+  GraduationCap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'cockpit' | 'dojo';
+export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'cockpit' | 'dojo' | 'learn';
 
 export interface NavItemDef {
   to: string;
@@ -36,6 +37,7 @@ export const COLOR_VAR: Record<NavColor, string> = {
   settings: 'var(--nav-settings)',
   cockpit: 'var(--nav-today)',
   dojo: 'var(--nav-coach)',
+  learn: 'var(--nav-prep)',
 };
 
 export const navRow1: NavItemDef[] = [
@@ -49,6 +51,7 @@ export const navRow1: NavItemDef[] = [
 export const navRow2: NavItemDef[] = [
   { to: '/prep', label: 'Sales Brain', icon: Brain, color: 'prep' },
   { to: '/dojo', label: 'Dojo', icon: Swords, color: 'dojo' },
+  { to: '/learn', label: 'Learn', icon: GraduationCap, color: 'learn' },
   { to: '/coach', label: 'Coach', icon: Compass, color: 'coach' },
   { to: '/trends', label: 'Trends', icon: TrendingUp, color: 'trends' },
   { to: '/quota', label: 'Quota', icon: DollarSign, color: 'quota' },
