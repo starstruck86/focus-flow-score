@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { logServiceRoleUsage, logAuthMethod, logValidationWarnings } from '../_shared/securityLog.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,7 +30,9 @@ Deno.serve(async (req) => {
 
     if (apiKey && expectedKey && apiKey === expectedKey) {
       // API key auth — use service role to find the first user
+      logAuthMethod('log-workday-focus', 'x-api-key');
       const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+      logServiceRoleUsage('log-workday-focus', 'system', { reason: 'api_key_auth_admin_listUsers' });
       const { data: users } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1 });
       if (!users?.users?.length) {
         return new Response(JSON.stringify({ error: 'No user found' }), {
@@ -64,6 +67,7 @@ Deno.serve(async (req) => {
 
     // Parse & validate body
     const body = await req.json();
+    logValidationWarnings('log-workday-focus', body, ['distracted_minutes']);
     const { distracted_minutes, phone_pickups } = body;
 
     // Auto-default to today's date if not provided or invalid
@@ -89,6 +93,7 @@ Deno.serve(async (req) => {
 
     // Upsert using service role (bypasses RLS)
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    logServiceRoleUsage('log-workday-focus', 'single_user', { reason: 'upsert_bypass_rls' });
     const { data: entry, error } = await supabaseAdmin
       .from('daily_journal_entries')
       .upsert(
