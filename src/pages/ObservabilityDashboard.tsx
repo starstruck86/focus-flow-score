@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Activity, AlertTriangle, CheckCircle, Clock, RefreshCw, Trash2, Download } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import Layout from '@/components/Layout';
+import { Layout } from '@/components/Layout';
 
 function StatusBadge({ status }: { status: string }) {
   const variant = status === 'running' ? 'default' :
