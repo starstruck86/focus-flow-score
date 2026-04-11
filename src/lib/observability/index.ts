@@ -7,3 +7,5 @@
 export { recordTelemetryEvent, getTelemetryEvents, getRecentEvents, getEventsByPrefix, getTelemetrySummary, clearTelemetryEvents } from './telemetry';
 export { installJobObserver } from './jobObserver';
 export { recordEnrichmentEvent, recordFnInvocation } from './enrichObserver';
+export { recordSecurityEvent, validateRequestShape, detectCrossUserAccess, recordServiceRoleUsage, recordInternalPathUsage } from './securityTelemetry';
+export { safeInternalInvoke } from './safeInternalInvoke';
