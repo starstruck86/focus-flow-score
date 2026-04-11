@@ -827,6 +827,10 @@ export function useDeepReExtraction() {
       // Dead path — all re-extractions now route through jobMode above.
       // Kept as safety fallback in case isBatched is ever dynamically false.
       try {
+        // Retrieve userId for protected-path enforcement
+        const { data: { session: __fbSession } } = await supabase.auth.getSession();
+        const __fbUserId = __fbSession?.user?.id;
+
         const response = await authenticatedFetch({
           functionName: 'extract-tactics',
           body: {
@@ -834,6 +838,7 @@ export function useDeepReExtraction() {
             deepMode: true,
             persist: true,
             jobMode: true, // Always use jobMode for durability
+            ...(__fbUserId ? { userId: __fbUserId, mode: 'protected' } : {}),
           },
           componentName: 'useDeepReExtraction-fallback',
           timeoutMs: 300_000,
