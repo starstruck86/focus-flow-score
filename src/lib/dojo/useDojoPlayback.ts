@@ -468,10 +468,30 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     return false;
   }, [acquireOwnership, applyResult, wireVisibility]);
 
+  const unlockAudio = useCallback(() => {
+    markAudioUnlocked();
+    setAutoplayBlocked(false);
+    // Resume delivery if we were blocked
+    const ctrl = ctrlRef.current;
+    if (ctrl && ctrl.deliveryMode === 'text_fallback' && ctrl.restoreReason !== 'owner_conflict') {
+      applyResult(switchToVoice(ctrl, 'user_gesture_unlock'));
+      // Restart delivery from current chunk
+      const updated = ctrlRef.current;
+      if (updated) {
+        const result = resumeAfterInterruption(updated);
+        handleTransportEvent(result);
+      }
+    }
+  }, [applyResult, handleTransportEvent]);
+
   const destroy = useCallback(() => {
     if (watchdogRef.current) {
       clearInterval(watchdogRef.current);
       watchdogRef.current = null;
+    }
+    if (pacingTimerRef.current) {
+      clearTimeout(pacingTimerRef.current);
+      pacingTimerRef.current = null;
     }
     logSessionSummary(metricsRef.current);
     metricsRef.current = createMetrics();
@@ -492,6 +512,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     }
     setIsOwner(false);
     setOwnershipConflict(false);
+    setAutoplayBlocked(false);
+    lastChunkRoleRef.current = undefined;
 
     ctrlRef.current = null;
     setCtrlState(null);
@@ -539,6 +561,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     isOwner,
     restoreReason,
     ownershipConflict,
+    autoplayBlocked,
 
     initialize,
     startDelivery,
@@ -550,6 +573,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     restoreVoice,
     tryRecover,
     retryOwnership,
+    unlockAudio,
     destroy,
   };
 }
