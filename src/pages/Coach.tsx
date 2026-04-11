@@ -44,8 +44,6 @@ import {
   WeeklyCoachingDigest,
   CoachingStreaks,
   CoachingFocus,
-  MockCallSimulator,
-  ObjectionDrillReps,
 } from '@/components/coach';
 import { WeeklyReviewPanel, SkillLabPanel, PatternDiagnosticsPanel, RecommendationAuditPanel } from '@/components/coach/PerformancePanels';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
