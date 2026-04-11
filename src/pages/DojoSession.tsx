@@ -791,6 +791,17 @@ function FeedbackView({
         </div>
       )}
 
+      {/* ── Session Feedback Loop ── */}
+      <SessionFeedbackCard
+        skillFocus={currentResult.topMistake ? currentResult.topMistake as any : (scenario?.skillFocus || 'objection_handling')}
+        score={currentResult.score}
+        topMistake={currentResult.topMistake}
+        focusPattern={activeFocus}
+        practiceCue={currentResult.practiceCue}
+        retryCount={retryCount}
+        sessionType={sessionType}
+      />
+
       {/* Actions */}
       <div className="flex gap-3 pt-2">
         {sessionType === 'drill' && (
@@ -798,8 +809,8 @@ function FeedbackView({
             <RotateCcw className="h-4 w-4" />Try Again
           </Button>
         )}
-        <Button className="flex-1 gap-2" onClick={onNextRep}>
-          Next Rep<ChevronRight className="h-4 w-4" />
+        <Button variant="ghost" className="flex-1 gap-2 text-muted-foreground" onClick={onNextRep}>
+          Back to Dojo<ChevronRight className="h-4 w-4" />
         </Button>
       </div>
     </>
