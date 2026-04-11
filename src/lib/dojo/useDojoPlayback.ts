@@ -148,8 +148,17 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const lastActionTimeRef = useRef(0);
   const ACTION_THROTTLE_MS = 200;
 
+  /** Returns false if action should be suppressed (too rapid). */
+  const throttleAction = useCallback((): boolean => {
+    const now = Date.now();
+    if (now - lastActionTimeRef.current < ACTION_THROTTLE_MS) return false;
+    lastActionTimeRef.current = now;
+    return true;
+  }, []);
+
   // Keep ref in sync with state + track metrics
   const applyResult = useCallback((result: ControllerResult) => {
+    if (!mountedRef.current) return; // Don't setState after unmount
     ctrlRef.current = result.state;
     setCtrlState(result.state);
     setLastDirective(result.directive);
