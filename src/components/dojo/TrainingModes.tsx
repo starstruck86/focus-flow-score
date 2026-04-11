@@ -50,12 +50,14 @@ export function TrainingModes({ skillStats, onStartAutopilot, highlightMode }: T
             icon={Swords}
             title="Drill"
             description="Single scenario, coached"
+            highlight={highlightMode === 'drill'}
             onClick={() => startCustom('objection_handling')}
           />
           <ModeCard
             icon={MessageSquare}
             title="Roleplay"
             description="Multi-turn buyer sim"
+            highlight={highlightMode === 'roleplay'}
             onClick={() => startRoleplay('discovery')}
           />
           <ModeCard
@@ -69,6 +71,7 @@ export function TrainingModes({ skillStats, onStartAutopilot, highlightMode }: T
             title="Mock Call"
             description="Full call simulation"
             active={inlineMode === 'mock-call'}
+            highlight={highlightMode === 'mock-call'}
             onClick={() => toggleInline('mock-call')}
           />
           <ModeCard
@@ -76,6 +79,7 @@ export function TrainingModes({ skillStats, onStartAutopilot, highlightMode }: T
             title="Objection Reps"
             description="Rapid-fire objections"
             active={inlineMode === 'objection-reps'}
+            highlight={highlightMode === 'objection-reps'}
             onClick={() => toggleInline('objection-reps')}
           />
           <ModeCard
