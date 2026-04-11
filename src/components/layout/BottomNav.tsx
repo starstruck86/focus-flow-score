@@ -52,7 +52,6 @@ export const navRow2: NavItemDef[] = [
   { to: '/prep', label: 'Sales Brain', icon: Brain, color: 'prep' },
   { to: '/dojo', label: 'Dojo', icon: Swords, color: 'dojo' },
   { to: '/learn', label: 'Learn', icon: GraduationCap, color: 'learn' },
-  { to: '/coach', label: 'Coach', icon: Compass, color: 'coach' },
   { to: '/trends', label: 'Trends', icon: TrendingUp, color: 'trends' },
   { to: '/quota', label: 'Quota', icon: DollarSign, color: 'quota' },
   { to: '/settings', label: 'Settings', icon: Settings, color: 'settings' },

@@ -101,6 +101,7 @@ const App = () => (
                   <Route path="/trends" element={<ProtectedPage routeName="Trends"><Trends /></ProtectedPage>} />
                   <Route path="/quota" element={<ProtectedPage routeName="Quota"><Quota /></ProtectedPage>} />
                   <Route path="/coach" element={<ProtectedPage routeName="Coach"><Coach /></ProtectedPage>} />
+                  {/* Coach is no longer a nav destination — accessible via /coach for transcript grading */}
                   <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><PrepHub /></ProtectedPage>} />
                   <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />
                   <Route path="/cockpit" element={
