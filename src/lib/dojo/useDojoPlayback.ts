@@ -12,7 +12,7 @@
  * Scoped to Sales Dojo only. Not a generic voice agent hook.
  */
 
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import type { SpeechChunk } from './conversationEngine';
 import { getInterChunkDelay } from './dojoChunkPacing';
 import { markAudioUnlocked, isAudioUnlocked } from './dojoAutoplayGate';
@@ -91,6 +91,25 @@ import {
   logSessionSummary,
   type DojoAudioMetrics,
 } from './dojoAudioAnalytics';
+import {
+  createReliabilityMetrics,
+  onForwardProgress,
+  onFailure as onReliabilityFailure,
+  startAudibleTracking,
+  confirmAudible,
+  finalizeAudible,
+  checkForHang,
+  armHangDetector,
+  disarmHangDetector,
+  markHangWarning,
+  markHung,
+  logRecoveryAttempt,
+  resolveRecoveryAttempt,
+  summarizeReliability,
+  type ReliabilityMetrics,
+  type ReliabilitySummary,
+  type SessionHealth,
+} from './dojoReliabilityV3';
 
 // ── Hook return type ───────────────────────────────────────────────
 
@@ -107,6 +126,10 @@ export interface DojoPlaybackControls {
   ownershipConflict: boolean;
   /** Whether autoplay is blocked and user gesture is needed. */
   autoplayBlocked: boolean;
+  /** V3 reliability health status */
+  sessionHealth: SessionHealth;
+  /** V3 reliability summary for debug panel */
+  reliabilitySummary: ReliabilitySummary | null;
 
   initialize: (dojo: PlaybackState, mode?: DeliveryMode) => void;
   startDelivery: () => void;
@@ -138,6 +161,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const handleRef = useRef<TransportHandle>(createTransportHandle());
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const metricsRef = useRef<DojoAudioMetrics>(createMetrics());
+  const reliabilityRef = useRef<ReliabilityMetrics>(createReliabilityMetrics());
   const ownershipCleanupRef = useRef<(() => void) | null>(null);
   const visibilityCleanupRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -169,17 +193,26 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
       metricsRef.current = logRestoreReason(metricsRef.current, result.state.restoreReason);
     }
 
-    // Track metrics based on directive
+    // Track metrics + reliability based on directive
     const m = metricsRef.current;
+    let r = reliabilityRef.current;
     switch (result.directive.kind) {
       case 'speak':
         metricsRef.current = logChunkRequested(m, result.directive.chunk.id);
+        r = startAudibleTracking(r, result.directive.chunk.id);
+        r = armHangDetector(r);
         break;
       case 'retry_speak':
         metricsRef.current = logRetryAttempt(m, result.directive.chunk.id, result.directive.attempt);
+        r = logRecoveryAttempt(r, 'retry', 'medium', result.directive.chunk.id);
         break;
       case 'show_text':
         metricsRef.current = logChunkCompleted(m, result.directive.chunk.id, 0);
+        r = onForwardProgress(r);
+        r = resolveRecoveryAttempt(r, true);
+        break;
+      case 'delivery_complete':
+        r = disarmHangDetector(r);
         break;
       case 'mode_changed':
         if (result.directive.mode === 'text_fallback') {
@@ -187,26 +220,45 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
           if (result.directive.level === 'session') {
             metricsRef.current = logSessionLevelDegrade(metricsRef.current, result.directive.reason);
           }
+          r = logRecoveryAttempt(r, 'degrade_text', 'high');
         } else {
           metricsRef.current = logRecovery(metricsRef.current, result.directive.reason);
+          r = resolveRecoveryAttempt(r, true);
         }
         break;
       case 'chunk_skipped_max_retries':
         metricsRef.current = logChunkSkipped(m, result.directive.chunkId);
         metricsRef.current = logChunkLevelDegrade(metricsRef.current, result.directive.chunkId);
+        r = onForwardProgress(r); // skip = forward progress
+        r = logRecoveryAttempt(r, 'skip', 'medium', result.directive.chunkId);
+        r = resolveRecoveryAttempt(r, true);
         break;
       case 'no_op':
         if (result.directive.reason === 'duplicate_completed') {
           metricsRef.current = logDuplicateSuppressed(m, '');
         } else if (result.directive.reason === 'stale_chunk_completed') {
           metricsRef.current = logStaleSuppressed(m, '');
+        } else if (result.directive.reason === 'tts_started_ack') {
+          // Audio became audible — confirm tracking
+          const chunkId = result.state.dojo.playback.currentPlayingChunkId;
+          if (chunkId) r = confirmAudible(r, chunkId);
         }
         // Track audibility in failure path
         if (result.state.chunkAudibleState === 'failed_before_audible' || result.state.chunkAudibleState === 'failed_after_audible') {
           metricsRef.current = logChunkFailedAudibility(metricsRef.current, result.state.chunkAudibleState);
+          r = onReliabilityFailure(r, result.state.dojo.playback.lastFailedChunkId ?? undefined);
+          r = resolveRecoveryAttempt(r, false);
         }
         break;
     }
+
+    // Finalize audible tracking on chunk completion
+    if (result.state.chunkAudibleState === 'ended' && result.state.lastAudibleChunkId) {
+      r = finalizeAudible(r, result.state.lastAudibleChunkId);
+      r = onForwardProgress(r);
+    }
+
+    reliabilityRef.current = r;
 
     // Persist snapshot for crash recovery
     if (result.state.dojo.sessionId) {
@@ -520,6 +572,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     }
     logSessionSummary(metricsRef.current);
     metricsRef.current = createMetrics();
+    reliabilityRef.current = createReliabilityMetrics();
     destroyTransport(handleRef.current);
     handleRef.current = createTransportHandle();
 
@@ -545,17 +598,35 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     setLastDirective(null);
   }, []);
 
-  // ── Watchdog: poll for hung playback every 5s ────────────────────
+  // ── Watchdog: poll for hung playback + hang detection every 5s ────
 
   useEffect(() => {
     watchdogRef.current = setInterval(() => {
       const ctrl = ctrlRef.current;
       if (!ctrl) return;
 
+      // Existing: chunk-level timeout
       const result = checkForTimeout(ctrl);
       if (result.directive.kind !== 'no_op') {
         metricsRef.current = logChunkTimedOut(metricsRef.current, ctrl.dojo.playback.currentPlayingChunkId ?? '');
         handleTransportEvent(result);
+        return;
+      }
+
+      // V3: Forward-progress hang detection
+      const hangCheck = checkForHang(reliabilityRef.current);
+      if (hangCheck.action === 'recover') {
+        reliabilityRef.current = markHung(reliabilityRef.current);
+        // Recovery cascade: if playing, timeout the chunk; if idle but delivering, force advance
+        if (ctrl.dojo.playback.currentPlayingChunkId) {
+          const chunkId = ctrl.dojo.playback.currentPlayingChunkId;
+          handleTransportEvent(onTtsFailed(ctrl, chunkId, `[hang_recovery] No progress for ${hangCheck.staleDurationMs}ms`));
+        } else if (ctrl.dojo.phase === 'delivering') {
+          // Idle during delivery = stuck. Force text fallback for current chunk.
+          handleTransportEvent(switchToTextFallback(ctrl, `hang_recovery: ${hangCheck.staleDurationMs}ms stale`));
+        }
+      } else if (hangCheck.action === 'warn') {
+        reliabilityRef.current = markHangWarning(reliabilityRef.current);
       }
     }, 5_000);
 
@@ -579,6 +650,11 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     };
   }, []);
 
+  const reliabilitySummary = useMemo(
+    () => ctrlState ? summarizeReliability(reliabilityRef.current) : null,
+    [ctrlState]
+  );
+
   return {
     controllerState: ctrlState,
     lastDirective,
@@ -590,6 +666,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     restoreReason,
     ownershipConflict,
     autoplayBlocked,
+    sessionHealth: reliabilityRef.current.health.status,
+    reliabilitySummary,
 
     initialize,
     startDelivery,
