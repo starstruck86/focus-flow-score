@@ -1,5 +1,5 @@
 /**
- * ElevenLabs Transport Adapter for Sales Dojo — v2 (hardened)
+ * ElevenLabs Transport Adapter for Sales Dojo — v3 (stale-closure fix)
  *
  * Thin integration layer that:
  * - Calls the existing elevenlabs-tts-stream edge function
@@ -9,6 +9,11 @@
  * - Distinguishes failure phases for debugging
  * - Handles autoplay rejection gracefully
  *
+ * CRITICAL FIX (v3): Audio event callbacks no longer close over a stale `ctrl`.
+ * Instead, callbacks receive a `getCtrl` function that reads the latest
+ * controller state from the hook's ref at callback time. This prevents
+ * state regression, duplicate deliveries, and React state thrashing.
+ *
  * Scoped exclusively to Dave coaching inside Dojo sessions.
  */
 
@@ -16,6 +21,8 @@ import type { SpeechChunk } from './conversationEngine';
 import type { AudioControllerState, ControllerResult } from './dojoAudioController';
 import {
   onTtsRequested,
+  onTtsBlobReceived,
+  onTtsPlayAttempted,
   onTtsStarted,
   onTtsCompleted,
   onTtsFailed,
@@ -71,8 +78,10 @@ export function createTransportHandle(): TransportHandle {
 
 /**
  * Fetch TTS audio for a chunk and play it.
- * Includes transport-level retry with backoff before handing failure
- * up to the controller's degradation logic.
+ *
+ * CRITICAL: `getCtrl` is a function that returns the CURRENT controller state
+ * at the moment it's called. This prevents stale closures in audio event
+ * callbacks. The `ctrl` parameter is only used for the initial onTtsRequested call.
  */
 export async function speakChunk(
   chunk: SpeechChunk,
@@ -80,7 +89,8 @@ export async function speakChunk(
   config: TransportConfig,
   handle: TransportHandle,
   onStateUpdate: (result: ControllerResult) => void,
-  options?: { previousText?: string; nextText?: string }
+  options?: { previousText?: string; nextText?: string },
+  getCtrl?: () => AudioControllerState | null
 ): Promise<TransportHandle> {
   // Clean up any previous playback (idempotent)
   const cleanHandle = cleanupHandle(handle);
@@ -93,7 +103,16 @@ export async function speakChunk(
     _cleaned: false,
   };
 
-  // Mark requested
+  // Helper: get the latest controller state, falling back to initial if no getter
+  const latestCtrl = (): AudioControllerState => {
+    if (getCtrl) {
+      const current = getCtrl();
+      if (current) return current;
+    }
+    return ctrl;
+  };
+
+  // Mark requested (uses initial ctrl — this is synchronous and safe)
   onStateUpdate(onTtsRequested(ctrl, chunk.id));
 
   // ── Fetch with transport-level retry ─────────────────────────
@@ -145,6 +164,12 @@ export async function speakChunk(
 
       failurePhase = 'during_response';
       blob = await response.blob();
+
+      // Notify blob received (use latest ctrl)
+      if (activeHandle.activeChunkId === chunk.id && !activeHandle._cleaned) {
+        onStateUpdate(onTtsBlobReceived(latestCtrl(), chunk.id));
+      }
+
       break; // success
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
@@ -157,7 +182,7 @@ export async function speakChunk(
 
   // All retries exhausted without blob
   if (!blob) {
-    onStateUpdate(onTtsFailed(ctrl, chunk.id, `[${failurePhase}] ${lastError}`));
+    onStateUpdate(onTtsFailed(latestCtrl(), chunk.id, `[${failurePhase}] ${lastError}`));
     return activeHandle;
   }
 
@@ -171,16 +196,17 @@ export async function speakChunk(
     activeHandle.objectUrl = objectUrl;
 
     // Wire browser audio events → controller events
+    // CRITICAL FIX: All callbacks use latestCtrl() instead of closed-over `ctrl`
     // GUARD: All callbacks check activeChunkId to prevent stale emissions
     audio.addEventListener('playing', () => {
       if (activeHandle.activeChunkId === chunk.id && !activeHandle._cleaned) {
-        onStateUpdate(onTtsStarted(ctrl, chunk.id));
+        onStateUpdate(onTtsStarted(latestCtrl(), chunk.id));
       }
     }, { once: true });
 
     audio.addEventListener('ended', () => {
       if (activeHandle.activeChunkId === chunk.id && !activeHandle._cleaned) {
-        onStateUpdate(onTtsCompleted(ctrl, chunk.id));
+        onStateUpdate(onTtsCompleted(latestCtrl(), chunk.id));
         activeHandle.activeChunkId = null;
       }
     }, { once: true });
@@ -188,13 +214,19 @@ export async function speakChunk(
     audio.addEventListener('error', () => {
       if (activeHandle.activeChunkId === chunk.id && !activeHandle._cleaned) {
         const msg = audio.error?.message ?? 'Audio playback error';
-        onStateUpdate(onTtsFailed(ctrl, chunk.id, `[during_playback] ${msg}`));
+        onStateUpdate(onTtsFailed(latestCtrl(), chunk.id, `[during_playback] ${msg}`));
         activeHandle.activeChunkId = null;
       }
     }, { once: true });
 
     // ── Attempt play — handle autoplay rejection ──────────────
     failurePhase = 'during_playback';
+
+    // Notify play attempted (use latest ctrl)
+    if (activeHandle.activeChunkId === chunk.id && !activeHandle._cleaned) {
+      onStateUpdate(onTtsPlayAttempted(latestCtrl(), chunk.id));
+    }
+
     try {
       await audio.play();
     } catch (playErr) {
@@ -203,14 +235,14 @@ export async function speakChunk(
         const isAutoplay = playErr instanceof DOMException && playErr.name === 'NotAllowedError';
         const phase: TransportFailurePhase = isAutoplay ? 'autoplay_blocked' : 'during_playback';
         const msg = playErr instanceof Error ? playErr.message : 'play() failed';
-        onStateUpdate(onTtsFailed(ctrl, chunk.id, `[${phase}] ${msg}`));
+        onStateUpdate(onTtsFailed(latestCtrl(), chunk.id, `[${phase}] ${msg}`));
         activeHandle.activeChunkId = null;
       }
     }
   } catch (err) {
     if (activeHandle.activeChunkId === chunk.id && !activeHandle._cleaned) {
       const msg = err instanceof Error ? err.message : 'Audio setup error';
-      onStateUpdate(onTtsFailed(ctrl, chunk.id, `[${failurePhase}] ${msg}`));
+      onStateUpdate(onTtsFailed(latestCtrl(), chunk.id, `[${failurePhase}] ${msg}`));
       activeHandle.activeChunkId = null;
     }
   }
