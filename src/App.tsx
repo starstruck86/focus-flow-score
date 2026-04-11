@@ -43,6 +43,7 @@ const Dojo = lazy(() => import("./pages/Dojo"));
 const DojoSession = lazy(() => import("./pages/DojoSession"));
 const DojoQA = lazy(() => import("./pages/DojoQA"));
 const ReliabilityQA = lazy(() => import("./pages/ReliabilityQA"));
+const ObservabilityDashboard = lazy(() => import("./pages/ObservabilityDashboard"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -167,6 +168,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
                         <ReliabilityQA />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/observability" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                        <ObservabilityDashboard />
                       </Suspense>
                     </ProtectedRoute>
                   } />

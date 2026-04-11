@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { createDurableJob } from '@/lib/durableJobs';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import type { EnrichMode } from '@/lib/resourceEligibility';
+import { recordEnrichmentEvent } from '@/lib/observability/enrichObserver';
 
 export interface DurableEnrichmentParams {
   userId: string;
@@ -22,6 +23,7 @@ export async function startDurableEnrichment(params: DurableEnrichmentParams): P
   const jobTitle = title || `${modeLabel}: ${resourceIds.length} resources`;
 
   console.info(`[DURABLE ENRICH] Creating job "${jobId}" for ${resourceIds.length} resources, mode=${mode}`);
+  recordEnrichmentEvent('enrich:dispatched', { jobId, resourceIds, mode, entryPoint: 'startDurableEnrichment' });
 
   // Create the durable job row
   await createDurableJob({
