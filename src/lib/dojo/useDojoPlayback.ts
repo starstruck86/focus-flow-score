@@ -572,6 +572,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     }
     logSessionSummary(metricsRef.current);
     metricsRef.current = createMetrics();
+    reliabilityRef.current = createReliabilityMetrics();
     destroyTransport(handleRef.current);
     handleRef.current = createTransportHandle();
 
