@@ -29,6 +29,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import DojoRoleplay from '@/components/dojo/DojoRoleplay';
 import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview';
 import DaveCoachingDelivery from '@/components/dojo/DaveCoachingDelivery';
+import { SessionFeedbackCard } from '@/components/dojo/SessionFeedbackCard';
 import type { Json } from '@/integrations/supabase/types';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
@@ -343,7 +344,7 @@ export default function DojoSession() {
 
           {phase === 'feedback' && currentResult && (
             <motion.div key="feedback" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-              <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} onRetry={handleStartRetry} onNextRep={handleNextRep} />
             </motion.div>
           )}
 
@@ -380,7 +381,7 @@ export default function DojoSession() {
         {/* ── Feedback for Roleplay / Review (non-drill) ── */}
         {sessionType !== 'drill' && phase === 'feedback' && currentResult && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} onRetry={handleStartRetry} onNextRep={handleNextRep} />
           </motion.div>
         )}
       </div>
@@ -402,6 +403,7 @@ interface FeedbackViewProps {
   roleplayExtras: RoleplayExtras | null;
   sessionType: string;
   sessionId: string | null;
+  skillFocus: SkillFocus;
   onRetry: () => void;
   onNextRep: () => void;
 }
@@ -409,7 +411,7 @@ interface FeedbackViewProps {
 function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
-  sessionId, onRetry, onNextRep,
+  sessionId, skillFocus, onRetry, onNextRep,
 }: FeedbackViewProps) {
   return (
     <>
@@ -790,6 +792,17 @@ function FeedbackView({
         </div>
       )}
 
+      {/* ── Session Feedback Loop ── */}
+      <SessionFeedbackCard
+        skillFocus={skillFocus}
+        score={currentResult.score}
+        topMistake={currentResult.topMistake}
+        focusPattern={activeFocus}
+        practiceCue={currentResult.practiceCue}
+        retryCount={retryCount}
+        sessionType={sessionType}
+      />
+
       {/* Actions */}
       <div className="flex gap-3 pt-2">
         {sessionType === 'drill' && (
@@ -797,8 +810,8 @@ function FeedbackView({
             <RotateCcw className="h-4 w-4" />Try Again
           </Button>
         )}
-        <Button className="flex-1 gap-2" onClick={onNextRep}>
-          Next Rep<ChevronRight className="h-4 w-4" />
+        <Button variant="ghost" className="flex-1 gap-2 text-muted-foreground" onClick={onNextRep}>
+          Back to Dojo<ChevronRight className="h-4 w-4" />
         </Button>
       </div>
     </>
