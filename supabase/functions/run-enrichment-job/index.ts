@@ -152,15 +152,34 @@ Deno.serve(async (req: Request) => {
       migrationCandidate: legacyClass === 'legacy_user_path' || legacyClass === 'legacy_internal_fallback',
     });
 
-    // ── Soft deprecation: legacy_user_path only ──
+    // ── Soft enforcement: legacy_user_path (Phase E, Slice 9) ──
+    const ENABLE_LEGACY_USER_SOFT_ENFORCEMENT = true;
+
     if (legacyClass === 'legacy_user_path') {
-      logEnforcementEvent('run-enrichment-job', 'fn:legacy_user_path_deprecation_warning' as any, {
-        pathClass: 'legacy_user_path',
-        authMethod,
-        protectedAlternativeExists: true,
-        migrationHint: 'Add mode: "protected" to request body',
-        jobId,
-      });
+      if (ENABLE_LEGACY_USER_SOFT_ENFORCEMENT) {
+        console.warn(JSON.stringify({
+          _type: 'fn:legacy_user_path_deprecation_warning',
+          _phase: 3,
+          _severity: 'warn',
+          functionName: 'run-enrichment-job',
+          ts: new Date().toISOString(),
+          pathClass: 'legacy_user_path',
+          authMethod,
+          hasProtectedAlternative: true,
+          migrationHint: 'use mode: "protected"',
+          jobId,
+          userAgent: req.headers.get('user-agent')?.slice(0, 120) || 'unknown',
+        }));
+        (req as any).__legacySoftEnforce = true;
+      } else {
+        logEnforcementEvent('run-enrichment-job', 'fn:legacy_user_path_deprecation_warning' as any, {
+          pathClass: 'legacy_user_path',
+          authMethod,
+          protectedAlternativeExists: true,
+          migrationHint: 'Add mode: "protected" to request body',
+          jobId,
+        });
+      }
     }
 
     // Preserve original telemetry for backwards compatibility
@@ -276,8 +295,12 @@ Deno.serve(async (req: Request) => {
       completed_at: new Date().toISOString(),
     }).eq("id", jobId);
 
+    const earlyHeaders: Record<string, string> = { ...corsHeaders, "Content-Type": "application/json" };
+    if ((req as any).__legacySoftEnforce) {
+      earlyHeaders['X-Deprecation-Warning'] = 'legacy_user_path; use mode="protected"';
+    }
     return new Response(JSON.stringify({ status: "completed", processed: 0 }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: earlyHeaders,
     });
   }
 
@@ -428,8 +451,13 @@ Deno.serve(async (req: Request) => {
     metadata: { ...meta, success_count: successCount, failed_count: failedCount, resume_from_index: resourceIds.length },
   }).eq("id", jobId);
 
+  const finalHeaders: Record<string, string> = { ...corsHeaders, "Content-Type": "application/json" };
+  if ((req as any).__legacySoftEnforce) {
+    finalHeaders['X-Deprecation-Warning'] = 'legacy_user_path; use mode="protected"';
+  }
+
   return new Response(
     JSON.stringify({ status: finalStatus, processed: totalProcessed, success: successCount, failed: failedCount }),
-    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    { headers: finalHeaders }
   );
 });
