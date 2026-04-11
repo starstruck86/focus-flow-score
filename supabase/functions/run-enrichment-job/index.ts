@@ -41,6 +41,12 @@ Deno.serve(async (req: Request) => {
   const token = authHeader.replace("Bearer ", "");
 
   const supabase = createClient(supabaseUrl, serviceKey);
+
+  // Phase D, Slice 4: Create user-scoped client for protected path reads
+  const supabaseUserScoped = (isProtectedMode && authHeader && token && token !== serviceKey)
+    ? createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } })
+    : null;
+
   logServiceRoleUsage('run-enrichment-job', 'single_user', { reason: 'db_operations_and_continuation' });
 
   // Resolve caller identity
