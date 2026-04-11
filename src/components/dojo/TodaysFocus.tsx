@@ -4,12 +4,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Play, Swords, TrendingUp, TrendingDown, Flame, Target, Zap,
+  Play, Swords, TrendingUp, TrendingDown, Flame, Target, Zap, BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
 import type { SmartAutopilotResult } from '@/lib/dojo/smartAutopilot';
 import type { SkillStat } from '@/lib/dojo/scenarios';
+import type { LessonContext } from '@/lib/learning/practiceMapping';
 
 interface TodaysFocusProps {
   recommendation: SmartAutopilotResult;
@@ -18,6 +19,7 @@ interface TodaysFocusProps {
   lastScore: number | null;
   bestScore: number | null;
   onStartAutopilot: () => void;
+  lessonContext?: LessonContext | null;
 }
 
 export function TodaysFocus({
@@ -27,24 +29,43 @@ export function TodaysFocus({
   lastScore,
   bestScore,
   onStartAutopilot,
+  lessonContext,
 }: TodaysFocusProps) {
   const weakestSkill = skillStats.length > 0 ? skillStats[0] : null;
   const strongestSkill = skillStats.length > 0 ? skillStats[skillStats.length - 1] : null;
 
+  const navigate = useNavigate();
+
   return (
     <div className="space-y-4">
-      {/* Dave's assignment */}
-      <div className="flex items-start gap-3">
-        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-          <Swords className="h-5 w-5 text-primary" />
+      {/* Lesson-linked override */}
+      {lessonContext ? (
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            <BookOpen className="h-5 w-5 text-primary" />
+          </div>
+          <div className="space-y-1 pt-0.5">
+            <p className="text-sm font-medium text-foreground">Based on your last lesson</p>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              You just finished <span className="font-medium text-foreground">{lessonContext.lessonTitle}</span>. 
+              Jump into {lessonContext.modeLabel} to lock it in.
+            </p>
+          </div>
         </div>
-        <div className="space-y-1 pt-0.5">
-          <p className="text-sm font-medium text-foreground">Dave</p>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            {recommendation.daveMessage}
-          </p>
+      ) : (
+        /* Dave's assignment */
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            <Swords className="h-5 w-5 text-primary" />
+          </div>
+          <div className="space-y-1 pt-0.5">
+            <p className="text-sm font-medium text-foreground">Dave</p>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {recommendation.daveMessage}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Quick insight chips */}
       {(strongestSkill || weakestSkill) && (
@@ -71,14 +92,38 @@ export function TodaysFocus({
       )}
 
       {/* Start CTA */}
-      <Button
-        size="lg"
-        className="w-full h-14 text-base font-semibold gap-2"
-        onClick={onStartAutopilot}
-      >
-        <Play className="h-5 w-5" />
-        Start Today's Rep
-      </Button>
+      {lessonContext ? (
+        <Button
+          size="lg"
+          className="w-full h-14 text-base font-semibold gap-2"
+          onClick={() => {
+            if (lessonContext.recommendedMode === 'drill' || lessonContext.recommendedMode === 'roleplay') {
+              navigate('/dojo/session', {
+                state: {
+                  skillFocus: lessonContext.skillFocus,
+                  mode: lessonContext.recommendedMode === 'drill' ? 'custom' : 'roleplay',
+                  sessionType: lessonContext.recommendedMode,
+                  fromLessonId: lessonContext.lessonId,
+                },
+              });
+            }
+            // For inline modes (objection-reps, mock-call), scrolling to the training modes section is enough
+            // The highlightMode prop handles visual emphasis
+          }}
+        >
+          <Play className="h-5 w-5" />
+          Start {lessonContext.modeLabel}
+        </Button>
+      ) : (
+        <Button
+          size="lg"
+          className="w-full h-14 text-base font-semibold gap-2"
+          onClick={onStartAutopilot}
+        >
+          <Play className="h-5 w-5" />
+          Start Today's Rep
+        </Button>
+      )}
 
       {/* Scenario preview */}
       <Card className="border-primary/20 bg-primary/5">

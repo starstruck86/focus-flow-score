@@ -8,14 +8,17 @@ import type { SkillStat } from '@/lib/dojo/scenarios';
 import { MockCallSimulator } from '@/components/coach/MockCallSimulator';
 import { ObjectionDrillReps } from '@/components/coach/ObjectionDrillReps';
 
+import type { RecommendedMode } from '@/lib/learning/practiceMapping';
+
 type InlineMode = 'mock-call' | 'objection-reps' | null;
 
 interface TrainingModesProps {
   skillStats: SkillStat[];
   onStartAutopilot: () => void;
+  highlightMode?: RecommendedMode | null;
 }
 
-export function TrainingModes({ skillStats, onStartAutopilot }: TrainingModesProps) {
+export function TrainingModes({ skillStats, onStartAutopilot, highlightMode }: TrainingModesProps) {
   const navigate = useNavigate();
   const [inlineMode, setInlineMode] = useState<InlineMode>(null);
 
@@ -47,12 +50,14 @@ export function TrainingModes({ skillStats, onStartAutopilot }: TrainingModesPro
             icon={Swords}
             title="Drill"
             description="Single scenario, coached"
+            highlight={highlightMode === 'drill'}
             onClick={() => startCustom('objection_handling')}
           />
           <ModeCard
             icon={MessageSquare}
             title="Roleplay"
             description="Multi-turn buyer sim"
+            highlight={highlightMode === 'roleplay'}
             onClick={() => startRoleplay('discovery')}
           />
           <ModeCard
@@ -66,6 +71,7 @@ export function TrainingModes({ skillStats, onStartAutopilot }: TrainingModesPro
             title="Mock Call"
             description="Full call simulation"
             active={inlineMode === 'mock-call'}
+            highlight={highlightMode === 'mock-call'}
             onClick={() => toggleInline('mock-call')}
           />
           <ModeCard
@@ -73,6 +79,7 @@ export function TrainingModes({ skillStats, onStartAutopilot }: TrainingModesPro
             title="Objection Reps"
             description="Rapid-fire objections"
             active={inlineMode === 'objection-reps'}
+            highlight={highlightMode === 'objection-reps'}
             onClick={() => toggleInline('objection-reps')}
           />
           <ModeCard
@@ -143,22 +150,25 @@ function SkillIcon({ skill }: { skill: SkillFocus }) {
   );
 }
 
-function ModeCard({ icon: Icon, title, description, onClick, active }: {
+function ModeCard({ icon: Icon, title, description, onClick, active, highlight }: {
   icon: React.ElementType;
   title: string;
   description: string;
   onClick: () => void;
   active?: boolean;
+  highlight?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       className={cn(
         "flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-colors text-center",
-        active ? "border-primary bg-primary/5" : "border-border/60 bg-card hover:bg-accent/50"
+        active ? "border-primary bg-primary/5" :
+        highlight ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30" :
+        "border-border/60 bg-card hover:bg-accent/50"
       )}
     >
-      <Icon className={cn("h-5 w-5", active ? "text-primary" : "text-primary")} />
+      <Icon className={cn("h-5 w-5", active || highlight ? "text-primary" : "text-primary")} />
       <p className="text-sm font-medium">{title}</p>
       <p className="text-[10px] text-muted-foreground">{description}</p>
     </button>
