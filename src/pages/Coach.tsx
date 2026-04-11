@@ -1071,13 +1071,10 @@ export default function Coach() {
   const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
   const { data: selectedGrade } = useTranscriptGrade(selectedTranscriptId || undefined);
 
-  // Voice event listeners for Dave integration
+  // Voice event listener for grading (practice events now handled by Dojo)
   useEffect(() => {
-    const handleStartRoleplay = () => setTab('simulate');
-    const handleStartDrill = () => setTab('drills');
     const handleGradeCall = () => {
       setTab('scorecard');
-      // Auto-grade the latest ungraded transcript if available
       const gradedIds = new Set((allGrades || []).map(g => g.transcript_id));
       const ungraded = (transcripts || []).filter(t => !gradedIds.has(t.id));
       if (ungraded.length > 0) {
@@ -1086,12 +1083,8 @@ export default function Coach() {
       }
     };
 
-    window.addEventListener('voice-start-roleplay', handleStartRoleplay);
-    window.addEventListener('voice-start-drill', handleStartDrill);
     window.addEventListener('voice-grade-call', handleGradeCall);
     return () => {
-      window.removeEventListener('voice-start-roleplay', handleStartRoleplay);
-      window.removeEventListener('voice-start-drill', handleStartDrill);
       window.removeEventListener('voice-grade-call', handleGradeCall);
     };
   }, [allGrades, transcripts, gradeTranscript]);
