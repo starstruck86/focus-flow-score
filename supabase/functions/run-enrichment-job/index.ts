@@ -10,9 +10,13 @@
  *
  * Also supports generic "retry" — any background_jobs row in 'queued' status
  * with a known type gets dispatched to the right handler.
+ *
+ * Phase 3: Supports mode="protected" for enforced auth + scope checks.
+ * Legacy path (no mode) is unchanged.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logServiceRoleUsage, logMissingUserScope, logCrossUserAccess, logValidationWarnings, logAuthMethod } from '../_shared/securityLog.ts';
+import { logEnforcementEvent } from '../_shared/enforcementLog.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,15 +43,18 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, serviceKey);
   logServiceRoleUsage('run-enrichment-job', 'single_user', { reason: 'db_operations_and_continuation' });
 
-  // Validate caller
+  // Resolve caller identity
   let callerUserId: string | null = null;
+  let authMethod: 'jwt' | 'service-role-continuation' | 'none' = 'none';
   if (token && token !== serviceKey) {
     const { data, error } = await supabase.auth.getUser(token);
     if (!error && data?.user) {
       callerUserId = data.user.id;
+      authMethod = 'jwt';
     }
     logAuthMethod('run-enrichment-job', 'jwt', { resolved: !!callerUserId });
   } else if (token === serviceKey) {
+    authMethod = 'service-role-continuation';
     logAuthMethod('run-enrichment-job', 'service-role-continuation');
   } else {
     logAuthMethod('run-enrichment-job', 'none');
@@ -64,15 +71,50 @@ Deno.serve(async (req: Request) => {
   }
 
   const jobId = body.job_id;
+  const isProtectedMode = body.mode === "protected";
+  const isContinuation = body.is_continuation === true;
+
   logValidationWarnings('run-enrichment-job', body, ['job_id']);
+
+  // ── Protected path enforcement ──
+  // When mode="protected", enforce strict auth + scope.
+  // Legacy path (no mode) is unchanged.
+  if (isProtectedMode) {
+    logEnforcementEvent('run-enrichment-job', 'fn:protected_path_used', { authMethod });
+
+    // Enforcement: require authenticated caller (not service-role continuation for initial dispatch)
+    if (!isContinuation && authMethod !== 'jwt') {
+      logEnforcementEvent('run-enrichment-job', 'fn:request_rejected_protected_path', {
+        reason: 'missing_jwt_auth',
+        authMethod,
+      });
+      return new Response(JSON.stringify({ error: "Protected path requires authentication" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Enforcement: require job_id
+    if (!jobId) {
+      logEnforcementEvent('run-enrichment-job', 'fn:request_rejected_protected_path', {
+        reason: 'missing_job_id',
+      });
+      return new Response(JSON.stringify({ error: "job_id required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  } else {
+    // Legacy path telemetry
+    logEnforcementEvent('run-enrichment-job', 'fn:legacy_path_used', { authMethod, isContinuation });
+  }
+
   if (!jobId) {
     return new Response(JSON.stringify({ error: "job_id required" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-
-  const isContinuation = body.is_continuation === true;
 
   // Load the job row
   const { data: job, error: jobErr } = await supabase
@@ -96,13 +138,42 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // Auth check: user must own the job (unless service-role continuation)
-  if (callerUserId && callerUserId !== job.user_id) {
-    logCrossUserAccess('run-enrichment-job', callerUserId, job.user_id, { jobId });
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+  // ── Ownership enforcement ──
+  // Protected path: strictly enforce caller == job owner
+  // Legacy path: existing check (block mismatch but allow no-caller for continuations)
+  if (isProtectedMode && !isContinuation) {
+    if (!callerUserId) {
+      logEnforcementEvent('run-enrichment-job', 'fn:request_rejected_protected_path', {
+        reason: 'no_caller_user_id',
+      });
+      return new Response(JSON.stringify({ error: "Unauthorized: cannot resolve user" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (callerUserId !== job.user_id) {
+      logEnforcementEvent('run-enrichment-job', 'fn:request_rejected_protected_path', {
+        reason: 'user_scope_mismatch',
+      });
+      logCrossUserAccess('run-enrichment-job', callerUserId, job.user_id, { jobId });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    logEnforcementEvent('run-enrichment-job', 'fn:scope_enforced', {
+      callerUserId,
+      jobUserId: job.user_id,
     });
+  } else {
+    // Legacy ownership check (unchanged from original)
+    if (callerUserId && callerUserId !== job.user_id) {
+      logCrossUserAccess('run-enrichment-job', callerUserId, job.user_id, { jobId });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
   }
 
   const meta = (job.metadata ?? {}) as Record<string, any>;
@@ -136,7 +207,7 @@ Deno.serve(async (req: Request) => {
   let failedCount = meta.failed_count ?? 0;
   let lastProcessedIndex = startIndex;
 
-  console.info(`[ENRICH-JOB] Starting job ${jobId}: ${resourceIds.length} resources, resuming from ${startIndex}, mode=${mode}`);
+  console.info(`[ENRICH-JOB] Starting job ${jobId}: ${resourceIds.length} resources, resuming from ${startIndex}, mode=${mode}, protected=${isProtectedMode}`);
 
   for (let i = startIndex; i < resourceIds.length; i++) {
     // Watchdog: self-continue before timeout
@@ -153,7 +224,7 @@ Deno.serve(async (req: Request) => {
         metadata: { ...meta, resume_from_index: i, success_count: successCount, failed_count: failedCount },
       }).eq("id", jobId);
 
-      // Self-continue
+      // Self-continue (continuations always use service-role, no mode flag — legacy path)
       try {
         const continueUrl = `${supabaseUrl}/functions/v1/run-enrichment-job`;
         const controller = new AbortController();
