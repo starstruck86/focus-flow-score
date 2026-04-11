@@ -476,10 +476,25 @@ Deno.serve(async (req) => {
     }
 
     // Fetch all existing assets for CONTENT-BASED dedup
+    // Phase D, Slice 7: Use user-scoped client on protected path for dedup reads
+    const dedupClient = (isProtectedMode && supabaseUserScoped) ? supabaseUserScoped : supabaseAdmin;
+    if (isProtectedMode && supabaseUserScoped) {
+      logEnforcementEvent('batch-actionize', 'fn:service_role_reduced_path' as any, {
+        operation: 'dedup_pool_fetch',
+        reason: 'protected_path_user_scoped',
+        path: 'protected',
+      });
+    } else {
+      logEnforcementEvent('batch-actionize', 'fn:service_role_retained' as any, {
+        operation: 'dedup_pool_fetch',
+        reason: isProtectedMode ? 'no_user_scoped_client' : 'legacy_or_batch_path',
+        path: isProtectedMode ? 'protected' : (body.mode || 'standard'),
+      });
+    }
     const [existingKI, existingTpl, existingEx] = await Promise.all([
-      supabaseAdmin.from('knowledge_items').select('id, source_resource_id, title, tactic_summary, when_to_use, example_usage').eq('user_id', userId),
-      supabaseAdmin.from('execution_templates').select('id, title, body').eq('user_id', userId),
-      supabaseAdmin.from('execution_outputs').select('id, title, content').eq('user_id', userId).eq('is_strong_example', true),
+      dedupClient.from('knowledge_items').select('id, source_resource_id, title, tactic_summary, when_to_use, example_usage').eq('user_id', userId),
+      dedupClient.from('execution_templates').select('id, title, body').eq('user_id', userId),
+      dedupClient.from('execution_outputs').select('id, title, content').eq('user_id', userId).eq('is_strong_example', true),
     ]);
 
     const processedResourceIds = new Set(
