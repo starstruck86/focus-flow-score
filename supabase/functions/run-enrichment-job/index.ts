@@ -152,6 +152,17 @@ Deno.serve(async (req: Request) => {
       migrationCandidate: legacyClass === 'legacy_user_path' || legacyClass === 'legacy_internal_fallback',
     });
 
+    // ── Soft deprecation: legacy_user_path only ──
+    if (legacyClass === 'legacy_user_path') {
+      logEnforcementEvent('run-enrichment-job', 'fn:legacy_user_path_deprecation_warning' as any, {
+        pathClass: 'legacy_user_path',
+        authMethod,
+        protectedAlternativeExists: true,
+        migrationHint: 'Add mode: "protected" to request body',
+        jobId,
+      });
+    }
+
     // Preserve original telemetry for backwards compatibility
     if (isContinuation) {
       logEnforcementEvent('run-enrichment-job', 'fn:internal_fallback_used' as any, {
