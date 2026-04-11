@@ -229,6 +229,9 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
         ? { previousText: result.directive.previousText, nextText: result.directive.nextText }
         : undefined;
 
+      // CRITICAL: Pass getCtrl so transport callbacks read fresh state, not stale closure
+      const getCtrl = () => ctrlRef.current;
+
       // Apply inter-chunk pacing delay for natural feel
       const isFirst = result.state.completedChunkIds.size === 0;
       const delay = getInterChunkDelay(chunk, lastChunkRoleRef.current, isFirst);
@@ -239,11 +242,11 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
 
       if (delay > 150) {
         pacingTimerRef.current = setTimeout(() => {
-          speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts)
+          speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts, getCtrl)
             .then((h) => { handleRef.current = h; });
         }, delay);
       } else {
-        speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts)
+        speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts, getCtrl)
           .then((h) => { handleRef.current = h; });
       }
     }
