@@ -403,6 +403,7 @@ interface FeedbackViewProps {
   roleplayExtras: RoleplayExtras | null;
   sessionType: string;
   sessionId: string | null;
+  skillFocus: SkillFocus;
   onRetry: () => void;
   onNextRep: () => void;
 }
@@ -410,7 +411,7 @@ interface FeedbackViewProps {
 function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
-  sessionId, onRetry, onNextRep,
+  sessionId, skillFocus, onRetry, onNextRep,
 }: FeedbackViewProps) {
   return (
     <>
