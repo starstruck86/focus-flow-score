@@ -1971,6 +1971,17 @@ Deno.serve(async (req) => {
         migrationCandidate: legacyClass === 'legacy_user_path',
       });
 
+      // ── Soft deprecation: legacy_user_path only ──
+      if (legacyClass === 'legacy_user_path') {
+        logEnforcementEvent('extract-tactics', 'fn:legacy_user_path_deprecation_warning' as any, {
+          pathClass: 'legacy_user_path',
+          authMethod: 'jwt',
+          protectedAlternativeExists: true,
+          migrationHint: 'Add mode: "protected" to request body',
+          resourceId,
+        });
+      }
+
       // Preserve original telemetry for backwards compatibility
       logEnforcementEvent('extract-tactics', 'fn:legacy_path_used', { isServiceRole, hasBodyUserId: !!bodyUserId, resourceId });
     }
