@@ -204,9 +204,24 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     }
   }, []);
 
-  // Transport callback
+  // Transport callback — with conversational pacing
   const handleTransportEvent = useCallback((result: ControllerResult) => {
     applyResult(result);
+
+    // Detect autoplay blocks from failure messages
+    if (result.directive.kind === 'no_op' || result.directive.kind === 'mode_changed') {
+      // Check if the last failure was autoplay-related
+      const failedPhase = result.state.chunkAudibleState;
+      if (failedPhase === 'failed_before_audible' && !isAudioUnlocked()) {
+        setAutoplayBlocked(true);
+      }
+    }
+
+    // Mark audio as unlocked when we first achieve audibility
+    if (result.state.chunkAudibleState === 'audible' && !isAudioUnlocked()) {
+      markAudioUnlocked();
+      setAutoplayBlocked(false);
+    }
 
     if (result.directive.kind === 'speak' || result.directive.kind === 'retry_speak') {
       const chunk = result.directive.chunk;
@@ -214,8 +229,23 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
         ? { previousText: result.directive.previousText, nextText: result.directive.nextText }
         : undefined;
 
-      speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts)
-        .then((h) => { handleRef.current = h; });
+      // Apply inter-chunk pacing delay for natural feel
+      const isFirst = result.state.completedChunkIds.size === 0;
+      const delay = getInterChunkDelay(chunk, lastChunkRoleRef.current, isFirst);
+      lastChunkRoleRef.current = chunk.role;
+
+      // Clear any previous pacing timer
+      if (pacingTimerRef.current) clearTimeout(pacingTimerRef.current);
+
+      if (delay > 150) {
+        pacingTimerRef.current = setTimeout(() => {
+          speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts)
+            .then((h) => { handleRef.current = h; });
+        }, delay);
+      } else {
+        speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts)
+          .then((h) => { handleRef.current = h; });
+      }
     }
   }, [config, applyResult]);
 
