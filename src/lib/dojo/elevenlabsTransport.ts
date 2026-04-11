@@ -133,6 +133,11 @@ export async function speakChunk(
       if (abortController.signal.aborted) return activeHandle;
     }
 
+    // Per-attempt abort for timeout; linked to outer abort for user cancellation
+    const attemptAbort = new AbortController();
+    const onOuterAbort = () => attemptAbort.abort();
+    abortController.signal.addEventListener('abort', onOuterAbort, { once: true });
+
     try {
       failurePhase = 'before_response';
       const body: Record<string, unknown> = {
@@ -143,9 +148,7 @@ export async function speakChunk(
       if (options?.nextText) body.next_text = options.nextText;
 
       // Hard timeout per attempt: abort if fetch hangs
-      const timeoutId = setTimeout(() => {
-        if (!abortController.signal.aborted) abortController.abort();
-      }, FETCH_TIMEOUT_MS);
+      const timeoutId = setTimeout(() => attemptAbort.abort(), FETCH_TIMEOUT_MS);
 
       let response: Response;
       try {
@@ -159,11 +162,12 @@ export async function speakChunk(
               Authorization: `Bearer ${config.supabaseAnonKey}`,
             },
             body: JSON.stringify(body),
-            signal: abortController.signal,
+            signal: attemptAbort.signal,
           }
         );
       } finally {
         clearTimeout(timeoutId);
+        abortController.signal.removeEventListener('abort', onOuterAbort);
       }
 
       if (!response.ok) {
@@ -184,8 +188,15 @@ export async function speakChunk(
 
       break; // success
     } catch (err) {
+      abortController.signal.removeEventListener('abort', onOuterAbort);
+      if (abortController.signal.aborted) {
+        return activeHandle; // user cancelled
+      }
       if ((err as Error).name === 'AbortError') {
-        return activeHandle; // cancelled intentionally
+        // Timeout on this attempt — retry if attempts remain
+        lastError = `Fetch timed out after ${FETCH_TIMEOUT_MS}ms`;
+        failurePhase = 'before_response';
+        continue;
       }
       lastError = err instanceof Error ? err.message : 'Unknown fetch error';
       failurePhase = 'before_response';
