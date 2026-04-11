@@ -230,7 +230,7 @@ export function useVoiceMode() {
     activeObjectUrlsRef.current.delete(url);
   };
 
-  /** Play a single audio element with a hard timeout guard */
+  /** Play a single audio element with a hard timeout guard and external-pause detection */
   const playAudioWithTimeout = (audio: HTMLAudioElement): Promise<void> => {
     return new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -244,7 +244,6 @@ export function useVoiceMode() {
       const timer = setTimeout(() => {
         settle(() => {
           audio.pause();
-          // Fix: revoke URL on timeout to prevent leak
           revokeUrl(audio.src);
           reject(new Error('Audio playback timed out'));
         });
@@ -259,6 +258,18 @@ export function useVoiceMode() {
         revokeUrl(audio.src);
         reject(new Error('Audio playback failed'));
       });
+
+      // Detect external pause (from stopPlayback) — resolve immediately instead of
+      // hanging for 120s. This fires when stopPlayback() calls audio.pause().
+      audio.onpause = () => {
+        // Only treat as abort if playback was stopped externally (not natural end)
+        if (!audio.ended) {
+          settle(() => {
+            revokeUrl(audio.src);
+            resolve(); // resolve (not reject) — caller checks playbackAbortRef
+          });
+        }
+      };
 
       audio.play().catch((err) => settle(() => {
         revokeUrl(audio.src);
