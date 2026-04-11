@@ -537,7 +537,12 @@ function useJournalNudge() {
   return useQuery({
     queryKey: ['journal-nudge'],
     queryFn: async () => {
-      const { data, error } = await trackedInvoke<any>('journal-nudge');
+      const { data, error } = await safeInternalInvoke<any>({
+        functionName: 'journal-nudge',
+        componentName: 'JournalNudge',
+        internalExecution: true,
+        strictValidation: false,
+      });
       if (error) throw error;
       return data as {
         nudge: string;
