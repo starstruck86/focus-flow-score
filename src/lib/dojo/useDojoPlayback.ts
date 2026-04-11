@@ -132,6 +132,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const [isOwner, setIsOwner] = useState(false);
   const [ownershipConflict, setOwnershipConflict] = useState(false);
   const [restoreReason, setRestoreReason] = useState<RestoreReason>(null);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
   const ctrlRef = useRef<AudioControllerState | null>(null);
   const handleRef = useRef<TransportHandle>(createTransportHandle());
@@ -140,6 +141,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const ownershipCleanupRef = useRef<(() => void) | null>(null);
   const visibilityCleanupRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const pacingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastChunkRoleRef = useRef<string | undefined>(undefined);
 
   // Keep ref in sync with state + track metrics
   const applyResult = useCallback((result: ControllerResult) => {
