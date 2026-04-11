@@ -45,6 +45,8 @@ const DEFAULT_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'; // George
 
 const TRANSPORT_MAX_RETRIES = 2;
 const TRANSPORT_BACKOFF_BASE_MS = 500;
+/** Hard timeout per fetch attempt — prevents hanging requests from blocking the session. */
+const FETCH_TIMEOUT_MS = 25_000;
 
 // ── Failure phases (for debugging/analytics) ───────────────────────
 
@@ -131,6 +133,11 @@ export async function speakChunk(
       if (abortController.signal.aborted) return activeHandle;
     }
 
+    // Per-attempt abort for timeout; linked to outer abort for user cancellation
+    const attemptAbort = new AbortController();
+    const onOuterAbort = () => attemptAbort.abort();
+    abortController.signal.addEventListener('abort', onOuterAbort, { once: true });
+
     try {
       failurePhase = 'before_response';
       const body: Record<string, unknown> = {
@@ -140,19 +147,28 @@ export async function speakChunk(
       if (options?.previousText) body.previous_text = options.previousText;
       if (options?.nextText) body.next_text = options.nextText;
 
-      const response = await fetch(
-        `${config.supabaseUrl}/functions/v1/elevenlabs-tts-stream`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: config.supabaseAnonKey,
-            Authorization: `Bearer ${config.supabaseAnonKey}`,
-          },
-          body: JSON.stringify(body),
-          signal: abortController.signal,
-        }
-      );
+      // Hard timeout per attempt: abort if fetch hangs
+      const timeoutId = setTimeout(() => attemptAbort.abort(), FETCH_TIMEOUT_MS);
+
+      let response: Response;
+      try {
+        response = await fetch(
+          `${config.supabaseUrl}/functions/v1/elevenlabs-tts-stream`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: config.supabaseAnonKey,
+              Authorization: `Bearer ${config.supabaseAnonKey}`,
+            },
+            body: JSON.stringify(body),
+            signal: attemptAbort.signal,
+          }
+        );
+      } finally {
+        clearTimeout(timeoutId);
+        abortController.signal.removeEventListener('abort', onOuterAbort);
+      }
 
       if (!response.ok) {
         failurePhase = 'during_response';
@@ -172,8 +188,15 @@ export async function speakChunk(
 
       break; // success
     } catch (err) {
+      abortController.signal.removeEventListener('abort', onOuterAbort);
+      if (abortController.signal.aborted) {
+        return activeHandle; // user cancelled
+      }
       if ((err as Error).name === 'AbortError') {
-        return activeHandle; // cancelled intentionally
+        // Timeout on this attempt — retry if attempts remain
+        lastError = `Fetch timed out after ${FETCH_TIMEOUT_MS}ms`;
+        failurePhase = 'before_response';
+        continue;
       }
       lastError = err instanceof Error ? err.message : 'Unknown fetch error';
       failurePhase = 'before_response';

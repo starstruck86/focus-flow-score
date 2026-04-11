@@ -32,17 +32,19 @@ export function resetAutoplayGate(): void {
 export async function probeAutoplay(): Promise<boolean> {
   if (audioUnlocked) return true;
 
+  let ctx: AudioContext | null = null;
   try {
-    const ctx = new AudioContext();
+    ctx = new AudioContext();
     // If AudioContext is suspended, autoplay is blocked
     if (ctx.state === 'suspended') {
-      ctx.close();
+      ctx.close().catch(() => {});
       return false;
     }
-    ctx.close();
+    ctx.close().catch(() => {});
     audioUnlocked = true;
     return true;
   } catch {
+    if (ctx) ctx.close().catch(() => {});
     return false;
   }
 }

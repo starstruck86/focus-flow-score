@@ -143,9 +143,22 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const sessionIdRef = useRef<string | null>(null);
   const pacingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastChunkRoleRef = useRef<string | undefined>(undefined);
+  const mountedRef = useRef(true);
+  /** Throttle rapid user actions (replay/skip/interrupt) — min 200ms between actions. */
+  const lastActionTimeRef = useRef(0);
+  const ACTION_THROTTLE_MS = 200;
+
+  /** Returns false if action should be suppressed (too rapid). */
+  const throttleAction = useCallback((): boolean => {
+    const now = Date.now();
+    if (now - lastActionTimeRef.current < ACTION_THROTTLE_MS) return false;
+    lastActionTimeRef.current = now;
+    return true;
+  }, []);
 
   // Keep ref in sync with state + track metrics
   const applyResult = useCallback((result: ControllerResult) => {
+    if (!mountedRef.current) return; // Don't setState after unmount
     ctrlRef.current = result.state;
     setCtrlState(result.state);
     setLastDirective(result.directive);
@@ -242,8 +255,9 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
 
       if (delay > 150) {
         pacingTimerRef.current = setTimeout(() => {
+          if (!mountedRef.current) return; // Guard against unmount during pacing delay
           speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts, getCtrl)
-            .then((h) => { handleRef.current = h; });
+            .then((h) => { if (mountedRef.current) handleRef.current = h; });
         }, delay);
       } else {
         speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts, getCtrl)
@@ -365,14 +379,17 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   }, [config, applyResult, handleTransportEvent]);
 
   const interrupt = useCallback(() => {
+    if (!throttleAction()) return;
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     handleRef.current = stopPlayback(handleRef.current);
+    if (pacingTimerRef.current) { clearTimeout(pacingTimerRef.current); pacingTimerRef.current = null; }
     metricsRef.current = logInterruption(metricsRef.current);
     applyResult(onUserInterrupted(ctrl));
-  }, [applyResult]);
+  }, [applyResult, throttleAction]);
 
   const replay = useCallback(() => {
+    if (!throttleAction()) return;
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     const result = onUserRequestedReplay(ctrl);
@@ -393,17 +410,19 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
         getCtrl
       ).then((h) => { handleRef.current = h; });
     }
-  }, [config, applyResult, handleTransportEvent]);
+  }, [config, applyResult, handleTransportEvent, throttleAction]);
 
   const skip = useCallback(() => {
+    if (!throttleAction()) return;
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     handleRef.current = stopPlayback(handleRef.current);
+    if (pacingTimerRef.current) { clearTimeout(pacingTimerRef.current); pacingTimerRef.current = null; }
     const chunkId = ctrl.dojo.playback.currentPlayingChunkId ?? ctrl.dojo.chunks[ctrl.dojo.currentChunkIndex]?.id;
     if (chunkId) metricsRef.current = logSkip(metricsRef.current, chunkId);
     const result = onUserRequestedSkip(ctrl);
     handleTransportEvent(result);
-  }, [handleTransportEvent]);
+  }, [handleTransportEvent, throttleAction]);
 
   const resumeDelivery = useCallback(() => {
     const ctrl = ctrlRef.current;
@@ -548,9 +567,12 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   // ── Cleanup on unmount ───────────────────────────────────────────
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       destroyTransport(handleRef.current);
       if (watchdogRef.current) clearInterval(watchdogRef.current);
+      if (pacingTimerRef.current) clearTimeout(pacingTimerRef.current);
       if (sessionIdRef.current) releaseOwnership(sessionIdRef.current);
       if (ownershipCleanupRef.current) ownershipCleanupRef.current();
       if (visibilityCleanupRef.current) visibilityCleanupRef.current();
