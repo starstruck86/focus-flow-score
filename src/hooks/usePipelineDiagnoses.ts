@@ -160,7 +160,7 @@ export function useRunPipeline() {
     try {
       toast.info('Retrying extraction…');
       const { data, error } = await supabase.functions.invoke('batch-actionize', {
-        body: { batchSize: 1, mode: 'standard', resource_id: resourceId, strict: false },
+        body: { batchSize: 1, mode: 'protected', resource_id: resourceId, strict: false, user_id: user.id },
       });
       if (error) throw error;
       const diag = data?.diagnoses?.[0];
