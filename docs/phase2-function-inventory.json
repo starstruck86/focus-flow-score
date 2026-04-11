@@ -7,84 +7,630 @@
       "LOW": "User-scoped, authenticated, no cross-user capability",
       "MEDIUM": "Authenticated but broad scope or service-role for internal ops only",
       "HIGH": "Public + service-role, cross-user capability, or admin API usage"
-    }
+    },
+    "classification_method": "heuristic_code_analysis",
+    "classification_note": "Risk levels are based on static code analysis of auth patterns, service-role usage, and cross-user capability. Not validated against runtime traffic. Treat as provisional until confirmed by Phase 1 telemetry data."
   },
   "functions": [
-    { "name": "analyze-deal-outcome", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "analyze-sentiment", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "batch-actionize", "verify_jwt": false, "uses_service_role": true, "cross_user": true, "auth_pattern": "jwt_or_x-batch-key", "invocation_sources": ["client_ui", "extract-tactics_downstream"], "notes": "Uses admin.listUsers for user lookup. Forwards x-batch-key to extract-tactics. Can operate on any user_id passed in body.", "risk": "HIGH" },
-    { "name": "batch-extract-kis", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "batch-recovery-rerun", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "none_hardcoded_user", "notes": "Hardcoded RESOURCE_IDS and USER_ID. Dispatches to extract-tactics with service-role auth.", "risk": "HIGH" },
-    { "name": "build-resource", "verify_jwt": "not_in_config", "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "classify-resource", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "conversion-math", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "daily-digest", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "dave-conversation-token", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "dave-health-check", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "none", "notes": "Health check endpoint, no data access", "risk": "LOW" },
-    { "name": "deal-intelligence", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "detect-knowledge-gaps", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "discover-contacts", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "discover-resources", "verify_jwt": "not_in_config", "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "dojo-review-score", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "dojo-roleplay-score", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "dojo-score", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "elevenlabs-stt", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "none", "risk": "LOW" },
-    { "name": "elevenlabs-tts-stream", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "none", "risk": "LOW" },
-    { "name": "enrich-account", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "enrich-resource-content", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "notes": "Large function (3457 lines). Service-role used for data persistence. Called by run-enrichment-job.", "risk": "MEDIUM" },
-    { "name": "explain-score", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "extract-tactics", "verify_jwt": false, "uses_service_role": true, "cross_user": true, "auth_pattern": "jwt_or_x-batch-key", "invocation_sources": ["client_ui", "batch-actionize", "batch-recovery-rerun", "process-podcast-queue"], "notes": "Accepts userId from body when using x-batch-key. Cross-user capable via service-role path.", "risk": "HIGH" },
-    { "name": "extract-tasks", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "generate-call-goals", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "generate-execution-draft", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "generate-playbooks", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "generate-stage-playbook", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "generate-time-blocks", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "grade-mock-call", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "grade-objection-drill", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "grade-transcript", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "import-course", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "none", "risk": "MEDIUM" },
-    { "name": "import-podcast", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "import-webpage-links", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "import-youtube-playlist", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "journal-nudge", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "log-workday-focus", "verify_jwt": false, "uses_service_role": true, "cross_user": true, "auth_pattern": "jwt_or_x-api-key", "notes": "Uses admin.listUsers to resolve first user when x-api-key auth. Service-role for upsert.", "risk": "HIGH" },
-    { "name": "mock-call", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "operationalize-resource", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "parse-account-screenshot", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "parse-account-synopsis", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "parse-calendar-screenshot", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "parse-claude-import", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "parse-opp-synopsis", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "parse-screenshot", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "parse-uploaded-file", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "pipeline-hygiene", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "playbook-roleplay", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "preprocess-transcript", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "prioritize-accounts", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "process-podcast-queue", "verify_jwt": false, "uses_service_role": true, "cross_user": true, "auth_pattern": "none_system_cron", "notes": "Processes queue items for any user. Forwards x-batch-key to extract-tactics.", "risk": "HIGH" },
-    { "name": "reconcile-library", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "register-dave-tools", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "none", "risk": "LOW" },
-    { "name": "resolve-podcast-episode", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "run-catchup", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "run-enrichment-job", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_or_service_continuation", "notes": "Accepts service-role token for self-continuation. Always uses service-role client for DB.", "risk": "HIGH" },
-    { "name": "schedule-daily-plan", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "search-context", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "source-icp-accounts", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "suggest-resource-uses", "verify_jwt": "not_in_config", "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "suggest-templates", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "sync-calendar", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "territory-copilot", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "transcribe-audio", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "validate-enrichment", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "voice-command", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "weekly-battle-plan", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "weekly-digest", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "weekly-patterns", "verify_jwt": false, "uses_service_role": false, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "LOW" },
-    { "name": "whoop-auth", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "notes": "HMAC-signed OAuth state", "risk": "LOW" },
-    { "name": "whoop-callback", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "hmac_state_verification", "risk": "LOW" },
-    { "name": "whoop-sync", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" },
-    { "name": "youtube-captions", "verify_jwt": false, "uses_service_role": true, "cross_user": false, "auth_pattern": "jwt_in_code", "risk": "MEDIUM" }
+    {
+      "name": "analyze-deal-outcome",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "analyze-sentiment",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "batch-actionize",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": true,
+      "auth_pattern": "jwt_or_x-batch-key",
+      "invocation_sources": [
+        "client_ui",
+        "extract-tactics_downstream"
+      ],
+      "notes": "Uses admin.listUsers for user lookup. Forwards x-batch-key to extract-tactics. Can operate on any user_id passed in body.",
+      "risk": "HIGH"
+    },
+    {
+      "name": "batch-extract-kis",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "batch-recovery-rerun",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "none_hardcoded_user",
+      "notes": "Hardcoded RESOURCE_IDS and USER_ID. Dispatches to extract-tactics with service-role auth.",
+      "risk": "HIGH"
+    },
+    {
+      "name": "build-resource",
+      "verify_jwt": "not_in_config",
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "classify-resource",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "conversion-math",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "daily-digest",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "dave-conversation-token",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "dave-health-check",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "none",
+      "notes": "Health check endpoint, no data access",
+      "risk": "LOW"
+    },
+    {
+      "name": "deal-intelligence",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "detect-knowledge-gaps",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "discover-contacts",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "discover-resources",
+      "verify_jwt": "not_in_config",
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "dojo-review-score",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "dojo-roleplay-score",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "dojo-score",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "elevenlabs-stt",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "none",
+      "risk": "LOW"
+    },
+    {
+      "name": "elevenlabs-tts-stream",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "none",
+      "risk": "LOW"
+    },
+    {
+      "name": "enrich-account",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "enrich-resource-content",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "notes": "Large function (3457 lines). Service-role used for data persistence. Called by run-enrichment-job.",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "explain-score",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "extract-tactics",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": true,
+      "auth_pattern": "jwt_or_x-batch-key",
+      "invocation_sources": [
+        "client_ui",
+        "batch-actionize",
+        "batch-recovery-rerun",
+        "process-podcast-queue"
+      ],
+      "notes": "Accepts userId from body when using x-batch-key. Cross-user capable via service-role path.",
+      "risk": "HIGH"
+    },
+    {
+      "name": "extract-tasks",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "generate-call-goals",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "generate-execution-draft",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "generate-playbooks",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "generate-stage-playbook",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "generate-time-blocks",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "grade-mock-call",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "grade-objection-drill",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "grade-transcript",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "import-course",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "none",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "import-podcast",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "import-webpage-links",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "import-youtube-playlist",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "journal-nudge",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "log-workday-focus",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": true,
+      "auth_pattern": "jwt_or_x-api-key",
+      "notes": "Uses admin.listUsers to resolve first user when x-api-key auth. Service-role for upsert.",
+      "risk": "HIGH"
+    },
+    {
+      "name": "mock-call",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "operationalize-resource",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "parse-account-screenshot",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "parse-account-synopsis",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "parse-calendar-screenshot",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "parse-claude-import",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "parse-opp-synopsis",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "parse-screenshot",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "parse-uploaded-file",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "pipeline-hygiene",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "playbook-roleplay",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "preprocess-transcript",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "prioritize-accounts",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "process-podcast-queue",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": true,
+      "auth_pattern": "none_system_cron",
+      "notes": "Processes queue items for any user. Forwards x-batch-key to extract-tactics.",
+      "risk": "HIGH"
+    },
+    {
+      "name": "reconcile-library",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "register-dave-tools",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "none",
+      "risk": "LOW"
+    },
+    {
+      "name": "resolve-podcast-episode",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "run-catchup",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "run-enrichment-job",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_or_service_continuation",
+      "notes": "Accepts service-role token for self-continuation. Always uses service-role client for DB.",
+      "risk": "HIGH"
+    },
+    {
+      "name": "schedule-daily-plan",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "search-context",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "source-icp-accounts",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "suggest-resource-uses",
+      "verify_jwt": "not_in_config",
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "suggest-templates",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "sync-calendar",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "territory-copilot",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "transcribe-audio",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "validate-enrichment",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "voice-command",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "weekly-battle-plan",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "weekly-digest",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "weekly-patterns",
+      "verify_jwt": false,
+      "uses_service_role": false,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "LOW"
+    },
+    {
+      "name": "whoop-auth",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "notes": "HMAC-signed OAuth state",
+      "risk": "LOW"
+    },
+    {
+      "name": "whoop-callback",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "hmac_state_verification",
+      "risk": "LOW"
+    },
+    {
+      "name": "whoop-sync",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    },
+    {
+      "name": "youtube-captions",
+      "verify_jwt": false,
+      "uses_service_role": true,
+      "cross_user": false,
+      "auth_pattern": "jwt_in_code",
+      "risk": "MEDIUM"
+    }
   ],
   "summary": {
     "total_functions": 75,
