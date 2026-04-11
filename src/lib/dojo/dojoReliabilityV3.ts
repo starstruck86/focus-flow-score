@@ -90,6 +90,10 @@ const MIN_AUDIBLE_MS = 300;
 const FAILURE_WINDOW_MS = 60_000;
 /** Max recovery attempts before giving up on voice */
 const MAX_RECOVERY_CHAIN = 4;
+/** Max entries kept for sliding-window buffers (prevents memory growth in long sessions) */
+const MAX_FAILURE_TIMESTAMPS = 50;
+const MAX_RECOVERY_ATTEMPTS = 20;
+const MAX_AUDIBLE_CONFIRMATIONS = 20;
 
 // ── Factory ───────────────────────────────────────────────────────
 
@@ -122,7 +126,8 @@ export function onForwardProgress(m: ReliabilityMetrics): ReliabilityMetrics {
 
 export function onFailure(m: ReliabilityMetrics, chunkId?: string): ReliabilityMetrics {
   const now = Date.now();
-  const recentFailures = [...m.recentFailureTimestamps.filter(t => now - t < FAILURE_WINDOW_MS), now];
+  const recentFailures = [...m.recentFailureTimestamps.filter(t => now - t < FAILURE_WINDOW_MS), now]
+    .slice(-MAX_FAILURE_TIMESTAMPS);
   const updated = {
     ...m,
     consecutiveSuccesses: 0,
@@ -142,7 +147,7 @@ export function startAudibleTracking(m: ReliabilityMetrics, chunkId: string): Re
     confirmed: false,
     durationMs: 0,
   };
-  return { ...m, audibleConfirmations: [...m.audibleConfirmations.slice(-19), entry] };
+  return { ...m, audibleConfirmations: [...m.audibleConfirmations.slice(-(MAX_AUDIBLE_CONFIRMATIONS - 1)), entry] };
 }
 
 export function confirmAudible(m: ReliabilityMetrics, chunkId: string): ReliabilityMetrics {
