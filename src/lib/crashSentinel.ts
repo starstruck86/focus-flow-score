@@ -286,35 +286,42 @@ export function initCrashSentinel(): void {
     addBreadcrumb('visibility', document.visibilityState);
   });
 
-  // ── Route breadcrumbs (polled) ──
+  // ── Route breadcrumbs (polled) — track interval for cleanup ──
   let _lastRoute = window.location.pathname;
-  setInterval(() => {
+  const routeInterval = setInterval(() => {
     if (window.location.pathname !== _lastRoute) {
       addBreadcrumb('route', `${_lastRoute} → ${window.location.pathname}`);
       _lastRoute = window.location.pathname;
     }
   }, 1000);
+  trackTimer(routeInterval);
 
-  // ── Fetch error breadcrumbs ──
-  const originalFetch = window.fetch;
-  window.fetch = async function(...args) {
-    const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request)?.url ?? '';
-    const shortUrl = url.split('?')[0].split('/').slice(-2).join('/');
-    try {
-      const response = await originalFetch.apply(this, args);
-      if (!response.ok && response.status >= 500) {
-        addBreadcrumb('fetch', `${response.status} ${shortUrl}`);
+  // ── Fetch error breadcrumbs (idempotent — only patch once) ──
+  if (!(window.fetch as any).__crashSentinelPatched) {
+    const originalFetch = window.fetch;
+    const patchedFetch = async function(this: any, ...args: Parameters<typeof fetch>) {
+      const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request)?.url ?? '';
+      const shortUrl = url.split('?')[0].split('/').slice(-2).join('/');
+      try {
+        const response = await originalFetch.apply(this, args);
+        if (!response.ok && response.status >= 500) {
+          addBreadcrumb('fetch', `${response.status} ${shortUrl}`);
+          if (shortUrl.includes('functions/v1')) {
+            _telemetry.supabaseFailures++;
+          }
+        }
+        return response;
+      } catch (err) {
+        addBreadcrumb('fetch', `FAIL ${shortUrl}: ${(err as Error).message?.slice(0, 50)}`);
         if (shortUrl.includes('functions/v1')) {
           _telemetry.supabaseFailures++;
         }
+        throw err;
       }
-      return response;
-    } catch (err) {
-      addBreadcrumb('fetch', `FAIL ${shortUrl}: ${(err as Error).message?.slice(0, 50)}`);
-      _telemetry.supabaseFailures++;
-      throw err;
-    }
-  };
+    };
+    (patchedFetch as any).__crashSentinelPatched = true;
+    window.fetch = patchedFetch as typeof fetch;
+  }
 
   console.info('[CrashSentinel] Initialized — tracking errors, rejections, and breadcrumbs');
 }
