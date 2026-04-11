@@ -178,6 +178,21 @@ export const CHAOS_PRESETS = {
     ownershipConflict: true,
   }),
 
+  /** Specific: corrupt/partial blob responses */
+  partialBlob: (): ChaosConfig => ({
+    ...DEFAULT_CHAOS,
+    enabled: true,
+    corruptBlobRate: 0.8,
+  }),
+
+  /** Specific: stale callbacks (delayed ended events) */
+  staleCallbacks: (): ChaosConfig => ({
+    ...DEFAULT_CHAOS,
+    enabled: true,
+    delayedEndedRate: 0.5,
+    duplicateCallbackRate: 0.3,
+  }),
+
   /** Off */
   off: (): ChaosConfig => DEFAULT_CHAOS,
 } as const;
