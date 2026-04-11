@@ -2539,9 +2539,24 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════
 
     // ── EXISTING KI AWARENESS: tell the model what already exists for this resource ──
+    // Phase D, Slice 2: Use user-scoped client on protected path for this read
     let existingKiContext = '';
     if (deepMode && resourceId) {
-      const { data: existingKIs } = await supabaseAdmin
+      const kiReadClient = supabaseUserScoped || supabaseAdmin;
+      if (supabaseUserScoped) {
+        logEnforcementEvent('extract-tactics', 'fn:service_role_reduced_path' as any, {
+          reason: 'protected_path_user_scoped_read',
+          resourceId,
+          operation: 'existing_ki_awareness_read',
+        });
+      } else {
+        logEnforcementEvent('extract-tactics', 'fn:service_role_retained' as any, {
+          reason: 'legacy_or_internal_path',
+          resourceId,
+          operation: 'existing_ki_awareness_read',
+        });
+      }
+      const { data: existingKIs } = await kiReadClient
         .from('knowledge_items')
         .select('title, tactic_summary')
         .eq('source_resource_id', resourceId)
