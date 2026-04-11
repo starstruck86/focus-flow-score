@@ -672,6 +672,10 @@ export function useDeepReExtraction() {
       });
 
       try {
+        // Retrieve userId for protected-path enforcement
+        const { data: { session: __session } } = await supabase.auth.getSession();
+        const __userId = __session?.user?.id;
+
         const response = await authenticatedFetch({
           functionName: 'extract-tactics',
           body: {
@@ -679,6 +683,7 @@ export function useDeepReExtraction() {
             deepMode: true,
             persist: true,
             jobMode: true,
+            ...(__userId ? { userId: __userId, mode: 'protected' } : {}),
           },
           componentName: 'useDeepReExtraction-jobMode',
           timeoutMs: 300_000, // 5 minute timeout for full job
