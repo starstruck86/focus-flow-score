@@ -107,14 +107,47 @@ export function heartbeatOwnership(sessionId: string): boolean {
   return true;
 }
 
+/** Tracks active heartbeat intervals for observability */
+const activeHeartbeats = new Map<string, { intervalId: ReturnType<typeof setInterval>; startedAt: number; beatCount: number }>();
+
 /** Start a heartbeat interval. Returns cleanup function. */
 export function startOwnershipHeartbeat(sessionId: string): () => void {
+  // Clean up any existing heartbeat for this session
+  const existing = activeHeartbeats.get(sessionId);
+  if (existing) clearInterval(existing.intervalId);
+
+  const entry = { intervalId: 0 as unknown as ReturnType<typeof setInterval>, startedAt: Date.now(), beatCount: 0 };
+
   const interval = setInterval(() => {
     const still = heartbeatOwnership(sessionId);
-    if (!still) clearInterval(interval);
+    entry.beatCount++;
+    if (!still) {
+      clearInterval(interval);
+      activeHeartbeats.delete(sessionId);
+    }
   }, HEARTBEAT_INTERVAL_MS);
 
-  return () => clearInterval(interval);
+  entry.intervalId = interval;
+  activeHeartbeats.set(sessionId, entry);
+
+  return () => {
+    clearInterval(interval);
+    activeHeartbeats.delete(sessionId);
+  };
+}
+
+/** Get diagnostics about active ownership heartbeats */
+export function getHeartbeatDiagnostics(): Array<{
+  sessionId: string;
+  uptimeMs: number;
+  beatCount: number;
+}> {
+  const now = Date.now();
+  return Array.from(activeHeartbeats.entries()).map(([sessionId, entry]) => ({
+    sessionId,
+    uptimeMs: now - entry.startedAt,
+    beatCount: entry.beatCount,
+  }));
 }
 
 // ── Release ──────────────────────────────────────────────────────
