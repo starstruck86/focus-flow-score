@@ -193,17 +193,26 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
       metricsRef.current = logRestoreReason(metricsRef.current, result.state.restoreReason);
     }
 
-    // Track metrics based on directive
+    // Track metrics + reliability based on directive
     const m = metricsRef.current;
+    let r = reliabilityRef.current;
     switch (result.directive.kind) {
       case 'speak':
         metricsRef.current = logChunkRequested(m, result.directive.chunk.id);
+        r = startAudibleTracking(r, result.directive.chunk.id);
+        r = armHangDetector(r);
         break;
       case 'retry_speak':
         metricsRef.current = logRetryAttempt(m, result.directive.chunk.id, result.directive.attempt);
+        r = logRecoveryAttempt(r, 'retry', 'medium', result.directive.chunk.id);
         break;
       case 'show_text':
         metricsRef.current = logChunkCompleted(m, result.directive.chunk.id, 0);
+        r = onForwardProgress(r);
+        r = resolveRecoveryAttempt(r, true);
+        break;
+      case 'delivery_complete':
+        r = disarmHangDetector(r);
         break;
       case 'mode_changed':
         if (result.directive.mode === 'text_fallback') {
@@ -211,26 +220,45 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
           if (result.directive.level === 'session') {
             metricsRef.current = logSessionLevelDegrade(metricsRef.current, result.directive.reason);
           }
+          r = logRecoveryAttempt(r, 'degrade_text', 'high');
         } else {
           metricsRef.current = logRecovery(metricsRef.current, result.directive.reason);
+          r = resolveRecoveryAttempt(r, true);
         }
         break;
       case 'chunk_skipped_max_retries':
         metricsRef.current = logChunkSkipped(m, result.directive.chunkId);
         metricsRef.current = logChunkLevelDegrade(metricsRef.current, result.directive.chunkId);
+        r = onForwardProgress(r); // skip = forward progress
+        r = logRecoveryAttempt(r, 'skip', 'medium', result.directive.chunkId);
+        r = resolveRecoveryAttempt(r, true);
         break;
       case 'no_op':
         if (result.directive.reason === 'duplicate_completed') {
           metricsRef.current = logDuplicateSuppressed(m, '');
         } else if (result.directive.reason === 'stale_chunk_completed') {
           metricsRef.current = logStaleSuppressed(m, '');
+        } else if (result.directive.reason === 'tts_started_ack') {
+          // Audio became audible — confirm tracking
+          const chunkId = result.state.dojo.playback.currentPlayingChunkId;
+          if (chunkId) r = confirmAudible(r, chunkId);
         }
         // Track audibility in failure path
         if (result.state.chunkAudibleState === 'failed_before_audible' || result.state.chunkAudibleState === 'failed_after_audible') {
           metricsRef.current = logChunkFailedAudibility(metricsRef.current, result.state.chunkAudibleState);
+          r = onReliabilityFailure(r, result.state.dojo.playback.lastFailedChunkId ?? undefined);
+          r = resolveRecoveryAttempt(r, false);
         }
         break;
     }
+
+    // Finalize audible tracking on chunk completion
+    if (result.state.chunkAudibleState === 'ended' && result.state.lastAudibleChunkId) {
+      r = finalizeAudible(r, result.state.lastAudibleChunkId);
+      r = onForwardProgress(r);
+    }
+
+    reliabilityRef.current = r;
 
     // Persist snapshot for crash recovery
     if (result.state.dojo.sessionId) {
