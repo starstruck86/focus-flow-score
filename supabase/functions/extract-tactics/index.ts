@@ -1984,13 +1984,38 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Log service-role usage with resolved scope
+    // ── Phase D, Slice 1: Conditional service-role reduction ──
+    // On the protected path, create a user-scoped client for the resource fetch
+    // since RLS on resources allows users to read their own rows.
+    // Service-role admin client is still created for write operations and all other paths.
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-    logServiceRoleUsage('extract-tactics', 'single_user', { resourceId, isServiceRole });
+    const supabaseUserScoped = isProtectedMode && authHeader
+      ? createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } })
+      : null;
+
+    if (isProtectedMode && supabaseUserScoped) {
+      logEnforcementEvent('extract-tactics', 'fn:service_role_reduced_path' as any, {
+        reason: 'protected_path_user_scoped_read',
+        resourceId,
+        operation: 'resource_fetch',
+      });
+      logServiceRoleUsage('extract-tactics', 'single_user', { resourceId, isServiceRole, serviceRoleReduced: true });
+    } else {
+      logEnforcementEvent('extract-tactics', 'fn:service_role_retained' as any, {
+        reason: isProtectedMode ? 'no_user_client_available' : 'legacy_or_internal_path',
+        resourceId,
+        isServiceRole,
+        isContinuation: !!body?.isContinuation,
+      });
+      logServiceRoleUsage('extract-tactics', 'single_user', { resourceId, isServiceRole, serviceRoleReduced: false });
+    }
+
     let fullContentLength = 0; // track total resource length for density calc
     if (resourceId && (!content || content.length < 100)) {
-      console.log(`[extract-tactics] No content in body, fetching resource ${resourceId} from DB`);
-      const { data: resource, error: fetchErr } = await supabaseAdmin
+      // Use user-scoped client on protected path, service-role otherwise
+      const fetchClient = supabaseUserScoped || supabaseAdmin;
+      console.log(`[extract-tactics] Fetching resource ${resourceId} from DB (client: ${supabaseUserScoped ? 'user-scoped' : 'service-role'})`);
+      const { data: resource, error: fetchErr } = await fetchClient
         .from('resources')
         .select('title, content, description, tags, resource_type, content_length')
         .eq('id', resourceId)
