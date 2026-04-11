@@ -1064,7 +1064,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
 
 // ─── MAIN COACH PAGE ──────────────────────────────────────────
 export default function Coach() {
-  const [tab, setTab] = useState('simulate');
+  const [tab, setTab] = useState('scorecard');
   const { data: transcripts, refetch: refetchTranscripts } = useCallTranscripts();
   const { data: allGrades, isLoading } = useAllTranscriptGrades();
   const gradeTranscript = useGradeTranscript();
@@ -1123,12 +1123,6 @@ export default function Coach() {
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className={SHELL.tabs.list}>
-            <TabsTrigger value="simulate" className={`${SHELL.tabs.triggerWithIcon}`}>
-              <Swords className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Simulate</span><span className="sm:hidden">Sim</span>
-            </TabsTrigger>
-            <TabsTrigger value="drills" className={`${SHELL.tabs.triggerWithIcon}`}>
-              <Shield className="h-3.5 w-3.5" /> Drills
-            </TabsTrigger>
             <TabsTrigger value="scorecard" className={SHELL.tabs.trigger}>Scorecard</TabsTrigger>
             <TabsTrigger value="history" className={SHELL.tabs.trigger}>History</TabsTrigger>
             <TabsTrigger value="trends" className={SHELL.tabs.trigger}>Trends</TabsTrigger>
@@ -1141,16 +1135,6 @@ export default function Coach() {
               </>
             )}
           </TabsList>
-
-          {/* ── SIMULATE TAB ── */}
-          <TabsContent value="simulate" className="mt-4">
-            <MockCallSimulator />
-          </TabsContent>
-
-          {/* ── DRILLS TAB ── */}
-          <TabsContent value="drills" className="mt-4">
-            <ObjectionDrillReps />
-          </TabsContent>
 
           {/* ── SCORECARD TAB ── */}
           <TabsContent value="scorecard" className="mt-4">
