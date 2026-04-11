@@ -17,15 +17,17 @@ const STALE_THRESHOLD_MS = 5 * 60_000; // 5 minutes
 
 /** Singleton guard — prevents double-install across HMR / StrictMode */
 let installedUnsubscribe: (() => void) | null = null;
+let installGeneration = 0;
 
 /** Set of job IDs already reported as stuck, to avoid spamming */
 const reportedStuckJobs = new Set<string>();
 
 /** Observe the Zustand store and emit telemetry on state changes */
 export function installJobObserver(): (() => void) {
-  // Hard singleton: if already installed, return existing teardown
+  // Hard singleton: if already installed, return a no-op.
+  // Only the original installer's teardown can actually unsubscribe.
   if (installedUnsubscribe) {
-    return installedUnsubscribe;
+    return () => { /* secondary mount — no-op teardown */ };
   }
 
   let previousJobs: BackgroundJob[] = [];
@@ -118,7 +120,11 @@ export function installJobObserver(): (() => void) {
     }
   });
 
+  const myGeneration = ++installGeneration;
+
   const teardown = () => {
+    // Only the generation that installed can tear down
+    if (installGeneration !== myGeneration) return;
     unsubscribe();
     installedUnsubscribe = null;
     reportedStuckJobs.clear();
