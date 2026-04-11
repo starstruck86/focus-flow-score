@@ -13,6 +13,7 @@ import { generateTraceId, normalizeError, recordError, type AppError } from './a
 import { createLogger } from './logger';
 import { checkDriftBlock, driftErrorMessage } from './functionGroupDrift';
 import { withRetry, withTimeout, type RetryOptions } from './reliability';
+import { recordFnInvocation } from './observability/enrichObserver';
 
 const logger = createLogger('TrackedInvoke');
 
@@ -93,6 +94,8 @@ export async function trackedInvoke<T = unknown>(
   functionName: string,
   options?: InvokeOptions,
 ): Promise<TrackedResult<T>> {
+  const invokeStartMs = Date.now();
+  recordFnInvocation({ functionName, authenticated: true, outcome: 'success', traceId: options?.traceId });
   // ── Fail-fast drift guard ──
   const drift = checkDriftBlock(functionName);
   if (drift) {
@@ -142,10 +145,12 @@ export async function trackedInvoke<T = unknown>(
     if (result.error) {
       recordError(result.error);
       logger.warn(`${functionName} failed`, { traceId, attempts, message: result.error.message });
+      recordFnInvocation({ functionName, authenticated: true, outcome: 'error', durationMs: Date.now() - invokeStartMs, traceId, errorMessage: result.error.message });
       return { data: null, error: result.error, traceId, attempts };
     }
 
     logger.debug(`${functionName} OK`, { traceId, attempts });
+    recordFnInvocation({ functionName, authenticated: true, outcome: 'success', durationMs: Date.now() - invokeStartMs, traceId });
     return { data: result.data, error: null, traceId, attempts };
   };
 
