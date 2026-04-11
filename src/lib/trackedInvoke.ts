@@ -95,7 +95,7 @@ export async function trackedInvoke<T = unknown>(
   options?: InvokeOptions,
 ): Promise<TrackedResult<T>> {
   const invokeStartMs = Date.now();
-  recordFnInvocation({ functionName, authenticated: true, outcome: 'success', traceId: options?.traceId });
+  recordTelemetryEvent('fn:invoke', { functionName, traceId: options?.traceId });
   // ── Fail-fast drift guard ──
   const drift = checkDriftBlock(functionName);
   if (drift) {
