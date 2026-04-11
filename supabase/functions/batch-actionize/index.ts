@@ -339,6 +339,7 @@ Deno.serve(async (req) => {
     logValidationWarnings('batch-actionize', body, ['user_id']);
 
     const isProtectedMode = body.mode === 'protected';
+    let supabaseUserScoped: ReturnType<typeof createClient> | null = null;
 
     // ── Protected Path Enforcement (Phase 3, Slice 3) ──────────
     if (isProtectedMode) {
@@ -393,6 +394,9 @@ Deno.serve(async (req) => {
       logEnforcementEvent('batch-actionize', 'fn:scope_enforced', {
         callerPresent: true, targetPresent: true, match: true,
       });
+
+      // Phase D, Slice 6: Hoist user-scoped client for selective reads
+      supabaseUserScoped = supabaseUser;
     }
 
     // ── Legacy Path Telemetry ──────────────────────────────────
@@ -506,7 +510,22 @@ Deno.serve(async (req) => {
     const alreadyResolved = new Set((resolvedDiags || []).map((d: any) => d.resource_id));
 
     // Fetch all eligible resources
-    const { data: allResources } = await supabaseAdmin
+    // Phase D, Slice 6: Use user-scoped client on protected path
+    const resourceClient = (isProtectedMode && supabaseUserScoped) ? supabaseUserScoped : supabaseAdmin;
+    if (isProtectedMode && supabaseUserScoped) {
+      logEnforcementEvent('batch-actionize', 'fn:service_role_reduced_path' as any, {
+        operation: 'resource_list_fetch',
+        reason: 'protected_path_user_scoped',
+        path: 'protected',
+      });
+    } else {
+      logEnforcementEvent('batch-actionize', 'fn:service_role_retained' as any, {
+        operation: 'resource_list_fetch',
+        reason: isProtectedMode ? 'no_user_scoped_client' : 'legacy_or_batch_path',
+        path: isProtectedMode ? 'protected' : (body.mode || 'standard'),
+      });
+    }
+    const { data: allResources } = await resourceClient
       .from('resources')
       .select('id, title, content, description, tags, resource_type, content_length, enrichment_status, failure_reason, manual_input_required, content_status')
       .eq('user_id', userId)
