@@ -14,6 +14,8 @@ import {
 import { useLesson, useGenerateLesson, useUpsertProgress, useSaveQuizAnswer } from '@/lib/learning/hooks';
 import { supabase } from '@/integrations/supabase/client';
 import type { MCQuestion } from '@/lib/learning/types';
+import { getPracticeMapping } from '@/lib/learning/practiceMapping';
+import { Swords } from 'lucide-react';
 
 type Phase = 'learn' | 'quiz' | 'open_ended' | 'results';
 
@@ -314,18 +316,40 @@ export default function LearnLesson() {
         )}
 
         {/* Phase: Results */}
-        {phase === 'results' && (
-          <div className="space-y-4 text-center py-6">
-            <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto" />
-            <p className="text-lg font-semibold">Lesson Complete</p>
-            <p className="text-sm text-muted-foreground">
-              MC: {mcScore}/{lesson.quiz_content?.mc_questions?.length || 0} · Application: {Math.round(openScore)}/100
-            </p>
-            <Button onClick={() => navigate('/learn')} className="w-full">
-              Back to Courses
-            </Button>
-          </div>
-        )}
+        {phase === 'results' && (() => {
+          const practice = getPracticeMapping(lesson.topic);
+          return (
+            <div className="space-y-4 text-center py-6">
+              <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto" />
+              <p className="text-lg font-semibold">Lesson Complete</p>
+              <p className="text-sm text-muted-foreground">
+                MC: {mcScore}/{lesson.quiz_content?.mc_questions?.length || 0} · Application: {Math.round(openScore)}/100
+              </p>
+
+              <Button
+                size="lg"
+                className="w-full h-14 text-base font-semibold gap-2"
+                onClick={() => navigate('/dojo', {
+                  state: {
+                    fromLesson: true,
+                    lessonId: lesson.id,
+                    lessonTitle: lesson.title,
+                    skillFocus: practice.skillFocus,
+                    recommendedMode: practice.recommendedMode,
+                    modeLabel: practice.label,
+                  },
+                })}
+              >
+                <Swords className="h-5 w-5" />
+                Practice This in Dojo
+              </Button>
+
+              <Button variant="ghost" onClick={() => navigate('/learn')} className="w-full text-muted-foreground">
+                Back to Courses
+              </Button>
+            </div>
+          );
+        })()}
       </div>
     </Layout>
   );
