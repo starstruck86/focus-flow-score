@@ -1,17 +1,14 @@
 /**
- * DaveCoachingDelivery — renders Dave's coaching audio/text delivery
- * inside the Sales Dojo feedback view.
+ * DaveCoachingDelivery — Dave's coaching audio/text delivery UI for Sales Dojo V2.
  *
- * Responsibilities:
- * - Initialize the audio stack when a score result arrives
- * - Recover from crash/refresh via localStorage snapshot
- * - Claim session ownership (multi-tab protection)
- * - Render currently-speaking chunk with visual indicator
- * - Show text fallback inline when voice degrades
- * - Show ownership conflict state with recovery options
- * - Provide replay / skip / interrupt controls
- * - Surface reliability status (speaking, degraded, recovered, interrupted, restored, conflict)
- * - Optionally show debug panel (Ctrl+Shift+A)
+ * V2 UX upgrades:
+ * - Audible-state-aware status (Connecting audio… vs Dave is speaking)
+ * - Autoplay gate with "Tap to hear Dave" recovery
+ * - Conversational pacing (handled by hook)
+ * - Smart recovery messaging ("Picking up where you left off")
+ * - Ownership conflict UX with takeover + text-only options
+ * - Interrupt acknowledgment in status
+ * - Adaptive failure behavior
  */
 
 import { useEffect, useRef, useState, lazy, Suspense } from 'react';
@@ -20,6 +17,7 @@ import { cn } from '@/lib/utils';
 import {
   Volume2, VolumeX, SkipForward, RotateCcw,
   Pause, Play, RefreshCw, CheckCircle, AlertTriangle,
+  Mic, Loader2,
   type LucideIcon,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -30,7 +28,7 @@ import { createSession, loadResult } from '@/lib/dojo/conversationEngine';
 import { withPlayback } from '@/lib/dojo/playbackAdapter';
 import { useDojoPlayback } from '@/lib/dojo/useDojoPlayback';
 import type { TransportConfig } from '@/lib/dojo/elevenlabsTransport';
-import type { ControllerDirective } from '@/lib/dojo/dojoAudioController';
+import type { ControllerDirective, ChunkAudibleState } from '@/lib/dojo/dojoAudioController';
 
 const DojoAudioDebugPanel = lazy(() => import('./DojoAudioDebugPanel'));
 
@@ -47,13 +45,16 @@ interface DaveCoachingDeliveryProps {
 
 type DeliveryStatus =
   | 'idle'
+  | 'connecting_audio'
   | 'speaking'
+  | 'thinking'
   | 'interrupted'
   | 'voice_degraded'
   | 'voice_restored'
   | 'replaying'
   | 'skipped'
   | 'recovered'
+  | 'autoplay_blocked'
   | 'ownership_conflict'
   | 'complete';
 
@@ -63,9 +64,12 @@ function deriveStatus(
   deliveryMode: 'voice' | 'text_fallback',
   wasRecovered: boolean,
   ownershipConflict: boolean,
+  autoplayBlocked: boolean,
+  audibleState: ChunkAudibleState,
   prevStatus: DeliveryStatus
 ): DeliveryStatus {
   if (ownershipConflict) return 'ownership_conflict';
+  if (autoplayBlocked) return 'autoplay_blocked';
   if (!directive) return wasRecovered ? 'recovered' : 'idle';
   if (directive.kind === 'delivery_complete') return 'complete';
 
@@ -76,21 +80,35 @@ function deriveStatus(
   if (directive.kind === 'chunk_skipped_max_retries') return 'skipped';
 
   if (deliveryMode === 'text_fallback') return 'voice_degraded';
-  if (isPlaying) return 'speaking';
+
+  // Audible-state-aware: distinguish connecting from actually speaking
+  if (isPlaying) {
+    if (audibleState === 'audible') return 'speaking';
+    if (audibleState === 'requested' || audibleState === 'blob_received' || audibleState === 'play_attempted') {
+      return 'connecting_audio';
+    }
+    return 'speaking';
+  }
+
+  // Between chunks with voice mode — show thinking
+  if (deliveryMode === 'voice' && directive.kind === 'speak') return 'thinking';
 
   return prevStatus === 'complete' ? 'complete' : 'idle';
 }
 
-const STATUS_CONFIG: Record<DeliveryStatus, { label: string; Icon: LucideIcon; className: string } | null> = {
+const STATUS_CONFIG: Record<DeliveryStatus, { label: string; Icon: LucideIcon; className: string; animate?: boolean } | null> = {
   idle: null,
+  connecting_audio: { label: 'Connecting audio…', Icon: Loader2, className: 'text-muted-foreground', animate: true },
   speaking: { label: 'Dave is speaking', Icon: Volume2, className: 'text-primary' },
+  thinking: { label: 'Dave is thinking…', Icon: Loader2, className: 'text-muted-foreground', animate: true },
   interrupted: { label: 'Paused — tap Resume to continue', Icon: Pause, className: 'text-amber-500' },
   voice_degraded: { label: 'Voice issue — continuing in text', Icon: VolumeX, className: 'text-amber-500' },
   voice_restored: { label: 'Voice restored', Icon: Volume2, className: 'text-green-500' },
   replaying: { label: 'Replaying last chunk', Icon: RotateCcw, className: 'text-blue-500' },
   skipped: { label: 'Skipped — moving on', Icon: SkipForward, className: 'text-muted-foreground' },
-  recovered: { label: 'Session recovered — picking up where you left off', Icon: RefreshCw, className: 'text-green-500' },
-  ownership_conflict: { label: 'This session is active in another tab', Icon: AlertTriangle, className: 'text-amber-500' },
+  recovered: { label: 'Picking up where you left off', Icon: RefreshCw, className: 'text-green-500' },
+  autoplay_blocked: { label: 'Tap to hear Dave coach you', Icon: Mic, className: 'text-primary' },
+  ownership_conflict: { label: 'Dave is active in another tab', Icon: AlertTriangle, className: 'text-amber-500' },
   complete: { label: 'Coaching complete', Icon: CheckCircle, className: 'text-green-500' },
 };
 
@@ -146,7 +164,12 @@ export default function DaveCoachingDelivery({
     const d = playback.lastDirective;
     if (!d) return;
 
-    const newStatus = deriveStatus(d, playback.isPlaying, playback.deliveryMode, playback.wasRecovered, playback.ownershipConflict, status);
+    const audibleState = playback.controllerState?.chunkAudibleState ?? 'none';
+    const newStatus = deriveStatus(
+      d, playback.isPlaying, playback.deliveryMode,
+      playback.wasRecovered, playback.ownershipConflict,
+      playback.autoplayBlocked, audibleState, status
+    );
     setStatus(newStatus);
 
     // Auto-clear transient statuses
@@ -176,7 +199,17 @@ export default function DaveCoachingDelivery({
         .then(() => {});
       onDeliveryComplete?.();
     }
-  }, [playback.lastDirective, playback.isPlaying, playback.deliveryMode, playback.wasRecovered, playback.ownershipConflict, onDeliveryComplete]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playback.lastDirective, playback.isPlaying, playback.deliveryMode, playback.wasRecovered, playback.ownershipConflict, playback.autoplayBlocked, onDeliveryComplete]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update status when audible state changes (for connecting → speaking transition)
+  useEffect(() => {
+    const audibleState = playback.controllerState?.chunkAudibleState;
+    if (!audibleState) return;
+
+    if (audibleState === 'audible' && status === 'connecting_audio') {
+      setStatus('speaking');
+    }
+  }, [playback.controllerState?.chunkAudibleState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track completed chunks for text transcript
   useEffect(() => {
@@ -194,12 +227,14 @@ export default function DaveCoachingDelivery({
     });
   }, [playback.controllerState]);
 
-  // Update status on ownership conflict change
+  // Update status on ownership conflict / autoplay change
   useEffect(() => {
-    if (playback.ownershipConflict) {
-      setStatus('ownership_conflict');
-    }
+    if (playback.ownershipConflict) setStatus('ownership_conflict');
   }, [playback.ownershipConflict]);
+
+  useEffect(() => {
+    if (playback.autoplayBlocked) setStatus('autoplay_blocked');
+  }, [playback.autoplayBlocked]);
 
   const statusConfig = STATUS_CONFIG[status];
   const currentChunk = playback.controllerState?.dojo.chunks.find(
@@ -216,13 +251,25 @@ export default function DaveCoachingDelivery({
           status === 'interrupted' && 'bg-amber-500/5 border-amber-500/20',
           status === 'ownership_conflict' && 'bg-amber-500/5 border-amber-500/20',
           status === 'speaking' && 'bg-primary/5 border-primary/20',
+          status === 'connecting_audio' && 'bg-muted/30 border-border/40',
+          status === 'thinking' && 'bg-muted/30 border-border/40',
           status === 'voice_restored' && 'bg-green-500/5 border-green-500/20',
           status === 'recovered' && 'bg-green-500/5 border-green-500/20',
           status === 'complete' && 'bg-green-500/5 border-green-500/20',
           status === 'replaying' && 'bg-blue-500/5 border-blue-500/20',
+          status === 'autoplay_blocked' && 'bg-primary/5 border-primary/20 cursor-pointer',
           (status === 'skipped' || status === 'idle') && 'bg-muted/30 border-border/40',
-        )}>
-          <statusConfig.Icon className={cn('h-4 w-4 shrink-0', statusConfig.className)} />
+        )}
+          onClick={status === 'autoplay_blocked' ? () => playback.unlockAudio() : undefined}
+          role={status === 'autoplay_blocked' ? 'button' : undefined}
+        >
+          <statusConfig.Icon
+            className={cn(
+              'h-4 w-4 shrink-0',
+              statusConfig.className,
+              statusConfig.animate && 'animate-spin',
+            )}
+          />
           <span className={cn('text-xs font-medium', statusConfig.className)}>
             {statusConfig.label}
           </span>
@@ -250,6 +297,23 @@ export default function DaveCoachingDelivery({
         </div>
       )}
 
+      {/* Autoplay Blocked — prominent tap target */}
+      {status === 'autoplay_blocked' && (
+        <div className="flex items-center gap-2 px-3">
+          <Button
+            variant="default" size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => playback.unlockAudio()}
+          >
+            <Volume2 className="h-3.5 w-3.5" />
+            Tap to hear Dave
+          </Button>
+          <span className="text-[10px] text-muted-foreground">
+            or continue reading below
+          </span>
+        </div>
+      )}
+
       {/* Ownership Conflict Actions */}
       {status === 'ownership_conflict' && (
         <div className="flex items-center gap-2 px-3">
@@ -260,14 +324,18 @@ export default function DaveCoachingDelivery({
           >
             Take over session
           </Button>
-          <span className="text-[10px] text-muted-foreground">
-            Or continue reading in text below
-          </span>
+          <Button
+            variant="ghost" size="sm"
+            className="h-7 text-xs"
+            onClick={() => playback.degradeToText('user_chose_text_conflict')}
+          >
+            Continue in text
+          </Button>
         </div>
       )}
 
       {/* Playback Controls */}
-      {playback.controllerState && status !== 'complete' && status !== 'ownership_conflict' && (
+      {playback.controllerState && status !== 'complete' && status !== 'ownership_conflict' && status !== 'autoplay_blocked' && (
         <div className="flex items-center gap-2">
           {playback.isPlaying && (
             <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => playback.interrupt()}>
@@ -317,7 +385,7 @@ export default function DaveCoachingDelivery({
       )}
 
       {/* Text Transcript */}
-      {textChunks.length > 0 && (playback.deliveryMode === 'text_fallback' || status === 'ownership_conflict') && (
+      {textChunks.length > 0 && (playback.deliveryMode === 'text_fallback' || status === 'ownership_conflict' || status === 'autoplay_blocked') && (
         <div className="space-y-2">
           {textChunks.map((chunk) => (
             <div

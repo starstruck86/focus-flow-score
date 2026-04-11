@@ -14,6 +14,8 @@
 
 import { useRef, useCallback, useEffect, useState } from 'react';
 import type { SpeechChunk } from './conversationEngine';
+import { getInterChunkDelay } from './dojoChunkPacing';
+import { markAudioUnlocked, isAudioUnlocked } from './dojoAutoplayGate';
 import type { PlaybackState } from './playbackAdapter';
 import type {
   AudioControllerState,
@@ -103,6 +105,8 @@ export interface DojoPlaybackControls {
   restoreReason: RestoreReason;
   /** Whether another tab owns this session (for ownership conflict UX). */
   ownershipConflict: boolean;
+  /** Whether autoplay is blocked and user gesture is needed. */
+  autoplayBlocked: boolean;
 
   initialize: (dojo: PlaybackState, mode?: DeliveryMode) => void;
   startDelivery: () => void;
@@ -114,6 +118,8 @@ export interface DojoPlaybackControls {
   restoreVoice: (reason: string) => void;
   tryRecover: (sessionId: string) => boolean;
   retryOwnership: () => boolean;
+  /** User tapped to unlock audio after autoplay block. */
+  unlockAudio: () => void;
   destroy: () => void;
 }
 
@@ -126,6 +132,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const [isOwner, setIsOwner] = useState(false);
   const [ownershipConflict, setOwnershipConflict] = useState(false);
   const [restoreReason, setRestoreReason] = useState<RestoreReason>(null);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
   const ctrlRef = useRef<AudioControllerState | null>(null);
   const handleRef = useRef<TransportHandle>(createTransportHandle());
@@ -134,6 +141,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   const ownershipCleanupRef = useRef<(() => void) | null>(null);
   const visibilityCleanupRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const pacingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastChunkRoleRef = useRef<string | undefined>(undefined);
 
   // Keep ref in sync with state + track metrics
   const applyResult = useCallback((result: ControllerResult) => {
@@ -195,9 +204,24 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     }
   }, []);
 
-  // Transport callback
+  // Transport callback — with conversational pacing
   const handleTransportEvent = useCallback((result: ControllerResult) => {
     applyResult(result);
+
+    // Detect autoplay blocks from failure messages
+    if (result.directive.kind === 'no_op' || result.directive.kind === 'mode_changed') {
+      // Check if the last failure was autoplay-related
+      const failedPhase = result.state.chunkAudibleState;
+      if (failedPhase === 'failed_before_audible' && !isAudioUnlocked()) {
+        setAutoplayBlocked(true);
+      }
+    }
+
+    // Mark audio as unlocked when we first achieve audibility
+    if (result.state.chunkAudibleState === 'audible' && !isAudioUnlocked()) {
+      markAudioUnlocked();
+      setAutoplayBlocked(false);
+    }
 
     if (result.directive.kind === 'speak' || result.directive.kind === 'retry_speak') {
       const chunk = result.directive.chunk;
@@ -205,8 +229,23 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
         ? { previousText: result.directive.previousText, nextText: result.directive.nextText }
         : undefined;
 
-      speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts)
-        .then((h) => { handleRef.current = h; });
+      // Apply inter-chunk pacing delay for natural feel
+      const isFirst = result.state.completedChunkIds.size === 0;
+      const delay = getInterChunkDelay(chunk, lastChunkRoleRef.current, isFirst);
+      lastChunkRoleRef.current = chunk.role;
+
+      // Clear any previous pacing timer
+      if (pacingTimerRef.current) clearTimeout(pacingTimerRef.current);
+
+      if (delay > 150) {
+        pacingTimerRef.current = setTimeout(() => {
+          speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts)
+            .then((h) => { handleRef.current = h; });
+        }, delay);
+      } else {
+        speakChunk(chunk, result.state, config, handleRef.current, handleTransportEvent, opts)
+          .then((h) => { handleRef.current = h; });
+      }
     }
   }, [config, applyResult]);
 
@@ -429,10 +468,30 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     return false;
   }, [acquireOwnership, applyResult, wireVisibility]);
 
+  const unlockAudio = useCallback(() => {
+    markAudioUnlocked();
+    setAutoplayBlocked(false);
+    // Resume delivery if we were blocked
+    const ctrl = ctrlRef.current;
+    if (ctrl && ctrl.deliveryMode === 'text_fallback' && ctrl.restoreReason !== 'owner_conflict') {
+      applyResult(switchToVoice(ctrl, 'user_gesture_unlock'));
+      // Restart delivery from current chunk
+      const updated = ctrlRef.current;
+      if (updated) {
+        const result = resumeAfterInterruption(updated);
+        handleTransportEvent(result);
+      }
+    }
+  }, [applyResult, handleTransportEvent]);
+
   const destroy = useCallback(() => {
     if (watchdogRef.current) {
       clearInterval(watchdogRef.current);
       watchdogRef.current = null;
+    }
+    if (pacingTimerRef.current) {
+      clearTimeout(pacingTimerRef.current);
+      pacingTimerRef.current = null;
     }
     logSessionSummary(metricsRef.current);
     metricsRef.current = createMetrics();
@@ -453,6 +512,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     }
     setIsOwner(false);
     setOwnershipConflict(false);
+    setAutoplayBlocked(false);
+    lastChunkRoleRef.current = undefined;
 
     ctrlRef.current = null;
     setCtrlState(null);
@@ -500,6 +561,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     isOwner,
     restoreReason,
     ownershipConflict,
+    autoplayBlocked,
 
     initialize,
     startDelivery,
@@ -511,6 +573,7 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     restoreVoice,
     tryRecover,
     retryOwnership,
+    unlockAudio,
     destroy,
   };
 }
