@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logServiceRoleUsage, logCrossUserAccess, logValidationWarnings, logAuthMethod, logMissingUserScope } from '../_shared/securityLog.ts';
+import { logEnforcementEvent } from '../_shared/enforcementLog.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1894,7 +1895,63 @@ Deno.serve(async (req) => {
       jobMode,
       // Continuation token: set by self-invoke to bypass idempotency guard
       isContinuation,
+      // Phase 3: Protected path enforcement
+      mode,
     } = body;
+
+    // ══════════════════════════════════════════════════════
+    // PHASE 3 — Protected path enforcement (Slice 2)
+    // When mode === "protected", enforce:
+    //   1. JWT auth required (no batch-key-only)
+    //   2. userId required in body
+    //   3. resourceId required in body
+    //   4. callerUserId must match body.userId
+    // Legacy path (no mode flag) remains completely unchanged.
+    // ══════════════════════════════════════════════════════
+    const isProtectedMode = mode === 'protected';
+
+    if (isProtectedMode) {
+      const authMethod = isServiceRole ? 'x-batch-key' : (userId ? 'jwt' : 'none');
+      logEnforcementEvent('extract-tactics', 'fn:protected_path_used', { authMethod, resourceId });
+
+      // 1. Auth enforcement: require JWT-resolved user (not batch-key-only)
+      if (!userId) {
+        logEnforcementEvent('extract-tactics', 'fn:auth_enforced', { authMethod, rejected: true });
+        logEnforcementEvent('extract-tactics', 'fn:request_rejected_protected_path', { reason: 'missing_jwt_auth', authMethod });
+        return new Response(JSON.stringify({ error: 'Protected path requires JWT authentication' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 2. Required request shape
+      if (!bodyUserId) {
+        logEnforcementEvent('extract-tactics', 'fn:request_rejected_protected_path', { reason: 'missing_body_userId' });
+        return new Response(JSON.stringify({ error: 'Protected path requires userId in body' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (!resourceId) {
+        logEnforcementEvent('extract-tactics', 'fn:request_rejected_protected_path', { reason: 'missing_resourceId' });
+        return new Response(JSON.stringify({ error: 'Protected path requires resourceId' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 3. Scope enforcement: callerUserId must match body.userId
+      if (userId !== bodyUserId) {
+        logCrossUserAccess('extract-tactics', userId, bodyUserId, { resourceId, mode: 'protected' });
+        logEnforcementEvent('extract-tactics', 'fn:request_rejected_protected_path', { reason: 'user_scope_mismatch' });
+        return new Response(JSON.stringify({ error: 'User scope mismatch' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      logEnforcementEvent('extract-tactics', 'fn:scope_enforced', { callerUserId: userId, bodyUserId, resourceId });
+      logEnforcementEvent('extract-tactics', 'fn:auth_enforced', { authMethod, rejected: false });
+    } else {
+      // Legacy path — log usage for observability, no enforcement changes
+      logEnforcementEvent('extract-tactics', 'fn:legacy_path_used', { isServiceRole, hasBodyUserId: !!bodyUserId, resourceId });
+    }
 
     // Resolve userId
     if (!userId) userId = bodyUserId;
