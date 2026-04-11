@@ -11,6 +11,7 @@
  * Also supports generic "retry" — any background_jobs row in 'queued' status
  * with a known type gets dispatched to the right handler.
  */
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logServiceRoleUsage, logMissingUserScope, logCrossUserAccess, logValidationWarnings, logAuthMethod } from '../_shared/securityLog.ts';
 
 const corsHeaders = {
