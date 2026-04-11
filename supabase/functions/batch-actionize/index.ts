@@ -338,13 +338,82 @@ Deno.serve(async (req) => {
     const body = JSON.parse(bodyText);
     logValidationWarnings('batch-actionize', body, ['user_id']);
 
+    const isProtectedMode = body.mode === 'protected';
+
+    // ── Protected Path Enforcement (Phase 3, Slice 3) ──────────
+    if (isProtectedMode) {
+      logEnforcementEvent('batch-actionize', 'fn:protected_path_used', {
+        hasAuth: !!authHeader,
+        hasUserId: !!body.user_id,
+        hasBatchKey: !!req.headers.get('x-batch-key'),
+        resourceCount: Array.isArray(body.resourceIds) ? body.resourceIds.length : (body.resource_id ? 1 : 0),
+      });
+
+      // 1. Auth: require JWT — reject x-batch-key-only
+      const supabaseUser = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } },
+      );
+      const { data: claimsData, error: claimsErr } = await supabaseUser.auth.getClaims(authHeader.replace('Bearer ', ''));
+      const callerUserId = claimsData?.claims?.sub as string | undefined;
+
+      if (claimsErr || !callerUserId) {
+        logEnforcementEvent('batch-actionize', 'fn:request_rejected_protected_path', {
+          reason: 'auth_required', hasAuth: !!authHeader,
+        });
+        return new Response(JSON.stringify({ error: 'Protected path requires authenticated user' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      logEnforcementEvent('batch-actionize', 'fn:auth_enforced', { callerPresent: true });
+
+      // 2. Shape: require user_id
+      if (!body.user_id) {
+        logEnforcementEvent('batch-actionize', 'fn:request_rejected_protected_path', {
+          reason: 'missing_user_id',
+        });
+        return new Response(JSON.stringify({ error: 'Protected path requires user_id' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 3. Scope: callerUserId must match body.user_id
+      if (callerUserId !== body.user_id) {
+        logEnforcementEvent('batch-actionize', 'fn:cross_user_detected', {
+          callerPresent: true, targetPresent: true, match: false,
+        });
+        logEnforcementEvent('batch-actionize', 'fn:request_rejected_protected_path', {
+          reason: 'user_scope_mismatch',
+        });
+        return new Response(JSON.stringify({ error: 'User scope mismatch' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      logEnforcementEvent('batch-actionize', 'fn:scope_enforced', {
+        callerPresent: true, targetPresent: true, match: true,
+      });
+    }
+
+    // ── Legacy Path Telemetry ──────────────────────────────────
+    if (!isProtectedMode) {
+      logEnforcementEvent('batch-actionize', 'fn:legacy_path_used', {
+        mode: body.mode || 'standard',
+        hasAuth: !!authHeader,
+        hasBatchKey: !!req.headers.get('x-batch-key'),
+      });
+    }
+
     let userId: string;
 
     // Check for service-role invocation via x-batch-key header
     const batchKey = req.headers.get('x-batch-key');
     const isServiceRole = batchKey != null && batchKey === serviceRoleKey;
 
-    if (isServiceRole && body.user_id) {
+    if (isProtectedMode) {
+      // Protected mode: userId already validated above via JWT scope guard
+      userId = body.user_id;
+    } else if (isServiceRole && body.user_id) {
       // Service-role caller — trust body.user_id directly
       logAuthMethod('batch-actionize', 'x-batch-key', { bodyUserId: !!body.user_id });
       console.log('batch-actionize: service-role auth via x-batch-key, user_id:', body.user_id);
