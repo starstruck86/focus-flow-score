@@ -598,17 +598,35 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     setLastDirective(null);
   }, []);
 
-  // ── Watchdog: poll for hung playback every 5s ────────────────────
+  // ── Watchdog: poll for hung playback + hang detection every 5s ────
 
   useEffect(() => {
     watchdogRef.current = setInterval(() => {
       const ctrl = ctrlRef.current;
       if (!ctrl) return;
 
+      // Existing: chunk-level timeout
       const result = checkForTimeout(ctrl);
       if (result.directive.kind !== 'no_op') {
         metricsRef.current = logChunkTimedOut(metricsRef.current, ctrl.dojo.playback.currentPlayingChunkId ?? '');
         handleTransportEvent(result);
+        return;
+      }
+
+      // V3: Forward-progress hang detection
+      const hangCheck = checkForHang(reliabilityRef.current);
+      if (hangCheck.action === 'recover') {
+        reliabilityRef.current = markHung(reliabilityRef.current);
+        // Recovery cascade: if playing, timeout the chunk; if idle but delivering, force advance
+        if (ctrl.dojo.playback.currentPlayingChunkId) {
+          const chunkId = ctrl.dojo.playback.currentPlayingChunkId;
+          handleTransportEvent(onTtsFailed(ctrl, chunkId, `[hang_recovery] No progress for ${hangCheck.staleDurationMs}ms`));
+        } else if (ctrl.dojo.phase === 'delivering') {
+          // Idle during delivery = stuck. Force text fallback for current chunk.
+          handleTransportEvent(switchToTextFallback(ctrl, `hang_recovery: ${hangCheck.staleDurationMs}ms stale`));
+        }
+      } else if (hangCheck.action === 'warn') {
+        reliabilityRef.current = markHangWarning(reliabilityRef.current);
       }
     }, 5_000);
 
