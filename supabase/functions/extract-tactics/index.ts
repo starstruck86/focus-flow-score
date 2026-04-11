@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logServiceRoleUsage, logCrossUserAccess, logValidationWarnings, logAuthMethod, logMissingUserScope } from '../_shared/securityLog.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1869,7 +1870,9 @@ Deno.serve(async (req) => {
 
     if (isServiceRole) {
       // Service role — userId must come from body
+      logAuthMethod('extract-tactics', 'x-batch-key');
     } else {
+      logAuthMethod('extract-tactics', 'jwt');
       const userClient = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: authHeader } },
       });
@@ -1883,6 +1886,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
+    logValidationWarnings('extract-tactics', body, ['resourceId']);
     let { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist,
       // Chunked extraction params
       contentSliceStart, contentSliceEnd, batchIndex, batchTotal, skipPersistResourceUpdate,
@@ -1895,13 +1899,15 @@ Deno.serve(async (req) => {
     // Resolve userId
     if (!userId) userId = bodyUserId;
     if (!userId) {
+      logMissingUserScope('extract-tactics', { hasBody: !!body, resourceId });
       return new Response(JSON.stringify({ error: 'userId required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // ── AUTO-FETCH: if resourceId provided but no content, fetch from DB ──
+    // Log service-role usage with resolved scope
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    logServiceRoleUsage('extract-tactics', 'single_user', { resourceId, isServiceRole });
     let fullContentLength = 0; // track total resource length for density calc
     if (resourceId && (!content || content.length < 100)) {
       console.log(`[extract-tactics] No content in body, fetching resource ${resourceId} from DB`);
