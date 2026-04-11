@@ -37,7 +37,7 @@ export function installJobObserver(): (() => void) {
 
         // Status changed
         if (prev.status !== job.status) {
-          const eventType = mapStatusToEventType(prev.status, job.status);
+          const eventType = mapStatusToEventType(prev.status, job.status) as import('./telemetry').TelemetryEventType;
           recordTelemetryEvent(eventType, {
             jobId: job.id,
             type: job.type,
