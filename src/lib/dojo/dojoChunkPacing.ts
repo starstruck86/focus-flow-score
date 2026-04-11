@@ -27,17 +27,14 @@ export function getInterChunkDelay(
   // Before world-class response — brief pause for emphasis
   if (role === 'worldClassResponse') return 450;
 
-  // Delta note — reflective pause
-  if (role === 'deltaNote') return 400;
-
   // Practice cue should feel punchy and directive
   if (role === 'practiceCue') return 250;
 
-  // Teaching note — slight pause
-  if (role === 'teachingNote') return 350;
-
   // Improved version — moderate pause
   if (role === 'improvedVersion') return 350;
+
+  // Feedback — standard coaching beat
+  if (role === 'feedback') return 300;
 
   // Default natural pause
   return 300;
