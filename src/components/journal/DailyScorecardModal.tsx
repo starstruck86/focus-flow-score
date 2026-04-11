@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import { safeInternalInvoke } from '@/lib/observability/safeInternalInvoke';
 import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from 'framer-motion';
 import {
   Phone,
