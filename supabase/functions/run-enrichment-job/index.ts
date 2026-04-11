@@ -260,11 +260,17 @@ Deno.serve(async (req: Request) => {
         metadata: { ...meta, resume_from_index: i, success_count: successCount, failed_count: failedCount },
       }).eq("id", jobId);
 
-      // Self-continue (continuations always use service-role, no mode flag — legacy path)
+      // Self-continue via explicit internal continuation lane
       try {
         const continueUrl = `${supabaseUrl}/functions/v1/run-enrichment-job`;
         const controller = new AbortController();
         setTimeout(() => controller.abort(), 5000);
+
+        logEnforcementEvent('run-enrichment-job', 'fn:continuation_lane_used' as any, {
+          jobId,
+          resumeFromIndex: i,
+          totalResources: resourceIds.length,
+        });
 
         await fetch(continueUrl, {
           method: "POST",
@@ -272,7 +278,7 @@ Deno.serve(async (req: Request) => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${serviceKey}`,
           },
-          body: JSON.stringify({ job_id: jobId, is_continuation: true }),
+          body: JSON.stringify({ job_id: jobId, is_continuation: true, mode: "internal_continuation" }),
           signal: controller.signal,
         }).catch(() => {});
       } catch {
