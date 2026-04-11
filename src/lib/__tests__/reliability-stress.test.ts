@@ -102,7 +102,7 @@ describe('Snapshot resilience', () => {
     localStorage.setItem(`dojo_snap_${SESSION_ID}`, '{"version":3,"sessionId":"x"}');
     const result = loadSnapshot(SESSION_ID);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('corrupt');
+    expect(!result.ok && 'reason' in result && result.reason).toBe('corrupt');
   });
 
   it('rejects version-mismatched snapshots', () => {
@@ -114,7 +114,7 @@ describe('Snapshot resilience', () => {
     }));
     const result = loadSnapshot(SESSION_ID);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('version_mismatch');
+    expect(!result.ok && 'reason' in result && result.reason).toBe('version_mismatch');
   });
 
   it('rejects stale snapshots (>2 hours)', () => {
@@ -139,7 +139,7 @@ describe('Snapshot resilience', () => {
     }));
     const result = loadSnapshot(SESSION_ID);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('stale');
+    expect(!result.ok && 'reason' in result && result.reason).toBe('stale');
   });
 
   it('handles localStorage quota exhaustion gracefully', () => {
@@ -167,7 +167,7 @@ describe('Snapshot resilience', () => {
     localStorage.setItem(`dojo_snap_${SESSION_ID}`, 'not json at all{{{');
     const result = loadSnapshot(SESSION_ID);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('corrupt');
+    expect(!result.ok && 'reason' in result && result.reason).toBe('corrupt');
   });
 });
 
