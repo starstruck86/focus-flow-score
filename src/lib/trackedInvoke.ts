@@ -14,6 +14,7 @@ import { createLogger } from './logger';
 import { checkDriftBlock, driftErrorMessage } from './functionGroupDrift';
 import { withRetry, withTimeout, type RetryOptions } from './reliability';
 import { recordFnInvocation } from './observability/enrichObserver';
+import { recordTelemetryEvent } from './observability/telemetry';
 
 const logger = createLogger('TrackedInvoke');
 
