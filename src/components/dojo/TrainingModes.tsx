@@ -8,14 +8,17 @@ import type { SkillStat } from '@/lib/dojo/scenarios';
 import { MockCallSimulator } from '@/components/coach/MockCallSimulator';
 import { ObjectionDrillReps } from '@/components/coach/ObjectionDrillReps';
 
+import type { RecommendedMode } from '@/lib/learning/practiceMapping';
+
 type InlineMode = 'mock-call' | 'objection-reps' | null;
 
 interface TrainingModesProps {
   skillStats: SkillStat[];
   onStartAutopilot: () => void;
+  highlightMode?: RecommendedMode | null;
 }
 
-export function TrainingModes({ skillStats, onStartAutopilot }: TrainingModesProps) {
+export function TrainingModes({ skillStats, onStartAutopilot, highlightMode }: TrainingModesProps) {
   const navigate = useNavigate();
   const [inlineMode, setInlineMode] = useState<InlineMode>(null);
 
