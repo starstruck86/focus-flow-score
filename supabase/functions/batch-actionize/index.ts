@@ -754,33 +754,64 @@ Deno.serve(async (req) => {
           try {
             const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-            // Chain-awareness: log downstream legacy call (do NOT propagate mode:"protected")
-            logEnforcementEvent('batch-actionize', 'fn:downstream_legacy_call' as any, {
-              target: 'extract-tactics',
-              modePropagated: false,
-              resourceCount: 1,
-              parentMode: isProtectedMode ? 'protected' : (body.mode || 'standard'),
-            });
+            // ── Slice 4: Controlled downstream propagation ─────────
+            // Safe condition: protected mode + single-resource execution only
+            const shouldPropagate = isProtectedMode && !!singleResourceId;
+
+            if (shouldPropagate) {
+              logEnforcementEvent('batch-actionize', 'fn:downstream_protected_call' as any, {
+                target: 'extract-tactics',
+                reason: 'single_resource_protected_rerun',
+                resourceCount: 1,
+              });
+            } else if (isProtectedMode) {
+              // Protected parent but propagation skipped (multi-resource or batch)
+              logEnforcementEvent('batch-actionize', 'fn:downstream_propagation_skipped' as any, {
+                target: 'extract-tactics',
+                reason: singleResourceId ? 'unknown' : 'multi_resource_batch',
+                resourceCount: resourceQueue.length,
+              });
+            } else {
+              logEnforcementEvent('batch-actionize', 'fn:downstream_legacy_call' as any, {
+                target: 'extract-tactics',
+                modePropagated: false,
+                resourceCount: 1,
+                parentMode: body.mode || 'standard',
+              });
+            }
+
+            // Build downstream headers and body based on propagation decision
+            const downstreamHeaders: Record<string, string> = {
+              'Content-Type': 'application/json',
+            };
+            const downstreamBody: Record<string, unknown> = {
+              title: resource.title,
+              content: content.slice(0, resource.resource_type === 'transcript' ? 60000 : 12000),
+              description: resource.description,
+              tags: resource.tags,
+              resourceType: resource.resource_type,
+              resourceId: resource.id,
+              userId,
+              persist: true,
+              strict: strictMode,
+            };
+
+            if (shouldPropagate) {
+              // Propagated: forward original user JWT so extract-tactics can validate
+              downstreamHeaders['Authorization'] = authHeader!;
+              downstreamBody.mode = 'protected';
+            } else {
+              // Legacy: service-role auth as before
+              downstreamHeaders['Authorization'] = `Bearer ${serviceRoleKey}`;
+              downstreamHeaders['x-batch-key'] = serviceRoleKey;
+            }
 
             const extractRes = await fetch(
               `${Deno.env.get('SUPABASE_URL')}/functions/v1/extract-tactics`,
               {
                 method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${serviceRoleKey}`,
-                  'x-batch-key': serviceRoleKey,
-                },
-                body: JSON.stringify({
-                  title: resource.title, content: content.slice(0, resource.resource_type === 'transcript' ? 60000 : 12000),
-                  description: resource.description, tags: resource.tags,
-                  resourceType: resource.resource_type,
-                  resourceId: resource.id,
-                  userId,
-                  persist: true,
-                  strict: strictMode,
-                  // NOTE: intentionally NOT passing mode:"protected" downstream (Slice 3 rule)
-                }),
+                headers: downstreamHeaders,
+                body: JSON.stringify(downstreamBody),
               }
             );
 
