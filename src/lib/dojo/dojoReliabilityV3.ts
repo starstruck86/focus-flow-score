@@ -262,7 +262,10 @@ export function logRecoveryAttempt(
 
 export function resolveRecoveryAttempt(m: ReliabilityMetrics, succeeded: boolean): ReliabilityMetrics {
   const attempts = [...m.recoveryAttempts];
-  const lastPending = attempts.findLastIndex(a => a.succeeded === null);
+  let lastPending = -1;
+  for (let i = attempts.length - 1; i >= 0; i--) {
+    if (attempts[i].succeeded === null) { lastPending = i; break; }
+  }
   if (lastPending >= 0) {
     attempts[lastPending] = { ...attempts[lastPending], succeeded };
   }
