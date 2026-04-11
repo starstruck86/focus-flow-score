@@ -623,6 +623,7 @@ export async function extractKnowledgeLLMFallback(
         resourceType: source.resourceType,
         deepMode: (source as any).deepMode ?? false,
         persist: true,
+        mode: 'protected',
       },
       componentName: 'KnowledgeExtraction',
       timeoutMs: isTranscriptResource ? 120_000 : 60_000,
