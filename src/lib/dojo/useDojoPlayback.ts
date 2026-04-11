@@ -359,7 +359,8 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
       directive: { kind: 'speak', chunk, ...context },
     });
 
-    speakChunk(chunk, updated, config, handleRef.current, handleTransportEvent, context)
+    const getCtrl = () => ctrlRef.current;
+    speakChunk(chunk, updated, config, handleRef.current, handleTransportEvent, context, getCtrl)
       .then((h) => { handleRef.current = h; });
   }, [config, applyResult, handleTransportEvent]);
 
@@ -381,13 +382,15 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
     applyResult(result);
 
     if (result.directive.kind === 'speak') {
+      const getCtrl = () => ctrlRef.current;
       speakChunk(
         result.directive.chunk,
         result.state,
         config,
         handleRef.current,
         handleTransportEvent,
-        { previousText: result.directive.previousText, nextText: result.directive.nextText }
+        { previousText: result.directive.previousText, nextText: result.directive.nextText },
+        getCtrl
       ).then((h) => { handleRef.current = h; });
     }
   }, [config, applyResult, handleTransportEvent]);
