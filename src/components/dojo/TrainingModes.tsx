@@ -1,9 +1,14 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
-import { Play, Swords, MessageSquare, Eye, Compass, ShieldCheck, Target, Mic } from 'lucide-react';
+import { Play, Swords, MessageSquare, Eye, Compass, ShieldCheck, Target, Mic, Phone, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
 import type { SkillStat } from '@/lib/dojo/scenarios';
+import { MockCallSimulator } from '@/components/coach/MockCallSimulator';
+import { ObjectionDrillReps } from '@/components/coach/ObjectionDrillReps';
+
+type InlineMode = 'mock-call' | 'objection-reps' | null;
 
 interface TrainingModesProps {
   skillStats: SkillStat[];
@@ -12,6 +17,11 @@ interface TrainingModesProps {
 
 export function TrainingModes({ skillStats, onStartAutopilot }: TrainingModesProps) {
   const navigate = useNavigate();
+  const [inlineMode, setInlineMode] = useState<InlineMode>(null);
+
+  const toggleInline = (mode: InlineMode) => {
+    setInlineMode(prev => prev === mode ? null : mode);
+  };
 
   const startCustom = (skill: SkillFocus) => {
     navigate('/dojo/session', { state: { skillFocus: skill, mode: 'custom' } });
@@ -32,7 +42,7 @@ export function TrainingModes({ skillStats, onStartAutopilot }: TrainingModesPro
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
           Training Modes
         </p>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <ModeCard
             icon={Swords}
             title="Drill"
@@ -52,6 +62,20 @@ export function TrainingModes({ skillStats, onStartAutopilot }: TrainingModesPro
             onClick={() => startReview('objection_handling')}
           />
           <ModeCard
+            icon={Phone}
+            title="Mock Call"
+            description="Full call simulation"
+            active={inlineMode === 'mock-call'}
+            onClick={() => toggleInline('mock-call')}
+          />
+          <ModeCard
+            icon={Shield}
+            title="Objection Reps"
+            description="Rapid-fire objections"
+            active={inlineMode === 'objection-reps'}
+            onClick={() => toggleInline('objection-reps')}
+          />
+          <ModeCard
             icon={Compass}
             title="Autopilot"
             description="Dave picks your drill"
@@ -59,6 +83,18 @@ export function TrainingModes({ skillStats, onStartAutopilot }: TrainingModesPro
           />
         </div>
       </div>
+
+      {/* Inline practice panels */}
+      {inlineMode === 'mock-call' && (
+        <div className="rounded-lg border border-border/60 bg-card p-2">
+          <MockCallSimulator />
+        </div>
+      )}
+      {inlineMode === 'objection-reps' && (
+        <div className="rounded-lg border border-border/60 bg-card p-2">
+          <ObjectionDrillReps />
+        </div>
+      )}
 
       {/* Skill picker */}
       <div>
@@ -107,18 +143,22 @@ function SkillIcon({ skill }: { skill: SkillFocus }) {
   );
 }
 
-function ModeCard({ icon: Icon, title, description, onClick }: {
+function ModeCard({ icon: Icon, title, description, onClick, active }: {
   icon: React.ElementType;
   title: string;
   description: string;
   onClick: () => void;
+  active?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center gap-1.5 p-3 rounded-lg border border-border/60 bg-card hover:bg-accent/50 transition-colors text-center"
+      className={cn(
+        "flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-colors text-center",
+        active ? "border-primary bg-primary/5" : "border-border/60 bg-card hover:bg-accent/50"
+      )}
     >
-      <Icon className="h-5 w-5 text-primary" />
+      <Icon className={cn("h-5 w-5", active ? "text-primary" : "text-primary")} />
       <p className="text-sm font-medium">{title}</p>
       <p className="text-[10px] text-muted-foreground">{description}</p>
     </button>
