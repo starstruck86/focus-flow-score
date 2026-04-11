@@ -132,8 +132,27 @@ Deno.serve(async (req: Request) => {
       });
     }
   } else {
-    // ── Legacy path ──
-    // If this is a continuation arriving without explicit internal mode, log as fallback
+    // ── Legacy path: classify and fence ──
+    // No behavior change — classification and telemetry only.
+    const legacyClass = isContinuation
+      ? 'legacy_internal_fallback'      // continuation without explicit internal mode
+      : authMethod === 'jwt'
+        ? 'legacy_user_path'            // user-driven but without mode="protected"
+        : authMethod === 'service-role-continuation'
+          ? 'legacy_service_role_entry'  // service-role initial entry (not continuation)
+          : 'legacy_unknown_path';       // no auth, no mode — unexpected
+
+    logEnforcementEvent('run-enrichment-job', 'fn:legacy_path_classified' as any, {
+      legacyClass,
+      authMethod,
+      isContinuation,
+      jobId,
+      hasProtectedAlternative: !isContinuation, // user-driven has protected; continuation has internal
+      hasInternalAlternative: isContinuation,
+      migrationCandidate: legacyClass === 'legacy_user_path' || legacyClass === 'legacy_internal_fallback',
+    });
+
+    // Preserve original telemetry for backwards compatibility
     if (isContinuation) {
       logEnforcementEvent('run-enrichment-job', 'fn:internal_fallback_used' as any, {
         authMethod,
