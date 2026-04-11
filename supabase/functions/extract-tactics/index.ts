@@ -1971,15 +1971,38 @@ Deno.serve(async (req) => {
         migrationCandidate: legacyClass === 'legacy_user_path',
       });
 
-      // ── Soft deprecation: legacy_user_path only ──
+      // ── Soft enforcement: legacy_user_path (Phase E, Slice 7) ──
+      // Feature flag: set to false to disable all soft enforcement signals.
+      const ENABLE_LEGACY_USER_SOFT_ENFORCEMENT = true;
+
       if (legacyClass === 'legacy_user_path') {
-        logEnforcementEvent('extract-tactics', 'fn:legacy_user_path_deprecation_warning' as any, {
-          pathClass: 'legacy_user_path',
-          authMethod: 'jwt',
-          protectedAlternativeExists: true,
-          migrationHint: 'Add mode: "protected" to request body',
-          resourceId,
-        });
+        if (ENABLE_LEGACY_USER_SOFT_ENFORCEMENT) {
+          // Escalated warn-level telemetry with enriched context
+          console.warn(JSON.stringify({
+            _type: 'fn:legacy_user_path_deprecation_warning',
+            _phase: 3,
+            _severity: 'warn',
+            functionName: 'extract-tactics',
+            ts: new Date().toISOString(),
+            pathClass: 'legacy_user_path',
+            authMethod: 'jwt',
+            hasProtectedAlternative: true,
+            migrationHint: 'use mode: "protected"',
+            resourceId,
+            userAgent: req.headers.get('user-agent')?.slice(0, 120) || 'unknown',
+          }));
+          // Flag for response header injection
+          (req as any).__legacySoftEnforce = true;
+        } else {
+          // Original deprecation warning (flag off)
+          logEnforcementEvent('extract-tactics', 'fn:legacy_user_path_deprecation_warning' as any, {
+            pathClass: 'legacy_user_path',
+            authMethod: 'jwt',
+            protectedAlternativeExists: true,
+            migrationHint: 'Add mode: "protected" to request body',
+            resourceId,
+          });
+        }
       }
 
       // Preserve original telemetry for backwards compatibility
@@ -2817,8 +2840,14 @@ Deno.serve(async (req) => {
       } : null,
     };
 
+    // Phase E, Slice 7: inject deprecation header for legacy_user_path
+    const responseHeaders: Record<string, string> = { ...corsHeaders, 'Content-Type': 'application/json' };
+    if ((req as any).__legacySoftEnforce) {
+      responseHeaders['X-Deprecation-Warning'] = 'legacy_user_path; use mode="protected"';
+    }
+
     return new Response(JSON.stringify(responsePayload), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: responseHeaders,
     });
   } catch (error) {
     console.error('extract-tactics error:', error);
