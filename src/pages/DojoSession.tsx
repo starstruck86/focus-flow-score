@@ -344,7 +344,7 @@ export default function DojoSession() {
 
           {phase === 'feedback' && currentResult && (
             <motion.div key="feedback" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-              <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} onRetry={handleStartRetry} onNextRep={handleNextRep} />
             </motion.div>
           )}
 
@@ -381,7 +381,7 @@ export default function DojoSession() {
         {/* ── Feedback for Roleplay / Review (non-drill) ── */}
         {sessionType !== 'drill' && phase === 'feedback' && currentResult && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} onRetry={handleStartRetry} onNextRep={handleNextRep} />
           </motion.div>
         )}
       </div>
@@ -794,7 +794,7 @@ function FeedbackView({
 
       {/* ── Session Feedback Loop ── */}
       <SessionFeedbackCard
-        skillFocus={currentResult.topMistake ? currentResult.topMistake as any : (scenario?.skillFocus || 'objection_handling')}
+        skillFocus={skillFocus}
         score={currentResult.score}
         topMistake={currentResult.topMistake}
         focusPattern={activeFocus}
