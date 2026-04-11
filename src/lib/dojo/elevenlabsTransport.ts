@@ -45,6 +45,8 @@ const DEFAULT_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'; // George
 
 const TRANSPORT_MAX_RETRIES = 2;
 const TRANSPORT_BACKOFF_BASE_MS = 500;
+/** Hard timeout per fetch attempt — prevents hanging requests from blocking the session. */
+const FETCH_TIMEOUT_MS = 25_000;
 
 // ── Failure phases (for debugging/analytics) ───────────────────────
 
@@ -140,19 +142,29 @@ export async function speakChunk(
       if (options?.previousText) body.previous_text = options.previousText;
       if (options?.nextText) body.next_text = options.nextText;
 
-      const response = await fetch(
-        `${config.supabaseUrl}/functions/v1/elevenlabs-tts-stream`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: config.supabaseAnonKey,
-            Authorization: `Bearer ${config.supabaseAnonKey}`,
-          },
-          body: JSON.stringify(body),
-          signal: abortController.signal,
-        }
-      );
+      // Hard timeout per attempt: abort if fetch hangs
+      const timeoutId = setTimeout(() => {
+        if (!abortController.signal.aborted) abortController.abort();
+      }, FETCH_TIMEOUT_MS);
+
+      let response: Response;
+      try {
+        response = await fetch(
+          `${config.supabaseUrl}/functions/v1/elevenlabs-tts-stream`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: config.supabaseAnonKey,
+              Authorization: `Bearer ${config.supabaseAnonKey}`,
+            },
+            body: JSON.stringify(body),
+            signal: abortController.signal,
+          }
+        );
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         failurePhase = 'during_response';
