@@ -1,7 +1,11 @@
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { initCrashSentinel } from "./lib/crashSentinel";
 import App from "./App.tsx";
 import "./index.css";
+
+// Initialize crash sentinel BEFORE React renders
+initCrashSentinel();
 
 console.log('[main] App module loaded successfully');
 
