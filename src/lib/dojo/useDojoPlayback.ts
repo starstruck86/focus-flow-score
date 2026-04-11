@@ -379,14 +379,17 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
   }, [config, applyResult, handleTransportEvent]);
 
   const interrupt = useCallback(() => {
+    if (!throttleAction()) return;
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     handleRef.current = stopPlayback(handleRef.current);
+    if (pacingTimerRef.current) { clearTimeout(pacingTimerRef.current); pacingTimerRef.current = null; }
     metricsRef.current = logInterruption(metricsRef.current);
     applyResult(onUserInterrupted(ctrl));
-  }, [applyResult]);
+  }, [applyResult, throttleAction]);
 
   const replay = useCallback(() => {
+    if (!throttleAction()) return;
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     const result = onUserRequestedReplay(ctrl);
@@ -407,17 +410,19 @@ export function useDojoPlayback(config: TransportConfig): DojoPlaybackControls {
         getCtrl
       ).then((h) => { handleRef.current = h; });
     }
-  }, [config, applyResult, handleTransportEvent]);
+  }, [config, applyResult, handleTransportEvent, throttleAction]);
 
   const skip = useCallback(() => {
+    if (!throttleAction()) return;
     const ctrl = ctrlRef.current;
     if (!ctrl) return;
     handleRef.current = stopPlayback(handleRef.current);
+    if (pacingTimerRef.current) { clearTimeout(pacingTimerRef.current); pacingTimerRef.current = null; }
     const chunkId = ctrl.dojo.playback.currentPlayingChunkId ?? ctrl.dojo.chunks[ctrl.dojo.currentChunkIndex]?.id;
     if (chunkId) metricsRef.current = logSkip(metricsRef.current, chunkId);
     const result = onUserRequestedSkip(ctrl);
     handleTransportEvent(result);
-  }, [handleTransportEvent]);
+  }, [handleTransportEvent, throttleAction]);
 
   const resumeDelivery = useCallback(() => {
     const ctrl = ctrlRef.current;
