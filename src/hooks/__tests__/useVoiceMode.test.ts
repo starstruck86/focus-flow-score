@@ -124,7 +124,7 @@ describe('abort controller isolation (design verification)', () => {
 
 // ── Playback timeout behavior ────────────────────────────────────────
 
-describe('playback timeout design', () => {
+describe('playback timeout and pause design', () => {
   it('settle function prevents double resolution', () => {
     let settleCount = 0;
     let settled = false;
@@ -134,11 +134,46 @@ describe('playback timeout design', () => {
       settleCount++;
     };
 
-    settle(); // first call
-    settle(); // should be no-op
-    settle(); // should be no-op
+    settle();
+    settle();
+    settle();
 
     expect(settleCount).toBe(1);
+  });
+
+  it('external pause resolves before timeout fires', () => {
+    // Simulates the design: onpause settles before the 120s timeout
+    let settled = false;
+    let resolvedBy: string | null = null;
+
+    const settle = (source: string) => {
+      if (settled) return;
+      settled = true;
+      resolvedBy = source;
+    };
+
+    // Simulate: timeout is set for 120s, but pause fires immediately
+    settle('pause'); // external pause fires first
+    settle('timeout'); // timeout fires later — should be no-op
+
+    expect(resolvedBy).toBe('pause');
+  });
+
+  it('timeout fires if no pause or ended event', () => {
+    let settled = false;
+    let resolvedBy: string | null = null;
+
+    const settle = (source: string) => {
+      if (settled) return;
+      settled = true;
+      resolvedBy = source;
+    };
+
+    // Only timeout fires
+    settle('timeout');
+    settle('ended'); // too late
+
+    expect(resolvedBy).toBe('timeout');
   });
 });
 
