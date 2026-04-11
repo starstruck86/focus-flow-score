@@ -4,6 +4,8 @@
  * This module provides wrapper functions that record telemetry events
  * before/after existing enrichment calls. It does NOT replace any existing functions.
  *
+ * IMPORTANT: Telemetry is session-local, in-memory, non-persistent, best-effort.
+ *
  * Usage: import these wrappers in places that dispatch enrichment work.
  * Or call `recordEnrichmentEvent()` directly from existing code paths.
  */
@@ -53,7 +55,8 @@ export function recordEnrichmentEvent(
 /** Record an edge function invocation event. Never throws. */
 export function recordFnInvocation(params: {
   functionName: string;
-  authenticated: boolean;
+  /** Only set if auth status is explicitly known */
+  authenticated?: boolean;
   serviceRole?: boolean;
   outcome: 'success' | 'error' | 'timeout';
   statusCode?: number;
@@ -65,8 +68,8 @@ export function recordFnInvocation(params: {
     const type: TelemetryEventType = params.outcome === 'success' ? 'fn:result' : 'fn:error';
     recordTelemetryEvent(type, {
       functionName: params.functionName,
-      authenticated: params.authenticated,
-      serviceRole: params.serviceRole ?? false,
+      ...(params.authenticated !== undefined ? { authenticated: params.authenticated } : {}),
+      ...(params.serviceRole ? { serviceRole: true } : {}),
       outcome: params.outcome,
       statusCode: params.statusCode,
       durationMs: params.durationMs,
