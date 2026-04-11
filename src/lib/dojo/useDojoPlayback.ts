@@ -12,7 +12,7 @@
  * Scoped to Sales Dojo only. Not a generic voice agent hook.
  */
 
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import type { SpeechChunk } from './conversationEngine';
 import { getInterChunkDelay } from './dojoChunkPacing';
 import { markAudioUnlocked, isAudioUnlocked } from './dojoAutoplayGate';
@@ -91,6 +91,25 @@ import {
   logSessionSummary,
   type DojoAudioMetrics,
 } from './dojoAudioAnalytics';
+import {
+  createReliabilityMetrics,
+  onForwardProgress,
+  onFailure as onReliabilityFailure,
+  startAudibleTracking,
+  confirmAudible,
+  finalizeAudible,
+  checkForHang,
+  armHangDetector,
+  disarmHangDetector,
+  markHangWarning,
+  markHung,
+  logRecoveryAttempt,
+  resolveRecoveryAttempt,
+  summarizeReliability,
+  type ReliabilityMetrics,
+  type ReliabilitySummary,
+  type SessionHealth,
+} from './dojoReliabilityV3';
 
 // ── Hook return type ───────────────────────────────────────────────
 
