@@ -394,6 +394,9 @@ Deno.serve(async (req) => {
       logEnforcementEvent('batch-actionize', 'fn:scope_enforced', {
         callerPresent: true, targetPresent: true, match: true,
       });
+
+      // Phase D, Slice 6: Hoist user-scoped client for selective reads
+      supabaseUserScoped = supabaseUser;
     }
 
     // ── Legacy Path Telemetry ──────────────────────────────────
