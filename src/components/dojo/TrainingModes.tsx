@@ -150,22 +150,25 @@ function SkillIcon({ skill }: { skill: SkillFocus }) {
   );
 }
 
-function ModeCard({ icon: Icon, title, description, onClick, active }: {
+function ModeCard({ icon: Icon, title, description, onClick, active, highlight }: {
   icon: React.ElementType;
   title: string;
   description: string;
   onClick: () => void;
   active?: boolean;
+  highlight?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       className={cn(
         "flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-colors text-center",
-        active ? "border-primary bg-primary/5" : "border-border/60 bg-card hover:bg-accent/50"
+        active ? "border-primary bg-primary/5" :
+        highlight ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30" :
+        "border-border/60 bg-card hover:bg-accent/50"
       )}
     >
-      <Icon className={cn("h-5 w-5", active ? "text-primary" : "text-primary")} />
+      <Icon className={cn("h-5 w-5", active || highlight ? "text-primary" : "text-primary")} />
       <p className="text-sm font-medium">{title}</p>
       <p className="text-[10px] text-muted-foreground">{description}</p>
     </button>
