@@ -10,6 +10,7 @@ export interface ExtractedScenario {
   objection: string;
   difficulty: 'foundational' | 'intermediate' | 'advanced';
   sourceExcerpt: string;
+  repResponse: string;
   coachingHint: string;
 }
 
@@ -18,6 +19,7 @@ export interface TranscriptOrigin {
   transcriptId: string;
   transcriptTitle: string;
   sourceExcerpt: string;
+  repResponse: string;
   coachingHint: string;
 }
 

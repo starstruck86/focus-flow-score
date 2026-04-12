@@ -33,7 +33,8 @@ Each scenario must include:
 - context: 1-2 sentences describing the situation with relevant business context
 - objection: the exact moment the rep needs to respond — should feel like something a buyer would actually say
 - difficulty: MUST be one of: ${VALID_DIFFICULTIES.join(", ")}
-- sourceExcerpt: a real quote from the BUYER (not the rep) that reveals the moment worth practicing. Quote the buyer's words that the rep failed to handle well.
+- sourceExcerpt: a real quote from the BUYER (not the rep) that reveals the moment worth practicing
+- repResponse: the rep's ACTUAL live response to this moment — quote what they really said (1-4 sentences, verbatim from transcript). This is the baseline we measure improvement against. If the rep dodged or gave multiple weak responses, quote the first substantive attempt. If the rep said nothing useful, quote their non-answer.
 - coachingHint: one sentence — what the rep should do differently (not the full answer)
 
 DIFFICULTY CALIBRATION:
@@ -122,10 +123,11 @@ ${transcript.slice(0, 30000)}
                         context: { type: "string", description: "1-2 sentences of business context" },
                         objection: { type: "string", description: "The exact buyer moment the rep must respond to" },
                         difficulty: { type: "string", enum: [...VALID_DIFFICULTIES] },
-                        sourceExcerpt: { type: "string", description: "Real quote from the transcript" },
+                        sourceExcerpt: { type: "string", description: "Real quote from the BUYER in the transcript" },
+                        repResponse: { type: "string", description: "The rep's actual live response to this moment — quote what they actually said (1-4 sentences, verbatim from transcript). This is used as the baseline for improvement scoring." },
                         coachingHint: { type: "string", description: "One sentence: what the rep should do differently" },
                       },
-                      required: ["title", "skillFocus", "context", "objection", "difficulty", "sourceExcerpt", "coachingHint"],
+                      required: ["title", "skillFocus", "context", "objection", "difficulty", "sourceExcerpt", "repResponse", "coachingHint"],
                       additionalProperties: false,
                     },
                     minItems: 3,
