@@ -13,6 +13,7 @@
  * 6. Set difficulty (phase + performance)
  * 7. Set retry strategy (adaptive)
  * 8. Enforce transcript cap
+ * 9. V4: Attach pressure profiles to scenarios
  */
 
 import type { SkillFocus, DojoScenario } from '../scenarios';
@@ -22,6 +23,9 @@ import type { DayAnchor } from './dayAnchors';
 import { getAnchorForDate, getAnchorDef } from './dayAnchors';
 import type { TrainingBlock, BlockPhase } from './blockManager';
 import { getFamiliesForAnchor, type ScenarioFamily } from './scenarioFamilies';
+import type { PressureProfile } from '../v4/pressureModel';
+import { PRESSURE_NONE } from '../v4/pressureModel';
+import { selectPressureProfile } from '../v4/pressureSelectors';
 
 // ── DailyAssignment — the contract ────────────────────────────────
 
@@ -41,12 +45,16 @@ export interface DailyAssignment {
   scenarioFamilyId: string | null;
   reason: string;
   source: 'weakness' | 'coverage' | 'transcript' | 'progression' | 'benchmark';
+  // V4 pressure
+  pressureExpected: boolean;
+  pressureLabel: string | null;
 }
 
 export interface ScenarioSpec {
   scenario: DojoScenario;
   purpose: 'direct_application' | 'variation' | 'transcript_origin' | 'pressure' | 'benchmark' | 'blended';
   familyId?: string;
+  pressure?: PressureProfile;
 }
 
 // ── Engine Input ──────────────────────────────────────────────────
