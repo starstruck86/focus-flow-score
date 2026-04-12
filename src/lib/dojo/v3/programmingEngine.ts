@@ -27,6 +27,8 @@ import type { PressureProfile } from '../v4/pressureModel';
 import { PRESSURE_NONE } from '../v4/pressureModel';
 import { selectPressureProfile } from '../v4/pressureSelectors';
 import { getArcsForStage, type SimulationArc } from '../v5/simulationArcs';
+import type { MultiThreadContext } from '../v6/multiThreadTypes';
+import { shouldInjectMultiThread, generateMultiThreadContext } from '../v6/multiThreadSelector';
 
 // ── DailyAssignment — the contract ────────────────────────────────
 
