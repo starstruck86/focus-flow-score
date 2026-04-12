@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
@@ -9,13 +8,19 @@ import { useCourses, useUserProgress } from '@/lib/learning/hooks';
 import type { CourseWithModules, LearningProgress } from '@/lib/learning/types';
 import { useMemo } from 'react';
 import { useDailyKI } from '@/hooks/useDailyKI';
+import { useLearnLoop } from '@/hooks/useLearnLoop';
 import { DailyKICard } from '@/components/learn/DailyKICard';
+import { TodaysMentalModel } from '@/components/learn/TodaysMentalModel';
+import { LastRepInsights } from '@/components/learn/LastRepInsights';
+import { ReinforcementQueue } from '@/components/learn/ReinforcementQueue';
+import { CourseCard } from '@/components/learn/CourseCard';
 
 export default function Learn() {
   const navigate = useNavigate();
   const { data: courses, isLoading } = useCourses();
   const { data: progress } = useUserProgress();
   const { data: dailyKI } = useDailyKI();
+  const { data: learnLoop } = useLearnLoop();
 
   const progressMap = useMemo(() => {
     const map: Record<string, LearningProgress> = {};
@@ -23,7 +28,6 @@ export default function Learn() {
     return map;
   }, [progress]);
 
-  // Compute topic mastery
   const topicMastery = useMemo(() => {
     if (!courses || !progress) return [];
     const topics: Record<string, { total: number; completed: number; totalScore: number }> = {};
@@ -56,7 +60,6 @@ export default function Learn() {
     ? topicMastery.reduce((a, b) => a.avgMastery < b.avgMastery ? a : b)
     : null;
 
-  // Find next recommended lesson
   const nextLesson = useMemo(() => {
     if (!courses) return null;
     for (const course of courses) {
@@ -100,8 +103,19 @@ export default function Learn() {
           </div>
         </div>
 
+        {/* Today's Mental Model — top of page */}
+        {learnLoop?.mentalModel && <TodaysMentalModel model={learnLoop.mentalModel} />}
+
         {/* Daily KI from today's assignment */}
-        {dailyKI && <DailyKICard context={dailyKI} />}
+        {dailyKI && <DailyKICard context={dailyKI} topMistake={learnLoop?.topMistake} />}
+
+        {/* Last Rep Insights */}
+        {learnLoop?.lastRep && <LastRepInsights insight={learnLoop.lastRep} />}
+
+        {/* Reinforcement Queue */}
+        {learnLoop?.reinforcement && learnLoop.reinforcement.length > 0 && (
+          <ReinforcementQueue items={learnLoop.reinforcement} />
+        )}
 
         {/* Next lesson CTA */}
         {nextLesson && (
@@ -169,65 +183,5 @@ export default function Learn() {
         ))}
       </div>
     </Layout>
-  );
-}
-
-function CourseCard({
-  course,
-  progressMap,
-  onLessonClick,
-}: {
-  course: CourseWithModules;
-  progressMap: Record<string, LearningProgress>;
-  onLessonClick: (id: string) => void;
-}) {
-  const totalLessons = course.learning_modules.reduce((s, m) => s + m.learning_lessons.length, 0);
-  const completed = course.learning_modules.reduce(
-    (s, m) => s + m.learning_lessons.filter(l => progressMap[l.id]?.status === 'completed').length,
-    0
-  );
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold">{course.title}</p>
-          <p className="text-xs text-muted-foreground">{completed}/{totalLessons} lessons completed</p>
-        </div>
-        <Badge variant="secondary" className="text-[10px] capitalize">
-          {course.difficulty_level}
-        </Badge>
-      </div>
-
-      {course.learning_modules.map(mod => (
-        <div key={mod.id} className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground pl-1">{mod.title}</p>
-          {mod.learning_lessons.map(lesson => {
-            const p = progressMap[lesson.id];
-            const status = p?.status || 'not_started';
-            return (
-              <button
-                key={lesson.id}
-                onClick={() => onLessonClick(lesson.id)}
-                className="w-full flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-card hover:bg-accent/50 transition-colors text-left"
-              >
-                {status === 'completed' ? (
-                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                ) : status === 'in_progress' ? (
-                  <Loader2 className="h-4 w-4 text-amber-500 shrink-0" />
-                ) : (
-                  <Circle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{lesson.title}</p>
-                  <p className="text-[10px] text-muted-foreground capitalize">{lesson.difficulty_level}</p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-              </button>
-            );
-          })}
-        </div>
-      ))}
-    </div>
   );
 }
