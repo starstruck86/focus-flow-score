@@ -84,12 +84,12 @@ export async function createBlockSnapshot(
   // Fetch session scores and turns
   const { data: sessions } = await supabase
     .from('dojo_sessions')
-    .select('id, skill_focus, best_score, latest_score')
+    .select('id, skill_focus, best_score, latest_score, session_type')
     .in('id', allSessionIds);
 
   const { data: turns } = await supabase
     .from('dojo_session_turns')
-    .select('session_id, score, top_mistake')
+    .select('session_id, score, top_mistake, turn_index')
     .in('session_id', allSessionIds);
 
   if (!sessions) return null;
