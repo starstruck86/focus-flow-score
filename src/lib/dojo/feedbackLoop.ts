@@ -59,50 +59,57 @@ export function deriveSessionInsights(result: SessionResult): SessionInsights {
   // Resolve mistake from taxonomy
   const mistakeDetail = result.topMistake ? getMistakeEntry(result.topMistake) : null;
 
-  // Strength signal
+  // Strength signal — only when earned, specific to what they did right
   let strengthSignal: string | null = null;
-  if (score >= 75) {
-    strengthSignal = `Strong ${skillLabel} execution — your response showed real competence.`;
-  } else if (score >= 55) {
-    strengthSignal = `Decent foundation in ${skillLabel} — the structure is there.`;
+  if (score >= 80) {
+    strengthSignal = `Your ${skillLabel} showed real conviction — the structure, specificity, and control were all there.`;
+  } else if (score >= 70) {
+    strengthSignal = `Good instincts on ${skillLabel}. The right moves are there — precision will take it further.`;
+  } else if (score >= 60) {
+    strengthSignal = `You made the right structural choices. The gap is in specificity and conviction, not direction.`;
   }
+  // No strength signal below 60 — empty praise is worse than none
 
-  // Weakness signal — use taxonomy for precision
+  // Weakness signal — taxonomy-driven, specific to what went wrong
   let weaknessSignal: string;
   if (mistakeDetail) {
     weaknessSignal = mistakeDetail.whyItHurts;
-  } else if (score < 40) {
-    weaknessSignal = `Your ${skillLabel} needs fundamental work — responses stayed surface-level.`;
-  } else if (score < 60) {
-    weaknessSignal = `You're getting the shape right but missing the precision that makes it land.`;
+  } else if (score < 35) {
+    weaknessSignal = `Your response missed the core concept. This isn't an execution problem — the foundational understanding needs work.`;
+  } else if (score < 50) {
+    weaknessSignal = `You recognized the situation but responded with a generic approach. The buyer heard nothing that would change their mind.`;
+  } else if (score < 65) {
+    weaknessSignal = `The direction was right but the response lacked the specificity and conviction that makes a buyer take action.`;
   } else {
-    weaknessSignal = `Small execution gaps — tighten the specificity and conviction.`;
+    weaknessSignal = `Small gaps in precision. The difference between good and elite here is concrete language and tighter control of the next step.`;
   }
 
-  // Actionable fix — from taxonomy or generic
+  // Actionable fix — exact phrasing from taxonomy, never conceptual
   let actionableFix: string;
   if (mistakeDetail) {
     actionableFix = mistakeDetail.whatGoodLooksLike;
-  } else if (score < 40) {
-    actionableFix = `Go back to basics: review the core concept and try applying it to a simple scenario first.`;
+  } else if (score < 35) {
+    actionableFix = `Start with the lesson. Understand the underlying principle, then come back and try applying it to this exact scenario.`;
+  } else if (score < 50) {
+    actionableFix = `Anchor your response to the buyer\'s specific situation. Say: "You mentioned [their exact problem] — here\'s what we see when that goes unaddressed: [consequence with a number]."`;
   } else {
-    actionableFix = `Be more specific. Anchor every response to a concrete business consequence or proof point.`;
+    actionableFix = `Add one concrete proof point and replace any vague language with the buyer\'s own words. End with a specific ask, not "let me know."`;
   }
 
-  // Coaching message — sharper, uses drill cue when available
+  // Coaching message — drill cue when available, behavioral instruction always
   let coachingMessage: string;
-  if (score < 40) {
-    coachingMessage = `Go back to the lesson on ${skillLabel}. You need the concept before reps will stick.`;
-  } else if (mistakeDetail && score < 60) {
+  if (score < 35) {
+    coachingMessage = `Review the ${skillLabel} lesson first. You need the concept before reps will build the muscle.`;
+  } else if (mistakeDetail && score < 55) {
     coachingMessage = mistakeDetail.drillCue;
-  } else if (score < 60) {
-    coachingMessage = `You know what to do but aren't doing it consistently. Run another rep with focus.`;
+  } else if (score < 55) {
+    coachingMessage = `Run another rep on this exact scenario. Focus on being specific — use names, numbers, and consequences.`;
   } else if (mistakeDetail && score < 75) {
-    coachingMessage = `Almost there. ${mistakeDetail.drillCue}`;
+    coachingMessage = `You're close. ${mistakeDetail.drillCue}`;
   } else if (score < 75) {
-    coachingMessage = `Getting close. One more focused rep and you'll lock this in.`;
+    coachingMessage = `One more focused rep. Tighten your language: fewer words, more proof, stronger close.`;
   } else {
-    coachingMessage = `Solid. Time to push into a harder skill or increase pressure.`;
+    coachingMessage = `This is solid. Push yourself: try a harder scenario or switch to a skill where you're less comfortable.`;
   }
 
   return { strengthSignal, weaknessSignal, mistakeDetail, coachingMessage, actionableFix };
@@ -122,61 +129,68 @@ export function getNextAction(
   // Check for repeated mistakes across recent sessions
   const repeatedMistake = detectRepeatedMistake(result, recentSessions);
 
-  // Score < 40: concept gap → send to lesson
-  if (score < 40) {
+  // Score < 35: concept gap → send to lesson
+  if (score < 35) {
     return {
       type: 'lesson',
       targetTopic: result.skillFocus,
       lessonTopic: result.skillFocus,
-      message: `Your ${skillLabel} fundamentals need work. Review the lesson to rebuild the foundation.`,
+      message: `Your ${skillLabel} fundamentals need work. The issue isn't practice volume — it's understanding. Review the lesson first.`,
       ctaLabel: `Review ${skillLabel} Lesson`,
     };
   }
 
-  // Repeated mistake detected → targeted drill on that specific pattern
+  // Repeated mistake detected → targeted intervention
   if (repeatedMistake) {
     const entry = getMistakeEntry(repeatedMistake.mistake);
     const targetSkill = entry.skill;
     const targetPractice = getPracticeMapping(targetSkill);
 
-    // If severity is 3 and it's repeated 3+ times, send back to lesson
+    // Severity 3 repeated 3+ times → concept gap, back to lesson
     if (entry.severity === 3 && repeatedMistake.count >= 3) {
       return {
         type: 'lesson',
         targetTopic: targetSkill,
         lessonTopic: targetSkill,
-        message: `You've hit "${entry.label}" ${repeatedMistake.count} times. The concept needs reinforcement before more reps.`,
+        message: `"${entry.label}" has come up ${repeatedMistake.count} times — this is a concept gap, not a practice gap. Revisit the lesson before more reps.`,
         ctaLabel: `Review ${SKILL_LABELS[targetSkill]} Lesson`,
       };
     }
 
+    // Severity 2-3 repeated 2+ times → targeted drill with justification
     return {
       type: 'dojo',
       targetTopic: targetSkill,
       suggestedMode: targetPractice.recommendedMode,
-      message: `You keep hitting "${entry.label}." ${entry.drillCue}`,
+      message: `"${entry.label}" keeps showing up (${repeatedMistake.count}× in recent sessions). This is your highest-leverage fix right now. ${entry.drillCue}`,
       ctaLabel: `Drill: ${entry.label}`,
     };
   }
 
-  // Score 40–60: execution gap → another rep, same skill
-  if (score < 60) {
+  // Score 35–55: execution gap → same skill, specific guidance
+  if (score < 55) {
+    const mistakeNote = insights.mistakeDetail
+      ? ` Focus on fixing "${insights.mistakeDetail.label}" — that's what's holding the score down.`
+      : '';
     return {
       type: 'dojo',
       targetTopic: result.skillFocus,
       suggestedMode: practice.recommendedMode,
-      message: `You understand the concept but the execution isn't consistent. Run another ${practice.label}.`,
+      message: `You understand the concept but the execution isn't landing.${mistakeNote} Run another ${practice.label}.`,
       ctaLabel: `Run Another ${practice.label}`,
     };
   }
 
-  // Score 60–75: close to locking in → one more focused rep
+  // Score 55–75: close — one more rep with specific focus
   if (score < 75) {
+    const focusNote = insights.mistakeDetail
+      ? `Specifically: fix "${insights.mistakeDetail.label}" and this locks in.`
+      : 'Tighten your specificity and close stronger.';
     return {
       type: 'dojo',
       targetTopic: result.skillFocus,
       suggestedMode: practice.recommendedMode,
-      message: `Almost there. One more focused rep will lock this pattern in.`,
+      message: `Almost there. ${focusNote}`,
       ctaLabel: `One More Rep`,
     };
   }
