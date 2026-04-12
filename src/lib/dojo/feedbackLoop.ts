@@ -80,6 +80,9 @@ export function deriveSessionInsights(result: SessionResult): SessionInsights {
     weaknessSignal = `You recognized the situation but responded with a generic approach. The buyer heard nothing that would change their mind.`;
   } else if (score < 65) {
     weaknessSignal = `The direction was right but the response lacked the specificity and conviction that makes a buyer take action.`;
+  } else if (score >= 75) {
+    // High score with no specific mistake — don't manufacture criticism
+    weaknessSignal = `At this level, the gains are subtle: sharper word choice, tighter timing on the close, and reading hesitation faster.`;
   } else {
     weaknessSignal = `Small gaps in precision. The difference between good and elite here is concrete language and tighter control of the next step.`;
   }
