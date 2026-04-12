@@ -155,6 +155,18 @@ export function PerformanceSignals({
                       <span className="text-muted-foreground">Recovery</span>
                       <span className="font-medium text-foreground">{cap.recoveryRate != null ? `+${cap.recoveryRate}` : '—'}</span>
                     </div>
+                    {cap.flowControl != null && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Flow</span>
+                        <span className="font-medium text-foreground">{cap.flowControl}</span>
+                      </div>
+                    )}
+                    {cap.closingUnderPressure != null && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Close</span>
+                        <span className="font-medium text-foreground">{cap.closingUnderPressure}</span>
+                      </div>
+                    )}
                   </div>
                   {/* Summary line */}
                   <p className="text-[10px] text-muted-foreground italic leading-snug">{cap.summary}</p>
