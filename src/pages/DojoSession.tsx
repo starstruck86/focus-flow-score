@@ -14,6 +14,7 @@ import {
   Eye, PenLine, Volume2, VolumeX,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
+import { DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 import {
   type DojoScoreResult,
   normalizeScoreResult,
