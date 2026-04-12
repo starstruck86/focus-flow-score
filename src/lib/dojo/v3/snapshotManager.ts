@@ -133,6 +133,41 @@ export async function createBlockSnapshot(
     scoresByAnchor[anchor] = { avgScore, topMistake, focusAppliedRate, sessionCount: anchorSessions.length };
   }
 
+  // V5: Compute flow metrics from simulation sessions in this week
+  const simSessions = (sessions ?? []).filter(s => s.session_type === 'simulation');
+  let flowMetrics: SnapshotFlowMetrics = { flowControlAvg: null, closingScoreAvg: null, simulationCount: 0 };
+
+  if (simSessions.length > 0) {
+    const flowScores: number[] = [];
+    const closingScores: number[] = [];
+
+    for (const sim of simSessions) {
+      const simTurns = (turns ?? [])
+        .filter(t => t.session_id === sim.id && t.score != null)
+        .sort((a, b) => a.turn_index - b.turn_index);
+      if (simTurns.length < 2) continue;
+
+      let fc = 100;
+      for (let i = 1; i < simTurns.length; i++) {
+        const drop = (simTurns[i - 1].score ?? 0) - (simTurns[i].score ?? 0);
+        if (drop >= 20) fc -= 30;
+        else if (drop >= 12) fc -= 20;
+        else if (drop >= 8) fc -= 10;
+      }
+      flowScores.push(Math.max(0, Math.min(100, fc)));
+      closingScores.push(simTurns[simTurns.length - 1].score ?? 0);
+    }
+
+    flowMetrics = {
+      flowControlAvg: flowScores.length > 0 ? Math.round(flowScores.reduce((a, b) => a + b, 0) / flowScores.length) : null,
+      closingScoreAvg: closingScores.length > 0 ? Math.round(closingScores.reduce((a, b) => a + b, 0) / closingScores.length) : null,
+      simulationCount: simSessions.length,
+    };
+  }
+
+  // Store flow metrics alongside anchor data in the JSON
+  const snapshotData = { ...scoresByAnchor, _flowMetrics: flowMetrics };
+
   // Persist snapshot
   const { data: row, error } = await supabase
     .from('block_snapshots')
@@ -142,7 +177,7 @@ export async function createBlockSnapshot(
       snapshot_type: snapshotType,
       week_number: weekNumber,
       stage,
-      scores_by_anchor: scoresByAnchor as unknown as import('@/integrations/supabase/types').Json,
+      scores_by_anchor: snapshotData as unknown as import('@/integrations/supabase/types').Json,
       mistakes_active: Array.from(allMistakes),
       mistakes_resolved: [],
     } as any)
