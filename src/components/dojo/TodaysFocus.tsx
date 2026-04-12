@@ -11,6 +11,7 @@ import { SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
 import type { SmartAutopilotResult } from '@/lib/dojo/smartAutopilot';
 import type { SkillStat } from '@/lib/dojo/scenarios';
 import type { LessonContext } from '@/lib/learning/practiceMapping';
+import type { DailyFocus } from '@/lib/dojo/skillMemory';
 
 interface TodaysFocusProps {
   recommendation: SmartAutopilotResult;
@@ -20,6 +21,7 @@ interface TodaysFocusProps {
   bestScore: number | null;
   onStartAutopilot: () => void;
   lessonContext?: LessonContext | null;
+  dailyFocus?: DailyFocus | null;
 }
 
 export function TodaysFocus({
@@ -30,11 +32,15 @@ export function TodaysFocus({
   bestScore,
   onStartAutopilot,
   lessonContext,
+  dailyFocus,
 }: TodaysFocusProps) {
   const weakestSkill = skillStats.length > 0 ? skillStats[0] : null;
   const strongestSkill = skillStats.length > 0 ? skillStats[skillStats.length - 1] : null;
 
   const navigate = useNavigate();
+
+  // Use daily focus message if available, otherwise fall back to recommendation
+  const daveMessage = dailyFocus?.daveMessage ?? recommendation.daveMessage;
 
   return (
     <div className="space-y-4">
@@ -53,7 +59,7 @@ export function TodaysFocus({
           </div>
         </div>
       ) : (
-        /* Dave's assignment */
+        /* Dave's assignment — skill-memory-aware */
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
             <Swords className="h-5 w-5 text-primary" />
@@ -61,8 +67,21 @@ export function TodaysFocus({
           <div className="space-y-1 pt-0.5">
             <p className="text-sm font-medium text-foreground">Dave</p>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {recommendation.daveMessage}
+              {daveMessage}
             </p>
+            {/* Daily focus skills */}
+            {dailyFocus && (
+              <div className="flex gap-1.5 pt-1">
+                <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                  {SKILL_LABELS[dailyFocus.primary]}
+                </Badge>
+                {dailyFocus.secondary && (
+                  <Badge variant="outline" className="text-[10px] border-muted-foreground/30">
+                    {SKILL_LABELS[dailyFocus.secondary]}
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -107,8 +126,6 @@ export function TodaysFocus({
                 },
               });
             }
-            // For inline modes (objection-reps, mock-call), scrolling to the training modes section is enough
-            // The highlightMode prop handles visual emphasis
           }}
         >
           <Play className="h-5 w-5" />
