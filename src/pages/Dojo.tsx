@@ -152,8 +152,8 @@ export default function Dojo() {
         )}
 
         {/* V3: Block Comparison — benchmark vs retest (Week 8+) */}
-        {snapshotComparison && (
-          <BlockComparisonView comparison={snapshotComparison} />
+        {snapshotComparison && activeBlock && (
+          <BlockComparisonView comparison={snapshotComparison} blockNumber={activeBlock.blockNumber} />
         )}
 
         {/* V3: Weekly Summary — shows after at least 1 anchor completed */}
