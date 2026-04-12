@@ -223,6 +223,12 @@ function TranscriptDetailPane({ selected, onDelete }: { selected: CallTranscript
                   difficulty: s.difficulty,
                 },
                 mode: 'autopilot',
+                transcriptOrigin: {
+                  transcriptId: selected.id,
+                  transcriptTitle: selected.title,
+                  sourceExcerpt: s.sourceExcerpt,
+                  coachingHint: s.coachingHint,
+                },
               },
             });
           }}
