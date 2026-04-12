@@ -23,7 +23,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { supabase } from '@/integrations/supabase/client';
-import type { DojoScenario } from '@/lib/dojo/scenarios';
+import { emitSaveStatus } from '@/components/SaveIndicator';
+import {
+  saveDojoState,
+  clearDojoState,
+  enqueuePendingWrite,
+  type DojoLocalState,
+} from '@/lib/sessionDurability';
+import { processPendingWrites } from '@/lib/pendingWriteSync';
 import type { DojoScoreResult } from '@/lib/dojo/types';
 import { normalizeScoreResult } from '@/lib/dojo/types';
 import DaveCoachingDelivery from './DaveCoachingDelivery';
