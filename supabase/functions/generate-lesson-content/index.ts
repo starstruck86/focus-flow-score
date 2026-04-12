@@ -170,22 +170,35 @@ ${kiContext}`;
       });
     }
 
-    const aiResponse = await fetch("https://ai.lovable.dev/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${lovableApiKey}`,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.7,
-      }),
-    });
+    let aiResponse: Response;
+    try {
+      aiResponse = await fetch("https://ai.lovable.dev/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${lovableApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.7,
+        }),
+      });
+    } catch (fetchErr) {
+      console.error("AI fetch network error:", fetchErr);
+      await adminClient
+        .from("learning_lessons")
+        .update({ generation_status: "failed" })
+        .eq("id", lessonId);
+      return new Response(JSON.stringify({ error: "AI service unreachable", detail: String(fetchErr) }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (!aiResponse.ok) {
       const errText = await aiResponse.text();
