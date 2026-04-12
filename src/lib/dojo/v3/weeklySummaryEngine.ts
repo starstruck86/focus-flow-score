@@ -30,6 +30,11 @@ export interface WeeklySummary {
   simulationsCompleted: number;
   flowControlAvg: number | null;
   controlHeldRate: number | null;  // 0–100 percentage
+  // V6 multi-thread metrics
+  multiThreadRepsCompleted: number;
+  multiThreadMomentumDistribution: { forward: number; neutral: number; atRisk: number } | null;
+  strongestMultiThreadAnchor: string | null;
+  weakestMultiThreadAnchor: string | null;
 }
 
 export interface AnchorWeekStat {
