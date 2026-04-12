@@ -54,6 +54,7 @@ import {
   isFeedbackPhase,
 } from '@/lib/dojo/audioSessionFlow';
 import type { Json } from '@/integrations/supabase/types';
+import { completeAssignment } from '@/lib/dojo/v3/assignmentManager';
 
 interface AudioSessionModeProps {
   scenario: DojoScenario;
