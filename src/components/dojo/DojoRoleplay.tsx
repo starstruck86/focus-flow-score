@@ -28,12 +28,15 @@ interface Props {
   scenario: DojoScenario;
   userId: string;
   onComplete: (result: DojoScoreResult) => void;
+  assignmentId?: string | null;
+  benchmarkTag?: boolean;
+  scenarioFamilyId?: string | null;
 }
 
 const MAX_TURNS = 5;
 const MIN_TURNS = 3;
 
-export default function DojoRoleplay({ scenario, userId, onComplete }: Props) {
+export default function DojoRoleplay({ scenario, userId, onComplete, assignmentId, benchmarkTag = false, scenarioFamilyId }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -194,6 +197,9 @@ NEVER break character. NEVER coach the rep. You are the BUYER.`,
           latest_score: result.score,
           status: 'completed',
           completed_at: new Date().toISOString(),
+          assignment_id: assignmentId ?? null,
+          benchmark_tag: benchmarkTag,
+          scenario_family_id: scenarioFamilyId ?? null,
         }).select('id').single();
 
         if (session) {
@@ -209,6 +215,15 @@ NEVER break character. NEVER coach the rep. You are the BUYER.`,
             improved_version: result.improvedVersion,
             score_json: fullScoreJson as Json,
           });
+
+          // V3: Complete assignment — links session and triggers snapshot/week advancement
+          if (assignmentId) {
+            const today = new Date().toISOString().split('T')[0];
+            const { completeAssignment } = await import('@/lib/dojo/v3/assignmentManager');
+            completeAssignment(userId, today, session.id).catch(err =>
+              console.error('[DojoRoleplay] completeAssignment failed:', err)
+            );
+          }
         }
       } catch (saveErr) {
         console.error('Failed to save roleplay session:', saveErr);

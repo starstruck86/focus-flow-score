@@ -32,9 +32,12 @@ interface Props {
   scenario: DojoScenario;
   userId: string;
   onComplete: (result: ReviewScoreResult) => void;
+  assignmentId?: string | null;
+  benchmarkTag?: boolean;
+  scenarioFamilyId?: string | null;
 }
 
-export default function DojoReview({ scenario, userId, onComplete }: Props) {
+export default function DojoReview({ scenario, userId, onComplete, assignmentId, benchmarkTag = false, scenarioFamilyId }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [phase, setPhase] = useState<ReviewPhase>('loading');
@@ -122,6 +125,9 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
           latest_score: result.score,
           status: 'completed',
           completed_at: new Date().toISOString(),
+          assignment_id: assignmentId ?? null,
+          benchmark_tag: benchmarkTag,
+          scenario_family_id: scenarioFamilyId ?? null,
         }).select('id').single();
 
         if (session) {
@@ -137,6 +143,15 @@ export default function DojoReview({ scenario, userId, onComplete }: Props) {
             improved_version: result.improvedVersion,
             score_json: fullScoreJson as Json,
           });
+
+          // V3: Complete assignment — links session and triggers snapshot/week advancement
+          if (assignmentId) {
+            const today = new Date().toISOString().split('T')[0];
+            const { completeAssignment } = await import('@/lib/dojo/v3/assignmentManager');
+            completeAssignment(userId, today, session.id).catch(err =>
+              console.error('[DojoReview] completeAssignment failed:', err)
+            );
+          }
         }
       } catch (saveErr) {
         console.error('Failed to save review session:', saveErr);

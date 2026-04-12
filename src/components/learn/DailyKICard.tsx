@@ -83,17 +83,24 @@ export function DailyKICard({ context }: DailyKICardProps) {
           )}
 
           <button
-            onClick={() => navigate('/dojo')}
+            onClick={() => navigate('/dojo', { state: { fromLearn: true, kiTitle: ki.title } })}
             className="w-full flex items-center justify-center gap-2 h-10 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/85 transition-colors mt-1"
           >
             <BookOpen className="h-4 w-4" />
             Practice This in Dojo
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
+
+          {/* Why this KI was chosen */}
+          <div className="flex items-start gap-2 pt-2 border-t border-primary/10">
+            <Target className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
+            <p className="text-[10px] text-muted-foreground leading-relaxed italic">
+              {context.reason}
+            </p>
+          </div>
         </CardContent>
       </Card>
 
-      <p className="text-[10px] text-muted-foreground text-center italic">{context.reason}</p>
     </div>
   );
 }
