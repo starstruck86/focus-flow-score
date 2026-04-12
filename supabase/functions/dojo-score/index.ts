@@ -407,6 +407,25 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       if (typeof parsed.focusAppliedReason !== "string") parsed.focusAppliedReason = "";
     }
 
+    // ── V6: Normalize multiThread if present ────────────────────
+    if (scenario.multiThread?.active && parsed.multiThread) {
+      const mt = parsed.multiThread;
+      if (!Array.isArray(mt.stakeholdersDetected)) mt.stakeholdersDetected = [];
+      if (!Array.isArray(mt.stakeholdersAddressed)) mt.stakeholdersAddressed = [];
+      if (typeof mt.alignmentScore !== "number") mt.alignmentScore = 0;
+      if (typeof mt.championStrengthScore !== "number") mt.championStrengthScore = 0;
+      if (typeof mt.politicalAwarenessScore !== "number") mt.politicalAwarenessScore = 0;
+      if (!["forward", "neutral", "at_risk"].includes(mt.dealMomentum)) mt.dealMomentum = "neutral";
+      if (typeof mt.coachingNote !== "string") mt.coachingNote = "";
+      // Clamp scores
+      mt.alignmentScore = Math.max(0, Math.min(100, Math.round(mt.alignmentScore)));
+      mt.championStrengthScore = Math.max(0, Math.min(100, Math.round(mt.championStrengthScore)));
+      mt.politicalAwarenessScore = Math.max(0, Math.min(100, Math.round(mt.politicalAwarenessScore)));
+    } else {
+      // Strip multiThread if not a multi-thread scenario
+      delete parsed.multiThread;
+    }
+
     // ── Normalize topMistake to canonical taxonomy ────────────────
     parsed.topMistake = normalizeTopMistake(parsed.topMistake || '', skill);
 
