@@ -83,6 +83,8 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   const [openFeedback, setOpenFeedback] = useState<string | null>(null);
   const [openScore, setOpenScore] = useState(0);
   const [micAvailable, setMicAvailable] = useState(true);
+  const [recovery, setRecovery] = useState<RecoveryState>(createInitialRecoveryState());
+  const recoveryRef = useRef<RecoveryController | null>(null);
 
   const indexRef = useRef(currentIndex);
   indexRef.current = currentIndex;
