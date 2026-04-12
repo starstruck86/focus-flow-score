@@ -32,6 +32,7 @@ import DaveCoachingDelivery from '@/components/dojo/DaveCoachingDelivery';
 import AudioSessionMode from '@/components/dojo/AudioSessionMode';
 import { SessionFeedbackCard } from '@/components/dojo/SessionFeedbackCard';
 import type { Json } from '@/integrations/supabase/types';
+import { useAudioPreference } from '@/hooks/useAudioPreference';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
 
