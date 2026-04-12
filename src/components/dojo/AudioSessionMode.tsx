@@ -98,21 +98,25 @@ export default function AudioSessionMode({
         const introText = buildIntroText(scenario);
         await voice.playTTS(introText);
 
-        if (phaseRef.current !== 'intro') return;
+        const phaseAfterIntro = phaseRef.current;
+        if (phaseAfterIntro !== 'intro') return;
         setPhase('prompt');
 
         const promptText = buildPromptText(scenario);
         await voice.playTTS(promptText);
 
-        if (phaseRef.current !== 'prompt') return;
+        const phaseAfterPrompt = phaseRef.current;
+        if (phaseAfterPrompt !== 'prompt') return;
         // Auto-activate mic
         await activateMic();
       } catch (err) {
         console.error('TTS intro failed, continuing anyway:', err);
         // If TTS fails, still advance
-        if (phaseRef.current === 'intro') setPhase('prompt');
+        const currentPhase = phaseRef.current;
+        if (currentPhase === 'intro') setPhase('prompt');
         setTimeout(() => {
-          if (phaseRef.current === 'prompt') activateMic();
+          const p = phaseRef.current;
+          if (p === 'prompt') activateMic();
         }, 500);
       }
     };
