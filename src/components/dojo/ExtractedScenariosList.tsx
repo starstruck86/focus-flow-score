@@ -83,6 +83,13 @@ export function ExtractedScenariosList({ scenarios, onPractice, onClose }: Extra
               </div>
             )}
 
+            {s.repResponse && (
+              <div className="bg-destructive/5 rounded-md p-2 border border-destructive/20">
+                <p className="text-[10px] font-semibold text-destructive/70 mb-0.5">Rep actually said:</p>
+                <p className="text-xs italic text-muted-foreground line-clamp-3">"{s.repResponse}"</p>
+              </div>
+            )}
+
             <p className="text-[10px] text-primary/80 font-medium">
               💡 {s.coachingHint}
             </p>
