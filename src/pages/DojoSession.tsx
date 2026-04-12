@@ -574,6 +574,30 @@ function FeedbackView({
         </div>
       </div>
 
+      {/* ── V4 Pressure Analysis ── */}
+      {pressureLevel && pressureLevel !== 'none' && (
+        <PressureAnalysisCard
+          pressureLevel={pressureLevel}
+          pressureDimensions={pressureDimensions ?? []}
+          sessionScore={currentResult.score}
+          recentAvg={currentResult.score} // TODO: pass actual recent avg from skill memory
+          topMistake={currentResult.topMistake}
+          focusPattern={activeFocus}
+          retryScore={retryResult?.score}
+        />
+      )}
+
+      {/* ── V4 Transfer Progress (transcript-origin) ── */}
+      {transcriptOrigin && originalCallScore && firstAttemptResult && (
+        <TransferProgressCard
+          originalScore={originalCallScore.score}
+          practiceScore={firstAttemptResult.score}
+          retryScore={retryResult?.score}
+          originalMistake={originalCallScore.topMistake}
+          practiceMistake={currentResult.topMistake}
+        />
+      )}
+
       {/* ── Review-specific: Diagnosis & Rewrite badges ── */}
       {reviewExtras && sessionType === 'review' && (
         <div className="space-y-3">

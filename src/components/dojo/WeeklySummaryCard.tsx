@@ -6,7 +6,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Target } from 'lucide-react';
+import { Calendar, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Target, Zap } from 'lucide-react';
 import type { WeeklySummary } from '@/lib/dojo/v3/weeklySummaryEngine';
 import { ANCHOR_LABELS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 
