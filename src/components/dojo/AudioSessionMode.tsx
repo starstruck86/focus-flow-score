@@ -27,6 +27,7 @@ import { emitSaveStatus } from '@/components/SaveIndicator';
 import {
   saveDojoState,
   clearDojoState,
+  loadDojoState,
   enqueuePendingWrite,
   type DojoLocalState,
 } from '@/lib/sessionDurability';
@@ -80,16 +81,22 @@ export default function AudioSessionMode({
   mode,
   onComplete,
 }: AudioSessionModeProps) {
-  const [phase, setPhase] = useState<AudioSessionPhase>('intro');
+  // Restore from saved state if resuming
+  const savedState = useRef(loadDojoState()).current;
+  const isResuming = savedState && savedState.scenario.title === scenario.title && savedState.phase !== 'intro';
+
+  const [phase, setPhase] = useState<AudioSessionPhase>(
+    isResuming ? (savedState!.phase as AudioSessionPhase) : 'intro'
+  );
   const [micAvailable, setMicAvailable] = useState(true);
   const [textFallback, setTextFallback] = useState('');
   const [result, setResult] = useState<DojoScoreResult | null>(null);
   const [retryResult, setRetryResult] = useState<DojoScoreResult | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(isResuming ? savedState!.dbSessionId : null);
   const [firstTurnId, setFirstTurnId] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
+  const [retryCount, setRetryCount] = useState(isResuming ? savedState!.retryCount : 0);
   const [isPaused, setIsPaused] = useState(false);
-  const [transcribedText, setTranscribedText] = useState('');
+  const [transcribedText, setTranscribedText] = useState(isResuming ? savedState!.transcribedText : '');
   // Client-generated session ID for durability
   const clientSessionId = useRef(crypto.randomUUID()).current;
 
