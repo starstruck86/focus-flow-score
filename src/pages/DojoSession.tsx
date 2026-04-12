@@ -638,13 +638,22 @@ function FeedbackView({
         </Card>
       )}
 
-      {/* ── Before vs After on Retry (when transcript-origin scenario is retried) ── */}
-      {transcriptOrigin && retryResult && retryAssessment && scoreDelta !== null && (
+      {/* ── Three-Stage Comparison (Live Call → Practice → Retry) ── */}
+      {originalCallScore && firstAttemptResult && (
+        <ThreeStageComparison
+          original={originalCallScore}
+          attempt1={firstAttemptResult}
+          retry={retryResult}
+        />
+      )}
+
+      {/* ── Before vs After on Retry (fallback when no original call score) ── */}
+      {!originalCallScore && transcriptOrigin && retryResult && retryAssessment && scoreDelta !== null && (
         <ImprovementVerdictCard
           verdict={assessImprovement({
             originalScore: currentResult.score - (scoreDelta ?? 0),
             trainedScore: currentResult.score,
-            originalTopMistake: retryAssessment.whatStillNeedsWork.includes(':') ? currentResult.topMistake : currentResult.topMistake,
+            originalTopMistake: currentResult.topMistake,
             trainedTopMistake: currentResult.topMistake,
             trainedFocusApplied: currentResult.focusApplied,
           })}
