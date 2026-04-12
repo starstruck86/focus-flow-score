@@ -280,8 +280,8 @@ export default function LearnLesson() {
           </div>
         )}
 
-        {/* Phase: Open-ended */}
-        {phase === 'open_ended' && lesson.quiz_content && (
+        {/* Text Mode: Phase: Open-ended */}
+        {!isAudio && phase === 'open_ended' && lesson.quiz_content && (
           <div className="space-y-4">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Apply It
