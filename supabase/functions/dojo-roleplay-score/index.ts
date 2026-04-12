@@ -200,6 +200,9 @@ Respond with ONLY valid JSON:
     if (typeof parsed.controlArc !== "string") parsed.controlArc = "";
     if (typeof parsed.adaptationNote !== "string") parsed.adaptationNote = "";
 
+    // Normalize topMistake
+    parsed.topMistake = normalizeTopMistake(parsed.topMistake || '', skillFocus);
+
     // Normalize focusPattern
     if (parsed.focusPattern) {
       parsed.focusPattern = normalizeFocusPattern(parsed.focusPattern, skillFocus);

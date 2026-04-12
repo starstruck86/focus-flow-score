@@ -244,6 +244,9 @@ Respond with ONLY valid JSON:
       if (typeof parsed.diagnosisAccuracy !== "string") parsed.diagnosisAccuracy = "partial";
       if (typeof parsed.rewriteFixedIssue !== "boolean") parsed.rewriteFixedIssue = false;
 
+      // Normalize topMistake
+      parsed.topMistake = normalizeTopMistake(parsed.topMistake || '', skillFocus);
+
       // Normalize focusPattern
       if (parsed.focusPattern) {
         parsed.focusPattern = normalizeFocusPattern(parsed.focusPattern, skillFocus);

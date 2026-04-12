@@ -347,6 +347,9 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       if (typeof parsed.focusAppliedReason !== "string") parsed.focusAppliedReason = "";
     }
 
+    // ── Normalize topMistake to canonical taxonomy ────────────────
+    parsed.topMistake = normalizeTopMistake(parsed.topMistake || '', skill);
+
     // ── Normalize focusPattern to canonical list ─────────────────
     if (parsed.focusPattern) {
       parsed.focusPattern = normalizeFocusPattern(parsed.focusPattern, skill);
