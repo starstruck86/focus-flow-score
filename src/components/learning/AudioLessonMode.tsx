@@ -28,6 +28,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { supabase } from '@/integrations/supabase/client';
+import { emitSaveStatus } from '@/components/SaveIndicator';
+import { saveLearnState, clearLearnState } from '@/lib/sessionDurability';
 import type { LearningLesson, MCQuestion } from '@/lib/learning/types';
 import {
   buildLessonAudioSections,
