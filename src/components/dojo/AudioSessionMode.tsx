@@ -272,6 +272,9 @@ export default function AudioSessionMode({
               latest_score: scoreData.score,
               status: 'completed',
               completed_at: new Date().toISOString(),
+              assignment_id: assignmentId ?? null,
+              benchmark_tag: benchmarkTag,
+              scenario_family_id: scenarioFamilyId ?? null,
             })
             .select('id')
             .single();
