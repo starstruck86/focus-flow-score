@@ -136,7 +136,13 @@ function generateSummary(
   }
 
   if (strongestTurn !== weakestTurn) {
-    parts.push(`Turn ${strongestTurn + 1} was your strongest response. Turn ${weakestTurn + 1} is where things broke.`);
+    const weakScore = scores[weakestTurn];
+    if (weakScore >= 65) {
+      // All turns solid — don't say "broke"
+      parts.push(`Turn ${strongestTurn + 1} was your strongest response. Turn ${weakestTurn + 1} had the most room to grow.`);
+    } else {
+      parts.push(`Turn ${strongestTurn + 1} was your strongest response. Turn ${weakestTurn + 1} is where things broke.`);
+    }
   }
 
   if (closingScore < 55) {
