@@ -16,12 +16,40 @@ const VALID_FOCUS_PATTERNS: Record<string, string[]> = {
 
 const ALL_VALID_IDS = new Set(Object.values(VALID_FOCUS_PATTERNS).flat());
 
+// ── Canonical mistake IDs per skill (must match client taxonomy) ────
+const VALID_MISTAKES: Record<string, string[]> = {
+  objection_handling: ['pitched_too_early', 'weak_objection_handle', 'reactive_not_reframing', 'vendor_language', 'no_business_impact', 'lack_of_control', 'too_generic', 'too_long', 'no_proof', 'weak_close'],
+  discovery: ['stacked_questions', 'failed_to_deepen', 'no_business_impact', 'too_generic', 'lack_of_control', 'weak_close', 'pitched_too_early'],
+  executive_response: ['too_long', 'no_business_impact', 'too_generic', 'weak_close', 'lack_of_control', 'no_proof', 'pitched_too_early', 'vendor_language'],
+  deal_control: ['lack_of_control', 'weak_close', 'vague_next_step', 'too_passive', 'accepted_delay', 'no_mutual_plan', 'too_generic', 'too_long'],
+  qualification: ['failed_to_qualify', 'accepted_weak_pain', 'no_urgency', 'skipped_stakeholders', 'too_generic', 'pitched_too_early', 'no_disqualification', 'no_business_impact'],
+};
+const ALL_VALID_MISTAKES = new Set(Object.values(VALID_MISTAKES).flat());
+
+function normalizeTopMistake(raw: string, skill: string): string {
+  if (!raw) return 'too_generic';
+  if (ALL_VALID_MISTAKES.has(raw)) return raw;
+  const cleaned = raw.toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z_]/g, '');
+  if (ALL_VALID_MISTAKES.has(cleaned)) return cleaned;
+  // Fuzzy match within skill
+  const candidates = VALID_MISTAKES[skill] || [];
+  const rawWords = raw.toLowerCase().replace(/_/g, ' ').split(' ').filter(w => w.length >= 3);
+  let best = ''; let bestScore = 0;
+  for (const id of candidates) {
+    const idWords = id.split('_');
+    let score = 0;
+    for (const w of rawWords) { if (idWords.some(k => k.includes(w) || w.includes(k))) score++; }
+    if (score > bestScore) { bestScore = score; best = id; }
+  }
+  if (bestScore >= 1 && best) return best;
+  return 'too_generic'; // safe fallback — always in taxonomy
+}
+
 function normalizeFocusPattern(raw: string, skill: string): string {
   if (!raw) return '';
   if (ALL_VALID_IDS.has(raw)) return raw;
   const cleaned = raw.toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z_]/g, '');
   if (ALL_VALID_IDS.has(cleaned)) return cleaned;
-  // Fuzzy: find best keyword match within skill
   const candidates = VALID_FOCUS_PATTERNS[skill] || [];
   const rawWords = raw.toLowerCase().replace(/_/g, ' ').split(' ').filter(w => w.length >= 3);
   let best = ''; let bestScore = 0;
@@ -223,7 +251,7 @@ RESPONSE RULES:
 - "practiceCue": One concrete behavioral instruction for the retry. Immediately executable.
 - "teachingNote": One sentence generalizing the lesson beyond this scenario.
 - "deltaNote": One sentence explaining the BIGGEST DIFFERENCE between improvedVersion and worldClassResponse.
-- "topMistake": Pick the single most impactful mistake from the list.
+- "topMistake": REQUIRED. Pick exactly ONE from the COMMON MISTAKES list above. You MUST always return a valid mistake code — never leave this empty or invent a new one.
 
 COHERENCE RULE (CRITICAL):
 feedback, topMistake, focusPattern, focusReason, and practiceCue MUST all point at the SAME core coaching lesson.
@@ -318,6 +346,9 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       if (typeof parsed.focusApplied !== "string" || !["yes", "partial", "no"].includes(parsed.focusApplied)) parsed.focusApplied = "no";
       if (typeof parsed.focusAppliedReason !== "string") parsed.focusAppliedReason = "";
     }
+
+    // ── Normalize topMistake to canonical taxonomy ────────────────
+    parsed.topMistake = normalizeTopMistake(parsed.topMistake || '', skill);
 
     // ── Normalize focusPattern to canonical list ─────────────────
     if (parsed.focusPattern) {
