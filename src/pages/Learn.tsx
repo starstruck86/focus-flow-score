@@ -89,14 +89,16 @@ export default function Learn() {
     return null;
   }, [courses, progressMap]);
 
-  const ctaLabel = useMemo(() => {
-    if (learnLoop?.lastRep) {
-      if (learnLoop.lastRep.focusApplied === 'no' || learnLoop.lastRep.score < 60) {
-        return 'Fix This Now';
-      }
+  const handlePrimaryAction = useCallback(() => {
+    const action = learnLoop?.primaryAction;
+    if (!action) return;
+    if (action.target.type === 'dojo_session') {
+      navigate('/dojo/session', { state: action.target.state });
+    } else if (action.target.type === 'lesson') {
+      navigate(`/learn/lesson/${action.target.lessonId}`);
     }
-    return 'Run Today\'s Rep';
-  }, [learnLoop?.lastRep]);
+    // learn_section and none: no navigation needed
+  }, [learnLoop?.primaryAction, navigate]);
 
   if (isLoading) {
     return (
@@ -131,7 +133,12 @@ export default function Learn() {
         {/* 1. Today's Mental Model */}
         {learnLoop?.mentalModel && <TodaysMentalModel model={learnLoop.mentalModel} />}
 
-        {/* 2. Adaptive Study Path (Phase 5) */}
+        {/* 2. Primary Action (Phase 6) */}
+        {learnLoop?.primaryAction && (
+          <PrimaryActionCard action={learnLoop.primaryAction} onExecute={handlePrimaryAction} />
+        )}
+
+        {/* 3. Adaptive Study Path (Phase 5) */}
         {learnLoop?.adaptiveStudyPath && <AdaptiveStudyPathCard path={learnLoop.adaptiveStudyPath} />}
 
         {/* 3. Weekly Coaching Plan (Phase 4) */}
@@ -185,14 +192,14 @@ export default function Learn() {
           <ReinforcementQueue items={learnLoop.reinforcement} />
         )}
 
-        {/* 16. Primary CTA */}
-        {nextLesson && (
+        {/* Secondary lesson CTA (downgraded from primary) */}
+        {nextLesson && !learnLoop?.primaryAction && (
           <button
             onClick={() => navigate(`/learn/lesson/${nextLesson.lesson.id}`)}
-            className="w-full h-14 rounded-md bg-primary text-primary-foreground font-semibold text-base flex items-center justify-center gap-2 shadow-sm hover:bg-primary/85 transition-colors"
+            className="w-full h-11 rounded-md border border-border bg-card text-foreground font-medium text-sm flex items-center justify-center gap-2 hover:bg-accent/50 transition-colors"
           >
-            <BookOpen className="h-5 w-5" />
-            {ctaLabel}
+            <BookOpen className="h-4 w-4" />
+            Continue: {nextLesson.lesson.title}
           </button>
         )}
 
