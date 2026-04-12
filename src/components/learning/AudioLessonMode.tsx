@@ -30,6 +30,13 @@ import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { supabase } from '@/integrations/supabase/client';
 import { emitSaveStatus } from '@/components/SaveIndicator';
 import { saveLearnState, clearLearnState, loadLearnState } from '@/lib/sessionDurability';
+import {
+  type RecoveryState,
+  createInitialRecoveryState,
+  executeWithRecovery,
+  type RecoveryController,
+} from '@/lib/sessionRecovery';
+import RecoveryBanner from '@/components/RecoveryBanner';
 import type { LearningLesson, MCQuestion } from '@/lib/learning/types';
 import {
   buildLessonAudioSections,
@@ -76,6 +83,8 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   const [openFeedback, setOpenFeedback] = useState<string | null>(null);
   const [openScore, setOpenScore] = useState(0);
   const [micAvailable, setMicAvailable] = useState(true);
+  const [recovery, setRecovery] = useState<RecoveryState>(createInitialRecoveryState());
+  const recoveryRef = useRef<RecoveryController | null>(null);
 
   const indexRef = useRef(currentIndex);
   indexRef.current = currentIndex;
@@ -258,9 +267,63 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
       setPhase('handoff');
       await doHandoff();
     } catch (err) {
-      console.error('Grading failed:', err);
-      toast.error('Grading failed. Please try again.');
-      setPhase('waiting_open');
+      console.error('Grading failed — entering recovery:', err);
+      emitSaveStatus('recovering');
+      
+      const capturedText = text;
+      recoveryRef.current?.cancel();
+      recoveryRef.current = executeWithRecovery(
+        async () => {
+          const { data, error } = await supabase.functions.invoke('grade-lesson-response', {
+            body: {
+              lessonId: lesson.id,
+              userResponse: capturedText,
+              prompt: lesson.quiz_content?.open_ended_prompt,
+              rubric: lesson.quiz_content?.rubric,
+              lessonTitle: lesson.title,
+              concept: lesson.lesson_content?.concept,
+            },
+          });
+          if (error) throw error;
+          return data;
+        },
+        {
+          reason: 'scoring_failure',
+          interruptedPhase: 'grading',
+          onStateChange: setRecovery,
+          onSuccess: async (data) => {
+            setRecovery(createInitialRecoveryState());
+            emitSaveStatus('saved');
+            setOpenFeedback(data.feedback);
+            setOpenScore(data.score ?? 0);
+            saveAnswer.mutate({
+              lessonId: lesson.id,
+              questionType: 'open_ended',
+              questionId: 'open_1',
+              userAnswer: capturedText,
+              aiFeedback: data.feedback,
+              score: data.score,
+            });
+            const totalMC = lesson.quiz_content?.mc_questions?.length || 1;
+            const mcPct = mcScore / totalMC;
+            const overallMastery = (mcPct * 0.4 + ((data.score ?? 0) / 100) * 0.6);
+            upsertProgress.mutate({
+              lessonId: lesson.id,
+              status: 'completed',
+              mastery_score: Math.round(overallMastery * 100) / 100,
+            });
+            try { await voice.playTTS(data.feedback); } catch { /* continue */ }
+            setPhase('handoff');
+            await doHandoff();
+          },
+          onGiveUp: () => {
+            setRecovery(createInitialRecoveryState());
+            emitSaveStatus('error');
+            toast.error('Could not reach grading service. Your response is saved.');
+            setPhase('waiting_open');
+          },
+        },
+      );
     }
   }, [lesson, mcScore, voice, saveAnswer, upsertProgress]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -325,10 +388,24 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
     playSection(currentIndex);
   }, [voice, currentIndex, playSection]);
 
+  // Cleanup recovery on unmount
+  useEffect(() => {
+    return () => { recoveryRef.current?.cancel(); };
+  }, []);
+
+  const cancelRecovery = useCallback(() => {
+    recoveryRef.current?.cancel();
+    setRecovery(createInitialRecoveryState());
+    emitSaveStatus('idle');
+  }, []);
+
   const progress = sections.length > 0 ? Math.round((completedSections.size / sections.length) * 100) : 0;
+  const isRecovering = recovery.status === 'recovering' || recovery.status === 'waiting_for_connection';
 
   return (
     <div className="space-y-4">
+      {/* Recovery banner */}
+      <RecoveryBanner recovery={recovery} onCancel={cancelRecovery} />
       {/* Progress & status */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">

@@ -32,6 +32,13 @@ import {
   type DojoLocalState,
 } from '@/lib/sessionDurability';
 import { processPendingWrites } from '@/lib/pendingWriteSync';
+import {
+  type RecoveryState,
+  createInitialRecoveryState,
+  executeWithRecovery,
+  type RecoveryController,
+} from '@/lib/sessionRecovery';
+import RecoveryBanner from '@/components/RecoveryBanner';
 import type { DojoScenario } from '@/lib/dojo/scenarios';
 import type { DojoScoreResult } from '@/lib/dojo/types';
 import { normalizeScoreResult } from '@/lib/dojo/types';
@@ -97,8 +104,10 @@ export default function AudioSessionMode({
   const [retryCount, setRetryCount] = useState(isResuming ? savedState!.retryCount : 0);
   const [isPaused, setIsPaused] = useState(false);
   const [transcribedText, setTranscribedText] = useState(isResuming ? savedState!.transcribedText : '');
+  const [recovery, setRecovery] = useState<RecoveryState>(createInitialRecoveryState());
   // Client-generated session ID for durability
   const clientSessionId = useRef(crypto.randomUUID()).current;
+  const recoveryRef = useRef<RecoveryController | null>(null);
 
   const voice = useVoiceMode();
   const phaseRef = useRef(phase);
@@ -225,6 +234,76 @@ export default function AudioSessionMode({
     setTextFallback('');
     await scoreAndDeliver(text, isRetry);
   }, [textFallback]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Persist score to DB with pending-write fallback (used by both normal and recovery paths)
+  const persistScore = useCallback(async (scoreData: DojoScoreResult, text: string, isRetry: boolean) => {
+    try {
+      if (!isRetry) {
+        const dbSessionId = crypto.randomUUID();
+        const turnId = crypto.randomUUID();
+        try {
+          const { data: session, error: sessionErr } = await supabase
+            .from('dojo_sessions')
+            .insert({
+              id: dbSessionId,
+              user_id: userId,
+              mode: (mode as 'autopilot' | 'custom') || 'autopilot',
+              session_type: 'drill',
+              skill_focus: scenario.skillFocus,
+              scenario_title: scenario.title,
+              scenario_context: scenario.context,
+              scenario_objection: scenario.objection,
+              best_score: scoreData.score,
+              latest_score: scoreData.score,
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+            })
+            .select('id')
+            .single();
+          if (sessionErr) throw sessionErr;
+          if (session) {
+            setSessionId(session.id);
+            const { data: turn } = await supabase
+              .from('dojo_session_turns')
+              .insert({
+                id: turnId,
+                session_id: session.id,
+                user_id: userId,
+                turn_index: 0,
+                prompt_text: scenario.objection,
+                user_response: text,
+                score: scoreData.score,
+                feedback: scoreData.feedback,
+                top_mistake: scoreData.topMistake,
+                improved_version: scoreData.improvedVersion,
+                score_json: scoreToJson(scoreData),
+              })
+              .select('id')
+              .single();
+            if (turn) setFirstTurnId(turn.id);
+          }
+          emitSaveStatus('saved');
+        } catch (dbErr) {
+          console.warn('DB write failed (persist helper), queuing:', dbErr);
+          enqueuePendingWrite({ turnId: dbSessionId, table: 'dojo_sessions', action: 'insert', data: {
+            id: dbSessionId, user_id: userId, mode: (mode as 'autopilot' | 'custom') || 'autopilot',
+            session_type: 'drill', skill_focus: scenario.skillFocus, scenario_title: scenario.title,
+            scenario_context: scenario.context, scenario_objection: scenario.objection,
+            best_score: scoreData.score, latest_score: scoreData.score, status: 'completed',
+            completed_at: new Date().toISOString(),
+          }});
+          enqueuePendingWrite({ turnId, table: 'dojo_session_turns', action: 'insert', data: {
+            id: turnId, session_id: dbSessionId, user_id: userId, turn_index: 0,
+            prompt_text: scenario.objection, user_response: text, score: scoreData.score,
+            feedback: scoreData.feedback, top_mistake: scoreData.topMistake,
+            improved_version: scoreData.improvedVersion, score_json: scoreToJson(scoreData),
+          }});
+          setSessionId(dbSessionId);
+          emitSaveStatus('offline');
+        }
+      }
+      processPendingWrites();
+    } catch { /* already handled */ }
+  }, [scenario, userId, mode]);
 
   const scoreAndDeliver = useCallback(async (text: string, isRetry: boolean) => {
     try {
@@ -411,11 +490,58 @@ export default function AudioSessionMode({
       processPendingWrites();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to score response';
-      console.error('Audio session score error:', e);
-      toast.error(msg);
-      emitSaveStatus('error');
-      // Go back to listening
-      setPhase(isRetry ? 'retry_listening' : 'listening');
+      console.error('Audio session score error — entering recovery:', e);
+      emitSaveStatus('recovering');
+
+      // Enter recovery mode: keep retrying scoring with backoff
+      const capturedText = text;
+      const capturedIsRetry = isRetry;
+      
+      recoveryRef.current?.cancel();
+      recoveryRef.current = executeWithRecovery(
+        async () => {
+          const { data, error } = await supabase.functions.invoke('dojo-score', {
+            body: {
+              scenario: {
+                skillFocus: scenario.skillFocus,
+                context: scenario.context,
+                objection: scenario.objection,
+              },
+              userResponse: capturedText,
+              retryCount: capturedIsRetry ? retryCount + 1 : 0,
+            },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          return normalizeScoreResult(data as Record<string, unknown>);
+        },
+        {
+          reason: 'scoring_failure',
+          interruptedPhase: isRetry ? 'retry_scoring' : 'scoring',
+          onStateChange: setRecovery,
+          onSuccess: (scoreData) => {
+            // Recovery succeeded — continue the normal flow
+            setRecovery(createInitialRecoveryState());
+            emitSaveStatus('saving');
+            // Re-enter the persist path (inline simplified version)
+            if (!capturedIsRetry) {
+              setResult(scoreData);
+            } else {
+              setRetryResult(scoreData);
+              setRetryCount(prev => prev + 1);
+            }
+            setPhase(capturedIsRetry ? 'retry_feedback' : 'feedback');
+            // Persist asynchronously — failures go to pending queue
+            persistScore(scoreData, capturedText, capturedIsRetry);
+          },
+          onGiveUp: () => {
+            setRecovery(createInitialRecoveryState());
+            emitSaveStatus('error');
+            toast.error('Could not reach scoring service. Your response is saved locally.');
+            setPhase(capturedIsRetry ? 'retry_listening' : 'listening');
+          },
+        },
+      );
     }
   }, [scenario, userId, mode, sessionId, firstTurnId, retryCount, result, retryResult]);
 
@@ -470,11 +596,39 @@ export default function AudioSessionMode({
     }
   }, [phase, voice, activateMic]);
 
+  // Cleanup recovery on unmount
+  useEffect(() => {
+    return () => { recoveryRef.current?.cancel(); };
+  }, []);
+
+  const cancelRecovery = useCallback(() => {
+    recoveryRef.current?.cancel();
+    setRecovery(createInitialRecoveryState());
+    emitSaveStatus('idle');
+  }, []);
+
+  const handleTextFallbackFromRecovery = useCallback(() => {
+    cancelRecovery();
+    setMicAvailable(false);
+    // Return to listening for text input
+    const currentPhase = phaseRef.current;
+    if (isProcessingPhase(currentPhase)) {
+      setPhase(currentPhase.startsWith('retry') ? 'retry_listening' : 'listening');
+    }
+  }, [cancelRecovery]);
+
   const currentResult = retryResult || result;
   const showFeedbackDelivery = isFeedbackPhase(phase) && currentResult && sessionId;
+  const isRecovering = recovery.status === 'recovering' || recovery.status === 'waiting_for_connection';
 
   return (
     <div className="space-y-4">
+      {/* Recovery banner */}
+      <RecoveryBanner
+        recovery={recovery}
+        onCancel={cancelRecovery}
+        onTextFallback={handleTextFallbackFromRecovery}
+      />
       {/* Phase indicator */}
       <div className={cn(
         'flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all duration-300',
