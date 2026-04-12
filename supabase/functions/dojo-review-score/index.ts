@@ -193,7 +193,14 @@ FOCUS PATTERNS (pick ONE from this EXACT list): ${validPatterns}
 
 COMMON MISTAKES (pick exactly ONE for "topMistake" — MUST be from this list): ${(VALID_MISTAKES[skillFocus] || VALID_MISTAKES.objection_handling).join(', ')}
 
-Respond with ONLY valid JSON:
+MISTAKE SELECTION PRIORITY (when multiple mistakes are present, pick the highest-leverage one):
+Priority 1 — CONTROL failures: lack_of_control, weak_close, vague_next_step, too_passive, accepted_delay, no_mutual_plan. These kill deals.
+Priority 2 — STRUCTURAL failures: pitched_too_early, failed_to_qualify, reactive_not_reframing, accepted_weak_pain, failed_to_deepen. These waste cycles.
+Priority 3 — CONTENT failures: no_business_impact, no_proof, too_generic, vendor_language. These weaken positioning.
+Priority 4 — STYLE failures: too_long, stacked_questions, no_urgency, skipped_stakeholders, no_disqualification. These reduce effectiveness.
+When a control failure AND a content failure coexist, ALWAYS pick the control failure — except pitched_too_early which trumps weak_close.
+
+
 {
   "score": 60,
   "diagnosisScore": 30,
