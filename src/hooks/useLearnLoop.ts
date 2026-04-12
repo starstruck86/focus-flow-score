@@ -8,7 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDailyKI } from '@/hooks/useDailyKI';
-import { buildSkillMemory } from '@/lib/dojo/skillMemory';
+import { buildSkillMemory, type SkillMemory } from '@/lib/dojo/skillMemory';
 import {
   buildMentalModel,
   getLastRepInsights,
