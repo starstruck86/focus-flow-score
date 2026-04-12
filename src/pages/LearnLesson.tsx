@@ -29,6 +29,7 @@ export default function LearnLesson() {
   const generateLesson = useGenerateLesson();
   const upsertProgress = useUpsertProgress();
   const saveAnswer = useSaveQuizAnswer();
+  const { isAudio, toggleMode } = useAudioPreference();
 
   const [phase, setPhase] = useState<Phase>('learn');
   const [expandedSection, setExpandedSection] = useState<string | null>('concept');
