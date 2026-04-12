@@ -93,7 +93,7 @@ export default function DojoSession() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isAudio, toggleMode } = useAudioPreference();
 
-  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null } | null;
+  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean } | null;
   const transcriptOrigin = state?.transcriptOrigin ?? null;
   const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
   const assignmentId = state?.assignmentId ?? null;
@@ -334,6 +334,22 @@ export default function DojoSession() {
 
       {/* ── Content ── */}
       <div className={cn('flex-1 px-4 py-4 space-y-4', SHELL.main.bottomPad)}>
+        {/* Assignment context — why today */}
+        {state?.assignmentReason && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="p-3 space-y-1">
+              <div className="flex items-center gap-2">
+                <Crosshair className="h-3.5 w-3.5 text-primary" />
+                <span className="text-xs font-semibold text-foreground">
+                  {state.assignmentAnchor ? `${DAY_ANCHORS[state.assignmentAnchor as DayAnchor]?.label ?? state.assignmentAnchor}` : 'Today\'s Focus'}
+                  {state.assignmentFocusPattern ? ` · ${FOCUS_PATTERN_LABELS[state.assignmentFocusPattern] || state.assignmentFocusPattern.replace(/_/g, ' ')}` : ''}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground pl-5.5">{state.assignmentReason}</p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Scenario context */}
         <Card className="border-border/60">
           <CardContent className="p-4 space-y-3">
