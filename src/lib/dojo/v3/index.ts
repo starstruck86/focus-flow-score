@@ -11,3 +11,5 @@ export * from './kiCatalogBridge';
 export * from './programmingEngine';
 export * from './scenarioFamilies';
 export * from './progressEngine';
+export * from './snapshotManager';
+export * from './weeklySummaryEngine';

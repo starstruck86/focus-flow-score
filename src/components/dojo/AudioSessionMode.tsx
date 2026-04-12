@@ -60,6 +60,9 @@ interface AudioSessionModeProps {
   userId: string;
   mode?: string;
   onComplete: () => void;
+  assignmentId?: string | null;
+  benchmarkTag?: boolean;
+  scenarioFamilyId?: string | null;
 }
 
 /** Safely cast DojoScoreResult to Json for DB storage */
@@ -87,6 +90,9 @@ export default function AudioSessionMode({
   userId,
   mode,
   onComplete,
+  assignmentId,
+  benchmarkTag = false,
+  scenarioFamilyId,
 }: AudioSessionModeProps) {
   // Restore from saved state if resuming
   const savedState = useRef(loadDojoState()).current;
@@ -266,6 +272,9 @@ export default function AudioSessionMode({
               latest_score: scoreData.score,
               status: 'completed',
               completed_at: new Date().toISOString(),
+              assignment_id: assignmentId ?? null,
+              benchmark_tag: benchmarkTag,
+              scenario_family_id: scenarioFamilyId ?? null,
             })
             .select('id')
             .single();
@@ -300,6 +309,8 @@ export default function AudioSessionMode({
             scenario_context: scenario.context, scenario_objection: scenario.objection,
             best_score: scoreData.score, latest_score: scoreData.score, status: 'completed',
             completed_at: new Date().toISOString(),
+            assignment_id: assignmentId ?? null, benchmark_tag: benchmarkTag,
+            scenario_family_id: scenarioFamilyId ?? null,
           }});
           enqueuePendingWrite({ turnId, table: 'dojo_session_turns', action: 'insert', data: {
             id: turnId, session_id: dbSessionId, user_id: userId, turn_index: 0,
@@ -358,6 +369,9 @@ export default function AudioSessionMode({
               latest_score: scoreData.score,
               status: 'completed',
               completed_at: new Date().toISOString(),
+              assignment_id: assignmentId ?? null,
+              benchmark_tag: benchmarkTag,
+              scenario_family_id: scenarioFamilyId ?? null,
             })
             .select('id')
             .single();

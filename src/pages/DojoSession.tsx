@@ -92,9 +92,12 @@ export default function DojoSession() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isAudio, toggleMode } = useAudioPreference();
 
-  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin } | null;
+  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null } | null;
   const transcriptOrigin = state?.transcriptOrigin ?? null;
   const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
+  const assignmentId = state?.assignmentId ?? null;
+  const benchmarkTag = state?.benchmarkTag ?? false;
+  const scenarioFamilyId = state?.scenarioFamilyId ?? null;
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
     return getRandomScenario(state?.skillFocus);
@@ -169,6 +172,9 @@ export default function DojoSession() {
               latest_score: scoreData.score,
               status: 'completed',
               completed_at: new Date().toISOString(),
+              assignment_id: assignmentId,
+              benchmark_tag: benchmarkTag,
+              scenario_family_id: scenarioFamilyId,
             })
             .select('id')
             .single();
@@ -338,6 +344,9 @@ export default function DojoSession() {
             userId={user.id}
             mode={state?.mode}
             onComplete={handleNextRep}
+            assignmentId={assignmentId}
+            benchmarkTag={benchmarkTag}
+            scenarioFamilyId={scenarioFamilyId}
           />
         )}
 
