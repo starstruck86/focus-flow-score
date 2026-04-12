@@ -6,14 +6,17 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileText, Search, Clock, Target, RefreshCw, Trash2, Building2, GraduationCap, Pencil, Save, X } from 'lucide-react';
+import { FileText, Search, Clock, Target, RefreshCw, Trash2, Building2, GraduationCap, Pencil, Save, X, Zap } from 'lucide-react';
 import { useCallTranscripts, useDeleteTranscript, useUpdateTranscript, type CallTranscript } from '@/hooks/useCallTranscripts';
 import { useGradeTranscript, useTranscriptGrade } from '@/hooks/useTranscriptGrades';
+import { useExtractScenarios } from '@/hooks/useExtractScenarios';
+import { ExtractedScenariosList } from '@/components/dojo/ExtractedScenariosList';
 import { useStore } from '@/store/useStore';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { SalesCoachPanel } from '@/components/SalesCoachPanel';
+import { useNavigate } from 'react-router-dom';
 
 const CALL_TYPES = ['Discovery', 'Demo', 'Negotiation', 'QBR', 'Follow-up', 'Other'];
 
@@ -26,6 +29,7 @@ interface TranscriptViewerProps {
 }
 
 function TranscriptDetailPane({ selected, onDelete }: { selected: CallTranscript; onDelete: (id: string) => void }) {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(selected.title);
   const [editCallType, setEditCallType] = useState(selected.call_type || '');
@@ -33,6 +37,7 @@ function TranscriptDetailPane({ selected, onDelete }: { selected: CallTranscript
   const [editParticipants, setEditParticipants] = useState(selected.participants || '');
   const [editNotes, setEditNotes] = useState(selected.notes || '');
   const updateTranscript = useUpdateTranscript();
+  const { extract, isExtracting, scenarios, clear } = useExtractScenarios();
 
   const startEdit = () => {
     setEditTitle(selected.title);
@@ -184,11 +189,44 @@ function TranscriptDetailPane({ selected, onDelete }: { selected: CallTranscript
       )}
 
       <div>
-        <p className="text-[11px] font-semibold text-muted-foreground mb-1">Full Transcript</p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[11px] font-semibold text-muted-foreground">Full Transcript</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            disabled={isExtracting || selected.content.length < 200}
+            onClick={() => extract(selected.content, selected.title, selected.call_type || undefined)}
+          >
+            <Zap className="h-3 w-3 mr-1" />
+            {isExtracting ? 'Extracting…' : 'Extract Scenarios'}
+          </Button>
+        </div>
         <div className="text-sm whitespace-pre-wrap font-mono bg-muted/30 p-3 rounded-lg border border-border/50 max-h-[400px] overflow-y-auto">
           {selected.content}
         </div>
       </div>
+
+      {scenarios && scenarios.length > 0 && (
+        <ExtractedScenariosList
+          scenarios={scenarios}
+          onClose={clear}
+          onPractice={(s) => {
+            navigate('/dojo', {
+              state: {
+                preloadScenario: {
+                  id: `extracted-${Date.now()}`,
+                  skillFocus: s.skillFocus,
+                  title: s.title,
+                  context: s.context,
+                  objection: s.objection,
+                  difficulty: s.difficulty,
+                },
+              },
+            });
+          }}
+        />
+      )}
     </div>
   );
 }
