@@ -128,7 +128,7 @@ export async function computeWeeklySummaryFromDB(
   // Top improvement
   const improving = [...perAnchorStats].filter(a => a.delta > 0).sort((a, b) => b.delta - a.delta);
   const topImprovement = improving[0]
-    ? `${improving[0].label} up ${improving[0].delta} pts`
+    ? `${improving[0].label} improved +${improving[0].delta} pts${improving[0].delta >= 10 ? ' — real progress' : ''}`
     : null;
 
   // Biggest gap
