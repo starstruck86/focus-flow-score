@@ -85,7 +85,7 @@ export async function buildSkillMemory(userId: string): Promise<SkillMemory> {
 
   const { data: turns } = await supabase
     .from('dojo_session_turns')
-    .select('session_id, score, turn_index, score_json, created_at')
+    .select('session_id, score, turn_index, score_json, top_mistake, created_at')
     .eq('user_id', userId)
     .eq('turn_index', 0) // first attempts only for pattern tracking
     .order('created_at', { ascending: false })
@@ -168,7 +168,7 @@ export async function buildSkillMemory(userId: string): Promise<SkillMemory> {
     // Confidence
     let confidence: ConfidenceLevel;
     if (recentAvg >= 75 && trendDelta >= 0 && totalReps >= 5) confidence = 'high';
-    else if (recentAvg >= 55 || totalReps >= 3) confidence = 'building';
+    else if (recentAvg >= 55 || (totalReps >= 3 && recentAvg >= 40)) confidence = 'building';
     else confidence = 'low';
 
     // Mistake tracking
@@ -179,8 +179,9 @@ export async function buildSkillMemory(userId: string): Promise<SkillMemory> {
       const session = skillSessions[i];
       const sessionTurns = turnsBySession.get(session.id) ?? [];
       for (const turn of sessionTurns) {
-        const sj = turn.score_json as Record<string, unknown> | null;
-        const mistake = sj?.topMistake as string | undefined;
+        // Use the canonical top_mistake column; fall back to score_json for legacy rows
+        const mistake = (turn as Record<string, unknown>).top_mistake as string | undefined
+          ?? (turn.score_json as Record<string, unknown> | null)?.topMistake as string | undefined;
         if (mistake) {
           mistakeCounts.set(mistake, (mistakeCounts.get(mistake) ?? 0) + 1);
           if (i < RECENT_WINDOW) recentMistakes.add(mistake);
@@ -342,9 +343,10 @@ function deriveProgressSignals(profiles: SkillProfile[]): ProgressSignal[] {
       });
     }
 
-    // "This is still breaking" — top mistake with 3+ occurrences
+    // "This is still breaking" — top mistake with 3+ occurrences AND still appearing recently
+    // (Skip if already resolved — avoids contradictory "fixed" + "still breaking" signals)
     for (const m of p.topMistakes) {
-      if (m.count >= 3) {
+      if (m.count >= 3 && !p.resolvedMistakes.includes(m.mistake)) {
         signals.push({
           type: 'still_breaking',
           label: 'This is still breaking',
