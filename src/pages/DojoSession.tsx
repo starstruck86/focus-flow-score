@@ -35,7 +35,9 @@ import { SaveIndicator } from '@/components/SaveIndicator';
 import type { Json } from '@/integrations/supabase/types';
 import { useAudioPreference } from '@/hooks/useAudioPreference';
 import { ImprovementVerdictCard } from '@/components/dojo/ImprovementVerdictCard';
+import { ThreeStageComparison } from '@/components/dojo/ThreeStageComparison';
 import { assessImprovement } from '@/lib/dojo/improvementAssessment';
+import { useScoreOriginalResponse } from '@/hooks/useScoreOriginalResponse';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
