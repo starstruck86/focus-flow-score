@@ -83,11 +83,20 @@ export function DailyKICard({ context }: DailyKICardProps) {
           )}
 
           <button
-            onClick={() => navigate('/dojo', { state: { fromLearn: true, kiTitle: ki.title } })}
+            onClick={() => navigate('/dojo/session', {
+              state: {
+                scenario: context.assignmentScenario ?? undefined,
+                mode: 'autopilot',
+                assignmentId: context.assignmentDbId ?? null,
+                benchmarkTag: context.benchmarkTag ?? false,
+                scenarioFamilyId: context.scenarioFamilyId ?? null,
+                fromLearn: true,
+              },
+            })}
             className="w-full flex items-center justify-center gap-2 h-10 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/85 transition-colors mt-1"
           >
             <BookOpen className="h-4 w-4" />
-            Practice This in Dojo
+            Practice This Now
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
 
