@@ -623,17 +623,17 @@ function FeedbackView({
       )}
 
       {/* ── Before vs After on Retry (when transcript-origin scenario is retried) ── */}
-      {transcriptOrigin && retryResult && result && (
+      {transcriptOrigin && retryResult && retryAssessment && scoreDelta !== null && (
         <ImprovementVerdictCard
           verdict={assessImprovement({
-            originalScore: result.score,
-            trainedScore: retryResult.score,
-            originalTopMistake: result.topMistake,
-            trainedTopMistake: retryResult.topMistake,
-            trainedFocusApplied: retryResult.focusApplied,
+            originalScore: currentResult.score - (scoreDelta ?? 0),
+            trainedScore: currentResult.score,
+            originalTopMistake: retryAssessment.whatStillNeedsWork.includes(':') ? currentResult.topMistake : currentResult.topMistake,
+            trainedTopMistake: currentResult.topMistake,
+            trainedFocusApplied: currentResult.focusApplied,
           })}
-          originalScore={result.score}
-          trainedScore={retryResult.score}
+          originalScore={currentResult.score - (scoreDelta ?? 0)}
+          trainedScore={currentResult.score}
         />
       )}
 
