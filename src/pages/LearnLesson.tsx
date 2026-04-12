@@ -150,6 +150,13 @@ export default function LearnLesson() {
             <p className="text-sm font-semibold truncate">{lesson.title}</p>
             <p className="text-[10px] text-muted-foreground capitalize">{lesson.topic.replace(/_/g, ' ')} · {lesson.difficulty_level}</p>
           </div>
+          <button
+            onClick={toggleMode}
+            className="p-1.5 rounded-md hover:bg-accent/50 transition-colors"
+            title={isAudio ? 'Switch to text mode' : 'Switch to audio mode'}
+          >
+            {isAudio ? <Volume2 className="h-4 w-4 text-primary" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
+          </button>
         </div>
 
         {/* Generation needed */}
