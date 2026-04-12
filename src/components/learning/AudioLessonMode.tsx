@@ -29,7 +29,7 @@ import { toast } from 'sonner';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { supabase } from '@/integrations/supabase/client';
 import { emitSaveStatus } from '@/components/SaveIndicator';
-import { saveLearnState, clearLearnState } from '@/lib/sessionDurability';
+import { saveLearnState, clearLearnState, loadLearnState } from '@/lib/sessionDurability';
 import type { LearningLesson, MCQuestion } from '@/lib/learning/types';
 import {
   buildLessonAudioSections,
@@ -51,18 +51,28 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   const upsertProgress = useUpsertProgress();
   const saveAnswer = useSaveQuizAnswer();
 
+  // Restore from saved state if resuming the same lesson
+  const savedLearn = useRef(loadLearnState()).current;
+  const isLearnResuming = savedLearn && savedLearn.lessonId === lesson.id && savedLearn.phase !== 'complete';
+
   const [sections] = useState<LessonAudioSection[]>(() =>
     buildLessonAudioSections(lesson.id, lesson.lesson_content!, lesson.quiz_content)
   );
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [phase, setPhase] = useState<LessonPhase>('teaching');
+  const [currentIndex, setCurrentIndex] = useState(isLearnResuming ? savedLearn!.currentSectionIndex : 0);
+  const [phase, setPhase] = useState<LessonPhase>(
+    isLearnResuming ? (savedLearn!.phase as LessonPhase) : 'teaching'
+  );
   const [isPaused, setIsPaused] = useState(false);
-  const [completedSections, setCompletedSections] = useState<Set<string>>(new Set());
+  const [completedSections, setCompletedSections] = useState<Set<string>>(
+    isLearnResuming ? new Set(savedLearn!.completedSectionIds) : new Set()
+  );
 
   // Quiz state
-  const [mcAnswers, setMcAnswers] = useState<Record<string, string>>({});
-  const [mcScore, setMcScore] = useState(0);
-  const [openAnswer, setOpenAnswer] = useState('');
+  const [mcAnswers, setMcAnswers] = useState<Record<string, string>>(
+    isLearnResuming ? savedLearn!.mcAnswers : {}
+  );
+  const [mcScore, setMcScore] = useState(isLearnResuming ? savedLearn!.mcScore : 0);
+  const [openAnswer, setOpenAnswer] = useState(isLearnResuming ? savedLearn!.openAnswer : '');
   const [openFeedback, setOpenFeedback] = useState<string | null>(null);
   const [openScore, setOpenScore] = useState(0);
   const [micAvailable, setMicAvailable] = useState(true);
