@@ -8,6 +8,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeMultiThreadAssessment, type MultiThreadAssessment } from './multiThreadTypes';
 import { validateScoredFixture, type V6ScorerFixtureResult } from './qaHarness';
+import { V6_FIXTURES, type V6Fixture } from './qaFixtures';
 import type { V6Fixture } from './qaFixtures';
 
 export interface V6LiveRunResult extends V6ScorerFixtureResult {
