@@ -26,6 +26,7 @@ import { getFamiliesForAnchor, type ScenarioFamily } from './scenarioFamilies';
 import type { PressureProfile } from '../v4/pressureModel';
 import { PRESSURE_NONE } from '../v4/pressureModel';
 import { selectPressureProfile } from '../v4/pressureSelectors';
+import { getArcsForStage, type SimulationArc } from '../v5/simulationArcs';
 
 // ── DailyAssignment — the contract ────────────────────────────────
 
@@ -48,6 +49,9 @@ export interface DailyAssignment {
   // V4 pressure
   pressureExpected: boolean;
   pressureLabel: string | null;
+  // V5 simulation
+  simulationArcId: string | null;
+  simulationExpected: boolean;
 }
 
 export interface ScenarioSpec {
