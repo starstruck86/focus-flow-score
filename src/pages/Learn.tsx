@@ -25,6 +25,7 @@ import { WeeklyCoachingPlanCard } from '@/components/learn/WeeklyCoachingPlanCar
 import { FridayReadinessCard } from '@/components/learn/FridayReadinessCard';
 import { WeakestAnchorCard } from '@/components/learn/WeakestAnchorCard';
 import { BlockRemediationCard } from '@/components/learn/BlockRemediationCard';
+import { AdaptiveStudyPathCard } from '@/components/learn/AdaptiveStudyPathCard';
 
 export default function Learn() {
   const navigate = useNavigate();
@@ -128,7 +129,10 @@ export default function Learn() {
         {/* 1. Today's Mental Model */}
         {learnLoop?.mentalModel && <TodaysMentalModel model={learnLoop.mentalModel} />}
 
-        {/* 2. Weekly Coaching Plan (Phase 4) */}
+        {/* 2. Adaptive Study Path (Phase 5) */}
+        {learnLoop?.adaptiveStudyPath && <AdaptiveStudyPathCard path={learnLoop.adaptiveStudyPath} />}
+
+        {/* 3. Weekly Coaching Plan (Phase 4) */}
         {learnLoop?.weeklyPlan && <WeeklyCoachingPlanCard plan={learnLoop.weeklyPlan} />}
 
         {/* 3. In Your Next Rep */}
