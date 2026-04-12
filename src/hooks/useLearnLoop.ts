@@ -41,6 +41,10 @@ import {
   getAdaptiveStudyPath,
   type AdaptiveStudyPath,
 } from '@/lib/learning/learnPathEngine';
+import {
+  getPrimaryLearnAction,
+  type LearnPrimaryAction,
+} from '@/lib/learning/learnActionEngine';
 
 export interface LearnLoopData {
   mentalModel: MentalModel | null;
@@ -59,6 +63,8 @@ export interface LearnLoopData {
   blockRemediation: BlockRemediation | null;
   // Phase 5
   adaptiveStudyPath: AdaptiveStudyPath | null;
+  // Phase 6
+  primaryAction: LearnPrimaryAction | null;
 }
 
 export function useLearnLoop() {
@@ -75,14 +81,14 @@ export function useLearnLoop() {
         skillMemory: null, pressureBreakdown: null, multiThreadMiss: null,
         decayItems: [], transferSignal: null,
         weeklyPlan: null, fridayReadiness: null, blockRemediation: null,
-        adaptiveStudyPath: null,
+        adaptiveStudyPath: null, primaryAction: null,
       };
 
       const [
         skillMemory, lastRep, reinforcement,
         pressureBreakdown, multiThreadMiss, decayItems, transferSignal,
         weeklyPlan, fridayReadiness, blockRemediation,
-        adaptiveStudyPath,
+        adaptiveStudyPath, primaryAction,
       ] = await Promise.all([
         buildSkillMemory(user.id),
         getLastRepInsights(user.id),
@@ -95,6 +101,7 @@ export function useLearnLoop() {
         getFridayReadiness(user.id),
         getBlockRemediationPlan(user.id),
         getAdaptiveStudyPath(user.id),
+        getPrimaryLearnAction(user.id),
       ]);
 
       let mentalModel: MentalModel | null = null;
@@ -119,7 +126,7 @@ export function useLearnLoop() {
         mentalModel, lastRep, reinforcement, topMistake, skillMemory,
         pressureBreakdown, multiThreadMiss, decayItems, transferSignal,
         weeklyPlan, fridayReadiness, blockRemediation,
-        adaptiveStudyPath,
+        adaptiveStudyPath, primaryAction,
       };
     },
   });
