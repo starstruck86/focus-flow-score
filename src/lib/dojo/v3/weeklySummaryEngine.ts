@@ -21,6 +21,11 @@ export interface WeeklySummary {
   fridayScore: number | null;
   totalSessions: number;
   avgScore: number;
+  // V4 pressure metrics
+  pressureRepsCompleted: number;
+  avgPressureScore: number | null;
+  strongestPressureAnchor: string | null;
+  weakestPressureAnchor: string | null;
 }
 
 export interface AnchorWeekStat {
