@@ -103,7 +103,9 @@ export function deriveSessionInsights(result: SessionResult): SessionInsights {
 
   // Coaching message — drill cue when available, behavioral instruction always
   let coachingMessage: string;
-  if (score < 35) {
+  if (score < 35 && mistakeDetail) {
+    coachingMessage = `Review the ${skillLabel} lesson first — then come back and focus on this: ${mistakeDetail.drillCue}`;
+  } else if (score < 35) {
     coachingMessage = `Review the ${skillLabel} lesson first. You need the concept before reps will build the muscle.`;
   } else if (mistakeDetail && score < 55) {
     coachingMessage = mistakeDetail.drillCue;
