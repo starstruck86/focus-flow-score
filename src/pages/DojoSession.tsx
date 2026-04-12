@@ -33,6 +33,7 @@ import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview
 import DaveCoachingDelivery from '@/components/dojo/DaveCoachingDelivery';
 import AudioSessionMode from '@/components/dojo/AudioSessionMode';
 import { SessionFeedbackCard } from '@/components/dojo/SessionFeedbackCard';
+import { DealMovementCard } from '@/components/dojo/DealMovementCard';
 import { SaveIndicator } from '@/components/SaveIndicator';
 import type { Json } from '@/integrations/supabase/types';
 import { useAudioPreference } from '@/hooks/useAudioPreference';
