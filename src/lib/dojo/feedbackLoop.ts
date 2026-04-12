@@ -129,61 +129,68 @@ export function getNextAction(
   // Check for repeated mistakes across recent sessions
   const repeatedMistake = detectRepeatedMistake(result, recentSessions);
 
-  // Score < 40: concept gap → send to lesson
-  if (score < 40) {
+  // Score < 35: concept gap → send to lesson
+  if (score < 35) {
     return {
       type: 'lesson',
       targetTopic: result.skillFocus,
       lessonTopic: result.skillFocus,
-      message: `Your ${skillLabel} fundamentals need work. Review the lesson to rebuild the foundation.`,
+      message: `Your ${skillLabel} fundamentals need work. The issue isn't practice volume — it's understanding. Review the lesson first.`,
       ctaLabel: `Review ${skillLabel} Lesson`,
     };
   }
 
-  // Repeated mistake detected → targeted drill on that specific pattern
+  // Repeated mistake detected → targeted intervention
   if (repeatedMistake) {
     const entry = getMistakeEntry(repeatedMistake.mistake);
     const targetSkill = entry.skill;
     const targetPractice = getPracticeMapping(targetSkill);
 
-    // If severity is 3 and it's repeated 3+ times, send back to lesson
+    // Severity 3 repeated 3+ times → concept gap, back to lesson
     if (entry.severity === 3 && repeatedMistake.count >= 3) {
       return {
         type: 'lesson',
         targetTopic: targetSkill,
         lessonTopic: targetSkill,
-        message: `You've hit "${entry.label}" ${repeatedMistake.count} times. The concept needs reinforcement before more reps.`,
+        message: `"${entry.label}" has come up ${repeatedMistake.count} times — this is a concept gap, not a practice gap. Revisit the lesson before more reps.`,
         ctaLabel: `Review ${SKILL_LABELS[targetSkill]} Lesson`,
       };
     }
 
+    // Severity 2-3 repeated 2+ times → targeted drill with justification
     return {
       type: 'dojo',
       targetTopic: targetSkill,
       suggestedMode: targetPractice.recommendedMode,
-      message: `You keep hitting "${entry.label}." ${entry.drillCue}`,
+      message: `"${entry.label}" keeps showing up (${repeatedMistake.count}× in recent sessions). This is your highest-leverage fix right now. ${entry.drillCue}`,
       ctaLabel: `Drill: ${entry.label}`,
     };
   }
 
-  // Score 40–60: execution gap → another rep, same skill
-  if (score < 60) {
+  // Score 35–55: execution gap → same skill, specific guidance
+  if (score < 55) {
+    const mistakeNote = insights.mistakeDetail
+      ? ` Focus on fixing "${insights.mistakeDetail.label}" — that's what's holding the score down.`
+      : '';
     return {
       type: 'dojo',
       targetTopic: result.skillFocus,
       suggestedMode: practice.recommendedMode,
-      message: `You understand the concept but the execution isn't consistent. Run another ${practice.label}.`,
+      message: `You understand the concept but the execution isn't landing.${mistakeNote} Run another ${practice.label}.`,
       ctaLabel: `Run Another ${practice.label}`,
     };
   }
 
-  // Score 60–75: close to locking in → one more focused rep
+  // Score 55–75: close — one more rep with specific focus
   if (score < 75) {
+    const focusNote = insights.mistakeDetail
+      ? `Specifically: fix "${insights.mistakeDetail.label}" and this locks in.`
+      : 'Tighten your specificity and close stronger.';
     return {
       type: 'dojo',
       targetTopic: result.skillFocus,
       suggestedMode: practice.recommendedMode,
-      message: `Almost there. One more focused rep will lock this pattern in.`,
+      message: `Almost there. ${focusNote}`,
       ctaLabel: `One More Rep`,
     };
   }
