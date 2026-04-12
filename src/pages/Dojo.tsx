@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useDojoStats } from '@/lib/dojo/useDojoStreak';
 import { getSmartAutopilotRecommendation } from '@/lib/dojo/smartAutopilot';
 import { buildPatternMemory, deriveCoachingInsights } from '@/lib/dojo/patternMemory';
+import { buildSkillMemory } from '@/lib/dojo/skillMemory';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PatternMemory, CoachingInsights } from '@/lib/dojo/types';
 import type { LessonContext } from '@/lib/learning/practiceMapping';
@@ -29,6 +30,13 @@ export default function Dojo() {
     queryKey: ['dojo-pattern-memory', user?.id],
     enabled: !!user?.id && (stats?.totalSessions ?? 0) >= 3,
     queryFn: () => user ? buildPatternMemory(user.id) : null,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: skillMemory } = useQuery({
+    queryKey: ['dojo-skill-memory', user?.id],
+    enabled: !!user?.id,
+    queryFn: () => user ? buildSkillMemory(user.id) : null,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -63,6 +71,7 @@ export default function Dojo() {
           bestScore={stats?.bestScore ?? null}
           onStartAutopilot={startAutopilot}
           lessonContext={lessonContext}
+          dailyFocus={skillMemory?.dailyFocus ?? null}
         />
 
         {/* Section 2: Training Modes */}
@@ -76,6 +85,8 @@ export default function Dojo() {
         <PerformanceSignals
           skillStats={skillStats}
           coachingInsights={coachingInsights}
+          skillProfiles={skillMemory?.profiles ?? null}
+          progressSignals={skillMemory?.progressSignals ?? null}
         />
       </div>
     </Layout>

@@ -2,6 +2,7 @@ import type { SkillFocus } from '@/lib/dojo/scenarios';
 import { SKILL_LABELS } from '@/lib/dojo/scenarios';
 import { getPracticeMapping } from '@/lib/learning/practiceMapping';
 import { getMistakeEntry, type MistakeEntry } from '@/lib/dojo/mistakeTaxonomy';
+import type { SkillProfile } from '@/lib/dojo/skillMemory';
 
 // ── Session Result ──
 
@@ -128,6 +129,7 @@ export function getNextAction(
   result: SessionResult,
   insights: SessionInsights,
   recentSessions?: RecentSessionSummary[],
+  skillProfiles?: SkillProfile[],
 ): NextAction {
   const score = result.score;
   const skillLabel = SKILL_LABELS[result.skillFocus] || result.skillFocus.replace(/_/g, ' ');
@@ -202,10 +204,47 @@ export function getNextAction(
     };
   }
 
-  // Score 75+: strong → push to new skill or harder mode
+  // Score 75+: strong → use skill profiles for intelligent rotation
   const allSkills: SkillFocus[] = ['objection_handling', 'discovery', 'executive_response', 'deal_control', 'qualification'];
 
-  // If we have recent sessions, find the weakest skill to recommend
+  // V3: Use skill profiles for smarter rotation (avoids repetition fatigue)
+  if (skillProfiles && skillProfiles.length > 0) {
+    const nextSkill = selectNextSkillFromProfiles(result.skillFocus, skillProfiles);
+    if (nextSkill) {
+      const nextPractice = getPracticeMapping(nextSkill.skill);
+      const nextLabel = SKILL_LABELS[nextSkill.skill];
+
+      if (nextSkill.totalReps === 0) {
+        return {
+          type: 'dojo',
+          targetTopic: nextSkill.skill,
+          suggestedMode: nextPractice.recommendedMode,
+          message: `${skillLabel} is solid. You haven't practiced ${nextLabel.toLowerCase()} yet — let's build that.`,
+          ctaLabel: `Start ${nextLabel}`,
+        };
+      }
+
+      if (nextSkill.trend === 'declining') {
+        return {
+          type: 'dojo',
+          targetTopic: nextSkill.skill,
+          suggestedMode: nextPractice.recommendedMode,
+          message: `${skillLabel} is solid. Your ${nextLabel.toLowerCase()} has been slipping — let's correct that.`,
+          ctaLabel: `Work on ${nextLabel}`,
+        };
+      }
+
+      return {
+        type: 'dojo',
+        targetTopic: nextSkill.skill,
+        suggestedMode: nextPractice.recommendedMode,
+        message: `${skillLabel} is solid. Let's sharpen ${nextLabel.toLowerCase()} next.`,
+        ctaLabel: `Work on ${nextLabel}`,
+      };
+    }
+  }
+
+  // Fallback: use recent sessions to find weakest skill
   if (recentSessions?.length) {
     const weakestSkill = findWeakestSkill(result.skillFocus, recentSessions, allSkills);
     if (weakestSkill) {
@@ -234,6 +273,40 @@ export function getNextAction(
     message: `${skillLabel} is solid. Challenge yourself with ${nextLabel}.`,
     ctaLabel: `Try ${nextLabel}`,
   };
+}
+
+// ── V3: Intelligent skill rotation using profiles ──
+
+function selectNextSkillFromProfiles(
+  currentSkill: SkillFocus,
+  profiles: SkillProfile[],
+): SkillProfile | null {
+  const candidates = profiles.filter(p => p.skill !== currentSkill);
+  if (candidates.length === 0) return null;
+
+  // Priority 1: unpracticed skills
+  const unpracticed = candidates.filter(p => p.totalReps === 0);
+  if (unpracticed.length > 0) return unpracticed[0];
+
+  // Priority 2: declining skills
+  const declining = candidates.filter(p => p.trend === 'declining');
+  if (declining.length > 0) {
+    return declining.sort((a, b) => a.trendDelta - b.trendDelta)[0];
+  }
+
+  // Priority 3: lowest confidence + staleness factor
+  return candidates.sort((a, b) => {
+    const daysSinceA = a.lastPracticed
+      ? Math.floor((Date.now() - new Date(a.lastPracticed).getTime()) / (1000 * 60 * 60 * 24))
+      : 30;
+    const daysSinceB = b.lastPracticed
+      ? Math.floor((Date.now() - new Date(b.lastPracticed).getTime()) / (1000 * 60 * 60 * 24))
+      : 30;
+    // Lower need score = more needy
+    const needA = a.recentAvg - Math.min(daysSinceA * 2, 20);
+    const needB = b.recentAvg - Math.min(daysSinceB * 2, 20);
+    return needA - needB;
+  })[0];
 }
 
 // ── Pattern Detection Helpers ──
