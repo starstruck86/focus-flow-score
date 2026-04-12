@@ -3,9 +3,9 @@ import { Layout } from '@/components/Layout';
 import { Badge } from '@/components/ui/badge';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
-import { BookOpen, ChevronRight, CheckCircle2, Circle, Loader2, TrendingUp, TrendingDown, GraduationCap } from 'lucide-react';
+import { BookOpen, Loader2, TrendingUp, TrendingDown, GraduationCap } from 'lucide-react';
 import { useCourses, useUserProgress } from '@/lib/learning/hooks';
-import type { CourseWithModules, LearningProgress } from '@/lib/learning/types';
+import type { LearningProgress } from '@/lib/learning/types';
 import { useMemo } from 'react';
 import { useDailyKI } from '@/hooks/useDailyKI';
 import { useLearnLoop } from '@/hooks/useLearnLoop';
@@ -21,6 +21,10 @@ import { PressureBreakdownCard } from '@/components/learn/PressureBreakdownCard'
 import { StakeholderMissCard } from '@/components/learn/StakeholderMissCard';
 import { ReinforcementDecayCard } from '@/components/learn/ReinforcementDecayCard';
 import { TransferSignalCard } from '@/components/learn/TransferSignalCard';
+import { WeeklyCoachingPlanCard } from '@/components/learn/WeeklyCoachingPlanCard';
+import { FridayReadinessCard } from '@/components/learn/FridayReadinessCard';
+import { WeakestAnchorCard } from '@/components/learn/WeakestAnchorCard';
+import { BlockRemediationCard } from '@/components/learn/BlockRemediationCard';
 
 export default function Learn() {
   const navigate = useNavigate();
@@ -82,7 +86,6 @@ export default function Learn() {
     return null;
   }, [courses, progressMap]);
 
-  // Derive contextual CTA label
   const ctaLabel = useMemo(() => {
     if (learnLoop?.lastRep) {
       if (learnLoop.lastRep.focusApplied === 'no' || learnLoop.lastRep.score < 60) {
@@ -125,43 +128,58 @@ export default function Learn() {
         {/* 1. Today's Mental Model */}
         {learnLoop?.mentalModel && <TodaysMentalModel model={learnLoop.mentalModel} />}
 
-        {/* 2. In Your Next Rep */}
-        {ki && (
-          <NextRepExecutionCard ki={ki} topMistake={learnLoop?.topMistake} />
-        )}
+        {/* 2. Weekly Coaching Plan (Phase 4) */}
+        {learnLoop?.weeklyPlan && <WeeklyCoachingPlanCard plan={learnLoop.weeklyPlan} />}
 
-        {/* 3. Daily KI */}
+        {/* 3. In Your Next Rep */}
+        {ki && <NextRepExecutionCard ki={ki} topMistake={learnLoop?.topMistake} />}
+
+        {/* 4. Daily KI */}
         {dailyKI && <DailyKICard context={dailyKI} topMistake={learnLoop?.topMistake} />}
 
-        {/* 4. Replay That Moment (conditional) */}
+        {/* 5. Friday Readiness (Phase 4, conditional) */}
+        {learnLoop?.fridayReadiness && <FridayReadinessCard readiness={learnLoop.fridayReadiness} />}
+
+        {/* 6. Replay That Moment (conditional) */}
         {learnLoop?.lastRep && <ReplayMomentCard lastRep={learnLoop.lastRep} />}
 
-        {/* 5. Last Rep Insights */}
+        {/* 7. Last Rep Insights */}
         {learnLoop?.lastRep && <LastRepInsights insight={learnLoop.lastRep} />}
 
-        {/* 6. Under Pressure (Phase 3) */}
+        {/* 8. Under Pressure (Phase 3) */}
         {learnLoop?.pressureBreakdown && <PressureBreakdownCard pressure={learnLoop.pressureBreakdown} />}
 
-        {/* 7. Who You Missed (Phase 3) */}
+        {/* 9. Who You Missed (Phase 3) */}
         {learnLoop?.multiThreadMiss && <StakeholderMissCard miss={learnLoop.multiThreadMiss} />}
 
-        {/* 8. Pattern Recognition */}
+        {/* 10. Weakest Anchor (Phase 4, conditional) */}
+        {learnLoop?.weeklyPlan?.weakestAnchorLabel && learnLoop.weeklyPlan.weakestAnchorReason && (
+          <WeakestAnchorCard
+            anchorLabel={learnLoop.weeklyPlan.weakestAnchorLabel}
+            reason={learnLoop.weeklyPlan.weakestAnchorReason}
+          />
+        )}
+
+        {/* 11. Pattern Recognition */}
         {learnLoop?.skillMemory && <PatternRecognitionCard skillMemory={learnLoop.skillMemory} />}
 
-        {/* 9. What's Fading (Phase 3) */}
+        {/* 12. What's Fading (Phase 3) */}
         {learnLoop?.decayItems && learnLoop.decayItems.length > 0 && (
           <ReinforcementDecayCard items={learnLoop.decayItems} />
         )}
 
-        {/* 10. Is It Sticking? (Phase 3) */}
+        {/* 13. Is It Sticking? (Phase 3) */}
         {learnLoop?.transferSignal && <TransferSignalCard signal={learnLoop.transferSignal} />}
 
-        {/* 11. Reinforcement Queue */}
+        {/* 14. Block Remediation (Phase 4, conditional) */}
+        {learnLoop?.blockRemediation && <BlockRemediationCard remediation={learnLoop.blockRemediation} />}
+
+        {/* 15. Reinforcement Queue */}
         {learnLoop?.reinforcement && learnLoop.reinforcement.length > 0 && (
           <ReinforcementQueue items={learnLoop.reinforcement} />
         )}
 
-        {/* 12. Primary CTA */}
+        {/* 16. Primary CTA */}
         {nextLesson && (
           <button
             onClick={() => navigate(`/learn/lesson/${nextLesson.lesson.id}`)}
@@ -172,7 +190,7 @@ export default function Learn() {
           </button>
         )}
 
-        {/* 13. Topic mastery */}
+        {/* 17. Topic mastery */}
         {topicMastery.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -216,7 +234,7 @@ export default function Learn() {
           </div>
         )}
 
-        {/* 14. Course list */}
+        {/* 18. Course list */}
         {(courses || []).map(course => (
           <CourseCard
             key={course.id}

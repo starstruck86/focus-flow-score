@@ -1,8 +1,9 @@
 /**
- * useLearnLoop — Hook for Learn V6 Phase 1–3 data
+ * useLearnLoop — Hook for Learn V6 Phase 1–4 data
  *
  * Fetches: mental model, last rep insights, reinforcement queue,
- * skill memory, pressure breakdown, multi-thread miss, decay, transfer signal.
+ * skill memory, pressure breakdown, multi-thread miss, decay, transfer signal,
+ * weekly coaching plan, friday readiness, block remediation.
  * All derived from real Dojo data.
  */
 
@@ -28,6 +29,14 @@ import {
   type DecayItem,
   type TransferSignal,
 } from '@/lib/learning/learnAdaptationEngine';
+import {
+  getWeeklyCoachingPlan,
+  getFridayReadiness,
+  getBlockRemediationPlan,
+  type WeeklyCoachingPlan,
+  type FridayReadiness,
+  type BlockRemediation,
+} from '@/lib/learning/learnWeeklyEngine';
 
 export interface LearnLoopData {
   mentalModel: MentalModel | null;
@@ -40,6 +49,10 @@ export interface LearnLoopData {
   multiThreadMiss: MultiThreadMiss | null;
   decayItems: DecayItem[];
   transferSignal: TransferSignal | null;
+  // Phase 4
+  weeklyPlan: WeeklyCoachingPlan | null;
+  fridayReadiness: FridayReadiness | null;
+  blockRemediation: BlockRemediation | null;
 }
 
 export function useLearnLoop() {
@@ -55,9 +68,14 @@ export function useLearnLoop() {
         mentalModel: null, lastRep: null, reinforcement: [], topMistake: null,
         skillMemory: null, pressureBreakdown: null, multiThreadMiss: null,
         decayItems: [], transferSignal: null,
+        weeklyPlan: null, fridayReadiness: null, blockRemediation: null,
       };
 
-      const [skillMemory, lastRep, reinforcement, pressureBreakdown, multiThreadMiss, decayItems, transferSignal] = await Promise.all([
+      const [
+        skillMemory, lastRep, reinforcement,
+        pressureBreakdown, multiThreadMiss, decayItems, transferSignal,
+        weeklyPlan, fridayReadiness, blockRemediation,
+      ] = await Promise.all([
         buildSkillMemory(user.id),
         getLastRepInsights(user.id),
         getReinforcementQueue(user.id),
@@ -65,6 +83,9 @@ export function useLearnLoop() {
         getRecentMultiThreadMiss(user.id),
         getReinforcementDecay(user.id),
         getTransferSignal(user.id),
+        getWeeklyCoachingPlan(user.id),
+        getFridayReadiness(user.id),
+        getBlockRemediationPlan(user.id),
       ]);
 
       let mentalModel: MentalModel | null = null;
@@ -88,6 +109,7 @@ export function useLearnLoop() {
       return {
         mentalModel, lastRep, reinforcement, topMistake, skillMemory,
         pressureBreakdown, multiThreadMiss, decayItems, transferSignal,
+        weeklyPlan, fridayReadiness, blockRemediation,
       };
     },
   });
