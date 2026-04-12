@@ -190,6 +190,7 @@ async function persistAssignment(
       scenario_family_id: assignment.scenarioFamilyId,
       reason: assignment.reason,
       source: assignment.source,
+      simulation_arc_id: assignment.simulationArcId,
     })
     .select('id')
     .single();
