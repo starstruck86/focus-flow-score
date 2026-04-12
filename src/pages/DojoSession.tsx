@@ -43,6 +43,8 @@ import { useScoreOriginalResponse } from '@/hooks/useScoreOriginalResponse';
 import { PressureAnalysisCard } from '@/components/dojo/PressureAnalysisCard';
 import { TransferProgressCard } from '@/components/dojo/TransferProgressCard';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
+import SimulationMode from '@/components/dojo/SimulationMode';
+import { getArcById, type SimulationArc } from '@/lib/dojo/v5/simulationArcs';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
 
