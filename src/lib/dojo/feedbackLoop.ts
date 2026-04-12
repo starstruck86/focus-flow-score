@@ -61,14 +61,14 @@ export function deriveSessionInsights(result: SessionResult): SessionInsights {
 
   // Strength signal — only when earned, specific to what they did right
   let strengthSignal: string | null = null;
-  if (score >= 80) {
+  if (score >= 85) {
     strengthSignal = `Your ${skillLabel} showed real conviction — the structure, specificity, and control were all there.`;
+  } else if (score >= 75) {
+    strengthSignal = `Strong ${skillLabel}. You're operating at a level where the gains come from small precision adjustments, not fundamental changes.`;
   } else if (score >= 70) {
     strengthSignal = `Good instincts on ${skillLabel}. The right moves are there — precision will take it further.`;
-  } else if (score >= 60) {
-    strengthSignal = `You made the right structural choices. The gap is in specificity and conviction, not direction.`;
   }
-  // No strength signal below 60 — empty praise is worse than none
+  // No strength signal below 70 — it must be earned
 
   // Weakness signal — taxonomy-driven, specific to what went wrong
   let weaknessSignal: string;
