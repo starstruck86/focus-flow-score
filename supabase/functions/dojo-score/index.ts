@@ -287,7 +287,49 @@ Respond with ONLY valid JSON:
 RETRY-ONLY FIELDS (you MUST include these since this is a retry):
 Add these to your JSON response:
   "focusApplied": "yes" or "partial" or "no",
-  "focusAppliedReason": "One sentence."` : '');
+  "focusAppliedReason": "One sentence."` : '') + (scenario.multiThread?.active ? `
+
+MULTI-STAKEHOLDER ASSESSMENT (REQUIRED — this scenario contains stakeholder tension):
+The buyer input includes multiple stakeholder viewpoints, conflicting priorities, or internal tension.
+
+1. Identify the distinct stakeholder perspectives present.
+2. Evaluate whether the rep:
+   - acknowledged multiple perspectives
+   - aligned them into a shared direction
+   - or focused too narrowly on one stakeholder
+3. Evaluate whether the rep strengthened an internal champion or left internal resistance unresolved.
+4. Evaluate whether the response improved deal momentum.
+
+IMPORTANT: Do NOT invent stakeholders that are not present. Only assess what is genuinely in the scenario.
+
+Add this to your JSON response:
+  "multiThread": {
+    "stakeholdersDetected": ["role1", "role2"],
+    "stakeholdersAddressed": ["role1"],
+    "alignmentScore": 0-100,
+    "championStrengthScore": 0-100,
+    "politicalAwarenessScore": 0-100,
+    "dealMomentum": "forward" or "neutral" or "at_risk",
+    "breakdown": {
+      "missedStakeholders": ["role2"],
+      "conflictingSignalsUnresolved": false,
+      "wrongPriorityFocus": false,
+      "statusQuoDefenderIgnored": false
+    },
+    "coachingNote": "1-2 sentences on internal deal movement."
+  }
+
+SCORING GUIDE for multiThread:
+- alignmentScore HIGH: rep connects multiple perspectives into one shared problem or decision path
+- alignmentScore LOW: rep answers only one stakeholder, leaves conflict unresolved
+- championStrengthScore HIGH: rep arms someone with language, framing, or a usable next step internally
+- championStrengthScore LOW: rep weakens the likely champion or gives nothing reusable
+- politicalAwarenessScore HIGH: rep reads the room correctly, knows when to align, challenge, or structure
+- politicalAwarenessScore LOW: over-indexes on the loudest voice, ignores status-quo defenders
+- dealMomentum "forward": clearer path, more internal alignment, better decision movement
+- dealMomentum "neutral": handled but not moved
+- dealMomentum "at_risk": conflict increased or likely blocker ignored
+Keep coachingNote short and concrete. Anchor judgment to internal deal movement, not just correctness.` : '');
 
     const userPrompt = `SCENARIO:
 Skill being tested: ${skill}
