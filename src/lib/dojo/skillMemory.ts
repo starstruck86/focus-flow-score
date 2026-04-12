@@ -143,7 +143,7 @@ export async function buildSkillMemory(userId: string): Promise<SkillMemory> {
       trendDelta = Math.round(recentAvg - olderAvg);
       if (trendDelta >= IMPROVING_THRESHOLD) trend = 'improving';
       else if (trendDelta <= -IMPROVING_THRESHOLD) trend = 'declining';
-    } else if (totalReps < 3) {
+    } else if (totalReps <= 3) {
       trend = 'new';
     }
 
