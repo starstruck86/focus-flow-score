@@ -81,7 +81,7 @@ export function BlockComparisonView({ comparison, blockNumber }: BlockComparison
               <Layers className="h-3 w-3" /> Conversation Flow Progress
             </p>
             <p className="text-[10px] text-muted-foreground">
-              How your conversation management evolved across this block.
+              Multi-turn flow and closing across the block.
             </p>
             <div className="space-y-1">
               {flowComparison.benchmarkFlow != null && flowComparison.retestFlow != null && (
