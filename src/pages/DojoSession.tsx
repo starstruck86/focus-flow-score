@@ -307,6 +307,16 @@ export default function DojoSession() {
           </CardContent>
         </Card>
 
+        {/* ── Audio Session Mode ── */}
+        {sessionType === 'audio' && user && (
+          <AudioSessionMode
+            scenario={scenario}
+            userId={user.id}
+            mode={state?.mode}
+            onComplete={handleNextRep}
+          />
+        )}
+
         {/* ── Roleplay Mode ── */}
         {sessionType === 'roleplay' && phase !== 'feedback' && !currentResult && user && (
           <DojoRoleplay
