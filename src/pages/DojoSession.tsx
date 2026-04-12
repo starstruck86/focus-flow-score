@@ -379,7 +379,7 @@ export default function DojoSession() {
 
           {phase === 'feedback' && currentResult && (
             <motion.div key="feedback" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} originalCallScore={originalScore} firstAttemptResult={result} onRetry={handleStartRetry} onNextRep={handleNextRep} />
             </motion.div>
           )}
 
