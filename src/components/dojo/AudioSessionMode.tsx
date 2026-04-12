@@ -399,6 +399,14 @@ export default function AudioSessionMode({
               .single();
 
             if (turn) setFirstTurnId(turn.id);
+
+            // V3: Complete assignment — links session and triggers snapshot/week advancement
+            if (assignmentId) {
+              const today = new Date().toISOString().split('T')[0];
+              completeAssignment(userId, today, session.id).catch(err =>
+                console.error('[AudioSession] completeAssignment failed:', err)
+              );
+            }
           }
           emitSaveStatus('saved');
         } catch (dbErr) {
