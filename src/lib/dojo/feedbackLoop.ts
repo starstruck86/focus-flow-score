@@ -61,14 +61,14 @@ export function deriveSessionInsights(result: SessionResult): SessionInsights {
 
   // Strength signal — only when earned, specific to what they did right
   let strengthSignal: string | null = null;
-  if (score >= 80) {
+  if (score >= 85) {
     strengthSignal = `Your ${skillLabel} showed real conviction — the structure, specificity, and control were all there.`;
+  } else if (score >= 75) {
+    strengthSignal = `Strong ${skillLabel}. You're operating at a level where the gains come from small precision adjustments, not fundamental changes.`;
   } else if (score >= 70) {
     strengthSignal = `Good instincts on ${skillLabel}. The right moves are there — precision will take it further.`;
-  } else if (score >= 60) {
-    strengthSignal = `You made the right structural choices. The gap is in specificity and conviction, not direction.`;
   }
-  // No strength signal below 60 — empty praise is worse than none
+  // No strength signal below 70 — it must be earned
 
   // Weakness signal — taxonomy-driven, specific to what went wrong
   let weaknessSignal: string;
@@ -80,6 +80,9 @@ export function deriveSessionInsights(result: SessionResult): SessionInsights {
     weaknessSignal = `You recognized the situation but responded with a generic approach. The buyer heard nothing that would change their mind.`;
   } else if (score < 65) {
     weaknessSignal = `The direction was right but the response lacked the specificity and conviction that makes a buyer take action.`;
+  } else if (score >= 75) {
+    // High score with no specific mistake — don't manufacture criticism
+    weaknessSignal = `At this level, the gains are subtle: sharper word choice, tighter timing on the close, and reading hesitation faster.`;
   } else {
     weaknessSignal = `Small gaps in precision. The difference between good and elite here is concrete language and tighter control of the next step.`;
   }
@@ -92,13 +95,17 @@ export function deriveSessionInsights(result: SessionResult): SessionInsights {
     actionableFix = `Start with the lesson. Understand the underlying principle, then come back and try applying it to this exact scenario.`;
   } else if (score < 50) {
     actionableFix = `Anchor your response to the buyer\'s specific situation. Say: "You mentioned [their exact problem] — here\'s what we see when that goes unaddressed: [consequence with a number]."`;
+  } else if (score >= 75) {
+    actionableFix = `Record yourself delivering this response out loud. Listen for filler words, hedging, and any moment where you explain instead of assert.`;
   } else {
     actionableFix = `Add one concrete proof point and replace any vague language with the buyer\'s own words. End with a specific ask, not "let me know."`;
   }
 
   // Coaching message — drill cue when available, behavioral instruction always
   let coachingMessage: string;
-  if (score < 35) {
+  if (score < 35 && mistakeDetail) {
+    coachingMessage = `Review the ${skillLabel} lesson first — then come back and focus on this: ${mistakeDetail.drillCue}`;
+  } else if (score < 35) {
     coachingMessage = `Review the ${skillLabel} lesson first. You need the concept before reps will build the muscle.`;
   } else if (mistakeDetail && score < 55) {
     coachingMessage = mistakeDetail.drillCue;
