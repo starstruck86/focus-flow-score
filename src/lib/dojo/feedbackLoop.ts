@@ -2,6 +2,7 @@ import type { SkillFocus } from '@/lib/dojo/scenarios';
 import { SKILL_LABELS } from '@/lib/dojo/scenarios';
 import { getPracticeMapping } from '@/lib/learning/practiceMapping';
 import { getMistakeEntry, type MistakeEntry } from '@/lib/dojo/mistakeTaxonomy';
+import type { SkillProfile } from '@/lib/dojo/skillMemory';
 
 // ── Session Result ──
 
