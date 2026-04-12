@@ -27,6 +27,7 @@ import { emitSaveStatus } from '@/components/SaveIndicator';
 import {
   saveDojoState,
   clearDojoState,
+  loadDojoState,
   enqueuePendingWrite,
   type DojoLocalState,
 } from '@/lib/sessionDurability';
@@ -80,16 +81,22 @@ export default function AudioSessionMode({
   mode,
   onComplete,
 }: AudioSessionModeProps) {
-  const [phase, setPhase] = useState<AudioSessionPhase>('intro');
+  // Restore from saved state if resuming
+  const savedState = useRef(loadDojoState()).current;
+  const isResuming = savedState && savedState.scenario.title === scenario.title && savedState.phase !== 'intro';
+
+  const [phase, setPhase] = useState<AudioSessionPhase>(
+    isResuming ? (savedState!.phase as AudioSessionPhase) : 'intro'
+  );
   const [micAvailable, setMicAvailable] = useState(true);
   const [textFallback, setTextFallback] = useState('');
   const [result, setResult] = useState<DojoScoreResult | null>(null);
   const [retryResult, setRetryResult] = useState<DojoScoreResult | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(isResuming ? savedState!.dbSessionId : null);
   const [firstTurnId, setFirstTurnId] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
+  const [retryCount, setRetryCount] = useState(isResuming ? savedState!.retryCount : 0);
   const [isPaused, setIsPaused] = useState(false);
-  const [transcribedText, setTranscribedText] = useState('');
+  const [transcribedText, setTranscribedText] = useState(isResuming ? savedState!.transcribedText : '');
   // Client-generated session ID for durability
   const clientSessionId = useRef(crypto.randomUUID()).current;
 
@@ -127,11 +134,25 @@ export default function AudioSessionMode({
     }
   }, [phase]);
 
-  // Auto-start: Dave introduces scenario
+  // Auto-start: Dave introduces scenario (skip if resuming mid-session)
   const hasStartedRef = useRef(false);
   useEffect(() => {
     if (hasStartedRef.current) return;
     hasStartedRef.current = true;
+
+    // If resuming from a later phase, skip intro — go straight to listening
+    if (isResuming) {
+      const resumePhase = savedState!.phase as AudioSessionPhase;
+      // If was in listening/feedback/scoring, let user re-engage from listening
+      if (resumePhase !== 'intro' && resumePhase !== 'prompt') {
+        toast.success('Session recovered — continue where you left off');
+        // If they had a score already, stay in current phase; otherwise activate mic
+        if (!savedState!.lastScore) {
+          activateMic();
+        }
+        return;
+      }
+    }
 
     const startIntro = async () => {
       try {
@@ -230,11 +251,13 @@ export default function AudioSessionMode({
 
       // Persist to DB with pending-write fallback
       if (!isRetry) {
+        const dbSessionId = crypto.randomUUID();
         const turnId = crypto.randomUUID();
         try {
           const { data: session, error: sessionErr } = await supabase
             .from('dojo_sessions')
             .insert({
+              id: dbSessionId,
               user_id: userId,
               mode: (mode as 'autopilot' | 'custom') || 'autopilot',
               session_type: 'drill',
@@ -275,13 +298,34 @@ export default function AudioSessionMode({
           }
           emitSaveStatus('saved');
         } catch (dbErr) {
-          console.warn('DB write failed, queuing for retry:', dbErr);
+          console.warn('DB write failed, queuing session + turn for retry:', dbErr);
+          // Queue the parent session first, then the turn
+          enqueuePendingWrite({
+            turnId: dbSessionId,
+            table: 'dojo_sessions',
+            action: 'insert',
+            data: {
+              id: dbSessionId,
+              user_id: userId,
+              mode: (mode as 'autopilot' | 'custom') || 'autopilot',
+              session_type: 'drill',
+              skill_focus: scenario.skillFocus,
+              scenario_title: scenario.title,
+              scenario_context: scenario.context,
+              scenario_objection: scenario.objection,
+              best_score: scoreData.score,
+              latest_score: scoreData.score,
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+            },
+          });
           enqueuePendingWrite({
             turnId,
             table: 'dojo_session_turns',
             action: 'insert',
             data: {
               id: turnId,
+              session_id: dbSessionId,
               user_id: userId,
               turn_index: 0,
               prompt_text: scenario.objection,
@@ -293,6 +337,7 @@ export default function AudioSessionMode({
               score_json: scoreToJson(scoreData),
             },
           });
+          setSessionId(dbSessionId);
           emitSaveStatus('error');
           toast.info('Connection issue — your response is saved locally');
         }

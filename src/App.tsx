@@ -17,6 +17,7 @@ import { BackgroundJobIndicator } from "@/components/jobs/BackgroundJobIndicator
 import { BackgroundJobDrawer } from "@/components/jobs/BackgroundJobDrawer";
 import { SessionResumePrompt } from "@/components/SessionResumePrompt";
 import { DurableJobRehydrator } from "@/components/jobs/DurableJobRehydrator";
+import '@/lib/pendingWriteSync'; // Register online listener for pending write queue
 import Dashboard from "./pages/Dashboard";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
 import Renewals from "./pages/Renewals";
