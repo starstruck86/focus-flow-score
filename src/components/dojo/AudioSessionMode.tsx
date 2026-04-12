@@ -60,6 +60,9 @@ interface AudioSessionModeProps {
   userId: string;
   mode?: string;
   onComplete: () => void;
+  assignmentId?: string | null;
+  benchmarkTag?: boolean;
+  scenarioFamilyId?: string | null;
 }
 
 /** Safely cast DojoScoreResult to Json for DB storage */
