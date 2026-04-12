@@ -668,6 +668,53 @@ export type Database = {
         }
         Relationships: []
       }
+      block_snapshots: {
+        Row: {
+          block_id: string
+          created_at: string
+          id: string
+          mistakes_active: string[] | null
+          mistakes_resolved: string[] | null
+          scores_by_anchor: Json
+          snapshot_type: string
+          stage: string
+          user_id: string
+          week_number: number
+        }
+        Insert: {
+          block_id: string
+          created_at?: string
+          id?: string
+          mistakes_active?: string[] | null
+          mistakes_resolved?: string[] | null
+          scores_by_anchor?: Json
+          snapshot_type: string
+          stage?: string
+          user_id: string
+          week_number: number
+        }
+        Update: {
+          block_id?: string
+          created_at?: string
+          id?: string
+          mistakes_active?: string[] | null
+          mistakes_resolved?: string[] | null
+          scores_by_anchor?: Json
+          snapshot_type?: string
+          stage?: string
+          user_id?: string
+          week_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "block_snapshots_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "training_blocks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       calendar_events: {
         Row: {
           all_day: boolean
@@ -1130,6 +1177,86 @@ export type Database = {
           variables?: string[] | null
         }
         Relationships: []
+      }
+      daily_assignments: {
+        Row: {
+          assignment_date: string
+          benchmark_tag: boolean
+          block_id: string
+          block_phase: string
+          block_week: number
+          completed: boolean
+          created_at: string
+          day_anchor: string
+          difficulty: string
+          focus_pattern: string
+          id: string
+          kis: Json
+          primary_skill: string
+          reason: string
+          retry_strategy: string
+          scenario_family_id: string | null
+          scenarios: Json
+          session_ids: string[] | null
+          source: string
+          transcript_scenario_used: boolean
+          user_id: string
+        }
+        Insert: {
+          assignment_date: string
+          benchmark_tag?: boolean
+          block_id: string
+          block_phase: string
+          block_week: number
+          completed?: boolean
+          created_at?: string
+          day_anchor: string
+          difficulty?: string
+          focus_pattern: string
+          id?: string
+          kis?: Json
+          primary_skill: string
+          reason?: string
+          retry_strategy?: string
+          scenario_family_id?: string | null
+          scenarios?: Json
+          session_ids?: string[] | null
+          source?: string
+          transcript_scenario_used?: boolean
+          user_id: string
+        }
+        Update: {
+          assignment_date?: string
+          benchmark_tag?: boolean
+          block_id?: string
+          block_phase?: string
+          block_week?: number
+          completed?: boolean
+          created_at?: string
+          day_anchor?: string
+          difficulty?: string
+          focus_pattern?: string
+          id?: string
+          kis?: Json
+          primary_skill?: string
+          reason?: string
+          retry_strategy?: string
+          scenario_family_id?: string | null
+          scenarios?: Json
+          session_ids?: string[] | null
+          source?: string
+          transcript_scenario_used?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_assignments_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "training_blocks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_digest_items: {
         Row: {
@@ -1693,7 +1820,9 @@ export type Database = {
       }
       dojo_sessions: {
         Row: {
+          assignment_id: string | null
           audio_metrics: Json | null
+          benchmark_tag: boolean
           best_score: number | null
           completed_at: string | null
           created_at: string
@@ -1703,6 +1832,7 @@ export type Database = {
           mode: string
           retry_count: number
           scenario_context: string | null
+          scenario_family_id: string | null
           scenario_objection: string | null
           scenario_title: string | null
           session_type: string
@@ -1713,7 +1843,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          assignment_id?: string | null
           audio_metrics?: Json | null
+          benchmark_tag?: boolean
           best_score?: number | null
           completed_at?: string | null
           created_at?: string
@@ -1723,6 +1855,7 @@ export type Database = {
           mode?: string
           retry_count?: number
           scenario_context?: string | null
+          scenario_family_id?: string | null
           scenario_objection?: string | null
           scenario_title?: string | null
           session_type?: string
@@ -1733,7 +1866,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          assignment_id?: string | null
           audio_metrics?: Json | null
+          benchmark_tag?: boolean
           best_score?: number | null
           completed_at?: string | null
           created_at?: string
@@ -1743,6 +1878,7 @@ export type Database = {
           mode?: string
           retry_count?: number
           scenario_context?: string | null
+          scenario_family_id?: string | null
           scenario_objection?: string | null
           scenario_title?: string | null
           session_type?: string
@@ -1752,7 +1888,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "dojo_sessions_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "daily_assignments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       enrichment_attempts: {
         Row: {
@@ -5675,6 +5819,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      training_blocks: {
+        Row: {
+          benchmark_snapshot: Json | null
+          block_number: number
+          completed_sessions_this_week: number
+          created_at: string
+          current_week: number
+          id: string
+          phase: string
+          retest_snapshot: Json | null
+          stage: string
+          start_date: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          benchmark_snapshot?: Json | null
+          block_number?: number
+          completed_sessions_this_week?: number
+          created_at?: string
+          current_week?: number
+          id?: string
+          phase?: string
+          retest_snapshot?: Json | null
+          stage?: string
+          start_date?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          benchmark_snapshot?: Json | null
+          block_number?: number
+          completed_sessions_this_week?: number
+          created_at?: string
+          current_week?: number
+          id?: string
+          phase?: string
+          retest_snapshot?: Json | null
+          stage?: string
+          start_date?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       transcript_grades: {
         Row: {
