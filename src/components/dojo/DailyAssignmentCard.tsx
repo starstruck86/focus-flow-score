@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Info, Flame } from 'lucide-react';
+import { Info, Flame, Zap } from 'lucide-react';
 import { DAY_ANCHORS } from '@/lib/dojo/v3/dayAnchors';
 import type { DailyAssignment } from '@/lib/dojo/v3/programmingEngine';
 import { FOCUS_PATTERN_LABELS } from '@/lib/dojo/focusPatterns';
@@ -15,6 +15,7 @@ export function DailyAssignmentCard({ assignment }: DailyAssignmentCardProps) {
     ?? assignment.focusPattern?.replace(/_/g, ' ')
     ?? '';
   const isFriday = assignment.dayAnchor === 'executive_roi_mixed';
+  const pressuredSpec = assignment.scenarios.find(s => s.pressure?.level !== 'none');
 
   return (
     <Card className={isFriday ? 'border-amber-500/30 bg-amber-500/5' : 'border-primary/20 bg-primary/5'}>
@@ -35,10 +36,25 @@ export function DailyAssignmentCard({ assignment }: DailyAssignmentCardProps) {
             <span className="text-base">{anchorDef.icon}</span>
             <span className="text-sm font-semibold text-foreground">{anchorDef.label}</span>
           </div>
-          <Badge variant="outline" className="text-[10px] capitalize">
-            {assignment.difficulty}
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            {assignment.pressureExpected && !isFriday && (
+              <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/20">
+                <Zap className="h-2.5 w-2.5 mr-0.5" />
+                {assignment.pressureLabel || 'Pressure'}
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-[10px] capitalize">
+              {assignment.difficulty}
+            </Badge>
+          </div>
         </div>
+
+        {/* Pressure Dave frame */}
+        {pressuredSpec?.pressure?.daveFrame && (
+          <p className="text-[11px] italic text-amber-600 dark:text-amber-400">
+            "{pressuredSpec.pressure.daveFrame}"
+          </p>
+        )}
 
         {/* Focus pattern */}
         {focusLabel && (

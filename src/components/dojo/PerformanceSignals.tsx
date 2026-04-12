@@ -1,19 +1,21 @@
 import { Card, CardContent } from '@/components/ui/card';
 import {
   BarChart3, TrendingUp, TrendingDown, AlertTriangle, Target, Brain,
-  CheckCircle2, ArrowUpRight, XCircle, Shield,
+  CheckCircle2, ArrowUpRight, XCircle, Shield, Zap, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
 import type { SkillStat } from '@/lib/dojo/scenarios';
 import type { CoachingInsights } from '@/lib/dojo/types';
 import type { SkillProfile, ProgressSignal } from '@/lib/dojo/skillMemory';
+import type { CapabilityProfile } from '@/lib/dojo/v4/capabilityModel';
 
 interface PerformanceSignalsProps {
   skillStats: SkillStat[];
   coachingInsights: CoachingInsights | null;
   skillProfiles?: SkillProfile[] | null;
   progressSignals?: ProgressSignal[] | null;
+  capabilityProfiles?: CapabilityProfile[] | null;
 }
 
 const SIGNAL_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
@@ -29,8 +31,11 @@ export function PerformanceSignals({
   coachingInsights,
   skillProfiles,
   progressSignals,
+  capabilityProfiles,
 }: PerformanceSignalsProps) {
   if (skillStats.length === 0 && !coachingInsights && !progressSignals?.length) return null;
+
+  const activeCapabilities = capabilityProfiles?.filter(c => c.firstAttemptStrength > 0) ?? [];
 
   // Use skill profiles for richer bars if available, otherwise fall back to skillStats
   const profilesAvailable = skillProfiles && skillProfiles.some(p => p.totalReps > 0);
