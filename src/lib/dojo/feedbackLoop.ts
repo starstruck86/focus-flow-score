@@ -95,6 +95,8 @@ export function deriveSessionInsights(result: SessionResult): SessionInsights {
     actionableFix = `Start with the lesson. Understand the underlying principle, then come back and try applying it to this exact scenario.`;
   } else if (score < 50) {
     actionableFix = `Anchor your response to the buyer\'s specific situation. Say: "You mentioned [their exact problem] — here\'s what we see when that goes unaddressed: [consequence with a number]."`;
+  } else if (score >= 75) {
+    actionableFix = `Record yourself delivering this response out loud. Listen for filler words, hedging, and any moment where you explain instead of assert.`;
   } else {
     actionableFix = `Add one concrete proof point and replace any vague language with the buyer\'s own words. End with a specific ask, not "let me know."`;
   }
