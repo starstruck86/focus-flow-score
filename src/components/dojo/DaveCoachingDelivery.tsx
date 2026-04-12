@@ -157,6 +157,7 @@ export default function DaveCoachingDelivery({
 
     return () => {
       if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+      revealTimersRef.current.forEach(clearTimeout);
       playback.destroy();
     };
   }, [sessionId, scoreResult, enableVoice]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -187,7 +188,14 @@ export default function DaveCoachingDelivery({
       const chunk = d.chunk;
       setTextChunks((prev) => {
         if (prev.some((c) => c.id === chunk.id)) return prev;
-        return [...prev, chunk].sort((a, b) => a.index - b.index);
+        const next = [...prev, chunk].sort((a, b) => a.index - b.index);
+        // Stagger reveal for text-fallback coaching arc
+        const delay = (next.length - 1) * 350;
+        const timer = setTimeout(() => {
+          setVisibleChunkIds((ids) => new Set([...ids, chunk.id]));
+        }, delay);
+        revealTimersRef.current.push(timer);
+        return next;
       });
     }
 
