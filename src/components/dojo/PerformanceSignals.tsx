@@ -110,7 +110,40 @@ export function PerformanceSignals({
         </div>
       )}
 
-      {/* Coaching signals */}
+      {/* V4 Capability section */}
+      {activeCapabilities.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <Activity className="h-3.5 w-3.5" />
+            Capability
+          </p>
+          <div className="space-y-1.5">
+            {activeCapabilities.map(cap => {
+              const readinessColor = cap.pressureReadiness === 'ready' ? 'text-green-500'
+                : cap.pressureReadiness === 'building' ? 'text-amber-500'
+                : 'text-red-500';
+              const readinessLabel = cap.pressureReadiness === 'ready' ? '● Ready'
+                : cap.pressureReadiness === 'building' ? '◐ Building'
+                : '○ Low';
+              return (
+                <div key={cap.skill} className="px-2.5 py-2 rounded-md border border-border/40 bg-muted/30">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-medium text-foreground">{cap.label}</p>
+                    <span className={cn('text-[10px] font-medium', readinessColor)}>{readinessLabel}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                    <span>Consistency: {cap.consistency}</span>
+                    <span>1st Attempt: {cap.firstAttemptStrength}</span>
+                    {cap.pressureScore != null && <span><Zap className="h-2.5 w-2.5 inline" /> {cap.pressureScore}</span>}
+                    {cap.recoveryRate != null && <span>Recovery: +{cap.recoveryRate}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {coachingInsights && (
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
