@@ -57,6 +57,9 @@ export interface DailyAssignment {
   // Runtime state (from DB)
   completed?: boolean;
   sessionCount?: number;
+  // V6 multi-thread
+  multiThreadExpected: boolean;
+  multiThreadContext: MultiThreadContext | null;
 }
 
 export interface ScenarioSpec {
@@ -64,6 +67,7 @@ export interface ScenarioSpec {
   purpose: 'direct_application' | 'variation' | 'transcript_origin' | 'pressure' | 'benchmark' | 'blended';
   familyId?: string;
   pressure?: PressureProfile;
+  multiThread?: MultiThreadContext;
 }
 
 // ── Engine Input ──────────────────────────────────────────────────
