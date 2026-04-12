@@ -122,10 +122,10 @@ export async function createBlockSnapshot(
       snapshot_type: snapshotType,
       week_number: weekNumber,
       stage,
-      scores_by_anchor: scoresByAnchor,
+      scores_by_anchor: scoresByAnchor as unknown as import('@/integrations/supabase/types').Json,
       mistakes_active: Array.from(allMistakes),
       mistakes_resolved: [],
-    })
+    } as any)
     .select()
     .single();
 
