@@ -128,6 +128,8 @@ YOUR DEFAULT IS 55-62. Multi-turn consistency is HARD — most reps degrade afte
 
 FOCUS PATTERNS (pick ONE from this EXACT list): ${validPatterns}
 
+COMMON MISTAKES (pick exactly ONE for "topMistake" — MUST be from this list): ${(VALID_MISTAKES[skillFocus] || VALID_MISTAKES.objection_handling).join(', ')}
+
 TURN ANALYSIS: For each rep turn, provide a brief assessment (1-2 sentences) covering:
 - What they did well or poorly in that specific moment
 - Whether they maintained/gained/lost control
@@ -137,7 +139,7 @@ Respond with ONLY valid JSON:
 {
   "score": 60,
   "feedback": "2 sentences. What worked across the conversation. The biggest gap.",
-  "topMistake": "single_mistake_code",
+  "topMistake": "single_mistake_code_from_list_above",
   "improvedVersion": "What the rep should have said at the WEAKEST moment. Quote the buyer line, then give the better version.",
   "worldClassResponse": "How a top 1% rep would have handled the ENTIRE arc — show the strategic approach across 3-4 key moments.",
   "whyItWorks": ["Pattern 1", "Pattern 2"],
