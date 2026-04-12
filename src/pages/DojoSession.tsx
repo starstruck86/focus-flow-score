@@ -87,7 +87,8 @@ export default function DojoSession() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isAudio, toggleMode } = useAudioPreference();
 
-  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string } | null;
+  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: { transcriptId: string; transcriptTitle: string; sourceExcerpt: string; coachingHint: string } } | null;
+  const transcriptOrigin = state?.transcriptOrigin ?? null;
   const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
