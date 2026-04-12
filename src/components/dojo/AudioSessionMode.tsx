@@ -23,6 +23,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { supabase } from '@/integrations/supabase/client';
+import { emitSaveStatus } from '@/components/SaveIndicator';
+import {
+  saveDojoState,
+  clearDojoState,
+  enqueuePendingWrite,
+  type DojoLocalState,
+} from '@/lib/sessionDurability';
+import { processPendingWrites } from '@/lib/pendingWriteSync';
 import type { DojoScenario } from '@/lib/dojo/scenarios';
 import type { DojoScoreResult } from '@/lib/dojo/types';
 import { normalizeScoreResult } from '@/lib/dojo/types';
@@ -82,10 +90,42 @@ export default function AudioSessionMode({
   const [retryCount, setRetryCount] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
+  // Client-generated session ID for durability
+  const clientSessionId = useRef(crypto.randomUUID()).current;
 
   const voice = useVoiceMode();
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+
+  // Save local state on every meaningful change
+  useEffect(() => {
+    const currentResult = retryResult || result;
+    saveDojoState({
+      sessionId: clientSessionId,
+      scenario: {
+        title: scenario.title,
+        skillFocus: scenario.skillFocus,
+        context: scenario.context,
+        objection: scenario.objection,
+      },
+      phase,
+      transcribedText,
+      retryCount,
+      lastScore: currentResult?.score ?? null,
+      lastFeedback: currentResult?.feedback ?? null,
+      sessionType: 'audio',
+      mode: mode || 'autopilot',
+      savedAt: Date.now(),
+      dbSessionId: sessionId,
+    });
+  }, [phase, transcribedText, retryCount, result, retryResult, sessionId]);
+
+  // Clear state on complete or unmount after completion
+  useEffect(() => {
+    if (phase === 'complete') {
+      clearDojoState();
+    }
+  }, [phase]);
 
   // Auto-start: Dave introduces scenario
   const hasStartedRef = useRef(false);
@@ -167,6 +207,7 @@ export default function AudioSessionMode({
 
   const scoreAndDeliver = useCallback(async (text: string, isRetry: boolean) => {
     try {
+      emitSaveStatus('saving');
       const currentFocus = isRetry ? (retryResult?.focusPattern || result?.focusPattern) : undefined;
 
       const { data, error } = await supabase.functions.invoke('dojo-score', {
@@ -187,32 +228,60 @@ export default function AudioSessionMode({
 
       const scoreData = normalizeScoreResult(data as Record<string, unknown>);
 
-      // Persist to DB (same logic as DojoSession)
+      // Persist to DB with pending-write fallback
       if (!isRetry) {
-        const { data: session, error: sessionErr } = await supabase
-          .from('dojo_sessions')
-          .insert({
-            user_id: userId,
-            mode: (mode as 'autopilot' | 'custom') || 'autopilot',
-            session_type: 'drill',
-            skill_focus: scenario.skillFocus,
-            scenario_title: scenario.title,
-            scenario_context: scenario.context,
-            scenario_objection: scenario.objection,
-            best_score: scoreData.score,
-            latest_score: scoreData.score,
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-          })
-          .select('id')
-          .single();
-
-        if (!sessionErr && session) {
-          setSessionId(session.id);
-          const { data: turn } = await supabase
-            .from('dojo_session_turns')
+        const turnId = crypto.randomUUID();
+        try {
+          const { data: session, error: sessionErr } = await supabase
+            .from('dojo_sessions')
             .insert({
-              session_id: session.id,
+              user_id: userId,
+              mode: (mode as 'autopilot' | 'custom') || 'autopilot',
+              session_type: 'drill',
+              skill_focus: scenario.skillFocus,
+              scenario_title: scenario.title,
+              scenario_context: scenario.context,
+              scenario_objection: scenario.objection,
+              best_score: scoreData.score,
+              latest_score: scoreData.score,
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+            })
+            .select('id')
+            .single();
+
+          if (sessionErr) throw sessionErr;
+          if (session) {
+            setSessionId(session.id);
+            const { data: turn } = await supabase
+              .from('dojo_session_turns')
+              .insert({
+                id: turnId,
+                session_id: session.id,
+                user_id: userId,
+                turn_index: 0,
+                prompt_text: scenario.objection,
+                user_response: text,
+                score: scoreData.score,
+                feedback: scoreData.feedback,
+                top_mistake: scoreData.topMistake,
+                improved_version: scoreData.improvedVersion,
+                score_json: scoreToJson(scoreData),
+              })
+              .select('id')
+              .single();
+
+            if (turn) setFirstTurnId(turn.id);
+          }
+          emitSaveStatus('saved');
+        } catch (dbErr) {
+          console.warn('DB write failed, queuing for retry:', dbErr);
+          enqueuePendingWrite({
+            turnId,
+            table: 'dojo_session_turns',
+            action: 'insert',
+            data: {
+              id: turnId,
               user_id: userId,
               turn_index: 0,
               prompt_text: scenario.objection,
@@ -222,54 +291,84 @@ export default function AudioSessionMode({
               top_mistake: scoreData.topMistake,
               improved_version: scoreData.improvedVersion,
               score_json: scoreToJson(scoreData),
-            })
-            .select('id')
-            .single();
-
-          if (turn) setFirstTurnId(turn.id);
+            },
+          });
+          emitSaveStatus('error');
+          toast.info('Connection issue — your response is saved locally');
         }
 
         setResult(scoreData);
       } else {
         const newRetryCount = retryCount + 1;
         setRetryCount(newRetryCount);
+        const retryTurnId = crypto.randomUUID();
 
         if (sessionId) {
-          const bestScore = Math.max(result?.score ?? 0, scoreData.score);
-          await supabase
-            .from('dojo_sessions')
-            .update({
-              best_score: bestScore,
-              latest_score: scoreData.score,
-              retry_count: newRetryCount,
-            })
-            .eq('id', sessionId);
+          try {
+            const bestScore = Math.max(result?.score ?? 0, scoreData.score);
+            await supabase
+              .from('dojo_sessions')
+              .update({
+                best_score: bestScore,
+                latest_score: scoreData.score,
+                retry_count: newRetryCount,
+              })
+              .eq('id', sessionId);
 
-          await supabase
-            .from('dojo_session_turns')
-            .insert({
-              session_id: sessionId,
-              user_id: userId,
-              turn_index: newRetryCount,
-              prompt_text: scenario.objection,
-              user_response: text,
-              score: scoreData.score,
-              feedback: scoreData.feedback,
-              top_mistake: scoreData.topMistake,
-              improved_version: scoreData.improvedVersion,
-              score_json: scoreToJson(scoreData),
-              retry_of_turn_id: firstTurnId,
+            await supabase
+              .from('dojo_session_turns')
+              .insert({
+                id: retryTurnId,
+                session_id: sessionId,
+                user_id: userId,
+                turn_index: newRetryCount,
+                prompt_text: scenario.objection,
+                user_response: text,
+                score: scoreData.score,
+                feedback: scoreData.feedback,
+                top_mistake: scoreData.topMistake,
+                improved_version: scoreData.improvedVersion,
+                score_json: scoreToJson(scoreData),
+                retry_of_turn_id: firstTurnId,
+              });
+            emitSaveStatus('saved');
+          } catch (dbErr) {
+            console.warn('Retry DB write failed, queuing:', dbErr);
+            enqueuePendingWrite({
+              turnId: retryTurnId,
+              table: 'dojo_session_turns',
+              action: 'insert',
+              data: {
+                id: retryTurnId,
+                session_id: sessionId,
+                user_id: userId,
+                turn_index: newRetryCount,
+                prompt_text: scenario.objection,
+                user_response: text,
+                score: scoreData.score,
+                feedback: scoreData.feedback,
+                top_mistake: scoreData.topMistake,
+                improved_version: scoreData.improvedVersion,
+                score_json: scoreToJson(scoreData),
+                retry_of_turn_id: firstTurnId,
+              },
             });
+            emitSaveStatus('error');
+            toast.info('Connection issue — your response is saved locally');
+          }
         }
 
         setRetryResult(scoreData);
       }
 
       setPhase(isRetry ? 'retry_feedback' : 'feedback');
+      // Try to flush any pending writes
+      processPendingWrites();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to score response';
       console.error('Audio session score error:', e);
       toast.error(msg);
+      emitSaveStatus('error');
       // Go back to listening
       setPhase(isRetry ? 'retry_listening' : 'listening');
     }

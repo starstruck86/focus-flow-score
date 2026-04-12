@@ -31,6 +31,7 @@ import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview
 import DaveCoachingDelivery from '@/components/dojo/DaveCoachingDelivery';
 import AudioSessionMode from '@/components/dojo/AudioSessionMode';
 import { SessionFeedbackCard } from '@/components/dojo/SessionFeedbackCard';
+import { SaveIndicator } from '@/components/SaveIndicator';
 import type { Json } from '@/integrations/supabase/types';
 import { useAudioPreference } from '@/hooks/useAudioPreference';
 
@@ -296,6 +297,7 @@ export default function DojoSession() {
           {isAudio ? <Volume2 className="h-4 w-4 text-primary" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
         </button>
         <Badge variant="outline" className="text-xs shrink-0">5 min</Badge>
+        <SaveIndicator />
       </div>
 
       {/* ── Content ── */}

@@ -28,6 +28,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { supabase } from '@/integrations/supabase/client';
+import { emitSaveStatus } from '@/components/SaveIndicator';
+import { saveLearnState, clearLearnState } from '@/lib/sessionDurability';
 import type { LearningLesson, MCQuestion } from '@/lib/learning/types';
 import {
   buildLessonAudioSections,
@@ -72,6 +74,24 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
 
   const currentSection = sections[currentIndex] ?? null;
 
+  // Save Learn state on every meaningful change
+  useEffect(() => {
+    saveLearnState({
+      lessonId: lesson.id,
+      currentSectionIndex: currentIndex,
+      phase,
+      mcAnswers,
+      mcScore,
+      openAnswer,
+      completedSectionIds: Array.from(completedSections),
+      savedAt: Date.now(),
+    });
+  }, [currentIndex, phase, mcAnswers, mcScore, openAnswer, completedSections, lesson.id]);
+
+  // Clear on completion
+  useEffect(() => {
+    if (phase === 'complete') clearLearnState();
+  }, [phase]);
   // Auto-play current section
   const hasStartedRef = useRef(false);
   useEffect(() => {
