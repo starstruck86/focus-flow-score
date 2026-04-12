@@ -6,7 +6,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Target, Zap, Layers, Shield } from 'lucide-react';
+import { Calendar, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Target, Zap, Layers, Shield, Users } from 'lucide-react';
 import type { WeeklySummary } from '@/lib/dojo/v3/weeklySummaryEngine';
 import { ANCHOR_LABELS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 
@@ -118,6 +118,49 @@ export function WeeklySummaryCard({ summary }: WeeklySummaryCardProps) {
                 <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
                 <span className="text-muted-foreground">Weakest under pressure:</span>
                 <span className="font-medium text-amber-700 dark:text-amber-400">{summary.weakestPressureAnchor}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* V6 multi-thread metrics */}
+        {summary.multiThreadRepsCompleted > 0 && (
+          <div className="space-y-1.5 pt-2 border-t border-border/40">
+            <p className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
+              <Users className="h-3 w-3" /> Deal Movement
+            </p>
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">
+                {summary.multiThreadRepsCompleted} multi-thread rep{summary.multiThreadRepsCompleted !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {summary.multiThreadMomentumDistribution && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-green-600 dark:text-green-400 font-medium">
+                  {summary.multiThreadMomentumDistribution.forward} forward
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-amber-600 dark:text-amber-400 font-medium">
+                  {summary.multiThreadMomentumDistribution.neutral} neutral
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-red-600 dark:text-red-400 font-medium">
+                  {summary.multiThreadMomentumDistribution.atRisk} at risk
+                </span>
+              </div>
+            )}
+            {summary.strongestMultiThreadAnchor && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <CheckCircle2 className="h-3 w-3 text-green-600 shrink-0" />
+                <span className="text-muted-foreground">Best alignment:</span>
+                <span className="font-medium text-green-700 dark:text-green-400">{summary.strongestMultiThreadAnchor}</span>
+              </div>
+            )}
+            {summary.weakestMultiThreadAnchor && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                <span className="text-muted-foreground">Most at risk:</span>
+                <span className="font-medium text-amber-700 dark:text-amber-400">{summary.weakestMultiThreadAnchor}</span>
               </div>
             )}
           </div>
