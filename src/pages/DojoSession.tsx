@@ -23,6 +23,7 @@ import {
   type RetryAssessment,
 } from '@/lib/dojo/types';
 import { supabase } from '@/integrations/supabase/client';
+import { completeAssignment } from '@/lib/dojo/v3/assignmentManager';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -199,6 +200,14 @@ export default function DojoSession() {
               .single();
 
             if (turn) setFirstTurnId(turn.id);
+
+            // V3: Complete assignment — links session and triggers snapshot/week advancement
+            if (assignmentId) {
+              const today = new Date().toISOString().split('T')[0];
+              completeAssignment(user.id, today, session.id).catch(err =>
+                console.error('[DojoSession] completeAssignment failed:', err)
+              );
+            }
           }
 
           setResult(scoreData);

@@ -9,7 +9,7 @@ interface BlockHeaderProps {
   currentWeek: number;
   phase: BlockPhase;
   stage: string;
-  completedSessionsThisWeek: number;
+  completedAnchors: DayAnchor[];
   todayAnchor: DayAnchor | null;
 }
 
@@ -34,7 +34,7 @@ export function BlockHeader({
   currentWeek,
   phase,
   stage,
-  completedSessionsThisWeek,
+  completedAnchors,
   todayAnchor,
 }: BlockHeaderProps) {
   return (
@@ -61,11 +61,11 @@ export function BlockHeader({
         </Badge>
       </div>
 
-      {/* Week progress dots — 5 anchors */}
+      {/* Week progress dots — 5 anchors, based on real completion data */}
       <div className="flex items-center gap-1.5">
-        {ANCHORS_IN_ORDER.map((anchor, i) => {
+        {ANCHORS_IN_ORDER.map((anchor) => {
           const def = DAY_ANCHORS[anchor];
-          const isCompleted = i < completedSessionsThisWeek;
+          const isCompleted = completedAnchors.includes(anchor);
           const isToday = anchor === todayAnchor;
 
           return (
@@ -83,7 +83,7 @@ export function BlockHeader({
               <span
                 className={cn(
                   'text-[9px] leading-none',
-                  isToday ? 'text-primary font-medium' : 'text-muted-foreground',
+                  isCompleted ? 'text-primary font-medium' : isToday ? 'text-primary font-medium' : 'text-muted-foreground',
                 )}
               >
                 {def.icon}

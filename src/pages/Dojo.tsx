@@ -15,14 +15,19 @@ import type { LessonContext } from '@/lib/learning/practiceMapping';
 // V3 imports
 import { getOrCreateActiveBlock } from '@/lib/dojo/v3/blockManager';
 import { getOrCreateTodayAssignment } from '@/lib/dojo/v3/assignmentManager';
+import { getCompletedAnchorsThisWeek } from '@/lib/dojo/v3/assignmentManager';
 import type { DailyAssignment } from '@/lib/dojo/v3/programmingEngine';
 import { getAnchorForDate } from '@/lib/dojo/v3/dayAnchors';
+import { computeWeeklySummaryFromDB } from '@/lib/dojo/v3/weeklySummaryEngine';
+import { getBlockSnapshots, compareSnapshots } from '@/lib/dojo/v3/snapshotManager';
 
 import { BlockHeader } from '@/components/dojo/BlockHeader';
 import { DailyAssignmentCard } from '@/components/dojo/DailyAssignmentCard';
 import { TodaysFocus } from '@/components/dojo/TodaysFocus';
 import { TrainingModes } from '@/components/dojo/TrainingModes';
 import { PerformanceSignals } from '@/components/dojo/PerformanceSignals';
+import { WeeklySummaryCard } from '@/components/dojo/WeeklySummaryCard';
+import { BlockComparisonView } from '@/components/dojo/BlockComparisonView';
 
 export default function Dojo() {
   const navigate = useNavigate();
@@ -61,8 +66,39 @@ export default function Dojo() {
     queryKey: ['dojo-v3-assignment', user?.id, new Date().toISOString().split('T')[0]],
     enabled: !!user?.id,
     queryFn: () => user ? getOrCreateTodayAssignment(user.id) : null,
-    staleTime: 30 * 60 * 1000, // stable for 30 min — assignment doesn't change intra-day
+    staleTime: 30 * 60 * 1000,
   });
+
+  // V3: Fetch real completed anchors for this week
+  const { data: completedAnchors } = useQuery({
+    queryKey: ['dojo-v3-completed-anchors', activeBlock?.id],
+    enabled: !!activeBlock?.id,
+    queryFn: () => activeBlock ? getCompletedAnchorsThisWeek(activeBlock.id) : [],
+    staleTime: 2 * 60 * 1000,
+  });
+
+  // V3: Weekly summary (show when week has sessions)
+  const { data: weeklySummary } = useQuery({
+    queryKey: ['dojo-v3-weekly-summary', activeBlock?.id, activeBlock?.currentWeek],
+    enabled: !!activeBlock?.id && (completedAnchors?.length ?? 0) >= 1,
+    queryFn: () => activeBlock
+      ? computeWeeklySummaryFromDB(activeBlock.userId, activeBlock.id, activeBlock.currentWeek)
+      : null,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // V3: Block snapshots for comparison (show when retest exists)
+  const { data: blockSnapshots } = useQuery({
+    queryKey: ['dojo-v3-snapshots', activeBlock?.id],
+    enabled: !!activeBlock?.id && activeBlock?.currentWeek === 8,
+    queryFn: () => activeBlock ? getBlockSnapshots(activeBlock.id) : null,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const snapshotComparison = useMemo(() => {
+    if (!blockSnapshots?.benchmark || !blockSnapshots?.retest) return null;
+    return compareSnapshots(blockSnapshots.benchmark, blockSnapshots.retest);
+  }, [blockSnapshots]);
 
   const coachingInsights = useMemo<CoachingInsights | null>(
     () => patternMemory ? deriveCoachingInsights(patternMemory) : null,
@@ -82,22 +118,30 @@ export default function Dojo() {
   }, [stats?.skillBreakdown]);
 
   const startAutopilot = () => {
-    // V3: Use assignment scenario if available
+    // V3: Use assignment scenario + pass assignment metadata for session tagging
     const scenario = dailyAssignment?.scenarios[0]?.scenario ?? recommendation.scenario;
-    navigate('/dojo/session', { state: { scenario, mode: 'autopilot' } });
+    navigate('/dojo/session', {
+      state: {
+        scenario,
+        mode: 'autopilot',
+        assignmentId: dailyAssignment ? (dailyAssignment as any)._dbId ?? null : null,
+        benchmarkTag: dailyAssignment?.benchmarkTag ?? false,
+        scenarioFamilyId: dailyAssignment?.scenarioFamilyId ?? null,
+      },
+    });
   };
 
   return (
     <Layout>
       <div className={cn('px-4 pt-4 space-y-6', SHELL.main.bottomPad)}>
-        {/* V3: Block Header */}
+        {/* V3: Block Header — uses real anchor completion data */}
         {activeBlock && (
           <BlockHeader
             blockNumber={activeBlock.blockNumber}
             currentWeek={activeBlock.currentWeek}
             phase={activeBlock.phase}
             stage={activeBlock.stage}
-            completedSessionsThisWeek={activeBlock.completedSessionsThisWeek}
+            completedAnchors={completedAnchors ?? []}
             todayAnchor={todayAnchor}
           />
         )}
@@ -105,6 +149,16 @@ export default function Dojo() {
         {/* V3: Daily Assignment Card */}
         {dailyAssignment && (
           <DailyAssignmentCard assignment={dailyAssignment} />
+        )}
+
+        {/* V3: Block Comparison — benchmark vs retest (Week 8+) */}
+        {snapshotComparison && activeBlock && (
+          <BlockComparisonView comparison={snapshotComparison} blockNumber={activeBlock.blockNumber} />
+        )}
+
+        {/* V3: Weekly Summary — shows after at least 1 anchor completed */}
+        {weeklySummary && weeklySummary.totalSessions > 0 && (
+          <WeeklySummaryCard summary={weeklySummary} />
         )}
 
         {/* Section 1: Today's Focus */}

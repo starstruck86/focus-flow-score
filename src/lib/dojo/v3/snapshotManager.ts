@@ -44,6 +44,18 @@ export async function createBlockSnapshot(
   snapshotType: 'benchmark' | 'retest',
   stage: string,
 ): Promise<SnapshotRow | null> {
+  // Dedup guard: check if snapshot already exists for this block + type
+  const { data: existing } = await supabase
+    .from('block_snapshots')
+    .select('id')
+    .eq('block_id', blockId)
+    .eq('snapshot_type', snapshotType)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    console.log(`[SnapshotManager] ${snapshotType} snapshot already exists for block ${blockId}, skipping`);
+    return null;
+  }
   // Fetch all completed sessions for this block + week via assignments
   const { data: assignments } = await supabase
     .from('daily_assignments')

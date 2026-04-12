@@ -28,7 +28,7 @@ import { buildSkillMemory } from '../skillMemory';
  * Get today's assignment. If it doesn't exist yet, generate and persist it.
  * This is the ONLY entry point for getting the daily assignment.
  */
-export async function getOrCreateTodayAssignment(userId: string): Promise<DailyAssignment | null> {
+export async function getOrCreateTodayAssignment(userId: string): Promise<(DailyAssignment & { _dbId: string }) | null> {
   const today = new Date().toISOString().split('T')[0];
   const anchor = getAnchorForDate(new Date());
 
@@ -43,9 +43,6 @@ export async function getOrCreateTodayAssignment(userId: string): Promise<DailyA
   const block = await getOrCreateActiveBlock(userId);
 
   // Fetch real inputs in parallel:
-  // - skillMemory from dojo_sessions
-  // - recent assignments from daily_assignments
-  // - KI catalog from knowledge_items (via kiCatalogBridge, anchor-scoped)
   const [skillMemory, recentAssignments, kiCatalog] = await Promise.all([
     buildSkillMemory(userId),
     fetchRecentAssignments(userId, 7),
@@ -63,10 +60,10 @@ export async function getOrCreateTodayAssignment(userId: string): Promise<DailyA
 
   const assignment = generateDailyAssignment(input);
 
-  // 3. Persist to DB
-  await persistAssignment(userId, today, block.id, assignment);
+  // 3. Persist to DB and return with _dbId
+  const dbId = await persistAssignment(userId, today, block.id, assignment);
 
-  return assignment;
+  return { ...assignment, _dbId: dbId };
 }
 
 /**
@@ -133,7 +130,7 @@ export async function getCompletedAnchorsThisWeek(blockId: string): Promise<DayA
 
 // ── Internal ──────────────────────────────────────────────────────
 
-async function fetchAssignment(userId: string, date: string): Promise<DailyAssignment | null> {
+async function fetchAssignment(userId: string, date: string): Promise<(DailyAssignment & { _dbId: string }) | null> {
   const { data } = await supabase
     .from('daily_assignments')
     .select('*')
@@ -142,7 +139,7 @@ async function fetchAssignment(userId: string, date: string): Promise<DailyAssig
     .single();
 
   if (!data) return null;
-  return mapRowToAssignment(data);
+  return { ...mapRowToAssignment(data), _dbId: data.id as string };
 }
 
 async function fetchRecentAssignments(userId: string, days: number): Promise<RecentAssignment[]> {
@@ -172,8 +169,8 @@ async function persistAssignment(
   date: string,
   blockId: string,
   assignment: DailyAssignment,
-): Promise<void> {
-  const { error } = await supabase
+): Promise<string> {
+  const { data, error } = await supabase
     .from('daily_assignments')
     .insert({
       user_id: userId,
@@ -193,14 +190,26 @@ async function persistAssignment(
       scenario_family_id: assignment.scenarioFamilyId,
       reason: assignment.reason,
       source: assignment.source,
-    });
+    })
+    .select('id')
+    .single();
 
   if (error) {
-    // UNIQUE violation = assignment already exists (race condition), which is fine
-    if (error.code !== '23505') {
-      console.error('[AssignmentManager] Failed to persist assignment:', error);
+    // UNIQUE violation = assignment already exists (race condition) — fetch its id
+    if (error.code === '23505') {
+      const { data: existing } = await supabase
+        .from('daily_assignments')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('assignment_date', date)
+        .single();
+      return existing?.id ?? '';
     }
+    console.error('[AssignmentManager] Failed to persist assignment:', error);
+    return '';
   }
+
+  return data?.id ?? '';
 }
 
 /**
