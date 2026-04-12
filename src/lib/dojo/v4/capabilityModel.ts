@@ -38,7 +38,7 @@ export async function buildCapabilityProfiles(userId: string): Promise<Capabilit
   // Fetch recent completed sessions
   const { data: sessions } = await supabase
     .from('dojo_sessions')
-    .select('id, skill_focus, latest_score, best_score, pressure_level, created_at')
+    .select('id, skill_focus, latest_score, best_score, pressure_level, session_type, created_at')
     .eq('user_id', userId)
     .eq('status', 'completed')
     .order('created_at', { ascending: false })
@@ -115,8 +115,47 @@ export async function buildCapabilityProfiles(userId: string): Promise<Capabilit
       firstAttemptStrength, consistency, pressureScore,
     );
 
+    // V5 flow metrics from simulation sessions
+    const simSessions = skillSessions.filter(s => s.session_type === 'simulation');
+    let flowControl: number | null = null;
+    let closingUnderPressure: number | null = null;
+    let lateTurnDropoff: number | null = null;
+
+    if (simSessions.length >= 2) {
+      const flowScores: number[] = [];
+      const closingScores: number[] = [];
+      const dropoffs: number[] = [];
+
+      for (const sim of simSessions) {
+        const simTurns = (turnsBySession.get(sim.id) ?? [])
+          .filter(t => t.score != null)
+          .sort((a, b) => a.turn_index - b.turn_index);
+        if (simTurns.length < 2) continue;
+
+        // Flow control score (same as arcScoring)
+        let fc = 100;
+        for (let i = 1; i < simTurns.length; i++) {
+          const drop = (simTurns[i - 1].score ?? 0) - (simTurns[i].score ?? 0);
+          if (drop >= 20) fc -= 30;
+          else if (drop >= 12) fc -= 20;
+          else if (drop >= 8) fc -= 10;
+        }
+        flowScores.push(Math.max(0, Math.min(100, fc)));
+        closingScores.push(simTurns[simTurns.length - 1].score ?? 0);
+
+        // Late-turn dropoff: turn 1 - last turn
+        const t1 = simTurns[0].score ?? 0;
+        const tLast = simTurns[simTurns.length - 1].score ?? 0;
+        dropoffs.push(t1 - tLast);
+      }
+
+      flowControl = flowScores.length > 0 ? Math.round(flowScores.reduce((a, b) => a + b, 0) / flowScores.length) : null;
+      closingUnderPressure = closingScores.length > 0 ? Math.round(closingScores.reduce((a, b) => a + b, 0) / closingScores.length) : null;
+      lateTurnDropoff = dropoffs.length > 0 ? Math.round(dropoffs.reduce((a, b) => a + b, 0) / dropoffs.length) : null;
+    }
+
     // Summary
-    const summary = buildSummary(skill, consistency, pressureScore, recoveryRate, firstAttemptStrength, pressureReadiness);
+    const summary = buildSummary(skill, consistency, pressureScore, recoveryRate, firstAttemptStrength, pressureReadiness, lateTurnDropoff);
 
     return {
       skill,
@@ -127,6 +166,9 @@ export async function buildCapabilityProfiles(userId: string): Promise<Capabilit
       firstAttemptStrength,
       pressureReadiness,
       summary,
+      flowControl,
+      closingUnderPressure,
+      lateTurnDropoff,
     };
   });
 }
