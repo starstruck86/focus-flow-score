@@ -35,7 +35,7 @@ export function validateSelector(): V6ValidationResult[] {
   const results: V6ValidationResult[] = [];
 
   // Test: benchmark/retest never activates
-  results.push(runSelectorTest('selector-benchmark', 'activation', 'Benchmark reps never activate', {
+  results.push(runSelectorTest('selector-benchmark', 'no_activation', 'Benchmark reps never activate', {
     blockStage: 'enterprise',
     blockPhase: 'peak',
     dayAnchor: 'executive_roi_mixed',
@@ -45,7 +45,7 @@ export function validateSelector(): V6ValidationResult[] {
   }, false));
 
   // Test: low scores never activate
-  results.push(runSelectorTest('selector-low-score', 'activation', 'Low scores (< 55) never activate', {
+  results.push(runSelectorTest('selector-low-score', 'no_activation', 'Low scores (< 55) never activate', {
     blockStage: 'enterprise',
     blockPhase: 'peak',
     dayAnchor: 'executive_roi_mixed',
@@ -55,7 +55,7 @@ export function validateSelector(): V6ValidationResult[] {
   }, false));
 
   // Test: weekly cap respected
-  results.push(runSelectorTest('selector-cap', 'activation', 'Weekly cap (>= 3) blocks activation', {
+  results.push(runSelectorTest('selector-cap', 'no_activation', 'Weekly cap (>= 3) blocks activation', {
     blockStage: 'enterprise',
     blockPhase: 'peak',
     dayAnchor: 'executive_roi_mixed',
@@ -65,7 +65,7 @@ export function validateSelector(): V6ValidationResult[] {
   }, false));
 
   // Test: foundation + cold call = no activation
-  results.push(runSelectorTest('selector-foundation-cold', 'activation', 'Foundation + cold call = no activation', {
+  results.push(runSelectorTest('selector-foundation-cold', 'no_activation', 'Foundation + cold call = no activation', {
     blockStage: 'foundation',
     blockPhase: 'build',
     dayAnchor: 'opening_cold_call',
@@ -75,7 +75,7 @@ export function validateSelector(): V6ValidationResult[] {
   }, false));
 
   // Test: enterprise + peak + executive = activation
-  results.push(runSelectorTest('selector-enterprise-exec', 'activation', 'Enterprise peak + executive = activation', {
+  results.push(runSelectorTest('selector-enterprise-exec', 'light_activation', 'Enterprise peak + executive = activation', {
     blockStage: 'enterprise',
     blockPhase: 'peak',
     dayAnchor: 'executive_roi_mixed',
@@ -85,7 +85,7 @@ export function validateSelector(): V6ValidationResult[] {
   }, true));
 
   // Test: integration + build + deal control = activation
-  results.push(runSelectorTest('selector-integration-deal', 'activation', 'Integration build + deal control = activation', {
+  results.push(runSelectorTest('selector-integration-deal', 'light_activation', 'Integration build + deal control = activation', {
     blockStage: 'integration',
     blockPhase: 'build',
     dayAnchor: 'deal_control_negotiation',
@@ -95,7 +95,7 @@ export function validateSelector(): V6ValidationResult[] {
   }, true));
 
   // Test: foundation + peak + discovery = borderline (0.55 * 0.6 = 0.33 < 0.5)
-  results.push(runSelectorTest('selector-foundation-disc', 'activation', 'Foundation peak + discovery = no activation', {
+  results.push(runSelectorTest('selector-foundation-disc', 'no_activation', 'Foundation peak + discovery = no activation', {
     blockStage: 'foundation',
     blockPhase: 'peak',
     dayAnchor: 'discovery_qualification',
@@ -105,7 +105,7 @@ export function validateSelector(): V6ValidationResult[] {
   }, false));
 
   // Test: enterprise + sustain + objection = activation (0.55 * 0.7 = 0.385 < 0.5 → NO)
-  results.push(runSelectorTest('selector-enterprise-obj-sustain', 'activation', 'Enterprise sustain + objection = no activation', {
+  results.push(runSelectorTest('selector-enterprise-obj-sustain', 'no_activation', 'Enterprise sustain + objection = no activation', {
     blockStage: 'enterprise',
     blockPhase: 'sustain',
     dayAnchor: 'objection_pricing',
