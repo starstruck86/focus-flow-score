@@ -191,13 +191,15 @@ CRITICAL DISTINCTION: "caught the issue" vs "fixed the issue"
 
 FOCUS PATTERNS (pick ONE from this EXACT list): ${validPatterns}
 
+COMMON MISTAKES (pick exactly ONE for "topMistake" — MUST be from this list): ${(VALID_MISTAKES[skillFocus] || VALID_MISTAKES.objection_handling).join(', ')}
+
 Respond with ONLY valid JSON:
 {
   "score": 60,
   "diagnosisScore": 30,
   "rewriteScore": 30,
   "feedback": "2 sentences on overall quality.",
-  "topMistake": "what they missed in their diagnosis",
+  "topMistake": "single_mistake_code_from_list_above",
   "diagnosisFeedback": "What they correctly identified. What they missed. Was their analysis surface-level or did they see the deeper issue?",
   "rewriteFeedback": "Does the rewrite actually fix the problems? Where is it still weak? How does it compare to elite?",
   "diagnosisAccuracy": "correct|partial|missed",
