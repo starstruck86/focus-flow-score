@@ -26,6 +26,10 @@ export interface WeeklySummary {
   avgPressureScore: number | null;
   strongestPressureAnchor: string | null;
   weakestPressureAnchor: string | null;
+  // V5 simulation / flow metrics
+  simulationsCompleted: number;
+  flowControlAvg: number | null;
+  controlHeldRate: number | null;  // 0–100 percentage
 }
 
 export interface AnchorWeekStat {
@@ -71,13 +75,13 @@ export async function computeWeeklySummaryFromDB(
 
   // Fetch session scores
   const allIds = [...currentSessionIds, ...priorSessionIds];
-  let sessions: Array<{ id: string; best_score: number | null; latest_score: number | null; pressure_level: string | null }> = [];
-  let turns: Array<{ session_id: string; top_mistake: string | null }> = [];
+  let sessions: Array<{ id: string; best_score: number | null; latest_score: number | null; pressure_level: string | null; session_type: string }> = [];
+  let turns: Array<{ session_id: string; top_mistake: string | null; score: number | null; turn_index: number }> = [];
 
   if (allIds.length > 0) {
     const [sessRes, turnsRes] = await Promise.all([
-      supabase.from('dojo_sessions').select('id, best_score, latest_score, pressure_level').in('id', allIds),
-      supabase.from('dojo_session_turns').select('session_id, top_mistake').in('session_id', allIds),
+      supabase.from('dojo_sessions').select('id, best_score, latest_score, pressure_level, session_type').in('id', allIds),
+      supabase.from('dojo_session_turns').select('session_id, top_mistake, score, turn_index').in('session_id', allIds),
     ]);
     sessions = sessRes.data ?? [];
     turns = turnsRes.data ?? [];
