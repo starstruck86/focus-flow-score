@@ -198,6 +198,7 @@ const App = () => (
                   } />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
+                <SessionResumePrompt />
               </BrowserRouter>
             </DataSyncProvider>
             </CopilotProvider>
