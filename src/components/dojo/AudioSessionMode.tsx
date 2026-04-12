@@ -596,11 +596,39 @@ export default function AudioSessionMode({
     }
   }, [phase, voice, activateMic]);
 
+  // Cleanup recovery on unmount
+  useEffect(() => {
+    return () => { recoveryRef.current?.cancel(); };
+  }, []);
+
+  const cancelRecovery = useCallback(() => {
+    recoveryRef.current?.cancel();
+    setRecovery(createInitialRecoveryState());
+    emitSaveStatus('idle');
+  }, []);
+
+  const handleTextFallbackFromRecovery = useCallback(() => {
+    cancelRecovery();
+    setMicAvailable(false);
+    // Return to listening for text input
+    const currentPhase = phaseRef.current;
+    if (isProcessingPhase(currentPhase)) {
+      setPhase(currentPhase.startsWith('retry') ? 'retry_listening' : 'listening');
+    }
+  }, [cancelRecovery]);
+
   const currentResult = retryResult || result;
   const showFeedbackDelivery = isFeedbackPhase(phase) && currentResult && sessionId;
+  const isRecovering = recovery.status === 'recovering' || recovery.status === 'waiting_for_connection';
 
   return (
     <div className="space-y-4">
+      {/* Recovery banner */}
+      <RecoveryBanner
+        recovery={recovery}
+        onCancel={cancelRecovery}
+        onTextFallback={handleTextFallbackFromRecovery}
+      />
       {/* Phase indicator */}
       <div className={cn(
         'flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all duration-300',
