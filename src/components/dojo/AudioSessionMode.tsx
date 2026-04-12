@@ -149,16 +149,26 @@ export default function AudioSessionMode({
     if (hasStartedRef.current) return;
     hasStartedRef.current = true;
 
-    // If resuming from a later phase, skip intro — go straight to listening
+    // If resuming from a later phase, skip intro — go straight to correct step
     if (isResuming) {
       const resumePhase = savedState!.phase as AudioSessionPhase;
-      // If was in listening/feedback/scoring, let user re-engage from listening
       if (resumePhase !== 'intro' && resumePhase !== 'prompt') {
         toast.success('Session recovered — continue where you left off');
-        // If they had a score already, stay in current phase; otherwise activate mic
-        if (!savedState!.lastScore) {
-          activateMic();
+
+        // If scoring was interrupted but transcript exists, auto-retry scoring
+        if ((resumePhase === 'scoring' || resumePhase === 'retry_scoring') && savedState!.transcribedText) {
+          const isRetry = resumePhase === 'retry_scoring';
+          scoreAndDeliver(savedState!.transcribedText, isRetry);
+          return;
         }
+
+        // If they had a score already (feedback/complete), stay in current phase
+        if (savedState!.lastScore) {
+          return;
+        }
+
+        // Otherwise (listening was interrupted), activate mic
+        activateMic();
         return;
       }
     }
@@ -417,7 +427,7 @@ export default function AudioSessionMode({
             },
           });
           setSessionId(dbSessionId);
-          emitSaveStatus('error');
+          emitSaveStatus('offline');
           toast.info('Connection issue — your response is saved locally');
         }
 
@@ -477,7 +487,7 @@ export default function AudioSessionMode({
                 retry_of_turn_id: firstTurnId,
               },
             });
-            emitSaveStatus('error');
+            emitSaveStatus('offline');
             toast.info('Connection issue — your response is saved locally');
           }
         }

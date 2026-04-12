@@ -111,13 +111,31 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   useEffect(() => {
     if (phase === 'complete') clearLearnState();
   }, [phase]);
-  // Auto-play current section
+  // Auto-play current section (or resume from interrupted state)
   const hasStartedRef = useRef(false);
   useEffect(() => {
     if (hasStartedRef.current) return;
     hasStartedRef.current = true;
     upsertProgress.mutate({ lessonId: lesson.id, status: 'in_progress' });
-    playSection(0);
+
+    if (isLearnResuming) {
+      const resumePhase = savedLearn!.phase as LessonPhase;
+      // If grading was interrupted and we have the answer, auto-retry grading
+      if (resumePhase === 'grading' && savedLearn!.openAnswer) {
+        toast.success('Lesson recovered — resuming grading');
+        handleOpenSubmit(savedLearn!.openAnswer);
+        return;
+      }
+      // If waiting for input, resume at the correct section
+      if (resumePhase === 'waiting_mc' || resumePhase === 'waiting_open') {
+        toast.success('Lesson recovered — continue where you left off');
+        return; // phase/index already restored
+      }
+      // For teaching phase, resume playback from current section
+      toast.success('Lesson recovered — continuing');
+    }
+
+    playSection(isLearnResuming ? savedLearn!.currentSectionIndex : 0);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const playSection = useCallback(async (idx: number) => {

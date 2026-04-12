@@ -137,7 +137,7 @@ export function removePendingWrite(turnId: string): void {
 export function incrementWriteRetry(turnId: string): void {
   const writes = getPendingWrites().map(w =>
     w.turnId === turnId ? { ...w, retries: w.retries + 1 } : w
-  ).filter(w => w.retries < 5); // drop after 5 retries
+  ).filter(w => w.retries < 20); // drop only after 20 retries (generous for long offline)
   savePendingWrites(writes);
 }
 
