@@ -1,11 +1,12 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Info, Flame, Zap, Layers } from 'lucide-react';
+import { Info, Flame, Zap, Layers, CheckCircle2 } from 'lucide-react';
 import { DAY_ANCHORS } from '@/lib/dojo/v3/dayAnchors';
 import type { DailyAssignment } from '@/lib/dojo/v3/programmingEngine';
 import { FOCUS_PATTERN_LABELS } from '@/lib/dojo/focusPatterns';
 import { getArcById } from '@/lib/dojo/v5/simulationArcs';
 import { SKILL_LABELS } from '@/lib/dojo/scenarios';
+import { cn } from '@/lib/utils';
 
 interface DailyAssignmentCardProps {
   assignment: DailyAssignment;
@@ -19,25 +20,39 @@ export function DailyAssignmentCard({ assignment }: DailyAssignmentCardProps) {
   const isFriday = assignment.dayAnchor === 'executive_roi_mixed';
   const pressuredSpec = assignment.scenarios.find(s => s.pressure?.level !== 'none');
   const simArc = assignment.simulationArcId ? getArcById(assignment.simulationArcId) : null;
+  const isComplete = assignment.completed ?? false;
 
   return (
-    <Card className={isFriday ? 'border-amber-500/30 bg-amber-500/5' : 'border-primary/20 bg-primary/5'}>
+    <Card className={cn(
+      isFriday ? 'border-amber-500/30 bg-amber-500/5' : 'border-primary/20 bg-primary/5',
+      isComplete && 'opacity-80',
+    )}>
       <CardContent className="p-4 space-y-3">
+        {/* Completion state */}
+        {isComplete && (
+          <div className="flex items-center gap-1.5 mb-1">
+            <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-green-600 dark:text-green-400">
+              Completed{assignment.sessionCount && assignment.sessionCount > 1 ? ` · ${assignment.sessionCount} reps` : ''}
+            </span>
+          </div>
+        )}
+
         {/* Friday pressure/simulation badge */}
-        {isFriday && (
+        {isFriday && !isComplete && (
           <div className="flex items-center gap-1.5 mb-1">
             {simArc ? (
               <>
                 <Layers className="h-3.5 w-3.5 text-primary" />
                 <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
-                  Simulation Day — {simArc.title}
+                  Simulation Day
                 </span>
               </>
             ) : (
               <>
                 <Flame className="h-3.5 w-3.5 text-amber-500" />
                 <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                  Pressure Day — This is where it comes together
+                  Pressure Day
                 </span>
               </>
             )}
@@ -78,17 +93,17 @@ export function DailyAssignmentCard({ assignment }: DailyAssignmentCardProps) {
         </div>
 
         {/* Pressure Dave frame */}
-        {pressuredSpec?.pressure?.daveFrame && (
+        {pressuredSpec?.pressure?.daveFrame && !isComplete && (
           <p className="text-[11px] italic text-amber-600 dark:text-amber-400">
             "{pressuredSpec.pressure.daveFrame}"
           </p>
         )}
 
-        {/* Focus pattern */}
+        {/* Focus pattern — always visible */}
         {focusLabel && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Focus:</span>
-            <span className="text-xs font-medium text-foreground">{focusLabel}</span>
+            <span className="text-xs font-semibold text-foreground">{focusLabel}</span>
           </div>
         )}
 
@@ -107,18 +122,20 @@ export function DailyAssignmentCard({ assignment }: DailyAssignmentCardProps) {
           </Badge>
         )}
 
-        {/* Scenario count */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{assignment.scenarios.length} rep{assignment.scenarios.length !== 1 ? 's' : ''}</span>
-          {assignment.kis.length > 0 && (
-            <>
-              <span>·</span>
-              <span>{assignment.kis.length} KI{assignment.kis.length !== 1 ? 's' : ''}</span>
-            </>
-          )}
-          <span>·</span>
-          <span>~{5 + assignment.scenarios.length * 3} min</span>
-        </div>
+        {/* Scenario count — hide when complete to reduce clutter */}
+        {!isComplete && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>{assignment.scenarios.length} rep{assignment.scenarios.length !== 1 ? 's' : ''}</span>
+            {assignment.kis.length > 0 && (
+              <>
+                <span>·</span>
+                <span>{assignment.kis.length} KI{assignment.kis.length !== 1 ? 's' : ''}</span>
+              </>
+            )}
+            <span>·</span>
+            <span>~{5 + assignment.scenarios.length * 3} min</span>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
