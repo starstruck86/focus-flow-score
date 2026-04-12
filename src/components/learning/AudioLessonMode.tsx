@@ -30,6 +30,13 @@ import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { supabase } from '@/integrations/supabase/client';
 import { emitSaveStatus } from '@/components/SaveIndicator';
 import { saveLearnState, clearLearnState, loadLearnState } from '@/lib/sessionDurability';
+import {
+  type RecoveryState,
+  createInitialRecoveryState,
+  executeWithRecovery,
+  type RecoveryController,
+} from '@/lib/sessionRecovery';
+import RecoveryBanner from '@/components/RecoveryBanner';
 import type { LearningLesson, MCQuestion } from '@/lib/learning/types';
 import {
   buildLessonAudioSections,
