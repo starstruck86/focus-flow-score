@@ -230,11 +230,13 @@ export default function AudioSessionMode({
 
       // Persist to DB with pending-write fallback
       if (!isRetry) {
+        const dbSessionId = crypto.randomUUID();
         const turnId = crypto.randomUUID();
         try {
           const { data: session, error: sessionErr } = await supabase
             .from('dojo_sessions')
             .insert({
+              id: dbSessionId,
               user_id: userId,
               mode: (mode as 'autopilot' | 'custom') || 'autopilot',
               session_type: 'drill',
@@ -275,13 +277,34 @@ export default function AudioSessionMode({
           }
           emitSaveStatus('saved');
         } catch (dbErr) {
-          console.warn('DB write failed, queuing for retry:', dbErr);
+          console.warn('DB write failed, queuing session + turn for retry:', dbErr);
+          // Queue the parent session first, then the turn
+          enqueuePendingWrite({
+            turnId: dbSessionId,
+            table: 'dojo_sessions',
+            action: 'insert',
+            data: {
+              id: dbSessionId,
+              user_id: userId,
+              mode: (mode as 'autopilot' | 'custom') || 'autopilot',
+              session_type: 'drill',
+              skill_focus: scenario.skillFocus,
+              scenario_title: scenario.title,
+              scenario_context: scenario.context,
+              scenario_objection: scenario.objection,
+              best_score: scoreData.score,
+              latest_score: scoreData.score,
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+            },
+          });
           enqueuePendingWrite({
             turnId,
             table: 'dojo_session_turns',
             action: 'insert',
             data: {
               id: turnId,
+              session_id: dbSessionId,
               user_id: userId,
               turn_index: 0,
               prompt_text: scenario.objection,
@@ -293,6 +316,7 @@ export default function AudioSessionMode({
               score_json: scoreToJson(scoreData),
             },
           });
+          setSessionId(dbSessionId);
           emitSaveStatus('error');
           toast.info('Connection issue — your response is saved locally');
         }
