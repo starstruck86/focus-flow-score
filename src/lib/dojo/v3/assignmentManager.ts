@@ -8,14 +8,19 @@
  * - Once created, the same assignment is reused for the entire day
  * - Assignment is NOT regenerated on every render
  * - recentAssignments is populated from real DB history
- * - KI selection uses real knowledge_items as catalog source
+ * - KI selection uses the KI Catalog Bridge (real knowledge_items foundation)
+ *
+ * Architecture rule:
+ *   DailyAssignment must resolve to real KI IDs from the knowledge_items table.
+ *   The KI/resource system is the foundation layer — V3 orchestrates it.
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { getOrCreateActiveBlock } from './blockManager';
-import { generateDailyAssignment, type DailyAssignment, type RecentAssignment, type KICatalogEntry, type ProgrammingInput } from './programmingEngine';
+import { generateDailyAssignment, type DailyAssignment, type RecentAssignment, type ProgrammingInput } from './programmingEngine';
 import { getAnchorForDate, type DayAnchor, ANCHORS_IN_ORDER } from './dayAnchors';
-import { buildSkillMemory, type SkillMemory } from '../skillMemory';
+import { fetchKICatalogForAnchor } from './kiCatalogBridge';
+import { buildSkillMemory } from '../skillMemory';
 
 // ── Public API ────────────────────────────────────────────────────
 
@@ -37,10 +42,14 @@ export async function getOrCreateTodayAssignment(userId: string): Promise<DailyA
   // 2. Generate a new one with real inputs
   const block = await getOrCreateActiveBlock(userId);
 
+  // Fetch real inputs in parallel:
+  // - skillMemory from dojo_sessions
+  // - recent assignments from daily_assignments
+  // - KI catalog from knowledge_items (via kiCatalogBridge, anchor-scoped)
   const [skillMemory, recentAssignments, kiCatalog] = await Promise.all([
     buildSkillMemory(userId),
     fetchRecentAssignments(userId, 7),
-    fetchKICatalog(userId),
+    fetchKICatalogForAnchor(userId, anchor),
   ]);
 
   const input: ProgrammingInput = {
@@ -158,25 +167,6 @@ async function fetchRecentAssignments(userId: string, days: number): Promise<Rec
   }));
 }
 
-async function fetchKICatalog(userId: string): Promise<KICatalogEntry[]> {
-  const { data } = await supabase
-    .from('knowledge_items' as any)
-    .select('id, title, tags, confidence_score, updated_at')
-    .eq('user_id', userId)
-    .eq('active', true)
-    .limit(100);
-
-  if (!data) return [];
-
-  return (data as any[]).map(ki => ({
-    id: ki.id,
-    title: ki.title ?? '',
-    skills: inferSkillsFromTags(ki.tags ?? []),
-    focusPatterns: inferPatternsFromTags(ki.tags ?? []),
-    lastTaughtAt: ki.updated_at ?? null,
-  }));
-}
-
 async function persistAssignment(
   userId: string,
   date: string,
@@ -240,7 +230,7 @@ async function recordAnchorCompletion(blockId: string, anchor: DayAnchor): Promi
 
 function mapRowToAssignment(row: Record<string, unknown>): DailyAssignment {
   return {
-    blockNumber: row.block_week as number, // block_week is stored; blockNumber comes from block
+    blockNumber: row.block_week as number,
     blockWeek: row.block_week as number,
     blockPhase: row.block_phase as any,
     dayAnchor: row.day_anchor as DayAnchor,
@@ -256,53 +246,4 @@ function mapRowToAssignment(row: Record<string, unknown>): DailyAssignment {
     reason: row.reason as string,
     source: row.source as any,
   };
-}
-
-// ── Tag → Skill/Pattern inference ─────────────────────────────────
-
-const TAG_SKILL_MAP: Record<string, string> = {
-  objection: 'objection_handling',
-  objections: 'objection_handling',
-  discovery: 'discovery',
-  qualification: 'qualification',
-  executive: 'executive_response',
-  deal_control: 'deal_control',
-  negotiation: 'deal_control',
-  closing: 'deal_control',
-  cold_call: 'objection_handling',
-  pricing: 'objection_handling',
-  roi: 'executive_response',
-};
-
-function inferSkillsFromTags(tags: string[]): any[] {
-  const skills = new Set<string>();
-  for (const tag of tags) {
-    const lower = tag.toLowerCase();
-    for (const [key, skill] of Object.entries(TAG_SKILL_MAP)) {
-      if (lower.includes(key)) skills.add(skill);
-    }
-  }
-  return skills.size > 0 ? Array.from(skills) as any[] : ['objection_handling'];
-}
-
-const TAG_PATTERN_MAP: Record<string, string> = {
-  isolate: 'isolate_before_answering',
-  reframe: 'reframe_to_business_impact',
-  proof: 'use_specific_proof',
-  deepen: 'deepen_one_level',
-  quantify: 'quantify_the_pain',
-  stakeholder: 'map_stakeholders',
-  commitment: 'lock_mutual_commitment',
-  next_step: 'control_next_step',
-};
-
-function inferPatternsFromTags(tags: string[]): string[] {
-  const patterns = new Set<string>();
-  for (const tag of tags) {
-    const lower = tag.toLowerCase();
-    for (const [key, pattern] of Object.entries(TAG_PATTERN_MAP)) {
-      if (lower.includes(key)) patterns.add(pattern);
-    }
-  }
-  return Array.from(patterns);
 }
