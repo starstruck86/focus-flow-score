@@ -25,6 +25,7 @@ RULES:
 2. DO NOT explain the call
 3. DO NOT give general advice
 4. ONLY produce scenarios that can be practiced
+5. ALWAYS return 5 scenarios if the transcript has enough substance
 
 Each scenario must include:
 - title: short, specific, actionable (describe the situation)
@@ -32,13 +33,21 @@ Each scenario must include:
 - context: 1-2 sentences describing the situation with relevant business context
 - objection: the exact moment the rep needs to respond — should feel like something a buyer would actually say
 - difficulty: MUST be one of: ${VALID_DIFFICULTIES.join(", ")}
-- sourceExcerpt: a real quote or close paraphrase from the transcript
+- sourceExcerpt: a real quote from the BUYER (not the rep) that reveals the moment worth practicing. Quote the buyer's words that the rep failed to handle well.
 - coachingHint: one sentence — what the rep should do differently (not the full answer)
 
+DIFFICULTY CALIBRATION:
+- foundational: the rep violated a basic principle any trained rep should know (e.g., pitching before discovering, ignoring stated priorities, answering questions not asked)
+- intermediate: the rep missed a real opportunity that requires situational awareness (e.g., weak follow-up, generic competitive response, shallow discovery)
+- advanced: the moment requires high skill and nuance to handle well (e.g., navigating exec-level politics, recovering credibility, handling multi-threaded deals)
+Default DOWN, not up. If in doubt between foundational and intermediate, choose foundational.
+
 PRIORITIZATION:
-Tier 1 (most important): moments that would kill or stall the deal — loss of control, missed qualification, weak objection handling
+Tier 1 (most important): moments that would kill or stall the deal — loss of control, missed qualification, weak objection handling, pitching before understanding the problem
 Tier 2: shallow discovery, missed follow-ups, generic responses
 Tier 3: style issues (too long, unclear, etc.)
+
+CRITICAL: The FIRST and most important thing to check is whether the rep understood the buyer's actual problem before proposing a solution. If the rep pitched before doing discovery, that MUST be the first scenario. This is almost always the highest-leverage mistake.
 
 If multiple mistakes exist in one moment, choose the highest-leverage mistake.
 
