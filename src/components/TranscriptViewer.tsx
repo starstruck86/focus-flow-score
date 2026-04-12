@@ -189,11 +189,44 @@ function TranscriptDetailPane({ selected, onDelete }: { selected: CallTranscript
       )}
 
       <div>
-        <p className="text-[11px] font-semibold text-muted-foreground mb-1">Full Transcript</p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[11px] font-semibold text-muted-foreground">Full Transcript</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            disabled={isExtracting || selected.content.length < 200}
+            onClick={() => extract(selected.content, selected.title, selected.call_type || undefined)}
+          >
+            <Zap className="h-3 w-3 mr-1" />
+            {isExtracting ? 'Extracting…' : 'Extract Scenarios'}
+          </Button>
+        </div>
         <div className="text-sm whitespace-pre-wrap font-mono bg-muted/30 p-3 rounded-lg border border-border/50 max-h-[400px] overflow-y-auto">
           {selected.content}
         </div>
       </div>
+
+      {scenarios && scenarios.length > 0 && (
+        <ExtractedScenariosList
+          scenarios={scenarios}
+          onClose={clear}
+          onPractice={(s) => {
+            navigate('/dojo', {
+              state: {
+                preloadScenario: {
+                  id: `extracted-${Date.now()}`,
+                  skillFocus: s.skillFocus,
+                  title: s.title,
+                  context: s.context,
+                  objection: s.objection,
+                  difficulty: s.difficulty,
+                },
+              },
+            });
+          }}
+        />
+      )}
     </div>
   );
 }
