@@ -331,8 +331,8 @@ export default function LearnLesson() {
           </div>
         )}
 
-        {/* Phase: Results */}
-        {phase === 'results' && (() => {
+        {/* Text Mode: Phase: Results */}
+        {!isAudio && phase === 'results' && (() => {
           const practice = getPracticeMapping(lesson.topic);
           return (
             <div className="space-y-4 text-center py-6">
