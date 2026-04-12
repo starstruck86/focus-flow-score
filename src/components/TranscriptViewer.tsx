@@ -38,7 +38,6 @@ function TranscriptDetailPane({ selected, onDelete }: { selected: CallTranscript
   const [editNotes, setEditNotes] = useState(selected.notes || '');
   const updateTranscript = useUpdateTranscript();
   const { extract, isExtracting, scenarios, clear } = useExtractScenarios();
-  const updateTranscript = useUpdateTranscript();
 
   const startEdit = () => {
     setEditTitle(selected.title);
