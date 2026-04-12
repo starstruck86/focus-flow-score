@@ -368,7 +368,7 @@ export default function DojoSession() {
               )}
               <div className="flex items-start gap-2 px-1">
                 <Swords className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                <p className="text-xs text-muted-foreground">{currentResult?.feedback}</p>
+                <p className="text-sm text-foreground leading-relaxed">{currentResult?.feedback}</p>
               </div>
               <p className="text-sm text-muted-foreground font-medium">Try again:</p>
               <Textarea ref={textareaRef} value={retryResponse} onChange={(e) => setRetryResponse(e.target.value)} placeholder="Give it another shot..." className="min-h-[120px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRetrySubmit(); }} />
@@ -428,7 +428,7 @@ function FeedbackView({
         <div className={cn(
           'text-4xl font-bold',
           currentResult.score >= 80 ? 'text-green-500' :
-          currentResult.score >= 65 ? 'text-yellow-500' :
+          currentResult.score >= 70 ? 'text-yellow-500' :
           currentResult.score >= 50 ? 'text-orange-500' : 'text-red-500'
         )}>
           {currentResult.score}
@@ -437,7 +437,7 @@ function FeedbackView({
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">
               {currentResult.score >= 80 ? 'Strong' :
-               currentResult.score >= 65 ? 'Solid' :
+               currentResult.score >= 70 ? 'Solid' :
                currentResult.score >= 50 ? 'Average' : 'Needs Work'}
             </span>
             {scoreDelta !== null && (
