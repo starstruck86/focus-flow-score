@@ -1,29 +1,37 @@
 /**
- * DailyKICard
+ * DailyKICard — Enhanced for Learn V6 Phase 1
  *
- * Renders today's KI from the DailyAssignment as a focused lesson card on the Learn page.
- * This is the Learn → Dojo bridge: same KI drives both teaching and practice.
+ * Renders today's KI with:
+ * - Why this matters today (tied to assignment.reason)
+ * - What this fixes (mapped to topMistake)
+ * - Failure mode (1 sentence)
+ * - Original teaching content
  */
 
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { BookOpen, ArrowRight, Lightbulb, Target, AlertTriangle, Sparkles } from 'lucide-react';
+import { BookOpen, ArrowRight, Lightbulb, Target, AlertTriangle, Sparkles, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DailyKIContext } from '@/hooks/useDailyKI';
 import { ANCHOR_LABELS } from '@/lib/dojo/v3/dayAnchors';
+import { getMistakeEntry } from '@/lib/dojo/mistakeTaxonomy';
+import type { SkillProfile } from '@/lib/dojo/skillMemory';
 
 interface DailyKICardProps {
   context: DailyKIContext;
+  /** Top mistake from skill memory for this anchor's skill */
+  topMistake?: string | null;
 }
 
-export function DailyKICard({ context }: DailyKICardProps) {
+export function DailyKICard({ context, topMistake }: DailyKICardProps) {
   const navigate = useNavigate();
   const ki = context.items[0];
 
   if (!ki) return null;
 
   const anchorLabel = ANCHOR_LABELS[context.anchor as keyof typeof ANCHOR_LABELS] ?? context.anchor;
+  const mistakeEntry = topMistake ? getMistakeEntry(topMistake) : null;
 
   return (
     <div className="space-y-3">
@@ -41,30 +49,41 @@ export function DailyKICard({ context }: DailyKICardProps) {
         <CardContent className="p-4 space-y-3">
           <p className="text-sm font-semibold text-foreground">{ki.title}</p>
 
-          {ki.tactic_summary && (
-            <div className="flex gap-2">
-              <Lightbulb className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground leading-relaxed">{ki.tactic_summary}</p>
-            </div>
-          )}
+          {/* Why this matters today */}
+          <div className="flex gap-2">
+            <Target className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+            <p className="text-xs text-foreground leading-relaxed">
+              <span className="font-medium">Why today: </span>
+              {context.reason}
+            </p>
+          </div>
 
-          {ki.when_to_use && (
+          {/* What this fixes */}
+          {mistakeEntry && (
             <div className="flex gap-2">
-              <Target className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                <span className="font-medium text-foreground">When to use: </span>
-                {ki.when_to_use}
+              <Shield className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-foreground leading-relaxed">
+                <span className="font-medium">What this fixes: </span>
+                {mistakeEntry.label} — {mistakeEntry.drillCue}
               </p>
             </div>
           )}
 
+          {/* Failure mode */}
           {ki.when_not_to_use && (
             <div className="flex gap-2">
               <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
               <p className="text-xs text-muted-foreground leading-relaxed">
-                <span className="font-medium text-foreground">When not to use: </span>
+                <span className="font-medium text-foreground">Failure mode: </span>
                 {ki.when_not_to_use}
               </p>
+            </div>
+          )}
+
+          {ki.tactic_summary && (
+            <div className="flex gap-2">
+              <Lightbulb className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground leading-relaxed">{ki.tactic_summary}</p>
             </div>
           )}
 
@@ -99,17 +118,8 @@ export function DailyKICard({ context }: DailyKICardProps) {
             Practice This Now
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
-
-          {/* Why this KI was chosen */}
-          <div className="flex items-start gap-2 pt-2 border-t border-primary/10">
-            <Target className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
-            <p className="text-[10px] text-muted-foreground leading-relaxed italic">
-              {context.reason}
-            </p>
-          </div>
         </CardContent>
       </Card>
-
     </div>
   );
 }
