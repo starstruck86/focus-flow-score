@@ -14,7 +14,8 @@ import type { LessonContext } from '@/lib/learning/practiceMapping';
 
 // V3 imports
 import { getOrCreateActiveBlock } from '@/lib/dojo/v3/blockManager';
-import { generateDailyAssignment, type DailyAssignment } from '@/lib/dojo/v3/programmingEngine';
+import { getOrCreateTodayAssignment } from '@/lib/dojo/v3/assignmentManager';
+import type { DailyAssignment } from '@/lib/dojo/v3/programmingEngine';
 import { getAnchorForDate } from '@/lib/dojo/v3/dayAnchors';
 
 import { BlockHeader } from '@/components/dojo/BlockHeader';
@@ -55,6 +56,14 @@ export default function Dojo() {
     staleTime: 10 * 60 * 1000,
   });
 
+  // V3: Fetch or create today's assignment from DB (single source of truth)
+  const { data: dailyAssignment } = useQuery<DailyAssignment | null>({
+    queryKey: ['dojo-v3-assignment', user?.id, new Date().toISOString().split('T')[0]],
+    enabled: !!user?.id,
+    queryFn: () => user ? getOrCreateTodayAssignment(user.id) : null,
+    staleTime: 30 * 60 * 1000, // stable for 30 min — assignment doesn't change intra-day
+  });
+
   const coachingInsights = useMemo<CoachingInsights | null>(
     () => patternMemory ? deriveCoachingInsights(patternMemory) : null,
     [patternMemory]
@@ -64,19 +73,6 @@ export default function Dojo() {
     () => getSmartAutopilotRecommendation(stats?.skillBreakdown, patternMemory),
     [stats?.skillBreakdown, patternMemory]
   );
-
-  // V3: Generate daily assignment
-  const dailyAssignment = useMemo<DailyAssignment | null>(() => {
-    if (!activeBlock) return null;
-    return generateDailyAssignment({
-      date: new Date(),
-      block: activeBlock,
-      skillMemory: skillMemory ?? null,
-      recentAssignments: [], // TODO: fetch from daily_assignments table
-      transcriptScenarios: [],
-      kiCatalog: [],
-    });
-  }, [activeBlock, skillMemory]);
 
   const todayAnchor = useMemo(() => getAnchorForDate(new Date()), []);
 

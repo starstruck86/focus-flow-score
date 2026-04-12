@@ -2,7 +2,7 @@
  * V3 Block Manager
  *
  * Manages 8-week training blocks.
- * Weeks advance on 5 completed anchor sessions, NOT calendar time.
+ * Weeks advance when all 5 unique weekday anchors are completed, NOT on session count.
  * Phase is derived deterministically from week number.
  */
 
@@ -120,12 +120,20 @@ export async function getOrCreateActiveBlock(userId: string): Promise<TrainingBl
 
   const nextNumber = (lastBlock?.block_number ?? 0) + 1;
 
+  // Align start_date to the most recent Monday (or today if Monday)
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon...
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - daysFromMonday);
+  const startDate = monday.toISOString().split('T')[0];
+
   const { data: created, error } = await supabase
     .from('training_blocks')
     .insert({
       user_id: userId,
       block_number: nextNumber,
-      start_date: new Date().toISOString().split('T')[0],
+      start_date: startDate,
       current_week: 1,
       phase: 'benchmark',
       stage: 'foundation',
@@ -142,12 +150,14 @@ export async function getOrCreateActiveBlock(userId: string): Promise<TrainingBl
   return mapBlock(created);
 }
 
-/** Record a completed session and advance week if 5 anchors done */
-export async function recordSessionCompletion(
+/**
+ * Advance the block to the next week.
+ * Called by assignmentManager when all 5 unique anchors are completed.
+ */
+export async function advanceWeek(
   blockId: string,
   stageGateInput?: StageGateInput,
 ): Promise<TrainingBlock> {
-  // Fetch current block
   const { data: block, error: fetchErr } = await supabase
     .from('training_blocks')
     .select('*')
@@ -156,56 +166,39 @@ export async function recordSessionCompletion(
 
   if (fetchErr || !block) throw new Error('Block not found');
 
-  const newCompleted = block.completed_sessions_this_week + 1;
+  const nextWeek = block.current_week + 1;
 
-  // Week advances at 5 completed anchor sessions
-  if (newCompleted >= 5) {
-    const nextWeek = block.current_week + 1;
-
-    if (nextWeek > 8) {
-      // Block complete
-      const { data: updated } = await supabase
-        .from('training_blocks')
-        .update({
-          status: 'completed',
-          completed_sessions_this_week: newCompleted,
-        })
-        .eq('id', blockId)
-        .select()
-        .single();
-      return mapBlock(updated!);
-    }
-
-    // Advance week
-    const nextPhase = derivePhase(nextWeek);
-
-    // Check stage gate at week boundaries
-    let nextStage = block.stage as BlockStage;
-    if (stageGateInput) {
-      nextStage = evaluateStageGate(nextStage, stageGateInput);
-    }
-
+  if (nextWeek > 8) {
+    // Block complete
     const { data: updated } = await supabase
       .from('training_blocks')
-      .update({
-        current_week: nextWeek,
-        phase: nextPhase,
-        stage: nextStage,
-        completed_sessions_this_week: 0, // reset for new week
-      })
+      .update({ status: 'completed' })
       .eq('id', blockId)
       .select()
       .single();
     return mapBlock(updated!);
   }
 
-  // Just increment counter
+  const nextPhase = derivePhase(nextWeek);
+
+  // Check stage gate at week boundaries
+  let nextStage = block.stage as BlockStage;
+  if (stageGateInput) {
+    nextStage = evaluateStageGate(nextStage, stageGateInput);
+  }
+
   const { data: updated } = await supabase
     .from('training_blocks')
-    .update({ completed_sessions_this_week: newCompleted })
+    .update({
+      current_week: nextWeek,
+      phase: nextPhase,
+      stage: nextStage,
+      completed_sessions_this_week: 0, // reset for new week
+    })
     .eq('id', blockId)
     .select()
     .single();
+
   return mapBlock(updated!);
 }
 
