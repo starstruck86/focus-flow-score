@@ -14,6 +14,9 @@ import { TodaysMentalModel } from '@/components/learn/TodaysMentalModel';
 import { LastRepInsights } from '@/components/learn/LastRepInsights';
 import { ReinforcementQueue } from '@/components/learn/ReinforcementQueue';
 import { CourseCard } from '@/components/learn/CourseCard';
+import { NextRepExecutionCard } from '@/components/learn/NextRepExecutionCard';
+import { ReplayMomentCard } from '@/components/learn/ReplayMomentCard';
+import { PatternRecognitionCard } from '@/components/learn/PatternRecognitionCard';
 
 export default function Learn() {
   const navigate = useNavigate();
@@ -75,6 +78,16 @@ export default function Learn() {
     return null;
   }, [courses, progressMap]);
 
+  // Derive contextual CTA label
+  const ctaLabel = useMemo(() => {
+    if (learnLoop?.lastRep) {
+      if (learnLoop.lastRep.focusApplied === 'no' || learnLoop.lastRep.score < 60) {
+        return 'Fix This Now';
+      }
+    }
+    return 'Run Today\'s Rep';
+  }, [learnLoop?.lastRep]);
+
   if (isLoading) {
     return (
       <Layout>
@@ -84,6 +97,8 @@ export default function Learn() {
       </Layout>
     );
   }
+
+  const ki = dailyKI?.items[0];
 
   return (
     <Layout>
@@ -103,28 +118,39 @@ export default function Learn() {
           </div>
         </div>
 
-        {/* Today's Mental Model — top of page */}
+        {/* 1. Today's Mental Model (Phase 1) */}
         {learnLoop?.mentalModel && <TodaysMentalModel model={learnLoop.mentalModel} />}
 
-        {/* Daily KI from today's assignment */}
+        {/* 2. In Your Next Rep (Phase 2) */}
+        {ki && (
+          <NextRepExecutionCard ki={ki} topMistake={learnLoop?.topMistake} />
+        )}
+
+        {/* 3. Daily KI (Phase 1) */}
         {dailyKI && <DailyKICard context={dailyKI} topMistake={learnLoop?.topMistake} />}
 
-        {/* Last Rep Insights */}
+        {/* 4. Replay That Moment (Phase 2, conditional) */}
+        {learnLoop?.lastRep && <ReplayMomentCard lastRep={learnLoop.lastRep} />}
+
+        {/* 5. Last Rep Insights (Phase 1) */}
         {learnLoop?.lastRep && <LastRepInsights insight={learnLoop.lastRep} />}
 
-        {/* Reinforcement Queue */}
+        {/* 6. Pattern Recognition (Phase 2) */}
+        {learnLoop?.skillMemory && <PatternRecognitionCard skillMemory={learnLoop.skillMemory} />}
+
+        {/* 7. Reinforcement Queue (Phase 1) */}
         {learnLoop?.reinforcement && learnLoop.reinforcement.length > 0 && (
           <ReinforcementQueue items={learnLoop.reinforcement} />
         )}
 
-        {/* Next lesson CTA */}
+        {/* 8. Next lesson CTA — contextual label */}
         {nextLesson && (
           <button
             onClick={() => navigate(`/learn/lesson/${nextLesson.lesson.id}`)}
             className="w-full h-14 rounded-md bg-primary text-primary-foreground font-semibold text-base flex items-center justify-center gap-2 shadow-sm hover:bg-primary/85 transition-colors"
           >
             <BookOpen className="h-5 w-5" />
-            Start Next Lesson
+            {ctaLabel}
           </button>
         )}
 
@@ -172,7 +198,7 @@ export default function Learn() {
           </div>
         )}
 
-        {/* Course list */}
+        {/* 9. Course list */}
         {(courses || []).map(course => (
           <CourseCard
             key={course.id}
