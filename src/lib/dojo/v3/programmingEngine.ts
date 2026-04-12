@@ -148,7 +148,7 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
   // Friday validation: ensure at least one pressured + one blended
   if (isFriday) {
     const hasPressure = finalScenarios.some(s => s.pressure?.level !== 'none');
-    if (!hasPressure && block.phase !== 'benchmark' && block.phase !== 'retest') {
+    if (!hasPressure) {
       // Force pressure on the last scenario
       const last = finalScenarios[finalScenarios.length - 1];
       if (last) {
