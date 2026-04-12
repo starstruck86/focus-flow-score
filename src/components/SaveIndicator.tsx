@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Check, Loader2, Cloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'recovering' | 'offline';
 
 // Global event emitter for save status
 const listeners = new Set<(status: SaveStatus) => void>();
@@ -34,6 +34,8 @@ export function SaveIndicator() {
       status === 'saving' && "text-muted-foreground",
       status === 'saved' && "text-status-green",
       status === 'error' && "text-destructive",
+      status === 'recovering' && "text-amber-500",
+      status === 'offline' && "text-amber-500",
     )}>
       {status === 'saving' && (
         <>
@@ -51,6 +53,18 @@ export function SaveIndicator() {
         <>
           <Cloud className="h-3.5 w-3.5" />
           <span>Save failed</span>
+        </>
+      )}
+      {status === 'recovering' && (
+        <>
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Reconnecting…</span>
+        </>
+      )}
+      {status === 'offline' && (
+        <>
+          <Cloud className="h-3.5 w-3.5" />
+          <span>Saved locally — waiting for signal</span>
         </>
       )}
     </div>
