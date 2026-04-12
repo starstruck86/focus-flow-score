@@ -388,10 +388,24 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
     playSection(currentIndex);
   }, [voice, currentIndex, playSection]);
 
+  // Cleanup recovery on unmount
+  useEffect(() => {
+    return () => { recoveryRef.current?.cancel(); };
+  }, []);
+
+  const cancelRecovery = useCallback(() => {
+    recoveryRef.current?.cancel();
+    setRecovery(createInitialRecoveryState());
+    emitSaveStatus('idle');
+  }, []);
+
   const progress = sections.length > 0 ? Math.round((completedSections.size / sections.length) * 100) : 0;
+  const isRecovering = recovery.status === 'recovering' || recovery.status === 'waiting_for_connection';
 
   return (
     <div className="space-y-4">
+      {/* Recovery banner */}
+      <RecoveryBanner recovery={recovery} onCancel={cancelRecovery} />
       {/* Progress & status */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
