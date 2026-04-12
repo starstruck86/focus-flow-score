@@ -84,9 +84,10 @@ export default function DojoSession() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { isAudio, toggleMode } = useAudioPreference();
 
   const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string } | null;
-  const sessionType = state?.sessionType || 'drill';
+  const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
     return getRandomScenario(state?.skillFocus);
