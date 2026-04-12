@@ -10,12 +10,15 @@ import { cn } from '@/lib/utils';
 import {
   ArrowLeft, Loader2, BookOpen, CheckCircle2, XCircle,
   ChevronDown, ChevronUp, Lightbulb, AlertTriangle, Send,
+  Volume2, VolumeX,
 } from 'lucide-react';
 import { useLesson, useGenerateLesson, useUpsertProgress, useSaveQuizAnswer } from '@/lib/learning/hooks';
 import { supabase } from '@/integrations/supabase/client';
 import type { MCQuestion } from '@/lib/learning/types';
 import { getPracticeMapping } from '@/lib/learning/practiceMapping';
 import { Swords } from 'lucide-react';
+import { useAudioPreference } from '@/hooks/useAudioPreference';
+import AudioLessonMode from '@/components/learning/AudioLessonMode';
 
 type Phase = 'learn' | 'quiz' | 'open_ended' | 'results';
 
@@ -26,6 +29,7 @@ export default function LearnLesson() {
   const generateLesson = useGenerateLesson();
   const upsertProgress = useUpsertProgress();
   const saveAnswer = useSaveQuizAnswer();
+  const { isAudio, toggleMode } = useAudioPreference();
 
   const [phase, setPhase] = useState<Phase>('learn');
   const [expandedSection, setExpandedSection] = useState<string | null>('concept');
@@ -146,6 +150,13 @@ export default function LearnLesson() {
             <p className="text-sm font-semibold truncate">{lesson.title}</p>
             <p className="text-[10px] text-muted-foreground capitalize">{lesson.topic.replace(/_/g, ' ')} · {lesson.difficulty_level}</p>
           </div>
+          <button
+            onClick={toggleMode}
+            className="p-1.5 rounded-md hover:bg-accent/50 transition-colors"
+            title={isAudio ? 'Switch to text mode' : 'Switch to audio mode'}
+          >
+            {isAudio ? <Volume2 className="h-4 w-4 text-primary" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
+          </button>
         </div>
 
         {/* Generation needed */}
@@ -174,8 +185,13 @@ export default function LearnLesson() {
           </Card>
         )}
 
-        {/* Phase: Learn */}
-        {!needsGeneration && phase === 'learn' && lesson.lesson_content && (
+        {/* Audio Mode — Dave teaches the full lesson */}
+        {!needsGeneration && isAudio && lesson.lesson_content && (
+          <AudioLessonMode lesson={lesson} />
+        )}
+
+        {/* Text Mode: Phase: Learn */}
+        {!needsGeneration && !isAudio && phase === 'learn' && lesson.lesson_content && (
           <>
             <LessonSection
               title="Core Concept"
@@ -226,8 +242,8 @@ export default function LearnLesson() {
           </>
         )}
 
-        {/* Phase: Quiz (MC) */}
-        {phase === 'quiz' && lesson.quiz_content && (
+        {/* Text Mode: Phase: Quiz (MC) */}
+        {!isAudio && phase === 'quiz' && lesson.quiz_content && (
           <div className="space-y-4">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Quick Check — {lesson.quiz_content.mc_questions.length} Questions
@@ -264,8 +280,8 @@ export default function LearnLesson() {
           </div>
         )}
 
-        {/* Phase: Open-ended */}
-        {phase === 'open_ended' && lesson.quiz_content && (
+        {/* Text Mode: Phase: Open-ended */}
+        {!isAudio && phase === 'open_ended' && lesson.quiz_content && (
           <div className="space-y-4">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Apply It
@@ -315,8 +331,8 @@ export default function LearnLesson() {
           </div>
         )}
 
-        {/* Phase: Results */}
-        {phase === 'results' && (() => {
+        {/* Text Mode: Phase: Results */}
+        {!isAudio && phase === 'results' && (() => {
           const practice = getPracticeMapping(lesson.topic);
           return (
             <div className="space-y-4 text-center py-6">

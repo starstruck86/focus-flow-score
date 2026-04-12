@@ -11,7 +11,7 @@ import {
   CheckCircle2, Lightbulb, Swords, ChevronRight, Crown, Sparkles,
   Crosshair, ListOrdered, MessageCircle, GraduationCap,
   TrendingUp, TrendingDown, Minus, Zap, Shield, XCircle,
-  Eye, PenLine,
+  Eye, PenLine, Volume2, VolumeX,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import {
@@ -32,6 +32,7 @@ import DaveCoachingDelivery from '@/components/dojo/DaveCoachingDelivery';
 import AudioSessionMode from '@/components/dojo/AudioSessionMode';
 import { SessionFeedbackCard } from '@/components/dojo/SessionFeedbackCard';
 import type { Json } from '@/integrations/supabase/types';
+import { useAudioPreference } from '@/hooks/useAudioPreference';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
 
@@ -83,9 +84,10 @@ export default function DojoSession() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { isAudio, toggleMode } = useAudioPreference();
 
   const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string } | null;
-  const sessionType = state?.sessionType || 'drill';
+  const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
     return getRandomScenario(state?.skillFocus);
@@ -290,6 +292,9 @@ export default function DojoSession() {
           <p className="text-sm font-semibold truncate">{scenario.title}</p>
           <p className="text-xs text-muted-foreground">{SKILL_LABELS[scenario.skillFocus]} · {sessionType === 'audio' ? 'Audio Session' : sessionType === 'roleplay' ? 'Roleplay' : sessionType === 'review' ? 'Review' : 'Drill'}</p>
         </div>
+        <button onClick={toggleMode} className="p-1.5 rounded-md hover:bg-accent/50 transition-colors" title={isAudio ? 'Switch to text mode' : 'Switch to audio mode'}>
+          {isAudio ? <Volume2 className="h-4 w-4 text-primary" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
+        </button>
         <Badge variant="outline" className="text-xs shrink-0">5 min</Badge>
       </div>
 
