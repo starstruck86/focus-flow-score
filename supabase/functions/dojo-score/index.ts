@@ -256,6 +256,14 @@ RESPONSE RULES:
 COHERENCE RULE (CRITICAL):
 feedback, topMistake, focusPattern, focusReason, and practiceCue MUST all point at the SAME core coaching lesson.
 
+MISTAKE SELECTION PRIORITY (CRITICAL — when multiple mistakes are present, pick the highest-leverage one):
+Priority 1 — CONTROL failures: Did the rep lose control of the conversation or next steps? (lack_of_control, weak_close, vague_next_step, too_passive, accepted_delay, no_mutual_plan). These kill deals.
+Priority 2 — STRUCTURAL failures: Did the rep pitch before understanding, miss the real issue, or fail to qualify? (pitched_too_early, failed_to_qualify, reactive_not_reframing, accepted_weak_pain, failed_to_deepen). These waste cycles.
+Priority 3 — CONTENT failures: Was the response missing proof, impact, or specificity? (no_business_impact, no_proof, too_generic, vendor_language). These weaken positioning.
+Priority 4 — STYLE failures: Was the response too long or questions stacked? (too_long, stacked_questions, no_urgency, skipped_stakeholders, no_disqualification). These reduce effectiveness.
+
+TIE-BREAKING: If a control failure AND a content failure are both present, ALWAYS pick the control failure — the rep can add better content later, but losing control loses the deal now. Exception: if the rep literally pitched product features into an objection (pitched_too_early), that trumps weak_close because the fundamental approach was wrong.
+
 TONE RULES:
 - Below 70: encouraging but NOT falsely positive. AVOID "great job", "solid work", etc.
 
