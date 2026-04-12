@@ -126,10 +126,12 @@ export default function DaveCoachingDelivery({
 
   const playback = useDojoPlayback(config);
   const [textChunks, setTextChunks] = useState<SpeechChunk[]>([]);
+  const [visibleChunkIds, setVisibleChunkIds] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState<DeliveryStatus>('idle');
   const initializedRef = useRef(false);
   const deliveryCompleteRef = useRef(false);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Initialize: try crash recovery first, then fresh start
   useEffect(() => {
@@ -155,6 +157,7 @@ export default function DaveCoachingDelivery({
 
     return () => {
       if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+      revealTimersRef.current.forEach(clearTimeout);
       playback.destroy();
     };
   }, [sessionId, scoreResult, enableVoice]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -185,7 +188,14 @@ export default function DaveCoachingDelivery({
       const chunk = d.chunk;
       setTextChunks((prev) => {
         if (prev.some((c) => c.id === chunk.id)) return prev;
-        return [...prev, chunk].sort((a, b) => a.index - b.index);
+        const next = [...prev, chunk].sort((a, b) => a.index - b.index);
+        // Stagger reveal for text-fallback coaching arc
+        const delay = (next.length - 1) * 350;
+        const timer = setTimeout(() => {
+          setVisibleChunkIds((ids) => new Set([...ids, chunk.id]));
+        }, delay);
+        revealTimersRef.current.push(timer);
+        return next;
       });
     }
 
@@ -391,7 +401,8 @@ export default function DaveCoachingDelivery({
             <div
               key={chunk.id}
               className={cn(
-                'text-sm leading-relaxed pl-3 border-l-2',
+                'text-sm leading-relaxed pl-3 border-l-2 transition-all duration-300',
+                visibleChunkIds.has(chunk.id) ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2',
                 chunk.role === 'feedback' && 'border-primary/40',
                 chunk.role === 'improvedVersion' && 'border-green-500/40',
                 chunk.role === 'worldClassResponse' && 'border-amber-500/40',
