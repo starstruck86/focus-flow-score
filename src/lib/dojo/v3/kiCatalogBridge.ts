@@ -23,11 +23,11 @@ import type { SkillFocus } from '../scenarios';
 // A KI belongs to an anchor if its chapter falls within that anchor's domain.
 
 const ANCHOR_CHAPTER_MAP: Record<DayAnchor, string[]> = {
-  opening_cold_call: ['cold_calling', 'opening', 'prospecting'],
-  discovery_qualification: ['discovery', 'qualification', 'needs_analysis'],
+  opening_cold_call: ['cold_calling', 'opening', 'prospecting', 'messaging'],
+  discovery_qualification: ['discovery', 'qualification', 'needs_analysis', 'stakeholder_navigation'],
   objection_pricing: ['objection_handling', 'pricing', 'competitive', 'value_proposition'],
-  deal_control_negotiation: ['negotiation', 'closing', 'deal_control', 'follow_up', 'pipeline'],
-  executive_roi_mixed: ['executive', 'roi', 'business_case', 'leadership', 'c_suite', 'demo'],
+  deal_control_negotiation: ['negotiation', 'closing', 'deal_control', 'deal_strategy', 'follow_up', 'pipeline', 'pipeline_management', 'pipeline_patterns', 'account_strategy'],
+  executive_roi_mixed: ['executive', 'roi', 'business_case', 'leadership', 'c_suite', 'demo', 'expansion'],
 };
 
 // ── Anchor → Skill Mapping ────────────────────────────────────────
