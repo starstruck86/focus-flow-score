@@ -12,6 +12,7 @@ import { SKILL_LABELS } from '../scenarios';
 // ── Types ──────────────────────────────────────────────────────────
 
 export type PressureReadiness = 'low' | 'building' | 'ready';
+export type MultiThreadReadiness = 'low' | 'building' | 'ready';
 
 export interface CapabilityProfile {
   skill: SkillFocus;
@@ -26,6 +27,8 @@ export interface CapabilityProfile {
   flowControl: number | null;             // avg flowControlScore from simulations
   closingUnderPressure: number | null;    // avg closingScore from simulations
   lateTurnDropoff: number | null;         // avg (turn1 - turn3) score
+  // V6 multi-thread
+  multiThreadReadiness?: MultiThreadReadiness;
 }
 
 // ── Build Capability Profiles ─────────────────────────────────────
