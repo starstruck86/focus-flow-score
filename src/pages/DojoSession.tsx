@@ -600,6 +600,21 @@ function FeedbackView({
         </Card>
       )}
 
+      {/* ── Before vs After: Improvement Verdict (transcript-origin scenarios) ── */}
+      {transcriptOrigin && currentResult && (
+        <ImprovementVerdictCard
+          verdict={assessImprovement({
+            originalScore: 35, // Baseline: original call performance estimated at weak
+            trainedScore: currentResult.score,
+            originalTopMistake: scenario.id.startsWith('extracted-') ? 'pitched_too_early' : currentResult.topMistake,
+            trainedTopMistake: currentResult.topMistake,
+            trainedFocusApplied: currentResult.focusApplied,
+          })}
+          originalScore={35}
+          trainedScore={currentResult.score}
+        />
+      )}
+
       {/* Feedback */}
       <Card>
         <CardContent className="p-4 space-y-3">
