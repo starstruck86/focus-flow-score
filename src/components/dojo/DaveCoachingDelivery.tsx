@@ -126,10 +126,12 @@ export default function DaveCoachingDelivery({
 
   const playback = useDojoPlayback(config);
   const [textChunks, setTextChunks] = useState<SpeechChunk[]>([]);
+  const [visibleChunkIds, setVisibleChunkIds] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState<DeliveryStatus>('idle');
   const initializedRef = useRef(false);
   const deliveryCompleteRef = useRef(false);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Initialize: try crash recovery first, then fresh start
   useEffect(() => {
