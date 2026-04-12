@@ -130,6 +130,42 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
   const transcriptThisWeek = recentAssignments.filter(a => a.transcriptScenarioUsed).length;
   const transcriptUsed = scenarios.some(s => s.purpose === 'transcript_origin') && transcriptThisWeek < 2;
 
+  // Step 9: V4 — Attach pressure profiles
+  const profile = skillMemory?.profiles.find(p => p.skill === primarySkill);
+  const recentAvg = profile?.recentAvg ?? 50;
+  const finalScenarios = (transcriptUsed ? scenarios : scenarios.filter(s => s.purpose !== 'transcript_origin'))
+    .map(spec => {
+      const pressure = selectPressureProfile({
+        blockPhase: block.phase,
+        dayAnchor,
+        isFriday,
+        recentAvg,
+        stage: block.stage,
+      });
+      return { ...spec, pressure };
+    });
+
+  // Friday validation: ensure at least one pressured + one blended
+  if (isFriday) {
+    const hasPressure = finalScenarios.some(s => s.pressure?.level !== 'none');
+    if (!hasPressure && block.phase !== 'benchmark' && block.phase !== 'retest') {
+      // Force pressure on the last scenario
+      const last = finalScenarios[finalScenarios.length - 1];
+      if (last) {
+        last.pressure = selectPressureProfile({
+          blockPhase: 'build', // force at least build-level pressure
+          dayAnchor,
+          isFriday: true,
+          recentAvg,
+          stage: block.stage,
+        });
+      }
+    }
+  }
+
+  const pressureExpected = finalScenarios.some(s => s.pressure?.level !== 'none');
+  const pressuredSpec = finalScenarios.find(s => s.pressure?.level !== 'none');
+
   return {
     blockNumber: block.blockNumber,
     blockWeek: block.currentWeek,
@@ -138,7 +174,7 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
     primarySkill,
     focusPattern,
     kis,
-    scenarios: transcriptUsed ? scenarios : scenarios.filter(s => s.purpose !== 'transcript_origin'),
+    scenarios: finalScenarios,
     difficulty,
     retryStrategy,
     transcriptScenarioUsed: transcriptUsed,
@@ -146,6 +182,8 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
     scenarioFamilyId: null,
     reason,
     source,
+    pressureExpected,
+    pressureLabel: pressuredSpec?.pressure?.label ?? null,
   };
 }
 
@@ -172,11 +210,12 @@ function generateBenchmarkAssignment(
     dayAnchor,
     primarySkill: scenario.skillFocus,
     focusPattern: '',
-    kis: [],  // no teaching during benchmark/retest
+    kis: [],
     scenarios: [{
       scenario,
       purpose: 'benchmark',
       familyId: family.id,
+      pressure: PRESSURE_NONE,
     }],
     difficulty: 'intermediate',
     retryStrategy: 'skip',
@@ -187,6 +226,8 @@ function generateBenchmarkAssignment(
       ? 'Benchmark week — establishing your baseline.'
       : 'Retest week — same challenges, different you.',
     source: 'benchmark',
+    pressureExpected: false,
+    pressureLabel: null,
   };
 }
 
@@ -425,7 +466,7 @@ function createFallbackAssignment(block: TrainingBlock, anchor: DayAnchor): Dail
     primarySkill: 'objection_handling',
     focusPattern: 'isolate_before_answering',
     kis: [],
-    scenarios: [{ scenario: getRandomScenario(), purpose: 'direct_application' }],
+    scenarios: [{ scenario: getRandomScenario(), purpose: 'direct_application', pressure: PRESSURE_NONE }],
     difficulty: 'intermediate',
     retryStrategy: 'weakest',
     transcriptScenarioUsed: false,
@@ -433,6 +474,8 @@ function createFallbackAssignment(block: TrainingBlock, anchor: DayAnchor): Dail
     scenarioFamilyId: null,
     reason: 'Fallback assignment.',
     source: 'progression',
+    pressureExpected: false,
+    pressureLabel: null,
   };
 }
 
