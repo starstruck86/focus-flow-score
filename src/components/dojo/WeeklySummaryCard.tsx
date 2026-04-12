@@ -6,7 +6,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Target, Zap } from 'lucide-react';
+import { Calendar, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Target, Zap, Layers, Shield } from 'lucide-react';
 import type { WeeklySummary } from '@/lib/dojo/v3/weeklySummaryEngine';
 import { ANCHOR_LABELS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 
@@ -118,6 +118,33 @@ export function WeeklySummaryCard({ summary }: WeeklySummaryCardProps) {
                 <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
                 <span className="text-muted-foreground">Weakest under pressure:</span>
                 <span className="font-medium text-amber-700 dark:text-amber-400">{summary.weakestPressureAnchor}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* V5 conversation flow metrics */}
+        {summary.simulationsCompleted > 0 && (
+          <div className="space-y-1.5 pt-2 border-t border-border/40">
+            <p className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
+              <Layers className="h-3 w-3" /> Conversation Flow
+            </p>
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">
+                {summary.simulationsCompleted} simulation{summary.simulationsCompleted !== 1 ? 's' : ''}
+              </span>
+              {summary.flowControlAvg != null && (
+                <>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="font-medium">Flow: {summary.flowControlAvg}</span>
+                </>
+              )}
+            </div>
+            {summary.controlHeldRate != null && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <Shield className="h-3 w-3 text-primary shrink-0" />
+                <span className="text-muted-foreground">Control held:</span>
+                <span className="font-medium">{summary.controlHeldRate}%</span>
               </div>
             )}
           </div>

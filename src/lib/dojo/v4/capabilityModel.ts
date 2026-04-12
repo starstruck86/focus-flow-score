@@ -22,6 +22,10 @@ export interface CapabilityProfile {
   firstAttemptStrength: number;   // avg first attempt score
   pressureReadiness: PressureReadiness;
   summary: string;
+  // V5 flow metrics
+  flowControl: number | null;             // avg flowControlScore from simulations
+  closingUnderPressure: number | null;    // avg closingScore from simulations
+  lateTurnDropoff: number | null;         // avg (turn1 - turn3) score
 }
 
 // ── Build Capability Profiles ─────────────────────────────────────
