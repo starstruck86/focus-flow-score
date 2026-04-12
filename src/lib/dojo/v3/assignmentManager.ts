@@ -218,9 +218,32 @@ async function recordAnchorCompletion(blockId: string, anchor: DayAnchor): Promi
     })
     .eq('id', blockId);
 
-  // All 5 unique anchors completed → advance week
+  // All 5 unique anchors completed → check for snapshot + advance week
   if (completedAnchors.length >= 5) {
-    // Import dynamically to avoid circular deps
+    // Fetch block to check week number for snapshot triggers
+    const { data: block } = await supabase
+      .from('training_blocks')
+      .select('current_week, user_id, stage')
+      .eq('id', blockId)
+      .single();
+
+    if (block) {
+      // Week 1 complete → create benchmark snapshot
+      // Week 8 complete → create retest snapshot
+      if (block.current_week === 1 || block.current_week === 8) {
+        const snapshotType = block.current_week === 1 ? 'benchmark' : 'retest';
+        const { createBlockSnapshot } = await import('./snapshotManager');
+        await createBlockSnapshot(
+          block.user_id,
+          blockId,
+          block.current_week,
+          snapshotType as 'benchmark' | 'retest',
+          block.stage,
+        );
+      }
+    }
+
+    // Advance week
     const { advanceWeek } = await import('./blockManager');
     await advanceWeek(blockId);
   }

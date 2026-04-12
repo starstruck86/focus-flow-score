@@ -344,6 +344,9 @@ export default function DojoSession() {
             userId={user.id}
             mode={state?.mode}
             onComplete={handleNextRep}
+            assignmentId={assignmentId}
+            benchmarkTag={benchmarkTag}
+            scenarioFamilyId={scenarioFamilyId}
           />
         )}
 
