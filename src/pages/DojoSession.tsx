@@ -94,12 +94,14 @@ export default function DojoSession() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isAudio, toggleMode } = useAudioPreference();
 
-  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean } | null;
+  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean; pressureLevel?: string; pressureDimensions?: string[] } | null;
   const transcriptOrigin = state?.transcriptOrigin ?? null;
   const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
   const assignmentId = state?.assignmentId ?? null;
   const benchmarkTag = state?.benchmarkTag ?? false;
   const scenarioFamilyId = state?.scenarioFamilyId ?? null;
+  const pressureLevel = state?.pressureLevel ?? null;
+  const pressureDimensions = state?.pressureDimensions ?? null;
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
     return getRandomScenario(state?.skillFocus);
@@ -177,6 +179,8 @@ export default function DojoSession() {
               assignment_id: assignmentId,
               benchmark_tag: benchmarkTag,
               scenario_family_id: scenarioFamilyId,
+              pressure_level: pressureLevel,
+              pressure_dimensions: pressureDimensions,
             })
             .select('id')
             .single();

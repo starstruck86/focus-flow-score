@@ -277,5 +277,7 @@ function mapRowToAssignment(row: Record<string, unknown>): DailyAssignment {
     scenarioFamilyId: row.scenario_family_id as string | null,
     reason: row.reason as string,
     source: row.source as any,
+    pressureExpected: ((row.scenarios as any[]) ?? []).some((s: any) => s.pressure?.level !== 'none'),
+    pressureLabel: ((row.scenarios as any[]) ?? []).find((s: any) => s.pressure?.level !== 'none')?.pressure?.label ?? null,
   };
 }

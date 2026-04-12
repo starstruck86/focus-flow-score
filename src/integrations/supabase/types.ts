@@ -1830,6 +1830,8 @@ export type Database = {
           id: string
           latest_score: number | null
           mode: string
+          pressure_dimensions: string[] | null
+          pressure_level: string | null
           retry_count: number
           scenario_context: string | null
           scenario_family_id: string | null
@@ -1853,6 +1855,8 @@ export type Database = {
           id?: string
           latest_score?: number | null
           mode?: string
+          pressure_dimensions?: string[] | null
+          pressure_level?: string | null
           retry_count?: number
           scenario_context?: string | null
           scenario_family_id?: string | null
@@ -1876,6 +1880,8 @@ export type Database = {
           id?: string
           latest_score?: number | null
           mode?: string
+          pressure_dimensions?: string[] | null
+          pressure_level?: string | null
           retry_count?: number
           scenario_context?: string | null
           scenario_family_id?: string | null
