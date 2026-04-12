@@ -252,6 +252,15 @@ export interface SnapshotComparison {
   mistakesFixed: string[];
   mistakesPersisting: string[];
   mistakesNew: string[];
+  /** V5 flow metrics comparison */
+  flowComparison?: {
+    benchmarkFlow: number | null;
+    retestFlow: number | null;
+    flowDelta: number | null;
+    benchmarkClose: number | null;
+    retestClose: number | null;
+    closeDelta: number | null;
+  };
 }
 
 export function compareSnapshots(
@@ -288,18 +297,39 @@ export function compareSnapshots(
   const bmMistakes = new Set(benchmark.mistakesActive);
   const rtMistakes = new Set(retest.mistakesActive);
 
+  // V5 flow comparison
+  const bmFlow = benchmark.flowMetrics;
+  const rtFlow = retest.flowMetrics;
+  const hasFlowData = (bmFlow?.simulationCount ?? 0) > 0 || (rtFlow?.simulationCount ?? 0) > 0;
+
   return {
     perAnchor,
     overallDelta,
     mistakesFixed: Array.from(bmMistakes).filter(m => !rtMistakes.has(m)),
     mistakesPersisting: Array.from(bmMistakes).filter(m => rtMistakes.has(m)),
     mistakesNew: Array.from(rtMistakes).filter(m => !bmMistakes.has(m)),
+    flowComparison: hasFlowData ? {
+      benchmarkFlow: bmFlow?.flowControlAvg ?? null,
+      retestFlow: rtFlow?.flowControlAvg ?? null,
+      flowDelta: (bmFlow?.flowControlAvg != null && rtFlow?.flowControlAvg != null)
+        ? rtFlow.flowControlAvg - bmFlow.flowControlAvg : null,
+      benchmarkClose: bmFlow?.closingScoreAvg ?? null,
+      retestClose: rtFlow?.closingScoreAvg ?? null,
+      closeDelta: (bmFlow?.closingScoreAvg != null && rtFlow?.closingScoreAvg != null)
+        ? rtFlow.closingScoreAvg - bmFlow.closingScoreAvg : null,
+    } : undefined,
   };
 }
 
 // ── Mapping ──────────────────────────────────────────────────────
 
 function mapSnapshotRow(row: Record<string, unknown>): SnapshotRow {
+  const rawScores = (row.scores_by_anchor ?? {}) as Record<string, unknown>;
+  // Extract flow metrics if stored alongside anchor data
+  const flowMetricsRaw = rawScores._flowMetrics as SnapshotFlowMetrics | undefined;
+  const scoresByAnchor = { ...rawScores } as Record<DayAnchor, AnchorSnapshotData>;
+  delete (scoresByAnchor as any)._flowMetrics;
+
   return {
     id: row.id as string,
     blockId: row.block_id as string,
@@ -307,9 +337,10 @@ function mapSnapshotRow(row: Record<string, unknown>): SnapshotRow {
     snapshotType: row.snapshot_type as 'benchmark' | 'retest',
     weekNumber: row.week_number as number,
     stage: row.stage as string,
-    scoresByAnchor: (row.scores_by_anchor ?? {}) as Record<DayAnchor, AnchorSnapshotData>,
+    scoresByAnchor,
     mistakesActive: (row.mistakes_active as string[] | null) ?? [],
     mistakesResolved: (row.mistakes_resolved as string[] | null) ?? [],
     createdAt: row.created_at as string,
+    flowMetrics: flowMetricsRaw ?? undefined,
   };
 }
