@@ -212,9 +212,9 @@ function TranscriptDetailPane({ selected, onDelete }: { selected: CallTranscript
           scenarios={scenarios}
           onClose={clear}
           onPractice={(s) => {
-            navigate('/dojo', {
+            navigate('/dojo/session', {
               state: {
-                preloadScenario: {
+                scenario: {
                   id: `extracted-${Date.now()}`,
                   skillFocus: s.skillFocus,
                   title: s.title,
@@ -222,6 +222,7 @@ function TranscriptDetailPane({ selected, onDelete }: { selected: CallTranscript
                   objection: s.objection,
                   difficulty: s.difficulty,
                 },
+                mode: 'autopilot',
               },
             });
           }}
