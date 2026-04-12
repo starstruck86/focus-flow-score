@@ -104,8 +104,10 @@ export default function AudioSessionMode({
   const [retryCount, setRetryCount] = useState(isResuming ? savedState!.retryCount : 0);
   const [isPaused, setIsPaused] = useState(false);
   const [transcribedText, setTranscribedText] = useState(isResuming ? savedState!.transcribedText : '');
+  const [recovery, setRecovery] = useState<RecoveryState>(createInitialRecoveryState());
   // Client-generated session ID for durability
   const clientSessionId = useRef(crypto.randomUUID()).current;
+  const recoveryRef = useRef<RecoveryController | null>(null);
 
   const voice = useVoiceMode();
   const phaseRef = useRef(phase);
