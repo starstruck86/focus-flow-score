@@ -11,7 +11,7 @@ import {
   CheckCircle2, Lightbulb, Swords, ChevronRight, Crown, Sparkles,
   Crosshair, ListOrdered, MessageCircle, GraduationCap,
   TrendingUp, TrendingDown, Minus, Zap, Shield, XCircle,
-  Eye, PenLine,
+  Eye, PenLine, Volume2, VolumeX,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import {
