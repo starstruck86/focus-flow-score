@@ -118,7 +118,6 @@ export default function Dojo() {
   }, [stats?.skillBreakdown]);
 
   const startAutopilot = () => {
-    // V3: Use assignment scenario + pass assignment metadata for session tagging
     const scenario = dailyAssignment?.scenarios[0]?.scenario ?? recommendation.scenario;
     navigate('/dojo/session', {
       state: {
@@ -127,6 +126,9 @@ export default function Dojo() {
         assignmentId: dailyAssignment ? (dailyAssignment as any)._dbId ?? null : null,
         benchmarkTag: dailyAssignment?.benchmarkTag ?? false,
         scenarioFamilyId: dailyAssignment?.scenarioFamilyId ?? null,
+        assignmentReason: dailyAssignment?.reason ?? null,
+        assignmentAnchor: dailyAssignment?.dayAnchor ?? null,
+        assignmentFocusPattern: dailyAssignment?.focusPattern ?? null,
       },
     });
   };

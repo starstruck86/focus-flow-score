@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Info } from 'lucide-react';
+import { Info, Flame } from 'lucide-react';
 import { DAY_ANCHORS } from '@/lib/dojo/v3/dayAnchors';
 import type { DailyAssignment } from '@/lib/dojo/v3/programmingEngine';
 import { FOCUS_PATTERN_LABELS } from '@/lib/dojo/focusPatterns';
@@ -14,10 +14,21 @@ export function DailyAssignmentCard({ assignment }: DailyAssignmentCardProps) {
   const focusLabel = FOCUS_PATTERN_LABELS[assignment.focusPattern]
     ?? assignment.focusPattern?.replace(/_/g, ' ')
     ?? '';
+  const isFriday = assignment.dayAnchor === 'executive_roi_mixed';
 
   return (
-    <Card className="border-primary/20 bg-primary/5">
+    <Card className={isFriday ? 'border-amber-500/30 bg-amber-500/5' : 'border-primary/20 bg-primary/5'}>
       <CardContent className="p-4 space-y-3">
+        {/* Friday pressure badge */}
+        {isFriday && (
+          <div className="flex items-center gap-1.5 mb-1">
+            <Flame className="h-3.5 w-3.5 text-amber-500" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              Pressure Day — This is where it comes together
+            </span>
+          </div>
+        )}
+
         {/* Anchor + Difficulty */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -37,7 +48,7 @@ export function DailyAssignmentCard({ assignment }: DailyAssignmentCardProps) {
           </div>
         )}
 
-        {/* Reason */}
+        {/* Reason — prominent */}
         <div className="flex items-start gap-2 pt-1 border-t border-primary/10">
           <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
           <p className="text-xs text-muted-foreground leading-relaxed">

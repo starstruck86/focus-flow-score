@@ -19,6 +19,11 @@ export interface DailyKIContext {
   anchor: string;
   focusPattern: string;
   reason: string;
+  /** Pass-through for direct Learn → Dojo session handoff */
+  assignmentDbId: string | null;
+  assignmentScenario: any | null;
+  benchmarkTag: boolean;
+  scenarioFamilyId: string | null;
 }
 
 export function useDailyKI() {
@@ -46,6 +51,10 @@ export function useDailyKI() {
         anchor: assignment.dayAnchor,
         focusPattern: assignment.focusPattern,
         reason: assignment.reason,
+        assignmentDbId: assignment._dbId ?? null,
+        assignmentScenario: assignment.scenarios[0]?.scenario ?? null,
+        benchmarkTag: assignment.benchmarkTag ?? false,
+        scenarioFamilyId: assignment.scenarioFamilyId ?? null,
       };
     },
   });

@@ -14,6 +14,7 @@ import {
   Eye, PenLine, Volume2, VolumeX,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
+import { DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 import {
   type DojoScoreResult,
   normalizeScoreResult,
@@ -93,7 +94,7 @@ export default function DojoSession() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isAudio, toggleMode } = useAudioPreference();
 
-  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null } | null;
+  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean } | null;
   const transcriptOrigin = state?.transcriptOrigin ?? null;
   const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
   const assignmentId = state?.assignmentId ?? null;
@@ -334,6 +335,22 @@ export default function DojoSession() {
 
       {/* ── Content ── */}
       <div className={cn('flex-1 px-4 py-4 space-y-4', SHELL.main.bottomPad)}>
+        {/* Assignment context — why today */}
+        {state?.assignmentReason && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="p-3 space-y-1">
+              <div className="flex items-center gap-2">
+                <Crosshair className="h-3.5 w-3.5 text-primary" />
+                <span className="text-xs font-semibold text-foreground">
+                  {state.assignmentAnchor ? `${DAY_ANCHORS[state.assignmentAnchor as DayAnchor]?.label ?? state.assignmentAnchor}` : 'Today\'s Focus'}
+                  {state.assignmentFocusPattern ? ` · ${FOCUS_PATTERN_LABELS[state.assignmentFocusPattern] || state.assignmentFocusPattern.replace(/_/g, ' ')}` : ''}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground pl-5.5">{state.assignmentReason}</p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Scenario context */}
         <Card className="border-border/60">
           <CardContent className="p-4 space-y-3">
@@ -403,7 +420,7 @@ export default function DojoSession() {
 
           {phase === 'feedback' && currentResult && (
             <motion.div key="feedback" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} originalCallScore={originalScore} firstAttemptResult={result} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} originalCallScore={originalScore} firstAttemptResult={result} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} onRetry={handleStartRetry} onNextRep={handleNextRep} />
             </motion.div>
           )}
 
@@ -440,7 +457,7 @@ export default function DojoSession() {
         {/* ── Feedback for Roleplay / Review (non-drill) ── */}
         {sessionType !== 'drill' && phase === 'feedback' && currentResult && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} onRetry={handleStartRetry} onNextRep={handleNextRep} />
           </motion.div>
         )}
       </div>
@@ -466,6 +483,7 @@ interface FeedbackViewProps {
   transcriptOrigin: TranscriptOrigin | null;
   originalCallScore?: DojoScoreResult | null;
   firstAttemptResult?: DojoScoreResult | null;
+  assignmentContext?: { anchor: string; focusPattern: string; reason: string } | null;
   onRetry: () => void;
   onNextRep: () => void;
 }
@@ -474,7 +492,7 @@ function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
   sessionId, skillFocus, transcriptOrigin, originalCallScore, firstAttemptResult,
-  onRetry, onNextRep,
+  assignmentContext, onRetry, onNextRep,
 }: FeedbackViewProps) {
   return (
     <>
@@ -911,6 +929,40 @@ function FeedbackView({
         retryCount={retryCount}
         sessionType={sessionType}
       />
+
+      {/* ── Post-Session: Today's Assignment Summary ── */}
+      {assignmentContext && (
+        <Card className="border-primary/15 bg-primary/5">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-[10px] font-bold text-primary uppercase tracking-wider">Today's Assignment</p>
+            <div className="flex items-center gap-2">
+              <span className="text-base">{DAY_ANCHORS[assignmentContext.anchor as DayAnchor]?.icon ?? '📋'}</span>
+              <span className="text-sm font-semibold text-foreground">
+                {DAY_ANCHORS[assignmentContext.anchor as DayAnchor]?.label ?? assignmentContext.anchor}
+              </span>
+              <span className="text-xs text-muted-foreground">·</span>
+              <span className="text-xs text-muted-foreground">
+                {FOCUS_PATTERN_LABELS[assignmentContext.focusPattern] || assignmentContext.focusPattern.replace(/_/g, ' ')}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">{assignmentContext.reason}</p>
+            {currentResult.focusApplied && (
+              <div className="flex items-center gap-2 pt-1 border-t border-primary/10">
+                {currentResult.focusApplied === 'yes' ? (
+                  <Badge className="text-[10px] bg-green-600 hover:bg-green-600">✅ Focus Applied</Badge>
+                ) : currentResult.focusApplied === 'partial' ? (
+                  <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-600">⚡ Partially Applied</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] border-red-500 text-red-600">❌ Focus Missed</Badge>
+                )}
+                {currentResult.focusAppliedReason && (
+                  <span className="text-[10px] text-muted-foreground">{currentResult.focusAppliedReason}</span>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Actions */}
       <div className="flex gap-3 pt-2">

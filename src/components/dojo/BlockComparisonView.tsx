@@ -36,12 +36,20 @@ export function BlockComparisonView({ comparison, blockNumber }: BlockComparison
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
           <BarChart3 className="h-4 w-4" />
-          Block {blockNumber} — Benchmark vs Retest
+          Block {blockNumber} — Your Progress
         </CardTitle>
-        <div className="flex items-center gap-2 mt-1">
-          <span className="text-xs text-muted-foreground">Overall:</span>
+        <p className="text-xs text-muted-foreground mt-1">
+          {overallDelta > 0
+            ? `You improved ${overallDelta} pts on average across all anchors. This is where you started vs where you are now.`
+            : overallDelta === 0
+            ? 'Your scores held steady across the block. Consistency is a signal too.'
+            : 'Some areas slipped — review the anchors below and keep drilling.'}
+        </p>
+        <div className="flex items-center gap-2 mt-2">
+          <Badge variant="outline" className="text-[10px]">Week 1</Badge>
+          <span className="text-xs text-muted-foreground">→</span>
+          <Badge variant="outline" className="text-[10px]">Week 8</Badge>
           <DeltaBadge delta={overallDelta} />
-          <span className="text-xs text-muted-foreground">avg pts improvement</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
