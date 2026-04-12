@@ -32,6 +32,13 @@ import {
   type DojoLocalState,
 } from '@/lib/sessionDurability';
 import { processPendingWrites } from '@/lib/pendingWriteSync';
+import {
+  type RecoveryState,
+  createInitialRecoveryState,
+  executeWithRecovery,
+  type RecoveryController,
+} from '@/lib/sessionRecovery';
+import RecoveryBanner from '@/components/RecoveryBanner';
 import type { DojoScenario } from '@/lib/dojo/scenarios';
 import type { DojoScoreResult } from '@/lib/dojo/types';
 import { normalizeScoreResult } from '@/lib/dojo/types';
