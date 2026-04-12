@@ -111,6 +111,17 @@ export default function DojoSession() {
   const [retryCount, setRetryCount] = useState(0);
   const [reviewExtras, setReviewExtras] = useState<ReviewExtras | null>(null);
   const [roleplayExtras, setRoleplayExtras] = useState<RoleplayExtras | null>(null);
+  const { scoreOriginal, isScoring: isScoringOriginal, originalScore } = useScoreOriginalResponse();
+
+  // Auto-score original call response when transcript origin has a rep response
+  useEffect(() => {
+    if (transcriptOrigin?.repResponse && transcriptOrigin.repResponse.length >= 10) {
+      scoreOriginal(
+        { skillFocus: scenario.skillFocus, context: scenario.context, objection: scenario.objection },
+        transcriptOrigin.repResponse
+      );
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (phase === 'respond' || phase === 'retry') {
