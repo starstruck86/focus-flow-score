@@ -177,6 +177,47 @@ export async function computeWeeklySummaryFromDB(
     ? `${pressureByAnchor[pressureByAnchor.length - 1].label} (${pressureByAnchor[pressureByAnchor.length - 1].avg} avg)`
     : null;
 
+  // V5 simulation / flow metrics
+  const simSessions = currentSessions.filter(s => s.session_type === 'simulation');
+  const simulationsCompleted = simSessions.length;
+
+  // Compute flow control avg from simulation turn scores
+  let flowControlAvg: number | null = null;
+  let controlHeldRate: number | null = null;
+
+  if (simSessions.length > 0) {
+    const flowScores: number[] = [];
+    let controlHeldCount = 0;
+
+    for (const sim of simSessions) {
+      const simTurns = turns
+        .filter(t => t.session_id === sim.id && t.score != null)
+        .sort((a, b) => a.turn_index - b.turn_index);
+
+      if (simTurns.length >= 2) {
+        // Flow control: penalize drops between turns (same logic as arcScoring)
+        let flowScore = 100;
+        for (let i = 1; i < simTurns.length; i++) {
+          const drop = (simTurns[i - 1].score ?? 0) - (simTurns[i].score ?? 0);
+          if (drop >= 20) flowScore -= 30;
+          else if (drop >= 12) flowScore -= 20;
+          else if (drop >= 8) flowScore -= 10;
+        }
+        flowScores.push(Math.max(0, Math.min(100, flowScore)));
+
+        // Control held: no drop >= 12 and closing >= 60
+        const maxDrop = Math.max(0, ...simTurns.slice(1).map((t, i) => (simTurns[i].score ?? 0) - (t.score ?? 0)));
+        const closingScore = simTurns[simTurns.length - 1].score ?? 0;
+        if (maxDrop < 12 && closingScore >= 60) controlHeldCount++;
+      }
+    }
+
+    flowControlAvg = flowScores.length > 0
+      ? Math.round(flowScores.reduce((a, b) => a + b, 0) / flowScores.length)
+      : null;
+    controlHeldRate = Math.round((controlHeldCount / simSessions.length) * 100);
+  }
+
   return {
     weekNumber,
     blockId,
@@ -193,5 +234,8 @@ export async function computeWeeklySummaryFromDB(
     avgPressureScore,
     strongestPressureAnchor,
     weakestPressureAnchor,
+    simulationsCompleted,
+    flowControlAvg,
+    controlHeldRate,
   };
 }
