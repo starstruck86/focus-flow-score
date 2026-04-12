@@ -134,11 +134,25 @@ export default function AudioSessionMode({
     }
   }, [phase]);
 
-  // Auto-start: Dave introduces scenario
+  // Auto-start: Dave introduces scenario (skip if resuming mid-session)
   const hasStartedRef = useRef(false);
   useEffect(() => {
     if (hasStartedRef.current) return;
     hasStartedRef.current = true;
+
+    // If resuming from a later phase, skip intro — go straight to listening
+    if (isResuming) {
+      const resumePhase = savedState!.phase as AudioSessionPhase;
+      // If was in listening/feedback/scoring, let user re-engage from listening
+      if (resumePhase !== 'intro' && resumePhase !== 'prompt') {
+        toast.success('Session recovered — continue where you left off');
+        // If they had a score already, stay in current phase; otherwise activate mic
+        if (!savedState!.lastScore) {
+          activateMic();
+        }
+        return;
+      }
+    }
 
     const startIntro = async () => {
       try {
