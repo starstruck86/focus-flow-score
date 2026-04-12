@@ -40,6 +40,8 @@ import { ImprovementVerdictCard } from '@/components/dojo/ImprovementVerdictCard
 import { ThreeStageComparison } from '@/components/dojo/ThreeStageComparison';
 import { assessImprovement } from '@/lib/dojo/improvementAssessment';
 import { useScoreOriginalResponse } from '@/hooks/useScoreOriginalResponse';
+import { PressureAnalysisCard } from '@/components/dojo/PressureAnalysisCard';
+import { TransferProgressCard } from '@/components/dojo/TransferProgressCard';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
@@ -351,6 +353,37 @@ export default function DojoSession() {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground pl-5.5">{state.assignmentReason}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Pre-session pressure brief */}
+        {pressureLevel && pressureLevel !== 'none' && phase === 'respond' && (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardContent className="p-3 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Zap className="h-3.5 w-3.5 text-amber-500" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  Pressure Rep
+                </span>
+                <Badge variant="outline" className="text-[9px] capitalize ml-auto">
+                  {pressureLevel}
+                </Badge>
+              </div>
+              {pressureDimensions && pressureDimensions.filter(d => d !== 'none').length > 0 && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                  {pressureDimensions.filter(d => d !== 'none').map(d => {
+                    const labels: Record<string, string> = {
+                      time_pressure: 'You have less time than you want. Prioritize.',
+                      hostile_persona: 'The buyer is tense. Stay controlled.',
+                      ambiguity: "You won't get perfect clarity here. Create it.",
+                      multi_stakeholder_tension: 'Multiple agendas in the room. Find alignment.',
+                      executive_scrutiny: 'Executive eyes on this. Be precise.',
+                    };
+                    return labels[d] || d.replace(/_/g, ' ');
+                  })[0]}
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
