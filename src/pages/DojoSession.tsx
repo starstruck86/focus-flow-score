@@ -600,18 +600,40 @@ function FeedbackView({
         </Card>
       )}
 
-      {/* ── Before vs After: Improvement Verdict (transcript-origin scenarios) ── */}
+      {/* ── Transcript Origin Context (scenarios extracted from real calls) ── */}
       {transcriptOrigin && currentResult && (
+        <Card className="border-l-4 border-l-primary/60 border-border/60">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              From Real Call: {transcriptOrigin.transcriptTitle}
+            </p>
+            <div className="bg-muted/50 rounded-md p-2 border border-border/40">
+              <p className="text-xs italic text-muted-foreground">"{transcriptOrigin.sourceExcerpt}"</p>
+            </div>
+            <p className="text-xs text-primary/80 font-medium">💡 Original coaching hint: {transcriptOrigin.coachingHint}</p>
+            {currentResult.score >= 75 ? (
+              <p className="text-xs text-green-600 font-medium">✅ Your trained response is strong enough for a real call. The original mistake has been addressed.</p>
+            ) : currentResult.score >= 55 ? (
+              <p className="text-xs text-amber-600 font-medium">⚡ You're improving on the original call behavior. Keep drilling to reach live-ready.</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">🔄 This is the same pattern from your real call. Apply the coaching hint and retry.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Before vs After on Retry (when transcript-origin scenario is retried) ── */}
+      {transcriptOrigin && retryResult && result && (
         <ImprovementVerdictCard
           verdict={assessImprovement({
-            originalScore: 35, // Baseline: original call performance estimated at weak
-            trainedScore: currentResult.score,
-            originalTopMistake: scenario.id.startsWith('extracted-') ? 'pitched_too_early' : currentResult.topMistake,
-            trainedTopMistake: currentResult.topMistake,
-            trainedFocusApplied: currentResult.focusApplied,
+            originalScore: result.score,
+            trainedScore: retryResult.score,
+            originalTopMistake: result.topMistake,
+            trainedTopMistake: retryResult.topMistake,
+            trainedFocusApplied: retryResult.focusApplied,
           })}
-          originalScore={35}
-          trainedScore={currentResult.score}
+          originalScore={result.score}
+          trainedScore={retryResult.score}
         />
       )}
 
