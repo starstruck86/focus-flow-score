@@ -90,6 +90,9 @@ export default function AudioSessionMode({
   userId,
   mode,
   onComplete,
+  assignmentId,
+  benchmarkTag = false,
+  scenarioFamilyId,
 }: AudioSessionModeProps) {
   // Restore from saved state if resuming
   const savedState = useRef(loadDojoState()).current;
