@@ -71,12 +71,12 @@ export async function computeWeeklySummaryFromDB(
 
   // Fetch session scores
   const allIds = [...currentSessionIds, ...priorSessionIds];
-  let sessions: Array<{ id: string; best_score: number | null; latest_score: number | null }> = [];
+  let sessions: Array<{ id: string; best_score: number | null; latest_score: number | null; pressure_level: string | null }> = [];
   let turns: Array<{ session_id: string; top_mistake: string | null }> = [];
 
   if (allIds.length > 0) {
     const [sessRes, turnsRes] = await Promise.all([
-      supabase.from('dojo_sessions').select('id, best_score, latest_score').in('id', allIds),
+      supabase.from('dojo_sessions').select('id, best_score, latest_score, pressure_level').in('id', allIds),
       supabase.from('dojo_session_turns').select('session_id, top_mistake').in('session_id', allIds),
     ]);
     sessions = sessRes.data ?? [];
@@ -147,6 +147,32 @@ export async function computeWeeklySummaryFromDB(
     ? Math.round(currentScores.reduce((a, b) => a + b, 0) / currentScores.length)
     : 0;
 
+  // V4 pressure metrics
+  const currentSessions = sessions.filter(s => currentSessionIds.includes(s.id));
+  const pressureSessions = currentSessions.filter(s => s.pressure_level && s.pressure_level !== 'none');
+  const pressureRepsCompleted = pressureSessions.length;
+  const pressureScores = pressureSessions.map(getScore);
+  const avgPressureScore = pressureScores.length > 0
+    ? Math.round(pressureScores.reduce((a, b) => a + b, 0) / pressureScores.length)
+    : null;
+
+  // Pressure by anchor
+  const pressureByAnchor: { anchor: string; label: string; avg: number }[] = [];
+  for (const anchor of ANCHORS_IN_ORDER) {
+    const anchorCurr = completed.filter(a => a.day_anchor === anchor);
+    const ids = anchorCurr.flatMap(a => (a.session_ids as string[] | null) ?? []);
+    const anchorPressure = pressureSessions.filter(s => ids.includes(s.id));
+    if (anchorPressure.length > 0) {
+      const avg = Math.round(anchorPressure.map(getScore).reduce((a, b) => a + b, 0) / anchorPressure.length);
+      pressureByAnchor.push({ anchor, label: DAY_ANCHORS[anchor].shortLabel, avg });
+    }
+  }
+  pressureByAnchor.sort((a, b) => b.avg - a.avg);
+  const strongestPressureAnchor = pressureByAnchor[0] ? `${pressureByAnchor[0].label} (${pressureByAnchor[0].avg} avg)` : null;
+  const weakestPressureAnchor = pressureByAnchor.length > 1
+    ? `${pressureByAnchor[pressureByAnchor.length - 1].label} (${pressureByAnchor[pressureByAnchor.length - 1].avg} avg)`
+    : null;
+
   return {
     weekNumber,
     blockId,
@@ -155,9 +181,13 @@ export async function computeWeeklySummaryFromDB(
     perAnchorStats,
     topImprovement,
     biggestGap,
-    mistakesResolvedThisWeek: [], // populated from skill memory comparison
+    mistakesResolvedThisWeek: [],
     fridayScore,
     totalSessions: currentSessionIds.length,
     avgScore,
+    pressureRepsCompleted,
+    avgPressureScore,
+    strongestPressureAnchor,
+    weakestPressureAnchor,
   };
 }

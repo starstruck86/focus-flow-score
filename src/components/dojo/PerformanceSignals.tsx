@@ -1,4 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   BarChart3, TrendingUp, TrendingDown, AlertTriangle, Target, Brain,
   CheckCircle2, ArrowUpRight, XCircle, Shield, Zap, Activity,
