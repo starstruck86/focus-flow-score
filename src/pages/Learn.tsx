@@ -8,11 +8,14 @@ import { BookOpen, ChevronRight, CheckCircle2, Circle, Loader2, TrendingUp, Tren
 import { useCourses, useUserProgress } from '@/lib/learning/hooks';
 import type { CourseWithModules, LearningProgress } from '@/lib/learning/types';
 import { useMemo } from 'react';
+import { useDailyKI } from '@/hooks/useDailyKI';
+import { DailyKICard } from '@/components/learn/DailyKICard';
 
 export default function Learn() {
   const navigate = useNavigate();
   const { data: courses, isLoading } = useCourses();
   const { data: progress } = useUserProgress();
+  const { data: dailyKI } = useDailyKI();
 
   const progressMap = useMemo(() => {
     const map: Record<string, LearningProgress> = {};
@@ -96,6 +99,9 @@ export default function Learn() {
             </p>
           </div>
         </div>
+
+        {/* Daily KI from today's assignment */}
+        {dailyKI && <DailyKICard context={dailyKI} />}
 
         {/* Next lesson CTA */}
         {nextLesson && (

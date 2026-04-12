@@ -23,11 +23,11 @@ import type { SkillFocus } from '../scenarios';
 // A KI belongs to an anchor if its chapter falls within that anchor's domain.
 
 const ANCHOR_CHAPTER_MAP: Record<DayAnchor, string[]> = {
-  opening_cold_call: ['cold_calling', 'opening', 'prospecting'],
-  discovery_qualification: ['discovery', 'qualification', 'needs_analysis'],
+  opening_cold_call: ['cold_calling', 'opening', 'prospecting', 'messaging'],
+  discovery_qualification: ['discovery', 'qualification', 'needs_analysis', 'stakeholder_navigation'],
   objection_pricing: ['objection_handling', 'pricing', 'competitive', 'value_proposition'],
-  deal_control_negotiation: ['negotiation', 'closing', 'deal_control', 'follow_up', 'pipeline'],
-  executive_roi_mixed: ['executive', 'roi', 'business_case', 'leadership', 'c_suite', 'demo'],
+  deal_control_negotiation: ['negotiation', 'closing', 'deal_control', 'deal_strategy', 'follow_up', 'pipeline', 'pipeline_management', 'pipeline_patterns', 'account_strategy'],
+  executive_roi_mixed: ['executive', 'roi', 'business_case', 'leadership', 'c_suite', 'demo', 'expansion'],
 };
 
 // ── Anchor → Skill Mapping ────────────────────────────────────────
@@ -67,7 +67,13 @@ const CHAPTER_PATTERN_MAP: Record<string, string[]> = {
   leadership: ['anchor_to_their_priority', 'project_certainty', 'close_with_a_specific_ask'],
   c_suite: ['cut_to_three_sentences', 'close_with_a_specific_ask'],
   demo: ['anchor_to_their_priority', 'use_specific_proof'],
-  messaging: ['reframe_to_business_impact', 'use_specific_proof'],
+  messaging: ['reframe_to_business_impact', 'use_specific_proof', 'stay_concise_under_pressure'],
+  stakeholder_navigation: ['map_stakeholders', 'deepen_one_level', 'anchor_to_their_priority'],
+  deal_strategy: ['name_the_risk', 'lock_mutual_commitment', 'control_next_step'],
+  expansion: ['anchor_to_their_priority', 'lead_with_the_number', 'use_specific_proof'],
+  pipeline_management: ['name_the_risk', 'control_next_step', 'create_urgency_without_pressure'],
+  pipeline_patterns: ['name_the_risk', 'create_urgency_without_pressure'],
+  account_strategy: ['anchor_to_their_priority', 'map_stakeholders'],
 };
 
 // ── Public API ────────────────────────────────────────────────────
@@ -225,9 +231,11 @@ function deriveSkillsFromChapter(chapter: string): SkillFocus[] {
     cold_calling: ['objection_handling', 'deal_control'],
     opening: ['objection_handling', 'deal_control'],
     prospecting: ['deal_control'],
+    messaging: ['objection_handling', 'deal_control'],
     discovery: ['discovery'],
     qualification: ['qualification'],
     needs_analysis: ['discovery'],
+    stakeholder_navigation: ['discovery', 'qualification'],
     objection_handling: ['objection_handling'],
     pricing: ['objection_handling'],
     competitive: ['objection_handling'],
@@ -235,15 +243,19 @@ function deriveSkillsFromChapter(chapter: string): SkillFocus[] {
     negotiation: ['deal_control'],
     closing: ['deal_control'],
     deal_control: ['deal_control'],
+    deal_strategy: ['deal_control'],
     follow_up: ['deal_control'],
     pipeline: ['deal_control'],
+    pipeline_management: ['deal_control'],
+    pipeline_patterns: ['deal_control'],
+    account_strategy: ['deal_control'],
     executive: ['executive_response'],
     roi: ['executive_response'],
     business_case: ['executive_response'],
     leadership: ['executive_response'],
     c_suite: ['executive_response'],
     demo: ['executive_response'],
-    messaging: ['objection_handling'],
+    expansion: ['executive_response'],
   };
   return map[chapter] ?? ['objection_handling'];
 }
