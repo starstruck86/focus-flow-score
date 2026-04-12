@@ -118,7 +118,8 @@ export default function Dojo() {
   }, [stats?.skillBreakdown]);
 
   const startAutopilot = () => {
-    const scenario = dailyAssignment?.scenarios[0]?.scenario ?? recommendation.scenario;
+    const firstSpec = dailyAssignment?.scenarios[0];
+    const scenario = firstSpec?.scenario ?? recommendation.scenario;
     navigate('/dojo/session', {
       state: {
         scenario,
@@ -129,6 +130,8 @@ export default function Dojo() {
         assignmentReason: dailyAssignment?.reason ?? null,
         assignmentAnchor: dailyAssignment?.dayAnchor ?? null,
         assignmentFocusPattern: dailyAssignment?.focusPattern ?? null,
+        pressureLevel: firstSpec?.pressure?.level ?? null,
+        pressureDimensions: firstSpec?.pressure?.dimensions ?? null,
       },
     });
   };
