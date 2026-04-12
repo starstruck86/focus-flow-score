@@ -66,7 +66,7 @@ export default function Dojo() {
     queryKey: ['dojo-v3-assignment', user?.id, new Date().toISOString().split('T')[0]],
     enabled: !!user?.id,
     queryFn: () => user ? getOrCreateTodayAssignment(user.id) : null,
-    staleTime: 30 * 60 * 1000,
+    staleTime: 2 * 60 * 1000, // Refetch quickly after session return
   });
 
   // V3: Fetch real completed anchors for this week
@@ -179,6 +179,8 @@ export default function Dojo() {
           onStartAutopilot={startAutopilot}
           lessonContext={lessonContext}
           dailyFocus={skillMemory?.dailyFocus ?? null}
+          hideScenarioPreview={!!dailyAssignment}
+          assignmentCompleted={dailyAssignment?.completed ?? false}
         />
 
         {/* Section 2: Training Modes */}

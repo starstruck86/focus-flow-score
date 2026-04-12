@@ -22,6 +22,8 @@ interface TodaysFocusProps {
   onStartAutopilot: () => void;
   lessonContext?: LessonContext | null;
   dailyFocus?: DailyFocus | null;
+  hideScenarioPreview?: boolean;
+  assignmentCompleted?: boolean;
 }
 
 export function TodaysFocus({
@@ -33,6 +35,8 @@ export function TodaysFocus({
   onStartAutopilot,
   lessonContext,
   dailyFocus,
+  hideScenarioPreview,
+  assignmentCompleted,
 }: TodaysFocusProps) {
   const weakestSkill = skillStats.length > 0 ? skillStats[0] : null;
   const strongestSkill = skillStats.length > 0 ? skillStats[skillStats.length - 1] : null;
@@ -138,25 +142,27 @@ export function TodaysFocus({
           onClick={onStartAutopilot}
         >
           <Play className="h-5 w-5" />
-          Start Today's Rep
+          {assignmentCompleted ? 'Do Another Rep' : 'Start Today\'s Rep'}
         </Button>
       )}
 
-      {/* Scenario preview */}
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <Badge variant="secondary" className="text-xs">
-              {SKILL_LABELS[recommendation.scenario.skillFocus]}
-            </Badge>
-            <span className="text-xs text-muted-foreground">~5 min</span>
-          </div>
-          <p className="text-sm font-medium">{recommendation.scenario.title}</p>
-          <p className="text-xs text-muted-foreground line-clamp-2">
-            {recommendation.scenario.context}
-          </p>
-        </CardContent>
-      </Card>
+      {/* Scenario preview — hidden when assignment card is already showing */}
+      {!hideScenarioPreview && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <Badge variant="secondary" className="text-xs">
+                {SKILL_LABELS[recommendation.scenario.skillFocus]}
+              </Badge>
+              <span className="text-xs text-muted-foreground">~5 min</span>
+            </div>
+            <p className="text-sm font-medium">{recommendation.scenario.title}</p>
+            <p className="text-xs text-muted-foreground line-clamp-2">
+              {recommendation.scenario.context}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">
