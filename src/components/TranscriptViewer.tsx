@@ -29,12 +29,15 @@ interface TranscriptViewerProps {
 }
 
 function TranscriptDetailPane({ selected, onDelete }: { selected: CallTranscript; onDelete: (id: string) => void }) {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(selected.title);
   const [editCallType, setEditCallType] = useState(selected.call_type || '');
   const [editCallDate, setEditCallDate] = useState(selected.call_date);
   const [editParticipants, setEditParticipants] = useState(selected.participants || '');
   const [editNotes, setEditNotes] = useState(selected.notes || '');
+  const updateTranscript = useUpdateTranscript();
+  const { extract, isExtracting, scenarios, clear } = useExtractScenarios();
   const updateTranscript = useUpdateTranscript();
 
   const startEdit = () => {
