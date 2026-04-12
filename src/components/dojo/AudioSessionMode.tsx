@@ -234,6 +234,76 @@ export default function AudioSessionMode({
     setTextFallback('');
     await scoreAndDeliver(text, isRetry);
   }, [textFallback]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Persist score to DB with pending-write fallback (used by both normal and recovery paths)
+  const persistScore = useCallback(async (scoreData: DojoScoreResult, text: string, isRetry: boolean) => {
+    try {
+      if (!isRetry) {
+        const dbSessionId = crypto.randomUUID();
+        const turnId = crypto.randomUUID();
+        try {
+          const { data: session, error: sessionErr } = await supabase
+            .from('dojo_sessions')
+            .insert({
+              id: dbSessionId,
+              user_id: userId,
+              mode: (mode as 'autopilot' | 'custom') || 'autopilot',
+              session_type: 'drill',
+              skill_focus: scenario.skillFocus,
+              scenario_title: scenario.title,
+              scenario_context: scenario.context,
+              scenario_objection: scenario.objection,
+              best_score: scoreData.score,
+              latest_score: scoreData.score,
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+            })
+            .select('id')
+            .single();
+          if (sessionErr) throw sessionErr;
+          if (session) {
+            setSessionId(session.id);
+            const { data: turn } = await supabase
+              .from('dojo_session_turns')
+              .insert({
+                id: turnId,
+                session_id: session.id,
+                user_id: userId,
+                turn_index: 0,
+                prompt_text: scenario.objection,
+                user_response: text,
+                score: scoreData.score,
+                feedback: scoreData.feedback,
+                top_mistake: scoreData.topMistake,
+                improved_version: scoreData.improvedVersion,
+                score_json: scoreToJson(scoreData),
+              })
+              .select('id')
+              .single();
+            if (turn) setFirstTurnId(turn.id);
+          }
+          emitSaveStatus('saved');
+        } catch (dbErr) {
+          console.warn('DB write failed (persist helper), queuing:', dbErr);
+          enqueuePendingWrite({ turnId: dbSessionId, table: 'dojo_sessions', action: 'insert', data: {
+            id: dbSessionId, user_id: userId, mode: (mode as 'autopilot' | 'custom') || 'autopilot',
+            session_type: 'drill', skill_focus: scenario.skillFocus, scenario_title: scenario.title,
+            scenario_context: scenario.context, scenario_objection: scenario.objection,
+            best_score: scoreData.score, latest_score: scoreData.score, status: 'completed',
+            completed_at: new Date().toISOString(),
+          }});
+          enqueuePendingWrite({ turnId, table: 'dojo_session_turns', action: 'insert', data: {
+            id: turnId, session_id: dbSessionId, user_id: userId, turn_index: 0,
+            prompt_text: scenario.objection, user_response: text, score: scoreData.score,
+            feedback: scoreData.feedback, top_mistake: scoreData.topMistake,
+            improved_version: scoreData.improvedVersion, score_json: scoreToJson(scoreData),
+          }});
+          setSessionId(dbSessionId);
+          emitSaveStatus('offline');
+        }
+      }
+      processPendingWrites();
+    } catch { /* already handled */ }
+  }, [scenario, userId, mode]);
 
   const scoreAndDeliver = useCallback(async (text: string, isRetry: boolean) => {
     try {
