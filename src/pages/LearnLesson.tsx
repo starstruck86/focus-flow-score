@@ -10,12 +10,15 @@ import { cn } from '@/lib/utils';
 import {
   ArrowLeft, Loader2, BookOpen, CheckCircle2, XCircle,
   ChevronDown, ChevronUp, Lightbulb, AlertTriangle, Send,
+  Volume2, VolumeX,
 } from 'lucide-react';
 import { useLesson, useGenerateLesson, useUpsertProgress, useSaveQuizAnswer } from '@/lib/learning/hooks';
 import { supabase } from '@/integrations/supabase/client';
 import type { MCQuestion } from '@/lib/learning/types';
 import { getPracticeMapping } from '@/lib/learning/practiceMapping';
 import { Swords } from 'lucide-react';
+import { useAudioPreference } from '@/hooks/useAudioPreference';
+import AudioLessonMode from '@/components/learning/AudioLessonMode';
 
 type Phase = 'learn' | 'quiz' | 'open_ended' | 'results';
 
