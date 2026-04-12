@@ -87,6 +87,7 @@ const App = () => (
               <DurableJobRehydrator />
               <BackgroundJobIndicator />
               <BackgroundJobDrawer />
+              <SessionResumePromptWrapper />
               
               <BrowserRouter>
                 <Routes>
