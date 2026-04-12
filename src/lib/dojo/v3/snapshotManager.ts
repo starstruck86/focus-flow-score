@@ -18,6 +18,13 @@ export interface AnchorSnapshotData {
   sessionCount: number;
 }
 
+/** Block-level flow metrics stored alongside anchor data in the snapshot JSON */
+export interface SnapshotFlowMetrics {
+  flowControlAvg: number | null;
+  closingScoreAvg: number | null;
+  simulationCount: number;
+}
+
 export interface SnapshotRow {
   id: string;
   blockId: string;
@@ -29,6 +36,7 @@ export interface SnapshotRow {
   mistakesActive: string[];
   mistakesResolved: string[];
   createdAt: string;
+  flowMetrics?: SnapshotFlowMetrics;
 }
 
 // ── Create Snapshot ───────────────────────────────────────────────
@@ -76,12 +84,12 @@ export async function createBlockSnapshot(
   // Fetch session scores and turns
   const { data: sessions } = await supabase
     .from('dojo_sessions')
-    .select('id, skill_focus, best_score, latest_score')
+    .select('id, skill_focus, best_score, latest_score, session_type')
     .in('id', allSessionIds);
 
   const { data: turns } = await supabase
     .from('dojo_session_turns')
-    .select('session_id, score, top_mistake')
+    .select('session_id, score, top_mistake, turn_index')
     .in('session_id', allSessionIds);
 
   if (!sessions) return null;
@@ -125,6 +133,41 @@ export async function createBlockSnapshot(
     scoresByAnchor[anchor] = { avgScore, topMistake, focusAppliedRate, sessionCount: anchorSessions.length };
   }
 
+  // V5: Compute flow metrics from simulation sessions in this week
+  const simSessions = (sessions ?? []).filter(s => s.session_type === 'simulation');
+  let flowMetrics: SnapshotFlowMetrics = { flowControlAvg: null, closingScoreAvg: null, simulationCount: 0 };
+
+  if (simSessions.length > 0) {
+    const flowScores: number[] = [];
+    const closingScores: number[] = [];
+
+    for (const sim of simSessions) {
+      const simTurns = (turns ?? [])
+        .filter(t => t.session_id === sim.id && t.score != null)
+        .sort((a, b) => a.turn_index - b.turn_index);
+      if (simTurns.length < 2) continue;
+
+      let fc = 100;
+      for (let i = 1; i < simTurns.length; i++) {
+        const drop = (simTurns[i - 1].score ?? 0) - (simTurns[i].score ?? 0);
+        if (drop >= 20) fc -= 30;
+        else if (drop >= 12) fc -= 20;
+        else if (drop >= 8) fc -= 10;
+      }
+      flowScores.push(Math.max(0, Math.min(100, fc)));
+      closingScores.push(simTurns[simTurns.length - 1].score ?? 0);
+    }
+
+    flowMetrics = {
+      flowControlAvg: flowScores.length > 0 ? Math.round(flowScores.reduce((a, b) => a + b, 0) / flowScores.length) : null,
+      closingScoreAvg: closingScores.length > 0 ? Math.round(closingScores.reduce((a, b) => a + b, 0) / closingScores.length) : null,
+      simulationCount: simSessions.length,
+    };
+  }
+
+  // Store flow metrics alongside anchor data in the JSON
+  const snapshotData = { ...scoresByAnchor, _flowMetrics: flowMetrics };
+
   // Persist snapshot
   const { data: row, error } = await supabase
     .from('block_snapshots')
@@ -134,7 +177,7 @@ export async function createBlockSnapshot(
       snapshot_type: snapshotType,
       week_number: weekNumber,
       stage,
-      scores_by_anchor: scoresByAnchor as unknown as import('@/integrations/supabase/types').Json,
+      scores_by_anchor: snapshotData as unknown as import('@/integrations/supabase/types').Json,
       mistakes_active: Array.from(allMistakes),
       mistakes_resolved: [],
     } as any)
@@ -209,6 +252,15 @@ export interface SnapshotComparison {
   mistakesFixed: string[];
   mistakesPersisting: string[];
   mistakesNew: string[];
+  /** V5 flow metrics comparison */
+  flowComparison?: {
+    benchmarkFlow: number | null;
+    retestFlow: number | null;
+    flowDelta: number | null;
+    benchmarkClose: number | null;
+    retestClose: number | null;
+    closeDelta: number | null;
+  };
 }
 
 export function compareSnapshots(
@@ -245,18 +297,39 @@ export function compareSnapshots(
   const bmMistakes = new Set(benchmark.mistakesActive);
   const rtMistakes = new Set(retest.mistakesActive);
 
+  // V5 flow comparison
+  const bmFlow = benchmark.flowMetrics;
+  const rtFlow = retest.flowMetrics;
+  const hasFlowData = (bmFlow?.simulationCount ?? 0) > 0 || (rtFlow?.simulationCount ?? 0) > 0;
+
   return {
     perAnchor,
     overallDelta,
     mistakesFixed: Array.from(bmMistakes).filter(m => !rtMistakes.has(m)),
     mistakesPersisting: Array.from(bmMistakes).filter(m => rtMistakes.has(m)),
     mistakesNew: Array.from(rtMistakes).filter(m => !bmMistakes.has(m)),
+    flowComparison: hasFlowData ? {
+      benchmarkFlow: bmFlow?.flowControlAvg ?? null,
+      retestFlow: rtFlow?.flowControlAvg ?? null,
+      flowDelta: (bmFlow?.flowControlAvg != null && rtFlow?.flowControlAvg != null)
+        ? rtFlow.flowControlAvg - bmFlow.flowControlAvg : null,
+      benchmarkClose: bmFlow?.closingScoreAvg ?? null,
+      retestClose: rtFlow?.closingScoreAvg ?? null,
+      closeDelta: (bmFlow?.closingScoreAvg != null && rtFlow?.closingScoreAvg != null)
+        ? rtFlow.closingScoreAvg - bmFlow.closingScoreAvg : null,
+    } : undefined,
   };
 }
 
 // ── Mapping ──────────────────────────────────────────────────────
 
 function mapSnapshotRow(row: Record<string, unknown>): SnapshotRow {
+  const rawScores = (row.scores_by_anchor ?? {}) as Record<string, unknown>;
+  // Extract flow metrics if stored alongside anchor data
+  const flowMetricsRaw = rawScores._flowMetrics as SnapshotFlowMetrics | undefined;
+  const scoresByAnchor = { ...rawScores } as Record<DayAnchor, AnchorSnapshotData>;
+  delete (scoresByAnchor as any)._flowMetrics;
+
   return {
     id: row.id as string,
     blockId: row.block_id as string,
@@ -264,9 +337,10 @@ function mapSnapshotRow(row: Record<string, unknown>): SnapshotRow {
     snapshotType: row.snapshot_type as 'benchmark' | 'retest',
     weekNumber: row.week_number as number,
     stage: row.stage as string,
-    scoresByAnchor: (row.scores_by_anchor ?? {}) as Record<DayAnchor, AnchorSnapshotData>,
+    scoresByAnchor,
     mistakesActive: (row.mistakes_active as string[] | null) ?? [],
     mistakesResolved: (row.mistakes_resolved as string[] | null) ?? [],
     createdAt: row.created_at as string,
+    flowMetrics: flowMetricsRaw ?? undefined,
   };
 }

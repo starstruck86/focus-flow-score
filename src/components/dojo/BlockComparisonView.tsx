@@ -7,7 +7,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, TrendingDown, Minus, CheckCircle2, AlertTriangle, XCircle, BarChart3 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, CheckCircle2, AlertTriangle, XCircle, BarChart3, Layers } from 'lucide-react';
 import type { SnapshotComparison } from '@/lib/dojo/v3/snapshotManager';
 import { MISTAKE_LABELS } from '@/lib/dojo/scenarios';
 
@@ -29,7 +29,7 @@ function DeltaIcon({ delta }: { delta: number }) {
 }
 
 export function BlockComparisonView({ comparison, blockNumber }: BlockComparisonViewProps) {
-  const { perAnchor, overallDelta, mistakesFixed, mistakesPersisting, mistakesNew } = comparison;
+  const { perAnchor, overallDelta, mistakesFixed, mistakesPersisting, mistakesNew, flowComparison } = comparison;
 
   return (
     <Card className="border-border/60">
@@ -71,6 +71,44 @@ export function BlockComparisonView({ comparison, blockNumber }: BlockComparison
             </div>
           ))}
         </div>
+
+        {/* V5 Flow metrics comparison */}
+        {flowComparison && (flowComparison.benchmarkFlow != null || flowComparison.retestFlow != null) && (
+          <div className="space-y-2 pt-2 border-t border-border/40">
+            <p className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1 uppercase tracking-wider">
+              <Layers className="h-3 w-3" /> Conversation Flow Progress
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              This is where you started vs where you are now.
+            </p>
+            <div className="space-y-1">
+              {flowComparison.benchmarkFlow != null && flowComparison.retestFlow != null && (
+                <div className="flex items-center gap-2 text-xs">
+                  <DeltaIcon delta={flowComparison.flowDelta ?? 0} />
+                  <span className="w-20 font-medium">Flow</span>
+                  <span className="text-muted-foreground w-8 text-right">{flowComparison.benchmarkFlow}</span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className={`w-8 font-semibold ${flowComparison.retestFlow >= 75 ? 'text-green-600' : flowComparison.retestFlow >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                    {flowComparison.retestFlow}
+                  </span>
+                  <DeltaBadge delta={flowComparison.flowDelta ?? 0} />
+                </div>
+              )}
+              {flowComparison.benchmarkClose != null && flowComparison.retestClose != null && (
+                <div className="flex items-center gap-2 text-xs">
+                  <DeltaIcon delta={flowComparison.closeDelta ?? 0} />
+                  <span className="w-20 font-medium">Close</span>
+                  <span className="text-muted-foreground w-8 text-right">{flowComparison.benchmarkClose}</span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className={`w-8 font-semibold ${flowComparison.retestClose >= 75 ? 'text-green-600' : flowComparison.retestClose >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                    {flowComparison.retestClose}
+                  </span>
+                  <DeltaBadge delta={flowComparison.closeDelta ?? 0} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Mistake analysis */}
         {(mistakesFixed.length > 0 || mistakesPersisting.length > 0 || mistakesNew.length > 0) && (
