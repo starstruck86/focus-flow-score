@@ -124,6 +124,19 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
   const isFriday = dayAnchor === 'executive_roi_mixed';
   const scenarios = selectScenarios(primarySkill, transcriptScenarios, recentAssignments, dayAnchor, isFriday);
 
+  // V5: Friday simulation arc selection
+  let simulationArcId: string | null = null;
+  let simulationExpected = false;
+  if (isFriday && block.phase !== 'benchmark' && block.phase !== 'retest') {
+    const eligibleArcs = getArcsForStage(block.stage);
+    if (eligibleArcs.length > 0 && (block.stage !== 'foundation' || block.phase === 'peak')) {
+      // Deterministic arc selection: rotate by block week
+      const arcIndex = (block.currentWeek - 1) % eligibleArcs.length;
+      simulationArcId = eligibleArcs[arcIndex].id;
+      simulationExpected = true;
+    }
+  }
+
   // Step 6: Difficulty
   const difficulty = calibrateDifficulty(block.phase, primarySkill, skillMemory);
 
