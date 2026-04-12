@@ -413,6 +413,7 @@ export default function DojoSession() {
             scenarioFamilyId={scenarioFamilyId}
             pressureLevel={pressureLevel}
             pressureDimensions={pressureDimensions}
+            assignmentFocusPattern={state?.assignmentFocusPattern ?? null}
             onComplete={handleNextRep}
           />
         )}

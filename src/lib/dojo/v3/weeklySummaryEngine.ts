@@ -26,6 +26,10 @@ export interface WeeklySummary {
   avgPressureScore: number | null;
   strongestPressureAnchor: string | null;
   weakestPressureAnchor: string | null;
+  // V5 simulation / flow metrics
+  simulationsCompleted: number;
+  flowControlAvg: number | null;
+  controlHeldRate: number | null;  // 0–100 percentage
 }
 
 export interface AnchorWeekStat {
@@ -71,13 +75,13 @@ export async function computeWeeklySummaryFromDB(
 
   // Fetch session scores
   const allIds = [...currentSessionIds, ...priorSessionIds];
-  let sessions: Array<{ id: string; best_score: number | null; latest_score: number | null; pressure_level: string | null }> = [];
-  let turns: Array<{ session_id: string; top_mistake: string | null }> = [];
+  let sessions: Array<{ id: string; best_score: number | null; latest_score: number | null; pressure_level: string | null; session_type: string }> = [];
+  let turns: Array<{ session_id: string; top_mistake: string | null; score: number | null; turn_index: number }> = [];
 
   if (allIds.length > 0) {
     const [sessRes, turnsRes] = await Promise.all([
-      supabase.from('dojo_sessions').select('id, best_score, latest_score, pressure_level').in('id', allIds),
-      supabase.from('dojo_session_turns').select('session_id, top_mistake').in('session_id', allIds),
+      supabase.from('dojo_sessions').select('id, best_score, latest_score, pressure_level, session_type').in('id', allIds),
+      supabase.from('dojo_session_turns').select('session_id, top_mistake, score, turn_index').in('session_id', allIds),
     ]);
     sessions = sessRes.data ?? [];
     turns = turnsRes.data ?? [];
@@ -173,6 +177,47 @@ export async function computeWeeklySummaryFromDB(
     ? `${pressureByAnchor[pressureByAnchor.length - 1].label} (${pressureByAnchor[pressureByAnchor.length - 1].avg} avg)`
     : null;
 
+  // V5 simulation / flow metrics
+  const simSessions = currentSessions.filter(s => s.session_type === 'simulation');
+  const simulationsCompleted = simSessions.length;
+
+  // Compute flow control avg from simulation turn scores
+  let flowControlAvg: number | null = null;
+  let controlHeldRate: number | null = null;
+
+  if (simSessions.length > 0) {
+    const flowScores: number[] = [];
+    let controlHeldCount = 0;
+
+    for (const sim of simSessions) {
+      const simTurns = turns
+        .filter(t => t.session_id === sim.id && t.score != null)
+        .sort((a, b) => a.turn_index - b.turn_index);
+
+      if (simTurns.length >= 2) {
+        // Flow control: penalize drops between turns (same logic as arcScoring)
+        let flowScore = 100;
+        for (let i = 1; i < simTurns.length; i++) {
+          const drop = (simTurns[i - 1].score ?? 0) - (simTurns[i].score ?? 0);
+          if (drop >= 20) flowScore -= 30;
+          else if (drop >= 12) flowScore -= 20;
+          else if (drop >= 8) flowScore -= 10;
+        }
+        flowScores.push(Math.max(0, Math.min(100, flowScore)));
+
+        // Control held: no drop >= 12 and closing >= 60
+        const maxDrop = Math.max(0, ...simTurns.slice(1).map((t, i) => (simTurns[i].score ?? 0) - (t.score ?? 0)));
+        const closingScore = simTurns[simTurns.length - 1].score ?? 0;
+        if (maxDrop < 12 && closingScore >= 60) controlHeldCount++;
+      }
+    }
+
+    flowControlAvg = flowScores.length > 0
+      ? Math.round(flowScores.reduce((a, b) => a + b, 0) / flowScores.length)
+      : null;
+    controlHeldRate = Math.round((controlHeldCount / simSessions.length) * 100);
+  }
+
   return {
     weekNumber,
     blockId,
@@ -189,5 +234,8 @@ export async function computeWeeklySummaryFromDB(
     avgPressureScore,
     strongestPressureAnchor,
     weakestPressureAnchor,
+    simulationsCompleted,
+    flowControlAvg,
+    controlHeldRate,
   };
 }

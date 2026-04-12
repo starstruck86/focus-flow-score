@@ -124,16 +124,27 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
   const isFriday = dayAnchor === 'executive_roi_mixed';
   const scenarios = selectScenarios(primarySkill, transcriptScenarios, recentAssignments, dayAnchor, isFriday);
 
-  // V5: Friday simulation arc selection
+  // V5: Friday simulation arc selection with eligibility guards
   let simulationArcId: string | null = null;
   let simulationExpected = false;
   if (isFriday) {
+    const profile = skillMemory?.profiles.find(p => p.skill === primarySkill);
+    const anchorRecentAvg = profile?.recentAvg ?? 50;
     const eligibleArcs = getArcsForStage(block.stage);
-    if (eligibleArcs.length > 0 && (block.stage !== 'foundation' || block.phase === 'peak')) {
+
+    // Guard A: Do not assign simulation if foundation + not peak, or anchor avg < 55
+    const stageAllowed = block.stage !== 'foundation' || block.phase === 'peak';
+    const readinessAllowed = anchorRecentAvg >= 55;
+
+    if (eligibleArcs.length > 0 && stageAllowed && readinessAllowed) {
       // Deterministic arc selection: rotate by block week
       const arcIndex = (block.currentWeek - 1) % eligibleArcs.length;
       simulationArcId = eligibleArcs[arcIndex].id;
       simulationExpected = true;
+    } else if (isFriday && !stageAllowed) {
+      console.info('[ProgrammingEngine] Simulation skipped: foundation stage, not peak phase');
+    } else if (isFriday && !readinessAllowed) {
+      console.info(`[ProgrammingEngine] Simulation skipped: anchor avg ${anchorRecentAvg} < 55`);
     }
   }
 

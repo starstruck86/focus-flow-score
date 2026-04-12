@@ -71,13 +71,21 @@ export function computeArcScore(turnResults: ArcTurnResult[]): ArcScore {
   // Closing score: final turn quality
   const closingScore = scores[n - 1];
 
-  // Overall: weighted blend
-  const overallScore = Math.round(
+  // Overall: weighted blend with closing penalty
+  let overallScore = Math.round(
     averageTurnScore * 0.4 +
     flowControlScore * 0.2 +
     consistencyScore * 0.2 +
     closingScore * 0.2
   );
+
+  // Sanity: weak close must drag overall down — cannot look elite while collapsing late
+  if (closingScore < 50 && overallScore > 70) {
+    console.warn('[ArcScoring] Closing penalty applied: closingScore', closingScore, 'overallScore capped');
+    overallScore = Math.min(overallScore, 65);
+  } else if (closingScore < 40) {
+    overallScore = Math.min(overallScore, 58);
+  }
 
   // Strongest / weakest
   const strongestTurn = scores.indexOf(Math.max(...scores));

@@ -88,6 +88,7 @@ interface SimulationModeProps {
   scenarioFamilyId: string | null;
   pressureLevel: string | null;
   pressureDimensions: string[] | null;
+  assignmentFocusPattern?: string | null;
   onComplete: () => void;
 }
 
@@ -99,7 +100,7 @@ function scoreToJson(score: DojoScoreResult): Json {
 
 export default function SimulationMode({
   arc, userId, assignmentId, benchmarkTag, scenarioFamilyId,
-  pressureLevel, pressureDimensions, onComplete,
+  pressureLevel, pressureDimensions, assignmentFocusPattern, onComplete,
 }: SimulationModeProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -438,6 +439,7 @@ export default function SimulationMode({
                 toArcTurnResult(i, t.scoreResult ?? normalizeScoreResult({}))
               )}
               arcScore={arcScore}
+              assignmentFocusPattern={assignmentFocusPattern}
             />
 
             {/* Target outcomes check */}
