@@ -6,14 +6,17 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileText, Search, Clock, Target, RefreshCw, Trash2, Building2, GraduationCap, Pencil, Save, X } from 'lucide-react';
+import { FileText, Search, Clock, Target, RefreshCw, Trash2, Building2, GraduationCap, Pencil, Save, X, Zap } from 'lucide-react';
 import { useCallTranscripts, useDeleteTranscript, useUpdateTranscript, type CallTranscript } from '@/hooks/useCallTranscripts';
 import { useGradeTranscript, useTranscriptGrade } from '@/hooks/useTranscriptGrades';
+import { useExtractScenarios } from '@/hooks/useExtractScenarios';
+import { ExtractedScenariosList } from '@/components/dojo/ExtractedScenariosList';
 import { useStore } from '@/store/useStore';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { SalesCoachPanel } from '@/components/SalesCoachPanel';
+import { useNavigate } from 'react-router-dom';
 
 const CALL_TYPES = ['Discovery', 'Demo', 'Negotiation', 'QBR', 'Follow-up', 'Other'];
 
