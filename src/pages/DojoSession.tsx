@@ -29,6 +29,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import DojoRoleplay from '@/components/dojo/DojoRoleplay';
 import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview';
 import DaveCoachingDelivery from '@/components/dojo/DaveCoachingDelivery';
+import AudioSessionMode from '@/components/dojo/AudioSessionMode';
 import { SessionFeedbackCard } from '@/components/dojo/SessionFeedbackCard';
 import type { Json } from '@/integrations/supabase/types';
 
@@ -287,7 +288,7 @@ export default function DojoSession() {
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate">{scenario.title}</p>
-          <p className="text-xs text-muted-foreground">{SKILL_LABELS[scenario.skillFocus]} · {sessionType === 'roleplay' ? 'Roleplay' : sessionType === 'review' ? 'Review' : 'Drill'}</p>
+          <p className="text-xs text-muted-foreground">{SKILL_LABELS[scenario.skillFocus]} · {sessionType === 'audio' ? 'Audio Session' : sessionType === 'roleplay' ? 'Roleplay' : sessionType === 'review' ? 'Review' : 'Drill'}</p>
         </div>
         <Badge variant="outline" className="text-xs shrink-0">5 min</Badge>
       </div>
@@ -305,6 +306,16 @@ export default function DojoSession() {
             </div>
           </CardContent>
         </Card>
+
+        {/* ── Audio Session Mode ── */}
+        {sessionType === 'audio' && user && (
+          <AudioSessionMode
+            scenario={scenario}
+            userId={user.id}
+            mode={state?.mode}
+            onComplete={handleNextRep}
+          />
+        )}
 
         {/* ── Roleplay Mode ── */}
         {sessionType === 'roleplay' && phase !== 'feedback' && !currentResult && user && (

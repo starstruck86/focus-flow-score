@@ -30,6 +30,10 @@ export function TrainingModes({ skillStats, onStartAutopilot, highlightMode }: T
     navigate('/dojo/session', { state: { skillFocus: skill, mode: 'custom' } });
   };
 
+  const startAudioSession = (skill: SkillFocus) => {
+    navigate('/dojo/session', { state: { skillFocus: skill, mode: 'custom', sessionType: 'audio' } });
+  };
+
   const startRoleplay = (skill: SkillFocus) => {
     navigate('/dojo/session', { state: { skillFocus: skill, mode: 'roleplay', sessionType: 'roleplay' } });
   };
@@ -81,6 +85,13 @@ export function TrainingModes({ skillStats, onStartAutopilot, highlightMode }: T
             active={inlineMode === 'objection-reps'}
             highlight={highlightMode === 'objection-reps'}
             onClick={() => toggleInline('objection-reps')}
+          />
+          <ModeCard
+            icon={Mic}
+            title="Audio Session"
+            description="Voice-guided coaching"
+            highlight={highlightMode === 'drill'}
+            onClick={() => startAudioSession('objection_handling')}
           />
           <ModeCard
             icon={Compass}
