@@ -251,7 +251,7 @@ RESPONSE RULES:
 - "practiceCue": One concrete behavioral instruction for the retry. Immediately executable.
 - "teachingNote": One sentence generalizing the lesson beyond this scenario.
 - "deltaNote": One sentence explaining the BIGGEST DIFFERENCE between improvedVersion and worldClassResponse.
-- "topMistake": Pick the single most impactful mistake from the list.
+- "topMistake": REQUIRED. Pick exactly ONE from the COMMON MISTAKES list above. You MUST always return a valid mistake code — never leave this empty or invent a new one.
 
 COHERENCE RULE (CRITICAL):
 feedback, topMistake, focusPattern, focusReason, and practiceCue MUST all point at the SAME core coaching lesson.
