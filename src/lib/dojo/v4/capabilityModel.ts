@@ -204,6 +204,7 @@ function buildSummary(
   recoveryRate: number | null,
   firstAttempt: number,
   readiness: PressureReadiness,
+  lateTurnDropoff?: number | null,
 ): string {
   const label = SKILL_LABELS[skill];
   const parts: string[] = [];
@@ -224,6 +225,13 @@ function buildSummary(
     if (recoveryRate >= 10) parts.push('strong self-corrector');
     else if (recoveryRate >= 3) parts.push('recovers on retry');
     else parts.push('retries show limited improvement');
+  }
+
+  // V5 flow insight
+  if (lateTurnDropoff != null) {
+    if (lateTurnDropoff >= 15) parts.push('breaks late under pressure');
+    else if (lateTurnDropoff >= 8) parts.push('loses control after pushback');
+    else if (lateTurnDropoff <= 0) parts.push('strong closer when control is maintained');
   }
 
   return `${label}: ${parts.join(', ')}.`;
