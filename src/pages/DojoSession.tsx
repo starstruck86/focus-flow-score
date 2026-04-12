@@ -930,6 +930,40 @@ function FeedbackView({
         sessionType={sessionType}
       />
 
+      {/* ── Post-Session: Today's Assignment Summary ── */}
+      {assignmentContext && (
+        <Card className="border-primary/15 bg-primary/5">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-[10px] font-bold text-primary uppercase tracking-wider">Today's Assignment</p>
+            <div className="flex items-center gap-2">
+              <span className="text-base">{DAY_ANCHORS[assignmentContext.anchor as DayAnchor]?.icon ?? '📋'}</span>
+              <span className="text-sm font-semibold text-foreground">
+                {DAY_ANCHORS[assignmentContext.anchor as DayAnchor]?.label ?? assignmentContext.anchor}
+              </span>
+              <span className="text-xs text-muted-foreground">·</span>
+              <span className="text-xs text-muted-foreground">
+                {FOCUS_PATTERN_LABELS[assignmentContext.focusPattern] || assignmentContext.focusPattern.replace(/_/g, ' ')}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">{assignmentContext.reason}</p>
+            {currentResult.focusApplied && (
+              <div className="flex items-center gap-2 pt-1 border-t border-primary/10">
+                {currentResult.focusApplied === 'yes' ? (
+                  <Badge className="text-[10px] bg-green-600 hover:bg-green-600">✅ Focus Applied</Badge>
+                ) : currentResult.focusApplied === 'partial' ? (
+                  <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-600">⚡ Partially Applied</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] border-red-500 text-red-600">❌ Focus Missed</Badge>
+                )}
+                {currentResult.focusAppliedReason && (
+                  <span className="text-[10px] text-muted-foreground">{currentResult.focusAppliedReason}</span>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Actions */}
       <div className="flex gap-3 pt-2">
         {sessionType === 'drill' && (
