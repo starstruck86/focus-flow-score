@@ -17,6 +17,10 @@ import { CourseCard } from '@/components/learn/CourseCard';
 import { NextRepExecutionCard } from '@/components/learn/NextRepExecutionCard';
 import { ReplayMomentCard } from '@/components/learn/ReplayMomentCard';
 import { PatternRecognitionCard } from '@/components/learn/PatternRecognitionCard';
+import { PressureBreakdownCard } from '@/components/learn/PressureBreakdownCard';
+import { StakeholderMissCard } from '@/components/learn/StakeholderMissCard';
+import { ReinforcementDecayCard } from '@/components/learn/ReinforcementDecayCard';
+import { TransferSignalCard } from '@/components/learn/TransferSignalCard';
 
 export default function Learn() {
   const navigate = useNavigate();
@@ -118,32 +122,46 @@ export default function Learn() {
           </div>
         </div>
 
-        {/* 1. Today's Mental Model (Phase 1) */}
+        {/* 1. Today's Mental Model */}
         {learnLoop?.mentalModel && <TodaysMentalModel model={learnLoop.mentalModel} />}
 
-        {/* 2. In Your Next Rep (Phase 2) */}
+        {/* 2. In Your Next Rep */}
         {ki && (
           <NextRepExecutionCard ki={ki} topMistake={learnLoop?.topMistake} />
         )}
 
-        {/* 3. Daily KI (Phase 1) */}
+        {/* 3. Daily KI */}
         {dailyKI && <DailyKICard context={dailyKI} topMistake={learnLoop?.topMistake} />}
 
-        {/* 4. Replay That Moment (Phase 2, conditional) */}
+        {/* 4. Replay That Moment (conditional) */}
         {learnLoop?.lastRep && <ReplayMomentCard lastRep={learnLoop.lastRep} />}
 
-        {/* 5. Last Rep Insights (Phase 1) */}
+        {/* 5. Last Rep Insights */}
         {learnLoop?.lastRep && <LastRepInsights insight={learnLoop.lastRep} />}
 
-        {/* 6. Pattern Recognition (Phase 2) */}
+        {/* 6. Under Pressure (Phase 3) */}
+        {learnLoop?.pressureBreakdown && <PressureBreakdownCard pressure={learnLoop.pressureBreakdown} />}
+
+        {/* 7. Who You Missed (Phase 3) */}
+        {learnLoop?.multiThreadMiss && <StakeholderMissCard miss={learnLoop.multiThreadMiss} />}
+
+        {/* 8. Pattern Recognition */}
         {learnLoop?.skillMemory && <PatternRecognitionCard skillMemory={learnLoop.skillMemory} />}
 
-        {/* 7. Reinforcement Queue (Phase 1) */}
+        {/* 9. What's Fading (Phase 3) */}
+        {learnLoop?.decayItems && learnLoop.decayItems.length > 0 && (
+          <ReinforcementDecayCard items={learnLoop.decayItems} />
+        )}
+
+        {/* 10. Is It Sticking? (Phase 3) */}
+        {learnLoop?.transferSignal && <TransferSignalCard signal={learnLoop.transferSignal} />}
+
+        {/* 11. Reinforcement Queue */}
         {learnLoop?.reinforcement && learnLoop.reinforcement.length > 0 && (
           <ReinforcementQueue items={learnLoop.reinforcement} />
         )}
 
-        {/* 8. Next lesson CTA — contextual label */}
+        {/* 12. Primary CTA */}
         {nextLesson && (
           <button
             onClick={() => navigate(`/learn/lesson/${nextLesson.lesson.id}`)}
@@ -154,7 +172,7 @@ export default function Learn() {
           </button>
         )}
 
-        {/* Mastery overview */}
+        {/* 13. Topic mastery */}
         {topicMastery.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -198,7 +216,7 @@ export default function Learn() {
           </div>
         )}
 
-        {/* 9. Course list */}
+        {/* 14. Course list */}
         {(courses || []).map(course => (
           <CourseCard
             key={course.id}

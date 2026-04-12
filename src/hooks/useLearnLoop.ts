@@ -1,7 +1,8 @@
 /**
- * useLearnLoop — Hook for Learn V6 Phase 1 data
+ * useLearnLoop — Hook for Learn V6 Phase 1–3 data
  *
- * Fetches: mental model, last rep insights, reinforcement queue.
+ * Fetches: mental model, last rep insights, reinforcement queue,
+ * skill memory, pressure breakdown, multi-thread miss, decay, transfer signal.
  * All derived from real Dojo data.
  */
 
@@ -17,6 +18,16 @@ import {
   type LastRepInsight,
   type ReinforcementItem,
 } from '@/lib/learning/learnEngine';
+import {
+  getPressureBreakdown,
+  getRecentMultiThreadMiss,
+  getReinforcementDecay,
+  getTransferSignal,
+  type PressureBreakdown,
+  type MultiThreadMiss,
+  type DecayItem,
+  type TransferSignal,
+} from '@/lib/learning/learnAdaptationEngine';
 
 export interface LearnLoopData {
   mentalModel: MentalModel | null;
@@ -24,6 +35,11 @@ export interface LearnLoopData {
   reinforcement: ReinforcementItem[];
   topMistake: string | null;
   skillMemory: SkillMemory | null;
+  // Phase 3
+  pressureBreakdown: PressureBreakdown | null;
+  multiThreadMiss: MultiThreadMiss | null;
+  decayItems: DecayItem[];
+  transferSignal: TransferSignal | null;
 }
 
 export function useLearnLoop() {
@@ -35,12 +51,20 @@ export function useLearnLoop() {
     enabled: !!user?.id,
     staleTime: 10 * 60 * 1000,
     queryFn: async () => {
-      if (!user) return { mentalModel: null, lastRep: null, reinforcement: [], topMistake: null, skillMemory: null };
+      if (!user) return {
+        mentalModel: null, lastRep: null, reinforcement: [], topMistake: null,
+        skillMemory: null, pressureBreakdown: null, multiThreadMiss: null,
+        decayItems: [], transferSignal: null,
+      };
 
-      const [skillMemory, lastRep, reinforcement] = await Promise.all([
+      const [skillMemory, lastRep, reinforcement, pressureBreakdown, multiThreadMiss, decayItems, transferSignal] = await Promise.all([
         buildSkillMemory(user.id),
         getLastRepInsights(user.id),
         getReinforcementQueue(user.id),
+        getPressureBreakdown(user.id),
+        getRecentMultiThreadMiss(user.id),
+        getReinforcementDecay(user.id),
+        getTransferSignal(user.id),
       ]);
 
       let mentalModel: MentalModel | null = null;
@@ -49,7 +73,6 @@ export function useLearnLoop() {
       if (dailyKI) {
         mentalModel = buildMentalModel(dailyKI, skillMemory);
 
-        // Find top mistake for this anchor's skill
         const anchorSkillMap: Record<string, string> = {
           monday: 'objection_handling',
           tuesday: 'discovery',
@@ -62,7 +85,10 @@ export function useLearnLoop() {
         topMistake = profile?.topMistakes[0]?.mistake ?? null;
       }
 
-      return { mentalModel, lastRep, reinforcement, topMistake, skillMemory };
+      return {
+        mentalModel, lastRep, reinforcement, topMistake, skillMemory,
+        pressureBreakdown, multiThreadMiss, decayItems, transferSignal,
+      };
     },
   });
 }
