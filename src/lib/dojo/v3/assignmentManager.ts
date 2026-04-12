@@ -279,5 +279,7 @@ function mapRowToAssignment(row: Record<string, unknown>): DailyAssignment {
     source: row.source as any,
     pressureExpected: ((row.scenarios as any[]) ?? []).some((s: any) => s.pressure?.level !== 'none'),
     pressureLabel: ((row.scenarios as any[]) ?? []).find((s: any) => s.pressure?.level !== 'none')?.pressure?.label ?? null,
+    simulationArcId: (row as any).simulation_arc_id ?? null,
+    simulationExpected: !!(row as any).simulation_arc_id,
   };
 }

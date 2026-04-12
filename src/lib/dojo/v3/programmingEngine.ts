@@ -127,7 +127,7 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
   // V5: Friday simulation arc selection
   let simulationArcId: string | null = null;
   let simulationExpected = false;
-  if (isFriday && block.phase !== 'benchmark' && block.phase !== 'retest') {
+  if (isFriday) {
     const eligibleArcs = getArcsForStage(block.stage);
     if (eligibleArcs.length > 0 && (block.stage !== 'foundation' || block.phase === 'peak')) {
       // Deterministic arc selection: rotate by block week
@@ -201,6 +201,8 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
     source,
     pressureExpected,
     pressureLabel: pressuredSpec?.pressure?.label ?? null,
+    simulationArcId,
+    simulationExpected,
   };
 }
 
@@ -245,6 +247,8 @@ function generateBenchmarkAssignment(
     source: 'benchmark',
     pressureExpected: false,
     pressureLabel: null,
+    simulationArcId: null,
+    simulationExpected: false,
   };
 }
 
@@ -493,6 +497,8 @@ function createFallbackAssignment(block: TrainingBlock, anchor: DayAnchor): Dail
     source: 'progression',
     pressureExpected: false,
     pressureLabel: null,
+    simulationArcId: null,
+    simulationExpected: false,
   };
 }
 
