@@ -34,6 +34,9 @@ import { SessionFeedbackCard } from '@/components/dojo/SessionFeedbackCard';
 import { SaveIndicator } from '@/components/SaveIndicator';
 import type { Json } from '@/integrations/supabase/types';
 import { useAudioPreference } from '@/hooks/useAudioPreference';
+import { ImprovementVerdictCard } from '@/components/dojo/ImprovementVerdictCard';
+import { assessImprovement } from '@/lib/dojo/improvementAssessment';
+import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
 
