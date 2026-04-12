@@ -309,6 +309,8 @@ export default function AudioSessionMode({
             scenario_context: scenario.context, scenario_objection: scenario.objection,
             best_score: scoreData.score, latest_score: scoreData.score, status: 'completed',
             completed_at: new Date().toISOString(),
+            assignment_id: assignmentId ?? null, benchmark_tag: benchmarkTag,
+            scenario_family_id: scenarioFamilyId ?? null,
           }});
           enqueuePendingWrite({ turnId, table: 'dojo_session_turns', action: 'insert', data: {
             id: turnId, session_id: dbSessionId, user_id: userId, turn_index: 0,
