@@ -18,6 +18,13 @@ export interface AnchorSnapshotData {
   sessionCount: number;
 }
 
+/** Block-level flow metrics stored alongside anchor data in the snapshot JSON */
+export interface SnapshotFlowMetrics {
+  flowControlAvg: number | null;
+  closingScoreAvg: number | null;
+  simulationCount: number;
+}
+
 export interface SnapshotRow {
   id: string;
   blockId: string;
@@ -29,6 +36,7 @@ export interface SnapshotRow {
   mistakesActive: string[];
   mistakesResolved: string[];
   createdAt: string;
+  flowMetrics?: SnapshotFlowMetrics;
 }
 
 // ── Create Snapshot ───────────────────────────────────────────────
