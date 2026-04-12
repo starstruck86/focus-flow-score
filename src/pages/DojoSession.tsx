@@ -440,6 +440,8 @@ interface FeedbackViewProps {
   sessionId: string | null;
   skillFocus: SkillFocus;
   transcriptOrigin: TranscriptOrigin | null;
+  originalCallScore?: DojoScoreResult | null;
+  firstAttemptResult?: DojoScoreResult | null;
   onRetry: () => void;
   onNextRep: () => void;
 }
@@ -447,7 +449,8 @@ interface FeedbackViewProps {
 function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
-  sessionId, skillFocus, transcriptOrigin, onRetry, onNextRep,
+  sessionId, skillFocus, transcriptOrigin, originalCallScore, firstAttemptResult,
+  onRetry, onNextRep,
 }: FeedbackViewProps) {
   return (
     <>
