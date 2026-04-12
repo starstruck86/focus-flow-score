@@ -401,7 +401,8 @@ export default function DaveCoachingDelivery({
             <div
               key={chunk.id}
               className={cn(
-                'text-sm leading-relaxed pl-3 border-l-2',
+                'text-sm leading-relaxed pl-3 border-l-2 transition-all duration-300',
+                visibleChunkIds.has(chunk.id) ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2',
                 chunk.role === 'feedback' && 'border-primary/40',
                 chunk.role === 'improvedVersion' && 'border-green-500/40',
                 chunk.role === 'worldClassResponse' && 'border-amber-500/40',
