@@ -365,6 +365,9 @@ export default function DojoSession() {
             scenario={scenario}
             userId={user.id}
             onComplete={handleRoleplayComplete}
+            assignmentId={assignmentId}
+            benchmarkTag={benchmarkTag}
+            scenarioFamilyId={scenarioFamilyId}
           />
         )}
 
@@ -374,6 +377,9 @@ export default function DojoSession() {
             scenario={scenario}
             userId={user.id}
             onComplete={handleReviewComplete}
+            assignmentId={assignmentId}
+            benchmarkTag={benchmarkTag}
+            scenarioFamilyId={scenarioFamilyId}
           />
         )}
 
