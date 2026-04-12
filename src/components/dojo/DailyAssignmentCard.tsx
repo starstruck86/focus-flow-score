@@ -1,9 +1,11 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Info, Flame, Zap } from 'lucide-react';
+import { Info, Flame, Zap, Layers } from 'lucide-react';
 import { DAY_ANCHORS } from '@/lib/dojo/v3/dayAnchors';
 import type { DailyAssignment } from '@/lib/dojo/v3/programmingEngine';
 import { FOCUS_PATTERN_LABELS } from '@/lib/dojo/focusPatterns';
+import { getArcById } from '@/lib/dojo/v5/simulationArcs';
+import { SKILL_LABELS } from '@/lib/dojo/scenarios';
 
 interface DailyAssignmentCardProps {
   assignment: DailyAssignment;
@@ -16,17 +18,43 @@ export function DailyAssignmentCard({ assignment }: DailyAssignmentCardProps) {
     ?? '';
   const isFriday = assignment.dayAnchor === 'executive_roi_mixed';
   const pressuredSpec = assignment.scenarios.find(s => s.pressure?.level !== 'none');
+  const simArc = assignment.simulationArcId ? getArcById(assignment.simulationArcId) : null;
 
   return (
     <Card className={isFriday ? 'border-amber-500/30 bg-amber-500/5' : 'border-primary/20 bg-primary/5'}>
       <CardContent className="p-4 space-y-3">
-        {/* Friday pressure badge */}
+        {/* Friday pressure/simulation badge */}
         {isFriday && (
           <div className="flex items-center gap-1.5 mb-1">
-            <Flame className="h-3.5 w-3.5 text-amber-500" />
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-              Pressure Day — This is where it comes together
-            </span>
+            {simArc ? (
+              <>
+                <Layers className="h-3.5 w-3.5 text-primary" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                  Simulation Day — {simArc.title}
+                </span>
+              </>
+            ) : (
+              <>
+                <Flame className="h-3.5 w-3.5 text-amber-500" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  Pressure Day — This is where it comes together
+                </span>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Simulation skill chain */}
+        {simArc && (
+          <div className="flex flex-wrap gap-1">
+            {simArc.skillChain.map(s => (
+              <Badge key={s} variant="outline" className="text-[9px]">
+                {SKILL_LABELS[s]}
+              </Badge>
+            ))}
+            <Badge variant="outline" className="text-[9px]">
+              {simArc.turns.length}-turn sim
+            </Badge>
           </div>
         )}
 

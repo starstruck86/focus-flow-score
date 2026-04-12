@@ -1198,6 +1198,7 @@ export type Database = {
           scenario_family_id: string | null
           scenarios: Json
           session_ids: string[] | null
+          simulation_arc_id: string | null
           source: string
           transcript_scenario_used: boolean
           user_id: string
@@ -1221,6 +1222,7 @@ export type Database = {
           scenario_family_id?: string | null
           scenarios?: Json
           session_ids?: string[] | null
+          simulation_arc_id?: string | null
           source?: string
           transcript_scenario_used?: boolean
           user_id: string
@@ -1244,6 +1246,7 @@ export type Database = {
           scenario_family_id?: string | null
           scenarios?: Json
           session_ids?: string[] | null
+          simulation_arc_id?: string | null
           source?: string
           transcript_scenario_used?: boolean
           user_id?: string

@@ -26,6 +26,7 @@ import { getFamiliesForAnchor, type ScenarioFamily } from './scenarioFamilies';
 import type { PressureProfile } from '../v4/pressureModel';
 import { PRESSURE_NONE } from '../v4/pressureModel';
 import { selectPressureProfile } from '../v4/pressureSelectors';
+import { getArcsForStage, type SimulationArc } from '../v5/simulationArcs';
 
 // ── DailyAssignment — the contract ────────────────────────────────
 
@@ -48,6 +49,9 @@ export interface DailyAssignment {
   // V4 pressure
   pressureExpected: boolean;
   pressureLabel: string | null;
+  // V5 simulation
+  simulationArcId: string | null;
+  simulationExpected: boolean;
 }
 
 export interface ScenarioSpec {
@@ -120,6 +124,19 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
   const isFriday = dayAnchor === 'executive_roi_mixed';
   const scenarios = selectScenarios(primarySkill, transcriptScenarios, recentAssignments, dayAnchor, isFriday);
 
+  // V5: Friday simulation arc selection
+  let simulationArcId: string | null = null;
+  let simulationExpected = false;
+  if (isFriday) {
+    const eligibleArcs = getArcsForStage(block.stage);
+    if (eligibleArcs.length > 0 && (block.stage !== 'foundation' || block.phase === 'peak')) {
+      // Deterministic arc selection: rotate by block week
+      const arcIndex = (block.currentWeek - 1) % eligibleArcs.length;
+      simulationArcId = eligibleArcs[arcIndex].id;
+      simulationExpected = true;
+    }
+  }
+
   // Step 6: Difficulty
   const difficulty = calibrateDifficulty(block.phase, primarySkill, skillMemory);
 
@@ -184,6 +201,8 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
     source,
     pressureExpected,
     pressureLabel: pressuredSpec?.pressure?.label ?? null,
+    simulationArcId,
+    simulationExpected,
   };
 }
 
@@ -228,6 +247,8 @@ function generateBenchmarkAssignment(
     source: 'benchmark',
     pressureExpected: false,
     pressureLabel: null,
+    simulationArcId: null,
+    simulationExpected: false,
   };
 }
 
@@ -476,6 +497,8 @@ function createFallbackAssignment(block: TrainingBlock, anchor: DayAnchor): Dail
     source: 'progression',
     pressureExpected: false,
     pressureLabel: null,
+    simulationArcId: null,
+    simulationExpected: false,
   };
 }
 

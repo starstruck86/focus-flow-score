@@ -120,10 +120,13 @@ export default function Dojo() {
   const startAutopilot = () => {
     const firstSpec = dailyAssignment?.scenarios[0];
     const scenario = firstSpec?.scenario ?? recommendation.scenario;
+    const isSimulation = dailyAssignment?.simulationExpected && dailyAssignment?.simulationArcId;
     navigate('/dojo/session', {
       state: {
         scenario,
         mode: 'autopilot',
+        sessionType: isSimulation ? 'simulation' : undefined,
+        simulationArcId: isSimulation ? dailyAssignment.simulationArcId : undefined,
         assignmentId: dailyAssignment ? (dailyAssignment as any)._dbId ?? null : null,
         benchmarkTag: dailyAssignment?.benchmarkTag ?? false,
         scenarioFamilyId: dailyAssignment?.scenarioFamilyId ?? null,

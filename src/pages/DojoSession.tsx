@@ -43,6 +43,8 @@ import { useScoreOriginalResponse } from '@/hooks/useScoreOriginalResponse';
 import { PressureAnalysisCard } from '@/components/dojo/PressureAnalysisCard';
 import { TransferProgressCard } from '@/components/dojo/TransferProgressCard';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
+import SimulationMode from '@/components/dojo/SimulationMode';
+import { getArcById, type SimulationArc } from '@/lib/dojo/v5/simulationArcs';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
 
@@ -96,7 +98,7 @@ export default function DojoSession() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isAudio, toggleMode } = useAudioPreference();
 
-  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean; pressureLevel?: string; pressureDimensions?: string[] } | null;
+  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean; pressureLevel?: string; pressureDimensions?: string[]; simulationArcId?: string } | null;
   const transcriptOrigin = state?.transcriptOrigin ?? null;
   const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
   const assignmentId = state?.assignmentId ?? null;
@@ -104,6 +106,7 @@ export default function DojoSession() {
   const scenarioFamilyId = state?.scenarioFamilyId ?? null;
   const pressureLevel = state?.pressureLevel ?? null;
   const pressureDimensions = state?.pressureDimensions ?? null;
+  const simulationArc: SimulationArc | null = state?.simulationArcId ? getArcById(state.simulationArcId) ?? null : null;
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
     return getRandomScenario(state?.skillFocus);
@@ -330,7 +333,7 @@ export default function DojoSession() {
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate">{scenario.title}</p>
-          <p className="text-xs text-muted-foreground">{SKILL_LABELS[scenario.skillFocus]} · {sessionType === 'audio' ? 'Audio Session' : sessionType === 'roleplay' ? 'Roleplay' : sessionType === 'review' ? 'Review' : 'Drill'}</p>
+          <p className="text-xs text-muted-foreground">{SKILL_LABELS[scenario.skillFocus]} · {sessionType === 'simulation' ? 'Simulation' : sessionType === 'audio' ? 'Audio Session' : sessionType === 'roleplay' ? 'Roleplay' : sessionType === 'review' ? 'Review' : 'Drill'}</p>
         </div>
         <button onClick={toggleMode} className="p-1.5 rounded-md hover:bg-accent/50 transition-colors" title={isAudio ? 'Switch to text mode' : 'Switch to audio mode'}>
           {isAudio ? <Volume2 className="h-4 w-4 text-primary" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
@@ -399,6 +402,20 @@ export default function DojoSession() {
             </div>
           </CardContent>
         </Card>
+
+        {/* ── Simulation Mode (V5) ── */}
+        {sessionType === 'simulation' && simulationArc && user && (
+          <SimulationMode
+            arc={simulationArc}
+            userId={user.id}
+            assignmentId={assignmentId}
+            benchmarkTag={benchmarkTag}
+            scenarioFamilyId={scenarioFamilyId}
+            pressureLevel={pressureLevel}
+            pressureDimensions={pressureDimensions}
+            onComplete={handleNextRep}
+          />
+        )}
 
         {/* ── Audio Session Mode ── */}
         {sessionType === 'audio' && user && (
