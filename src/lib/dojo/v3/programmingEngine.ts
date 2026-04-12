@@ -52,6 +52,9 @@ export interface DailyAssignment {
   // V5 simulation
   simulationArcId: string | null;
   simulationExpected: boolean;
+  // Runtime state (from DB)
+  completed?: boolean;
+  sessionCount?: number;
 }
 
 export interface ScenarioSpec {

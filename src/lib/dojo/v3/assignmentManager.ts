@@ -262,6 +262,7 @@ async function recordAnchorCompletion(blockId: string, anchor: DayAnchor): Promi
 // ── Mapping ───────────────────────────────────────────────────────
 
 function mapRowToAssignment(row: Record<string, unknown>): DailyAssignment {
+  const sessionIds = (row.session_ids as string[] | null) ?? [];
   return {
     blockNumber: row.block_week as number,
     blockWeek: row.block_week as number,
@@ -282,5 +283,7 @@ function mapRowToAssignment(row: Record<string, unknown>): DailyAssignment {
     pressureLabel: ((row.scenarios as any[]) ?? []).find((s: any) => s.pressure?.level !== 'none')?.pressure?.label ?? null,
     simulationArcId: (row as any).simulation_arc_id ?? null,
     simulationExpected: !!(row as any).simulation_arc_id,
+    completed: (row.completed as boolean) ?? false,
+    sessionCount: sessionIds.length,
   };
 }
