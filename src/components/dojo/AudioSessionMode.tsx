@@ -31,6 +31,7 @@ import {
   type DojoLocalState,
 } from '@/lib/sessionDurability';
 import { processPendingWrites } from '@/lib/pendingWriteSync';
+import type { DojoScenario } from '@/lib/dojo/scenarios';
 import type { DojoScoreResult } from '@/lib/dojo/types';
 import { normalizeScoreResult } from '@/lib/dojo/types';
 import DaveCoachingDelivery from './DaveCoachingDelivery';
