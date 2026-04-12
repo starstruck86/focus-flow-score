@@ -420,11 +420,58 @@ export default function AudioSessionMode({
       processPendingWrites();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to score response';
-      console.error('Audio session score error:', e);
-      toast.error(msg);
-      emitSaveStatus('error');
-      // Go back to listening
-      setPhase(isRetry ? 'retry_listening' : 'listening');
+      console.error('Audio session score error — entering recovery:', e);
+      emitSaveStatus('recovering');
+
+      // Enter recovery mode: keep retrying scoring with backoff
+      const capturedText = text;
+      const capturedIsRetry = isRetry;
+      
+      recoveryRef.current?.cancel();
+      recoveryRef.current = executeWithRecovery(
+        async () => {
+          const { data, error } = await supabase.functions.invoke('dojo-score', {
+            body: {
+              scenario: {
+                skillFocus: scenario.skillFocus,
+                context: scenario.context,
+                objection: scenario.objection,
+              },
+              userResponse: capturedText,
+              retryCount: capturedIsRetry ? retryCount + 1 : 0,
+            },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          return normalizeScoreResult(data as Record<string, unknown>);
+        },
+        {
+          reason: 'scoring_failure',
+          interruptedPhase: isRetry ? 'retry_scoring' : 'scoring',
+          onStateChange: setRecovery,
+          onSuccess: (scoreData) => {
+            // Recovery succeeded — continue the normal flow
+            setRecovery(createInitialRecoveryState());
+            emitSaveStatus('saving');
+            // Re-enter the persist path (inline simplified version)
+            if (!capturedIsRetry) {
+              setResult(scoreData);
+            } else {
+              setRetryResult(scoreData);
+              setRetryCount(prev => prev + 1);
+            }
+            setPhase(capturedIsRetry ? 'retry_feedback' : 'feedback');
+            // Persist asynchronously — failures go to pending queue
+            persistScore(scoreData, capturedText, capturedIsRetry);
+          },
+          onGiveUp: () => {
+            setRecovery(createInitialRecoveryState());
+            emitSaveStatus('error');
+            toast.error('Could not reach scoring service. Your response is saved locally.');
+            setPhase(capturedIsRetry ? 'retry_listening' : 'listening');
+          },
+        },
+      );
     }
   }, [scenario, userId, mode, sessionId, firstTurnId, retryCount, result, retryResult]);
 
