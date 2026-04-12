@@ -12,6 +12,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { PatternMemory, CoachingInsights } from '@/lib/dojo/types';
 import type { LessonContext } from '@/lib/learning/practiceMapping';
 
+// V3 imports
+import { getOrCreateActiveBlock } from '@/lib/dojo/v3/blockManager';
+import { generateDailyAssignment, type DailyAssignment } from '@/lib/dojo/v3/programmingEngine';
+import { getAnchorForDate } from '@/lib/dojo/v3/dayAnchors';
+
+import { BlockHeader } from '@/components/dojo/BlockHeader';
+import { DailyAssignmentCard } from '@/components/dojo/DailyAssignmentCard';
 import { TodaysFocus } from '@/components/dojo/TodaysFocus';
 import { TrainingModes } from '@/components/dojo/TrainingModes';
 import { PerformanceSignals } from '@/components/dojo/PerformanceSignals';
@@ -40,6 +47,14 @@ export default function Dojo() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // V3: Fetch active training block
+  const { data: activeBlock } = useQuery({
+    queryKey: ['dojo-v3-block', user?.id],
+    enabled: !!user?.id,
+    queryFn: () => user ? getOrCreateActiveBlock(user.id) : null,
+    staleTime: 10 * 60 * 1000,
+  });
+
   const coachingInsights = useMemo<CoachingInsights | null>(
     () => patternMemory ? deriveCoachingInsights(patternMemory) : null,
     [patternMemory]
@@ -50,18 +65,52 @@ export default function Dojo() {
     [stats?.skillBreakdown, patternMemory]
   );
 
+  // V3: Generate daily assignment
+  const dailyAssignment = useMemo<DailyAssignment | null>(() => {
+    if (!activeBlock) return null;
+    return generateDailyAssignment({
+      date: new Date(),
+      block: activeBlock,
+      skillMemory: skillMemory ?? null,
+      recentAssignments: [], // TODO: fetch from daily_assignments table
+      transcriptScenarios: [],
+      kiCatalog: [],
+    });
+  }, [activeBlock, skillMemory]);
+
+  const todayAnchor = useMemo(() => getAnchorForDate(new Date()), []);
+
   const skillStats = useMemo(() => {
     if (!stats?.skillBreakdown) return [];
     return [...stats.skillBreakdown].sort((a, b) => a.avgFirstAttempt - b.avgFirstAttempt);
   }, [stats?.skillBreakdown]);
 
   const startAutopilot = () => {
-    navigate('/dojo/session', { state: { scenario: recommendation.scenario, mode: 'autopilot' } });
+    // V3: Use assignment scenario if available
+    const scenario = dailyAssignment?.scenarios[0]?.scenario ?? recommendation.scenario;
+    navigate('/dojo/session', { state: { scenario, mode: 'autopilot' } });
   };
 
   return (
     <Layout>
       <div className={cn('px-4 pt-4 space-y-6', SHELL.main.bottomPad)}>
+        {/* V3: Block Header */}
+        {activeBlock && (
+          <BlockHeader
+            blockNumber={activeBlock.blockNumber}
+            currentWeek={activeBlock.currentWeek}
+            phase={activeBlock.phase}
+            stage={activeBlock.stage}
+            completedSessionsThisWeek={activeBlock.completedSessionsThisWeek}
+            todayAnchor={todayAnchor}
+          />
+        )}
+
+        {/* V3: Daily Assignment Card */}
+        {dailyAssignment && (
+          <DailyAssignmentCard assignment={dailyAssignment} />
+        )}
+
         {/* Section 1: Today's Focus */}
         <TodaysFocus
           recommendation={recommendation}
