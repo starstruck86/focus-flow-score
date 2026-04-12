@@ -50,7 +50,7 @@ export async function buildCapabilityProfiles(userId: string): Promise<Capabilit
   // Fetch first-attempt and retry turns
   const { data: turns } = await supabase
     .from('dojo_session_turns')
-    .select('session_id, score, turn_index, retry_of_turn_id')
+    .select('session_id, score, turn_index, retry_of_turn_id, score_json')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(500);
