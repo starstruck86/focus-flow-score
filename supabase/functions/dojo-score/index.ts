@@ -331,10 +331,20 @@ SCORING GUIDE for multiThread:
 - dealMomentum "at_risk": conflict increased or likely blocker ignored
 Keep coachingNote short and concrete. Anchor judgment to internal deal movement, not just correctness.` : '');
 
+    // Build stakeholder context for multi-thread scenarios
+    let stakeholderBlock = '';
+    if (scenario.multiThread?.active && Array.isArray(scenario.multiThread.stakeholders)) {
+      const lines = scenario.multiThread.stakeholders.map((sh: { role: string; stance: string; priority: string; perspective: string }) =>
+        `- ${sh.role} (${sh.stance}, priority: ${sh.priority}): "${sh.perspective}"`
+      );
+      const tensionLabel = scenario.multiThread.tensionType ? ` Tension type: ${scenario.multiThread.tensionType.replace(/_/g, ' ')}.` : '';
+      stakeholderBlock = `\n\nSTAKEHOLDER CONTEXT:${tensionLabel}\n${lines.join('\n')}`;
+    }
+
     const userPrompt = `SCENARIO:
 Skill being tested: ${skill}
 Situation: ${scenario.context}
-Buyer says: "${scenario.objection}"
+Buyer says: "${scenario.objection}"${stakeholderBlock}
 
 REP'S RESPONSE:
 "${userResponse}"
