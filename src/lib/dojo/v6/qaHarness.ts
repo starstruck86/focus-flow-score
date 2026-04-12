@@ -107,7 +107,7 @@ export function validateSelector(): V6ValidationResult[] {
   // Test: enterprise + sustain + objection = activation (0.55 * 0.7 = 0.385 < 0.5 → NO)
   results.push(runSelectorTest('selector-enterprise-obj-sustain', 'no_activation', 'Enterprise sustain + objection = no activation', {
     blockStage: 'enterprise',
-    blockPhase: 'sustain',
+    blockPhase: 'foundation',
     dayAnchor: 'objection_pricing',
     recentAvg: 75,
     recentMultiThreadCount: 0,
