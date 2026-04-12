@@ -1000,6 +1000,11 @@ function FeedbackView({
         </div>
       )}
 
+      {/* ── V6 Deal Movement (multi-thread only) ── */}
+      {currentResult.multiThread && (
+        <DealMovementCard assessment={currentResult.multiThread} />
+      )}
+
       {/* ── Session Feedback Loop ── */}
       <SessionFeedbackCard
         skillFocus={skillFocus}
