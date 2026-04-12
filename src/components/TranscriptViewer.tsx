@@ -227,6 +227,7 @@ function TranscriptDetailPane({ selected, onDelete }: { selected: CallTranscript
                   transcriptId: selected.id,
                   transcriptTitle: selected.title,
                   sourceExcerpt: s.sourceExcerpt,
+                  repResponse: s.repResponse || '',
                   coachingHint: s.coachingHint,
                 },
               },
