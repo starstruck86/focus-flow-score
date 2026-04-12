@@ -242,8 +242,8 @@ export default function LearnLesson() {
           </>
         )}
 
-        {/* Phase: Quiz (MC) */}
-        {phase === 'quiz' && lesson.quiz_content && (
+        {/* Text Mode: Phase: Quiz (MC) */}
+        {!isAudio && phase === 'quiz' && lesson.quiz_content && (
           <div className="space-y-4">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Quick Check — {lesson.quiz_content.mc_questions.length} Questions
