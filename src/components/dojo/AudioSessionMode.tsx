@@ -90,10 +90,42 @@ export default function AudioSessionMode({
   const [retryCount, setRetryCount] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
+  // Client-generated session ID for durability
+  const clientSessionId = useRef(crypto.randomUUID()).current;
 
   const voice = useVoiceMode();
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+
+  // Save local state on every meaningful change
+  useEffect(() => {
+    const currentResult = retryResult || result;
+    saveDojoState({
+      sessionId: clientSessionId,
+      scenario: {
+        title: scenario.title,
+        skillFocus: scenario.skillFocus,
+        context: scenario.context,
+        objection: scenario.objection,
+      },
+      phase,
+      transcribedText,
+      retryCount,
+      lastScore: currentResult?.score ?? null,
+      lastFeedback: currentResult?.feedback ?? null,
+      sessionType: 'audio',
+      mode: mode || 'autopilot',
+      savedAt: Date.now(),
+      dbSessionId: sessionId,
+    });
+  }, [phase, transcribedText, retryCount, result, retryResult, sessionId]);
+
+  // Clear state on complete or unmount after completion
+  useEffect(() => {
+    if (phase === 'complete') {
+      clearDojoState();
+    }
+  }, [phase]);
 
   // Auto-start: Dave introduces scenario
   const hasStartedRef = useRef(false);
