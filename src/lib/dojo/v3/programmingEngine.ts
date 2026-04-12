@@ -87,6 +87,7 @@ export interface RecentAssignment {
   dayAnchor: DayAnchor;
   primarySkill: SkillFocus;
   focusPattern: string;
+  multiThreadUsed?: boolean;
 }
 
 export interface KICatalogEntry {
