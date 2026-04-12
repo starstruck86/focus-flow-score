@@ -23,6 +23,7 @@ export interface LearnLoopData {
   lastRep: LastRepInsight | null;
   reinforcement: ReinforcementItem[];
   topMistake: string | null;
+  skillMemory: SkillMemory | null;
 }
 
 export function useLearnLoop() {
@@ -34,7 +35,7 @@ export function useLearnLoop() {
     enabled: !!user?.id,
     staleTime: 10 * 60 * 1000,
     queryFn: async () => {
-      if (!user) return { mentalModel: null, lastRep: null, reinforcement: [], topMistake: null };
+      if (!user) return { mentalModel: null, lastRep: null, reinforcement: [], topMistake: null, skillMemory: null };
 
       const [skillMemory, lastRep, reinforcement] = await Promise.all([
         buildSkillMemory(user.id),
@@ -61,7 +62,7 @@ export function useLearnLoop() {
         topMistake = profile?.topMistakes[0]?.mistake ?? null;
       }
 
-      return { mentalModel, lastRep, reinforcement, topMistake };
+      return { mentalModel, lastRep, reinforcement, topMistake, skillMemory };
     },
   });
 }
