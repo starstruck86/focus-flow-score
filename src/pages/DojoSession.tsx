@@ -34,6 +34,9 @@ import { SessionFeedbackCard } from '@/components/dojo/SessionFeedbackCard';
 import { SaveIndicator } from '@/components/SaveIndicator';
 import type { Json } from '@/integrations/supabase/types';
 import { useAudioPreference } from '@/hooks/useAudioPreference';
+import { ImprovementVerdictCard } from '@/components/dojo/ImprovementVerdictCard';
+import { assessImprovement } from '@/lib/dojo/improvementAssessment';
+import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
 
@@ -87,7 +90,8 @@ export default function DojoSession() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isAudio, toggleMode } = useAudioPreference();
 
-  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string } | null;
+  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: { transcriptId: string; transcriptTitle: string; sourceExcerpt: string; coachingHint: string } } | null;
+  const transcriptOrigin = state?.transcriptOrigin ?? null;
   const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
@@ -362,7 +366,7 @@ export default function DojoSession() {
 
           {phase === 'feedback' && currentResult && (
             <motion.div key="feedback" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} onRetry={handleStartRetry} onNextRep={handleNextRep} />
             </motion.div>
           )}
 
@@ -399,7 +403,7 @@ export default function DojoSession() {
         {/* ── Feedback for Roleplay / Review (non-drill) ── */}
         {sessionType !== 'drill' && phase === 'feedback' && currentResult && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} onRetry={handleStartRetry} onNextRep={handleNextRep} />
           </motion.div>
         )}
       </div>
@@ -422,6 +426,7 @@ interface FeedbackViewProps {
   sessionType: string;
   sessionId: string | null;
   skillFocus: SkillFocus;
+  transcriptOrigin: TranscriptOrigin | null;
   onRetry: () => void;
   onNextRep: () => void;
 }
@@ -429,7 +434,7 @@ interface FeedbackViewProps {
 function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
-  sessionId, skillFocus, onRetry, onNextRep,
+  sessionId, skillFocus, transcriptOrigin, onRetry, onNextRep,
 }: FeedbackViewProps) {
   return (
     <>
@@ -593,6 +598,43 @@ function FeedbackView({
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* ── Transcript Origin Context (scenarios extracted from real calls) ── */}
+      {transcriptOrigin && currentResult && (
+        <Card className="border-l-4 border-l-primary/60 border-border/60">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              From Real Call: {transcriptOrigin.transcriptTitle}
+            </p>
+            <div className="bg-muted/50 rounded-md p-2 border border-border/40">
+              <p className="text-xs italic text-muted-foreground">"{transcriptOrigin.sourceExcerpt}"</p>
+            </div>
+            <p className="text-xs text-primary/80 font-medium">💡 Original coaching hint: {transcriptOrigin.coachingHint}</p>
+            {currentResult.score >= 75 ? (
+              <p className="text-xs text-green-600 font-medium">✅ Your trained response is strong enough for a real call. The original mistake has been addressed.</p>
+            ) : currentResult.score >= 55 ? (
+              <p className="text-xs text-amber-600 font-medium">⚡ You're improving on the original call behavior. Keep drilling to reach live-ready.</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">🔄 This is the same pattern from your real call. Apply the coaching hint and retry.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Before vs After on Retry (when transcript-origin scenario is retried) ── */}
+      {transcriptOrigin && retryResult && retryAssessment && scoreDelta !== null && (
+        <ImprovementVerdictCard
+          verdict={assessImprovement({
+            originalScore: currentResult.score - (scoreDelta ?? 0),
+            trainedScore: currentResult.score,
+            originalTopMistake: retryAssessment.whatStillNeedsWork.includes(':') ? currentResult.topMistake : currentResult.topMistake,
+            trainedTopMistake: currentResult.topMistake,
+            trainedFocusApplied: currentResult.focusApplied,
+          })}
+          originalScore={currentResult.score - (scoreDelta ?? 0)}
+          trainedScore={currentResult.score}
+        />
       )}
 
       {/* Feedback */}

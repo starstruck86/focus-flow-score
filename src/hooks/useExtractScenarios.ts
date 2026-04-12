@@ -13,6 +13,14 @@ export interface ExtractedScenario {
   coachingHint: string;
 }
 
+/** Metadata carried to Dojo session for before/after comparison */
+export interface TranscriptOrigin {
+  transcriptId: string;
+  transcriptTitle: string;
+  sourceExcerpt: string;
+  coachingHint: string;
+}
+
 export function useExtractScenarios() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [scenarios, setScenarios] = useState<ExtractedScenario[] | null>(null);
