@@ -30,6 +30,11 @@ export interface WeeklySummary {
   simulationsCompleted: number;
   flowControlAvg: number | null;
   controlHeldRate: number | null;  // 0–100 percentage
+  // V6 multi-thread metrics
+  multiThreadRepsCompleted: number;
+  multiThreadMomentumDistribution: { forward: number; neutral: number; atRisk: number } | null;
+  strongestMultiThreadAnchor: string | null;
+  weakestMultiThreadAnchor: string | null;
 }
 
 export interface AnchorWeekStat {
@@ -76,12 +81,12 @@ export async function computeWeeklySummaryFromDB(
   // Fetch session scores
   const allIds = [...currentSessionIds, ...priorSessionIds];
   let sessions: Array<{ id: string; best_score: number | null; latest_score: number | null; pressure_level: string | null; session_type: string }> = [];
-  let turns: Array<{ session_id: string; top_mistake: string | null; score: number | null; turn_index: number }> = [];
+  let turns: Array<{ session_id: string; top_mistake: string | null; score: number | null; turn_index: number; score_json: unknown }> = [];
 
   if (allIds.length > 0) {
     const [sessRes, turnsRes] = await Promise.all([
       supabase.from('dojo_sessions').select('id, best_score, latest_score, pressure_level, session_type').in('id', allIds),
-      supabase.from('dojo_session_turns').select('session_id, top_mistake, score, turn_index').in('session_id', allIds),
+      supabase.from('dojo_session_turns').select('session_id, top_mistake, score, turn_index, score_json').in('session_id', allIds),
     ]);
     sessions = sessRes.data ?? [];
     turns = turnsRes.data ?? [];
@@ -218,6 +223,49 @@ export async function computeWeeklySummaryFromDB(
     controlHeldRate = Math.round((controlHeldCount / simSessions.length) * 100);
   }
 
+  // V6 multi-thread metrics
+  const currentTurns = turns.filter(t => currentSessionIds.includes(t.session_id));
+  const multiThreadTurns = currentTurns.filter(t => {
+    const sj = t.score_json as Record<string, unknown> | null;
+    return sj?.multiThread && typeof sj.multiThread === 'object';
+  });
+  const multiThreadRepsCompleted = multiThreadTurns.length;
+
+  let multiThreadMomentumDistribution: { forward: number; neutral: number; atRisk: number } | null = null;
+  let strongestMultiThreadAnchor: string | null = null;
+  let weakestMultiThreadAnchor: string | null = null;
+
+  if (multiThreadRepsCompleted > 0) {
+    let forward = 0, neutral = 0, atRisk = 0;
+    for (const t of multiThreadTurns) {
+      const mt = (t.score_json as Record<string, unknown>)?.multiThread as Record<string, unknown> | undefined;
+      const momentum = mt?.dealMomentum;
+      if (momentum === 'forward') forward++;
+      else if (momentum === 'at_risk') atRisk++;
+      else neutral++;
+    }
+    multiThreadMomentumDistribution = { forward, neutral, atRisk };
+
+    // Multi-thread by anchor
+    const mtByAnchor: { anchor: string; label: string; avgAlignment: number }[] = [];
+    for (const anchor of ANCHORS_IN_ORDER) {
+      const anchorCurr = completed.filter(a => a.day_anchor === anchor);
+      const ids = anchorCurr.flatMap(a => (a.session_ids as string[] | null) ?? []);
+      const anchorMtTurns = multiThreadTurns.filter(t => ids.includes(t.session_id));
+      if (anchorMtTurns.length > 0) {
+        const scores = anchorMtTurns.map(t => {
+          const mt = (t.score_json as Record<string, unknown>)?.multiThread as Record<string, unknown> | undefined;
+          return typeof mt?.alignmentScore === 'number' ? mt.alignmentScore : 0;
+        });
+        const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+        mtByAnchor.push({ anchor, label: DAY_ANCHORS[anchor].shortLabel, avgAlignment: avg });
+      }
+    }
+    mtByAnchor.sort((a, b) => b.avgAlignment - a.avgAlignment);
+    strongestMultiThreadAnchor = mtByAnchor[0] ? `${mtByAnchor[0].label}` : null;
+    weakestMultiThreadAnchor = mtByAnchor.length > 1 ? `${mtByAnchor[mtByAnchor.length - 1].label}` : null;
+  }
+
   return {
     weekNumber,
     blockId,
@@ -237,5 +285,9 @@ export async function computeWeeklySummaryFromDB(
     simulationsCompleted,
     flowControlAvg,
     controlHeldRate,
+    multiThreadRepsCompleted,
+    multiThreadMomentumDistribution,
+    strongestMultiThreadAnchor,
+    weakestMultiThreadAnchor,
   };
 }

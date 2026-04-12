@@ -27,6 +27,8 @@ import type { PressureProfile } from '../v4/pressureModel';
 import { PRESSURE_NONE } from '../v4/pressureModel';
 import { selectPressureProfile } from '../v4/pressureSelectors';
 import { getArcsForStage, type SimulationArc } from '../v5/simulationArcs';
+import type { MultiThreadContext } from '../v6/multiThreadTypes';
+import { shouldInjectMultiThread, generateMultiThreadContext } from '../v6/multiThreadSelector';
 
 // ── DailyAssignment — the contract ────────────────────────────────
 
@@ -55,6 +57,9 @@ export interface DailyAssignment {
   // Runtime state (from DB)
   completed?: boolean;
   sessionCount?: number;
+  // V6 multi-thread
+  multiThreadExpected: boolean;
+  multiThreadContext: MultiThreadContext | null;
 }
 
 export interface ScenarioSpec {
@@ -62,6 +67,7 @@ export interface ScenarioSpec {
   purpose: 'direct_application' | 'variation' | 'transcript_origin' | 'pressure' | 'benchmark' | 'blended';
   familyId?: string;
   pressure?: PressureProfile;
+  multiThread?: MultiThreadContext;
 }
 
 // ── Engine Input ──────────────────────────────────────────────────
@@ -81,6 +87,7 @@ export interface RecentAssignment {
   dayAnchor: DayAnchor;
   primarySkill: SkillFocus;
   focusPattern: string;
+  multiThreadUsed?: boolean;
 }
 
 export interface KICatalogEntry {
@@ -197,6 +204,26 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
   const pressureExpected = finalScenarios.some(s => s.pressure?.level !== 'none');
   const pressuredSpec = finalScenarios.find(s => s.pressure?.level !== 'none');
 
+  // Step 10: V6 — Multi-thread injection
+  const recentMultiThreadCount = recentAssignments.filter(a => a.multiThreadUsed).length;
+  const injectMultiThread = shouldInjectMultiThread({
+    blockStage: block.stage,
+    blockPhase: block.phase,
+    dayAnchor,
+    recentAvg,
+    recentMultiThreadCount,
+    isBenchmarkOrRetest: false,
+  });
+
+  let multiThreadContext: MultiThreadContext | null = null;
+  if (injectMultiThread) {
+    multiThreadContext = generateMultiThreadContext(dayAnchor);
+    // Attach to the second scenario (variation) for organic complexity
+    if (finalScenarios.length >= 2) {
+      finalScenarios[1].multiThread = multiThreadContext;
+    }
+  }
+
   return {
     blockNumber: block.blockNumber,
     blockWeek: block.currentWeek,
@@ -217,6 +244,8 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
     pressureLabel: pressuredSpec?.pressure?.label ?? null,
     simulationArcId,
     simulationExpected,
+    multiThreadExpected: injectMultiThread,
+    multiThreadContext,
   };
 }
 
@@ -263,6 +292,8 @@ function generateBenchmarkAssignment(
     pressureLabel: null,
     simulationArcId: null,
     simulationExpected: false,
+    multiThreadExpected: false,
+    multiThreadContext: null,
   };
 }
 
@@ -513,6 +544,8 @@ function createFallbackAssignment(block: TrainingBlock, anchor: DayAnchor): Dail
     pressureLabel: null,
     simulationArcId: null,
     simulationExpected: false,
+    multiThreadExpected: false,
+    multiThreadContext: null,
   };
 }
 

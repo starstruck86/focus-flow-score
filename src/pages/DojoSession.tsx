@@ -33,6 +33,7 @@ import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview
 import DaveCoachingDelivery from '@/components/dojo/DaveCoachingDelivery';
 import AudioSessionMode from '@/components/dojo/AudioSessionMode';
 import { SessionFeedbackCard } from '@/components/dojo/SessionFeedbackCard';
+import { DealMovementCard } from '@/components/dojo/DealMovementCard';
 import { SaveIndicator } from '@/components/SaveIndicator';
 import type { Json } from '@/integrations/supabase/types';
 import { useAudioPreference } from '@/hooks/useAudioPreference';
@@ -998,6 +999,11 @@ function FeedbackView({
             <p className="text-sm text-muted-foreground italic leading-relaxed">"{currentResult.teachingNote}"</p>
           </div>
         </div>
+      )}
+
+      {/* ── V6 Deal Movement (multi-thread only) ── */}
+      {currentResult.multiThread && (
+        <DealMovementCard assessment={currentResult.multiThread} />
       )}
 
       {/* ── Session Feedback Loop ── */}

@@ -4,6 +4,8 @@
  */
 
 import type { SkillFocus } from './scenarios';
+import type { MultiThreadAssessment } from './v6/multiThreadTypes';
+import { normalizeMultiThreadAssessment } from './v6/multiThreadTypes';
 
 // ── Scoring Result ─────────────────────────────────────────────────
 
@@ -38,6 +40,9 @@ export interface DojoScoreResult {
   // ── Retry-only fields (only present when retryCount > 0) ──
   focusApplied?: FocusAppliedStatus;
   focusAppliedReason?: string;
+
+  // ── V6 Multi-thread (only present when stakeholder tension exists) ──
+  multiThread?: MultiThreadAssessment;
 }
 
 // ── Retry Assessment (derived client-side) ─────────────────────────
@@ -161,5 +166,6 @@ export function normalizeScoreResult(raw: Record<string, unknown>): DojoScoreRes
     focusApplied: raw.focusApplied === 'yes' || raw.focusApplied === 'partial' || raw.focusApplied === 'no'
       ? raw.focusApplied : undefined,
     focusAppliedReason: typeof raw.focusAppliedReason === 'string' ? raw.focusAppliedReason : undefined,
+    multiThread: normalizeMultiThreadAssessment(raw.multiThread as Record<string, unknown> | undefined),
   };
 }

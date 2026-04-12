@@ -12,6 +12,7 @@ import { SKILL_LABELS } from '../scenarios';
 // ── Types ──────────────────────────────────────────────────────────
 
 export type PressureReadiness = 'low' | 'building' | 'ready';
+export type MultiThreadReadiness = 'low' | 'building' | 'ready';
 
 export interface CapabilityProfile {
   skill: SkillFocus;
@@ -26,6 +27,8 @@ export interface CapabilityProfile {
   flowControl: number | null;             // avg flowControlScore from simulations
   closingUnderPressure: number | null;    // avg closingScore from simulations
   lateTurnDropoff: number | null;         // avg (turn1 - turn3) score
+  // V6 multi-thread
+  multiThreadReadiness?: MultiThreadReadiness;
 }
 
 // ── Build Capability Profiles ─────────────────────────────────────
@@ -47,7 +50,7 @@ export async function buildCapabilityProfiles(userId: string): Promise<Capabilit
   // Fetch first-attempt and retry turns
   const { data: turns } = await supabase
     .from('dojo_session_turns')
-    .select('session_id, score, turn_index, retry_of_turn_id')
+    .select('session_id, score, turn_index, retry_of_turn_id, score_json')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(500);
@@ -154,6 +157,38 @@ export async function buildCapabilityProfiles(userId: string): Promise<Capabilit
       lateTurnDropoff = dropoffs.length > 0 ? Math.round(dropoffs.reduce((a, b) => a + b, 0) / dropoffs.length) : null;
     }
 
+    // V6 multi-thread readiness
+    let multiThreadReadiness: MultiThreadReadiness | undefined;
+    const allSkillTurns = turnList.filter(t => {
+      const sess = sessionList.find(s => s.id === t.session_id);
+      return sess?.skill_focus === skill;
+    });
+    const mtTurns = allSkillTurns.filter(t => {
+      const sj = (t as any).score_json as Record<string, unknown> | null;
+      return sj?.multiThread && typeof sj.multiThread === 'object';
+    });
+    if (mtTurns.length >= 3) {
+      const alignmentScores = mtTurns.map(t => {
+        const mt = ((t as any).score_json as Record<string, unknown>)?.multiThread as Record<string, unknown> | undefined;
+        return typeof mt?.alignmentScore === 'number' ? mt.alignmentScore : 0;
+      });
+      const politicalScores = mtTurns.map(t => {
+        const mt = ((t as any).score_json as Record<string, unknown>)?.multiThread as Record<string, unknown> | undefined;
+        return typeof mt?.politicalAwarenessScore === 'number' ? mt.politicalAwarenessScore : 0;
+      });
+      const avgAlignment = alignmentScores.reduce((a, b) => a + b, 0) / alignmentScores.length;
+      const avgPolitical = politicalScores.reduce((a, b) => a + b, 0) / politicalScores.length;
+      const forwardCount = mtTurns.filter(t => {
+        const mt = ((t as any).score_json as Record<string, unknown>)?.multiThread as Record<string, unknown> | undefined;
+        return mt?.dealMomentum === 'forward';
+      }).length;
+      const forwardRate = forwardCount / mtTurns.length;
+
+      if (avgAlignment >= 70 && avgPolitical >= 65 && forwardRate >= 0.5) multiThreadReadiness = 'ready';
+      else if (avgAlignment >= 50 || avgPolitical >= 50) multiThreadReadiness = 'building';
+      else multiThreadReadiness = 'low';
+    }
+
     // Summary
     const summary = buildSummary(skill, consistency, pressureScore, recoveryRate, firstAttemptStrength, pressureReadiness, lateTurnDropoff);
 
@@ -169,6 +204,7 @@ export async function buildCapabilityProfiles(userId: string): Promise<Capabilit
       flowControl,
       closingUnderPressure,
       lateTurnDropoff,
+      multiThreadReadiness,
     };
   });
 }
