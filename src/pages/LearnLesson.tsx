@@ -185,8 +185,13 @@ export default function LearnLesson() {
           </Card>
         )}
 
-        {/* Phase: Learn */}
-        {!needsGeneration && phase === 'learn' && lesson.lesson_content && (
+        {/* Audio Mode — Dave teaches the full lesson */}
+        {!needsGeneration && isAudio && lesson.lesson_content && (
+          <AudioLessonMode lesson={lesson} />
+        )}
+
+        {/* Text Mode: Phase: Learn */}
+        {!needsGeneration && !isAudio && phase === 'learn' && lesson.lesson_content && (
           <>
             <LessonSection
               title="Core Concept"
