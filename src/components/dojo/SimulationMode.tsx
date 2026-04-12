@@ -442,22 +442,35 @@ export default function SimulationMode({
               assignmentFocusPattern={assignmentFocusPattern}
             />
 
-            {/* Target outcomes check */}
+            {/* What to focus next */}
             <Card className="border-border/60">
               <CardContent className="p-4 space-y-2">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Target Outcomes
+                  {arcScore.overallScore >= 70 ? 'What Worked' : 'What to Sharpen'}
                 </p>
-                {arc.targetOutcomes.map((outcome, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs">
-                    {arcScore.overallScore >= 65 ? (
-                      <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
-                    ) : (
-                      <Target className="h-3 w-3 text-muted-foreground shrink-0" />
-                    )}
-                    <span className="text-muted-foreground">{outcome}</span>
+                {arcScore.controlHeld ? (
+                  <div className="flex items-center gap-2 text-xs">
+                    <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                    <span className="text-muted-foreground">You maintained control across the conversation.</span>
                   </div>
-                ))}
+                ) : (
+                  <div className="flex items-center gap-2 text-xs">
+                    <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                    <span className="text-muted-foreground">Practice holding form when the buyer shifts pressure late.</span>
+                  </div>
+                )}
+                {arcScore.closingScore < 60 && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <Target className="h-3 w-3 text-amber-500 shrink-0" />
+                    <span className="text-muted-foreground">Your close needs more commitment language. Drive to a specific next step.</span>
+                  </div>
+                )}
+                {arcScore.overallScore >= 70 && arcScore.closingScore >= 60 && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                    <span className="text-muted-foreground">Solid execution — keep drilling consistency under new pressure types.</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

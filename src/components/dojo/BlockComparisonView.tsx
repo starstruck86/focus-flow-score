@@ -39,8 +39,10 @@ export function BlockComparisonView({ comparison, blockNumber }: BlockComparison
           Block {blockNumber} — Your Progress
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-1">
-          {overallDelta > 0
-            ? `You improved ${overallDelta} pts on average across all anchors. This is where you started vs where you are now.`
+          {overallDelta >= 15
+            ? `+${overallDelta} pts average improvement. That's a real shift — the reps are compounding.`
+            : overallDelta > 0
+            ? `+${overallDelta} pts average improvement across anchors. Steady progress.`
             : overallDelta === 0
             ? 'Your scores held steady across the block. Consistency is a signal too.'
             : 'Some areas slipped — review the anchors below and keep drilling.'}
@@ -79,7 +81,7 @@ export function BlockComparisonView({ comparison, blockNumber }: BlockComparison
               <Layers className="h-3 w-3" /> Conversation Flow Progress
             </p>
             <p className="text-[10px] text-muted-foreground">
-              This is where you started vs where you are now.
+              How your conversation management evolved across this block.
             </p>
             <div className="space-y-1">
               {flowComparison.benchmarkFlow != null && flowComparison.retestFlow != null && (
