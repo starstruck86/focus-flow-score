@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useCallback } from 'react';
 import { Layout } from '@/components/Layout';
 import { Badge } from '@/components/ui/badge';
 import { SHELL } from '@/lib/layout';
@@ -26,6 +27,7 @@ import { FridayReadinessCard } from '@/components/learn/FridayReadinessCard';
 import { WeakestAnchorCard } from '@/components/learn/WeakestAnchorCard';
 import { BlockRemediationCard } from '@/components/learn/BlockRemediationCard';
 import { AdaptiveStudyPathCard } from '@/components/learn/AdaptiveStudyPathCard';
+import { PrimaryActionCard } from '@/components/learn/PrimaryActionCard';
 
 export default function Learn() {
   const navigate = useNavigate();
