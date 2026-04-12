@@ -143,3 +143,12 @@ export const ANCHORS_IN_ORDER: DayAnchor[] = [
   'deal_control_negotiation',
   'executive_roi_mixed',
 ];
+
+/** Human-readable labels keyed by anchor */
+export const ANCHOR_LABELS: Record<DayAnchor, string> = {
+  opening_cold_call: 'Opening / Cold Call',
+  discovery_qualification: 'Discovery / Qualification',
+  objection_pricing: 'Objections / Pricing',
+  deal_control_negotiation: 'Deal Control / Negotiation',
+  executive_roi_mixed: 'Executive / ROI',
+};

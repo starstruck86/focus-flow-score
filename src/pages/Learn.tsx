@@ -8,6 +8,8 @@ import { BookOpen, ChevronRight, CheckCircle2, Circle, Loader2, TrendingUp, Tren
 import { useCourses, useUserProgress } from '@/lib/learning/hooks';
 import type { CourseWithModules, LearningProgress } from '@/lib/learning/types';
 import { useMemo } from 'react';
+import { useDailyKI } from '@/hooks/useDailyKI';
+import { DailyKICard } from '@/components/learn/DailyKICard';
 
 export default function Learn() {
   const navigate = useNavigate();
