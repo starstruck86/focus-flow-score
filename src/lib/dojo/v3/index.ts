@@ -6,6 +6,7 @@
 
 export * from './dayAnchors';
 export * from './blockManager';
+export * from './assignmentManager';
 export * from './programmingEngine';
 export * from './scenarioFamilies';
 export * from './progressEngine';
