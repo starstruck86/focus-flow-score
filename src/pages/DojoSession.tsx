@@ -292,6 +292,9 @@ export default function DojoSession() {
           <p className="text-sm font-semibold truncate">{scenario.title}</p>
           <p className="text-xs text-muted-foreground">{SKILL_LABELS[scenario.skillFocus]} · {sessionType === 'audio' ? 'Audio Session' : sessionType === 'roleplay' ? 'Roleplay' : sessionType === 'review' ? 'Review' : 'Drill'}</p>
         </div>
+        <button onClick={toggleMode} className="p-1.5 rounded-md hover:bg-accent/50 transition-colors" title={isAudio ? 'Switch to text mode' : 'Switch to audio mode'}>
+          {isAudio ? <Volume2 className="h-4 w-4 text-primary" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
+        </button>
         <Badge variant="outline" className="text-xs shrink-0">5 min</Badge>
       </div>
 
