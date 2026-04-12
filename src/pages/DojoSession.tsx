@@ -40,6 +40,8 @@ import { ImprovementVerdictCard } from '@/components/dojo/ImprovementVerdictCard
 import { ThreeStageComparison } from '@/components/dojo/ThreeStageComparison';
 import { assessImprovement } from '@/lib/dojo/improvementAssessment';
 import { useScoreOriginalResponse } from '@/hooks/useScoreOriginalResponse';
+import { PressureAnalysisCard } from '@/components/dojo/PressureAnalysisCard';
+import { TransferProgressCard } from '@/components/dojo/TransferProgressCard';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
@@ -355,6 +357,37 @@ export default function DojoSession() {
           </Card>
         )}
 
+        {/* Pre-session pressure brief */}
+        {pressureLevel && pressureLevel !== 'none' && phase === 'respond' && (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardContent className="p-3 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Zap className="h-3.5 w-3.5 text-amber-500" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  Pressure Rep
+                </span>
+                <Badge variant="outline" className="text-[9px] capitalize ml-auto">
+                  {pressureLevel}
+                </Badge>
+              </div>
+              {pressureDimensions && pressureDimensions.filter(d => d !== 'none').length > 0 && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                  {pressureDimensions.filter(d => d !== 'none').map(d => {
+                    const labels: Record<string, string> = {
+                      time_pressure: 'You have less time than you want. Prioritize.',
+                      hostile_persona: 'The buyer is tense. Stay controlled.',
+                      ambiguity: "You won't get perfect clarity here. Create it.",
+                      multi_stakeholder_tension: 'Multiple agendas in the room. Find alignment.',
+                      executive_scrutiny: 'Executive eyes on this. Be precise.',
+                    };
+                    return labels[d] || d.replace(/_/g, ' ');
+                  })[0]}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Scenario context */}
         <Card className="border-border/60">
           <CardContent className="p-4 space-y-3">
@@ -424,7 +457,7 @@ export default function DojoSession() {
 
           {phase === 'feedback' && currentResult && (
             <motion.div key="feedback" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} originalCallScore={originalScore} firstAttemptResult={result} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} originalCallScore={originalScore} firstAttemptResult={result} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} pressureLevel={pressureLevel} pressureDimensions={pressureDimensions} onRetry={handleStartRetry} onNextRep={handleNextRep} />
             </motion.div>
           )}
 
@@ -461,7 +494,7 @@ export default function DojoSession() {
         {/* ── Feedback for Roleplay / Review (non-drill) ── */}
         {sessionType !== 'drill' && phase === 'feedback' && currentResult && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} pressureLevel={pressureLevel} pressureDimensions={pressureDimensions} onRetry={handleStartRetry} onNextRep={handleNextRep} />
           </motion.div>
         )}
       </div>
@@ -488,6 +521,8 @@ interface FeedbackViewProps {
   originalCallScore?: DojoScoreResult | null;
   firstAttemptResult?: DojoScoreResult | null;
   assignmentContext?: { anchor: string; focusPattern: string; reason: string } | null;
+  pressureLevel?: string | null;
+  pressureDimensions?: string[] | null;
   onRetry: () => void;
   onNextRep: () => void;
 }
@@ -496,7 +531,7 @@ function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
   sessionId, skillFocus, transcriptOrigin, originalCallScore, firstAttemptResult,
-  assignmentContext, onRetry, onNextRep,
+  assignmentContext, pressureLevel, pressureDimensions, onRetry, onNextRep,
 }: FeedbackViewProps) {
   return (
     <>
@@ -538,6 +573,30 @@ function FeedbackView({
           </p>
         </div>
       </div>
+
+      {/* ── V4 Pressure Analysis ── */}
+      {pressureLevel && pressureLevel !== 'none' && (
+        <PressureAnalysisCard
+          pressureLevel={pressureLevel}
+          pressureDimensions={pressureDimensions ?? []}
+          sessionScore={currentResult.score}
+          recentAvg={currentResult.score} // TODO: pass actual recent avg from skill memory
+          topMistake={currentResult.topMistake}
+          focusPattern={activeFocus}
+          retryScore={retryResult?.score}
+        />
+      )}
+
+      {/* ── V4 Transfer Progress (transcript-origin) ── */}
+      {transcriptOrigin && originalCallScore && firstAttemptResult && (
+        <TransferProgressCard
+          originalScore={originalCallScore.score}
+          practiceScore={firstAttemptResult.score}
+          retryScore={retryResult?.score}
+          originalMistake={originalCallScore.topMistake}
+          practiceMistake={currentResult.topMistake}
+        />
+      )}
 
       {/* ── Review-specific: Diagnosis & Rewrite badges ── */}
       {reviewExtras && sessionType === 'review' && (

@@ -6,7 +6,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Target } from 'lucide-react';
+import { Calendar, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Target, Zap } from 'lucide-react';
 import type { WeeklySummary } from '@/lib/dojo/v3/weeklySummaryEngine';
 import { ANCHOR_LABELS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 
@@ -91,7 +91,37 @@ export function WeeklySummaryCard({ summary }: WeeklySummaryCardProps) {
           )}
         </div>
 
-        {/* Per-anchor deltas */}
+        {/* Pressure performance */}
+        {summary.pressureRepsCompleted > 0 && (
+          <div className="space-y-1.5 pt-2 border-t border-border/40">
+            <p className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
+              <Zap className="h-3 w-3" /> Pressure Performance
+            </p>
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">{summary.pressureRepsCompleted} pressure rep{summary.pressureRepsCompleted !== 1 ? 's' : ''}</span>
+              {summary.avgPressureScore != null && (
+                <>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="font-medium">{summary.avgPressureScore} avg</span>
+                </>
+              )}
+            </div>
+            {summary.strongestPressureAnchor && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <CheckCircle2 className="h-3 w-3 text-green-600 shrink-0" />
+                <span className="text-muted-foreground">Best under pressure:</span>
+                <span className="font-medium text-green-700 dark:text-green-400">{summary.strongestPressureAnchor}</span>
+              </div>
+            )}
+            {summary.weakestPressureAnchor && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                <span className="text-muted-foreground">Weakest under pressure:</span>
+                <span className="font-medium text-amber-700 dark:text-amber-400">{summary.weakestPressureAnchor}</span>
+              </div>
+            )}
+          </div>
+        )}
         {summary.perAnchorStats.some(s => s.delta !== 0 && s.priorWeekAvg > 0) && (
           <div className="pt-2 border-t border-border/40">
             <p className="text-[10px] font-semibold text-muted-foreground mb-1">Week-over-week</p>

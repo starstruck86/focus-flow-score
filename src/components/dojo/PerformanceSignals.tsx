@@ -1,4 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   BarChart3, TrendingUp, TrendingDown, AlertTriangle, Target, Brain,
   CheckCircle2, ArrowUpRight, XCircle, Shield, Zap, Activity,
@@ -122,21 +123,41 @@ export function PerformanceSignals({
               const readinessColor = cap.pressureReadiness === 'ready' ? 'text-green-500'
                 : cap.pressureReadiness === 'building' ? 'text-amber-500'
                 : 'text-red-500';
+              const readinessBg = cap.pressureReadiness === 'ready' ? 'bg-green-500/10 border-green-500/20'
+                : cap.pressureReadiness === 'building' ? 'bg-amber-500/10 border-amber-500/20'
+                : 'bg-red-500/10 border-red-500/20';
               const readinessLabel = cap.pressureReadiness === 'ready' ? '● Ready'
                 : cap.pressureReadiness === 'building' ? '◐ Building'
                 : '○ Low';
               return (
-                <div key={cap.skill} className="px-2.5 py-2 rounded-md border border-border/40 bg-muted/30">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs font-medium text-foreground">{cap.label}</p>
-                    <span className={cn('text-[10px] font-medium', readinessColor)}>{readinessLabel}</span>
+                <div key={cap.skill} className="px-2.5 py-2.5 rounded-md border border-border/40 bg-muted/30 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-foreground">{cap.label}</p>
+                    <Badge variant="outline" className={cn('text-[9px] h-4 px-1.5', readinessBg, readinessColor)}>
+                      {readinessLabel}
+                    </Badge>
                   </div>
-                  <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                    <span>Consistency: {cap.consistency}</span>
-                    <span>1st Attempt: {cap.firstAttemptStrength}</span>
-                    {cap.pressureScore != null && <span><Zap className="h-2.5 w-2.5 inline" /> {cap.pressureScore}</span>}
-                    {cap.recoveryRate != null && <span>Recovery: +{cap.recoveryRate}</span>}
+                  {/* Metrics row */}
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Consistency</span>
+                      <span className="font-medium text-foreground">{cap.consistency || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">1st Attempt</span>
+                      <span className="font-medium text-foreground">{cap.firstAttemptStrength || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground"><Zap className="h-2.5 w-2.5 inline mr-0.5" />Pressure</span>
+                      <span className="font-medium text-foreground">{cap.pressureScore != null ? cap.pressureScore : '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Recovery</span>
+                      <span className="font-medium text-foreground">{cap.recoveryRate != null ? `+${cap.recoveryRate}` : '—'}</span>
+                    </div>
                   </div>
+                  {/* Summary line */}
+                  <p className="text-[10px] text-muted-foreground italic leading-snug">{cap.summary}</p>
                 </div>
               );
             })}
