@@ -145,9 +145,6 @@ export function computeBatchSummary(results: V6LiveRunResult[]): V6BatchSummary 
   };
 }
 
-// Helper to get fixture by ID (lazy import to avoid circular)
 function getFixtureById(id: string): V6Fixture | undefined {
-  // Import inline to avoid top-level circular
-  const { V6_FIXTURES } = require('./qaFixtures');
-  return V6_FIXTURES.find((f: V6Fixture) => f.id === id);
+  return V6_FIXTURES.find(f => f.id === id);
 }
