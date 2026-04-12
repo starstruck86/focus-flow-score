@@ -204,6 +204,26 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
   const pressureExpected = finalScenarios.some(s => s.pressure?.level !== 'none');
   const pressuredSpec = finalScenarios.find(s => s.pressure?.level !== 'none');
 
+  // Step 10: V6 — Multi-thread injection
+  const recentMultiThreadCount = recentAssignments.filter(a => a.multiThreadUsed).length;
+  const injectMultiThread = shouldInjectMultiThread({
+    blockStage: block.stage,
+    blockPhase: block.phase,
+    dayAnchor,
+    recentAvg,
+    recentMultiThreadCount,
+    isBenchmarkOrRetest: false,
+  });
+
+  let multiThreadContext: MultiThreadContext | null = null;
+  if (injectMultiThread) {
+    multiThreadContext = generateMultiThreadContext(dayAnchor);
+    // Attach to the second scenario (variation) for organic complexity
+    if (finalScenarios.length >= 2) {
+      finalScenarios[1].multiThread = multiThreadContext;
+    }
+  }
+
   return {
     blockNumber: block.blockNumber,
     blockWeek: block.currentWeek,
@@ -224,6 +244,8 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
     pressureLabel: pressuredSpec?.pressure?.label ?? null,
     simulationArcId,
     simulationExpected,
+    multiThreadExpected: injectMultiThread,
+    multiThreadContext,
   };
 }
 
@@ -270,6 +292,8 @@ function generateBenchmarkAssignment(
     pressureLabel: null,
     simulationArcId: null,
     simulationExpected: false,
+    multiThreadExpected: false,
+    multiThreadContext: null,
   };
 }
 
@@ -520,6 +544,8 @@ function createFallbackAssignment(block: TrainingBlock, anchor: DayAnchor): Dail
     pressureLabel: null,
     simulationArcId: null,
     simulationExpected: false,
+    multiThreadExpected: false,
+    multiThreadContext: null,
   };
 }
 

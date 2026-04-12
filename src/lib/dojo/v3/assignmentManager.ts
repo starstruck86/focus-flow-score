@@ -283,6 +283,8 @@ function mapRowToAssignment(row: Record<string, unknown>): DailyAssignment {
     pressureLabel: ((row.scenarios as any[]) ?? []).find((s: any) => s.pressure?.level !== 'none')?.pressure?.label ?? null,
     simulationArcId: (row as any).simulation_arc_id ?? null,
     simulationExpected: !!(row as any).simulation_arc_id,
+    multiThreadExpected: ((row.scenarios as any[]) ?? []).some((s: any) => s.multiThread?.active),
+    multiThreadContext: ((row.scenarios as any[]) ?? []).find((s: any) => s.multiThread?.active)?.multiThread ?? null,
     completed: (row.completed as boolean) ?? false,
     sessionCount: sessionIds.length,
   };
