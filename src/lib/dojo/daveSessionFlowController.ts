@@ -138,7 +138,7 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     });
 
     if (listenResult.command) {
-      const action = await handleBargeInCommand(listenResult.command, ctx);
+      const action = await handleBargeInCommand(listenResult.command, ctx, listenResult.transcript);
       if (action === 'stop') return abort(result);
       if (action === 'repeat') {
         // After replay, re-listen
