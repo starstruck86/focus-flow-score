@@ -142,7 +142,7 @@ export function useDaveAudioSession(config: DaveAudioSessionConfig): UseDaveAudi
         setDaveMessage(msg);
         // Speak the message if we're in audio mode and active
         if (isActive && runtime.isAudio) {
-          speak(msg).catch(() => { /* offline, can't speak */ });
+          speakFn(msg, runtime.ttsConfig, runtime.playbackRef.current).catch(() => { /* offline, can't speak */ });
         }
       } else if (state.offlineDurationMs > 0) {
         // Signal restored — replay queued ops
