@@ -1,10 +1,10 @@
 /**
- * SkillLevelCard — Shows a single skill's level, progress, gaps, and next steps.
+ * SkillLevelCard — Shows tier, micro-level progress, gaps, and next steps.
  */
 
 import { useNavigate } from 'react-router-dom';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
-import { getSkillLevel } from '@/lib/learning/learnSkillLevels';
+import { getSkillTier } from '@/lib/learning/learnSkillLevels';
 import { SKILL_LABELS } from '@/lib/dojo/scenarios';
 import { ArrowRight, Target, AlertTriangle, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -16,19 +16,19 @@ interface SkillLevelCardProps {
 
 export function SkillLevelCard({ level }: SkillLevelCardProps) {
   const navigate = useNavigate();
-  const currentDef = getSkillLevel(level.skill, level.currentLevel);
-  const isCloseToLevelUp = level.progressToNext >= 75;
-  const isMaxLevel = !level.nextLevel;
+  const currentDef = getSkillTier(level.skill, level.currentTier);
+  const isCloseToTierUp = level.progressWithinTier >= 75;
+  const isMaxTier = !level.nextTier;
 
-  const statusColor = isMaxLevel
+  const statusColor = isMaxTier
     ? 'text-green-500'
-    : isCloseToLevelUp
+    : isCloseToTierUp
       ? 'text-amber-500'
       : 'text-muted-foreground';
 
-  const barColor = isMaxLevel
+  const barColor = isMaxTier
     ? 'bg-green-500'
-    : isCloseToLevelUp
+    : isCloseToTierUp
       ? 'bg-amber-500'
       : 'bg-primary';
 
@@ -50,41 +50,55 @@ export function SkillLevelCard({ level }: SkillLevelCardProps) {
             variant="secondary"
             className="text-[10px] font-medium px-1.5 py-0"
           >
-            Level {level.currentLevel} — {level.currentLevelName}
+            Tier {level.currentTier} — {level.currentTierName}
           </Badge>
         </div>
       </div>
 
-      {/* Progress bar */}
-      {!isMaxLevel && (
+      {/* Micro-level sub-progress */}
+      {!isMaxTier && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <p className="text-[11px] text-muted-foreground">
-              Progress to Level {level.currentLevel + 1}
+              Level {level.levelWithinTier} / {level.maxLevelWithinTier} in this tier
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Overall: {level.overallLevel} / 30
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Progress bar to next tier */}
+      {!isMaxTier && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] text-muted-foreground">
+              Progress to Tier {level.currentTier + 1}
             </p>
             <p className={cn('text-[11px] font-medium', statusColor)}>
-              {level.progressToNext}%
+              {level.progressWithinTier}%
             </p>
           </div>
           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
             <div
               className={cn('h-full rounded-full transition-all duration-500', barColor)}
-              style={{ width: `${level.progressToNext}%` }}
+              style={{ width: `${level.progressWithinTier}%` }}
             />
           </div>
         </div>
       )}
 
-      {isMaxLevel && (
+      {isMaxTier && (
         <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-green-500/5 border border-green-500/15">
           <Sparkles className="h-3 w-3 text-green-500 shrink-0" />
           <p className="text-[11px] text-green-600 dark:text-green-400 font-medium">
-            Max level reached
+            Tier 6, Level {level.levelWithinTier} — Master
           </p>
         </div>
       )}
 
-      {/* Gaps — what's blocking */}
+      {/* Gaps */}
       {level.gaps.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-1">
@@ -117,16 +131,16 @@ export function SkillLevelCard({ level }: SkillLevelCardProps) {
         </div>
       )}
 
-      {/* Next level preview */}
-      {level.nextLevel && (
+      {/* Next tier preview */}
+      {level.nextTier && (
         <div className="flex items-start gap-1.5 px-2 py-1.5 rounded-md bg-primary/5 border border-primary/10">
           <Target className="h-3 w-3 text-primary mt-0.5 shrink-0" />
           <div>
             <p className="text-[11px] font-medium text-foreground">
-              Level {level.nextLevel.level}: {level.nextLevel.name}
+              Tier {level.nextTier.tier}: {level.nextTier.name}
             </p>
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              {level.nextLevel.description}
+              {level.nextTier.description}
             </p>
           </div>
         </div>
@@ -140,18 +154,18 @@ export function SkillLevelCard({ level }: SkillLevelCardProps) {
       )}
 
       {/* CTA */}
-      {!isMaxLevel && (
+      {!isMaxTier && (
         <button
           onClick={handleCTA}
           className={cn(
             'w-full h-9 rounded-md text-xs font-medium flex items-center justify-center gap-1.5 transition-colors',
-            isCloseToLevelUp
+            isCloseToTierUp
               ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20'
               : 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20',
           )}
         >
-          {isCloseToLevelUp ? (
-            <>Push to Level {level.currentLevel + 1}</>
+          {isCloseToTierUp ? (
+            <>Push to Tier {level.currentTier + 1}</>
           ) : (
             <>Train This Skill</>
           )}
