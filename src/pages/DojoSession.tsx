@@ -546,6 +546,7 @@ interface FeedbackViewProps {
   assignmentContext?: { anchor: string; focusPattern: string; reason: string } | null;
   pressureLevel?: string | null;
   pressureDimensions?: string[] | null;
+  skillLevelForFeedback?: UserSkillLevel | null;
   onRetry: () => void;
   onNextRep: () => void;
 }
@@ -554,7 +555,7 @@ function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
   sessionId, skillFocus, transcriptOrigin, originalCallScore, firstAttemptResult,
-  assignmentContext, pressureLevel, pressureDimensions, onRetry, onNextRep,
+  assignmentContext, pressureLevel, pressureDimensions, skillLevelForFeedback, onRetry, onNextRep,
 }: FeedbackViewProps) {
   return (
     <>
