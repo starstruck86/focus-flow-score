@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useCallback } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { Layout } from '@/components/Layout';
 import { Badge } from '@/components/ui/badge';
 import { SHELL } from '@/lib/layout';
@@ -30,7 +30,11 @@ import { AdaptiveStudyPathCard } from '@/components/learn/AdaptiveStudyPathCard'
 import { PrimaryActionCard } from '@/components/learn/PrimaryActionCard';
 import { SkillBuilderEntryCard } from '@/components/learn/SkillBuilderEntryCard';
 import { SkillLevelsPanel } from '@/components/learn/SkillLevelsPanel';
+import { SkillTierUpModal } from '@/components/learn/SkillTierUpModal';
+import { SkillProgressTimeline } from '@/components/learn/SkillProgressTimeline';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
+import { isTierUpDismissed } from '@/lib/learning/levelEventStore';
+import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 
 export default function Learn() {
   const navigate = useNavigate();
