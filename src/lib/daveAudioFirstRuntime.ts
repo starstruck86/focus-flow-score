@@ -444,26 +444,40 @@ export function interruptPlayback(ctx: AudioFirstContext): void {
 
 /**
  * Central handler for barge-in commands during a session flow.
- * Returns true if the command was fully handled (caller should continue flow),
- * or an action string indicating what the caller should do.
+ * Returns an action string indicating what the caller should do.
+ *
+ * For 'repeat' commands, also checks for targeted replay
+ * (e.g. "repeat objection", "repeat scenario").
  */
 export type BargeInAction =
-  | 'continue'    // Command handled, resume normal flow
-  | 'repeat'      // Replay current checkpoint, then resume
-  | 'skip'        // Skip to next phase
-  | 'stop'        // End session
+  | 'continue'      // Command handled, resume normal flow
+  | 'repeat'        // Replay current checkpoint, then resume
+  | 'skip'          // Skip to next phase
+  | 'stop'          // End session
   | 'pause_resume'; // Was paused, now resumed — continue
 
 export async function handleBargeInCommand(
   command: InterruptionCommand,
   ctx: AudioFirstContext,
+  /** The raw transcript for targeted replay parsing */
+  rawTranscript?: string,
 ): Promise<BargeInAction> {
   if (!command) return 'continue';
 
   switch (command) {
-    case 'repeat':
+    case 'repeat': {
+      // Check for targeted replay first
+      if (rawTranscript) {
+        const targetRole = parseTargetedReplay(rawTranscript);
+        if (targetRole) {
+          await replayCheckpointByRole(targetRole, ctx);
+          return 'repeat';
+        }
+      }
+      // Generic repeat — replay current checkpoint
       await replayCurrentCheckpoint(ctx);
       return 'repeat';
+    }
 
     case 'skip':
       await speakStrict("Skipping ahead.", ctx);
