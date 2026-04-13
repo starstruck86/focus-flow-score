@@ -45,6 +45,7 @@ import { PressureAnalysisCard } from '@/components/dojo/PressureAnalysisCard';
 import { TransferProgressCard } from '@/components/dojo/TransferProgressCard';
 import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedbackCard';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
+import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
 import SimulationMode from '@/components/dojo/SimulationMode';
 import { getArcById, type SimulationArc } from '@/lib/dojo/v5/simulationArcs';
