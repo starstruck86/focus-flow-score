@@ -115,7 +115,8 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
     <div className="space-y-4">
       {/* Stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-        <StatCard label="Extracted" value={stats.extracted} icon={<Zap className="h-3.5 w-3.5" />} />
+        <StatCard label="Pending" value={stats.extracted} icon={<Zap className="h-3.5 w-3.5" />}
+          color={stats.extracted > 0 ? 'text-blue-400' : undefined} />
         <StatCard label="Active" value={stats.active} icon={<Shield className="h-3.5 w-3.5" />}
           color={stats.active > 0 ? 'text-emerald-500' : undefined} />
         <StatCard label="Review" value={stats.reviewNeeded} icon={<AlertTriangle className="h-3.5 w-3.5" />}
