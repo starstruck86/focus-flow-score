@@ -37,11 +37,14 @@ import {
   speakWithBargeIn,
   listenStrict,
   interruptPlayback,
+  waitForPlaybackDrain,
   handleBargeInCommand,
   replayCurrentCheckpoint,
   buildSessionRecapSpeech,
   AudioFirstSessionError,
 } from '@/lib/daveAudioFirstRuntime';
+import { SessionTelemetryTracker } from '@/lib/daveSessionTelemetry';
+import { getDrivingModeConfig, type DrivingMode } from '@/hooks/useDrivingMode';
 import { buildAudioScript, buildRetryScript, buildFeedbackScript, buildAudioLessonScript } from './audioScenarioScript';
 import type { AudioSessionPhase } from './audioSessionFlow';
 import { createLogger } from '@/lib/logger';
@@ -61,11 +64,12 @@ export interface DojoSessionConfig {
   onStateChange?: (patch: Record<string, unknown>) => void;
   onRepComplete?: (result: DojoScoreResult, transcript: string, isRetry: boolean) => void;
   onSessionComplete?: (recap: SessionRecap) => void;
-  /** Called when Learn→Dojo auto-handoff should trigger */
   onHandoffToDojo?: (skillFocus: string) => void;
   onError?: (error: AudioFirstSessionError) => void;
   maxRetries?: number;
   signal?: AbortSignal;
+  /** Driving mode for config overrides */
+  drivingMode?: DrivingMode;
 }
 
 export interface DojoSessionResult {
@@ -83,9 +87,18 @@ export interface DojoSessionResult {
 export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promise<DojoSessionResult> {
   const maxRetries = config.maxRetries ?? 2;
   const script = buildAudioScript(config.scenario);
+  const dm = config.drivingMode ?? 'audio-first';
+  const dmConfig = getDrivingModeConfig(dm);
   const ctx = createAudioFirstContext(
     config.ttsConfig, config.playbackRef, config.signal, config.onStateChange,
+    {
+      drivingMode: dm,
+      silenceTimeoutMs: dmConfig.silenceTimeoutMs,
+      silenceRetries: dmConfig.silenceRetries,
+      bargeInWindowMs: dmConfig.bargeInWindowMs,
+    },
   );
+  const telemetry = new SessionTelemetryTracker('dojo', 'full', dm);
 
   const result: DojoSessionResult = {
     phase: 'intro',
@@ -120,36 +133,40 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
 
     if (bargeIn) {
       const action = await handleBargeInCommand(bargeIn.command, ctx, bargeIn.transcript);
-      if (action === 'stop') return abort(result);
+      if (bargeIn.command) telemetry.trackInterruption(bargeIn.command);
+      if (action === 'stop') { telemetry.finalize(false); return abort(result); }
       if (action === 'skip') { /* skip to instruction */ }
     }
-    if (ctx.signal?.aborted) return abort(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
-    // ── Instruction (protected) ──────────────────────────────
+    // ── Instruction (protected) — reinforces what to do ──────
     setPhase('instruction');
-    await speakStrict(script.instruction, ctx, { role: 'instruction' });
-    if (ctx.signal?.aborted) return abort(result);
+    await speakStrict(
+      `${script.instruction} Focus on re-anchoring to value. Go.`,
+      ctx, { role: 'instruction' },
+    );
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
     // ── Listen ───────────────────────────────────────────────
     setPhase('listening');
     const listenResult = await listenStrict(ctx, {
-      timeoutMs: 60_000,
       requireResponse: true,
-      retryOnSilence: 1,
     });
+    telemetry.trackFirstResponse();
 
     if (listenResult.command) {
+      if (listenResult.command) telemetry.trackInterruption(listenResult.command);
       const action = await handleBargeInCommand(listenResult.command, ctx, listenResult.transcript);
-      if (action === 'stop') return abort(result);
+      if (action === 'stop') { telemetry.finalize(false); return abort(result); }
       if (action === 'repeat') {
-        // After replay, re-listen
-        const reListen = await listenStrict(ctx, { timeoutMs: 60_000, requireResponse: true });
+        telemetry.trackInterruption('repeat');
+        const reListen = await listenStrict(ctx, { requireResponse: true });
         listenResult.transcript = reListen.transcript;
         listenResult.command = reListen.command;
       }
     }
 
-    if (ctx.signal?.aborted) return abort(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
     result.lastTranscript = listenResult.transcript;
 
     // ── Scoring ──────────────────────────────────────────────
@@ -157,17 +174,18 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     config.onStateChange?.({ isProcessing: true });
     const scoreResult = await config.onScore(listenResult.transcript);
     config.onStateChange?.({ isProcessing: false });
-    if (ctx.signal?.aborted) return abort(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
     result.lastScore = scoreResult;
 
     // ── Feedback (interruptible) ─────────────────────────────
     setPhase('feedback');
     const fbBargeIn = await deliverFeedback(scoreResult, ctx);
     if (fbBargeIn) {
+      if (fbBargeIn.command) telemetry.trackInterruption(fbBargeIn.command);
       const action = await handleBargeInCommand(fbBargeIn.command, ctx, fbBargeIn.transcript);
-      if (action === 'stop') return abort(result);
+      if (action === 'stop') { telemetry.finalize(false); return abort(result); }
     }
-    if (ctx.signal?.aborted) return abort(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
     config.onRepComplete?.(scoreResult, listenResult.transcript, false);
 
@@ -179,31 +197,34 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     while (currentScore < 7 && retryCount < maxRetries && !ctx.signal?.aborted) {
       retryCount++;
       result.retryCount = retryCount;
+      telemetry.trackRetryLoop();
 
       const retryScript = buildRetryScript(latestScore.practiceCue || latestScore.topMistake);
 
       setPhase('retry_prompt');
       const retryBargeIn = await speakWithBargeIn(retryScript.retryPrompt, ctx, { role: 'retry_prompt' });
       if (retryBargeIn) {
+        if (retryBargeIn.command) telemetry.trackInterruption(retryBargeIn.command);
         const action = await handleBargeInCommand(retryBargeIn.command, ctx, retryBargeIn.transcript);
-        if (action === 'stop') return abort(result);
+        if (action === 'stop') { telemetry.finalize(false); return abort(result); }
         if (action === 'skip') break;
       }
-      if (ctx.signal?.aborted) return abort(result);
+      if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
       setPhase('retry_instruction');
-      await speakStrict(retryScript.retryInstruction, ctx, { role: 'retry_instruction' });
-      if (ctx.signal?.aborted) return abort(result);
+      await speakStrict(
+        `${retryScript.retryInstruction} Let's sharpen that. Go.`,
+        ctx, { role: 'retry_instruction' },
+      );
+      if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
       setPhase('retry_listening');
       const retryListen = await listenStrict(ctx, {
-        timeoutMs: 60_000,
         requireResponse: true,
-        retryOnSilence: 1,
       });
 
-      if (retryListen.command === 'stop') return abort(result);
-      if (ctx.signal?.aborted) return abort(result);
+      if (retryListen.command === 'stop') { telemetry.finalize(false); return abort(result); }
+      if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
       result.lastTranscript = retryListen.transcript;
 
@@ -211,12 +232,12 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
       config.onStateChange?.({ isProcessing: true });
       latestScore = await config.onScore(retryListen.transcript);
       config.onStateChange?.({ isProcessing: false });
-      if (ctx.signal?.aborted) return abort(result);
+      if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
       result.lastScore = latestScore;
 
       setPhase('retry_feedback');
       await deliverFeedback(latestScore, ctx);
-      if (ctx.signal?.aborted) return abort(result);
+      if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
       config.onRepComplete?.(latestScore, retryListen.transcript, true);
       currentScore = latestScore.score ?? 0;
@@ -229,6 +250,8 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     result.recap = recap;
     await speakQueueStrict(buildSessionRecapSpeech(recap), ctx);
 
+    telemetry.setFinalScore(result.lastScore?.score ?? null);
+    telemetry.finalize(true);
     config.onSessionComplete?.(recap);
     return result;
 
@@ -298,6 +321,8 @@ export interface LearnSessionConfig {
   /** 'full' = all 7 sections; 'compressed' = concept + criteria + prompt (driving mode) */
   mode?: LearnMode;
   signal?: AbortSignal;
+  /** Driving mode for config overrides */
+  drivingMode?: DrivingMode;
 }
 
 export interface LearnSessionResult {
@@ -328,10 +353,19 @@ export async function runAudioFirstLearnSession(config: LearnSessionConfig): Pro
 async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSessionResult> {
   const script = buildAudioLessonScript(config.lesson);
   if (config.exampleResponse) script.exampleResponse = config.exampleResponse;
+  const dm = config.drivingMode ?? 'audio-first';
+  const dmConfig = getDrivingModeConfig(dm);
 
   const ctx = createAudioFirstContext(
     config.ttsConfig, config.playbackRef, config.signal, config.onStateChange,
+    {
+      drivingMode: dm,
+      silenceTimeoutMs: dmConfig.silenceTimeoutMs,
+      silenceRetries: dmConfig.silenceRetries,
+      bargeInWindowMs: dmConfig.bargeInWindowMs,
+    },
   );
+  const telemetry = new SessionTelemetryTracker('learn', 'full', dm);
 
   const result: LearnSessionResult = {
     phase: 'intro',
@@ -421,7 +455,7 @@ async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSes
       await speakWithBargeIn(gradeResult.feedback, ctx, { role: 'feedback' });
     }
 
-    if (ctx.signal?.aborted) return abortLearn(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abortLearn(result); }
 
     // Recap
     setPhase('recap');
@@ -433,22 +467,27 @@ async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSes
     if (config.onHandoffToDojo) {
       setPhase('handoff');
       await speakStrict(
-        "Good — now let's put this into practice. I'm going to give you a scenario. Respond like you would on a real call.",
+        "Alright — now let's apply it. I'm setting up a scenario. Respond like you would on a real call.",
         ctx,
         { role: 'handoff' },
       );
-      // Transfer audio ownership cleanly — the Dojo session will create its own context
-      // using the same ttsConfig + playbackRef, so we just signal completion here.
+      // Drain audio fully before handing ownership to Dojo
+      await waitForPlaybackDrain(ctx);
       interruptPlayback(ctx);
       result.handedOffToDojo = true;
+      telemetry.setHandoff(true);
+      telemetry.setFinalScore(result.gradeScore);
+      telemetry.finalize(true);
       config.onHandoffToDojo(config.lesson.topic);
     } else {
       setPhase('handoff');
       await speakStrict(
-        "That wraps up this lesson. Great work today.",
+        "That wraps up this lesson. Good reps today.",
         ctx,
         { role: 'closing' },
       );
+      telemetry.setFinalScore(result.gradeScore);
+      telemetry.finalize(true);
     }
 
     setPhase('complete');
@@ -462,13 +501,13 @@ async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSes
     } else {
       logger.error('Unexpected learn error', { error: err });
     }
+    telemetry.finalize(false);
     result.aborted = true;
     result.phase = 'complete';
     return result;
   }
 }
 
-// ══════════════════════════════════════════════════════════════════
 // COMPRESSED LEARN (DRIVING MODE)
 // ══════════════════════════════════════════════════════════════════
 
@@ -486,10 +525,19 @@ async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSes
 async function runCompressedLearnSession(config: LearnSessionConfig): Promise<LearnSessionResult> {
   const content = config.lesson.lesson_content;
   const topic = config.lesson.topic.replace(/_/g, ' ');
+  const dm = config.drivingMode ?? 'driving';
+  const dmConfig = getDrivingModeConfig(dm);
 
   const ctx = createAudioFirstContext(
     config.ttsConfig, config.playbackRef, config.signal, config.onStateChange,
+    {
+      drivingMode: dm,
+      silenceTimeoutMs: dmConfig.silenceTimeoutMs,
+      silenceRetries: dmConfig.silenceRetries,
+      bargeInWindowMs: dmConfig.bargeInWindowMs,
+    },
   );
+  const telemetry = new SessionTelemetryTracker('learn', 'compressed', dm);
 
   const result: LearnSessionResult = {
     phase: 'intro',
@@ -511,18 +559,18 @@ async function runCompressedLearnSession(config: LearnSessionConfig): Promise<Le
   try {
     // ── Compressed intro + concept ───────────────────────────
     setPhase('intro');
-    const compressedIntro = `Quick lesson on ${topic}. ${config.lesson.title}.`;
-    await speakStrict(compressedIntro, ctx, { role: 'intro' });
-    if (ctx.signal?.aborted) return abortLearn(result);
+    await speakStrict(`Quick lesson on ${topic}. ${config.lesson.title}.`, ctx, { role: 'intro' });
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abortLearn(result); }
 
     // ── Core concept (interruptible) ─────────────────────────
     setPhase('concept');
     const bargeIn1 = await speakWithBargeIn(content.concept, ctx, { role: 'concept' });
     if (bargeIn1) {
+      if (bargeIn1.command) telemetry.trackInterruption(bargeIn1.command);
       const action = await handleBargeInCommand(bargeIn1.command, ctx, bargeIn1.transcript);
-      if (action === 'stop') return abortLearn(result);
+      if (action === 'stop') { telemetry.finalize(false); return abortLearn(result); }
     }
-    if (ctx.signal?.aborted) return abortLearn(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abortLearn(result); }
 
     // ── What good looks like + criteria (merged, interruptible)
     setPhase('what_good_looks_like');
@@ -532,35 +580,36 @@ async function runCompressedLearnSession(config: LearnSessionConfig): Promise<Le
       : `Here's what good looks like: ${content.what_good_looks_like}`;
     const bargeIn2 = await speakWithBargeIn(mergedCriteria, ctx, { role: 'criteria' });
     if (bargeIn2) {
+      if (bargeIn2.command) telemetry.trackInterruption(bargeIn2.command);
       const action = await handleBargeInCommand(bargeIn2.command, ctx, bargeIn2.transcript);
-      if (action === 'stop') return abortLearn(result);
+      if (action === 'stop') { telemetry.finalize(false); return abortLearn(result); }
     }
-    if (ctx.signal?.aborted) return abortLearn(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abortLearn(result); }
 
-    // ── Prompt (protected) ───────────────────────────────────
+    // ── Prompt (protected) — reinforced instruction ──────────
     setPhase('application_prompt');
     const prompt = config.lesson.quiz_content?.open_ended_prompt
-      ?? `Now apply this. Give me your best ${topic} response. Go.`;
-    await speakStrict(prompt, ctx, { role: 'application_prompt' });
-    if (ctx.signal?.aborted) return abortLearn(result);
+      ?? `Now apply this. Give me your best ${topic} response.`;
+    await speakStrict(`${prompt} Focus on the criteria I just gave you. Go.`, ctx, { role: 'application_prompt' });
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abortLearn(result); }
 
     // ── Listen ───────────────────────────────────────────────
     setPhase('listening');
     const listenResult = await listenStrict(ctx, {
-      timeoutMs: 60_000,
       requireResponse: false,
-      retryOnSilence: 1,
     });
+    telemetry.trackFirstResponse();
 
-    if (listenResult.command === 'stop') return abortLearn(result);
+    if (listenResult.command === 'stop') { telemetry.finalize(false); return abortLearn(result); }
     if (listenResult.command === 'repeat') {
+      telemetry.trackInterruption('repeat');
       await replayCurrentCheckpoint(ctx);
-      const reListen = await listenStrict(ctx, { timeoutMs: 60_000 });
+      const reListen = await listenStrict(ctx);
       result.userResponse = reListen.transcript;
     } else {
       result.userResponse = listenResult.transcript;
     }
-    if (ctx.signal?.aborted) return abortLearn(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abortLearn(result); }
 
     // ── Grade ────────────────────────────────────────────────
     if (config.onGrade && result.userResponse.trim()) {
@@ -574,25 +623,31 @@ async function runCompressedLearnSession(config: LearnSessionConfig): Promise<Le
       setPhase('feedback');
       await speakStrict(gradeResult.feedback, ctx, { role: 'feedback' });
     }
-    if (ctx.signal?.aborted) return abortLearn(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abortLearn(result); }
 
     // ── Quick recap ──────────────────────────────────────────
     setPhase('recap');
     const recap = buildLearnRecap(result, config.lesson.topic);
     result.recap = recap;
-    // Compressed recap — single sentence
     const quickRecap = recap.whatImproved
-      ? `${recap.whatImproved} ${recap.whatStillNeedsWork ? `Work on: ${recap.whatStillNeedsWork}` : ''}`
-      : "Let's lock this in with a live rep.";
+      ? `${recap.whatImproved} ${recap.whatStillNeedsWork ? `Let's sharpen: ${recap.whatStillNeedsWork}` : ''}`
+      : "Alright — let's lock this in with a live rep.";
     await speakStrict(quickRecap, ctx, { role: 'recap' });
 
     // ── Auto handoff ─────────────────────────────────────────
     if (config.onHandoffToDojo) {
       setPhase('handoff');
-      await speakStrict("Let's put this into practice right now. Here comes a scenario.", ctx, { role: 'handoff' });
+      await speakStrict("Alright — let's apply it. Here comes a scenario.", ctx, { role: 'handoff' });
+      await waitForPlaybackDrain(ctx);
       interruptPlayback(ctx);
       result.handedOffToDojo = true;
+      telemetry.setHandoff(true);
+      telemetry.setFinalScore(result.gradeScore);
+      telemetry.finalize(true);
       config.onHandoffToDojo(config.lesson.topic);
+    } else {
+      telemetry.setFinalScore(result.gradeScore);
+      telemetry.finalize(true);
     }
 
     setPhase('complete');
@@ -603,6 +658,7 @@ async function runCompressedLearnSession(config: LearnSessionConfig): Promise<Le
     if (err instanceof AudioFirstSessionError) {
       config.onError?.(err);
     }
+    telemetry.finalize(false);
     result.aborted = true;
     result.phase = 'complete';
     return result;
