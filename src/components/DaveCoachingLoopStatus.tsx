@@ -27,10 +27,10 @@ const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secon
 };
 
 const OUTCOME_ICON: Record<string, React.ReactNode> = {
-  strong: <CheckCircle2 className="h-4 w-4 text-green-500" />,
-  applied: <CheckCircle2 className="h-4 w-4 text-blue-500" />,
-  partial: <RefreshCw className="h-4 w-4 text-yellow-500" />,
-  missed: <AlertTriangle className="h-4 w-4 text-red-500" />,
+  strong: <CheckCircle2 className="h-4 w-4 text-primary" />,
+  applied: <CheckCircle2 className="h-4 w-4 text-accent-foreground" />,
+  partial: <RefreshCw className="h-4 w-4 text-muted-foreground" />,
+  missed: <AlertTriangle className="h-4 w-4 text-destructive" />,
 };
 
 const NEXT_STEP_LABELS: Record<string, { icon: React.ReactNode; label: string }> = {
