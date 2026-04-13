@@ -15,6 +15,8 @@ import { selectKIsForLevel } from './kiClusterBuilder';
 import { fetchFullKICatalog } from '@/lib/dojo/v3/kiCatalogBridge';
 import { buildCapabilityProfiles } from '@/lib/dojo/v4/capabilityModel';
 import type { KICatalogEntry } from '@/lib/dojo/v3/programmingEngine';
+import { runSkillBuilderCoverageAudit } from './skillBuilderCoverageAudit';
+import { getSkillDepthProfile, getPatternCoverage } from './skillBuilderHardening';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -76,10 +78,11 @@ export interface GenerateSkillTrackInput {
 
 // ── Duration → Pattern Count ──────────────────────────────────────
 
-function getPatternCount(duration: number): number {
+function getPatternCount(duration: number, shouldDegrade: boolean = false): number {
   if (duration <= 15) return 2;
-  if (duration <= 30) return 3;
-  return 5;
+  if (duration <= 30) return shouldDegrade ? 2 : 3;
+  // 60 min: degrade to fewer patterns if skill is thin
+  return shouldDegrade ? 3 : 5;
 }
 
 // ── Determine User Level ──────────────────────────────────────────
@@ -115,9 +118,10 @@ export async function generateSkillTrack(
   const { userId, skill, durationMinutes } = input;
 
   // Fetch data in parallel
-  const [catalog, capabilities] = await Promise.all([
+  const [catalog, capabilities, coverageReport] = await Promise.all([
     fetchFullKICatalog(userId),
     buildCapabilityProfiles(userId),
+    runSkillBuilderCoverageAudit(userId).catch(() => null),
   ]);
 
   // Determine user level from capability data
@@ -130,26 +134,38 @@ export async function generateSkillTrack(
   const curriculum = SKILL_CURRICULA[skill];
   const levelDef = getCurriculumLevel(skill, currentLevel)!;
 
-  // Fetch recent KI IDs to avoid repetition
-  const recentKIIds = await fetchRecentlyUsedKIIds(userId, 7);
+  // Coverage-aware depth check: degrade gracefully for thin skills
+  const depthProfile = coverageReport ? getSkillDepthProfile(coverageReport, skill) : null;
+  const shouldDegrade = depthProfile?.shouldDegrade60 === true && durationMinutes >= 60;
+
+  // Fetch recent KI IDs to avoid repetition (extend window for longer sessions)
+  const recentDays = durationMinutes >= 60 ? 14 : 7;
+  const recentKIIds = await fetchRecentlyUsedKIIds(userId, recentDays);
 
   // Build cluster map for KI selection
   const clusterMap = buildKIClusterMap(catalog);
 
   // Select focus patterns for this session
-  const patternCount = getPatternCount(durationMinutes);
+  const patternCount = getPatternCount(durationMinutes, shouldDegrade);
   const selectedPatterns = selectPatterns(levelDef, curriculum.levels, patternCount, currentLevel);
 
-  // Select KIs for each pattern
+  // Select KIs for each pattern — avoid repeats more aggressively
   const kisByPattern = new Map<string, KICatalogEntry[]>();
+  const usedKIIds = new Set<string>(recentKIIds);
+
   for (const pattern of selectedPatterns) {
     const patternKIs = catalog.filter(ki => ki.focusPatterns.includes(pattern));
-    const selected = selectKIsForLevel(patternKIs, levelDef, recentKIIds, 1);
+    // Prefer KIs not recently used
+    const freshKIs = patternKIs.filter(ki => !usedKIIds.has(ki.id));
+    const pool = freshKIs.length > 0 ? freshKIs : patternKIs;
+
+    const selected = selectKIsForLevel(pool, levelDef, Array.from(usedKIIds), 1);
     if (selected.length > 0) {
       kisByPattern.set(pattern, selected);
-    } else if (patternKIs.length > 0) {
-      // Fallback: use any KI with this pattern
-      kisByPattern.set(pattern, [patternKIs[0]]);
+      selected.forEach(ki => usedKIIds.add(ki.id));
+    } else if (pool.length > 0) {
+      kisByPattern.set(pattern, [pool[0]]);
+      usedKIIds.add(pool[0].id);
     }
   }
 
