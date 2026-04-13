@@ -29,6 +29,8 @@ import { BlockRemediationCard } from '@/components/learn/BlockRemediationCard';
 import { AdaptiveStudyPathCard } from '@/components/learn/AdaptiveStudyPathCard';
 import { PrimaryActionCard } from '@/components/learn/PrimaryActionCard';
 import { SkillBuilderEntryCard } from '@/components/learn/SkillBuilderEntryCard';
+import { SkillLevelsPanel } from '@/components/learn/SkillLevelsPanel';
+import { useSkillLevels } from '@/hooks/useSkillLevels';
 
 export default function Learn() {
   const navigate = useNavigate();
@@ -36,6 +38,7 @@ export default function Learn() {
   const { data: progress } = useUserProgress();
   const { data: dailyKI } = useDailyKI();
   const { data: learnLoop } = useLearnLoop();
+  const { data: skillLevels } = useSkillLevels();
 
   const progressMap = useMemo(() => {
     const map: Record<string, LearningProgress> = {};
@@ -139,7 +142,12 @@ export default function Learn() {
           <PrimaryActionCard action={learnLoop.primaryAction} onExecute={handlePrimaryAction} />
         )}
 
-        {/* 3. Adaptive Study Path (Phase 5) */}
+        {/* 3. Skill Progression Levels */}
+        {skillLevels && skillLevels.length > 0 && (
+          <SkillLevelsPanel levels={skillLevels} />
+        )}
+
+        {/* 4. Adaptive Study Path (Phase 5) */}
         {learnLoop?.adaptiveStudyPath && <AdaptiveStudyPathCard path={learnLoop.adaptiveStudyPath} />}
 
         {/* Skill Builder Entry (Mode 2) */}
