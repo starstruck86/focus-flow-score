@@ -146,6 +146,11 @@ export function routeByIntent(
   intent: UserIntent,
   ctx: UserTrainingContext,
 ): DaveRecommendation {
+  // Active closed-loop coaching takes priority for resume and what_next
+  if ((intent === 'resume' || intent === 'what_next') && shouldPrioritizeLoop(ctx.activeLoop)) {
+    return buildLoopRecommendation(ctx.activeLoop!);
+  }
+
   // Resume always wins if there's a pending session
   if (intent === 'resume' && ctx.pendingBuffer) {
     return buildResumeRecommendation(ctx.pendingBuffer);
@@ -235,6 +240,11 @@ function buildResumeRecommendation(buffer: VoiceSessionBuffer): DaveRecommendati
 }
 
 function buildSmartDefault(ctx: UserTrainingContext): DaveRecommendation {
+  // Active closed-loop coaching outranks generic recommendations
+  if (shouldPrioritizeLoop(ctx.activeLoop)) {
+    return buildLoopRecommendation(ctx.activeLoop!);
+  }
+
   // Resume pending if exists
   if (ctx.pendingBuffer) {
     return buildResumeRecommendation(ctx.pendingBuffer);
