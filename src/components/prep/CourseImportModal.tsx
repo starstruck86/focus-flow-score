@@ -1011,7 +1011,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 min-h-0 border rounded-md">
+              <ScrollArea className="border rounded-md" style={{ maxHeight: '40vh' }}>
                 <div className="p-2 space-y-3">
                   {[...modules.entries()].map(([mod, items]) => (
                     <div key={mod}>
