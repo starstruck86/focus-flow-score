@@ -142,6 +142,23 @@ export default function AudioSessionMode({
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
 
+  // Closed-loop coaching integration
+  const closedLoop = useClosedLoopCoaching();
+  const isClosedLoop = !!closedLoopSessionId;
+
+  // Initialize closed-loop session if entering from Learn
+  useEffect(() => {
+    if (isClosedLoop && closedLoopSkill && closedLoopConcept && !closedLoop.session) {
+      const session = closedLoop.startTeaching(
+        closedLoopSkill,
+        closedLoopConcept,
+        closedLoopSubSkill || undefined,
+        closedLoopFocusPattern || undefined,
+      );
+      closedLoop.markReadyForTest();
+    }
+  }, [isClosedLoop]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Save local state on every meaningful change
   useEffect(() => {
     const currentResult = retryResult || result;
