@@ -107,6 +107,11 @@ export default function AudioSessionMode({
   assignmentId,
   benchmarkTag = false,
   scenarioFamilyId,
+  closedLoopSessionId,
+  closedLoopSkill,
+  closedLoopSubSkill,
+  closedLoopFocusPattern,
+  closedLoopConcept,
 }: AudioSessionModeProps) {
   // Restore from saved state if resuming
   const savedState = useRef(loadDojoState()).current;
