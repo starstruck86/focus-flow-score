@@ -143,6 +143,18 @@ export default function Learn() {
     }
   }, [learnLoop?.primaryAction, navigate]);
 
+  const handleResumeLoop = useCallback(() => {
+    if (!closedLoop.session) return;
+    const info = buildLoopResumeInfo(closedLoop.session);
+    if (info.nextSurface === 'dojo') {
+      navigate('/dojo/session', { state: info.launchState });
+    } else if (info.nextSurface === 'learn') {
+      // Already on learn — the loop will continue via existing lesson flow
+    } else if (info.nextSurface === 'skill_builder') {
+      navigate('/skill-builder/session', { state: info.launchState });
+    }
+  }, [closedLoop.session, navigate]);
+
   if (isLoading) {
     return (
       <Layout>
@@ -173,17 +185,27 @@ export default function Learn() {
           <div className="space-y-1 pt-0.5">
             <p className="text-sm font-medium text-foreground">Learning Engine</p>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {nextLesson
-                ? `Up next: ${nextLesson.lesson.title}`
-                : 'All lessons completed. Review weak areas below.'}
+              {closedLoop.session && closedLoop.isActive
+                ? `Dave is coaching: ${closedLoop.session.subSkill || closedLoop.session.taughtConcept}`
+                : nextLesson
+                  ? `Up next: ${nextLesson.lesson.title}`
+                  : 'All lessons completed. Review weak areas below.'}
             </p>
           </div>
         </div>
 
+        {/* Active Coaching Loop — top priority when present */}
+        {closedLoop.session && closedLoop.isActive && (
+          <DaveActiveLoopCard
+            session={closedLoop.session}
+            onResume={handleResumeLoop}
+          />
+        )}
+
         {/* 1. Today's Mental Model */}
         {learnLoop?.mentalModel && <TodaysMentalModel model={learnLoop.mentalModel} />}
 
-        {/* 2. Primary Action (Phase 6) */}
+        {/* 2. Primary Action (Phase 6) — only when no active loop dominates */}
         {learnLoop?.primaryAction && (
           <PrimaryActionCard action={learnLoop.primaryAction} onExecute={handlePrimaryAction} />
         )}
