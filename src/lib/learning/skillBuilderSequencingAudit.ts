@@ -7,6 +7,7 @@
 
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 import { generateSkillTrack, type SkillTrack } from './skillBuilderEngine';
+import { SKILL_CURRICULA } from './learnSkillCurriculum';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -123,9 +124,7 @@ function auditTrack(track: SkillTrack): SequencingAuditResult {
 // ── Helpers ───────────────────────────────────────────────────────
 
 function inferLevelSpread(track: SkillTrack): number[] {
-  // Import curriculum to map patterns to levels
-  const { SKILL_CURRICULA } = require('./learnSkillCurriculum');
-  const curriculum = SKILL_CURRICULA[track.skill];
+  const curriculum = SKILL_CURRICULA[track.skill as keyof typeof SKILL_CURRICULA];
   if (!curriculum) return [];
 
   const levels: number[] = [];
