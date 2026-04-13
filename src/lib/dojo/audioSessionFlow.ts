@@ -20,11 +20,13 @@ import type { DojoScenario } from './scenarios';
 export type AudioSessionPhase =
   | 'intro'
   | 'prompt'
+  | 'instruction'        // Dave gives explicit verbal cue before mic activates
   | 'listening'
   | 'transcribing'
   | 'scoring'
   | 'feedback'
   | 'retry_prompt'
+  | 'retry_instruction'  // Verbal cue before retry recording
   | 'retry_listening'
   | 'retry_transcribing'
   | 'retry_scoring'
@@ -43,9 +45,19 @@ export function buildIntroText(scenario: DojoScenario): string {
   return `Here's the situation. ${scenario.context}`;
 }
 
-/** Build the prompt speech text from scenario */
+/** Build the prompt speech text from scenario (objection only) */
 export function buildPromptText(scenario: DojoScenario): string {
-  return `The buyer says: "${scenario.objection}" — How do you respond?`;
+  return `The buyer says: "${scenario.objection}"`;
+}
+
+/** Build the instruction text — explicit verbal cue before recording starts */
+export function buildInstructionText(): string {
+  return "How do you respond? Go.";
+}
+
+/** Build retry instruction text */
+export function buildRetryInstructionText(): string {
+  return "Go ahead.";
 }
 
 /** Build retry prompt text */
@@ -58,11 +70,13 @@ export function buildRetryPromptText(feedback: string, practiceCue?: string): st
 export function nextPhase(current: AudioSessionPhase): AudioSessionPhase {
   switch (current) {
     case 'intro': return 'prompt';
-    case 'prompt': return 'listening';
+    case 'prompt': return 'instruction';
+    case 'instruction': return 'listening';
     case 'listening': return 'transcribing';
     case 'transcribing': return 'scoring';
     case 'scoring': return 'feedback';
-    case 'retry_prompt': return 'retry_listening';
+    case 'retry_prompt': return 'retry_instruction';
+    case 'retry_instruction': return 'retry_listening';
     case 'retry_listening': return 'retry_transcribing';
     case 'retry_transcribing': return 'retry_scoring';
     case 'retry_scoring': return 'retry_feedback';
@@ -72,7 +86,8 @@ export function nextPhase(current: AudioSessionPhase): AudioSessionPhase {
 
 /** Check if phase is a speaking phase (Dave talks) */
 export function isSpeakingPhase(phase: AudioSessionPhase): boolean {
-  return phase === 'intro' || phase === 'prompt' || phase === 'retry_prompt';
+  return phase === 'intro' || phase === 'prompt' || phase === 'instruction' ||
+         phase === 'retry_prompt' || phase === 'retry_instruction';
 }
 
 /** Check if phase is a listening phase (mic active) */
