@@ -233,6 +233,18 @@ function filterCandidates(index: IndexedKI[], playbook: PlaybookDefinition): Ind
   });
 }
 
+/**
+ * Level-aware filtering: prefer KIs at or below the user's difficulty level,
+ * with a small window above for stretch content.
+ * Level 1 → difficulty 1-2, Level 2 → 1-3, Level 3 → 1-4, Level 4+ → all
+ */
+function filterByLevel(candidates: IndexedKI[], userLevel: number): IndexedKI[] {
+  const maxDifficulty = Math.min(userLevel + 1, 4);
+  const filtered = candidates.filter(ki => ki.difficulty <= maxDifficulty);
+  // Fall back to all candidates if level filtering is too aggressive
+  return filtered.length >= MIN_SLOTS ? filtered : candidates;
+}
+
 // ── Scored Selection ──────────────────────────────────────────────
 
 function pickBestScored(
