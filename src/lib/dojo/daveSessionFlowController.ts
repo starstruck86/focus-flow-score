@@ -455,7 +455,7 @@ async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSes
       await speakWithBargeIn(gradeResult.feedback, ctx, { role: 'feedback' });
     }
 
-    if (ctx.signal?.aborted) return abortLearn(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abortLearn(result); }
 
     // Recap
     setPhase('recap');
@@ -467,40 +467,32 @@ async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSes
     if (config.onHandoffToDojo) {
       setPhase('handoff');
       await speakStrict(
-        "Good — now let's put this into practice. I'm going to give you a scenario. Respond like you would on a real call.",
+        "Alright — now let's apply it. I'm setting up a scenario. Respond like you would on a real call.",
         ctx,
         { role: 'handoff' },
       );
-      // Transfer audio ownership cleanly — the Dojo session will create its own context
-      // using the same ttsConfig + playbackRef, so we just signal completion here.
+      // Drain audio fully before handing ownership to Dojo
+      await waitForPlaybackDrain(ctx);
       interruptPlayback(ctx);
       result.handedOffToDojo = true;
+      telemetry.setHandoff(true);
+      telemetry.setFinalScore(result.gradeScore);
+      telemetry.finalize(true);
       config.onHandoffToDojo(config.lesson.topic);
     } else {
       setPhase('handoff');
       await speakStrict(
-        "That wraps up this lesson. Great work today.",
+        "That wraps up this lesson. Good reps today.",
         ctx,
         { role: 'closing' },
       );
+      telemetry.setFinalScore(result.gradeScore);
+      telemetry.finalize(true);
     }
 
     setPhase('complete');
     config.onComplete?.(recap);
     return result;
-
-  } catch (err) {
-    if (err instanceof AudioFirstSessionError) {
-      config.onError?.(err);
-      logger.error('Audio-first learn error', { error: err.message, phase: err.phase });
-    } else {
-      logger.error('Unexpected learn error', { error: err });
-    }
-    result.aborted = true;
-    result.phase = 'complete';
-    return result;
-  }
-}
 
 // ══════════════════════════════════════════════════════════════════
 // COMPRESSED LEARN (DRIVING MODE)
