@@ -17,6 +17,8 @@ import { buildCapabilityProfiles } from '@/lib/dojo/v4/capabilityModel';
 import type { KICatalogEntry } from '@/lib/dojo/v3/programmingEngine';
 import { runSkillBuilderCoverageAudit } from './skillBuilderCoverageAudit';
 import { getSkillDepthProfile, getPatternCoverage } from './skillBuilderHardening';
+import { evaluateSkillLevel, type UserSkillLevel } from './learnLevelEvaluator';
+import { getSkillLevel as getSkillLevelDef, getCumulativePatterns } from './learnSkillLevels';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -68,6 +70,8 @@ export interface SkillTrack {
   blocks: SkillBlock[];
   kiIdsUsed: string[];
   focusPatternsUsed: string[];
+  /** Level evaluation details for UI display */
+  levelEvaluation?: UserSkillLevel;
 }
 
 export interface GenerateSkillTrackInput {
