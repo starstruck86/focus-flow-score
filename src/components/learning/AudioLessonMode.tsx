@@ -252,10 +252,15 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
     } catch (err) {
       console.error('TTS failed for section, advancing:', err);
       setCompletedSections(prev => new Set([...prev, section.id]));
-      // Still advance even if TTS fails
+      // Still advance even if TTS fails — but NEVER drop user into silence
       if (section.pauseAfter) {
-        if (section.expectsInput === 'mc') setPhase('waiting_mc');
-        else if (section.expectsInput === 'open_ended') {
+        if (section.expectsInput === 'mc') {
+          // Fallback verbal cue so mic never activates silently
+          try { await dave.speak("Alright — what's your answer?"); } catch { /* last resort */ }
+          setPhase('waiting_mc');
+        } else if (section.expectsInput === 'open_ended') {
+          // Fallback verbal cue before mic activation
+          try { await dave.speak("Alright — your turn. Go ahead."); } catch { /* last resort */ }
           setPhase('waiting_open');
           tryActivateMic();
         }
@@ -266,6 +271,8 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   }, [sections, dave, getSectionIntro, getListenCue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tryActivateMic = useCallback(async () => {
+    // Small delay to ensure TTS playback fully drains before mic opens
+    await new Promise(r => setTimeout(r, 300));
     try {
       await dave.startListening();
     } catch {
