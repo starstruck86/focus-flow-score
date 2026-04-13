@@ -55,6 +55,9 @@ import {
 } from '@/lib/dojo/audioSessionFlow';
 import type { Json } from '@/integrations/supabase/types';
 import { completeAssignment } from '@/lib/dojo/v3/assignmentManager';
+import { useDaveSessionBridge } from '@/hooks/useDaveSessionBridge';
+import { prefetchDojoScenario } from '@/lib/daveSessionPrefetch';
+import DaveSignalBanner from '@/components/DaveSignalBanner';
 
 interface AudioSessionModeProps {
   scenario: DojoScenario;
@@ -117,6 +120,11 @@ export default function AudioSessionMode({
   const recoveryRef = useRef<RecoveryController | null>(null);
 
   const voice = useVoiceMode();
+  const dave = useDaveSessionBridge({
+    surface: 'dojo',
+    sessionKey: `dojo-${scenario.title}`,
+    mode: 'audio',
+  });
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
 
@@ -149,6 +157,17 @@ export default function AudioSessionMode({
       clearDojoState();
     }
   }, [phase]);
+
+  // Prefetch scenario content for driving resilience
+  useEffect(() => {
+    const prefetched = prefetchDojoScenario(scenario);
+    dave.prefetchCache.add(prefetched);
+  }, [scenario.title]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear buffer on complete
+  useEffect(() => {
+    if (phase === 'complete') dave.clearBuffer();
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-start: Dave introduces scenario (skip if resuming mid-session)
   const hasStartedRef = useRef(false);
@@ -229,9 +248,12 @@ export default function AudioSessionMode({
     try {
       const text = await voice.stopRecording();
       setTranscribedText(text);
+      dave.recordTranscript('user', text);
+      dave.setPendingTranscript(text);
 
       const isRetry = phaseRef.current === 'retry_listening';
       setPhase(isRetry ? 'retry_scoring' : 'scoring');
+      dave.updatePosition(isRetry ? retryCount + 1 : 0, { phase: isRetry ? 'retry_scoring' : 'scoring' });
       await scoreAndDeliver(text, isRetry);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Recording failed';
@@ -656,6 +678,12 @@ export default function AudioSessionMode({
 
   return (
     <div className="space-y-4">
+      {/* Signal loss/recovery banner for driving mode */}
+      <DaveSignalBanner
+        message={dave.signalMessage}
+        isOffline={dave.isOffline}
+        pendingOpsCount={dave.pendingOpsCount}
+      />
       {/* Recovery banner */}
       <RecoveryBanner
         recovery={recovery}

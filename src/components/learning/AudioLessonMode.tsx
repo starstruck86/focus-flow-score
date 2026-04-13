@@ -45,6 +45,9 @@ import {
 } from '@/lib/learning/lessonAudioSequencer';
 import { getPracticeMapping } from '@/lib/learning/practiceMapping';
 import { useUpsertProgress, useSaveQuizAnswer } from '@/lib/learning/hooks';
+import { useDaveSessionBridge } from '@/hooks/useDaveSessionBridge';
+import { prefetchLearnUnits } from '@/lib/daveSessionPrefetch';
+import DaveSignalBanner from '@/components/DaveSignalBanner';
 
 interface AudioLessonModeProps {
   lesson: LearningLesson;
@@ -57,6 +60,11 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   const voice = useVoiceMode();
   const upsertProgress = useUpsertProgress();
   const saveAnswer = useSaveQuizAnswer();
+  const dave = useDaveSessionBridge({
+    surface: 'learn',
+    sessionKey: `learn-${lesson.id}`,
+    mode: 'audio',
+  });
 
   // Restore from saved state if resuming the same lesson
   const savedLearn = useRef(loadLearnState()).current;
@@ -109,8 +117,11 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
 
   // Clear on completion
   useEffect(() => {
-    if (phase === 'complete') clearLearnState();
-  }, [phase]);
+    if (phase === 'complete') {
+      clearLearnState();
+      dave.clearBuffer();
+    }
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
   // Auto-play current section (or resume from interrupted state)
   const hasStartedRef = useRef(false);
   useEffect(() => {
@@ -151,6 +162,8 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
 
     try {
       await voice.playTTS(section.text);
+      dave.recordTranscript('dave', section.text);
+      dave.updatePosition(idx, { phase: 'teaching' });
       setCompletedSections(prev => new Set([...prev, section.id]));
 
       // After speaking, check if we need user input
@@ -422,6 +435,12 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
 
   return (
     <div className="space-y-4">
+      {/* Signal loss/recovery banner for driving mode */}
+      <DaveSignalBanner
+        message={dave.signalMessage}
+        isOffline={dave.isOffline}
+        pendingOpsCount={dave.pendingOpsCount}
+      />
       {/* Recovery banner */}
       <RecoveryBanner recovery={recovery} onCancel={cancelRecovery} />
       {/* Progress & status */}
