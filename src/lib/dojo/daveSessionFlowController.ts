@@ -11,9 +11,15 @@
  * 4. No content is silently skipped.
  * 5. Retry loops cannot skip instruction.
  *
+ * BARGE-IN: Interruptible phases support mid-playback commands.
+ * CHECKPOINT REPLAY: "repeat" replays the active segment deterministically.
+ * COMPRESSED LEARN: Shorter driving-safe lesson mode.
+ * AUTO HANDOFF: Learn → Dojo chains automatically.
+ *
  * Entry points:
  * - runAudioFirstDojoSession() — practice reps with scoring
- * - runAudioFirstLearnSession() — lesson teaching with application
+ * - runAudioFirstLearnSession() — full lesson teaching with application
+ * - runCompressedLearnSession() — highway-safe compressed lesson
  */
 
 import type { DojoScenario } from './scenarios';
@@ -23,10 +29,15 @@ import {
   type AudioFirstContext,
   type InterruptionCommand,
   type SessionRecap,
+  type BargeInAction,
+  createAudioFirstContext,
   speakStrict,
   speakQueueStrict,
+  speakWithBargeIn,
   listenStrict,
   interruptPlayback,
+  handleBargeInCommand,
+  replayCurrentCheckpoint,
   buildSessionRecapSpeech,
   AudioFirstSessionError,
 } from '@/lib/daveAudioFirstRuntime';
@@ -49,6 +60,8 @@ export interface DojoSessionConfig {
   onStateChange?: (patch: Record<string, unknown>) => void;
   onRepComplete?: (result: DojoScoreResult, transcript: string, isRetry: boolean) => void;
   onSessionComplete?: (recap: SessionRecap) => void;
+  /** Called when Learn→Dojo auto-handoff should trigger */
+  onHandoffToDojo?: (skillFocus: string) => void;
   onError?: (error: AudioFirstSessionError) => void;
   maxRetries?: number;
   signal?: AbortSignal;
@@ -64,20 +77,14 @@ export interface DojoSessionResult {
 }
 
 /**
- * Run a complete audio-first Dojo session.
- * Fully hands-free: intro → context → what good sounds like →
- * evaluation criteria → objection → instruction → auto-record →
- * feedback → auto-retry → recap.
+ * Run a complete audio-first Dojo session with barge-in support.
  */
 export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promise<DojoSessionResult> {
   const maxRetries = config.maxRetries ?? 2;
   const script = buildAudioScript(config.scenario);
-  const ctx: AudioFirstContext = {
-    ttsConfig: config.ttsConfig,
-    playbackRef: config.playbackRef,
-    signal: config.signal,
-    onStateChange: config.onStateChange,
-  };
+  const ctx = createAudioFirstContext(
+    config.ttsConfig, config.playbackRef, config.signal, config.onStateChange,
+  );
 
   const result: DojoSessionResult = {
     phase: 'intro',
@@ -90,32 +97,39 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
 
   const setPhase = (phase: AudioSessionPhase) => {
     result.phase = phase;
+    ctx.currentPhase = phase;
     config.onPhaseChange?.(phase);
     config.onStateChange?.({ phase });
   };
 
   try {
-    // ── Phase 1: Intro ───────────────────────────────────────
+    // ── Intro (protected) ────────────────────────────────────
     setPhase('intro');
-    await speakStrict(script.intro, ctx);
+    await speakStrict(script.intro, ctx, { role: 'intro' });
     if (ctx.signal?.aborted) return abort(result);
 
-    // ── Phase 2: Context + What Good Sounds Like + Evaluation Criteria + Objection
+    // ── Context + Framing (interruptible with barge-in) ──────
     setPhase('prompt');
-    await speakQueueStrict([
+    const bargeIn = await speakQueueStrict([
       { text: script.context, pauseAfter: 800 },
       { text: script.whatGoodSoundsLike, pauseAfter: 600 },
       { text: script.evaluationCriteria, pauseAfter: 600 },
       { text: script.objection, pauseAfter: 600 },
-    ], ctx);
+    ], ctx, { roles: ['context', 'what_good_sounds_like', 'evaluation_criteria', 'objection'] });
+
+    if (bargeIn) {
+      const action = await handleBargeInCommand(bargeIn, ctx);
+      if (action === 'stop') return abort(result);
+      if (action === 'skip') { /* skip to instruction */ }
+    }
     if (ctx.signal?.aborted) return abort(result);
 
-    // ── Phase 3: Instruction (explicit verbal cue) ───────────
+    // ── Instruction (protected) ──────────────────────────────
     setPhase('instruction');
-    await speakStrict(script.instruction, ctx);
+    await speakStrict(script.instruction, ctx, { role: 'instruction' });
     if (ctx.signal?.aborted) return abort(result);
 
-    // ── Phase 4: Listen ──────────────────────────────────────
+    // ── Listen ───────────────────────────────────────────────
     setPhase('listening');
     const listenResult = await listenStrict(ctx, {
       timeoutMs: 60_000,
@@ -123,16 +137,21 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
       retryOnSilence: 1,
     });
 
-    // Handle interruption commands during listening
     if (listenResult.command) {
-      const handled = await handleInterruption(listenResult.command, ctx, result, config);
-      if (handled) return result;
+      const action = await handleBargeInCommand(listenResult.command, ctx);
+      if (action === 'stop') return abort(result);
+      if (action === 'repeat') {
+        // After replay, re-listen
+        const reListen = await listenStrict(ctx, { timeoutMs: 60_000, requireResponse: true });
+        listenResult.transcript = reListen.transcript;
+        listenResult.command = reListen.command;
+      }
     }
 
     if (ctx.signal?.aborted) return abort(result);
     result.lastTranscript = listenResult.transcript;
 
-    // ── Phase 5: Scoring ─────────────────────────────────────
+    // ── Scoring ──────────────────────────────────────────────
     setPhase('scoring');
     config.onStateChange?.({ isProcessing: true });
     const scoreResult = await config.onScore(listenResult.transcript);
@@ -140,14 +159,18 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     if (ctx.signal?.aborted) return abort(result);
     result.lastScore = scoreResult;
 
-    // ── Phase 6: Feedback ────────────────────────────────────
+    // ── Feedback (interruptible) ─────────────────────────────
     setPhase('feedback');
-    await deliverFeedback(scoreResult, ctx);
+    const fbBargeIn = await deliverFeedback(scoreResult, ctx);
+    if (fbBargeIn) {
+      const action = await handleBargeInCommand(fbBargeIn, ctx);
+      if (action === 'stop') return abort(result);
+    }
     if (ctx.signal?.aborted) return abort(result);
 
     config.onRepComplete?.(scoreResult, listenResult.transcript, false);
 
-    // ── Phase 7+: Auto Retry Loop ────────────────────────────
+    // ── Auto Retry Loop ──────────────────────────────────────
     const score = scoreResult.score ?? 0;
     let retryCount = 0;
     let latestScore = scoreResult;
@@ -158,17 +181,19 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
 
       const retryScript = buildRetryScript(latestScore.practiceCue || latestScore.topMistake);
 
-      // Retry prompt (NEVER skipped)
       setPhase('retry_prompt');
-      await speakStrict(retryScript.retryPrompt, ctx);
+      const retryBargeIn = await speakWithBargeIn(retryScript.retryPrompt, ctx, { role: 'retry_prompt' });
+      if (retryBargeIn) {
+        const action = await handleBargeInCommand(retryBargeIn, ctx);
+        if (action === 'stop') return abort(result);
+        if (action === 'skip') break;
+      }
       if (ctx.signal?.aborted) return abort(result);
 
-      // Retry instruction (NEVER skipped)
       setPhase('retry_instruction');
-      await speakStrict(retryScript.retryInstruction, ctx);
+      await speakStrict(retryScript.retryInstruction, ctx, { role: 'retry_instruction' });
       if (ctx.signal?.aborted) return abort(result);
 
-      // Retry listen
       setPhase('retry_listening');
       const retryListen = await listenStrict(ctx, {
         timeoutMs: 60_000,
@@ -181,7 +206,6 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
 
       result.lastTranscript = retryListen.transcript;
 
-      // Retry scoring
       setPhase('retry_scoring');
       config.onStateChange?.({ isProcessing: true });
       latestScore = await config.onScore(retryListen.transcript);
@@ -189,18 +213,17 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
       if (ctx.signal?.aborted) return abort(result);
       result.lastScore = latestScore;
 
-      // Retry feedback
       setPhase('retry_feedback');
       await deliverFeedback(latestScore, ctx);
       if (ctx.signal?.aborted) return abort(result);
 
       config.onRepComplete?.(latestScore, retryListen.transcript, true);
-
       if ((latestScore.score ?? 0) >= 7) break;
     }
 
     // ── Recap + Complete ─────────────────────────────────────
     setPhase('complete');
+    ctx.currentPhase = 'recap';
     const recap = buildDojoRecap(result);
     result.recap = recap;
     await speakQueueStrict(buildSessionRecapSpeech(recap), ctx);
@@ -242,6 +265,8 @@ export type LearnSessionPhase =
   | 'handoff'
   | 'complete';
 
+export type LearnMode = 'full' | 'compressed';
+
 export interface LearnSessionConfig {
   lesson: {
     id: string;
@@ -261,14 +286,16 @@ export interface LearnSessionConfig {
   };
   ttsConfig: TtsConfig;
   playbackRef: React.MutableRefObject<ActivePlayback>;
-  /** Grade the user's application response */
   onGrade?: (response: string) => Promise<{ feedback: string; score: number }>;
   onPhaseChange?: (phase: LearnSessionPhase) => void;
   onStateChange?: (patch: Record<string, unknown>) => void;
   onComplete?: (recap: SessionRecap) => void;
+  /** When set, auto-chains into a Dojo rep after lesson */
+  onHandoffToDojo?: (skillFocus: string) => void;
   onError?: (error: AudioFirstSessionError) => void;
-  /** Optional example response to speak before asking the user */
   exampleResponse?: string;
+  /** 'full' = all 7 sections; 'compressed' = concept + criteria + prompt (driving mode) */
+  mode?: LearnMode;
   signal?: AbortSignal;
 }
 
@@ -279,26 +306,31 @@ export interface LearnSessionResult {
   gradeScore: number;
   aborted: boolean;
   recap: SessionRecap | null;
+  handedOffToDojo: boolean;
 }
 
 /**
  * Run a complete audio-first Learn session.
- * Fully hands-free: intro → concept → what good looks like → breakdown →
- * when to use → when to avoid → expected response framing → (example) →
- * application prompt → auto-record → grade → feedback → recap.
+ * Dispatches to full or compressed mode.
  */
 export async function runAudioFirstLearnSession(config: LearnSessionConfig): Promise<LearnSessionResult> {
-  const script = buildAudioLessonScript(config.lesson);
-  if (config.exampleResponse) {
-    script.exampleResponse = config.exampleResponse;
+  const mode = config.mode ?? 'full';
+  if (mode === 'compressed') {
+    return runCompressedLearnSession(config);
   }
+  return runFullLearnSession(config);
+}
 
-  const ctx: AudioFirstContext = {
-    ttsConfig: config.ttsConfig,
-    playbackRef: config.playbackRef,
-    signal: config.signal,
-    onStateChange: config.onStateChange,
-  };
+/**
+ * Full Learn session — all lesson sections with barge-in.
+ */
+async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSessionResult> {
+  const script = buildAudioLessonScript(config.lesson);
+  if (config.exampleResponse) script.exampleResponse = config.exampleResponse;
+
+  const ctx = createAudioFirstContext(
+    config.ttsConfig, config.playbackRef, config.signal, config.onStateChange,
+  );
 
   const result: LearnSessionResult = {
     phase: 'intro',
@@ -307,66 +339,53 @@ export async function runAudioFirstLearnSession(config: LearnSessionConfig): Pro
     gradeScore: 0,
     aborted: false,
     recap: null,
+    handedOffToDojo: false,
   };
 
   const setPhase = (phase: LearnSessionPhase) => {
     result.phase = phase;
+    ctx.currentPhase = phase;
     config.onPhaseChange?.(phase);
     config.onStateChange?.({ phase });
   };
 
   try {
-    // ── Intro ────────────────────────────────────────────────
-    setPhase('intro');
-    await speakStrict(script.intro, ctx);
-    if (ctx.signal?.aborted) return abortLearn(result);
+    // Teaching segments — each interruptible
+    const teachingSegments: { phase: LearnSessionPhase; text: string; role: string }[] = [
+      { phase: 'intro', text: script.intro, role: 'intro' },
+      { phase: 'concept', text: script.concept, role: 'concept' },
+      { phase: 'what_good_looks_like', text: script.whatGoodLooksLike, role: 'what_good_looks_like' },
+      { phase: 'breakdown', text: script.breakdown, role: 'breakdown' },
+      { phase: 'when_to_use', text: script.whenToUse, role: 'when_to_use' },
+      { phase: 'when_to_avoid', text: script.whenToAvoid, role: 'when_to_avoid' },
+      { phase: 'expected_response_framing', text: script.expectedResponseFraming, role: 'expected_response_framing' },
+    ];
 
-    // ── Concept ──────────────────────────────────────────────
-    setPhase('concept');
-    await speakStrict(script.concept, ctx);
-    if (ctx.signal?.aborted) return abortLearn(result);
-
-    // ── What Good Looks Like ─────────────────────────────────
-    setPhase('what_good_looks_like');
-    await speakStrict(script.whatGoodLooksLike, ctx);
-    if (ctx.signal?.aborted) return abortLearn(result);
-
-    // ── Breakdown ────────────────────────────────────────────
-    setPhase('breakdown');
-    await speakStrict(script.breakdown, ctx);
-    if (ctx.signal?.aborted) return abortLearn(result);
-
-    // ── When to Use ──────────────────────────────────────────
-    setPhase('when_to_use');
-    await speakStrict(script.whenToUse, ctx);
-    if (ctx.signal?.aborted) return abortLearn(result);
-
-    // ── When to Avoid ────────────────────────────────────────
-    setPhase('when_to_avoid');
-    await speakStrict(script.whenToAvoid, ctx);
-    if (ctx.signal?.aborted) return abortLearn(result);
-
-    // ── Expected Response Framing ────────────────────────────
-    setPhase('expected_response_framing');
-    await speakStrict(script.expectedResponseFraming, ctx);
-    if (ctx.signal?.aborted) return abortLearn(result);
-
-    // ── Example Response (optional) ──────────────────────────
     if (script.exampleResponse) {
-      setPhase('example_response');
-      await speakStrict(
-        `Here's an example of what a strong response sounds like: ${script.exampleResponse}`,
-        ctx,
-      );
+      teachingSegments.push({
+        phase: 'example_response',
+        text: `Here's an example of what a strong response sounds like: ${script.exampleResponse}`,
+        role: 'example_response',
+      });
+    }
+
+    for (const seg of teachingSegments) {
+      setPhase(seg.phase);
+      const bargeIn = await speakWithBargeIn(seg.text, ctx, { role: seg.role });
+      if (bargeIn) {
+        const action = await handleBargeInCommand(bargeIn, ctx);
+        if (action === 'stop') return abortLearn(result);
+        if (action === 'skip') continue;
+      }
       if (ctx.signal?.aborted) return abortLearn(result);
     }
 
-    // ── Application Prompt ───────────────────────────────────
+    // Application prompt (protected)
     setPhase('application_prompt');
-    await speakStrict(script.applicationPrompt, ctx);
+    await speakStrict(script.applicationPrompt, ctx, { role: 'application_prompt' });
     if (ctx.signal?.aborted) return abortLearn(result);
 
-    // ── Listen ───────────────────────────────────────────────
+    // Listen
     setPhase('listening');
     const listenResult = await listenStrict(ctx, {
       timeoutMs: 60_000,
@@ -376,47 +395,57 @@ export async function runAudioFirstLearnSession(config: LearnSessionConfig): Pro
 
     if (listenResult.command === 'stop') return abortLearn(result);
     if (listenResult.command === 'skip') {
-      // Skip application but still do recap
-      setPhase('recap');
-      const recap = buildLearnRecap(result, config.lesson.topic);
-      result.recap = recap;
-      await speakQueueStrict(buildSessionRecapSpeech(recap), ctx);
-      setPhase('complete');
-      config.onComplete?.(recap);
-      return result;
+      // Skip to recap
+    } else if (listenResult.command === 'repeat') {
+      await replayCurrentCheckpoint(ctx);
+      // Re-listen after replay
+      const reListen = await listenStrict(ctx, { timeoutMs: 60_000 });
+      result.userResponse = reListen.transcript;
+    } else {
+      result.userResponse = listenResult.transcript;
     }
 
     if (ctx.signal?.aborted) return abortLearn(result);
-    result.userResponse = listenResult.transcript;
 
-    // ── Grading ──────────────────────────────────────────────
-    if (config.onGrade && listenResult.transcript.trim()) {
+    // Grading
+    if (config.onGrade && result.userResponse.trim()) {
       setPhase('grading');
       config.onStateChange?.({ isProcessing: true });
-      const gradeResult = await config.onGrade(listenResult.transcript);
+      const gradeResult = await config.onGrade(result.userResponse);
       config.onStateChange?.({ isProcessing: false });
       result.gradeFeedback = gradeResult.feedback;
       result.gradeScore = gradeResult.score;
 
-      // ── Feedback ─────────────────────────────────────────
       setPhase('feedback');
-      await speakStrict(gradeResult.feedback, ctx);
+      await speakWithBargeIn(gradeResult.feedback, ctx, { role: 'feedback' });
     }
 
     if (ctx.signal?.aborted) return abortLearn(result);
 
-    // ── Recap ────────────────────────────────────────────────
+    // Recap
     setPhase('recap');
     const recap = buildLearnRecap(result, config.lesson.topic);
     result.recap = recap;
     await speakQueueStrict(buildSessionRecapSpeech(recap), ctx);
 
-    // ── Handoff ──────────────────────────────────────────────
-    setPhase('handoff');
-    await speakStrict(
-      "Good — now let's put this into practice. I'm going to give you a scenario. Respond like you would on a real call.",
-      ctx,
-    );
+    // Handoff — automatic Learn → Dojo chain
+    if (config.onHandoffToDojo) {
+      setPhase('handoff');
+      await speakStrict(
+        "Good — now let's put this into practice. I'm going to give you a scenario. Respond like you would on a real call.",
+        ctx,
+        { role: 'handoff' },
+      );
+      result.handedOffToDojo = true;
+      config.onHandoffToDojo(config.lesson.topic);
+    } else {
+      setPhase('handoff');
+      await speakStrict(
+        "Good — now let's put this into practice. I'm going to give you a scenario. Respond like you would on a real call.",
+        ctx,
+        { role: 'handoff' },
+      );
+    }
 
     setPhase('complete');
     config.onComplete?.(recap);
@@ -436,49 +465,161 @@ export async function runAudioFirstLearnSession(config: LearnSessionConfig): Pro
 }
 
 // ══════════════════════════════════════════════════════════════════
+// COMPRESSED LEARN (DRIVING MODE)
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Compressed Learn session for highway use.
+ * Merges concept + what good looks like + criteria into a single tight flow:
+ *   1. Quick intro
+ *   2. Concept (compressed)
+ *   3. Key criteria
+ *   4. Prompt → Listen → Feedback
+ *   5. Auto handoff to Dojo
+ *
+ * Total speaking time: ~60–90 seconds before asking user to respond.
+ */
+async function runCompressedLearnSession(config: LearnSessionConfig): Promise<LearnSessionResult> {
+  const content = config.lesson.lesson_content;
+  const topic = config.lesson.topic.replace(/_/g, ' ');
+
+  const ctx = createAudioFirstContext(
+    config.ttsConfig, config.playbackRef, config.signal, config.onStateChange,
+  );
+
+  const result: LearnSessionResult = {
+    phase: 'intro',
+    userResponse: '',
+    gradeFeedback: '',
+    gradeScore: 0,
+    aborted: false,
+    recap: null,
+    handedOffToDojo: false,
+  };
+
+  const setPhase = (phase: LearnSessionPhase) => {
+    result.phase = phase;
+    ctx.currentPhase = phase;
+    config.onPhaseChange?.(phase);
+    config.onStateChange?.({ phase });
+  };
+
+  try {
+    // ── Compressed intro + concept ───────────────────────────
+    setPhase('intro');
+    const compressedIntro = `Quick lesson on ${topic}. ${config.lesson.title}.`;
+    await speakStrict(compressedIntro, ctx, { role: 'intro' });
+    if (ctx.signal?.aborted) return abortLearn(result);
+
+    // ── Core concept (interruptible) ─────────────────────────
+    setPhase('concept');
+    const bargeIn1 = await speakWithBargeIn(content.concept, ctx, { role: 'concept' });
+    if (bargeIn1) {
+      const action = await handleBargeInCommand(bargeIn1, ctx);
+      if (action === 'stop') return abortLearn(result);
+    }
+    if (ctx.signal?.aborted) return abortLearn(result);
+
+    // ── What good looks like + criteria (merged, interruptible)
+    setPhase('what_good_looks_like');
+    const rubric = config.lesson.quiz_content?.rubric;
+    const mergedCriteria = rubric
+      ? `Here's what I'm looking for: ${rubric}`
+      : `Here's what good looks like: ${content.what_good_looks_like}`;
+    const bargeIn2 = await speakWithBargeIn(mergedCriteria, ctx, { role: 'criteria' });
+    if (bargeIn2) {
+      const action = await handleBargeInCommand(bargeIn2, ctx);
+      if (action === 'stop') return abortLearn(result);
+    }
+    if (ctx.signal?.aborted) return abortLearn(result);
+
+    // ── Prompt (protected) ───────────────────────────────────
+    setPhase('application_prompt');
+    const prompt = config.lesson.quiz_content?.open_ended_prompt
+      ?? `Now apply this. Give me your best ${topic} response. Go.`;
+    await speakStrict(prompt, ctx, { role: 'application_prompt' });
+    if (ctx.signal?.aborted) return abortLearn(result);
+
+    // ── Listen ───────────────────────────────────────────────
+    setPhase('listening');
+    const listenResult = await listenStrict(ctx, {
+      timeoutMs: 60_000,
+      requireResponse: false,
+      retryOnSilence: 1,
+    });
+
+    if (listenResult.command === 'stop') return abortLearn(result);
+    if (listenResult.command === 'repeat') {
+      await replayCurrentCheckpoint(ctx);
+      const reListen = await listenStrict(ctx, { timeoutMs: 60_000 });
+      result.userResponse = reListen.transcript;
+    } else {
+      result.userResponse = listenResult.transcript;
+    }
+    if (ctx.signal?.aborted) return abortLearn(result);
+
+    // ── Grade ────────────────────────────────────────────────
+    if (config.onGrade && result.userResponse.trim()) {
+      setPhase('grading');
+      config.onStateChange?.({ isProcessing: true });
+      const gradeResult = await config.onGrade(result.userResponse);
+      config.onStateChange?.({ isProcessing: false });
+      result.gradeFeedback = gradeResult.feedback;
+      result.gradeScore = gradeResult.score;
+
+      setPhase('feedback');
+      await speakStrict(gradeResult.feedback, ctx, { role: 'feedback' });
+    }
+    if (ctx.signal?.aborted) return abortLearn(result);
+
+    // ── Quick recap ──────────────────────────────────────────
+    setPhase('recap');
+    const recap = buildLearnRecap(result, config.lesson.topic);
+    result.recap = recap;
+    // Compressed recap — single sentence
+    const quickRecap = recap.whatImproved
+      ? `${recap.whatImproved} ${recap.whatStillNeedsWork ? `Work on: ${recap.whatStillNeedsWork}` : ''}`
+      : "Let's lock this in with a live rep.";
+    await speakStrict(quickRecap, ctx, { role: 'recap' });
+
+    // ── Auto handoff ─────────────────────────────────────────
+    if (config.onHandoffToDojo) {
+      setPhase('handoff');
+      await speakStrict("Let's put this into practice right now. Here comes a scenario.", ctx, { role: 'handoff' });
+      result.handedOffToDojo = true;
+      config.onHandoffToDojo(config.lesson.topic);
+    }
+
+    setPhase('complete');
+    config.onComplete?.(recap);
+    return result;
+
+  } catch (err) {
+    if (err instanceof AudioFirstSessionError) {
+      config.onError?.(err);
+    }
+    result.aborted = true;
+    result.phase = 'complete';
+    return result;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
 // SHARED HELPERS
 // ══════════════════════════════════════════════════════════════════
 
 async function deliverFeedback(
   scoreResult: DojoScoreResult,
   ctx: AudioFirstContext,
-): Promise<void> {
+): Promise<InterruptionCommand> {
   const segments = buildFeedbackScript(scoreResult);
   const items: SpeechQueueItem[] = segments.map((text, i) => ({
     text,
     pauseAfter: i < segments.length - 1 ? 500 : 800,
   }));
-  await speakQueueStrict(items, ctx);
-}
-
-async function handleInterruption(
-  command: InterruptionCommand,
-  ctx: AudioFirstContext,
-  result: DojoSessionResult,
-  config: DojoSessionConfig,
-): Promise<boolean> {
-  switch (command) {
-    case 'stop':
-      result.aborted = true;
-      result.phase = 'complete';
-      await speakStrict("Got it. Ending session.", ctx);
-      return true;
-    case 'repeat':
-      // Caller should re-run the current phase — return false to continue flow
-      return false;
-    case 'pause':
-      await speakStrict("Paused. Say 'go ahead' when you're ready.", ctx);
-      // Wait for resume command
-      const resumed = await listenStrict(ctx, { timeoutMs: 120_000 });
-      if (resumed.command === 'stop') {
-        result.aborted = true;
-        result.phase = 'complete';
-        return true;
-      }
-      return false;
-    default:
-      return false;
-  }
+  return speakQueueStrict(items, ctx, {
+    roles: segments.map((_, i) => `feedback_${i}`),
+  });
 }
 
 function abort(result: DojoSessionResult): DojoSessionResult {
@@ -529,7 +670,6 @@ function buildLearnRecap(result: LearnSessionResult, topic: string): SessionReca
 }
 
 function extractImprovementFromFeedback(feedback: string): string {
-  // Extract the most actionable sentence from grading feedback
   const sentences = feedback.split(/[.!?]+/).filter(s => s.trim().length > 10);
   const improvementSentence = sentences.find(s =>
     /improve|missing|need|should|could|try|focus|work on/i.test(s)
