@@ -234,6 +234,7 @@ export async function generateSkillTrack(
     blocks,
     kiIdsUsed,
     focusPatternsUsed,
+    levelEvaluation: levelEval,
   };
 }
 

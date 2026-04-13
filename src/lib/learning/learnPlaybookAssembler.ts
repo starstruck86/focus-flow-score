@@ -99,6 +99,8 @@ export interface AssembleOptions {
   playbookId: string;
   durationMinutes: number;
   mode: 'learn' | 'skill_builder';
+  /** If provided, filters KIs to difficulty appropriate for user level */
+  userLevel?: number;
 }
 
 export function assemblePlaybook(
