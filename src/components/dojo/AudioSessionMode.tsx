@@ -731,6 +731,10 @@ export default function AudioSessionMode({
         pendingOpsCount={dave.pendingOpsCount}
       />
       {/* Recovery banner */}
+      {/* Closed-loop coaching status */}
+      {isClosedLoop && closedLoop.isActive && (
+        <DaveCoachingLoopStatus state={closedLoop} compact />
+      )}
       <RecoveryBanner
         recovery={recovery}
         onCancel={cancelRecovery}
