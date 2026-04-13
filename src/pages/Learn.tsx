@@ -28,6 +28,7 @@ import { WeakestAnchorCard } from '@/components/learn/WeakestAnchorCard';
 import { BlockRemediationCard } from '@/components/learn/BlockRemediationCard';
 import { AdaptiveStudyPathCard } from '@/components/learn/AdaptiveStudyPathCard';
 import { PrimaryActionCard } from '@/components/learn/PrimaryActionCard';
+import { SkillBuilderEntryCard } from '@/components/learn/SkillBuilderEntryCard';
 
 export default function Learn() {
   const navigate = useNavigate();
