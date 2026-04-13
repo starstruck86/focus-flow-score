@@ -51,17 +51,42 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
   const batchProcessed = useResourceJobProgress(s => s.batchProcessed);
   const batchJobType = useResourceJobProgress(s => s.batchJobType);
 
-  // Merge DB queue + Zustand live jobs for accurate processing count
-  const mergedProcessingCount = useMemo(() => {
+  // Merge DB queue + Zustand live jobs for accurate processing count & panel data
+  const { mergedJobs, mergedSummary, mergedProcessingCount } = useMemo(() => {
     const dbJobIds = new Set(queueJobs.map(j => j.entityId).filter(Boolean));
     let liveOnlyCount = 0;
+    const extraJobs: typeof queueJobs = [];
     for (const [resourceId, entry] of Object.entries(liveJobs)) {
-      if (entry.status === 'running' && !dbJobIds.has(resourceId)) {
-        liveOnlyCount++;
+      if ((entry.status === 'running' || entry.status === 'queued') && !dbJobIds.has(resourceId)) {
+        if (entry.status === 'running') liveOnlyCount++;
+        extraJobs.push({
+          id: `live-${resourceId}`,
+          resourceTitle: entry.title || 'Resource',
+          jobType: entry.jobType || 'extraction',
+          status: entry.status === 'running' ? 'running' : 'queued',
+          stepLabel: entry.resultSummary || (entry.status === 'running' ? getJobLabel(entry.jobType, 'running') : null),
+          startedAt: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          progressPercent: null,
+          progressCurrent: null,
+          progressTotal: null,
+          error: entry.error || null,
+          entityId: resourceId,
+          source: 'background_jobs' as const,
+        });
       }
     }
-    return queueSummary.total + liveOnlyCount + (batchActive && queueSummary.total === 0 ? 1 : 0);
-  }, [queueJobs, queueSummary.total, liveJobs, batchActive]);
+    const mergedJobs = [...queueJobs, ...extraJobs];
+    const count = queueSummary.total + extraJobs.length + (batchActive && queueSummary.total === 0 && extraJobs.length === 0 ? 1 : 0);
+    const mergedSummary = {
+      ...queueSummary,
+      total: count,
+      running: queueSummary.running + extraJobs.filter(j => j.status === 'running').length,
+      queued: queueSummary.queued + extraJobs.filter(j => j.status === 'queued').length,
+    };
+    return { mergedJobs, mergedSummary, mergedProcessingCount: count };
+  }, [queueJobs, queueSummary, liveJobs, batchActive]);
 
   const counts = useMemo<HealthCounts>(() => {
     const c: HealthCounts = { total: resources.length, ready: 0, blocked: 0, stalled: 0, qa_required: 0 };
@@ -229,8 +254,8 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
       <ProcessingQueuePanel
         open={queuePanelOpen}
         onOpenChange={setQueuePanelOpen}
-        jobs={queueJobs}
-        summary={queueSummary}
+        jobs={mergedJobs}
+        summary={mergedSummary}
         loading={queueLoading}
         onRefresh={queueRefresh}
       />
