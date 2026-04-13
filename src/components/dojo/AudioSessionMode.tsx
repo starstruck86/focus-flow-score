@@ -71,6 +71,12 @@ interface AudioSessionModeProps {
   assignmentId?: string | null;
   benchmarkTag?: boolean;
   scenarioFamilyId?: string | null;
+  /** Closed-loop context passed from Learn */
+  closedLoopSessionId?: string | null;
+  closedLoopSkill?: SkillFocus | null;
+  closedLoopSubSkill?: string | null;
+  closedLoopFocusPattern?: string | null;
+  closedLoopConcept?: string | null;
 }
 
 /** Safely cast DojoScoreResult to Json for DB storage */
