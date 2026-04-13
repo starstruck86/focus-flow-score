@@ -47,17 +47,17 @@ export function formatAudioFeedback(result: DojoScoreResult): SpeechQueueItem[] 
   }
 
   // 3. What to improve (1-2 points)
-  if (result.top_mistake) {
+  if (result.topMistake) {
     items.push({
-      text: `Key area to improve: ${result.top_mistake}.`,
+      text: `Key area to improve: ${result.topMistake}.`,
       pauseAfter: 500,
     });
   }
 
   // 4. Improved version (if available)
-  if (result.improved_version) {
+  if (result.improvedVersion) {
     items.push({
-      text: `Here's how a top rep would say it: ${result.improved_version}`,
+      text: `Here's how a top rep would say it: ${result.improvedVersion}`,
       pauseAfter: 800,
     });
   }

@@ -94,7 +94,7 @@ const DEFAULT_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'; // George
 const TTS_FETCH_TIMEOUT_MS = 25_000;
 const TTS_MAX_RETRIES = 2;
 
-interface ActivePlayback {
+export interface ActivePlayback {
   audio: HTMLAudioElement | null;
   objectUrl: string | null;
   abortController: AbortController | null;
