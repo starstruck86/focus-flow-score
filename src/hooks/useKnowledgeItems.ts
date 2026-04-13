@@ -59,12 +59,14 @@ export function useKnowledgeItems(chapter?: string, filters?: { who?: string; fr
   return useQuery({
     queryKey: ['knowledge-items', user?.id, chapter, filters?.who, filters?.framework],
     queryFn: async () => {
-      // Paginate to avoid Supabase 1000-row default limit
+      // Select only columns needed for display/stats — avoid fetching large text fields
+      // (example_usage, how_to_execute, source_excerpt, etc.) which bloat 12k+ row payloads
+      const COLUMNS = 'id, user_id, source_resource_id, source_doctrine_id, title, knowledge_type, chapter, sub_chapter, competitor_name, product_area, applies_to_contexts, tactic_summary, why_it_matters, when_to_use, when_not_to_use, confidence_score, status, active, user_edited, tags, who, framework, review_status, created_at, updated_at';
       const PAGE_SIZE = 1000;
       let allData: any[] = [];
       let from = 0;
       while (true) {
-        let q = supabase.from(TABLE).select('*').order('confidence_score', { ascending: false }).range(from, from + PAGE_SIZE - 1);
+        let q = supabase.from(TABLE).select(COLUMNS).order('confidence_score', { ascending: false }).range(from, from + PAGE_SIZE - 1);
         if (chapter) q = q.eq('chapter', chapter);
         if (filters?.who) q = q.eq('who', filters.who);
         if (filters?.framework) q = q.eq('framework', filters.framework);
