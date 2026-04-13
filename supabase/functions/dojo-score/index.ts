@@ -336,6 +336,7 @@ TONE RULES:
 Respond with ONLY valid JSON:
 {
   "score": 60,
+  "dimensions": { ... },
   "feedback": "What they got right. The one thing to improve.",
   "topMistake": "one_mistake_code",
   "improvedVersion": "Better version of the rep's approach.",
