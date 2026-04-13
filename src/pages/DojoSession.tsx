@@ -47,6 +47,7 @@ import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedb
 import { useSkillLevels } from '@/hooks/useSkillLevels';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
 import SimulationMode from '@/components/dojo/SimulationMode';
+import { getArcById, type SimulationArc } from '@/lib/dojo/v5/simulationArcs';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
 
