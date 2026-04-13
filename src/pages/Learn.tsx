@@ -142,6 +142,9 @@ export default function Learn() {
         {/* 3. Adaptive Study Path (Phase 5) */}
         {learnLoop?.adaptiveStudyPath && <AdaptiveStudyPathCard path={learnLoop.adaptiveStudyPath} />}
 
+        {/* Skill Builder Entry (Mode 2) */}
+        <SkillBuilderEntryCard />
+
         {/* 3. Weekly Coaching Plan (Phase 4) */}
         {learnLoop?.weeklyPlan && <WeeklyCoachingPlanCard plan={learnLoop.weeklyPlan} />}
 
