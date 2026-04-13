@@ -282,11 +282,17 @@ export async function speakStrict(
  *
  * Returns the barge-in command if one was detected, or null.
  */
+/** Result from speakWithBargeIn — includes raw transcript for targeted replay */
+export interface BargeInDetection {
+  command: InterruptionCommand;
+  transcript: string;
+}
+
 export async function speakWithBargeIn(
   text: string,
   ctx: AudioFirstContext,
   options?: { role?: string },
-): Promise<InterruptionCommand> {
+): Promise<BargeInDetection | null> {
   const policy = getBargeInPolicy(ctx.currentPhase ?? '');
 
   if (policy === 'protected') {
@@ -294,11 +300,8 @@ export async function speakWithBargeIn(
     return null;
   }
 
-  // For interruptible phases: speak, but if user interrupts we catch it
-  // The browser SpeechRecognition won't fire during audio playback in most
-  // environments, so we rely on post-playback command detection.
-  // True real-time barge-in requires always-on VAD which is a future upgrade.
-  // For now: speak → brief listen window → check for command.
+  // Post-segment interruption detection (not true live barge-in).
+  // Speak → brief listen window → check for command.
   await speakStrict(text, ctx, { role: options?.role });
 
   // Quick listen window (1.5s) for commands after interruptible segments
@@ -311,8 +314,8 @@ export async function speakWithBargeIn(
     if (quickResult.trim()) {
       const cmd = parseInterruption(quickResult);
       if (cmd) {
-        logger.info('Barge-in command detected', { command: cmd, phase: ctx.currentPhase });
-        return cmd;
+        logger.info('Barge-in command detected', { command: cmd, phase: ctx.currentPhase, rawTranscript: quickResult });
+        return { command: cmd, transcript: quickResult };
       }
     }
   } catch {
@@ -332,7 +335,7 @@ export async function speakQueueStrict(
   items: SpeechQueueItem[],
   ctx: AudioFirstContext,
   options?: { roles?: string[] },
-): Promise<InterruptionCommand> {
+): Promise<BargeInDetection | null> {
   for (let i = 0; i < items.length; i++) {
     if (ctx.signal?.aborted) return null;
 
