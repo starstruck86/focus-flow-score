@@ -44,6 +44,34 @@ export default function Learn() {
   const { data: learnLoop } = useLearnLoop();
   const { data: skillLevels } = useSkillLevels();
 
+  // Tier-up modal
+  const [tierUpLevel, setTierUpLevel] = useState<UserSkillLevel | null>(null);
+  const [tierUpOpen, setTierUpOpen] = useState(false);
+  const prevTiersRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!skillLevels || skillLevels.length === 0) return;
+    const prev = prevTiersRef.current;
+    const hasPrev = Object.keys(prev).length > 0;
+
+    for (const level of skillLevels) {
+      if (hasPrev && prev[level.skill] != null && level.currentTier > prev[level.skill]) {
+        if (!isTierUpDismissed(level.skill, level.currentTier)) {
+          setTierUpLevel(level);
+          setTierUpOpen(true);
+          break;
+        }
+      }
+      prev[level.skill] = level.currentTier;
+    }
+
+    if (!hasPrev) {
+      for (const level of skillLevels) {
+        prev[level.skill] = level.currentTier;
+      }
+    }
+  }, [skillLevels]);
+
   const progressMap = useMemo(() => {
     const map: Record<string, LearningProgress> = {};
     (progress || []).forEach(p => { map[p.lesson_id] = p; });
@@ -105,7 +133,6 @@ export default function Learn() {
     } else if (action.target.type === 'lesson') {
       navigate(`/learn/lesson/${action.target.lessonId}`);
     }
-    // learn_section and none: no navigation needed
   }, [learnLoop?.primaryAction, navigate]);
 
   if (isLoading) {
@@ -122,6 +149,13 @@ export default function Learn() {
 
   return (
     <Layout>
+      {/* Tier-Up Modal */}
+      <SkillTierUpModal
+        level={tierUpLevel}
+        open={tierUpOpen}
+        onClose={() => setTierUpOpen(false)}
+      />
+
       <div className={cn('px-4 pt-4 space-y-5', SHELL.main.bottomPad)}>
         {/* Header */}
         <div className="flex items-start gap-3">
@@ -150,6 +184,9 @@ export default function Learn() {
         {skillLevels && skillLevels.length > 0 && (
           <SkillLevelsPanel levels={skillLevels} />
         )}
+
+        {/* 3b. Progress Timeline */}
+        <SkillProgressTimeline />
 
         {/* 4. Adaptive Study Path (Phase 5) */}
         {learnLoop?.adaptiveStudyPath && <AdaptiveStudyPathCard path={learnLoop.adaptiveStudyPath} />}
