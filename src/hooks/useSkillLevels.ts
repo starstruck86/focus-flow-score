@@ -1,5 +1,5 @@
 /**
- * Hook to fetch all skill levels for the current user.
+ * Hook to fetch all skill levels (tier + micro-level) for the current user.
  */
 
 import { useQuery } from '@tanstack/react-query';

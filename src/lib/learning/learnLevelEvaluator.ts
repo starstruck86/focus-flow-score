@@ -1,38 +1,28 @@
 /**
- * Skill Level Evaluator
+ * Skill Level Evaluator — Tier + Micro-Level Model
  *
- * Determines user level based on real performance from the capability model.
- * Advancement is driven by consistency, pressure score, and pattern success —
- * NOT by lessons completed.
+ * 6 mastery tiers × 5 micro-levels = 30 visible progression levels.
+ * Advancement is driven by consistency, pressure score, and first-attempt strength.
  */
 
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 import type { CapabilityProfile } from '@/lib/dojo/v4/capabilityModel';
 import { buildCapabilityProfiles } from '@/lib/dojo/v4/capabilityModel';
-import { getMaxLevel, getSkillLevel, type SkillLevel } from './learnSkillLevels';
+import {
+  getMaxTier,
+  getSkillTier,
+  MICRO_LEVELS_PER_TIER,
+  getOverallLevel,
+  type SkillTier,
+} from './learnSkillLevels';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export interface LevelThresholds {
-  /** Minimum consistency score (0–100) */
+export interface TierThreshold {
   consistency: number;
-  /** Minimum first-attempt strength */
   firstAttemptStrength: number;
-  /** Minimum pressure score (null = not required) */
   pressureScore: number | null;
-  /** Minimum reps needed before this level is reachable */
   minReps: number;
-}
-
-export interface UserSkillLevel {
-  skill: SkillFocus;
-  currentLevel: number;
-  currentLevelName: string;
-  nextLevel: SkillLevel | null;
-  /** What's blocking advancement to the next level */
-  gaps: LevelGap[];
-  /** 0–100 progress toward the next level */
-  progressToNext: number;
 }
 
 export interface LevelGap {
@@ -42,126 +32,125 @@ export interface LevelGap {
   label: string;
 }
 
-// ── Level Thresholds ──────────────────────────────────────────────
-//
-// Each entry defines what the user MUST achieve to BE at that level.
-// Level 1 is the default — no thresholds needed.
+export interface UserSkillLevel {
+  skill: SkillFocus;
 
-const LEVEL_THRESHOLDS: Record<number, LevelThresholds> = {
-  2: {
-    consistency: 45,
-    firstAttemptStrength: 45,
-    pressureScore: null,
-    minReps: 5,
-  },
-  3: {
-    consistency: 60,
-    firstAttemptStrength: 60,
-    pressureScore: 50,
-    minReps: 12,
-  },
-  4: {
-    consistency: 72,
-    firstAttemptStrength: 70,
-    pressureScore: 60,
-    minReps: 25,
-  },
-  5: {
-    consistency: 82,
-    firstAttemptStrength: 78,
-    pressureScore: 70,
-    minReps: 40,
-  },
+  currentTier: number;
+  currentTierName: string;
+
+  levelWithinTier: number;
+  maxLevelWithinTier: number;
+
+  overallLevel: number;
+  progressWithinTier: number;
+
+  nextTier: SkillTier | null;
+  gaps: LevelGap[];
+  blockers: string[];
+
+  // ── Compat fields (kept for downstream consumers) ──
+  /** @deprecated use currentTier */
+  currentLevel: number;
+  /** @deprecated use currentTierName */
+  currentLevelName: string;
+  /** @deprecated use nextTier */
+  nextLevel: SkillTier | null;
+  /** @deprecated use progressWithinTier */
+  progressToNext: number;
+}
+
+// ── Tier Thresholds ───────────────────────────────────────────────
+
+const TIER_THRESHOLDS: Record<number, TierThreshold> = {
+  2: { consistency: 35, firstAttemptStrength: 35, pressureScore: null, minReps: 4 },
+  3: { consistency: 48, firstAttemptStrength: 48, pressureScore: 40, minReps: 10 },
+  4: { consistency: 62, firstAttemptStrength: 60, pressureScore: 55, minReps: 20 },
+  5: { consistency: 75, firstAttemptStrength: 72, pressureScore: 65, minReps: 35 },
+  6: { consistency: 85, firstAttemptStrength: 82, pressureScore: 75, minReps: 55 },
 };
 
 // ── Core Evaluator ────────────────────────────────────────────────
 
-/**
- * Evaluate a user's level for a single skill from a pre-built capability profile.
- */
 export function evaluateSkillLevel(
   cap: CapabilityProfile,
   repCount: number,
 ): UserSkillLevel {
   const skill = cap.skill;
-  const maxLevel = getMaxLevel(skill);
-  let achievedLevel = 1;
+  const maxTier = getMaxTier(skill);
+  let achievedTier = 1;
 
-  // Walk up through levels, stopping when thresholds aren't met
-  for (let lvl = 2; lvl <= maxLevel; lvl++) {
-    const thresh = LEVEL_THRESHOLDS[lvl];
+  for (let t = 2; t <= maxTier; t++) {
+    const thresh = TIER_THRESHOLDS[t];
     if (!thresh) break;
-
     if (repCount < thresh.minReps) break;
     if (cap.consistency < thresh.consistency) break;
     if (cap.firstAttemptStrength < thresh.firstAttemptStrength) break;
     if (thresh.pressureScore !== null && (cap.pressureScore ?? 0) < thresh.pressureScore) break;
-
-    achievedLevel = lvl;
+    achievedTier = t;
   }
 
-  const currentLevelDef = getSkillLevel(skill, achievedLevel);
-  const nextLevelDef = achievedLevel < maxLevel ? getSkillLevel(skill, achievedLevel + 1) : null;
+  const isMaxTier = achievedTier >= maxTier;
+  const nextThresh = TIER_THRESHOLDS[achievedTier + 1];
 
-  // Compute gaps to next level
+  // Progress within tier → micro-level
+  const progressWithinTier = isMaxTier
+    ? 100
+    : nextThresh
+      ? computeProgress(cap, repCount, nextThresh)
+      : 100;
+
+  const levelWithinTier = isMaxTier
+    ? MICRO_LEVELS_PER_TIER
+    : Math.max(1, Math.min(MICRO_LEVELS_PER_TIER, Math.ceil((progressWithinTier / 100) * MICRO_LEVELS_PER_TIER)));
+
+  const overallLevel = getOverallLevel(achievedTier, levelWithinTier);
+
+  // Gaps
   const gaps: LevelGap[] = [];
-  const nextThresh = LEVEL_THRESHOLDS[achievedLevel + 1];
-
+  const blockers: string[] = [];
   if (nextThresh) {
     if (cap.consistency < nextThresh.consistency) {
-      gaps.push({
-        metric: 'consistency',
-        current: cap.consistency,
-        required: nextThresh.consistency,
-        label: `Consistency: ${cap.consistency} / ${nextThresh.consistency}`,
-      });
+      gaps.push({ metric: 'consistency', current: cap.consistency, required: nextThresh.consistency, label: `Consistency: ${cap.consistency} / ${nextThresh.consistency}` });
+      blockers.push('Consistency needs improvement');
     }
     if (cap.firstAttemptStrength < nextThresh.firstAttemptStrength) {
-      gaps.push({
-        metric: 'firstAttemptStrength',
-        current: cap.firstAttemptStrength,
-        required: nextThresh.firstAttemptStrength,
-        label: `First Attempt: ${cap.firstAttemptStrength} / ${nextThresh.firstAttemptStrength}`,
-      });
+      gaps.push({ metric: 'firstAttemptStrength', current: cap.firstAttemptStrength, required: nextThresh.firstAttemptStrength, label: `First Attempt: ${cap.firstAttemptStrength} / ${nextThresh.firstAttemptStrength}` });
+      blockers.push('First-attempt strength too low');
     }
     if (nextThresh.pressureScore !== null && (cap.pressureScore ?? 0) < nextThresh.pressureScore) {
-      gaps.push({
-        metric: 'pressureScore',
-        current: cap.pressureScore,
-        required: nextThresh.pressureScore,
-        label: `Pressure Score: ${cap.pressureScore ?? 0} / ${nextThresh.pressureScore}`,
-      });
+      gaps.push({ metric: 'pressureScore', current: cap.pressureScore, required: nextThresh.pressureScore, label: `Pressure Score: ${cap.pressureScore ?? 0} / ${nextThresh.pressureScore}` });
+      blockers.push('Pressure performance needs work');
     }
     if (repCount < nextThresh.minReps) {
-      gaps.push({
-        metric: 'reps',
-        current: repCount,
-        required: nextThresh.minReps,
-        label: `Reps: ${repCount} / ${nextThresh.minReps}`,
-      });
+      gaps.push({ metric: 'reps', current: repCount, required: nextThresh.minReps, label: `Reps: ${repCount} / ${nextThresh.minReps}` });
+      blockers.push('More reps needed');
     }
   }
 
-  // Progress to next level (0-100)
-  const progressToNext = nextThresh
-    ? computeProgress(cap, repCount, nextThresh)
-    : 100;
+  const currentTierDef = getSkillTier(skill, achievedTier);
+  const nextTierDef = isMaxTier ? null : getSkillTier(skill, achievedTier + 1);
 
   return {
     skill,
-    currentLevel: achievedLevel,
-    currentLevelName: currentLevelDef?.name ?? `Level ${achievedLevel}`,
-    nextLevel: nextLevelDef,
+    currentTier: achievedTier,
+    currentTierName: currentTierDef?.name ?? `Tier ${achievedTier}`,
+    levelWithinTier,
+    maxLevelWithinTier: MICRO_LEVELS_PER_TIER,
+    overallLevel,
+    progressWithinTier,
+    nextTier: nextTierDef,
     gaps,
-    progressToNext,
+    blockers,
+    // Compat
+    currentLevel: achievedTier,
+    currentLevelName: currentTierDef?.name ?? `Tier ${achievedTier}`,
+    nextLevel: nextTierDef,
+    progressToNext: progressWithinTier,
   };
 }
 
 // ── Batch Evaluator ───────────────────────────────────────────────
 
-/**
- * Evaluate all skill levels for a user. Fetches capability profiles automatically.
- */
 export async function evaluateAllSkillLevels(
   userId: string,
 ): Promise<UserSkillLevel[]> {
@@ -169,15 +158,9 @@ export async function evaluateAllSkillLevels(
     buildCapabilityProfiles(userId),
     fetchRepCountsBySkill(userId),
   ]);
-
-  return caps.map(cap =>
-    evaluateSkillLevel(cap, repCounts.get(cap.skill) ?? 0),
-  );
+  return caps.map(cap => evaluateSkillLevel(cap, repCounts.get(cap.skill) ?? 0));
 }
 
-/**
- * Get a single skill level for a user.
- */
 export async function getUserLevel(
   userId: string,
   skill: SkillFocus,
@@ -186,19 +169,25 @@ export async function getUserLevel(
     buildCapabilityProfiles(userId),
     fetchRepCountsBySkill(userId),
   ]);
-
   const cap = caps.find(c => c.skill === skill);
   if (!cap) {
     return {
       skill,
-      currentLevel: 1,
-      currentLevelName: getSkillLevel(skill, 1)?.name ?? 'Level 1',
-      nextLevel: getSkillLevel(skill, 2),
+      currentTier: 1,
+      currentTierName: getSkillTier(skill, 1)?.name ?? 'Tier 1',
+      levelWithinTier: 1,
+      maxLevelWithinTier: MICRO_LEVELS_PER_TIER,
+      overallLevel: 1,
+      progressWithinTier: 0,
+      nextTier: getSkillTier(skill, 2),
       gaps: [],
+      blockers: [],
+      currentLevel: 1,
+      currentLevelName: getSkillTier(skill, 1)?.name ?? 'Tier 1',
+      nextLevel: getSkillTier(skill, 2),
       progressToNext: 0,
     };
   }
-
   return evaluateSkillLevel(cap, repCounts.get(skill) ?? 0);
 }
 
@@ -207,19 +196,15 @@ export async function getUserLevel(
 function computeProgress(
   cap: CapabilityProfile,
   repCount: number,
-  thresh: LevelThresholds,
+  thresh: TierThreshold,
 ): number {
   const factors: number[] = [];
-
-  // Each factor: how far toward threshold (clamped 0–1)
   factors.push(Math.min(1, cap.consistency / thresh.consistency));
   factors.push(Math.min(1, cap.firstAttemptStrength / thresh.firstAttemptStrength));
   factors.push(Math.min(1, repCount / thresh.minReps));
-
   if (thresh.pressureScore !== null) {
     factors.push(Math.min(1, (cap.pressureScore ?? 0) / thresh.pressureScore));
   }
-
   const avg = factors.reduce((a, b) => a + b, 0) / factors.length;
   return Math.round(avg * 100);
 }
@@ -228,7 +213,6 @@ async function fetchRepCountsBySkill(
   userId: string,
 ): Promise<Map<SkillFocus, number>> {
   const { supabase } = await import('@/integrations/supabase/client');
-
   const { data } = await supabase
     .from('dojo_sessions')
     .select('skill_focus')
