@@ -171,6 +171,40 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
     playSection(isLearnResuming ? savedLearn!.currentSectionIndex : 0);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Verbal cues Dave says before each section role
+  const getSectionIntro = useCallback((section: LessonAudioSection, idx: number): string | null => {
+    // First section gets a lesson-level intro
+    if (idx === 0) {
+      return `Alright — let's get into it. Today we're covering: ${lesson.title}.`;
+    }
+    switch (section.role) {
+      case 'example':
+        return "Here's what good looks like.";
+      case 'breakdown':
+        return "Let me break down why this works.";
+      case 'usage':
+        return "Here's when to use this.";
+      case 'anti_usage':
+        return "Now — when NOT to use it.";
+      case 'quiz_intro':
+        return null; // quiz_intro text already includes its own intro
+      case 'quiz_question':
+        return null; // question text is self-contained
+      case 'application_prompt':
+        return "Now it's your turn. I'm going to give you a prompt — listen, then respond naturally.";
+      default:
+        return null;
+    }
+  }, [lesson.title]);
+
+  // Verbal cue before mic activation
+  const getListenCue = useCallback((section: LessonAudioSection): string => {
+    if (section.expectsInput === 'mc') {
+      return "Go ahead — what's your answer?";
+    }
+    return "You've got about 60 seconds. Give me your best shot — go.";
+  }, []);
+
   const playSection = useCallback(async (idx: number) => {
     if (idx >= sections.length) {
       setPhase('handoff');
@@ -183,18 +217,34 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
     setPhase('teaching');
 
     try {
+      // Speak verbal intro cue if applicable
+      const intro = getSectionIntro(section, idx);
+      if (intro) {
+        await dave.speak(intro);
+        dave.recordTranscript('dave', intro);
+      }
+
+      // Speak the section content
       await dave.speak(section.text);
       dave.recordTranscript('dave', section.text);
       dave.updatePosition(idx, { phase: 'teaching' });
       setCompletedSections(prev => new Set([...prev, section.id]));
 
       // After speaking, check if we need user input
-      if (section.pauseAfter && section.expectsInput === 'mc') {
-        setPhase('waiting_mc');
-      } else if (section.pauseAfter && section.expectsInput === 'open_ended') {
-        setPhase('waiting_open');
-        // Auto-activate mic for open-ended
-        tryActivateMic();
+      if (section.pauseAfter && (section.expectsInput === 'mc' || section.expectsInput === 'open_ended')) {
+        // Dave verbally cues the user before activating the mic
+        const cue = getListenCue(section);
+        try {
+          await dave.speak(cue);
+          dave.recordTranscript('dave', cue);
+        } catch { /* continue to input phase even if cue TTS fails */ }
+
+        if (section.expectsInput === 'mc') {
+          setPhase('waiting_mc');
+        } else {
+          setPhase('waiting_open');
+          tryActivateMic();
+        }
       } else {
         // Auto-advance to next section
         await playSection(idx + 1);
@@ -213,7 +263,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
         await playSection(idx + 1);
       }
     }
-  }, [sections, dave]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sections, dave, getSectionIntro, getListenCue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tryActivateMic = useCallback(async () => {
     try {
