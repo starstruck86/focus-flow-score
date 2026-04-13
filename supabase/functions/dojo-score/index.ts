@@ -460,6 +460,9 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       if (sc < 2 && parsed.score > 55) parsed.score = 55;
     }
 
+    // ── Parse and validate structured dimensions ──────────────────
+    parsed.dimensions = parseDimensions(parsed.dimensions, skill);
+
     // Ensure fields exist
     if (!Array.isArray(parsed.patternTags)) parsed.patternTags = [];
     if (typeof parsed.focusPattern !== "string") parsed.focusPattern = "";
