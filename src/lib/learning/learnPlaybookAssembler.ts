@@ -298,9 +298,9 @@ export function getViablePlaybooks(
   skill: SkillFocus,
   durationMinutes: number,
   index: IndexedKI[],
+  registry: PlaybookDefinition[],
 ): string[] {
-  const { PLAYBOOK_REGISTRY } = await import('./learnPlaybookSchema');
-  return (PLAYBOOK_REGISTRY as PlaybookDefinition[])
+  return registry
     .filter(p => p.skill === skill)
     .filter(p => canSupportDuration(p.id, durationMinutes, index))
     .map(p => p.id);
