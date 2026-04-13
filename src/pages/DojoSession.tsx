@@ -331,7 +331,7 @@ export default function DojoSession() {
   const activeFocus = currentResult?.focusPattern;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className={`min-h-screen bg-background flex flex-col ${SHELL.top.safeArea}`}>
       {/* ── Header ── */}
       <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-sm px-4 py-3 flex items-center gap-3">
         <button onClick={() => navigate('/dojo')} className="p-1 -ml-1">
