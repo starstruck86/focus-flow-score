@@ -18,6 +18,8 @@ import { FOCUS_PATTERN_LABELS } from '@/lib/dojo/focusPatterns';
 import { Loader2, BookOpen, Dumbbell, Brain, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedbackCard';
+import { useSkillLevels } from '@/hooks/useSkillLevels';
 
 type SessionState = 'generating' | 'active' | 'completed' | 'error';
 
@@ -33,6 +35,7 @@ export default function SkillBuilderSession() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [repScores, setRepScores] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const { data: skillLevels } = useSkillLevels();
 
   // Generate session on mount
   useEffect(() => {
@@ -203,7 +206,12 @@ export default function SkillBuilderSession() {
                   Reps completed: {repScores.length}
                 </p>
               </div>
-            )}
+             )}
+            {/* Level progress feedback */}
+            {track?.skill && (() => {
+              const lvl = skillLevels?.find(l => l.skill === track.skill);
+              return lvl ? <LevelProgressFeedbackCard current={lvl} /> : null;
+            })()}
             <div className="flex gap-2">
               <button
                 onClick={() => navigate('/learn')}

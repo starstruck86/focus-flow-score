@@ -43,6 +43,9 @@ import { assessImprovement } from '@/lib/dojo/improvementAssessment';
 import { useScoreOriginalResponse } from '@/hooks/useScoreOriginalResponse';
 import { PressureAnalysisCard } from '@/components/dojo/PressureAnalysisCard';
 import { TransferProgressCard } from '@/components/dojo/TransferProgressCard';
+import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedbackCard';
+import { useSkillLevels } from '@/hooks/useSkillLevels';
+import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
 import SimulationMode from '@/components/dojo/SimulationMode';
 import { getArcById, type SimulationArc } from '@/lib/dojo/v5/simulationArcs';
@@ -125,6 +128,8 @@ export default function DojoSession() {
   const [reviewExtras, setReviewExtras] = useState<ReviewExtras | null>(null);
   const [roleplayExtras, setRoleplayExtras] = useState<RoleplayExtras | null>(null);
   const { scoreOriginal, isScoring: isScoringOriginal, originalScore } = useScoreOriginalResponse();
+  const { data: skillLevels } = useSkillLevels();
+  const skillLevelForFeedback = skillLevels?.find(l => l.skill === scenario.skillFocus) ?? null;
 
   // Auto-score original call response when transcript origin has a rep response
   useEffect(() => {
@@ -476,7 +481,7 @@ export default function DojoSession() {
 
           {phase === 'feedback' && currentResult && (
             <motion.div key="feedback" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} originalCallScore={originalScore} firstAttemptResult={result} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} pressureLevel={pressureLevel} pressureDimensions={pressureDimensions} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} originalCallScore={originalScore} firstAttemptResult={result} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} pressureLevel={pressureLevel} pressureDimensions={pressureDimensions} skillLevelForFeedback={skillLevelForFeedback} onRetry={handleStartRetry} onNextRep={handleNextRep} />
             </motion.div>
           )}
 
@@ -513,7 +518,7 @@ export default function DojoSession() {
         {/* ── Feedback for Roleplay / Review (non-drill) ── */}
         {sessionType !== 'drill' && phase === 'feedback' && currentResult && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} pressureLevel={pressureLevel} pressureDimensions={pressureDimensions} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} pressureLevel={pressureLevel} pressureDimensions={pressureDimensions} skillLevelForFeedback={skillLevelForFeedback} onRetry={handleStartRetry} onNextRep={handleNextRep} />
           </motion.div>
         )}
       </div>
@@ -542,6 +547,7 @@ interface FeedbackViewProps {
   assignmentContext?: { anchor: string; focusPattern: string; reason: string } | null;
   pressureLevel?: string | null;
   pressureDimensions?: string[] | null;
+  skillLevelForFeedback?: UserSkillLevel | null;
   onRetry: () => void;
   onNextRep: () => void;
 }
@@ -550,7 +556,7 @@ function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
   sessionId, skillFocus, transcriptOrigin, originalCallScore, firstAttemptResult,
-  assignmentContext, pressureLevel, pressureDimensions, onRetry, onNextRep,
+  assignmentContext, pressureLevel, pressureDimensions, skillLevelForFeedback, onRetry, onNextRep,
 }: FeedbackViewProps) {
   return (
     <>
@@ -1016,6 +1022,11 @@ function FeedbackView({
         retryCount={retryCount}
         sessionType={sessionType}
       />
+
+      {/* ── Level Progress Feedback ── */}
+      {skillLevelForFeedback && (
+        <LevelProgressFeedbackCard current={skillLevelForFeedback} />
+      )}
 
       {/* ── Post-Session: Today's Assignment Summary ── */}
       {assignmentContext && (
