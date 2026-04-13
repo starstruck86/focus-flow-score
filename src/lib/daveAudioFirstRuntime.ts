@@ -475,6 +475,22 @@ export function interruptPlayback(ctx: AudioFirstContext): void {
   ctx.playbackRef.current = interruptSpeech(ctx.playbackRef.current);
 }
 
+/**
+ * Wait for any in-flight playback to fully drain (no clipped final words).
+ * Used before audio ownership handoffs (Learn → Dojo).
+ */
+export async function waitForPlaybackDrain(ctx: AudioFirstContext, maxWaitMs = 3000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    const pb = ctx.playbackRef.current;
+    const audio = pb?.audio;
+    if (!audio || audio.paused || audio.ended) return;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  // Force-interrupt if still playing after max wait
+  interruptPlayback(ctx);
+}
+
 // ── Barge-In Handler ───────────────────────────────────────────────
 
 /**
