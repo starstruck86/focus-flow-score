@@ -8,7 +8,7 @@
  * - Does NOT change scoring logic (uses existing dojo-score edge function)
  * - Dave only reads system outputs
  * - Falls back to text input if mic unavailable
- * - Reuses existing TTS (useVoiceMode) and scoring infrastructure
+ * - Reuses existing TTS/STT via useDaveVoiceController
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
