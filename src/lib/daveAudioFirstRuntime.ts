@@ -35,6 +35,7 @@
 import type { TtsConfig, ActivePlayback, SpeechQueueItem, VoiceCommand } from '@/lib/daveVoiceRuntime';
 import { speak, listen, interruptSpeech, parseVoiceCommand } from '@/lib/daveVoiceRuntime';
 import { createLogger } from '@/lib/logger';
+import type { DrivingMode } from '@/hooks/useDrivingMode';
 
 const logger = createLogger('DaveAudioFirstRuntime');
 
@@ -210,6 +211,14 @@ export interface AudioFirstContext {
   checkpoints: CheckpointTracker;
   /** Current phase — used for barge-in policy */
   currentPhase?: string;
+  /** Driving mode — affects silence tolerance and barge-in windows */
+  drivingMode?: DrivingMode;
+  /** Override: silence timeout ms */
+  silenceTimeoutMs?: number;
+  /** Override: silence retries */
+  silenceRetries?: number;
+  /** Override: barge-in listen window ms */
+  bargeInWindowMs?: number;
 }
 
 /**
@@ -220,6 +229,12 @@ export function createAudioFirstContext(
   playbackRef: React.MutableRefObject<ActivePlayback>,
   signal?: AbortSignal,
   onStateChange?: (patch: Record<string, unknown>) => void,
+  drivingOverrides?: {
+    drivingMode?: DrivingMode;
+    silenceTimeoutMs?: number;
+    silenceRetries?: number;
+    bargeInWindowMs?: number;
+  },
 ): AudioFirstContext {
   return {
     ttsConfig,
@@ -227,6 +242,10 @@ export function createAudioFirstContext(
     signal,
     onStateChange,
     checkpoints: new CheckpointTracker(),
+    drivingMode: drivingOverrides?.drivingMode,
+    silenceTimeoutMs: drivingOverrides?.silenceTimeoutMs,
+    silenceRetries: drivingOverrides?.silenceRetries,
+    bargeInWindowMs: drivingOverrides?.bargeInWindowMs,
   };
 }
 
