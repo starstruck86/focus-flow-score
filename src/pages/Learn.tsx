@@ -37,6 +37,10 @@ import { useSkillLevels } from '@/hooks/useSkillLevels';
 import { useSubSkillProgress } from '@/hooks/useSubSkillProgress';
 import { isTierUpDismissed } from '@/lib/learning/levelEventStore';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
+import { DaveActiveLoopCard } from '@/components/DaveActiveLoopCard';
+import { DaveCoachingHistory } from '@/components/DaveCoachingHistory';
+import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
+import { buildLoopResumeInfo } from '@/lib/daveClosedLoopResume';
 
 export default function Learn() {
   const navigate = useNavigate();
