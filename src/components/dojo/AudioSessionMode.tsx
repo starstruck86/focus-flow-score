@@ -737,6 +737,15 @@ export default function AudioSessionMode({
       {isClosedLoop && closedLoop.isActive && (
         <DaveCoachingLoopStatus state={closedLoop} compact />
       )}
+      {/* Coaching focus chip — always visible when in closed loop */}
+      {isClosedLoop && closedLoopConcept && (
+        <div className="px-4 pb-1">
+          <DaveCoachingFocusChip
+            concept={closedLoopConcept}
+            skill={closedLoopSkill || undefined}
+          />
+        </div>
+      )}
       <RecoveryBanner
         recovery={recovery}
         onCancel={cancelRecovery}
