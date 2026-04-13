@@ -43,6 +43,7 @@ import type { DojoScenario } from '@/lib/dojo/scenarios';
 import type { DojoScoreResult } from '@/lib/dojo/types';
 import { normalizeScoreResult } from '@/lib/dojo/types';
 import DaveCoachingDelivery from './DaveCoachingDelivery';
+import { DaveLoopCompletionCard } from '@/components/DaveLoopCompletionCard';
 import {
   type AudioSessionPhase,
   buildIntroText,
@@ -898,8 +899,20 @@ export default function AudioSessionMode({
         </div>
       )}
 
+      {/* Loop completion card */}
+      {isClosedLoop && closedLoop.session?.status === 'completed' && (
+        <DaveLoopCompletionCard
+          concept={closedLoop.session.subSkill || closedLoop.session.taughtConcept}
+          skill={closedLoop.session.skill}
+          attempts={closedLoop.session.attempts.length}
+          nextConcept={closedLoop.session.nextStep === 'move_to_next_concept' ? undefined : undefined}
+          onContinue={() => closedLoop.advanceToNext().then(() => onComplete())}
+          onDismiss={onComplete}
+        />
+      )}
+
       {/* Post-feedback actions */}
-      {isFeedbackPhase(phase) && currentResult && (
+      {isFeedbackPhase(phase) && currentResult && !closedLoop.session?.status?.includes('completed') && (
         <div className="space-y-2 pt-2">
           {/* Closed-loop coaching line */}
           {isClosedLoop && closedLoop.coaching?.spoken && (

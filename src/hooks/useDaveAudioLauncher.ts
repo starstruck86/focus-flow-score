@@ -66,7 +66,7 @@ export function useDaveAudioLauncher(): UseDaveAudioLauncher {
     setPhase('greeting');
     const buffer = loadVoiceSessionBuffer();
 
-    // Check for active coaching loop first
+    // Check for active coaching loop first (skip completed ones)
     const activeLoop = await loadActiveLoop(userId);
     if (activeLoop && activeLoop.status !== 'completed') {
       const info = buildLoopResumeInfo(activeLoop);

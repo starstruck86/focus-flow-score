@@ -39,6 +39,7 @@ import { isTierUpDismissed } from '@/lib/learning/levelEventStore';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 import { DaveActiveLoopCard } from '@/components/DaveActiveLoopCard';
 import { DaveCoachingHistory } from '@/components/DaveCoachingHistory';
+import { DaveLoopCompletionCard } from '@/components/DaveLoopCompletionCard';
 import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
 import { buildLoopResumeInfo } from '@/lib/daveClosedLoopResume';
 
@@ -194,6 +195,20 @@ export default function Learn() {
           </div>
         </div>
 
+        {/* Loop completion card — shown briefly after mastery */}
+        {closedLoop.session && !closedLoop.isActive && closedLoop.session.status === 'completed' && (
+          <DaveLoopCompletionCard
+            concept={closedLoop.session.subSkill || closedLoop.session.taughtConcept}
+            skill={closedLoop.session.skill}
+            attempts={closedLoop.session.attempts.length}
+            onContinue={() => closedLoop.advanceToNext().then(() => {
+              const info = closedLoop.session ? buildLoopResumeInfo(closedLoop.session) : null;
+              if (info?.nextSurface === 'dojo') navigate('/dojo/session', { state: info.launchState });
+            })}
+            onDismiss={() => closedLoop.endLoop()}
+          />
+        )}
+
         {/* Active Coaching Loop — top priority when present */}
         {closedLoop.session && closedLoop.isActive && (
           <DaveActiveLoopCard
@@ -205,8 +220,8 @@ export default function Learn() {
         {/* 1. Today's Mental Model */}
         {learnLoop?.mentalModel && <TodaysMentalModel model={learnLoop.mentalModel} />}
 
-        {/* 2. Primary Action (Phase 6) — only when no active loop dominates */}
-        {learnLoop?.primaryAction && (
+        {/* 2. Primary Action — suppressed when active loop dominates */}
+        {learnLoop?.primaryAction && !(closedLoop.session && closedLoop.isActive) && (
           <PrimaryActionCard action={learnLoop.primaryAction} onExecute={handlePrimaryAction} />
         )}
 

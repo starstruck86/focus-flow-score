@@ -30,6 +30,7 @@ const OUTCOME_ICONS: Record<string, React.ReactNode> = {
 export function DaveCoachingHistory() {
   const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
+  const [sectionOpen, setSectionOpen] = useState(false);
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -66,7 +67,10 @@ export function DaveCoachingHistory() {
   return (
     <Card className="border-border/50 bg-card/80">
       <CardContent className="p-3 space-y-2">
-        <div className="flex items-center justify-between">
+        <button
+          className="flex items-center justify-between w-full"
+          onClick={() => setSectionOpen(!sectionOpen)}
+        >
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Coaching History
             {activeCount > 0 && (
@@ -75,20 +79,26 @@ export function DaveCoachingHistory() {
               </Badge>
             )}
           </p>
-          {entries.length > 3 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setExpanded(!expanded)}
-              className="h-6 px-2 text-xs text-muted-foreground"
-            >
-              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            </Button>
-          )}
-        </div>
+          {sectionOpen ? <ChevronUp className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+        </button>
 
-        <div className="space-y-1.5">
-          {visibleEntries.map((entry, i) => (
+        {sectionOpen && (
+          <>
+            {entries.length > 3 && (
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setExpanded(!expanded)}
+                  className="h-6 px-2 text-xs text-muted-foreground"
+                >
+                  {expanded ? 'Show less' : `Show all ${entries.length}`}
+                </Button>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              {visibleEntries.map((entry, i) => (
             <div
               key={`${entry.skill}-${entry.concept}-${i}`}
               className="flex items-center gap-2 py-1.5 px-2 rounded-md bg-muted/30"
@@ -116,7 +126,9 @@ export function DaveCoachingHistory() {
               </Badge>
             </div>
           ))}
-        </div>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
