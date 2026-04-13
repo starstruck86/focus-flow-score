@@ -849,6 +849,63 @@ export type Database = {
           },
         ]
       }
+      closed_loop_sessions: {
+        Row: {
+          attempts: Json
+          completed_at: string | null
+          created_at: string
+          focus_pattern: string | null
+          id: string
+          latest_verification: Json | null
+          next_step: string | null
+          routed_to_review: boolean
+          routed_to_skill_builder: boolean
+          skill: string
+          status: string
+          sub_skill: string | null
+          taught_at: string
+          taught_concept: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: Json
+          completed_at?: string | null
+          created_at?: string
+          focus_pattern?: string | null
+          id?: string
+          latest_verification?: Json | null
+          next_step?: string | null
+          routed_to_review?: boolean
+          routed_to_skill_builder?: boolean
+          skill: string
+          status?: string
+          sub_skill?: string | null
+          taught_at?: string
+          taught_concept: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: Json
+          completed_at?: string | null
+          created_at?: string
+          focus_pattern?: string | null
+          id?: string
+          latest_verification?: Json | null
+          next_step?: string | null
+          routed_to_review?: boolean
+          routed_to_skill_builder?: boolean
+          skill?: string
+          status?: string
+          sub_skill?: string | null
+          taught_at?: string
+          taught_concept?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       cluster_resolutions: {
         Row: {
           canonical_resource_id: string | null
