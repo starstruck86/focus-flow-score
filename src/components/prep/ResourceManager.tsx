@@ -106,6 +106,24 @@ const TEMPLATE_CATEGORIES = [
 
 const ACCEPTED_FILE_TYPES = '.zip,.pdf,.docx,.pptx,.txt,.md,.csv,.doc,.xlsx,.xls';
 
+function getFriendlyPrepError(error: unknown, fallback = 'Something went wrong') {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === 'object' && error !== null && 'message' in error
+      ? String((error as { message?: unknown }).message ?? fallback)
+      : String(error ?? fallback);
+
+  if (
+    /Edge Function returned a non-2xx status code/i.test(message) ||
+    /HTTP\s*(502|503|504|520)\b/i.test(message) ||
+    /Failed to fetch/i.test(message)
+  ) {
+    return 'The processing service hit a temporary backend issue. Your job may still continue in the background — check the Processing panel in a moment.';
+  }
+
+  return message;
+}
+
 export function ResourceManager() {
   const { user } = useAuth();
   useConsolidateFolders();
@@ -954,7 +972,7 @@ export function ResourceManager() {
                     toast.success(`Extracted ${totalKI} KIs from ${results.filter(r => r.knowledgeExtracted > 0).length} resources`);
                   } catch (error: any) {
                     useResourceJobProgress.getState().endBatch();
-                    toast.error('Batch extraction failed', { description: error?.message });
+                    toast.error('Batch extraction failed', { description: getFriendlyPrepError(error, 'Batch extraction failed') });
                   }
                   break;
                 }
@@ -1093,7 +1111,7 @@ export function ResourceManager() {
 
                     toast.dismiss('extract-single');
                     console.error('[Extract] Failed:', error);
-                    toast.error('Extraction failed', { description: error?.message });
+                    toast.error('Extraction failed', { description: getFriendlyPrepError(error, 'Extraction failed') });
                   }
                   break;
                 }
@@ -1142,7 +1160,9 @@ export function ResourceManager() {
                     } as any).eq('id', resource.id);
 
                     toast.dismiss(toastId);
-                    toast.error(action === 'activate' ? 'Activation failed' : 'Context repair failed', { description: error?.message });
+                    toast.error(action === 'activate' ? 'Activation failed' : 'Context repair failed', {
+                      description: getFriendlyPrepError(error, action === 'activate' ? 'Activation failed' : 'Context repair failed'),
+                    });
                   }
                   break;
                 }
@@ -1237,7 +1257,9 @@ export function ResourceManager() {
 
                       if (result.error) {
                         console.error('[Enrich] Edge function error:', result.error);
-                        toast.error(result.error.message, { description: result.error.recoveryHint });
+                        toast.error(getFriendlyPrepError(result.error, 'Enrichment failed'), {
+                          description: result.error.recoveryHint,
+                        });
                         break;
                       }
                       if (result.data?.final_status === 'enriched') toast.success('Content enriched');
@@ -1246,7 +1268,7 @@ export function ResourceManager() {
                     } catch (error: any) {
                       console.error('[Enrich] Unexpected error:', error);
                       queryClient.invalidateQueries({ queryKey: ['resources'] });
-                      toast.error('Enrichment failed', { description: error?.message });
+                      toast.error('Enrichment failed', { description: getFriendlyPrepError(error, 'Enrichment failed') });
                     }
                   }
                   break;
@@ -1348,7 +1370,7 @@ export function ResourceManager() {
                     setSelectedResourceIds(new Set());
                   } catch (error: any) {
                     useResourceJobProgress.getState().endBatch();
-                    toast.error('Batch extraction failed', { description: error?.message });
+                    toast.error('Batch extraction failed', { description: getFriendlyPrepError(error, 'Batch extraction failed') });
                   }
                   break;
                 }
@@ -1392,7 +1414,7 @@ export function ResourceManager() {
                     toast.success(`Extracted ${totalKI} KIs from ${results.filter(r => r.knowledgeExtracted > 0).length} resources`);
                   } catch (error: any) {
                     useResourceJobProgress.getState().endBatch();
-                    toast.error('Batch extraction failed', { description: error?.message });
+                    toast.error('Batch extraction failed', { description: getFriendlyPrepError(error, 'Batch extraction failed') });
                   }
                   break;
                 }
