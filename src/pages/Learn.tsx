@@ -50,6 +50,7 @@ export default function Learn() {
   const { data: learnLoop } = useLearnLoop();
   const { data: skillLevels } = useSkillLevels();
   const { data: subSkillSummaries } = useSubSkillProgress();
+  const closedLoop = useClosedLoopCoaching();
 
   // Tier-up modal
   const [tierUpLevel, setTierUpLevel] = useState<UserSkillLevel | null>(null);
