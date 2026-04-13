@@ -47,6 +47,7 @@ const DojoV6QA = lazy(() => import("./pages/DojoV6QA"));
 const Learn = lazy(() => import("./pages/Learn"));
 const LearnLesson = lazy(() => import("./pages/LearnLesson"));
 const SkillBuilderSession = lazy(() => import("./pages/SkillBuilderSession"));
+const SkillBuilderAudit = lazy(() => import("./pages/SkillBuilderAudit"));
 const ReliabilityQA = lazy(() => import("./pages/ReliabilityQA"));
 const ObservabilityDashboard = lazy(() => import("./pages/ObservabilityDashboard"));
 
@@ -196,6 +197,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
                         <SkillBuilderSession />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/learn/skill-builder-audit" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                        <SkillBuilderAudit />
                       </Suspense>
                     </ProtectedRoute>
                   } />
