@@ -5424,6 +5424,60 @@ export type Database = {
         }
         Relationships: []
       }
+      skill_builder_sessions: {
+        Row: {
+          avg_score: number | null
+          blocks: Json
+          completed_at: string | null
+          created_at: string
+          duration_minutes: number
+          focus_patterns_used: string[]
+          id: string
+          ki_ids_used: string[]
+          level: number
+          skill: string
+          status: string
+          strongest_pattern: string | null
+          updated_at: string
+          user_id: string
+          weakest_pattern: string | null
+        }
+        Insert: {
+          avg_score?: number | null
+          blocks?: Json
+          completed_at?: string | null
+          created_at?: string
+          duration_minutes?: number
+          focus_patterns_used?: string[]
+          id?: string
+          ki_ids_used?: string[]
+          level?: number
+          skill: string
+          status?: string
+          strongest_pattern?: string | null
+          updated_at?: string
+          user_id: string
+          weakest_pattern?: string | null
+        }
+        Update: {
+          avg_score?: number | null
+          blocks?: Json
+          completed_at?: string | null
+          created_at?: string
+          duration_minutes?: number
+          focus_patterns_used?: string[]
+          id?: string
+          ki_ids_used?: string[]
+          level?: number
+          skill?: string
+          status?: string
+          strongest_pattern?: string | null
+          updated_at?: string
+          user_id?: string
+          weakest_pattern?: string | null
+        }
+        Relationships: []
+      }
       source_registry: {
         Row: {
           created_at: string
