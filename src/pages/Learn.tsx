@@ -37,6 +37,10 @@ import { useSkillLevels } from '@/hooks/useSkillLevels';
 import { useSubSkillProgress } from '@/hooks/useSubSkillProgress';
 import { isTierUpDismissed } from '@/lib/learning/levelEventStore';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
+import { DaveActiveLoopCard } from '@/components/DaveActiveLoopCard';
+import { DaveCoachingHistory } from '@/components/DaveCoachingHistory';
+import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
+import { buildLoopResumeInfo } from '@/lib/daveClosedLoopResume';
 
 export default function Learn() {
   const navigate = useNavigate();
@@ -46,6 +50,7 @@ export default function Learn() {
   const { data: learnLoop } = useLearnLoop();
   const { data: skillLevels } = useSkillLevels();
   const { data: subSkillSummaries } = useSubSkillProgress();
+  const closedLoop = useClosedLoopCoaching();
 
   // Tier-up modal
   const [tierUpLevel, setTierUpLevel] = useState<UserSkillLevel | null>(null);
@@ -138,6 +143,18 @@ export default function Learn() {
     }
   }, [learnLoop?.primaryAction, navigate]);
 
+  const handleResumeLoop = useCallback(() => {
+    if (!closedLoop.session) return;
+    const info = buildLoopResumeInfo(closedLoop.session);
+    if (info.nextSurface === 'dojo') {
+      navigate('/dojo/session', { state: info.launchState });
+    } else if (info.nextSurface === 'learn') {
+      // Already on learn — the loop will continue via existing lesson flow
+    } else if (info.nextSurface === 'skill_builder') {
+      navigate('/skill-builder/session', { state: info.launchState });
+    }
+  }, [closedLoop.session, navigate]);
+
   if (isLoading) {
     return (
       <Layout>
@@ -168,17 +185,27 @@ export default function Learn() {
           <div className="space-y-1 pt-0.5">
             <p className="text-sm font-medium text-foreground">Learning Engine</p>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {nextLesson
-                ? `Up next: ${nextLesson.lesson.title}`
-                : 'All lessons completed. Review weak areas below.'}
+              {closedLoop.session && closedLoop.isActive
+                ? `Dave is coaching: ${closedLoop.session.subSkill || closedLoop.session.taughtConcept}`
+                : nextLesson
+                  ? `Up next: ${nextLesson.lesson.title}`
+                  : 'All lessons completed. Review weak areas below.'}
             </p>
           </div>
         </div>
 
+        {/* Active Coaching Loop — top priority when present */}
+        {closedLoop.session && closedLoop.isActive && (
+          <DaveActiveLoopCard
+            session={closedLoop.session}
+            onResume={handleResumeLoop}
+          />
+        )}
+
         {/* 1. Today's Mental Model */}
         {learnLoop?.mentalModel && <TodaysMentalModel model={learnLoop.mentalModel} />}
 
-        {/* 2. Primary Action (Phase 6) */}
+        {/* 2. Primary Action (Phase 6) — only when no active loop dominates */}
         {learnLoop?.primaryAction && (
           <PrimaryActionCard action={learnLoop.primaryAction} onExecute={handlePrimaryAction} />
         )}
@@ -252,6 +279,9 @@ export default function Learn() {
         {learnLoop?.reinforcement && learnLoop.reinforcement.length > 0 && (
           <ReinforcementQueue items={learnLoop.reinforcement} />
         )}
+
+        {/* 16. Coaching History */}
+        <DaveCoachingHistory />
 
         {/* Secondary lesson CTA (downgraded from primary) */}
         {nextLesson && !learnLoop?.primaryAction && (

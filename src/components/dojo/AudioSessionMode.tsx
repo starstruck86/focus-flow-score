@@ -61,6 +61,7 @@ import DaveSignalBanner from '@/components/DaveSignalBanner';
 import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
 import { orchestrateNextStep } from '@/lib/daveClosedLoopOrchestrator';
 import { DaveCoachingLoopStatus } from '@/components/DaveCoachingLoopStatus';
+import { DaveCoachingFocusChip } from '@/components/DaveCoachingFocusChip';
 import { parseDimensions } from '@/lib/learning/learnScoringSchema';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 
@@ -735,6 +736,15 @@ export default function AudioSessionMode({
       {/* Closed-loop coaching status */}
       {isClosedLoop && closedLoop.isActive && (
         <DaveCoachingLoopStatus state={closedLoop} compact />
+      )}
+      {/* Coaching focus chip — always visible when in closed loop */}
+      {isClosedLoop && closedLoopConcept && (
+        <div className="px-4 pb-1">
+          <DaveCoachingFocusChip
+            concept={closedLoopConcept}
+            skill={closedLoopSkill || undefined}
+          />
+        </div>
       )}
       <RecoveryBanner
         recovery={recovery}

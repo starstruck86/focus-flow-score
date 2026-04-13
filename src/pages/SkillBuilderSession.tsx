@@ -27,6 +27,7 @@ import { useSkillLevels } from '@/hooks/useSkillLevels';
 import { useDaveVoiceController } from '@/hooks/useDaveVoiceController';
 import { prefetchSkillBuilderBlocks } from '@/lib/daveSessionPrefetch';
 import DaveSignalBanner from '@/components/DaveSignalBanner';
+import { DaveCoachingFocusChip } from '@/components/DaveCoachingFocusChip';
 import { makeOpKey, runIdempotent, clearIdempotencyRecords } from '@/lib/daveIdempotency';
 import { monitorLifecycle, getResumeMessage } from '@/lib/daveLifecycleRecovery';
 
@@ -37,7 +38,16 @@ export default function SkillBuilderSession() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const state = location.state as { skill?: SkillFocus; duration?: number; mode?: string } | null;
+  const state = location.state as {
+    skill?: SkillFocus;
+    duration?: number;
+    mode?: string;
+    fromClosedLoop?: boolean;
+    closedLoopSessionId?: string;
+    taughtConcept?: string;
+    subSkill?: string;
+    remediationContext?: { concept: string; weakDimensions: string[]; attemptCount: number };
+  } | null;
 
   const [sessionState, setSessionState] = useState<SessionState>('generating');
   const [track, setTrack] = useState<SkillTrack | null>(null);
@@ -280,6 +290,22 @@ export default function SkillBuilderSession() {
             isOffline={dave.isOffline}
             pendingOpsCount={dave.pendingOpsCount}
           />
+        )}
+
+        {/* Remediation context from closed-loop */}
+        {state?.fromClosedLoop && state?.taughtConcept && (
+          <div className="space-y-1.5">
+            <DaveCoachingFocusChip
+              concept={state.taughtConcept}
+              skill={state.skill}
+              contextLabel={`Reinforcing: ${state.taughtConcept}`}
+            />
+            {state.remediationContext && (
+              <p className="text-[10px] text-muted-foreground italic px-1">
+                Routed here because this concept needs structured practice.
+              </p>
+            )}
+          </div>
         )}
 
         {/* Header */}

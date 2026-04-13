@@ -22,6 +22,8 @@ import {
 } from '@/lib/daveSurfaceTransitions';
 import type { DaveRecommendation } from '@/lib/daveTrainingRouter';
 import { loadVoiceSessionBuffer } from '@/lib/daveSessionBuffer';
+import { loadActiveLoop } from '@/lib/daveClosedLoopStore';
+import { buildLoopResumeInfo } from '@/lib/daveClosedLoopResume';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('useDaveAudioLauncher');
@@ -63,8 +65,25 @@ export function useDaveAudioLauncher(): UseDaveAudioLauncher {
   const startLauncher = useCallback(async (userId: string) => {
     setPhase('greeting');
     const buffer = loadVoiceSessionBuffer();
-    const greeting = buildGreeting(!!buffer);
 
+    // Check for active coaching loop first
+    const activeLoop = await loadActiveLoop(userId);
+    if (activeLoop && activeLoop.status !== 'completed') {
+      const info = buildLoopResumeInfo(activeLoop);
+      const greeting = `Welcome back. ${info.spokenIntro}`;
+      await dave.speak(greeting);
+      // Set as recommendation so the user can immediately launch
+      setRecommendation({
+        type: info.nextSurface || 'dojo',
+        reason: `Active coaching loop: ${activeLoop.taughtConcept}`,
+        launchState: info.launchState,
+        spokenIntro: info.spokenIntro,
+      });
+      setPhase('listening');
+      return;
+    }
+
+    const greeting = buildGreeting(!!buffer);
     await dave.speak(greeting);
     setPhase('listening');
   }, [dave]);
