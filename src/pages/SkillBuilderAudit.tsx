@@ -34,15 +34,14 @@ export default function SkillBuilderAudit() {
       setPhase('coverage');
       const report = await runSkillBuilderCoverageAudit(user.id);
       setCoverageReport(report);
-      setGapMap(getSkillBuilderGapMap(report));
+      const gapResult = getSkillBuilderGapMap(report);
+      setGapMap(gapResult);
 
       setPhase('sequencing');
       const seq = await auditSkillBuilderSequencing(user.id);
       setSeqResults(seq);
 
       // Build curation plan from all audit data
-      const gapResult = getSkillBuilderGapMap(report);
-      setGapMap(gapResult);
       setCurationPlan(buildSkillBuilderCurationPlan(report, gapResult, seq));
 
       setPhase('done');
