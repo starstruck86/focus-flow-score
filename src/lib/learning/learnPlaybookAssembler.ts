@@ -299,7 +299,7 @@ export function getViablePlaybooks(
   durationMinutes: number,
   index: IndexedKI[],
 ): string[] {
-  const { PLAYBOOK_REGISTRY } = require('./learnPlaybookSchema');
+  const { PLAYBOOK_REGISTRY } = await import('./learnPlaybookSchema');
   return (PLAYBOOK_REGISTRY as PlaybookDefinition[])
     .filter(p => p.skill === skill)
     .filter(p => canSupportDuration(p.id, durationMinutes, index))
