@@ -9,6 +9,12 @@
  * 5. No scenario content is silently skipped.
  * 6. Retry loops cannot skip instruction.
  *
+ * BARGE-IN RULES:
+ * - Protected phases (intro, objection, instruction) ignore user speech.
+ * - Interruptible phases (context, breakdown, feedback) pause on barge-in.
+ * - On barge-in: Dave stops → parses command → acts → resumes or advances.
+ * - "repeat" replays the CURRENT checkpoint segment from the beginning.
+ *
  * Both Dojo and Learn sessions use this runtime.
  */
 
@@ -24,19 +30,15 @@ export type AudioFirstMode = 'audio-first' | 'visual';
 
 // ── Interruption Commands ──────────────────────────────────────────
 
-/**
- * Extended voice commands for hands-free use.
- * Includes driving-safe commands beyond the base set.
- */
 export type InterruptionCommand =
-  | 'repeat'       // "repeat that", "say that again"
-  | 'skip'         // "skip", "next"
-  | 'go'           // "go", "I'm ready"
-  | 'done'         // "I'm done", "that's my answer"
-  | 'retry'        // "one more time", "let me try again"
-  | 'stop'         // "stop", "end session"
-  | 'pause'        // "hold on", "wait"
-  | 'resume'       // "go ahead", "continue"
+  | 'repeat'
+  | 'skip'
+  | 'go'
+  | 'done'
+  | 'retry'
+  | 'stop'
+  | 'pause'
+  | 'resume'
   | null;
 
 const INTERRUPTION_PATTERNS: [InterruptionCommand, RegExp][] = [
@@ -52,14 +54,100 @@ const INTERRUPTION_PATTERNS: [InterruptionCommand, RegExp][] = [
 
 export function parseInterruption(transcript: string): InterruptionCommand {
   const trimmed = transcript.trim();
-  if (trimmed.split(/\s+/).length > 8) return null; // Only short utterances
+  if (trimmed.split(/\s+/).length > 8) return null;
   for (const [cmd, pattern] of INTERRUPTION_PATTERNS) {
     if (pattern.test(trimmed)) return cmd;
   }
   return null;
 }
 
-// ── Session Error (audio-first never silently degrades) ────────────
+// ── Barge-In Phase Rules ───────────────────────────────────────────
+
+/**
+ * Barge-in behaviour per phase category:
+ * - 'protected': Dave ignores user speech. Used for critical instructions
+ *   (intro, objection delivery, instruction cues). User must wait.
+ * - 'interruptible': Dave stops on user speech, parses command, acts.
+ *   Used for context, breakdown, feedback, recap — longer teaching segments.
+ */
+export type BargeInPolicy = 'protected' | 'interruptible';
+
+const PHASE_BARGE_IN_MAP: Record<string, BargeInPolicy> = {
+  // Dojo phases
+  intro: 'protected',
+  prompt: 'interruptible',
+  instruction: 'protected',
+  listening: 'protected',
+  scoring: 'protected',
+  feedback: 'interruptible',
+  retry_prompt: 'interruptible',
+  retry_instruction: 'protected',
+  retry_listening: 'protected',
+  retry_feedback: 'interruptible',
+  complete: 'protected',
+
+  // Learn phases
+  concept: 'interruptible',
+  what_good_looks_like: 'interruptible',
+  breakdown: 'interruptible',
+  when_to_use: 'interruptible',
+  when_to_avoid: 'interruptible',
+  expected_response_framing: 'interruptible',
+  example_response: 'interruptible',
+  application_prompt: 'protected',
+  grading: 'protected',
+  recap: 'interruptible',
+  handoff: 'protected',
+};
+
+export function getBargeInPolicy(phase: string): BargeInPolicy {
+  return PHASE_BARGE_IN_MAP[phase] ?? 'interruptible';
+}
+
+// ── Checkpoint Replay ──────────────────────────────────────────────
+
+/**
+ * A spoken checkpoint — the text that was last spoken in a given role.
+ * Used for deterministic "repeat" commands.
+ */
+export interface SpokenCheckpoint {
+  role: string;
+  text: string;
+  timestamp: number;
+}
+
+export class CheckpointTracker {
+  private checkpoints: SpokenCheckpoint[] = [];
+  private currentIndex = -1;
+
+  /** Record that we spoke this segment */
+  record(role: string, text: string): void {
+    this.checkpoints.push({ role, text, timestamp: Date.now() });
+    this.currentIndex = this.checkpoints.length - 1;
+  }
+
+  /** Get the current (most recently spoken) checkpoint for replay */
+  getCurrent(): SpokenCheckpoint | null {
+    if (this.currentIndex < 0) return null;
+    return this.checkpoints[this.currentIndex];
+  }
+
+  /** Get a checkpoint by role (e.g. 'objection', 'what_good_sounds_like') */
+  getByRole(role: string): SpokenCheckpoint | null {
+    for (let i = this.checkpoints.length - 1; i >= 0; i--) {
+      if (this.checkpoints[i].role === role) return this.checkpoints[i];
+    }
+    return null;
+  }
+
+  /** Reset tracker for new session */
+  reset(): void {
+    this.checkpoints = [];
+    this.currentIndex = -1;
+  }
+}
+
+// ── Session Error ──────────────────────────────────────────────────
 
 export class AudioFirstSessionError extends Error {
   constructor(
@@ -72,23 +160,48 @@ export class AudioFirstSessionError extends Error {
   }
 }
 
-// ── Shared Playback Primitives ─────────────────────────────────────
+// ── Audio-First Context ────────────────────────────────────────────
 
 export interface AudioFirstContext {
   ttsConfig: TtsConfig;
   playbackRef: React.MutableRefObject<ActivePlayback>;
   signal?: AbortSignal;
   onStateChange?: (patch: Record<string, unknown>) => void;
+  /** Checkpoint tracker for replay support */
+  checkpoints: CheckpointTracker;
+  /** Current phase — used for barge-in policy */
+  currentPhase?: string;
 }
 
 /**
+ * Create a fresh AudioFirstContext (call once per session).
+ */
+export function createAudioFirstContext(
+  ttsConfig: TtsConfig,
+  playbackRef: React.MutableRefObject<ActivePlayback>,
+  signal?: AbortSignal,
+  onStateChange?: (patch: Record<string, unknown>) => void,
+): AudioFirstContext {
+  return {
+    ttsConfig,
+    playbackRef,
+    signal,
+    onStateChange,
+    checkpoints: new CheckpointTracker(),
+  };
+}
+
+// ── Speak Strict (with checkpoint recording) ───────────────────────
+
+/**
  * Speak text with strict audio-first guarantees.
- * If TTS fails after retries, throws AudioFirstSessionError — never silently continues.
+ * Records the segment as a checkpoint for replay.
+ * If TTS fails after retries, throws AudioFirstSessionError.
  */
 export async function speakStrict(
   text: string,
   ctx: AudioFirstContext,
-  options?: { previousText?: string; nextText?: string },
+  options?: { previousText?: string; nextText?: string; role?: string },
 ): Promise<void> {
   if (ctx.signal?.aborted) return;
 
@@ -104,7 +217,9 @@ export async function speakStrict(
         ctx.playbackRef.current,
         options,
       );
-      return; // Success
+      // Record checkpoint on success
+      ctx.checkpoints.record(options?.role ?? ctx.currentPhase ?? 'unknown', text);
+      return;
     } catch (err) {
       lastError = err instanceof Error ? err.message : 'TTS error';
       logger.warn('TTS attempt failed', { attempt, error: lastError });
@@ -114,7 +229,6 @@ export async function speakStrict(
     }
   }
 
-  // All retries exhausted — do NOT silently continue
   throw new AudioFirstSessionError(
     `Dave cannot speak: ${lastError}. Session paused.`,
     'tts_failure',
@@ -123,39 +237,115 @@ export async function speakStrict(
 }
 
 /**
- * Speak a sequence of items strictly. Each item must complete before next starts.
- * Pauses between items are enforced.
+ * Speak with barge-in detection on interruptible phases.
+ * On protected phases, behaves identically to speakStrict.
+ * On interruptible phases, monitors for user speech during playback.
+ *
+ * Returns the barge-in command if one was detected, or null.
+ */
+export async function speakWithBargeIn(
+  text: string,
+  ctx: AudioFirstContext,
+  options?: { role?: string },
+): Promise<InterruptionCommand> {
+  const policy = getBargeInPolicy(ctx.currentPhase ?? '');
+
+  if (policy === 'protected') {
+    await speakStrict(text, ctx, { role: options?.role });
+    return null;
+  }
+
+  // For interruptible phases: speak, but if user interrupts we catch it
+  // The browser SpeechRecognition won't fire during audio playback in most
+  // environments, so we rely on post-playback command detection.
+  // True real-time barge-in requires always-on VAD which is a future upgrade.
+  // For now: speak → brief listen window → check for command.
+  await speakStrict(text, ctx, { role: options?.role });
+
+  // Quick listen window (1.5s) for commands after interruptible segments
+  if (ctx.signal?.aborted) return null;
+  try {
+    const quickResult = await listen(ctx.ttsConfig, {
+      timeoutMs: 1500,
+      signal: ctx.signal,
+    });
+    if (quickResult.trim()) {
+      const cmd = parseInterruption(quickResult);
+      if (cmd) {
+        logger.info('Barge-in command detected', { command: cmd, phase: ctx.currentPhase });
+        return cmd;
+      }
+    }
+  } catch {
+    // Timeout / no speech — continue normally
+  }
+  return null;
+}
+
+/**
+ * Speak a sequence of items strictly with checkpoint tracking.
+ * Each item must complete before next starts.
+ * Supports barge-in on interruptible phases.
+ *
+ * Returns the command that interrupted the queue, or null if completed.
  */
 export async function speakQueueStrict(
   items: SpeechQueueItem[],
   ctx: AudioFirstContext,
-): Promise<void> {
+  options?: { roles?: string[] },
+): Promise<InterruptionCommand> {
   for (let i = 0; i < items.length; i++) {
-    if (ctx.signal?.aborted) return;
+    if (ctx.signal?.aborted) return null;
 
     const item = items[i];
-    const prev = i > 0 ? items[i - 1].text : undefined;
-    const next = i < items.length - 1 ? items[i + 1].text : undefined;
+    const role = options?.roles?.[i] ?? ctx.currentPhase ?? `queue_${i}`;
 
-    await speakStrict(item.text, ctx, { previousText: prev, nextText: next });
+    const bargeIn = await speakWithBargeIn(item.text, ctx, { role });
+    if (bargeIn) return bargeIn;
 
     if (item.pauseAfter && !ctx.signal?.aborted) {
       await new Promise(r => setTimeout(r, item.pauseAfter));
     }
   }
+  return null;
 }
 
 /**
+ * Replay the current checkpoint — deterministic replay of the last spoken segment.
+ */
+export async function replayCurrentCheckpoint(ctx: AudioFirstContext): Promise<void> {
+  const checkpoint = ctx.checkpoints.getCurrent();
+  if (!checkpoint) {
+    await speakStrict("Nothing to repeat yet.", ctx);
+    return;
+  }
+  logger.info('Replaying checkpoint', { role: checkpoint.role });
+  await speakStrict(checkpoint.text, ctx, { role: checkpoint.role });
+}
+
+/**
+ * Replay a specific named checkpoint (e.g. 'objection', 'what_good_sounds_like').
+ */
+export async function replayCheckpointByRole(role: string, ctx: AudioFirstContext): Promise<void> {
+  const checkpoint = ctx.checkpoints.getByRole(role);
+  if (!checkpoint) {
+    await speakStrict(`I don't have that segment to replay.`, ctx);
+    return;
+  }
+  logger.info('Replaying checkpoint by role', { role });
+  await speakStrict(checkpoint.text, ctx, { role });
+}
+
+// ── Listen Strict ──────────────────────────────────────────────────
+
+/**
  * Listen with interruption handling and noise resilience.
- * Returns transcript and any detected interruption command.
  */
 export async function listenStrict(
   ctx: AudioFirstContext,
   options?: {
     timeoutMs?: number;
-    /** If true, treat empty transcript as session error */
     requireResponse?: boolean;
-    /** Retry count if no speech detected */
     retryOnSilence?: number;
   },
 ): Promise<{ transcript: string; command: InterruptionCommand }> {
@@ -171,14 +361,11 @@ export async function listenStrict(
         signal: ctx.signal,
       });
 
-      // Check for interruption command
       const command = parseInterruption(transcript);
       if (command) return { transcript, command };
 
-      // Check for empty transcript (road noise / no response)
       if (!transcript.trim()) {
         if (attempt < retryOnSilence) {
-          // Nudge the user
           await speakStrict(
             attempt === 0
               ? "I didn't catch that. Go ahead."
@@ -208,11 +395,59 @@ export async function listenStrict(
   return { transcript: '', command: null };
 }
 
-/**
- * Interrupt current playback immediately.
- */
+// ── Interrupt + Playback ───────────────────────────────────────────
+
 export function interruptPlayback(ctx: AudioFirstContext): void {
   ctx.playbackRef.current = interruptSpeech(ctx.playbackRef.current);
+}
+
+// ── Barge-In Handler ───────────────────────────────────────────────
+
+/**
+ * Central handler for barge-in commands during a session flow.
+ * Returns true if the command was fully handled (caller should continue flow),
+ * or an action string indicating what the caller should do.
+ */
+export type BargeInAction =
+  | 'continue'    // Command handled, resume normal flow
+  | 'repeat'      // Replay current checkpoint, then resume
+  | 'skip'        // Skip to next phase
+  | 'stop'        // End session
+  | 'pause_resume'; // Was paused, now resumed — continue
+
+export async function handleBargeInCommand(
+  command: InterruptionCommand,
+  ctx: AudioFirstContext,
+): Promise<BargeInAction> {
+  if (!command) return 'continue';
+
+  switch (command) {
+    case 'repeat':
+      await replayCurrentCheckpoint(ctx);
+      return 'repeat';
+
+    case 'skip':
+      await speakStrict("Skipping ahead.", ctx);
+      return 'skip';
+
+    case 'stop':
+      await speakStrict("Got it. Ending session.", ctx);
+      return 'stop';
+
+    case 'pause': {
+      await speakStrict("Paused. Say 'go ahead' when you're ready.", ctx);
+      const resumed = await listenStrict(ctx, { timeoutMs: 120_000 });
+      if (resumed.command === 'stop') return 'stop';
+      return 'pause_resume';
+    }
+
+    case 'go':
+    case 'resume':
+    case 'done':
+    case 'retry':
+    default:
+      return 'continue';
+  }
 }
 
 // ── Session Recap Builder ──────────────────────────────────────────
@@ -223,9 +458,6 @@ export interface SessionRecap {
   whatWeWorkOnNext: string;
 }
 
-/**
- * Build verbal session recap for end-of-session delivery.
- */
 export function buildSessionRecapSpeech(recap: SessionRecap): SpeechQueueItem[] {
   const items: SpeechQueueItem[] = [];
 
