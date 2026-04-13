@@ -90,15 +90,18 @@ export function parseUserIntent(transcript: string): UserIntent {
 export async function fetchTrainingContext(userId: string): Promise<UserTrainingContext> {
   const pendingBuffer = loadVoiceSessionBuffer();
 
-  // Fetch recent dojo sessions
-  const { data: sessions } = await supabase
-    .from('dojo_sessions')
-    .select('skill_focus, latest_score, completed_at, status')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(20);
+  // Fetch recent dojo sessions + active closed-loop in parallel
+  const [sessionsResult, activeLoop] = await Promise.all([
+    supabase
+      .from('dojo_sessions')
+      .select('skill_focus, latest_score, completed_at, status')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(20),
+    loadActiveLoop(userId),
+  ]);
 
-  const recentSessions = (sessions || []).map(s => ({
+  const recentSessions = (sessionsResult.data || []).map(s => ({
     skill_focus: s.skill_focus,
     latest_score: s.latest_score,
     completed_at: s.completed_at,
@@ -124,7 +127,6 @@ export async function fetchTrainingContext(userId: string): Promise<UserTraining
     }
   }
 
-  // Check for active skill builder sessions (simplified)
   const hasActiveSkillBuilder = pendingBuffer?.surface === 'skill_builder';
 
   return {
@@ -134,6 +136,7 @@ export async function fetchTrainingContext(userId: string): Promise<UserTraining
     weakestSkill,
     weakestScore,
     hasActiveSkillBuilder,
+    activeLoop,
   };
 }
 
