@@ -30,6 +30,7 @@ import {
   type InterruptionCommand,
   type SessionRecap,
   type BargeInAction,
+  type BargeInDetection,
   createAudioFirstContext,
   speakStrict,
   speakQueueStrict,
@@ -118,7 +119,7 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     ], ctx, { roles: ['context', 'what_good_sounds_like', 'evaluation_criteria', 'objection'] });
 
     if (bargeIn) {
-      const action = await handleBargeInCommand(bargeIn, ctx);
+      const action = await handleBargeInCommand(bargeIn.command, ctx, bargeIn.transcript);
       if (action === 'stop') return abort(result);
       if (action === 'skip') { /* skip to instruction */ }
     }
@@ -163,7 +164,7 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     setPhase('feedback');
     const fbBargeIn = await deliverFeedback(scoreResult, ctx);
     if (fbBargeIn) {
-      const action = await handleBargeInCommand(fbBargeIn, ctx);
+      const action = await handleBargeInCommand(fbBargeIn.command, ctx, fbBargeIn.transcript);
       if (action === 'stop') return abort(result);
     }
     if (ctx.signal?.aborted) return abort(result);
@@ -184,7 +185,7 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
       setPhase('retry_prompt');
       const retryBargeIn = await speakWithBargeIn(retryScript.retryPrompt, ctx, { role: 'retry_prompt' });
       if (retryBargeIn) {
-        const action = await handleBargeInCommand(retryBargeIn, ctx);
+        const action = await handleBargeInCommand(retryBargeIn.command, ctx, retryBargeIn.transcript);
         if (action === 'stop') return abort(result);
         if (action === 'skip') break;
       }
@@ -373,7 +374,7 @@ async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSes
       setPhase(seg.phase);
       const bargeIn = await speakWithBargeIn(seg.text, ctx, { role: seg.role });
       if (bargeIn) {
-        const action = await handleBargeInCommand(bargeIn, ctx);
+        const action = await handleBargeInCommand(bargeIn.command, ctx, bargeIn.transcript);
         if (action === 'stop') return abortLearn(result);
         if (action === 'skip') continue;
       }
@@ -428,7 +429,7 @@ async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSes
     result.recap = recap;
     await speakQueueStrict(buildSessionRecapSpeech(recap), ctx);
 
-    // Handoff — automatic Learn → Dojo chain
+    // Handoff — automatic Learn → Dojo chain (or clean close)
     if (config.onHandoffToDojo) {
       setPhase('handoff');
       await speakStrict(
@@ -436,14 +437,17 @@ async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSes
         ctx,
         { role: 'handoff' },
       );
+      // Transfer audio ownership cleanly — the Dojo session will create its own context
+      // using the same ttsConfig + playbackRef, so we just signal completion here.
+      interruptPlayback(ctx);
       result.handedOffToDojo = true;
       config.onHandoffToDojo(config.lesson.topic);
     } else {
       setPhase('handoff');
       await speakStrict(
-        "Good — now let's put this into practice. I'm going to give you a scenario. Respond like you would on a real call.",
+        "That wraps up this lesson. Great work today.",
         ctx,
-        { role: 'handoff' },
+        { role: 'closing' },
       );
     }
 
@@ -515,7 +519,7 @@ async function runCompressedLearnSession(config: LearnSessionConfig): Promise<Le
     setPhase('concept');
     const bargeIn1 = await speakWithBargeIn(content.concept, ctx, { role: 'concept' });
     if (bargeIn1) {
-      const action = await handleBargeInCommand(bargeIn1, ctx);
+      const action = await handleBargeInCommand(bargeIn1.command, ctx, bargeIn1.transcript);
       if (action === 'stop') return abortLearn(result);
     }
     if (ctx.signal?.aborted) return abortLearn(result);
@@ -528,7 +532,7 @@ async function runCompressedLearnSession(config: LearnSessionConfig): Promise<Le
       : `Here's what good looks like: ${content.what_good_looks_like}`;
     const bargeIn2 = await speakWithBargeIn(mergedCriteria, ctx, { role: 'criteria' });
     if (bargeIn2) {
-      const action = await handleBargeInCommand(bargeIn2, ctx);
+      const action = await handleBargeInCommand(bargeIn2.command, ctx, bargeIn2.transcript);
       if (action === 'stop') return abortLearn(result);
     }
     if (ctx.signal?.aborted) return abortLearn(result);
@@ -611,7 +615,7 @@ async function runCompressedLearnSession(config: LearnSessionConfig): Promise<Le
 async function deliverFeedback(
   scoreResult: DojoScoreResult,
   ctx: AudioFirstContext,
-): Promise<InterruptionCommand> {
+): Promise<BargeInDetection | null> {
   const segments = buildFeedbackScript(scoreResult);
   const items: SpeechQueueItem[] = segments.map((text, i) => ({
     text,
