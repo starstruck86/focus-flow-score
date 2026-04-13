@@ -8,7 +8,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BookOpen, RefreshCw, Target } from 'lucide-react';
+import { ArrowRight, BookOpen, RefreshCw, Target, CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { ClosedLoopSession } from '@/lib/daveClosedLoopEngine';
 
 interface Props {
@@ -33,11 +33,39 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   needs_review: <BookOpen className="h-4 w-4" />,
 };
 
+const NEXT_STEP_LABELS: Record<string, string> = {
+  retry_same_focus: 'Retry rep',
+  reinforce_with_micro_coaching: 'Coach + retry',
+  advance_to_harder_variant: 'Harder rep',
+  move_to_next_concept: 'Next concept',
+  route_to_skill_builder: 'Skill Builder',
+  route_to_learn_review: 'Review concept',
+};
+
+const OUTCOME_LABELS: Record<string, { label: string; className: string }> = {
+  missed: { label: 'Missed', className: 'text-destructive' },
+  partial: { label: 'Partial', className: 'text-muted-foreground' },
+  applied: { label: 'Applied', className: 'text-accent-foreground' },
+  strong: { label: 'Strong', className: 'text-primary' },
+};
+
+function getLastOutcome(session: ClosedLoopSession): string | null {
+  const last = session.attempts[session.attempts.length - 1];
+  if (!last) return null;
+  if (last.focusApplied && (last.score ?? 0) >= 70) return 'strong';
+  if (last.focusApplied) return 'applied';
+  if ((last.score ?? 0) >= 50) return 'partial';
+  return 'missed';
+}
+
 export function DaveActiveLoopCard({ session, onResume, compact = false }: Props) {
   const concept = session.subSkill || session.taughtConcept;
   const attemptCount = session.attempts.length;
   const statusLabel = STATUS_LABELS[session.status] || session.status;
   const icon = STATUS_ICONS[session.status] || <Target className="h-4 w-4" />;
+  const lastOutcome = getLastOutcome(session);
+  const outcomeInfo = lastOutcome ? OUTCOME_LABELS[lastOutcome] : null;
+  const nextStepLabel = session.nextStep ? NEXT_STEP_LABELS[session.nextStep] : null;
 
   if (compact) {
     return (
@@ -57,6 +85,7 @@ export function DaveActiveLoopCard({ session, onResume, compact = false }: Props
   return (
     <Card className="border-primary/20 bg-card/90 backdrop-blur-sm">
       <CardContent className="p-4 space-y-3">
+        {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
             {icon}
@@ -72,6 +101,26 @@ export function DaveActiveLoopCard({ session, onResume, compact = false }: Props
           </Badge>
         </div>
 
+        {/* Last outcome + next step summary */}
+        {(outcomeInfo || nextStepLabel) && (
+          <div className="flex items-center gap-3 text-xs">
+            {outcomeInfo && (
+              <span className={outcomeInfo.className}>
+                Last: {outcomeInfo.label}
+              </span>
+            )}
+            {outcomeInfo && nextStepLabel && (
+              <span className="text-muted-foreground">·</span>
+            )}
+            {nextStepLabel && (
+              <span className="text-primary">
+                Next: {nextStepLabel}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Attempt count */}
         {attemptCount > 0 && (
           <p className="text-xs text-muted-foreground">
             {attemptCount} attempt{attemptCount !== 1 ? 's' : ''} so far
@@ -80,6 +129,7 @@ export function DaveActiveLoopCard({ session, onResume, compact = false }: Props
           </p>
         )}
 
+        {/* CTA */}
         {onResume && session.status !== 'completed' && (
           <Button
             size="sm"
@@ -87,7 +137,7 @@ export function DaveActiveLoopCard({ session, onResume, compact = false }: Props
             onClick={onResume}
             className="w-full text-xs"
           >
-            Continue
+            {nextStepLabel || 'Continue'}
             <ArrowRight className="h-3 w-3 ml-1" />
           </Button>
         )}
