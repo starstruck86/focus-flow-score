@@ -225,3 +225,20 @@ export function buildFullCoverageMap(index: IndexedKI[]): SkillCoverage[] {
   const skills: SkillFocus[] = ['discovery', 'objection_handling', 'deal_control', 'executive_response', 'qualification'];
   return skills.map(skill => buildCoverageForSkill(index, skill));
 }
+
+// ── Incremental Refresh Support ───────────────────────────────────
+
+/** Alias for buildCoverageForSkill — used by refresh layer */
+export function rebuildCoverageForSkill(
+  index: IndexedKI[],
+  skill: SkillFocus,
+): SkillCoverage {
+  return buildCoverageForSkill(index, skill);
+}
+
+/** Determine which skills are affected by a given indexed KI */
+export function getAffectedSkillsFromIndexedKI(ki: IndexedKI): SkillFocus[] {
+  const skills = new Set<SkillFocus>();
+  if (ki.skill) skills.add(ki.skill);
+  return Array.from(skills);
+}

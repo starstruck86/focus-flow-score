@@ -25,6 +25,7 @@ export interface IndexedKI {
   difficulty: 1 | 2 | 3 | 4;
   sourceQuality: number;
   redundancyKey: string;
+  freshnessTimestamp?: string | null;
 }
 
 // ── Skill inference from chapter ──────────────────────────────────
@@ -169,7 +170,7 @@ function inferDifficulty(
   if (tagSet.has('intermediate')) return 2;
   if (tagSet.has('beginner') || tagSet.has('foundational')) return 1;
 
-  // Confidence-based fallback: higher confidence = better content = can handle harder context
+  // Confidence-based fallback
   if (confidenceScore != null) {
     if (confidenceScore >= 90) return 2;
     if (confidenceScore >= 70) return 2;
@@ -192,39 +193,7 @@ function buildRedundancyKey(title: string, chapter: string): string {
   return `${chapter}::${words.join('_')}`;
 }
 
-// ── Main Indexer ──────────────────────────────────────────────────
-
-export async function buildKIIndex(userId?: string): Promise<IndexedKI[]> {
-  // Fetch all active KIs
-  let query = supabase
-    .from('knowledge_items' as any)
-    .select('id, title, chapter, tags, knowledge_type, tactic_summary, when_to_use, confidence_score, applies_to_contexts')
-    .eq('active', true)
-    .order('confidence_score', { ascending: false });
-
-  if (userId) {
-    query = query.eq('user_id', userId);
-  }
-
-  // Paginate to get full library (beyond 1000 limit)
-  const allKIs: any[] = [];
-  let page = 0;
-  const pageSize = 1000;
-  let hasMore = true;
-
-  while (hasMore) {
-    const { data, error } = await query.range(page * pageSize, (page + 1) * pageSize - 1);
-    if (error || !data || data.length === 0) {
-      hasMore = false;
-    } else {
-      allKIs.push(...data);
-      hasMore = data.length === pageSize;
-      page++;
-    }
-  }
-
-  return allKIs.map((ki: any) => indexKI(ki));
-}
+// ── Core indexing function (shared) ───────────────────────────────
 
 function indexKI(ki: any): IndexedKI {
   const chapter = ki.chapter ?? '';
@@ -253,7 +222,77 @@ function indexKI(ki: any): IndexedKI {
     difficulty: inferDifficulty(chapter, tags, ki.confidence_score),
     sourceQuality: ki.confidence_score ?? 50,
     redundancyKey: buildRedundancyKey(ki.title ?? '', chapter),
+    freshnessTimestamp: ki.updated_at ?? null,
   };
+}
+
+// ── Main Indexer (full library) ───────────────────────────────────
+
+const KI_SELECT_FIELDS = 'id, title, chapter, tags, knowledge_type, tactic_summary, when_to_use, confidence_score, applies_to_contexts, updated_at';
+
+export async function buildKIIndex(userId?: string): Promise<IndexedKI[]> {
+  let query = supabase
+    .from('knowledge_items' as any)
+    .select(KI_SELECT_FIELDS)
+    .eq('active', true)
+    .order('confidence_score', { ascending: false });
+
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  // Paginate to get full library (beyond 1000 limit)
+  const allKIs: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await query.range(page * pageSize, (page + 1) * pageSize - 1);
+    if (error || !data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allKIs.push(...data);
+      hasMore = data.length === pageSize;
+      page++;
+    }
+  }
+
+  return allKIs.map((ki: any) => indexKI(ki));
+}
+
+// ── Incremental Indexing ──────────────────────────────────────────
+
+/**
+ * Index a single KI by ID. Returns null if KI is inactive or not found.
+ */
+export async function indexSingleKI(kiId: string): Promise<IndexedKI | null> {
+  const { data, error } = await supabase
+    .from('knowledge_items' as any)
+    .select(KI_SELECT_FIELDS)
+    .eq('id', kiId)
+    .eq('active', true)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return indexKI(data);
+}
+
+/**
+ * Merge an updated KI into an existing index.
+ * Replaces existing entry with same kiId, or appends if new.
+ */
+export function mergeIndexedKI(
+  existingIndex: IndexedKI[],
+  updatedKI: IndexedKI,
+): IndexedKI[] {
+  const idx = existingIndex.findIndex(ki => ki.kiId === updatedKI.kiId);
+  if (idx >= 0) {
+    const result = [...existingIndex];
+    result[idx] = updatedKI;
+    return result;
+  }
+  return [...existingIndex, updatedKI];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────

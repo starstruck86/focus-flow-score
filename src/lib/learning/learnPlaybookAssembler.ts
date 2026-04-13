@@ -2,7 +2,8 @@
  * Dynamic Playbook Engine — Assembler
  *
  * Assembles a playbook from indexed KIs using coverage-aware selection.
- * Enforces concept coverage, deduplication, role variety, and difficulty escalation.
+ * Enforces concept coverage, deduplication, role variety, difficulty escalation,
+ * and quality-aware scoring with freshness and thin-concept boosts.
  */
 
 import type { SkillFocus } from '@/lib/dojo/scenarios';
@@ -15,12 +16,82 @@ import type {
 } from './learnPlaybookSchema';
 import { getPlaybookById } from './learnPlaybookSchema';
 import { buildCoverageForSkill } from './learnCoverageMap';
+import { getCachedPlaybook, setCachedPlaybook } from './learnPlaybookCache';
 
 // ── Config ─────────────────────────────────────────────────────────
 
 const KIS_PER_MINUTE = 0.5; // ~2 min per KI on average
 const MIN_SLOTS = 4;
 const MAX_REDUNDANCY_PER_GROUP = 2;
+
+// ── Candidate Scoring ─────────────────────────────────────────────
+
+export interface KICandidateScore {
+  sourceQuality: number;
+  roleFit: number;
+  freshnessBoost: number;
+  thinConceptBoost: number;
+  redundancyPenalty: number;
+  overusePenalty: number;
+  total: number;
+}
+
+function scoreCandidate(
+  ki: IndexedKI,
+  context: {
+    thinConcepts: string[];
+    overusedConcepts: string[];
+    usedRedundancyKeys: Map<string, number>;
+    targetDifficulty?: number;
+    desiredRoles?: KILessonRole[];
+  },
+): KICandidateScore {
+  // 1. Source quality (0-100 range)
+  const sourceQuality = ki.sourceQuality;
+
+  // 2. Role fit bonus
+  let roleFit = 0;
+  if (ki.lessonRoles.length > 1) roleFit += 5;
+  if (context.desiredRoles) {
+    const matchCount = ki.lessonRoles.filter(r => context.desiredRoles!.includes(r)).length;
+    roleFit += matchCount * 4;
+  }
+  if (ki.lessonRoles.includes('example')) roleFit += 3;
+  if (ki.lessonRoles.includes('practice_seed')) roleFit += 3;
+
+  // 3. Freshness boost (moderate — never overpowers quality)
+  let freshnessBoost = 0;
+  if (ki.freshnessTimestamp) {
+    const ageMs = Date.now() - new Date(ki.freshnessTimestamp).getTime();
+    const ageDays = ageMs / (1000 * 60 * 60 * 24);
+    if (ageDays < 3) freshnessBoost = 8;
+    else if (ageDays < 7) freshnessBoost = 5;
+    else if (ageDays < 14) freshnessBoost = 2;
+  }
+
+  // 4. Thin concept boost (significant — drives coverage improvement)
+  let thinConceptBoost = 0;
+  const fillsThin = ki.concepts.filter(c => context.thinConcepts.includes(c));
+  thinConceptBoost = fillsThin.length * 12;
+
+  // 5. Redundancy penalty
+  let redundancyPenalty = 0;
+  const redundancyCount = context.usedRedundancyKeys.get(ki.redundancyKey) ?? 0;
+  if (redundancyCount >= MAX_REDUNDANCY_PER_GROUP) {
+    redundancyPenalty = -1000;
+  } else {
+    redundancyPenalty = -(redundancyCount * 20);
+  }
+
+  // 6. Overuse penalty
+  let overusePenalty = 0;
+  const hitsOverused = ki.concepts.filter(c => context.overusedConcepts.includes(c));
+  overusePenalty = -(hitsOverused.length * 8);
+
+  const total = sourceQuality + roleFit + freshnessBoost + thinConceptBoost + redundancyPenalty + overusePenalty;
+
+  return { sourceQuality, roleFit, freshnessBoost, thinConceptBoost, redundancyPenalty, overusePenalty, total };
+}
 
 // ── Main Assembler ────────────────────────────────────────────────
 
@@ -34,6 +105,10 @@ export function assemblePlaybook(
   options: AssembleOptions,
   index: IndexedKI[],
 ): AssembledPlaybook {
+  // Check cache first
+  const cached = getCachedPlaybook(options.playbookId, options.durationMinutes, options.mode);
+  if (cached) return cached;
+
   const playbook = getPlaybookById(options.playbookId);
   if (!playbook) {
     return emptyResult(options, 'Playbook not found');
@@ -42,15 +117,22 @@ export function assemblePlaybook(
   const { durationMinutes } = options;
   const targetSlots = Math.max(MIN_SLOTS, Math.round(durationMinutes * KIS_PER_MINUTE));
 
-  // Get candidate KIs for this playbook
+  // Get candidate KIs and coverage context
   const candidates = filterCandidates(index, playbook);
+  const coverage = buildCoverageForSkill(index, playbook.skill);
 
   if (candidates.length < MIN_SLOTS) {
     return emptyResult(options, `Only ${candidates.length} KIs available — not enough for assembly`, playbook);
   }
 
-  // Check coverage depth for graceful degradation
-  const coverage = buildCoverageForSkill(index, playbook.skill);
+  // Scoring context
+  const scoringContext = {
+    thinConcepts: coverage.thinConcepts,
+    overusedConcepts: coverage.overusedConcepts,
+    usedRedundancyKeys: new Map<string, number>(),
+  };
+
+  // Graceful degradation
   const shouldDegrade =
     (durationMinutes >= 60 && !coverage.viableFor60) ||
     (durationMinutes >= 30 && !coverage.viableFor30);
@@ -59,21 +141,20 @@ export function assemblePlaybook(
     ? Math.min(targetSlots, Math.ceil(candidates.length * 0.7))
     : targetSlots;
 
-  // Phase 1: Fill required concepts
+  // Phase 1: Fill required concepts (scored selection)
   const slots: PlaybookSlot[] = [];
   const usedKIIds = new Set<string>();
-  const usedRedundancyKeys = new Map<string, number>();
   let sectionIndex = 0;
 
   for (const concept of playbook.requiredConcepts) {
     const conceptKIs = candidates.filter(
       ki => ki.concepts.includes(concept) && !usedKIIds.has(ki.kiId),
     );
-    const picked = pickBestForConcept(conceptKIs, concept, usedRedundancyKeys);
+    const picked = pickBestScored(conceptKIs, scoringContext);
     if (picked) {
       slots.push(makeSlot(picked, concept, 'core_concept', sectionIndex));
       usedKIIds.add(picked.kiId);
-      trackRedundancy(picked, usedRedundancyKeys);
+      trackRedundancy(picked, scoringContext.usedRedundancyKeys);
       sectionIndex++;
     }
   }
@@ -84,22 +165,22 @@ export function assemblePlaybook(
     const conceptKIs = candidates.filter(
       ki => ki.concepts.includes(concept) && !usedKIIds.has(ki.kiId),
     );
-    const picked = pickBestForConcept(conceptKIs, concept, usedRedundancyKeys);
+    const picked = pickBestScored(conceptKIs, scoringContext);
     if (picked) {
       slots.push(makeSlot(picked, concept, 'core_concept', sectionIndex));
       usedKIIds.add(picked.kiId);
-      trackRedundancy(picked, usedRedundancyKeys);
+      trackRedundancy(picked, scoringContext.usedRedundancyKeys);
       sectionIndex++;
     }
   }
 
-  // Phase 3: Fill remaining slots with variety
+  // Phase 3: Fill remaining slots with scored variety
   const remainingSlots = effectiveSlots - slots.length;
   if (remainingSlots > 0) {
-    const fillers = fillWithVariety(
+    const fillers = fillWithScoredVariety(
       candidates,
       usedKIIds,
-      usedRedundancyKeys,
+      scoringContext,
       remainingSlots,
       sectionIndex,
       playbook,
@@ -109,7 +190,6 @@ export function assemblePlaybook(
 
   // Phase 4: Sort by difficulty for escalation
   slots.sort((a, b) => a.difficulty - b.difficulty);
-  // Re-assign section indices after sort
   slots.forEach((s, i) => { s.sectionIndex = i; });
 
   // Compute coverage stats
@@ -117,7 +197,7 @@ export function assemblePlaybook(
   const allRequired = [...playbook.requiredConcepts, ...playbook.optionalConcepts];
   const missingConcepts = allRequired.filter(c => !coveredConcepts.includes(c));
 
-  return {
+  const result: AssembledPlaybook = {
     playbookId: options.playbookId,
     label: playbook.label,
     skill: playbook.skill,
@@ -130,57 +210,53 @@ export function assemblePlaybook(
       ? `Skill "${playbook.skill}" lacks depth for ${durationMinutes} min — session tightened`
       : undefined,
   };
+
+  // Cache the result
+  setCachedPlaybook(result);
+
+  return result;
 }
 
 // ── Candidate Filtering ───────────────────────────────────────────
 
 function filterCandidates(index: IndexedKI[], playbook: PlaybookDefinition): IndexedKI[] {
   return index.filter(ki => {
-    // Must match skill
     if (ki.skill !== playbook.skill) return false;
-
-    // Must match at least one target pattern or context
     const matchesPattern = ki.focusPatterns.some(p => playbook.targetPatterns.includes(p));
     const matchesContext = ki.contexts.some(c => playbook.targetContexts.includes(c));
-
     return matchesPattern || matchesContext;
   });
 }
 
-// ── Selection Logic ───────────────────────────────────────────────
+// ── Scored Selection ──────────────────────────────────────────────
 
-function pickBestForConcept(
+function pickBestScored(
   candidates: IndexedKI[],
-  _concept: string,
-  usedRedundancyKeys: Map<string, number>,
+  context: {
+    thinConcepts: string[];
+    overusedConcepts: string[];
+    usedRedundancyKeys: Map<string, number>;
+  },
 ): IndexedKI | null {
   if (candidates.length === 0) return null;
 
-  // Score each candidate
-  const scored = candidates.map(ki => {
-    let score = ki.sourceQuality;
+  const scored = candidates.map(ki => ({
+    ki,
+    score: scoreCandidate(ki, context),
+  }));
 
-    // Penalize redundancy
-    const redundancyCount = usedRedundancyKeys.get(ki.redundancyKey) ?? 0;
-    if (redundancyCount >= MAX_REDUNDANCY_PER_GROUP) score -= 1000;
-    else score -= redundancyCount * 20;
-
-    // Reward role variety
-    if (ki.lessonRoles.length > 1) score += 5;
-    if (ki.lessonRoles.includes('example')) score += 3;
-    if (ki.lessonRoles.includes('practice_seed')) score += 3;
-
-    return { ki, score };
-  });
-
-  scored.sort((a, b) => b.score - a.score);
+  scored.sort((a, b) => b.score.total - a.score.total);
   return scored[0]?.ki ?? null;
 }
 
-function fillWithVariety(
+function fillWithScoredVariety(
   candidates: IndexedKI[],
   usedKIIds: Set<string>,
-  usedRedundancyKeys: Map<string, number>,
+  scoringContext: {
+    thinConcepts: string[];
+    overusedConcepts: string[];
+    usedRedundancyKeys: Map<string, number>;
+  },
   count: number,
   startSection: number,
   playbook: PlaybookDefinition,
@@ -196,30 +272,28 @@ function fillWithVariety(
     practice_seed: 0,
   };
 
-  // Sort remaining candidates by quality, penalize redundancy
+  // Score and sort all remaining candidates
   const remaining = candidates
     .filter(ki => !usedKIIds.has(ki.kiId))
-    .map(ki => {
-      const redundancyCount = usedRedundancyKeys.get(ki.redundancyKey) ?? 0;
-      const redundancyPenalty = redundancyCount >= MAX_REDUNDANCY_PER_GROUP ? -1000 : redundancyCount * -20;
-      return { ki, score: ki.sourceQuality + redundancyPenalty };
-    })
-    .sort((a, b) => b.score - a.score);
+    .map(ki => ({
+      ki,
+      score: scoreCandidate(ki, scoringContext),
+    }))
+    .sort((a, b) => b.score.total - a.score.total);
 
   for (const { ki } of remaining) {
     if (slots.length >= count) break;
     if (usedKIIds.has(ki.kiId)) continue;
 
-    const redundancyCount = usedRedundancyKeys.get(ki.redundancyKey) ?? 0;
+    const redundancyCount = scoringContext.usedRedundancyKeys.get(ki.redundancyKey) ?? 0;
     if (redundancyCount >= MAX_REDUNDANCY_PER_GROUP) continue;
 
-    // Pick least-used role this KI can fill
     const bestRole = pickLeastUsedRole(ki.lessonRoles, roleQuota);
     const concept = ki.concepts[0] ?? playbook.requiredConcepts[0] ?? 'general';
 
     slots.push(makeSlot(ki, concept, bestRole, startSection + slots.length));
     usedKIIds.add(ki.kiId);
-    trackRedundancy(ki, usedRedundancyKeys);
+    trackRedundancy(ki, scoringContext.usedRedundancyKeys);
     roleQuota[bestRole]++;
   }
 
