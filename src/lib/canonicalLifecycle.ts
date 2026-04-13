@@ -267,14 +267,27 @@ export function deriveBlockedReason(
 // ── Main audit function ────────────────────────────────────
 
 export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
+  // Fetch resource metadata (without full content to avoid 17MB+ payloads)
   const { data: resources, error: rErr } = await supabase
     .from('resources')
-    .select('id, title, content, content_length, enrichment_status, tags, updated_at, manual_content_present, manual_input_required, recovery_queue_bucket, failure_reason, resource_type, file_url, active_job_status')
+    .select('id, title, content_length, enrichment_status, tags, updated_at, manual_content_present, manual_input_required, recovery_queue_bucket, failure_reason, resource_type, file_url, active_job_status')
     .order('updated_at', { ascending: false });
 
   if (rErr || !resources) {
     log.error('Canonical lifecycle query failed', { error: rErr });
     return emptySummary();
+  }
+
+  // Fetch only content prefixes (first 300 chars) for placeholder detection
+  const { data: { user } } = await supabase.auth.getUser();
+  const contentPrefixMap = new Map<string, string>();
+  if (user) {
+    const { data: prefixes } = await supabase.rpc('get_resource_content_prefixes', { p_user_id: user.id });
+    if (prefixes) {
+      for (const p of prefixes as any[]) {
+        contentPrefixMap.set(p.id, p.content_prefix ?? '');
+      }
+    }
   }
 
   const resourceIds = (resources as any[]).map((r) => r.id).filter(Boolean);
@@ -322,6 +335,10 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
   };
 
   for (const r of resources as any[]) {
+    // Inject content prefix for placeholder detection (deriveCanonicalStage / deriveBlockedReason use r.content)
+    const contentPrefix = contentPrefixMap.get(r.id) ?? '';
+    (r as any).content = contentPrefix;
+
     const ki = kiMap.get(r.id) ?? { total: 0, active: 0, activeWithContexts: 0 };
     const stage = deriveCanonicalStage(r, ki);
     const blocked = deriveBlockedReason(r, ki);
@@ -361,11 +378,10 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
     }
 
     // Failure-class observability
-    const contentStr = (r as any).content ?? '';
-    const rType = (r as any).resource_type ?? '';
+    const rType = r.resource_type ?? '';
     const isTranscriptType = ['transcript', 'podcast', 'audio'].includes(rType);
-    const hasRealContent = !isPlaceholderContent(contentStr) && (r.content_length ?? 0) >= MIN_CONTENT_LENGTH;
-    const isPlaceholder = isPlaceholderContent(contentStr) && contentStr.length > 0;
+    const hasRealContent = !isPlaceholderContent(contentPrefix) && (r.content_length ?? 0) >= MIN_CONTENT_LENGTH;
+    const isPlaceholder = isPlaceholderContent(contentPrefix) && contentPrefix.length > 0;
 
     if (isTranscriptType && hasRealContent && ki.total === 0) {
       summary.failure_classes.transcript_extraction_not_triggered++;
