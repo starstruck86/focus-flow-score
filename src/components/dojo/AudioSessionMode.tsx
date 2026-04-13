@@ -62,6 +62,7 @@ import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
 import { orchestrateNextStep } from '@/lib/daveClosedLoopOrchestrator';
 import { DaveCoachingLoopStatus } from '@/components/DaveCoachingLoopStatus';
 import { DaveCoachingFocusChip } from '@/components/DaveCoachingFocusChip';
+import { parseDimensions } from '@/lib/learning/learnScoringSchema';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 
 interface AudioSessionModeProps {
