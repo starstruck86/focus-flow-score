@@ -127,6 +127,8 @@ export default function DojoSession() {
   const [reviewExtras, setReviewExtras] = useState<ReviewExtras | null>(null);
   const [roleplayExtras, setRoleplayExtras] = useState<RoleplayExtras | null>(null);
   const { scoreOriginal, isScoring: isScoringOriginal, originalScore } = useScoreOriginalResponse();
+  const { data: skillLevels } = useSkillLevels();
+  const skillLevelForFeedback = skillLevels?.find(l => l.skill === scenario.skillFocus) ?? null;
 
   // Auto-score original call response when transcript origin has a rep response
   useEffect(() => {
