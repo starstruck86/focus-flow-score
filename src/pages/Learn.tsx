@@ -280,6 +280,9 @@ export default function Learn() {
           <ReinforcementQueue items={learnLoop.reinforcement} />
         )}
 
+        {/* 16. Coaching History */}
+        <DaveCoachingHistory />
+
         {/* Secondary lesson CTA (downgraded from primary) */}
         {nextLesson && !learnLoop?.primaryAction && (
           <button
