@@ -248,9 +248,12 @@ export default function AudioSessionMode({
     try {
       const text = await voice.stopRecording();
       setTranscribedText(text);
+      dave.recordTranscript('user', text);
+      dave.setPendingTranscript(text);
 
       const isRetry = phaseRef.current === 'retry_listening';
       setPhase(isRetry ? 'retry_scoring' : 'scoring');
+      dave.updatePosition(isRetry ? retryCount + 1 : 0, { phase: isRetry ? 'retry_scoring' : 'scoring' });
       await scoreAndDeliver(text, isRetry);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Recording failed';
