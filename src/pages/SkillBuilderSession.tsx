@@ -35,6 +35,7 @@ export default function SkillBuilderSession() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [repScores, setRepScores] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const { data: skillLevels } = useSkillLevels();
 
   // Generate session on mount
   useEffect(() => {
