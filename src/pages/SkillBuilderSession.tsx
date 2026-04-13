@@ -24,10 +24,9 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedbackCard';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
-import { useDaveSessionBridge } from '@/hooks/useDaveSessionBridge';
+import { useDaveVoiceController } from '@/hooks/useDaveVoiceController';
 import { prefetchSkillBuilderBlocks } from '@/lib/daveSessionPrefetch';
 import DaveSignalBanner from '@/components/DaveSignalBanner';
-import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { makeOpKey, runIdempotent, clearIdempotencyRecords } from '@/lib/daveIdempotency';
 import { monitorLifecycle, getResumeMessage } from '@/lib/daveLifecycleRecovery';
 
