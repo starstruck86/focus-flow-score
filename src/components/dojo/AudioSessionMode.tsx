@@ -120,6 +120,11 @@ export default function AudioSessionMode({
   const recoveryRef = useRef<RecoveryController | null>(null);
 
   const voice = useVoiceMode();
+  const dave = useDaveSessionBridge({
+    surface: 'dojo',
+    sessionKey: `dojo-${scenario.title}`,
+    mode: 'audio',
+  });
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
 
