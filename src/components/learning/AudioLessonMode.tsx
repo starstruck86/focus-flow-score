@@ -396,11 +396,24 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   }, [openAnswer, handleOpenSubmit]);
 
   const doHandoff = useCallback(async () => {
+    // Start closed-loop session when lesson completes
+    const concept = lesson.lesson_content?.concept || lesson.title;
+    const subDef = lessonSubSkill
+      ? getSubSkillsForSkill(lessonSkill).find(s => s.name === lessonSubSkill)
+      : null;
+    closedLoop.startTeaching(
+      lessonSkill,
+      concept,
+      lessonSubSkill,
+      subDef?.patterns[0],
+    );
+    closedLoop.markReadyForTest();
+
     try {
       await dave.speak(buildHandoffText());
     } catch { /* continue */ }
     setPhase('complete');
-  }, [dave]);
+  }, [dave, lessonSkill, lessonSubSkill, lesson, closedLoop]);
 
   const handleGoToDojo = useCallback(() => {
     const practice = getPracticeMapping(lesson.topic);
@@ -411,9 +424,15 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
         sessionType: 'audio',
         fromLesson: true,
         lessonTitle: lesson.title,
+        // Closed-loop context
+        closedLoopSessionId: closedLoop.session?.id,
+        closedLoopSkill: closedLoop.session?.skill,
+        closedLoopSubSkill: closedLoop.session?.subSkill,
+        closedLoopFocusPattern: closedLoop.session?.focusPattern,
+        closedLoopConcept: closedLoop.session?.taughtConcept,
       },
     });
-  }, [lesson, navigate]);
+  }, [lesson, navigate, closedLoop.session]);
 
   // Controls
   const handlePause = useCallback(() => {
