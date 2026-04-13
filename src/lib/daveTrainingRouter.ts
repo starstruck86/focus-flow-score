@@ -285,6 +285,16 @@ function buildSmartDefault(ctx: UserTrainingContext): DaveRecommendation {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
+function buildLoopRecommendation(loop: ClosedLoopSession): DaveRecommendation {
+  const info = buildLoopResumeInfo(loop);
+  return {
+    type: info.nextSurface || 'dojo',
+    reason: `Active coaching loop: ${loop.taughtConcept}`,
+    launchState: info.launchState,
+    spokenIntro: info.spokenIntro,
+  };
+}
+
 function formatSkill(skill: string): string {
   return skill
     .replace(/_/g, ' ')
