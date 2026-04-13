@@ -37,11 +37,14 @@ import {
   speakWithBargeIn,
   listenStrict,
   interruptPlayback,
+  waitForPlaybackDrain,
   handleBargeInCommand,
   replayCurrentCheckpoint,
   buildSessionRecapSpeech,
   AudioFirstSessionError,
 } from '@/lib/daveAudioFirstRuntime';
+import { SessionTelemetryTracker } from '@/lib/daveSessionTelemetry';
+import { getDrivingModeConfig, type DrivingMode } from '@/hooks/useDrivingMode';
 import { buildAudioScript, buildRetryScript, buildFeedbackScript, buildAudioLessonScript } from './audioScenarioScript';
 import type { AudioSessionPhase } from './audioSessionFlow';
 import { createLogger } from '@/lib/logger';
