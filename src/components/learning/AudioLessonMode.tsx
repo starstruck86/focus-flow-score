@@ -430,6 +430,12 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
 
   return (
     <div className="space-y-4">
+      {/* Signal loss/recovery banner for driving mode */}
+      <DaveSignalBanner
+        message={dave.signalMessage}
+        isOffline={dave.isOffline}
+        pendingOpsCount={dave.pendingOpsCount}
+      />
       {/* Recovery banner */}
       <RecoveryBanner recovery={recovery} onCancel={cancelRecovery} />
       {/* Progress & status */}
