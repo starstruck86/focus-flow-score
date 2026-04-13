@@ -61,7 +61,7 @@ import DaveSignalBanner from '@/components/DaveSignalBanner';
 import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
 import { orchestrateNextStep } from '@/lib/daveClosedLoopOrchestrator';
 import { DaveCoachingLoopStatus } from '@/components/DaveCoachingLoopStatus';
-import { parseDimensions } from '@/lib/learning/learnScoringSchema';
+import { DaveCoachingFocusChip } from '@/components/DaveCoachingFocusChip';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 
 interface AudioSessionModeProps {
