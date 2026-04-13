@@ -140,8 +140,10 @@ const MIN_CONTENT_LENGTH = 200;
 const ENRICHED_STATUSES = ['enriched', 'deep_enriched', 'verified'];
 const QUERY_PAGE_SIZE = 1000;
 
-async function fetchKnowledgeItemsForResources(resourceIds: string[]) {
-  if (resourceIds.length === 0) return [] as any[];
+async function fetchKnowledgeItemsForResources(_resourceIds: string[]) {
+  // Don't filter by resource IDs — RLS scopes to the user already.
+  // Using .in() with 700+ UUIDs exceeds PostgREST URL length limits.
+  if (_resourceIds.length === 0) return [] as any[];
 
   const rows: any[] = [];
 
@@ -150,11 +152,10 @@ async function fetchKnowledgeItemsForResources(resourceIds: string[]) {
     const { data, error } = await supabase
       .from('knowledge_items' as any)
       .select('source_resource_id, active, applies_to_contexts')
-      .in('source_resource_id', resourceIds)
       .range(from, to);
 
     if (error) {
-      log.error('Knowledge item lifecycle query failed', { error, from, to, resourceCount: resourceIds.length });
+      log.error('Knowledge item lifecycle query failed', { error, from, to });
       break;
     }
 
