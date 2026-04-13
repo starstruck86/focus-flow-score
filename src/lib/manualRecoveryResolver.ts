@@ -132,9 +132,19 @@ async function handleFileUpload(input: RecoveryInput): Promise<RecoveryResult> {
   }
 
   try {
-    const rawText = await file.text();
+    const isPdf = ext === '.pdf';
+    let rawText: string;
+
+    if (isPdf) {
+      rawText = await extractTextFromPdf(file);
+    } else {
+      rawText = await file.text();
+    }
+
     if (rawText.length < MIN_CONTENT_LENGTH) {
-      return { success: false, message: 'File content too short — minimum 50 characters of usable text' };
+      return { success: false, message: isPdf
+        ? 'PDF contained no extractable text — it may be a scanned/image-only PDF'
+        : 'File content too short — minimum 50 characters of usable text' };
     }
 
     // Clean transcript formats
