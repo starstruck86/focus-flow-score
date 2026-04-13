@@ -13,6 +13,7 @@ import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { deriveResourceTruth, type ResourceTruth, type LifecycleInfo } from '@/lib/resourceTruthState';
 import { useActiveJobQueue } from '@/hooks/useActiveJobQueue';
 import { ProcessingQueuePanel } from './ProcessingQueuePanel';
+import { useResourceJobProgress, getJobLabel } from '@/store/useResourceJobProgress';
 
 interface HealthCounts {
   total: number;
@@ -42,6 +43,25 @@ interface Props {
 export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilterChange, activeFilter }: Props) {
   const [queuePanelOpen, setQueuePanelOpen] = useState(false);
   const { jobs: queueJobs, summary: queueSummary, loading: queueLoading, refresh: queueRefresh } = useActiveJobQueue();
+
+  // Also incorporate Zustand live job state (client-side orchestration)
+  const liveJobs = useResourceJobProgress(s => s.resources);
+  const batchActive = useResourceJobProgress(s => s.batchActive);
+  const batchTotal = useResourceJobProgress(s => s.batchTotal);
+  const batchProcessed = useResourceJobProgress(s => s.batchProcessed);
+  const batchJobType = useResourceJobProgress(s => s.batchJobType);
+
+  // Merge DB queue + Zustand live jobs for accurate processing count
+  const mergedProcessingCount = useMemo(() => {
+    const dbJobIds = new Set(queueJobs.map(j => j.entityId).filter(Boolean));
+    let liveOnlyCount = 0;
+    for (const [resourceId, entry] of Object.entries(liveJobs)) {
+      if (entry.status === 'running' && !dbJobIds.has(resourceId)) {
+        liveOnlyCount++;
+      }
+    }
+    return queueSummary.total + liveOnlyCount + (batchActive && queueSummary.total === 0 ? 1 : 0);
+  }, [queueJobs, queueSummary.total, liveJobs, batchActive]);
 
   const counts = useMemo<HealthCounts>(() => {
     const c: HealthCounts = { total: resources.length, ready: 0, blocked: 0, stalled: 0, qa_required: 0 };
@@ -141,10 +161,10 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
         />
         <HealthPill
           label="Processing"
-          count={queueSummary.total}
+          count={mergedProcessingCount}
           colorClass="text-primary"
           bgClass="bg-primary/10"
-          icon={queueSummary.total > 0 ? <Loader2 className="h-3 w-3 animate-spin" /> : <Loader2 className="h-3 w-3" />}
+          icon={mergedProcessingCount > 0 ? <Loader2 className="h-3 w-3 animate-spin" /> : <Loader2 className="h-3 w-3" />}
           active={queuePanelOpen}
           onClick={() => setQueuePanelOpen(true)}
         />
