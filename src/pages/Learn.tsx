@@ -32,7 +32,9 @@ import { SkillBuilderEntryCard } from '@/components/learn/SkillBuilderEntryCard'
 import { SkillLevelsPanel } from '@/components/learn/SkillLevelsPanel';
 import { SkillTierUpModal } from '@/components/learn/SkillTierUpModal';
 import { SkillProgressTimeline } from '@/components/learn/SkillProgressTimeline';
+import { SubSkillProgressPanel } from '@/components/learn/SubSkillProgressPanel';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
+import { useSubSkillProgress } from '@/hooks/useSubSkillProgress';
 import { isTierUpDismissed } from '@/lib/learning/levelEventStore';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 
@@ -43,6 +45,7 @@ export default function Learn() {
   const { data: dailyKI } = useDailyKI();
   const { data: learnLoop } = useLearnLoop();
   const { data: skillLevels } = useSkillLevels();
+  const { data: subSkillSummaries } = useSubSkillProgress();
 
   // Tier-up modal
   const [tierUpLevel, setTierUpLevel] = useState<UserSkillLevel | null>(null);
@@ -187,6 +190,11 @@ export default function Learn() {
 
         {/* 3b. Progress Timeline */}
         <SkillProgressTimeline />
+
+        {/* 3c. Sub-Skill Breakdown */}
+        {subSkillSummaries && subSkillSummaries.length > 0 && (
+          <SubSkillProgressPanel summaries={subSkillSummaries} />
+        )}
 
         {/* 4. Adaptive Study Path (Phase 5) */}
         {learnLoop?.adaptiveStudyPath && <AdaptiveStudyPathCard path={learnLoop.adaptiveStudyPath} />}
