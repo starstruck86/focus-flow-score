@@ -143,7 +143,7 @@ async function handleFileUpload(input: RecoveryInput): Promise<RecoveryResult> {
 
     if (rawText.length < MIN_CONTENT_LENGTH) {
       return { success: false, message: isPdf
-        ? 'PDF contained no extractable text — it may be a scanned/image-only PDF'
+        ? 'PDF contained no extractable text even after AI vision OCR. The file may be blank or contain only graphics.'
         : 'File content too short — minimum 50 characters of usable text' };
     }
 
