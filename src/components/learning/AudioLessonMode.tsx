@@ -45,6 +45,9 @@ import {
 } from '@/lib/learning/lessonAudioSequencer';
 import { getPracticeMapping } from '@/lib/learning/practiceMapping';
 import { useUpsertProgress, useSaveQuizAnswer } from '@/lib/learning/hooks';
+import { useDaveSessionBridge } from '@/hooks/useDaveSessionBridge';
+import { prefetchLearnUnits } from '@/lib/daveSessionPrefetch';
+import DaveSignalBanner from '@/components/DaveSignalBanner';
 
 interface AudioLessonModeProps {
   lesson: LearningLesson;
