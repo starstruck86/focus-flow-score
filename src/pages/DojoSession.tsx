@@ -1019,6 +1019,11 @@ function FeedbackView({
         sessionType={sessionType}
       />
 
+      {/* ── Level Progress Feedback ── */}
+      {skillLevelForFeedback && (
+        <LevelProgressFeedbackCard current={skillLevelForFeedback} />
+      )}
+
       {/* ── Post-Session: Today's Assignment Summary ── */}
       {assignmentContext && (
         <Card className="border-primary/15 bg-primary/5">
