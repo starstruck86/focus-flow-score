@@ -516,7 +516,7 @@ function buildLearnRecap(result: LearnSessionResult, topic: string): SessionReca
   if (score >= 70) {
     whatImproved = `You showed solid application of ${topic.replace(/_/g, ' ')} concepts.`;
   } else if (score >= 40) {
-    whatImproved = 'You're building the foundation. The core idea is clicking.';
+    whatImproved = "You're building the foundation. The core idea is clicking.";
   }
 
   const whatStillNeedsWork = score < 70
