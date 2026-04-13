@@ -321,6 +321,8 @@ export interface LearnSessionConfig {
   /** 'full' = all 7 sections; 'compressed' = concept + criteria + prompt (driving mode) */
   mode?: LearnMode;
   signal?: AbortSignal;
+  /** Driving mode for config overrides */
+  drivingMode?: DrivingMode;
 }
 
 export interface LearnSessionResult {
