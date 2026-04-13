@@ -494,7 +494,20 @@ async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSes
     config.onComplete?.(recap);
     return result;
 
-// ══════════════════════════════════════════════════════════════════
+  } catch (err) {
+    if (err instanceof AudioFirstSessionError) {
+      config.onError?.(err);
+      logger.error('Audio-first learn error', { error: err.message, phase: err.phase });
+    } else {
+      logger.error('Unexpected learn error', { error: err });
+    }
+    telemetry.finalize(false);
+    result.aborted = true;
+    result.phase = 'complete';
+    return result;
+  }
+}
+
 // COMPRESSED LEARN (DRIVING MODE)
 // ══════════════════════════════════════════════════════════════════
 
