@@ -162,6 +162,8 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
 
     try {
       await voice.playTTS(section.text);
+      dave.recordTranscript('dave', section.text);
+      dave.updatePosition(idx, { phase: 'teaching' });
       setCompletedSections(prev => new Set([...prev, section.id]));
 
       // After speaking, check if we need user input
