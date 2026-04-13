@@ -590,6 +590,7 @@ async function runCompressedLearnSession(config: LearnSessionConfig): Promise<Le
     if (config.onHandoffToDojo) {
       setPhase('handoff');
       await speakStrict("Let's put this into practice right now. Here comes a scenario.", ctx, { role: 'handoff' });
+      interruptPlayback(ctx);
       result.handedOffToDojo = true;
       config.onHandoffToDojo(config.lesson.topic);
     }
