@@ -238,10 +238,17 @@ function orchestrateSkillBuilderRoute(
       skill: session.skill,
       focusPattern: session.focusPattern,
       subSkill: session.subSkill,
+      taughtConcept: session.taughtConcept,
       fromClosedLoop: true,
       closedLoopSessionId: session.id,
+      // Carry remediation context so Skill Builder knows what to reinforce
+      remediationContext: {
+        concept: session.taughtConcept,
+        weakDimensions: session.attempts[session.attempts.length - 1]?.weakDimensions || [],
+        attemptCount: session.attempts.length,
+      },
     },
-    keepLoopActive: false,
+    keepLoopActive: true, // Loop stays active — SB completion can hand back
   };
 }
 
