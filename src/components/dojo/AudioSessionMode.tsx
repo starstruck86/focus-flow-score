@@ -200,14 +200,14 @@ export default function AudioSessionMode({
     const startIntro = async () => {
       try {
         const introText = buildIntroText(scenario);
-        await voice.playTTS(introText);
+        await dave.speak(introText);
 
         const phaseAfterIntro = phaseRef.current;
         if (phaseAfterIntro !== 'intro') return;
         setPhase('prompt');
 
         const promptText = buildPromptText(scenario);
-        await voice.playTTS(promptText);
+        await dave.speak(promptText);
 
         const phaseAfterPrompt = phaseRef.current;
         if (phaseAfterPrompt !== 'prompt') return;
@@ -233,18 +233,18 @@ export default function AudioSessionMode({
     setPhase(targetPhase);
 
     try {
-      await voice.startRecording();
+      await dave.startListening();
     } catch {
       setMicAvailable(false);
       toast.error('Microphone unavailable', {
         description: 'Type your response instead.',
       });
     }
-  }, [voice]);
+  }, [dave]);
 
   const handleStopRecording = useCallback(async () => {
     try {
-      const text = await voice.stopRecording();
+      const text = await dave.stopListening();
       setTranscribedText(text);
       dave.recordTranscript('user', text);
       dave.setPendingTranscript(text);
@@ -260,7 +260,7 @@ export default function AudioSessionMode({
       setMicAvailable(false);
       setPhase(phaseRef.current === 'retry_listening' ? 'retry_listening' : 'listening');
     }
-  }, [voice]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dave]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTextSubmit = useCallback(async () => {
     if (!textFallback.trim()) return;
@@ -607,7 +607,7 @@ export default function AudioSessionMode({
 
     setPhase('retry_prompt');
     try {
-      await voice.playTTS(retryPrompt);
+      await dave.speak(retryPrompt);
       if (phaseRef.current === 'retry_prompt') {
         await activateMic();
       }
@@ -616,14 +616,14 @@ export default function AudioSessionMode({
         await activateMic();
       }
     }
-  }, [voice, result, retryResult, activateMic]);
+  }, [dave, result, retryResult, activateMic]);
 
   const handlePause = useCallback(() => {
-    if (voice.isPlaying) {
-      voice.stopPlayback();
+    if (dave.isSpeaking) {
+      dave.stopSpeaking();
       setIsPaused(true);
     }
-  }, [voice]);
+  }, [dave]);
 
   const handleResume = useCallback(async () => {
     setIsPaused(false);
@@ -634,12 +634,12 @@ export default function AudioSessionMode({
         : phase === 'prompt'
           ? buildPromptText(scenario)
           : buildRetryPromptText(result?.feedback ?? '', result?.practiceCue);
-      await voice.playTTS(text);
+      await dave.speak(text);
     }
-  }, [phase, scenario, result, voice]);
+  }, [phase, scenario, result, dave]);
 
   const handleSkip = useCallback(() => {
-    voice.stopPlayback();
+    dave.stopSpeaking();
     if (phase === 'intro') {
       setPhase('prompt');
     } else if (phase === 'prompt') {
@@ -647,7 +647,7 @@ export default function AudioSessionMode({
     } else if (phase === 'retry_prompt') {
       activateMic();
     }
-  }, [phase, voice, activateMic]);
+  }, [phase, dave, activateMic]);
 
   // Cleanup recovery on unmount
   useEffect(() => {
@@ -703,7 +703,7 @@ export default function AudioSessionMode({
         {isSpeakingPhase(phase) && (
           <Volume2 className="h-4 w-4 text-primary" />
         )}
-        {isListeningPhase(phase) && voice.isRecording && (
+        {isListeningPhase(phase) && dave.isListening && (
           <Mic className="h-4 w-4 text-red-500 animate-pulse" />
         )}
         <span className="text-xs font-medium text-foreground">
@@ -711,7 +711,7 @@ export default function AudioSessionMode({
         </span>
 
         {/* Speaking pulse */}
-        {isSpeakingPhase(phase) && voice.isPlaying && (
+        {isSpeakingPhase(phase) && dave.isSpeaking && (
           <div className="ml-auto flex items-center gap-0.5">
             {[0, 1, 2].map((i) => (
               <div
@@ -748,7 +748,7 @@ export default function AudioSessionMode({
           animate={{ opacity: 1, scale: 1 }}
           className="flex flex-col items-center gap-4 py-6"
         >
-          {voice.isRecording ? (
+          {dave.isListening ? (
             <>
               <button
                 onClick={handleStopRecording}
@@ -758,7 +758,7 @@ export default function AudioSessionMode({
               </button>
               <p className="text-xs text-muted-foreground">Tap to stop recording</p>
             </>
-          ) : voice.isTranscribing ? (
+          ) : dave.isTranscribing ? (
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-xs text-muted-foreground">Transcribing...</p>
@@ -814,7 +814,7 @@ export default function AudioSessionMode({
       {/* Playback controls */}
       {(isSpeakingPhase(phase) || isFeedbackPhase(phase)) && (
         <div className="flex items-center gap-2">
-          {voice.isPlaying && isSpeakingPhase(phase) && (
+          {dave.isSpeaking && isSpeakingPhase(phase) && (
             <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={handlePause}>
               <Pause className="h-3.5 w-3.5" />
               Pause
