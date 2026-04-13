@@ -271,8 +271,12 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   }, [sections, dave, getSectionIntro, getListenCue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tryActivateMic = useCallback(async () => {
-    // Small delay to ensure TTS playback fully drains before mic opens
-    await new Promise(r => setTimeout(r, 300));
+    // dave.speak() is async and resolves after playback ends,
+    // but add a small guard to ensure audio hardware fully releases
+    const drainStart = Date.now();
+    while (dave.isSpeaking && Date.now() - drainStart < 2000) {
+      await new Promise(r => setTimeout(r, 50));
+    }
     try {
       await dave.startListening();
     } catch {
