@@ -349,7 +349,7 @@ export default function SkillBuilderSession() {
         {sessionState === 'completed' && (
           <div className="rounded-lg border border-border bg-card p-4 space-y-3">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              <CheckCircle2 className="h-5 w-5 text-primary" />
               <p className="text-sm font-medium">Session Complete</p>
             </div>
             {repScores.length > 0 && (
@@ -362,18 +362,51 @@ export default function SkillBuilderSession() {
                 </p>
               </div>
             )}
-            {track?.skill && (() => {
-              const lvl = skillLevels?.find(l => l.skill === track.skill);
-              return lvl ? <LevelProgressFeedbackCard current={lvl} /> : null;
-            })()}
-            <div className="flex gap-2">
-              <button
-                onClick={() => navigate('/learn')}
-                className="flex-1 h-9 rounded-md bg-primary text-primary-foreground text-sm font-medium"
-              >
-                Back to Learn
-              </button>
-            </div>
+            {/* Closed-loop hand-back */}
+            {state?.fromClosedLoop && state?.taughtConcept && (
+              <div className="space-y-2 border-t border-border pt-3">
+                <p className="text-xs text-muted-foreground">
+                  This session reinforced <span className="font-medium text-foreground">{state.taughtConcept}</span>.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => navigate('/dojo/session', {
+                      state: {
+                        closedLoopSessionId: state.closedLoopSessionId,
+                        closedLoopSkill: state.skill,
+                        closedLoopConcept: state.taughtConcept,
+                        closedLoopSubSkill: state.subSkill,
+                      },
+                    })}
+                    className="flex-1 h-9 rounded-md border border-primary text-primary text-sm font-medium"
+                  >
+                    Retest in Dojo
+                  </button>
+                  <button
+                    onClick={() => navigate('/learn')}
+                    className="flex-1 h-9 rounded-md bg-primary text-primary-foreground text-sm font-medium"
+                  >
+                    Back to Learn
+                  </button>
+                </div>
+              </div>
+            )}
+            {!state?.fromClosedLoop && (
+              <>
+                {track?.skill && (() => {
+                  const lvl = skillLevels?.find(l => l.skill === track.skill);
+                  return lvl ? <LevelProgressFeedbackCard current={lvl} /> : null;
+                })()}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => navigate('/learn')}
+                    className="flex-1 h-9 rounded-md bg-primary text-primary-foreground text-sm font-medium"
+                  >
+                    Back to Learn
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 
