@@ -11,7 +11,8 @@
  * - Reuses existing TTS/STT via useDaveVoiceController
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -57,6 +58,11 @@ import { completeAssignment } from '@/lib/dojo/v3/assignmentManager';
 import { useDaveVoiceController } from '@/hooks/useDaveVoiceController';
 import { prefetchDojoScenario } from '@/lib/daveSessionPrefetch';
 import DaveSignalBanner from '@/components/DaveSignalBanner';
+import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
+import { orchestrateNextStep } from '@/lib/daveClosedLoopOrchestrator';
+import { DaveCoachingLoopStatus } from '@/components/DaveCoachingLoopStatus';
+import { parseDimensions } from '@/lib/learning/learnScoringSchema';
+import type { SkillFocus } from '@/lib/dojo/scenarios';
 
 interface AudioSessionModeProps {
   scenario: DojoScenario;
@@ -66,6 +72,12 @@ interface AudioSessionModeProps {
   assignmentId?: string | null;
   benchmarkTag?: boolean;
   scenarioFamilyId?: string | null;
+  /** Closed-loop context passed from Learn */
+  closedLoopSessionId?: string | null;
+  closedLoopSkill?: SkillFocus | null;
+  closedLoopSubSkill?: string | null;
+  closedLoopFocusPattern?: string | null;
+  closedLoopConcept?: string | null;
 }
 
 /** Safely cast DojoScoreResult to Json for DB storage */
@@ -96,6 +108,11 @@ export default function AudioSessionMode({
   assignmentId,
   benchmarkTag = false,
   scenarioFamilyId,
+  closedLoopSessionId,
+  closedLoopSkill,
+  closedLoopSubSkill,
+  closedLoopFocusPattern,
+  closedLoopConcept,
 }: AudioSessionModeProps) {
   // Restore from saved state if resuming
   const savedState = useRef(loadDojoState()).current;
@@ -125,6 +142,23 @@ export default function AudioSessionMode({
   });
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+
+  // Closed-loop coaching integration
+  const closedLoop = useClosedLoopCoaching();
+  const isClosedLoop = !!closedLoopSessionId;
+
+  // Initialize closed-loop session if entering from Learn
+  useEffect(() => {
+    if (isClosedLoop && closedLoopSkill && closedLoopConcept && !closedLoop.session) {
+      const session = closedLoop.startTeaching(
+        closedLoopSkill,
+        closedLoopConcept,
+        closedLoopSubSkill || undefined,
+        closedLoopFocusPattern || undefined,
+      );
+      closedLoop.markReadyForTest();
+    }
+  }, [isClosedLoop]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save local state on every meaningful change
   useEffect(() => {
@@ -539,6 +573,21 @@ export default function AudioSessionMode({
       }
 
       setPhase(isRetry ? 'retry_feedback' : 'feedback');
+
+      // Feed result into closed-loop if active
+      if (isClosedLoop && closedLoop.session) {
+        const dimensions = parseDimensions(
+          (scoreData as any).dimensions ?? null,
+          scenario.skillFocus as SkillFocus,
+        );
+        closedLoop.submitAttempt({
+          sessionId: sessionId || clientSessionId,
+          transcript: text,
+          score: scoreData.score,
+          dimensions: dimensions || undefined,
+        });
+      }
+
       // Try to flush any pending writes
       processPendingWrites();
     } catch (e: unknown) {
@@ -683,6 +732,10 @@ export default function AudioSessionMode({
         pendingOpsCount={dave.pendingOpsCount}
       />
       {/* Recovery banner */}
+      {/* Closed-loop coaching status */}
+      {isClosedLoop && closedLoop.isActive && (
+        <DaveCoachingLoopStatus state={closedLoop} compact />
+      )}
       <RecoveryBanner
         recovery={recovery}
         onCancel={cancelRecovery}
@@ -837,21 +890,40 @@ export default function AudioSessionMode({
 
       {/* Post-feedback actions */}
       {isFeedbackPhase(phase) && currentResult && (
-        <div className="flex gap-2 pt-2">
-          <Button
-            variant="outline"
-            className="flex-1 gap-2"
-            onClick={handleRetry}
-          >
-            <RotateCcw className="h-4 w-4" />
-            Try Again
-          </Button>
-          <Button
-            className="flex-1"
-            onClick={onComplete}
-          >
-            Next Rep
-          </Button>
+        <div className="space-y-2 pt-2">
+          {/* Closed-loop coaching line */}
+          {isClosedLoop && closedLoop.coaching?.spoken && (
+            <p className="text-xs text-muted-foreground italic border-l-2 border-primary/30 pl-2">
+              {closedLoop.coaching.spoken}
+            </p>
+          )}
+          {/* Closed-loop next step or standard actions */}
+          {isClosedLoop && closedLoop.verification ? (
+            <ClosedLoopActions
+              verification={closedLoop.verification}
+              session={closedLoop.session!}
+              onRetry={handleRetry}
+              onComplete={onComplete}
+              coaching={closedLoop.coaching}
+            />
+          ) : (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 gap-2"
+                onClick={handleRetry}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Try Again
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={onComplete}
+              >
+                Next Rep
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -868,6 +940,90 @@ export default function AudioSessionMode({
           <div className="text-xs text-muted-foreground">/ 100</div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Closed-Loop Action Buttons ────────────────────────────────────
+
+import { ArrowRight, BookOpen } from 'lucide-react';
+import type { ClosedLoopVerification, ClosedLoopSession } from '@/lib/daveClosedLoopEngine';
+import type { MicroCoachingResponse } from '@/lib/daveMicroCoaching';
+
+const NEXT_STEP_BUTTON_CONFIG: Record<string, { label: string; variant: 'default' | 'outline' | 'secondary' }> = {
+  retry_same_focus: { label: 'Try Again (Same Focus)', variant: 'outline' },
+  reinforce_with_micro_coaching: { label: 'Coach Me, Then Retry', variant: 'outline' },
+  advance_to_harder_variant: { label: 'Go Harder', variant: 'default' },
+  move_to_next_concept: { label: 'Next Concept', variant: 'default' },
+  route_to_skill_builder: { label: 'Skill Builder', variant: 'secondary' },
+  route_to_learn_review: { label: 'Review Concept', variant: 'secondary' },
+};
+
+function ClosedLoopActions({
+  verification,
+  session,
+  onRetry,
+  onComplete,
+  coaching,
+}: {
+  verification: ClosedLoopVerification;
+  session: ClosedLoopSession;
+  onRetry: () => void;
+  onComplete: () => void;
+  coaching: MicroCoachingResponse | null;
+}) {
+  const navigate = useNavigate();
+  const step = verification.recommendedNextStep;
+  const config = NEXT_STEP_BUTTON_CONFIG[step] || { label: 'Continue', variant: 'default' as const };
+
+  const handleNextStep = useCallback(() => {
+    const orchestration = orchestrateNextStep(session, verification);
+
+    if (!orchestration.nextSurface) {
+      onComplete();
+      return;
+    }
+
+    if (orchestration.nextSurface === 'dojo') {
+      // Retry or escalation — stay in Dojo
+      onRetry();
+      return;
+    }
+
+    if (orchestration.nextSurface === 'learn') {
+      navigate('/learn', { state: orchestration.launchState });
+      return;
+    }
+
+    if (orchestration.nextSurface === 'skill_builder') {
+      navigate('/skill-builder/session', { state: orchestration.launchState });
+      return;
+    }
+
+    onComplete();
+  }, [session, verification, onRetry, onComplete, navigate]);
+
+  return (
+    <div className="flex gap-2">
+      {(step === 'retry_same_focus' || step === 'reinforce_with_micro_coaching') && (
+        <Button
+          variant="outline"
+          className="flex-1 gap-2"
+          onClick={onRetry}
+        >
+          <RotateCcw className="h-4 w-4" />
+          {config.label}
+        </Button>
+      )}
+      <Button
+        variant={config.variant}
+        className="flex-1 gap-2"
+        onClick={handleNextStep}
+      >
+        {step === 'advance_to_harder_variant' && <ArrowRight className="h-4 w-4" />}
+        {(step === 'route_to_learn_review' || step === 'route_to_skill_builder') && <BookOpen className="h-4 w-4" />}
+        {config.label}
+      </Button>
     </div>
   );
 }

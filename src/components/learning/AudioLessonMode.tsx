@@ -13,7 +13,7 @@
  * - Reuses existing TTS/STT infrastructure
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -48,6 +48,11 @@ import { useUpsertProgress, useSaveQuizAnswer } from '@/lib/learning/hooks';
 // Session bridge consolidated into useDaveVoiceController
 import { prefetchLearnUnits } from '@/lib/daveSessionPrefetch';
 import DaveSignalBanner from '@/components/DaveSignalBanner';
+import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
+import { orchestrateNextStep } from '@/lib/daveClosedLoopOrchestrator';
+import { DaveCoachingLoopStatus } from '@/components/DaveCoachingLoopStatus';
+import type { SkillFocus } from '@/lib/dojo/scenarios';
+import { getSubSkillsForSkill } from '@/lib/learning/learnSubSkillMap';
 
 interface AudioLessonModeProps {
   lesson: LearningLesson;
@@ -64,6 +69,24 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
     sessionKey: `learn-${lesson.id}`,
     mode: 'audio',
   });
+
+  // Closed-loop coaching integration
+  const closedLoop = useClosedLoopCoaching();
+
+  // Derive skill and sub-skill from lesson topic for closed-loop
+  const lessonSkill = useMemo(() => {
+    const topic = lesson.topic as SkillFocus | undefined;
+    return topic || 'discovery';
+  }, [lesson.topic]);
+
+  const lessonSubSkill = useMemo(() => {
+    const subs = getSubSkillsForSkill(lessonSkill);
+    // Try to match lesson title to a sub-skill name
+    const match = subs.find(s =>
+      lesson.title.toLowerCase().includes(s.name.toLowerCase())
+    );
+    return match?.name;
+  }, [lessonSkill, lesson.title]);
 
   // Restore from saved state if resuming the same lesson
   const savedLearn = useRef(loadLearnState()).current;
@@ -373,11 +396,24 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   }, [openAnswer, handleOpenSubmit]);
 
   const doHandoff = useCallback(async () => {
+    // Start closed-loop session when lesson completes
+    const concept = lesson.lesson_content?.concept || lesson.title;
+    const subDef = lessonSubSkill
+      ? getSubSkillsForSkill(lessonSkill).find(s => s.name === lessonSubSkill)
+      : null;
+    closedLoop.startTeaching(
+      lessonSkill,
+      concept,
+      lessonSubSkill,
+      subDef?.patterns[0],
+    );
+    closedLoop.markReadyForTest();
+
     try {
       await dave.speak(buildHandoffText());
     } catch { /* continue */ }
     setPhase('complete');
-  }, [dave]);
+  }, [dave, lessonSkill, lessonSubSkill, lesson, closedLoop]);
 
   const handleGoToDojo = useCallback(() => {
     const practice = getPracticeMapping(lesson.topic);
@@ -388,9 +424,15 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
         sessionType: 'audio',
         fromLesson: true,
         lessonTitle: lesson.title,
+        // Closed-loop context
+        closedLoopSessionId: closedLoop.session?.id,
+        closedLoopSkill: closedLoop.session?.skill,
+        closedLoopSubSkill: closedLoop.session?.subSkill,
+        closedLoopFocusPattern: closedLoop.session?.focusPattern,
+        closedLoopConcept: closedLoop.session?.taughtConcept,
       },
     });
-  }, [lesson, navigate]);
+  }, [lesson, navigate, closedLoop.session]);
 
   // Controls
   const handlePause = useCallback(() => {
@@ -442,6 +484,10 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
       />
       {/* Recovery banner */}
       <RecoveryBanner recovery={recovery} onCancel={cancelRecovery} />
+      {/* Closed-loop coaching status */}
+      {closedLoop.isActive && (
+        <DaveCoachingLoopStatus state={closedLoop} compact />
+      )}
       {/* Progress & status */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
