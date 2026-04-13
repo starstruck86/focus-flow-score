@@ -133,6 +133,70 @@ COMMON MISTAKES: lack_of_control / weak_close / vague_next_step / too_passive / 
 COMMON MISTAKES: failed_to_qualify / accepted_weak_pain / no_urgency / skipped_stakeholders / too_generic / pitched_too_early / no_disqualification / no_business_impact`,
 };
 
+// ── Structured scoring dimensions per skill ─────────────────────────
+const SKILL_DIMENSIONS: Record<string, Record<string, string>> = {
+  discovery: {
+    questionArchitecture: 'Quality of question construction — singular, open, non-leading',
+    painExcavation: 'Depth of pain exploration — went past surface answers',
+    painQuantification: 'Attached numbers, costs, or timelines to the pain',
+    businessImpact: 'Connected the problem to revenue, cost, or competitive risk',
+    urgencyTesting: 'Tested for trigger events, timelines, or catalysts for action',
+    stakeholderDiscovery: 'Identified other decision-makers or influencers',
+  },
+  objection_handling: {
+    composure: 'Stayed calm and concise — no rambling or defensive reaction',
+    isolation: 'Surfaced the real concern behind the stated objection',
+    reframing: 'Shifted from feature/cost to business value or risk',
+    proof: 'Used a specific proof point — customer, metric, or benchmark',
+    commitmentControl: 'Maintained control and proposed a concrete next step',
+  },
+  deal_control: {
+    nextStepControl: 'Proposed a specific, time-bound next step',
+    riskNaming: 'Called out deal drift, stalling, or missing stakeholders directly',
+    mutualPlan: 'Defined mutual commitments — what both sides will do by when',
+    stakeholderAlignment: 'Ensured alignment across multiple stakeholders or created urgency',
+  },
+  executive_response: {
+    brevity: 'Response could be delivered in under 30 seconds, no filler',
+    numberLed: 'Opened with a specific metric or quantified outcome',
+    priorityAnchoring: 'Anchored to the executive\'s stated priority, not own agenda',
+    executivePresence: 'Projected certainty and confidence — no hedging',
+  },
+  qualification: {
+    painValidation: 'Distinguished genuine business pain from casual interest',
+    stakeholderMapping: 'Identified other decision-makers and their roles',
+    decisionProcess: 'Tested for timeline, process, and decision criteria',
+    disqualification: 'Willingness to disqualify or challenge weak opportunities',
+  },
+};
+
+function getDimensionPromptBlock(skill: string): string {
+  const dims = SKILL_DIMENSIONS[skill];
+  if (!dims) return '';
+  const entries = Object.entries(dims)
+    .map(([key, desc]) => `    "${key}": 0-10  // ${desc}`)
+    .join(',\n');
+  return `\nSTRUCTURED SCORING (REQUIRED):\nYou MUST return a "dimensions" object scoring each dimension 0-10 for this skill.\nOnly score dimensions listed below. Do NOT invent new ones.\n\n  "dimensions": {\n${entries}\n  }\n\nDimension scoring guide: 0-2 not present, 3-4 attempted but weak, 5-6 competent, 7-8 genuinely strong, 9-10 elite.`;
+}
+
+function parseDimensions(raw: unknown, skill: string): Record<string, number> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const validKeys = new Set(Object.keys(SKILL_DIMENSIONS[skill] || {}));
+  const result: Record<string, number> = {};
+  let found = 0;
+  for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (validKeys.has(key) && typeof val === 'number') {
+      result[key] = Math.max(0, Math.min(10, Math.round(val)));
+      found++;
+    }
+  }
+  if (found < Math.ceil(validKeys.size / 2)) return null;
+  for (const key of validKeys) {
+    if (!(key in result)) result[key] = 5;
+  }
+  return result;
+}
+
 // ── Coaching tone ───────────────────────────────────────────────────
 
 const COACHING_TONE: Record<string, string> = {
