@@ -18,6 +18,8 @@ import { FOCUS_PATTERN_LABELS } from '@/lib/dojo/focusPatterns';
 import { Loader2, BookOpen, Dumbbell, Brain, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedbackCard';
+import { useSkillLevels } from '@/hooks/useSkillLevels';
 
 type SessionState = 'generating' | 'active' | 'completed' | 'error';
 
