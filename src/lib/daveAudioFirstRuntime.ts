@@ -567,27 +567,27 @@ export function buildSessionRecapSpeech(recap: SessionRecap): SpeechQueueItem[] 
 
   if (recap.whatImproved) {
     items.push({
-      text: `Here's what you improved today: ${recap.whatImproved}`,
+      text: `Here's what clicked today: ${recap.whatImproved}`,
       pauseAfter: 600,
     });
   }
 
   if (recap.whatStillNeedsWork) {
     items.push({
-      text: `What still needs work: ${recap.whatStillNeedsWork}`,
+      text: `Let's sharpen this next: ${recap.whatStillNeedsWork}`,
       pauseAfter: 600,
     });
   }
 
   if (recap.whatWeWorkOnNext) {
     items.push({
-      text: `Next time, we'll focus on: ${recap.whatWeWorkOnNext}`,
+      text: `Next session, we're going after: ${recap.whatWeWorkOnNext}`,
       pauseAfter: 400,
     });
   }
 
   items.push({
-    text: "Good session. Keep putting in the reps.",
+    text: "Good reps today. Keep at it.",
     pauseAfter: 0,
   });
 
