@@ -267,7 +267,7 @@ export function deriveBlockedReason(
 // ── Main audit function ────────────────────────────────────
 
 export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
-  // Only fetch first 300 chars of content (for placeholder detection) to avoid 17MB+ payloads
+  // Fetch resource metadata (without full content to avoid 17MB+ payloads)
   const { data: resources, error: rErr } = await supabase
     .from('resources')
     .select('id, title, content_length, enrichment_status, tags, updated_at, manual_content_present, manual_input_required, recovery_queue_bucket, failure_reason, resource_type, file_url, active_job_status')
@@ -276,6 +276,18 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
   if (rErr || !resources) {
     log.error('Canonical lifecycle query failed', { error: rErr });
     return emptySummary();
+  }
+
+  // Fetch only content prefixes (first 300 chars) for placeholder detection
+  const { data: { user } } = await supabase.auth.getUser();
+  const contentPrefixMap = new Map<string, string>();
+  if (user) {
+    const { data: prefixes } = await supabase.rpc('get_resource_content_prefixes', { p_user_id: user.id });
+    if (prefixes) {
+      for (const p of prefixes as any[]) {
+        contentPrefixMap.set(p.id, p.content_prefix ?? '');
+      }
+    }
   }
 
   const resourceIds = (resources as any[]).map((r) => r.id).filter(Boolean);
