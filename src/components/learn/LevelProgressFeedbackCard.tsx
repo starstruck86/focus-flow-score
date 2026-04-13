@@ -1,6 +1,7 @@
 /**
  * LevelProgressFeedbackCard — Post-session progress feedback.
- * Shows how much progress was gained toward the next tier.
+ * Shows how much progress was gained toward the next tier,
+ * plus which sub-skills improved or are blocking.
  */
 
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
@@ -14,12 +15,18 @@ interface LevelProgressFeedbackCardProps {
   previousProgress?: number;
   /** Which metrics improved */
   improvedMetrics?: string[];
+  /** Sub-skill insights from post-session evaluation */
+  subSkillInsights?: {
+    improved?: string[];
+    stillBlocking?: string[];
+  };
 }
 
 export function LevelProgressFeedbackCard({
   current,
   previousProgress,
   improvedMetrics,
+  subSkillInsights,
 }: LevelProgressFeedbackCardProps) {
   const delta = previousProgress != null
     ? current.progressWithinTier - previousProgress
@@ -58,6 +65,20 @@ export function LevelProgressFeedbackCard({
             </span>
           ))}
         </div>
+      )}
+
+      {/* Sub-skill insights */}
+      {subSkillInsights?.improved && subSkillInsights.improved.length > 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground">Improved: </span>
+          {subSkillInsights.improved.join(', ')}
+        </p>
+      )}
+      {subSkillInsights?.stillBlocking && subSkillInsights.stillBlocking.length > 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground">Still blocking: </span>
+          {subSkillInsights.stillBlocking.join(', ')}
+        </p>
       )}
 
       {/* Close to tier up nudge */}

@@ -191,6 +191,11 @@ export default function Learn() {
         {/* 3b. Progress Timeline */}
         <SkillProgressTimeline />
 
+        {/* 3c. Sub-Skill Breakdown */}
+        {subSkillSummaries && subSkillSummaries.length > 0 && (
+          <SubSkillProgressPanel summaries={subSkillSummaries} />
+        )}
+
         {/* 4. Adaptive Study Path (Phase 5) */}
         {learnLoop?.adaptiveStudyPath && <AdaptiveStudyPathCard path={learnLoop.adaptiveStudyPath} />}
 
