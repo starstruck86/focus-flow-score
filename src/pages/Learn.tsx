@@ -28,6 +28,7 @@ import { WeakestAnchorCard } from '@/components/learn/WeakestAnchorCard';
 import { BlockRemediationCard } from '@/components/learn/BlockRemediationCard';
 import { AdaptiveStudyPathCard } from '@/components/learn/AdaptiveStudyPathCard';
 import { PrimaryActionCard } from '@/components/learn/PrimaryActionCard';
+import { SkillBuilderEntryCard } from '@/components/learn/SkillBuilderEntryCard';
 
 export default function Learn() {
   const navigate = useNavigate();
@@ -140,6 +141,9 @@ export default function Learn() {
 
         {/* 3. Adaptive Study Path (Phase 5) */}
         {learnLoop?.adaptiveStudyPath && <AdaptiveStudyPathCard path={learnLoop.adaptiveStudyPath} />}
+
+        {/* Skill Builder Entry (Mode 2) */}
+        <SkillBuilderEntryCard />
 
         {/* 3. Weekly Coaching Plan (Phase 4) */}
         {learnLoop?.weeklyPlan && <WeeklyCoachingPlanCard plan={learnLoop.weeklyPlan} />}
