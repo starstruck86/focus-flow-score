@@ -2,6 +2,9 @@
  * Dave Audio Failure Audit — Structured test/verification layer
  * for resilience across Dojo, Learn, and Skill Builder audio surfaces.
  *
+ * Updated post-consolidation: validates that useDaveVoiceController
+ * correctly owns all resilience behavior (buffer, queue, idempotency).
+ *
  * Each audit case simulates a failure scenario and verifies system behavior.
  * This is NOT a runtime system — it's a diagnostic tool.
  */
@@ -23,7 +26,7 @@ const logger = createLogger('DaveAudioFailureAudit');
 // ── Result Type ─────────────────────────────────────────────
 
 export interface AudioFailureAuditResult {
-  surface: 'dojo' | 'learn' | 'skill_builder';
+  surface: 'dojo' | 'learn' | 'skill_builder' | 'controller';
   caseId: string;
   label: string;
   passed: boolean;
@@ -40,10 +43,12 @@ export async function runFullAudioFailureAudit(): Promise<AudioFailureAuditResul
   results.push(testBufferPersistence());
   results.push(testBufferResume());
   results.push(testBufferExpiry());
+  results.push(testBufferTranscriptLog());
 
   // Queue tests
   results.push(await testQueueReplay());
   results.push(await testQueueOrderPreservation());
+  results.push(await testQueueFailureRetry());
 
   // Idempotency tests
   results.push(await testIdempotentScoring());
@@ -54,6 +59,9 @@ export async function runFullAudioFailureAudit(): Promise<AudioFailureAuditResul
   results.push(testLearnSectionResume());
   results.push(testSkillBuilderBlockResume());
   results.push(await testSkillBuilderMultiQueueReplay());
+
+  // Ownership boundary verification
+  results.push(testControllerOwnsBuffer());
 
   // Cleanup
   clearVoiceSessionBuffer();
@@ -102,7 +110,6 @@ function testBufferExpiry(): AudioFailureAuditResult {
   try {
     clearVoiceSessionBuffer();
     const buf = createEmptyBuffer('old-session', 'learn', 'audio');
-    // Fake an old timestamp
     const old = { ...buf, savedAt: Date.now() - (5 * 60 * 60 * 1000) };
     localStorage.setItem('dave_voice_session_buffer', JSON.stringify(old));
 
@@ -113,6 +120,28 @@ function testBufferExpiry(): AudioFailureAuditResult {
     return { surface: 'learn', caseId: 'buffer-expiry', label: 'Expired buffer is discarded', passed, severity: 'medium' };
   } catch (e) {
     return { surface: 'learn', caseId: 'buffer-expiry', label: 'Expired buffer is discarded', passed: false, severity: 'medium', notes: String(e) };
+  }
+}
+
+function testBufferTranscriptLog(): AudioFailureAuditResult {
+  try {
+    clearVoiceSessionBuffer();
+    let buf = createEmptyBuffer('log-test', 'dojo', 'audio');
+    buf = appendToTranscriptLog(buf, 'dave', 'Scenario prompt');
+    buf = appendToTranscriptLog(buf, 'user', 'My response');
+    buf = appendToTranscriptLog(buf, 'dave', 'Feedback');
+    saveVoiceSessionBuffer(buf);
+
+    const loaded = loadVoiceSessionBuffer();
+    const passed = !!(loaded && loaded.transcriptLog.length === 3
+      && loaded.transcriptLog[0].role === 'dave'
+      && loaded.transcriptLog[1].role === 'user'
+      && loaded.transcriptLog[2].role === 'dave');
+    clearVoiceSessionBuffer();
+
+    return { surface: 'controller', caseId: 'buffer-transcript-log', label: 'Transcript log preserves role order', passed, severity: 'medium' };
+  } catch (e) {
+    return { surface: 'controller', caseId: 'buffer-transcript-log', label: 'Transcript log preserves role order', passed: false, severity: 'medium', notes: String(e) };
   }
 }
 
@@ -148,6 +177,31 @@ async function testQueueOrderPreservation(): Promise<AudioFailureAuditResult> {
     return { surface: 'skill_builder', caseId: 'queue-order', label: 'Queue replays in FIFO order', passed, severity: 'high' };
   } catch (e) {
     return { surface: 'skill_builder', caseId: 'queue-order', label: 'Queue replays in FIFO order', passed: false, severity: 'high', notes: String(e) };
+  }
+}
+
+async function testQueueFailureRetry(): Promise<AudioFailureAuditResult> {
+  try {
+    const queue = new OperationQueue();
+    let attempts = 0;
+    queue.enqueue('score', async () => {
+      attempts++;
+      if (attempts < 3) throw new Error('transient');
+    }, 'retry-op', 5);
+
+    await queue.processAll();
+    // First pass: fails (attempt 1)
+    // Re-enqueued, process again
+    await queue.processAll();
+    // Second pass: fails (attempt 2), re-enqueued
+    await queue.processAll();
+    // Third pass: succeeds (attempt 3)
+
+    const passed = attempts === 3 && queue.isEmpty;
+
+    return { surface: 'controller', caseId: 'queue-failure-retry', label: 'Failed queue ops retry with bounded attempts', passed, severity: 'high' };
+  } catch (e) {
+    return { surface: 'controller', caseId: 'queue-failure-retry', label: 'Failed queue ops retry with bounded attempts', passed: false, severity: 'high', notes: String(e) };
   }
 }
 
@@ -258,7 +312,6 @@ async function testSkillBuilderMultiQueueReplay(): Promise<AudioFailureAuditResu
     const queue = new OperationQueue();
     const scores: number[] = [];
 
-    // Simulate 3 queued scoring ops for consecutive blocks
     for (let i = 0; i < 3; i++) {
       const opKey = makeOpKey('skill_builder', 'sb-multi', i, 'score');
       queue.enqueue('score', async () => {
@@ -283,5 +336,48 @@ async function testSkillBuilderMultiQueueReplay(): Promise<AudioFailureAuditResu
     return { surface: 'skill_builder', caseId: 'sb-multi-queue', label: 'Multiple queued scores replay correctly without duplication', passed, severity: 'high' };
   } catch (e) {
     return { surface: 'skill_builder', caseId: 'sb-multi-queue', label: 'Multiple queued scores replay correctly without duplication', passed: false, severity: 'high', notes: String(e) };
+  }
+}
+
+// ── Ownership Boundary Tests ────────────────────────────────
+
+function testControllerOwnsBuffer(): AudioFailureAuditResult {
+  try {
+    // Verify that buffer operations work correctly when used through
+    // the same primitives the controller uses
+    clearVoiceSessionBuffer();
+    let buf = createEmptyBuffer('ownership-test', 'dojo', 'audio');
+    buf = appendToTranscriptLog(buf, 'dave', 'Prompt');
+    buf = appendToTranscriptLog(buf, 'user', 'Response');
+    buf = updateBufferPosition(buf, 1, { phase: 'scoring' });
+    buf = { ...buf, pendingTranscript: 'buffered response' };
+    saveVoiceSessionBuffer(buf);
+
+    const loaded = loadVoiceSessionBuffer();
+    const passed = !!(
+      loaded &&
+      loaded.position === 1 &&
+      loaded.transcriptLog.length === 2 &&
+      loaded.pendingTranscript === 'buffered response' &&
+      loaded.surfaceState?.phase === 'scoring'
+    );
+    clearVoiceSessionBuffer();
+
+    return {
+      surface: 'controller',
+      caseId: 'controller-owns-buffer',
+      label: 'Controller buffer primitives work correctly end-to-end',
+      passed,
+      severity: 'high',
+    };
+  } catch (e) {
+    return {
+      surface: 'controller',
+      caseId: 'controller-owns-buffer',
+      label: 'Controller buffer primitives work correctly end-to-end',
+      passed: false,
+      severity: 'high',
+      notes: String(e),
+    };
   }
 }

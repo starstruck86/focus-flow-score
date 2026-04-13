@@ -24,10 +24,9 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedbackCard';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
-import { useDaveSessionBridge } from '@/hooks/useDaveSessionBridge';
+import { useDaveVoiceController } from '@/hooks/useDaveVoiceController';
 import { prefetchSkillBuilderBlocks } from '@/lib/daveSessionPrefetch';
 import DaveSignalBanner from '@/components/DaveSignalBanner';
-import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { makeOpKey, runIdempotent, clearIdempotencyRecords } from '@/lib/daveIdempotency';
 import { monitorLifecycle, getResumeMessage } from '@/lib/daveLifecycleRecovery';
 
@@ -50,10 +49,9 @@ export default function SkillBuilderSession() {
     state?.mode === 'audio' ? 'audio' : 'visual'
   );
   const { data: skillLevels } = useSkillLevels();
-  const voice = useVoiceMode();
 
-  // Dave bridge for audio resilience
-  const dave = useDaveSessionBridge({
+  // Dave unified controller for audio resilience
+  const dave = useDaveVoiceController({
     surface: 'skill_builder',
     sessionKey: `sb-${state?.skill ?? 'unknown'}-${Date.now()}`,
     mode: deliveryMode === 'audio' ? 'audio' : 'text',
@@ -222,7 +220,7 @@ export default function SkillBuilderSession() {
 
       dave.recordTranscript('dave', text);
       try {
-        await voice.playTTS(text);
+        await dave.speak(text);
       } catch {
         // TTS failed — continue in visual
       }

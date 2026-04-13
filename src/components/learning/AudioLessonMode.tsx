@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import { useVoiceMode } from '@/hooks/useVoiceMode';
+import { useDaveVoiceController } from '@/hooks/useDaveVoiceController';
 import { supabase } from '@/integrations/supabase/client';
 import { emitSaveStatus } from '@/components/SaveIndicator';
 import { saveLearnState, clearLearnState, loadLearnState } from '@/lib/sessionDurability';
@@ -45,7 +45,7 @@ import {
 } from '@/lib/learning/lessonAudioSequencer';
 import { getPracticeMapping } from '@/lib/learning/practiceMapping';
 import { useUpsertProgress, useSaveQuizAnswer } from '@/lib/learning/hooks';
-import { useDaveSessionBridge } from '@/hooks/useDaveSessionBridge';
+// Session bridge consolidated into useDaveVoiceController
 import { prefetchLearnUnits } from '@/lib/daveSessionPrefetch';
 import DaveSignalBanner from '@/components/DaveSignalBanner';
 
@@ -57,10 +57,9 @@ type LessonPhase = 'teaching' | 'waiting_mc' | 'waiting_open' | 'grading' | 'han
 
 export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   const navigate = useNavigate();
-  const voice = useVoiceMode();
   const upsertProgress = useUpsertProgress();
   const saveAnswer = useSaveQuizAnswer();
-  const dave = useDaveSessionBridge({
+  const dave = useDaveVoiceController({
     surface: 'learn',
     sessionKey: `learn-${lesson.id}`,
     mode: 'audio',
@@ -161,7 +160,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
     setPhase('teaching');
 
     try {
-      await voice.playTTS(section.text);
+      await dave.speak(section.text);
       dave.recordTranscript('dave', section.text);
       dave.updatePosition(idx, { phase: 'teaching' });
       setCompletedSections(prev => new Set([...prev, section.id]));
@@ -191,15 +190,15 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
         await playSection(idx + 1);
       }
     }
-  }, [sections, voice]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sections, dave]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tryActivateMic = useCallback(async () => {
     try {
-      await voice.startRecording();
+      await dave.startListening();
     } catch {
       setMicAvailable(false);
     }
-  }, [voice]);
+  }, [dave]);
 
   // MC answer handling
   const handleMCAnswer = useCallback(async (answer: string) => {
@@ -225,17 +224,17 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
       : `Not quite — the answer is ${q.correct_answer}. ${q.explanation}`;
 
     try {
-      await voice.playTTS(explanation);
+      await dave.speak(explanation);
     } catch { /* continue anyway */ }
 
     // Advance to next section
     await playSection(indexRef.current + 1);
-  }, [currentSection, lesson.id, saveAnswer, voice, playSection]);
+  }, [currentSection, lesson.id, saveAnswer, dave, playSection]);
 
   // Voice MC answer (parse letter from speech)
   const handleVoiceMCAnswer = useCallback(async () => {
     try {
-      const text = await voice.stopRecording();
+      const text = await dave.stopListening();
       // Extract letter answer (A, B, C, D) from speech
       const match = text.match(/\b([A-Da-d])\b/);
       if (match) {
@@ -247,7 +246,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
     } catch {
       setMicAvailable(false);
     }
-  }, [voice, handleMCAnswer]);
+  }, [dave, handleMCAnswer]);
 
   // Open-ended answer handling
   const handleOpenSubmit = useCallback(async (text: string) => {
@@ -281,7 +280,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
 
       // Dave reads the feedback
       try {
-        await voice.playTTS(data.feedback);
+        await dave.speak(data.feedback);
       } catch { /* continue */ }
 
       // Complete the lesson
@@ -343,7 +342,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
               status: 'completed',
               mastery_score: Math.round(overallMastery * 100) / 100,
             });
-            try { await voice.playTTS(data.feedback); } catch { /* continue */ }
+            try { await dave.speak(data.feedback); } catch { /* continue */ }
             setPhase('handoff');
             await doHandoff();
           },
@@ -356,18 +355,18 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
         },
       );
     }
-  }, [lesson, mcScore, voice, saveAnswer, upsertProgress]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lesson, mcScore, dave, saveAnswer, upsertProgress]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleVoiceOpenSubmit = useCallback(async () => {
     try {
-      const text = await voice.stopRecording();
+      const text = await dave.stopListening();
       setOpenAnswer(text);
       await handleOpenSubmit(text);
     } catch {
       setMicAvailable(false);
       setPhase('waiting_open');
     }
-  }, [voice, handleOpenSubmit]);
+  }, [dave, handleOpenSubmit]);
 
   const handleTextOpenSubmit = useCallback(async () => {
     await handleOpenSubmit(openAnswer);
@@ -375,10 +374,10 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
 
   const doHandoff = useCallback(async () => {
     try {
-      await voice.playTTS(buildHandoffText());
+      await dave.speak(buildHandoffText());
     } catch { /* continue */ }
     setPhase('complete');
-  }, [voice]);
+  }, [dave]);
 
   const handleGoToDojo = useCallback(() => {
     const practice = getPracticeMapping(lesson.topic);
@@ -395,9 +394,9 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
 
   // Controls
   const handlePause = useCallback(() => {
-    voice.stopPlayback();
+    dave.stopSpeaking();
     setIsPaused(true);
-  }, [voice]);
+  }, [dave]);
 
   const handleResume = useCallback(() => {
     setIsPaused(false);
@@ -407,17 +406,17 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   }, [phase, currentSection, currentIndex, playSection]);
 
   const handleSkip = useCallback(() => {
-    voice.stopPlayback();
+    dave.stopSpeaking();
     setIsPaused(false);
     setCompletedSections(prev => new Set([...prev, currentSection?.id ?? '']));
     playSection(currentIndex + 1);
-  }, [voice, currentSection, currentIndex, playSection]);
+  }, [dave, currentSection, currentIndex, playSection]);
 
   const handleReplay = useCallback(() => {
-    voice.stopPlayback();
+    dave.stopSpeaking();
     setIsPaused(false);
     playSection(currentIndex);
-  }, [voice, currentIndex, playSection]);
+  }, [dave, currentIndex, playSection]);
 
   // Cleanup recovery on unmount
   useEffect(() => {
@@ -447,7 +446,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {phase === 'teaching' && voice.isPlaying && (
+            {phase === 'teaching' && dave.isSpeaking && (
               <>
                 <Volume2 className="h-4 w-4 text-primary" />
                 <span className="text-xs font-medium text-primary">Dave is teaching</span>
@@ -462,7 +461,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
                 </div>
               </>
             )}
-            {phase === 'teaching' && !voice.isPlaying && !isPaused && (
+            {phase === 'teaching' && !dave.isSpeaking && !isPaused && (
               <>
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 <span className="text-xs font-medium text-muted-foreground">Preparing next section...</span>
@@ -539,7 +538,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
           {/* Voice answer option */}
           {micAvailable && (
             <div className="flex items-center justify-center pt-2">
-              {voice.isRecording ? (
+              {dave.isListening ? (
                 <button
                   onClick={handleVoiceMCAnswer}
                   className="h-12 w-12 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors"
@@ -564,7 +563,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
       {phase === 'waiting_open' && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
           {/* Mic recording */}
-          {micAvailable && voice.isRecording && (
+          {micAvailable && dave.isListening && (
             <div className="flex flex-col items-center gap-3 py-4">
               <button
                 onClick={handleVoiceOpenSubmit}
@@ -577,7 +576,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
           )}
 
           {/* Text fallback */}
-          {(!micAvailable || !voice.isRecording) && (
+          {(!micAvailable || !dave.isListening) && (
             <>
               {!micAvailable && (
                 <div className="flex items-center gap-2 text-xs text-amber-500">
@@ -627,7 +626,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
       {/* Playback controls */}
       {phase === 'teaching' && (
         <div className="flex items-center gap-2">
-          {voice.isPlaying && !isPaused && (
+          {dave.isSpeaking && !isPaused && (
             <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={handlePause}>
               <Pause className="h-3.5 w-3.5" />
               Pause
