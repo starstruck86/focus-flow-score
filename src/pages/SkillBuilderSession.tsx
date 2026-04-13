@@ -49,10 +49,9 @@ export default function SkillBuilderSession() {
     state?.mode === 'audio' ? 'audio' : 'visual'
   );
   const { data: skillLevels } = useSkillLevels();
-  const voice = useVoiceMode();
 
-  // Dave bridge for audio resilience
-  const dave = useDaveSessionBridge({
+  // Dave unified controller for audio resilience
+  const dave = useDaveVoiceController({
     surface: 'skill_builder',
     sessionKey: `sb-${state?.skill ?? 'unknown'}-${Date.now()}`,
     mode: deliveryMode === 'audio' ? 'audio' : 'text',

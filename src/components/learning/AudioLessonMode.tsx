@@ -57,10 +57,9 @@ type LessonPhase = 'teaching' | 'waiting_mc' | 'waiting_open' | 'grading' | 'han
 
 export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   const navigate = useNavigate();
-  const voice = useVoiceMode();
   const upsertProgress = useUpsertProgress();
   const saveAnswer = useSaveQuizAnswer();
-  const dave = useDaveSessionBridge({
+  const dave = useDaveVoiceController({
     surface: 'learn',
     sessionKey: `learn-${lesson.id}`,
     mode: 'audio',
