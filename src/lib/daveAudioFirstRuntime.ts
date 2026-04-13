@@ -375,6 +375,7 @@ export async function speakQueueStrict(
 
 /**
  * Replay the current checkpoint — deterministic replay of the last spoken segment.
+ * After replay, anchors the user with a transition prompt.
  */
 export async function replayCurrentCheckpoint(ctx: AudioFirstContext): Promise<void> {
   const checkpoint = ctx.checkpoints.getCurrent();
@@ -384,10 +385,13 @@ export async function replayCurrentCheckpoint(ctx: AudioFirstContext): Promise<v
   }
   logger.info('Replaying checkpoint', { role: checkpoint.role });
   await speakStrict(checkpoint.text, ctx, { role: checkpoint.role });
+  // Anchor after replay — guide user to next step
+  await speakStrict("Alright — now go ahead.", ctx, { role: 'replay_anchor' });
 }
 
 /**
  * Replay a specific named checkpoint (e.g. 'objection', 'what_good_sounds_like').
+ * After replay, anchors the user.
  */
 export async function replayCheckpointByRole(role: string, ctx: AudioFirstContext): Promise<void> {
   const checkpoint = ctx.checkpoints.getByRole(role);
@@ -397,12 +401,14 @@ export async function replayCheckpointByRole(role: string, ctx: AudioFirstContex
   }
   logger.info('Replaying checkpoint by role', { role });
   await speakStrict(checkpoint.text, ctx, { role });
+  await speakStrict("Alright — now go ahead.", ctx, { role: 'replay_anchor' });
 }
 
 // ── Listen Strict ──────────────────────────────────────────────────
 
 /**
  * Listen with interruption handling and noise resilience.
+ * Uses driving mode overrides for silence tolerance when available.
  */
 export async function listenStrict(
   ctx: AudioFirstContext,
@@ -412,8 +418,15 @@ export async function listenStrict(
     retryOnSilence?: number;
   },
 ): Promise<{ transcript: string; command: InterruptionCommand }> {
-  const timeoutMs = options?.timeoutMs ?? 60_000;
-  const retryOnSilence = options?.retryOnSilence ?? 1;
+  const timeoutMs = options?.timeoutMs ?? ctx.silenceTimeoutMs ?? 60_000;
+  const retryOnSilence = options?.retryOnSilence ?? ctx.silenceRetries ?? 1;
+
+  // Coaching-tone silence prompts (not robotic)
+  const SILENCE_PROMPTS = [
+    "Give me your best shot — even if it's not perfect.",
+    "Still here? Take your time, then go ahead.",
+    "Whenever you're ready. Just speak naturally.",
+  ];
 
   for (let attempt = 0; attempt <= retryOnSilence; attempt++) {
     if (ctx.signal?.aborted) return { transcript: '', command: 'stop' };
@@ -430,9 +443,7 @@ export async function listenStrict(
       if (!transcript.trim()) {
         if (attempt < retryOnSilence) {
           await speakStrict(
-            attempt === 0
-              ? "I didn't catch that. Go ahead."
-              : "Still here? Give me your response when you're ready.",
+            SILENCE_PROMPTS[Math.min(attempt, SILENCE_PROMPTS.length - 1)],
             ctx,
           );
           continue;
