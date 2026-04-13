@@ -100,10 +100,18 @@ async function determineLevelFromEvaluator(
   if (!cap) {
     return {
       skill,
-      currentLevel: 1,
-      currentLevelName: getSkillLevelDef(skill, 1)?.name ?? 'Level 1',
-      nextLevel: getSkillLevelDef(skill, 2),
+      currentTier: 1,
+      currentTierName: getSkillLevelDef(skill, 1)?.name ?? 'Tier 1',
+      levelWithinTier: 1,
+      maxLevelWithinTier: 5,
+      overallLevel: 1,
+      progressWithinTier: 0,
+      nextTier: getSkillLevelDef(skill, 2),
       gaps: [],
+      blockers: [],
+      currentLevel: 1,
+      currentLevelName: getSkillLevelDef(skill, 1)?.name ?? 'Tier 1',
+      nextLevel: getSkillLevelDef(skill, 2),
       progressToNext: 0,
     };
   }
