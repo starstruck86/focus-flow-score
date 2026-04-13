@@ -353,10 +353,19 @@ export async function runAudioFirstLearnSession(config: LearnSessionConfig): Pro
 async function runFullLearnSession(config: LearnSessionConfig): Promise<LearnSessionResult> {
   const script = buildAudioLessonScript(config.lesson);
   if (config.exampleResponse) script.exampleResponse = config.exampleResponse;
+  const dm = config.drivingMode ?? 'audio-first';
+  const dmConfig = getDrivingModeConfig(dm);
 
   const ctx = createAudioFirstContext(
     config.ttsConfig, config.playbackRef, config.signal, config.onStateChange,
+    {
+      drivingMode: dm,
+      silenceTimeoutMs: dmConfig.silenceTimeoutMs,
+      silenceRetries: dmConfig.silenceRetries,
+      bargeInWindowMs: dmConfig.bargeInWindowMs,
+    },
   );
+  const telemetry = new SessionTelemetryTracker('learn', 'full', dm);
 
   const result: LearnSessionResult = {
     phase: 'intro',
