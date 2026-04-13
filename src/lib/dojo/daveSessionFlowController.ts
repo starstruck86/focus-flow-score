@@ -87,9 +87,18 @@ export interface DojoSessionResult {
 export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promise<DojoSessionResult> {
   const maxRetries = config.maxRetries ?? 2;
   const script = buildAudioScript(config.scenario);
+  const dm = config.drivingMode ?? 'audio-first';
+  const dmConfig = getDrivingModeConfig(dm);
   const ctx = createAudioFirstContext(
     config.ttsConfig, config.playbackRef, config.signal, config.onStateChange,
+    {
+      drivingMode: dm,
+      silenceTimeoutMs: dmConfig.silenceTimeoutMs,
+      silenceRetries: dmConfig.silenceRetries,
+      bargeInWindowMs: dmConfig.bargeInWindowMs,
+    },
   );
+  const telemetry = new SessionTelemetryTracker('dojo', 'full', dm);
 
   const result: DojoSessionResult = {
     phase: 'intro',
