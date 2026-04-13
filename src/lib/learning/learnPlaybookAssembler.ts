@@ -119,8 +119,11 @@ export function assemblePlaybook(
   const { durationMinutes } = options;
   const targetSlots = Math.max(MIN_SLOTS, Math.round(durationMinutes * KIS_PER_MINUTE));
 
-  // Get candidate KIs and coverage context
-  const candidates = filterCandidates(index, playbook);
+  // Get candidate KIs and coverage context — level-aware filtering
+  const allCandidates = filterCandidates(index, playbook);
+  const candidates = options.userLevel
+    ? filterByLevel(allCandidates, options.userLevel)
+    : allCandidates;
   const coverage = buildCoverageForSkill(index, playbook.skill);
 
   if (candidates.length < MIN_SLOTS) {
