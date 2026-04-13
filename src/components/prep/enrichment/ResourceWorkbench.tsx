@@ -135,7 +135,7 @@ export function ResourceWorkbench({ resources, activeBucket, onSelectResource, s
       </div>
 
       {/* Resource list */}
-      <ScrollArea className="max-h-[60vh]">
+      <ScrollArea className="min-h-[80px] max-h-[60vh]">
         <div className="space-y-1">
           {paginated.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-8">No resources match the current filter</p>
