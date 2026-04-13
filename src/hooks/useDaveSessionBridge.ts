@@ -29,6 +29,8 @@ import {
   type VoiceSessionBuffer,
 } from '@/lib/daveSessionBuffer';
 import { PrefetchCache } from '@/lib/daveSessionPrefetch';
+import { makeOpKey, runIdempotent } from '@/lib/daveIdempotency';
+import { monitorLifecycle, getResumeMessage } from '@/lib/daveLifecycleRecovery';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('useDaveSessionBridge');
