@@ -206,7 +206,12 @@ export default function SkillBuilderSession() {
                   Reps completed: {repScores.length}
                 </p>
               </div>
-            )}
+             )}
+            {/* Level progress feedback */}
+            {track?.skill && (() => {
+              const lvl = skillLevels?.find(l => l.skill === track.skill);
+              return lvl ? <LevelProgressFeedbackCard current={lvl} /> : null;
+            })()}
             <div className="flex gap-2">
               <button
                 onClick={() => navigate('/learn')}
