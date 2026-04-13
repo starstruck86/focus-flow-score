@@ -60,6 +60,11 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   const voice = useVoiceMode();
   const upsertProgress = useUpsertProgress();
   const saveAnswer = useSaveQuizAnswer();
+  const dave = useDaveSessionBridge({
+    surface: 'learn',
+    sessionKey: `learn-${lesson.id}`,
+    mode: 'audio',
+  });
 
   // Restore from saved state if resuming the same lesson
   const savedLearn = useRef(loadLearnState()).current;
