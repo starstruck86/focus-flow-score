@@ -12,8 +12,10 @@ import { Badge } from '@/components/ui/badge';
 import { runSkillBuilderCoverageAudit, type CoverageAuditReport } from '@/lib/learning/skillBuilderCoverageAudit';
 import { getSkillBuilderGapMap, type GapMapResult } from '@/lib/learning/skillBuilderGapMap';
 import { auditSkillBuilderSequencing, type SequencingAuditResult } from '@/lib/learning/skillBuilderSequencingAudit';
+import { buildSkillBuilderCurationPlan, type SkillBuilderCurationPlan } from '@/lib/learning/skillBuilderCurationPlan';
 import { SkillBuilderCoverageCard } from '@/components/learn/SkillBuilderCoverageCard';
 import { SkillBuilderGapCard } from '@/components/learn/SkillBuilderGapCard';
+import { SkillBuilderCurationPlanCard } from '@/components/learn/SkillBuilderCurationPlanCard';
 
 type AuditPhase = 'idle' | 'coverage' | 'sequencing' | 'done' | 'error';
 
@@ -23,6 +25,7 @@ export default function SkillBuilderAudit() {
   const [coverageReport, setCoverageReport] = useState<CoverageAuditReport | null>(null);
   const [gapMap, setGapMap] = useState<GapMapResult | null>(null);
   const [seqResults, setSeqResults] = useState<SequencingAuditResult[] | null>(null);
+  const [curationPlan, setCurationPlan] = useState<SkillBuilderCurationPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const runAudit = async () => {
@@ -36,6 +39,11 @@ export default function SkillBuilderAudit() {
       setPhase('sequencing');
       const seq = await auditSkillBuilderSequencing(user.id);
       setSeqResults(seq);
+
+      // Build curation plan from all audit data
+      const gapResult = getSkillBuilderGapMap(report);
+      setGapMap(gapResult);
+      setCurationPlan(buildSkillBuilderCurationPlan(report, gapResult, seq));
 
       setPhase('done');
     } catch (err) {
@@ -80,6 +88,9 @@ export default function SkillBuilderAudit() {
 
         {phase === 'done' && coverageReport && gapMap && (
           <>
+            {/* Curation Plan — most actionable, goes first */}
+            {curationPlan && <SkillBuilderCurationPlanCard plan={curationPlan} />}
+
             {/* Coverage */}
             <SkillBuilderCoverageCard report={coverageReport} />
 
@@ -131,7 +142,7 @@ export default function SkillBuilderAudit() {
             </div>
 
             <button
-              onClick={() => { setPhase('idle'); setCoverageReport(null); setGapMap(null); setSeqResults(null); }}
+              onClick={() => { setPhase('idle'); setCoverageReport(null); setGapMap(null); setSeqResults(null); setCurationPlan(null); }}
               className="w-full h-9 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground"
             >
               Re-run Audit
