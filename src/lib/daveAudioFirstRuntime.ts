@@ -323,11 +323,13 @@ export async function speakWithBargeIn(
   // Speak → brief listen window → check for command.
   await speakStrict(text, ctx, { role: options?.role });
 
-  // Quick listen window (1.5s) for commands after interruptible segments
+  // Quick listen window for commands after interruptible segments
+  // Duration is extended in driving mode for road noise tolerance
+  const windowMs = ctx.bargeInWindowMs ?? 1500;
   if (ctx.signal?.aborted) return null;
   try {
     const quickResult = await listen(ctx.ttsConfig, {
-      timeoutMs: 1500,
+      timeoutMs: windowMs,
       signal: ctx.signal,
     });
     if (quickResult.trim()) {
