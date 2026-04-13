@@ -14,6 +14,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { isNotionZip, extractNotionZip } from '@/lib/notionZipExtractor';
+import { extractTextFromPdf } from '@/lib/pdfTextExtractor';
 
 // ── Types ────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ export interface RecoveryResult {
 // ── Constants ────────────────────────────────────────────
 
 const MIN_CONTENT_LENGTH = 50;
-const ALLOWED_EXTENSIONS = ['.txt', '.vtt', '.srt', '.json', '.csv', '.md', '.html', '.htm', '.zip'];
+const ALLOWED_EXTENSIONS = ['.txt', '.vtt', '.srt', '.json', '.csv', '.md', '.html', '.htm', '.zip', '.pdf'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 // ── Main entry point ─────────────────────────────────────
@@ -131,9 +132,19 @@ async function handleFileUpload(input: RecoveryInput): Promise<RecoveryResult> {
   }
 
   try {
-    const rawText = await file.text();
+    const isPdf = ext === '.pdf';
+    let rawText: string;
+
+    if (isPdf) {
+      rawText = await extractTextFromPdf(file);
+    } else {
+      rawText = await file.text();
+    }
+
     if (rawText.length < MIN_CONTENT_LENGTH) {
-      return { success: false, message: 'File content too short — minimum 50 characters of usable text' };
+      return { success: false, message: isPdf
+        ? 'PDF contained no extractable text — it may be a scanned/image-only PDF'
+        : 'File content too short — minimum 50 characters of usable text' };
     }
 
     // Clean transcript formats

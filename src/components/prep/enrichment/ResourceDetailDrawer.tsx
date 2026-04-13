@@ -588,7 +588,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".zip,.txt,.md,.csv,.vtt,.srt"
+                  accept=".zip,.txt,.md,.csv,.vtt,.srt,.pdf"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
