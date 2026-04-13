@@ -38,6 +38,7 @@ export default function Learn() {
   const { data: progress } = useUserProgress();
   const { data: dailyKI } = useDailyKI();
   const { data: learnLoop } = useLearnLoop();
+  const { data: skillLevels } = useSkillLevels();
 
   const progressMap = useMemo(() => {
     const map: Record<string, LearningProgress> = {};
@@ -141,7 +142,12 @@ export default function Learn() {
           <PrimaryActionCard action={learnLoop.primaryAction} onExecute={handlePrimaryAction} />
         )}
 
-        {/* 3. Adaptive Study Path (Phase 5) */}
+        {/* 3. Skill Progression Levels */}
+        {skillLevels && skillLevels.length > 0 && (
+          <SkillLevelsPanel levels={skillLevels} />
+        )}
+
+        {/* 4. Adaptive Study Path (Phase 5) */}
         {learnLoop?.adaptiveStudyPath && <AdaptiveStudyPathCard path={learnLoop.adaptiveStudyPath} />}
 
         {/* Skill Builder Entry (Mode 2) */}
