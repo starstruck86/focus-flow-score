@@ -37,7 +37,16 @@ export default function SkillBuilderSession() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const state = location.state as { skill?: SkillFocus; duration?: number; mode?: string } | null;
+  const state = location.state as {
+    skill?: SkillFocus;
+    duration?: number;
+    mode?: string;
+    fromClosedLoop?: boolean;
+    closedLoopSessionId?: string;
+    taughtConcept?: string;
+    subSkill?: string;
+    remediationContext?: { concept: string; weakDimensions: string[]; attemptCount: number };
+  } | null;
 
   const [sessionState, setSessionState] = useState<SessionState>('generating');
   const [track, setTrack] = useState<SkillTrack | null>(null);
