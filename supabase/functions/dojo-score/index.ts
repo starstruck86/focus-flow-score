@@ -289,6 +289,8 @@ ${rubric}
 
 ${focusPatternGuide}
 
+${getDimensionPromptBlock(skill)}
+
 CRITICAL: focusPattern MUST be selected from the EXACT list above. Do not invent new pattern names.
 
 SCORE CALIBRATION (CRITICAL — follow this distribution strictly):
