@@ -64,11 +64,12 @@ export interface DojoSessionConfig {
   onStateChange?: (patch: Record<string, unknown>) => void;
   onRepComplete?: (result: DojoScoreResult, transcript: string, isRetry: boolean) => void;
   onSessionComplete?: (recap: SessionRecap) => void;
-  /** Called when Learn→Dojo auto-handoff should trigger */
   onHandoffToDojo?: (skillFocus: string) => void;
   onError?: (error: AudioFirstSessionError) => void;
   maxRetries?: number;
   signal?: AbortSignal;
+  /** Driving mode for config overrides */
+  drivingMode?: DrivingMode;
 }
 
 export interface DojoSessionResult {
