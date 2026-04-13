@@ -55,6 +55,9 @@ import {
 } from '@/lib/dojo/audioSessionFlow';
 import type { Json } from '@/integrations/supabase/types';
 import { completeAssignment } from '@/lib/dojo/v3/assignmentManager';
+import { useDaveSessionBridge } from '@/hooks/useDaveSessionBridge';
+import { prefetchDojoScenario } from '@/lib/daveSessionPrefetch';
+import DaveSignalBanner from '@/components/DaveSignalBanner';
 
 interface AudioSessionModeProps {
   scenario: DojoScenario;
