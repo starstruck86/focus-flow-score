@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
