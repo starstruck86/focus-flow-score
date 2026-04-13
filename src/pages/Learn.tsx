@@ -29,6 +29,8 @@ import { BlockRemediationCard } from '@/components/learn/BlockRemediationCard';
 import { AdaptiveStudyPathCard } from '@/components/learn/AdaptiveStudyPathCard';
 import { PrimaryActionCard } from '@/components/learn/PrimaryActionCard';
 import { SkillBuilderEntryCard } from '@/components/learn/SkillBuilderEntryCard';
+import { SkillLevelsPanel } from '@/components/learn/SkillLevelsPanel';
+import { useSkillLevels } from '@/hooks/useSkillLevels';
 
 export default function Learn() {
   const navigate = useNavigate();
