@@ -14,6 +14,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { isNotionZip, extractNotionZip } from '@/lib/notionZipExtractor';
+import { extractTextFromPdf } from '@/lib/pdfTextExtractor';
 
 // ── Types ────────────────────────────────────────────────
 
