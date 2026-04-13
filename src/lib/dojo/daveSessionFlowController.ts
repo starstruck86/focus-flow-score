@@ -138,7 +138,7 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     });
 
     if (listenResult.command) {
-      const action = await handleBargeInCommand(listenResult.command, ctx);
+      const action = await handleBargeInCommand(listenResult.command, ctx, listenResult.transcript);
       if (action === 'stop') return abort(result);
       if (action === 'repeat') {
         // After replay, re-listen
@@ -171,11 +171,11 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     config.onRepComplete?.(scoreResult, listenResult.transcript, false);
 
     // ── Auto Retry Loop ──────────────────────────────────────
-    const score = scoreResult.score ?? 0;
     let retryCount = 0;
     let latestScore = scoreResult;
+    let currentScore = scoreResult.score ?? 0;
 
-    while (score < 7 && retryCount < maxRetries && !ctx.signal?.aborted) {
+    while (currentScore < 7 && retryCount < maxRetries && !ctx.signal?.aborted) {
       retryCount++;
       result.retryCount = retryCount;
 
@@ -218,7 +218,7 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
       if (ctx.signal?.aborted) return abort(result);
 
       config.onRepComplete?.(latestScore, retryListen.transcript, true);
-      if ((latestScore.score ?? 0) >= 7) break;
+      currentScore = latestScore.score ?? 0;
     }
 
     // ── Recap + Complete ─────────────────────────────────────
