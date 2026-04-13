@@ -889,21 +889,40 @@ export default function AudioSessionMode({
 
       {/* Post-feedback actions */}
       {isFeedbackPhase(phase) && currentResult && (
-        <div className="flex gap-2 pt-2">
-          <Button
-            variant="outline"
-            className="flex-1 gap-2"
-            onClick={handleRetry}
-          >
-            <RotateCcw className="h-4 w-4" />
-            Try Again
-          </Button>
-          <Button
-            className="flex-1"
-            onClick={onComplete}
-          >
-            Next Rep
-          </Button>
+        <div className="space-y-2 pt-2">
+          {/* Closed-loop coaching line */}
+          {isClosedLoop && closedLoop.coaching?.spoken && (
+            <p className="text-xs text-muted-foreground italic border-l-2 border-primary/30 pl-2">
+              {closedLoop.coaching.spoken}
+            </p>
+          )}
+          {/* Closed-loop next step or standard actions */}
+          {isClosedLoop && closedLoop.verification ? (
+            <ClosedLoopActions
+              verification={closedLoop.verification}
+              session={closedLoop.session!}
+              onRetry={handleRetry}
+              onComplete={onComplete}
+              coaching={closedLoop.coaching}
+            />
+          ) : (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 gap-2"
+                onClick={handleRetry}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Try Again
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={onComplete}
+              >
+                Next Rep
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
