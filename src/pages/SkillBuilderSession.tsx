@@ -2,10 +2,10 @@
  * Skill Builder Session Page
  *
  * Runs a structured skill training session block by block.
- * KI intro → Rep (via Dojo) → Reflection
+ * Supports both visual and audio (Dave) modes with full resilience.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { SHELL } from '@/lib/layout';
@@ -15,19 +15,30 @@ import { useAuth } from '@/contexts/AuthContext';
 import { generateSkillTrack, type SkillTrack, type SkillBlock } from '@/lib/learning/skillBuilderEngine';
 import { SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
 import { FOCUS_PATTERN_LABELS } from '@/lib/dojo/focusPatterns';
-import { Loader2, BookOpen, Dumbbell, Brain, ChevronRight, CheckCircle2 } from 'lucide-react';
+import {
+  Loader2, BookOpen, Dumbbell, Brain, ChevronRight, CheckCircle2,
+  Volume2, VolumeX,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedbackCard';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
+import { useDaveSessionBridge } from '@/hooks/useDaveSessionBridge';
+import { prefetchSkillBuilderBlocks } from '@/lib/daveSessionPrefetch';
+import DaveSignalBanner from '@/components/DaveSignalBanner';
+import { useVoiceMode } from '@/hooks/useVoiceMode';
+import { makeOpKey, runIdempotent, clearIdempotencyRecords } from '@/lib/daveIdempotency';
+import { monitorLifecycle, getResumeMessage } from '@/lib/daveLifecycleRecovery';
 
 type SessionState = 'generating' | 'active' | 'completed' | 'error';
+type DeliveryMode = 'visual' | 'audio';
 
 export default function SkillBuilderSession() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const state = location.state as { skill?: SkillFocus; duration?: number } | null;
+  const state = location.state as { skill?: SkillFocus; duration?: number; mode?: string } | null;
 
   const [sessionState, setSessionState] = useState<SessionState>('generating');
   const [track, setTrack] = useState<SkillTrack | null>(null);
@@ -35,7 +46,50 @@ export default function SkillBuilderSession() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [repScores, setRepScores] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>(
+    state?.mode === 'audio' ? 'audio' : 'visual'
+  );
   const { data: skillLevels } = useSkillLevels();
+  const voice = useVoiceMode();
+
+  // Dave bridge for audio resilience
+  const dave = useDaveSessionBridge({
+    surface: 'skill_builder',
+    sessionKey: `sb-${state?.skill ?? 'unknown'}-${Date.now()}`,
+    mode: deliveryMode === 'audio' ? 'audio' : 'text',
+  });
+
+  // Lifecycle monitoring for backgrounding
+  useEffect(() => {
+    const cleanup = monitorLifecycle((lifecycle) => {
+      if (lifecycle.isVisible && lifecycle.hiddenDurationMs > 3000) {
+        const msg = getResumeMessage(lifecycle.hiddenDurationMs);
+        if (msg && deliveryMode === 'audio') {
+          toast.info(msg);
+        }
+      }
+    });
+    return cleanup;
+  }, [deliveryMode]);
+
+  // Prefetch blocks when track is ready
+  useEffect(() => {
+    if (!track) return;
+    const prefetched = prefetchSkillBuilderBlocks(
+      track.blocks.map(b => ({
+        type: b.type,
+        text: b.type === 'mental_model' ? b.levelDescription
+          : b.type === 'ki_intro' ? b.kiTitle
+          : b.type === 'reflection' ? b.prompt
+          : undefined,
+        title: b.type === 'ki_intro' ? b.kiTitle : b.type === 'mental_model' ? b.levelName : undefined,
+        scenarioPrompt: b.type === 'rep' ? b.scenarioObjection : undefined,
+      })),
+      currentBlockIndex,
+      5,
+    );
+    for (const p of prefetched) dave.prefetchCache.add(p);
+  }, [track, currentBlockIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate session on mount
   useEffect(() => {
@@ -50,7 +104,6 @@ export default function SkillBuilderSession() {
 
     generateSkillTrack({ userId: user.id, skill, durationMinutes: duration })
       .then(async (generatedTrack) => {
-        // Persist session
         const { data, error: dbErr } = await supabase
           .from('skill_builder_sessions' as any)
           .insert({
@@ -66,20 +119,24 @@ export default function SkillBuilderSession() {
           .select('id')
           .single();
 
-        if (dbErr) {
-          console.error('Failed to persist session:', dbErr);
-        }
+        if (dbErr) console.error('Failed to persist session:', dbErr);
 
         setTrack(generatedTrack);
         setSessionId((data as any)?.id ?? null);
         setSessionState('active');
+
+        // Try restoring position from buffer
+        if (dave.buffer && dave.buffer.position > 0) {
+          setCurrentBlockIndex(dave.buffer.position);
+          toast.success('Resuming from where you left off');
+        }
       })
       .catch((err) => {
         console.error('Failed to generate track:', err);
         setError('Failed to generate training session.');
         setSessionState('error');
       });
-  }, [user, state?.skill, state?.duration]);
+  }, [user, state?.skill, state?.duration]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentBlock = track?.blocks[currentBlockIndex] ?? null;
   const totalBlocks = track?.blocks.length ?? 0;
@@ -88,13 +145,14 @@ export default function SkillBuilderSession() {
   const advanceBlock = useCallback(() => {
     if (!track) return;
     const next = currentBlockIndex + 1;
+    dave.updatePosition(next, { blockType: track.blocks[next]?.type ?? 'complete' });
+
     if (next >= track.blocks.length) {
-      // Session complete
       completeSession();
     } else {
       setCurrentBlockIndex(next);
     }
-  }, [currentBlockIndex, track]);
+  }, [currentBlockIndex, track]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRepComplete = useCallback((score?: number) => {
     if (score != null) setRepScores(prev => [...prev, score]);
@@ -118,23 +176,72 @@ export default function SkillBuilderSession() {
 
   const completeSession = useCallback(async () => {
     setSessionState('completed');
+    dave.clearBuffer();
+    clearIdempotencyRecords();
+
     if (!sessionId) return;
 
-    const avgScore = repScores.length > 0
-      ? Math.round(repScores.reduce((a, b) => a + b, 0) / repScores.length)
-      : null;
+    const opKey = makeOpKey('skill_builder', sessionId, -1, 'persist');
+    await runIdempotent(opKey, async () => {
+      const avgScore = repScores.length > 0
+        ? Math.round(repScores.reduce((a, b) => a + b, 0) / repScores.length)
+        : null;
 
-    await supabase
-      .from('skill_builder_sessions' as any)
-      .update({
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-        avg_score: avgScore,
-      } as any)
-      .eq('id', sessionId);
+      await supabase
+        .from('skill_builder_sessions' as any)
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          avg_score: avgScore,
+        } as any)
+        .eq('id', sessionId);
+    });
 
     toast.success('Skill Builder session complete!');
-  }, [sessionId, repScores]);
+  }, [sessionId, repScores]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Audio: auto-narrate current block
+  useEffect(() => {
+    if (deliveryMode !== 'audio' || sessionState !== 'active' || !currentBlock) return;
+
+    const narrateBlock = async () => {
+      const block = currentBlock;
+      let text = '';
+
+      if (block.type === 'mental_model') {
+        text = `Mental model. ${block.levelName}. ${block.levelDescription}`;
+      } else if (block.type === 'ki_intro') {
+        text = `Key insight. ${block.kiTitle}. Pattern: ${FOCUS_PATTERN_LABELS[block.focusPattern] ?? block.focusPattern}.`;
+      } else if (block.type === 'reflection') {
+        text = `Time to reflect. ${block.prompt}`;
+      } else if (block.type === 'rep') {
+        text = `Practice rep. ${block.scenarioContext}. The buyer says: "${block.scenarioObjection}"`;
+      }
+
+      if (!text) return;
+
+      dave.recordTranscript('dave', text);
+      try {
+        await voice.playTTS(text);
+      } catch {
+        // TTS failed — continue in visual
+      }
+
+      // Auto-advance narration blocks
+      if (block.type === 'mental_model' || block.type === 'ki_intro') {
+        // Small pause then advance
+        await new Promise(r => setTimeout(r, 1500));
+        advanceBlock();
+      }
+    };
+
+    narrateBlock();
+  }, [currentBlockIndex, deliveryMode, sessionState]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleMode = useCallback(() => {
+    setDeliveryMode(prev => prev === 'audio' ? 'visual' : 'audio');
+    toast.info(deliveryMode === 'audio' ? 'Switched to visual mode' : 'Switched to audio mode');
+  }, [deliveryMode]);
 
   // Loading state
   if (sessionState === 'generating') {
@@ -168,15 +275,39 @@ export default function SkillBuilderSession() {
   return (
     <Layout>
       <div className={cn('px-4 pt-4 space-y-4', SHELL.main.bottomPad)}>
+        {/* Signal banner for audio mode */}
+        {deliveryMode === 'audio' && (
+          <DaveSignalBanner
+            message={dave.signalMessage}
+            isOffline={dave.isOffline}
+            pendingOpsCount={dave.pendingOpsCount}
+          />
+        )}
+
         {/* Header */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-foreground">
               Skill Builder — {track.skillLabel}
             </p>
-            <Badge variant="outline" className="text-[10px]">
-              Level {track.currentLevel}: {track.levelName}
-            </Badge>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={toggleMode}
+                title={deliveryMode === 'audio' ? 'Switch to visual' : 'Switch to audio'}
+              >
+                {deliveryMode === 'audio' ? (
+                  <Volume2 className="h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <VolumeX className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+              </Button>
+              <Badge variant="outline" className="text-[10px]">
+                Level {track.currentLevel}: {track.levelName}
+              </Badge>
+            </div>
           </div>
           {/* Progress bar */}
           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -206,8 +337,7 @@ export default function SkillBuilderSession() {
                   Reps completed: {repScores.length}
                 </p>
               </div>
-             )}
-            {/* Level progress feedback */}
+            )}
             {track?.skill && (() => {
               const lvl = skillLevels?.find(l => l.skill === track.skill);
               return lvl ? <LevelProgressFeedbackCard current={lvl} /> : null;

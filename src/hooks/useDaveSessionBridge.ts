@@ -29,6 +29,8 @@ import {
   type VoiceSessionBuffer,
 } from '@/lib/daveSessionBuffer';
 import { PrefetchCache } from '@/lib/daveSessionPrefetch';
+import { makeOpKey, runIdempotent } from '@/lib/daveIdempotency';
+import { monitorLifecycle, getResumeMessage } from '@/lib/daveLifecycleRecovery';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('useDaveSessionBridge');
@@ -70,6 +72,16 @@ export interface UseDaveSessionBridge {
 
   // ── Prefetch ────────────────────────────────────────
   prefetchCache: PrefetchCache;
+
+  // ── Idempotent Operations ──────────────────────────
+  /** Queue an idempotent operation (deduplicated by opKey) */
+  queueIdempotent: (opKey: string, execute: () => Promise<unknown>, label: string) => void;
+
+  // ── Lifecycle ──────────────────────────────────────
+  /** Whether the app was recently backgrounded and resumed */
+  wasBackgrounded: boolean;
+  /** Resume message from Dave if app was backgrounded */
+  resumeMessage: string | null;
 }
 
 export function useDaveSessionBridge(config: DaveSessionBridgeConfig): UseDaveSessionBridge {
@@ -82,10 +94,13 @@ export function useDaveSessionBridge(config: DaveSessionBridgeConfig): UseDaveSe
   });
   const [signalMessage, setSignalMessage] = useState<string | null>(null);
   const [bufferState, setBufferState] = useState<VoiceSessionBuffer | null>(null);
+  const [wasBackgrounded, setWasBackgrounded] = useState(false);
+  const [resumeMessage, setResumeMessage] = useState<string | null>(null);
 
   const opQueue = useRef(new OperationQueue());
   const prefetchCache = useRef(new PrefetchCache());
   const msgTimer = useRef<ReturnType<typeof setTimeout>>();
+  const resumeTimer = useRef<ReturnType<typeof setTimeout>>();
 
   // ── Initialize buffer on mount ──────────────────────
   useEffect(() => {
@@ -130,6 +145,26 @@ export function useDaveSessionBridge(config: DaveSessionBridgeConfig): UseDaveSe
     };
   }, []);
 
+  // ── Lifecycle monitoring (backgrounding) ────────────
+  useEffect(() => {
+    const cleanup = monitorLifecycle((lifecycle) => {
+      if (lifecycle.isVisible && lifecycle.hiddenDurationMs > 3000) {
+        setWasBackgrounded(true);
+        const msg = getResumeMessage(lifecycle.hiddenDurationMs);
+        if (msg) setResumeMessage(msg);
+        resumeTimer.current = setTimeout(() => {
+          setWasBackgrounded(false);
+          setResumeMessage(null);
+        }, 8000);
+      }
+    });
+
+    return () => {
+      cleanup();
+      if (resumeTimer.current) clearTimeout(resumeTimer.current);
+    };
+  }, []);
+
   // ── Queue Operations ────────────────────────────────
   const queueForReconnect = useCallback((execute: () => Promise<unknown>, label: string) => {
     opQueue.current.enqueue('score', execute, label);
@@ -137,6 +172,11 @@ export function useDaveSessionBridge(config: DaveSessionBridgeConfig): UseDaveSe
 
   const replayQueue = useCallback(() => {
     return opQueue.current.processAll();
+  }, []);
+
+  // ── Idempotent Queue ────────────────────────────────
+  const queueIdempotent = useCallback((opKey: string, execute: () => Promise<unknown>, label: string) => {
+    opQueue.current.enqueue('score', () => runIdempotent(opKey, execute), label);
   }, []);
 
   // ── Buffer Operations ───────────────────────────────
@@ -192,5 +232,8 @@ export function useDaveSessionBridge(config: DaveSessionBridgeConfig): UseDaveSe
     hasResumableSession,
     clearBuffer,
     prefetchCache: prefetchCache.current,
+    queueIdempotent,
+    wasBackgrounded,
+    resumeMessage,
   };
 }
