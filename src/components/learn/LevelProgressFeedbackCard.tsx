@@ -1,12 +1,13 @@
 /**
  * LevelProgressFeedbackCard — Post-session progress feedback.
  * Shows how much progress was gained toward the next tier,
- * plus which sub-skills improved or are blocking.
+ * plus which dimensions/sub-skills improved or are blocking.
  */
 
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 import { SKILL_LABELS } from '@/lib/dojo/scenarios';
-import { TrendingUp, Zap } from 'lucide-react';
+import { DIMENSION_LABELS } from '@/lib/learning/learnScoringSchema';
+import { TrendingUp, Zap, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface LevelProgressFeedbackCardProps {
@@ -20,6 +21,11 @@ interface LevelProgressFeedbackCardProps {
     improved?: string[];
     stillBlocking?: string[];
   };
+  /** Dimension-level results from structured scoring */
+  dimensionResults?: {
+    improved?: string[];
+    weak?: string[];
+  };
 }
 
 export function LevelProgressFeedbackCard({
@@ -27,6 +33,7 @@ export function LevelProgressFeedbackCard({
   previousProgress,
   improvedMetrics,
   subSkillInsights,
+  dimensionResults,
 }: LevelProgressFeedbackCardProps) {
   const delta = previousProgress != null
     ? current.progressWithinTier - previousProgress
@@ -36,6 +43,8 @@ export function LevelProgressFeedbackCard({
   const isMaxTier = !current.nextTier;
 
   if (isMaxTier) return null;
+
+  const getDimensionLabel = (key: string) => DIMENSION_LABELS[key] || key;
 
   return (
     <div className="rounded-lg border border-border bg-card p-3 space-y-2">
@@ -53,8 +62,48 @@ export function LevelProgressFeedbackCard({
         </p>
       )}
 
-      {/* What improved */}
-      {improvedMetrics && improvedMetrics.length > 0 && (
+      {/* Dimension-level improvements */}
+      {dimensionResults?.improved && dimensionResults.improved.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[11px] font-medium text-foreground flex items-center gap-1">
+            <ArrowUpRight className="h-3 w-3 text-primary" />
+            Improved this rep:
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {dimensionResults.improved.map((d) => (
+              <span
+                key={d}
+                className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/5 border border-primary/10 text-primary font-medium"
+              >
+                {getDimensionLabel(d)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Dimension-level weaknesses */}
+      {dimensionResults?.weak && dimensionResults.weak.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[11px] font-medium text-foreground flex items-center gap-1">
+            <ArrowDownRight className="h-3 w-3 text-destructive" />
+            Still needs work:
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {dimensionResults.weak.map((d) => (
+              <span
+                key={d}
+                className="text-[10px] px-1.5 py-0.5 rounded-full bg-destructive/5 border border-destructive/10 text-destructive font-medium"
+              >
+                {getDimensionLabel(d)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Legacy: What improved (kept for backward compat) */}
+      {!dimensionResults && improvedMetrics && improvedMetrics.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {improvedMetrics.map((m) => (
             <span

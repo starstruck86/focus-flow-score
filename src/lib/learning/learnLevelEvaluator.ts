@@ -61,12 +61,16 @@ export interface UserSkillLevel {
 
 // ── Tier Thresholds ───────────────────────────────────────────────
 
-const TIER_THRESHOLDS: Record<number, TierThreshold> = {
+/**
+ * minDimensionAvg: average of all dimension scores (0–10) required.
+ * This ensures sub-skill competency, not just aggregate performance.
+ */
+const TIER_THRESHOLDS: Record<number, TierThreshold & { minDimensionAvg?: number }> = {
   2: { consistency: 35, firstAttemptStrength: 35, pressureScore: null, minReps: 4 },
-  3: { consistency: 48, firstAttemptStrength: 48, pressureScore: 40, minReps: 10 },
-  4: { consistency: 62, firstAttemptStrength: 60, pressureScore: 55, minReps: 20 },
-  5: { consistency: 75, firstAttemptStrength: 72, pressureScore: 65, minReps: 35 },
-  6: { consistency: 85, firstAttemptStrength: 82, pressureScore: 75, minReps: 55 },
+  3: { consistency: 48, firstAttemptStrength: 48, pressureScore: 40, minReps: 10, minDimensionAvg: 4.5 },
+  4: { consistency: 62, firstAttemptStrength: 60, pressureScore: 55, minReps: 20, minDimensionAvg: 5.5 },
+  5: { consistency: 75, firstAttemptStrength: 72, pressureScore: 65, minReps: 35, minDimensionAvg: 6.5 },
+  6: { consistency: 85, firstAttemptStrength: 82, pressureScore: 75, minReps: 55, minDimensionAvg: 7.5 },
 };
 
 // ── Core Evaluator ────────────────────────────────────────────────
