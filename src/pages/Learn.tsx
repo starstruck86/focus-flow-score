@@ -32,7 +32,9 @@ import { SkillBuilderEntryCard } from '@/components/learn/SkillBuilderEntryCard'
 import { SkillLevelsPanel } from '@/components/learn/SkillLevelsPanel';
 import { SkillTierUpModal } from '@/components/learn/SkillTierUpModal';
 import { SkillProgressTimeline } from '@/components/learn/SkillProgressTimeline';
+import { SubSkillProgressPanel } from '@/components/learn/SubSkillProgressPanel';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
+import { useSubSkillProgress } from '@/hooks/useSubSkillProgress';
 import { isTierUpDismissed } from '@/lib/learning/levelEventStore';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 
