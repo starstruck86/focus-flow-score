@@ -17,6 +17,8 @@ import { buildCapabilityProfiles } from '@/lib/dojo/v4/capabilityModel';
 import type { KICatalogEntry } from '@/lib/dojo/v3/programmingEngine';
 import { runSkillBuilderCoverageAudit } from './skillBuilderCoverageAudit';
 import { getSkillDepthProfile, getPatternCoverage } from './skillBuilderHardening';
+import { evaluateSkillLevel, type UserSkillLevel } from './learnLevelEvaluator';
+import { getSkillLevel as getSkillLevelDef, getCumulativePatterns } from './learnSkillLevels';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -68,6 +70,8 @@ export interface SkillTrack {
   blocks: SkillBlock[];
   kiIdsUsed: string[];
   focusPatternsUsed: string[];
+  /** Level evaluation details for UI display */
+  levelEvaluation?: UserSkillLevel;
 }
 
 export interface GenerateSkillTrackInput {
@@ -85,29 +89,35 @@ function getPatternCount(duration: number, shouldDegrade: boolean = false): numb
   return shouldDegrade ? 3 : 5;
 }
 
-// ── Determine User Level ──────────────────────────────────────────
+// ── Determine User Level (via Skill Level Evaluator) ──────────────
 
-function determineLevel(
+async function determineLevelFromEvaluator(
+  userId: string,
   skill: SkillFocus,
-  firstAttemptStrength: number,
-  consistency: number,
-  pressureScore: number | null,
-): number {
-  const curriculum = SKILL_CURRICULA[skill];
-  const maxLevel = curriculum.levels.length;
-
-  // Strong performer → highest level
-  if (firstAttemptStrength >= 75 && consistency >= 70) {
-    return maxLevel;
+  capabilities: Awaited<ReturnType<typeof buildCapabilityProfiles>>,
+): Promise<UserSkillLevel> {
+  const cap = capabilities.find(c => c.skill === skill);
+  if (!cap) {
+    return {
+      skill,
+      currentLevel: 1,
+      currentLevelName: getSkillLevelDef(skill, 1)?.name ?? 'Level 1',
+      nextLevel: getSkillLevelDef(skill, 2),
+      gaps: [],
+      progressToNext: 0,
+    };
   }
 
-  // Building → mid level
-  if (firstAttemptStrength >= 55 || consistency >= 55) {
-    return Math.min(2, maxLevel);
-  }
+  // Fetch rep count for this skill
+  const { supabase } = await import('@/integrations/supabase/client');
+  const { count } = await supabase
+    .from('dojo_sessions')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('skill_focus', skill)
+    .eq('status', 'completed');
 
-  // Everyone else starts at level 1
-  return 1;
+  return evaluateSkillLevel(cap, count ?? 0);
 }
 
 // ── Main Generator ────────────────────────────────────────────────
@@ -124,13 +134,9 @@ export async function generateSkillTrack(
     runSkillBuilderCoverageAudit(userId).catch(() => null),
   ]);
 
-  // Determine user level from capability data
-  const cap = capabilities.find(c => c.skill === skill);
-  const firstAttemptStrength = cap?.firstAttemptStrength ?? 0;
-  const consistency = cap?.consistency ?? 0;
-  const pressureScore = cap?.pressureScore ?? null;
-
-  const currentLevel = determineLevel(skill, firstAttemptStrength, consistency, pressureScore);
+  // Determine user level from the evaluator (performance-based)
+  const levelEval = await determineLevelFromEvaluator(userId, skill, capabilities);
+  const currentLevel = Math.min(levelEval.currentLevel, SKILL_CURRICULA[skill].levels.length);
   const curriculum = SKILL_CURRICULA[skill];
   const levelDef = getCurriculumLevel(skill, currentLevel)!;
 
@@ -228,6 +234,7 @@ export async function generateSkillTrack(
     blocks,
     kiIdsUsed,
     focusPatternsUsed,
+    levelEvaluation: levelEval,
   };
 }
 
