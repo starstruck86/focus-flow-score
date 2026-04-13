@@ -43,6 +43,8 @@ export interface UserTrainingContext {
   weakestScore: number | null;
   /** Whether there's an active skill builder session */
   hasActiveSkillBuilder: boolean;
+  /** Active closed-loop coaching session */
+  activeLoop: ClosedLoopSession | null;
 }
 
 // ── Intent Parsing ─────────────────────────────────────────────────
