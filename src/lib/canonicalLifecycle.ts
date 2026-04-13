@@ -335,6 +335,10 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
   };
 
   for (const r of resources as any[]) {
+    // Inject content prefix for placeholder detection (deriveCanonicalStage / deriveBlockedReason use r.content)
+    const contentPrefix = contentPrefixMap.get(r.id) ?? '';
+    (r as any).content = contentPrefix;
+
     const ki = kiMap.get(r.id) ?? { total: 0, active: 0, activeWithContexts: 0 };
     const stage = deriveCanonicalStage(r, ki);
     const blocked = deriveBlockedReason(r, ki);
@@ -374,11 +378,10 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
     }
 
     // Failure-class observability
-    const contentStr = (r as any).content ?? '';
-    const rType = (r as any).resource_type ?? '';
+    const rType = r.resource_type ?? '';
     const isTranscriptType = ['transcript', 'podcast', 'audio'].includes(rType);
-    const hasRealContent = !isPlaceholderContent(contentStr) && (r.content_length ?? 0) >= MIN_CONTENT_LENGTH;
-    const isPlaceholder = isPlaceholderContent(contentStr) && contentStr.length > 0;
+    const hasRealContent = !isPlaceholderContent(contentPrefix) && (r.content_length ?? 0) >= MIN_CONTENT_LENGTH;
+    const isPlaceholder = isPlaceholderContent(contentPrefix) && contentPrefix.length > 0;
 
     if (isTranscriptType && hasRealContent && ki.total === 0) {
       summary.failure_classes.transcript_extraction_not_triggered++;
