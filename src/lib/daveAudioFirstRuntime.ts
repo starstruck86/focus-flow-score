@@ -9,11 +9,25 @@
  * 5. No scenario content is silently skipped.
  * 6. Retry loops cannot skip instruction.
  *
- * BARGE-IN RULES:
- * - Protected phases (intro, objection, instruction) ignore user speech.
- * - Interruptible phases (context, breakdown, feedback) pause on barge-in.
- * - On barge-in: Dave stops → parses command → acts → resumes or advances.
- * - "repeat" replays the CURRENT checkpoint segment from the beginning.
+ * BARGE-IN IMPLEMENTATION (v1 — post-segment):
+ * Current implementation is POST-SEGMENT interruption detection, NOT true
+ * live mid-playback barge-in. After each interruptible segment finishes
+ * playing, a brief (~1.5s) listen window opens to detect voice commands.
+ *
+ * True real-time barge-in (stopping Dave mid-sentence) would require:
+ * - Always-on VAD running in parallel with TTS playback
+ * - Simultaneous audio output + mic monitoring (Web Audio API duplex)
+ * - This is a future upgrade tracked separately.
+ *
+ * PHASE POLICIES:
+ * - 'protected': No post-segment listen window. Dave plays through.
+ *   Used for: intro, instruction cues, application prompts.
+ * - 'interruptible': Post-segment listen window enabled.
+ *   Used for: context, breakdown, feedback, recap — longer teaching segments.
+ *
+ * CHECKPOINT REPLAY:
+ * - "repeat" replays the CURRENT (most recently spoken) checkpoint.
+ * - Targeted commands ("repeat objection") replay by role name.
  *
  * Both Dojo and Learn sessions use this runtime.
  */
@@ -54,9 +68,34 @@ const INTERRUPTION_PATTERNS: [InterruptionCommand, RegExp][] = [
 
 export function parseInterruption(transcript: string): InterruptionCommand {
   const trimmed = transcript.trim();
-  if (trimmed.split(/\s+/).length > 8) return null;
+  if (trimmed.split(/\s+/).length > 12) return null;
   for (const [cmd, pattern] of INTERRUPTION_PATTERNS) {
     if (pattern.test(trimmed)) return cmd;
+  }
+  return null;
+}
+
+// ── Targeted Replay Parsing ────────────────────────────────────────
+
+/**
+ * Parse targeted replay commands like "repeat objection", "repeat scenario",
+ * "repeat rubric", "repeat example". Returns the checkpoint role to replay,
+ * or null for a generic "repeat" (replay current).
+ */
+const TARGETED_REPLAY_PATTERNS: [string, RegExp][] = [
+  ['context', /\brepeat\s+(the\s+)?(scenario|context|situation)\b/i],
+  ['objection', /\brepeat\s+(the\s+)?(objection|what\s+(the|they)\s+said)\b/i],
+  ['what_good_sounds_like', /\brepeat\s+(the\s+)?(rubric|criteria|what\s+good\s+(sounds|looks)\s+like|expectations)\b/i],
+  ['example_response', /\brepeat\s+(the\s+)?(example|model\s+answer|sample)\b/i],
+  ['concept', /\brepeat\s+(the\s+)?(concept|lesson|teaching)\b/i],
+  ['instruction', /\brepeat\s+(the\s+)?(instruction|prompt|question)\b/i],
+  ['feedback', /\brepeat\s+(the\s+)?(feedback|coaching|what\s+you\s+said)\b/i],
+];
+
+export function parseTargetedReplay(transcript: string): string | null {
+  const trimmed = transcript.trim();
+  for (const [role, pattern] of TARGETED_REPLAY_PATTERNS) {
+    if (pattern.test(trimmed)) return role;
   }
   return null;
 }
