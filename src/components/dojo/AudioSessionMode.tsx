@@ -158,6 +158,17 @@ export default function AudioSessionMode({
     }
   }, [phase]);
 
+  // Prefetch scenario content for driving resilience
+  useEffect(() => {
+    const prefetched = prefetchDojoScenario(scenario);
+    dave.prefetchCache.add(prefetched);
+  }, [scenario.title]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear buffer on complete
+  useEffect(() => {
+    if (phase === 'complete') dave.clearBuffer();
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Auto-start: Dave introduces scenario (skip if resuming mid-session)
   const hasStartedRef = useRef(false);
   useEffect(() => {
@@ -664,6 +675,12 @@ export default function AudioSessionMode({
 
   return (
     <div className="space-y-4">
+      {/* Signal loss/recovery banner for driving mode */}
+      <DaveSignalBanner
+        message={dave.signalMessage}
+        isOffline={dave.isOffline}
+        pendingOpsCount={dave.pendingOpsCount}
+      />
       {/* Recovery banner */}
       <RecoveryBanner
         recovery={recovery}
