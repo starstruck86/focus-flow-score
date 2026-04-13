@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { supabase } from '@/integrations/supabase/client';
 import { emitSaveStatus } from '@/components/SaveIndicator';
 import {
@@ -55,7 +54,7 @@ import {
 } from '@/lib/dojo/audioSessionFlow';
 import type { Json } from '@/integrations/supabase/types';
 import { completeAssignment } from '@/lib/dojo/v3/assignmentManager';
-import { useDaveSessionBridge } from '@/hooks/useDaveSessionBridge';
+import { useDaveVoiceController } from '@/hooks/useDaveVoiceController';
 import { prefetchDojoScenario } from '@/lib/daveSessionPrefetch';
 import DaveSignalBanner from '@/components/DaveSignalBanner';
 
@@ -119,8 +118,7 @@ export default function AudioSessionMode({
   const clientSessionId = useRef(crypto.randomUUID()).current;
   const recoveryRef = useRef<RecoveryController | null>(null);
 
-  const voice = useVoiceMode();
-  const dave = useDaveSessionBridge({
+  const dave = useDaveVoiceController({
     surface: 'dojo',
     sessionKey: `dojo-${scenario.title}`,
     mode: 'audio',
