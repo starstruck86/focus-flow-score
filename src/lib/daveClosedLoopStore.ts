@@ -226,6 +226,11 @@ export function buildProgressSummary(session: ClosedLoopSession): ClosedLoopProg
   const improved = attempts.length > 1 && (OUTCOME_RANK[latestOutcome] ?? 0) > (OUTCOME_RANK[firstOutcome] ?? 0);
   const mastered = session.status === 'completed' && (latestOutcome === 'strong' || latestOutcome === 'applied');
 
+  // Use DB flags when available (they're cumulative), fall back to current nextStep
+  const row = session as any;
+  const routedToReview = row.routedToReview === true || session.nextStep === 'route_to_learn_review';
+  const routedToSkillBuilder = row.routedToSkillBuilder === true || session.nextStep === 'route_to_skill_builder';
+
   return {
     skill: session.skill,
     concept: session.taughtConcept,
@@ -234,8 +239,8 @@ export function buildProgressSummary(session: ClosedLoopSession): ClosedLoopProg
     latestOutcome,
     improved,
     mastered,
-    routedToReview: session.nextStep === 'route_to_learn_review',
-    routedToSkillBuilder: session.nextStep === 'route_to_skill_builder',
+    routedToReview,
+    routedToSkillBuilder,
   };
 }
 
