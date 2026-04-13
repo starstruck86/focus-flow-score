@@ -6761,6 +6761,13 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_resource_content_prefixes: {
+        Args: { p_user_id: string }
+        Returns: {
+          content_prefix: string
+          id: string
+        }[]
+      }
       is_approved_user: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
