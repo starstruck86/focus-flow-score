@@ -10,6 +10,9 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { loadVoiceSessionBuffer, type VoiceSessionBuffer } from '@/lib/daveSessionBuffer';
+import { loadActiveLoop, type ClosedLoopProgressSummary, buildProgressSummary } from '@/lib/daveClosedLoopStore';
+import { buildLoopResumeInfo, shouldPrioritizeLoop } from '@/lib/daveClosedLoopResume';
+import type { ClosedLoopSession } from '@/lib/daveClosedLoopEngine';
 import type { VoiceSurface } from '@/lib/daveVoiceRuntime';
 import { createLogger } from '@/lib/logger';
 
