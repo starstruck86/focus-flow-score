@@ -256,10 +256,19 @@ async function scoreResponse(
   } catch (err) {
     logger.error('Scoring failed', { error: err });
     return {
-      score: null,
+      score: 0,
       feedback: 'Scoring temporarily unavailable.',
-      topMistake: null,
-      improvedVersion: null,
+      topMistake: '',
+      improvedVersion: '',
+      worldClassResponse: '',
+      whyItWorks: [],
+      moveSequence: [],
+      patternTags: [],
+      focusPattern: '',
+      focusReason: '',
+      practiceCue: '',
+      teachingNote: '',
+      deltaNote: '',
     };
   }
 }
