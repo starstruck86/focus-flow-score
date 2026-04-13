@@ -117,8 +117,11 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
 
   // Clear on completion
   useEffect(() => {
-    if (phase === 'complete') clearLearnState();
-  }, [phase]);
+    if (phase === 'complete') {
+      clearLearnState();
+      dave.clearBuffer();
+    }
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
   // Auto-play current section (or resume from interrupted state)
   const hasStartedRef = useRef(false);
   useEffect(() => {
