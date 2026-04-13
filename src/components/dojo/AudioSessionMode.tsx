@@ -942,3 +942,87 @@ export default function AudioSessionMode({
     </div>
   );
 }
+
+// ── Closed-Loop Action Buttons ────────────────────────────────────
+
+import { ArrowRight, BookOpen } from 'lucide-react';
+import type { ClosedLoopVerification, ClosedLoopSession } from '@/lib/daveClosedLoopEngine';
+import type { MicroCoachingResponse } from '@/lib/daveMicroCoaching';
+
+const NEXT_STEP_BUTTON_CONFIG: Record<string, { label: string; variant: 'default' | 'outline' | 'secondary' }> = {
+  retry_same_focus: { label: 'Try Again (Same Focus)', variant: 'outline' },
+  reinforce_with_micro_coaching: { label: 'Coach Me, Then Retry', variant: 'outline' },
+  advance_to_harder_variant: { label: 'Go Harder', variant: 'default' },
+  move_to_next_concept: { label: 'Next Concept', variant: 'default' },
+  route_to_skill_builder: { label: 'Skill Builder', variant: 'secondary' },
+  route_to_learn_review: { label: 'Review Concept', variant: 'secondary' },
+};
+
+function ClosedLoopActions({
+  verification,
+  session,
+  onRetry,
+  onComplete,
+  coaching,
+}: {
+  verification: ClosedLoopVerification;
+  session: ClosedLoopSession;
+  onRetry: () => void;
+  onComplete: () => void;
+  coaching: MicroCoachingResponse | null;
+}) {
+  const navigate = useNavigate();
+  const step = verification.recommendedNextStep;
+  const config = NEXT_STEP_BUTTON_CONFIG[step] || { label: 'Continue', variant: 'default' as const };
+
+  const handleNextStep = useCallback(() => {
+    const orchestration = orchestrateNextStep(session, verification);
+
+    if (!orchestration.nextSurface) {
+      onComplete();
+      return;
+    }
+
+    if (orchestration.nextSurface === 'dojo') {
+      // Retry or escalation — stay in Dojo
+      onRetry();
+      return;
+    }
+
+    if (orchestration.nextSurface === 'learn') {
+      navigate('/learn', { state: orchestration.launchState });
+      return;
+    }
+
+    if (orchestration.nextSurface === 'skill_builder') {
+      navigate('/skill-builder/session', { state: orchestration.launchState });
+      return;
+    }
+
+    onComplete();
+  }, [session, verification, onRetry, onComplete, navigate]);
+
+  return (
+    <div className="flex gap-2">
+      {(step === 'retry_same_focus' || step === 'reinforce_with_micro_coaching') && (
+        <Button
+          variant="outline"
+          className="flex-1 gap-2"
+          onClick={onRetry}
+        >
+          <RotateCcw className="h-4 w-4" />
+          {config.label}
+        </Button>
+      )}
+      <Button
+        variant={config.variant}
+        className="flex-1 gap-2"
+        onClick={handleNextStep}
+      >
+        {step === 'advance_to_harder_variant' && <ArrowRight className="h-4 w-4" />}
+        {(step === 'route_to_learn_review' || step === 'route_to_skill_builder') && <BookOpen className="h-4 w-4" />}
+        {config.label}
+      </Button>
+    </div>
+  );
+}
