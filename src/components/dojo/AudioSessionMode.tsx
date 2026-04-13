@@ -11,7 +11,7 @@
  * - Reuses existing TTS/STT via useDaveVoiceController
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -57,6 +57,11 @@ import { completeAssignment } from '@/lib/dojo/v3/assignmentManager';
 import { useDaveVoiceController } from '@/hooks/useDaveVoiceController';
 import { prefetchDojoScenario } from '@/lib/daveSessionPrefetch';
 import DaveSignalBanner from '@/components/DaveSignalBanner';
+import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
+import { orchestrateNextStep } from '@/lib/daveClosedLoopOrchestrator';
+import { DaveCoachingLoopStatus } from '@/components/DaveCoachingLoopStatus';
+import { parseDimensions } from '@/lib/learning/learnScoringSchema';
+import type { SkillFocus } from '@/lib/dojo/scenarios';
 
 interface AudioSessionModeProps {
   scenario: DojoScenario;

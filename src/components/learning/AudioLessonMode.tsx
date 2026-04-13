@@ -484,6 +484,10 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
       />
       {/* Recovery banner */}
       <RecoveryBanner recovery={recovery} onCancel={cancelRecovery} />
+      {/* Closed-loop coaching status */}
+      {closedLoop.isActive && (
+        <DaveCoachingLoopStatus state={closedLoop} compact />
+      )}
       {/* Progress & status */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
