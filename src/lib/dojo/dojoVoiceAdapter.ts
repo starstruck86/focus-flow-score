@@ -65,12 +65,13 @@ export function formatAudioFeedback(result: DojoScoreResult): SpeechQueueItem[] 
   return items;
 }
 
-// ── Scenario Introduction ──────────────────────────────────────────
+// ── Scenario Introduction (audio-first: full verbal flow) ──────────
 
 export function buildScenarioIntro(scenario: DojoScenario): SpeechQueueItem[] {
   return [
-    { text: `Here's the situation. ${scenario.context}`, pauseAfter: 1000 },
-    { text: `The buyer says: "${scenario.objection}". How do you respond?`, pauseAfter: 0 },
+    { text: `Here's the situation. ${scenario.context}`, pauseAfter: 800 },
+    { text: `The buyer says: "${scenario.objection}"`, pauseAfter: 600 },
+    { text: "How do you respond? Go.", pauseAfter: 0 },
   ];
 }
 
