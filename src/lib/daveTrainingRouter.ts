@@ -10,6 +10,9 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { loadVoiceSessionBuffer, type VoiceSessionBuffer } from '@/lib/daveSessionBuffer';
+import { loadActiveLoop, type ClosedLoopProgressSummary, buildProgressSummary } from '@/lib/daveClosedLoopStore';
+import { buildLoopResumeInfo, shouldPrioritizeLoop } from '@/lib/daveClosedLoopResume';
+import type { ClosedLoopSession } from '@/lib/daveClosedLoopEngine';
 import type { VoiceSurface } from '@/lib/daveVoiceRuntime';
 import { createLogger } from '@/lib/logger';
 
@@ -40,6 +43,8 @@ export interface UserTrainingContext {
   weakestScore: number | null;
   /** Whether there's an active skill builder session */
   hasActiveSkillBuilder: boolean;
+  /** Active closed-loop coaching session */
+  activeLoop: ClosedLoopSession | null;
 }
 
 // ── Intent Parsing ─────────────────────────────────────────────────
@@ -85,15 +90,18 @@ export function parseUserIntent(transcript: string): UserIntent {
 export async function fetchTrainingContext(userId: string): Promise<UserTrainingContext> {
   const pendingBuffer = loadVoiceSessionBuffer();
 
-  // Fetch recent dojo sessions
-  const { data: sessions } = await supabase
-    .from('dojo_sessions')
-    .select('skill_focus, latest_score, completed_at, status')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(20);
+  // Fetch recent dojo sessions + active closed-loop in parallel
+  const [sessionsResult, activeLoop] = await Promise.all([
+    supabase
+      .from('dojo_sessions')
+      .select('skill_focus, latest_score, completed_at, status')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(20),
+    loadActiveLoop(userId),
+  ]);
 
-  const recentSessions = (sessions || []).map(s => ({
+  const recentSessions = (sessionsResult.data || []).map(s => ({
     skill_focus: s.skill_focus,
     latest_score: s.latest_score,
     completed_at: s.completed_at,
@@ -119,7 +127,6 @@ export async function fetchTrainingContext(userId: string): Promise<UserTraining
     }
   }
 
-  // Check for active skill builder sessions (simplified)
   const hasActiveSkillBuilder = pendingBuffer?.surface === 'skill_builder';
 
   return {
@@ -129,6 +136,7 @@ export async function fetchTrainingContext(userId: string): Promise<UserTraining
     weakestSkill,
     weakestScore,
     hasActiveSkillBuilder,
+    activeLoop,
   };
 }
 
@@ -138,6 +146,11 @@ export function routeByIntent(
   intent: UserIntent,
   ctx: UserTrainingContext,
 ): DaveRecommendation {
+  // Active closed-loop coaching takes priority for resume and what_next
+  if ((intent === 'resume' || intent === 'what_next') && shouldPrioritizeLoop(ctx.activeLoop)) {
+    return buildLoopRecommendation(ctx.activeLoop!);
+  }
+
   // Resume always wins if there's a pending session
   if (intent === 'resume' && ctx.pendingBuffer) {
     return buildResumeRecommendation(ctx.pendingBuffer);
@@ -227,6 +240,11 @@ function buildResumeRecommendation(buffer: VoiceSessionBuffer): DaveRecommendati
 }
 
 function buildSmartDefault(ctx: UserTrainingContext): DaveRecommendation {
+  // Active closed-loop coaching outranks generic recommendations
+  if (shouldPrioritizeLoop(ctx.activeLoop)) {
+    return buildLoopRecommendation(ctx.activeLoop!);
+  }
+
   // Resume pending if exists
   if (ctx.pendingBuffer) {
     return buildResumeRecommendation(ctx.pendingBuffer);
@@ -266,6 +284,16 @@ function buildSmartDefault(ctx: UserTrainingContext): DaveRecommendation {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
+
+function buildLoopRecommendation(loop: ClosedLoopSession): DaveRecommendation {
+  const info = buildLoopResumeInfo(loop);
+  return {
+    type: info.nextSurface || 'dojo',
+    reason: `Active coaching loop: ${loop.taughtConcept}`,
+    launchState: info.launchState,
+    spokenIntro: info.spokenIntro,
+  };
+}
 
 function formatSkill(skill: string): string {
   return skill
