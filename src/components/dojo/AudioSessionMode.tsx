@@ -905,14 +905,13 @@ export default function AudioSessionMode({
           concept={closedLoop.session.subSkill || closedLoop.session.taughtConcept}
           skill={closedLoop.session.skill}
           attempts={closedLoop.session.attempts.length}
-          nextConcept={closedLoop.session.nextStep === 'move_to_next_concept' ? undefined : undefined}
           onContinue={() => closedLoop.advanceToNext().then(() => onComplete())}
           onDismiss={onComplete}
         />
       )}
 
       {/* Post-feedback actions */}
-      {isFeedbackPhase(phase) && currentResult && !closedLoop.session?.status?.includes('completed') && (
+      {isFeedbackPhase(phase) && currentResult && closedLoop.session?.status !== 'completed' && (
         <div className="space-y-2 pt-2">
           {/* Closed-loop coaching line */}
           {isClosedLoop && closedLoop.coaching?.spoken && (

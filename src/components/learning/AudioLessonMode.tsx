@@ -401,7 +401,8 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
     const subDef = lessonSubSkill
       ? getSubSkillsForSkill(lessonSkill).find(s => s.name === lessonSubSkill)
       : null;
-    closedLoop.startTeaching(
+    // Await startTeaching to ensure DB record exists before markReadyForTest
+    await closedLoop.startTeaching(
       lessonSkill,
       concept,
       lessonSubSkill,
