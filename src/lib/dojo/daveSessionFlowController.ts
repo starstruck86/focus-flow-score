@@ -133,36 +133,40 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
 
     if (bargeIn) {
       const action = await handleBargeInCommand(bargeIn.command, ctx, bargeIn.transcript);
-      if (action === 'stop') return abort(result);
+      if (bargeIn.command) telemetry.trackInterruption(bargeIn.command);
+      if (action === 'stop') { telemetry.finalize(false); return abort(result); }
       if (action === 'skip') { /* skip to instruction */ }
     }
-    if (ctx.signal?.aborted) return abort(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
-    // ── Instruction (protected) ──────────────────────────────
+    // ── Instruction (protected) — reinforces what to do ──────
     setPhase('instruction');
-    await speakStrict(script.instruction, ctx, { role: 'instruction' });
-    if (ctx.signal?.aborted) return abort(result);
+    await speakStrict(
+      `${script.instruction} Focus on re-anchoring to value. Go.`,
+      ctx, { role: 'instruction' },
+    );
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
     // ── Listen ───────────────────────────────────────────────
     setPhase('listening');
     const listenResult = await listenStrict(ctx, {
-      timeoutMs: 60_000,
       requireResponse: true,
-      retryOnSilence: 1,
     });
+    telemetry.trackFirstResponse();
 
     if (listenResult.command) {
+      if (listenResult.command) telemetry.trackInterruption(listenResult.command);
       const action = await handleBargeInCommand(listenResult.command, ctx, listenResult.transcript);
-      if (action === 'stop') return abort(result);
+      if (action === 'stop') { telemetry.finalize(false); return abort(result); }
       if (action === 'repeat') {
-        // After replay, re-listen
-        const reListen = await listenStrict(ctx, { timeoutMs: 60_000, requireResponse: true });
+        telemetry.trackInterruption('repeat');
+        const reListen = await listenStrict(ctx, { requireResponse: true });
         listenResult.transcript = reListen.transcript;
         listenResult.command = reListen.command;
       }
     }
 
-    if (ctx.signal?.aborted) return abort(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
     result.lastTranscript = listenResult.transcript;
 
     // ── Scoring ──────────────────────────────────────────────
@@ -170,17 +174,18 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     config.onStateChange?.({ isProcessing: true });
     const scoreResult = await config.onScore(listenResult.transcript);
     config.onStateChange?.({ isProcessing: false });
-    if (ctx.signal?.aborted) return abort(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
     result.lastScore = scoreResult;
 
     // ── Feedback (interruptible) ─────────────────────────────
     setPhase('feedback');
     const fbBargeIn = await deliverFeedback(scoreResult, ctx);
     if (fbBargeIn) {
+      if (fbBargeIn.command) telemetry.trackInterruption(fbBargeIn.command);
       const action = await handleBargeInCommand(fbBargeIn.command, ctx, fbBargeIn.transcript);
-      if (action === 'stop') return abort(result);
+      if (action === 'stop') { telemetry.finalize(false); return abort(result); }
     }
-    if (ctx.signal?.aborted) return abort(result);
+    if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
     config.onRepComplete?.(scoreResult, listenResult.transcript, false);
 
@@ -192,31 +197,34 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     while (currentScore < 7 && retryCount < maxRetries && !ctx.signal?.aborted) {
       retryCount++;
       result.retryCount = retryCount;
+      telemetry.trackRetryLoop();
 
       const retryScript = buildRetryScript(latestScore.practiceCue || latestScore.topMistake);
 
       setPhase('retry_prompt');
       const retryBargeIn = await speakWithBargeIn(retryScript.retryPrompt, ctx, { role: 'retry_prompt' });
       if (retryBargeIn) {
+        if (retryBargeIn.command) telemetry.trackInterruption(retryBargeIn.command);
         const action = await handleBargeInCommand(retryBargeIn.command, ctx, retryBargeIn.transcript);
-        if (action === 'stop') return abort(result);
+        if (action === 'stop') { telemetry.finalize(false); return abort(result); }
         if (action === 'skip') break;
       }
-      if (ctx.signal?.aborted) return abort(result);
+      if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
       setPhase('retry_instruction');
-      await speakStrict(retryScript.retryInstruction, ctx, { role: 'retry_instruction' });
-      if (ctx.signal?.aborted) return abort(result);
+      await speakStrict(
+        `${retryScript.retryInstruction} Let's sharpen that. Go.`,
+        ctx, { role: 'retry_instruction' },
+      );
+      if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
       setPhase('retry_listening');
       const retryListen = await listenStrict(ctx, {
-        timeoutMs: 60_000,
         requireResponse: true,
-        retryOnSilence: 1,
       });
 
-      if (retryListen.command === 'stop') return abort(result);
-      if (ctx.signal?.aborted) return abort(result);
+      if (retryListen.command === 'stop') { telemetry.finalize(false); return abort(result); }
+      if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
       result.lastTranscript = retryListen.transcript;
 
@@ -224,12 +232,12 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
       config.onStateChange?.({ isProcessing: true });
       latestScore = await config.onScore(retryListen.transcript);
       config.onStateChange?.({ isProcessing: false });
-      if (ctx.signal?.aborted) return abort(result);
+      if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
       result.lastScore = latestScore;
 
       setPhase('retry_feedback');
       await deliverFeedback(latestScore, ctx);
-      if (ctx.signal?.aborted) return abort(result);
+      if (ctx.signal?.aborted) { telemetry.finalize(false); return abort(result); }
 
       config.onRepComplete?.(latestScore, retryListen.transcript, true);
       currentScore = latestScore.score ?? 0;
@@ -242,6 +250,8 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
     result.recap = recap;
     await speakQueueStrict(buildSessionRecapSpeech(recap), ctx);
 
+    telemetry.setFinalScore(result.lastScore?.score ?? null);
+    telemetry.finalize(true);
     config.onSessionComplete?.(recap);
     return result;
 
