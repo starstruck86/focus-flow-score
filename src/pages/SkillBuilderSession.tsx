@@ -222,7 +222,7 @@ export default function SkillBuilderSession() {
 
       dave.recordTranscript('dave', text);
       try {
-        await voice.playTTS(text);
+        await dave.speak(text);
       } catch {
         // TTS failed — continue in visual
       }
