@@ -572,6 +572,21 @@ export default function AudioSessionMode({
       }
 
       setPhase(isRetry ? 'retry_feedback' : 'feedback');
+
+      // Feed result into closed-loop if active
+      if (isClosedLoop && closedLoop.session) {
+        const dimensions = parseDimensions(
+          (scoreData as any).dimensions ?? null,
+          scenario.skillFocus as SkillFocus,
+        );
+        closedLoop.submitAttempt({
+          sessionId: sessionId || clientSessionId,
+          transcript: text,
+          score: scoreData.score,
+          dimensions: dimensions || undefined,
+        });
+      }
+
       // Try to flush any pending writes
       processPendingWrites();
     } catch (e: unknown) {
