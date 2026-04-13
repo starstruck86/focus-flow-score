@@ -47,6 +47,7 @@ const DojoV6QA = lazy(() => import("./pages/DojoV6QA"));
 const Learn = lazy(() => import("./pages/Learn"));
 const LearnLesson = lazy(() => import("./pages/LearnLesson"));
 const SkillBuilderSession = lazy(() => import("./pages/SkillBuilderSession"));
+const SkillBuilderAudit = lazy(() => import("./pages/SkillBuilderAudit"));
 const ReliabilityQA = lazy(() => import("./pages/ReliabilityQA"));
 const ObservabilityDashboard = lazy(() => import("./pages/ObservabilityDashboard"));
 
