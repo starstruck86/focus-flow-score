@@ -196,10 +196,11 @@ export function incrementWriteRetry(turnId: string): void {
 // ── Resume check ───────────────────────────────────────────────
 
 export interface ResumeInfo {
-  type: 'dojo' | 'learn';
+  type: 'dojo' | 'learn' | 'lane';
   label: string;
   path: string;
   state?: Record<string, any>;
+  lane?: ActiveLane;
 }
 
 export function checkForResumableSessions(): ResumeInfo | null {
