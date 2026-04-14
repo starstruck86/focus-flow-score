@@ -101,9 +101,9 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
               <span className="text-destructive">Fix: </span>{biggestMiss.fix}
             </p>
           </div>
-          {lever?.whyChosen && lever.leverDiffersFromWeakest && (
-            <p className="text-[10px] text-muted-foreground pl-[22px] italic">
-              {lever.whyChosen}
+          {lever?.leverDiffersFromWeakest && lever.whyChosenCoaching && (
+            <p className="text-[10px] text-muted-foreground pl-[22px] italic leading-relaxed">
+              {lever.whyChosenCoaching}
             </p>
           )}
         </div>
