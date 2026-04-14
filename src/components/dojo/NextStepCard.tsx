@@ -26,7 +26,7 @@ const ACTION_VARIANTS: Record<NextAction, 'default' | 'outline' | 'secondary'> =
 
 interface Props {
   score: number;
-  dimensions: Record<string, number> | null | undefined;
+  dimensions: Record<string, unknown> | null | undefined;
   skill: SkillFocus;
   retryCount: number;
   topMistake: string;
