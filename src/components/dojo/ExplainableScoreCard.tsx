@@ -171,14 +171,16 @@ function DimensionRow({
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className="w-full" disabled={!hasDetail}>
-        <div className="space-y-0.5 py-1">
+        <div className={`space-y-0.5 py-1 ${isPrimaryLever ? 'bg-destructive/5 -mx-1 px-1 rounded' : ''}`}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <span className={`text-[11px] flex items-center gap-1 ${isPrimaryLever ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
               {hasDetail && (
                 open ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />
               )}
+              {isPrimaryLever && <Crosshair className="h-3 w-3 shrink-0" />}
               {label}
               <span className="text-[9px] opacity-60">({weight}%)</span>
+              {isPrimaryLever && <Badge variant="outline" className="text-[8px] py-0 px-1 border-destructive/30 text-destructive ml-1">lever</Badge>}
             </span>
             <span className={`text-[11px] font-mono font-bold ${
               isStrong ? 'text-green-500' : isWeak ? 'text-destructive' : 'text-amber-500'
