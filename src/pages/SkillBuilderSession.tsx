@@ -3,6 +3,7 @@
  *
  * Runs a structured skill training session block by block.
  * Supports both visual and audio (Dave) modes with full resilience.
+ * Now supports deep training content via SkillTrainingModule when launched with SkillSession.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -28,6 +29,10 @@ import { useDaveVoiceController } from '@/hooks/useDaveVoiceController';
 import { prefetchSkillBuilderBlocks } from '@/lib/daveSessionPrefetch';
 import DaveSignalBanner from '@/components/DaveSignalBanner';
 import { DaveCoachingFocusChip } from '@/components/DaveCoachingFocusChip';
+import { useResolvedSkillSession } from '@/lib/learning/skillSessionResolver';
+import { getTrainingContent } from '@/lib/learning/skillBuilderContent';
+import { SkillTrainingModule } from '@/components/learn/SkillTrainingModule';
+import { SkillSessionDebugPanel } from '@/components/learn/SkillSessionDebugPanel';
 import { makeOpKey, runIdempotent, clearIdempotencyRecords } from '@/lib/daveIdempotency';
 import { monitorLifecycle, getResumeMessage } from '@/lib/daveLifecycleRecovery';
 
