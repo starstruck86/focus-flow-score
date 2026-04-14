@@ -19,7 +19,7 @@ export function LearnPressureCard({ readiness }: Props) {
   if (!readiness.expected) return null;
 
   const handlePrepare = () => {
-    navigate('/dojo', {
+    navigate('/dojo/session', {
       state: {
         skillSession: {
           skillId: 'objection_handling',
@@ -27,10 +27,17 @@ export function LearnPressureCard({ readiness }: Props) {
           currentTier: 0,
           currentLevel: 0,
           targetTier: 0,
-          scenarioType: 'advanced',
+          scenarioType: 'advanced' as const,
         },
+        skillFocus: 'objection_handling',
         pressurePrep: true,
         fridayReadiness: readiness,
+        pressureLevel: 'high',
+        pressureDimensions: [
+          readiness.pressureExpected ? 'time_pressure' : '',
+          readiness.multiThreadLikely ? 'multi_thread' : '',
+          'executive_scrutiny',
+        ].filter(Boolean),
       },
     });
   };
