@@ -69,6 +69,50 @@ export async function getAdaptiveStudyPath(userId: string): Promise<AdaptiveStud
 
   // ── Mode selection (priority order) ──
 
+  // 0. active_lane — if user is actively drilling a mastery lane, reinforce it
+  const activeLane = loadActiveLane();
+  if (activeLane && activeLane.repsThisSession > 0) {
+    const anchorDef = DAY_ANCHORS[activeLane.anchor as DayAnchor];
+    if (anchorDef) {
+      // Find weakest sub-skill in this lane
+      let weakSubSkill: string | null = null;
+      try {
+        const subSkillProgress = await evaluateAllSubSkills(userId);
+        const laneSubSkills = getSubSkillsForAnchor(activeLane.anchor);
+        const laneSubSkillNames = new Set(laneSubSkills.map(s => s.name));
+        const relevantProgress = subSkillProgress
+          .flatMap(s => s.subSkills)
+          .filter(ss => laneSubSkillNames.has(ss.subSkill))
+          .sort((a, b) => a.score - b.score);
+        weakSubSkill = relevantProgress[0]?.subSkill ?? null;
+      } catch { /* noop */ }
+
+      const subSkillNote = weakSubSkill ? ` Weakest area: ${weakSubSkill}.` : '';
+      const kis = await getRecommendedKIsForFocus(userId, {
+        type: 'anchor',
+        anchor: activeLane.anchor,
+      });
+      const lessons = await getRecommendedLessonsForFocus(userId, {
+        type: 'anchor',
+        anchor: activeLane.anchor,
+      });
+      return {
+        mode: 'active_lane' as StudyMode,
+        headline: `Reinforce your ${anchorDef.shortLabel} lane`,
+        rationale: `You've completed ${activeLane.repsThisSession} reps in ${anchorDef.shortLabel}. Study these to sharpen your next rep.${subSkillNote}`,
+        primaryFocus: {
+          type: 'anchor',
+          label: anchorDef.shortLabel,
+        },
+        recommendedKIs: kis,
+        recommendedLessons: lessons,
+        recommendedAnchor: { key: activeLane.anchor, label: anchorDef.shortLabel },
+        confidence: 'high' as const,
+        weakSubSkill,
+      };
+    }
+  }
+
   // 1. today_rep
   if (todayAssignment && !todayAssignment.completed) {
     const kis = await getRecommendedKIsForFocus(userId, {
