@@ -23,9 +23,10 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
   const normalized = normalizeDimensionScores(dimensions);
   if (!normalized || !rubric) return null;
 
-  // Extract simple scores for point-lift / biggest-miss functions
+  const lever = selectPrimaryCoachingLever(dimensions, skill);
   const biggestMiss = findBiggestMiss(dimensions, skill);
   const pointLifts = computePointLiftSuggestions(dimensions, skill);
+  const primaryKey = lever?.primaryLever;
 
   return (
     <div className="space-y-3">
