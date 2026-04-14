@@ -565,9 +565,11 @@ export default function DojoSession() {
                 </div>
               )}
 
-              <p className="text-sm text-muted-foreground font-medium">Try again:</p>
-              <Textarea ref={textareaRef} value={retryResponse} onChange={(e) => setRetryResponse(e.target.value)} placeholder={scenario.skillFocus === 'executive_response' ? 'Answer the exec — sharper this time...' : 'Give it another shot...'} className="min-h-[120px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRetrySubmit(); }} />
-              <Button className="w-full gap-2" disabled={!retryResponse.trim()} onClick={handleRetrySubmit}><Send className="h-4 w-4" />Submit Retry</Button>
+              <Textarea ref={textareaRef} value={retryResponse} onChange={(e) => setRetryResponse(e.target.value)} placeholder={scenario.skillFocus === 'executive_response' ? 'Answer the exec — sharper this time...' : 'Give it another shot...'} className="min-h-[100px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRetrySubmit(); }} />
+              <Button className="w-full gap-2 h-11" disabled={!retryResponse.trim()} onClick={handleRetrySubmit}>
+                <Send className="h-4 w-4" />
+                {scenario.skillFocus === 'executive_response' ? 'Give Sharper Answer' : 'Submit Retry'}
+              </Button>
             </motion.div>
           )}
         </AnimatePresence>
