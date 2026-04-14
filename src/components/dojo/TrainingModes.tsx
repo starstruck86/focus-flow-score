@@ -7,6 +7,8 @@ import { SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
 import type { SkillStat } from '@/lib/dojo/scenarios';
 import { MockCallSimulator } from '@/components/coach/MockCallSimulator';
 import { ObjectionDrillReps } from '@/components/coach/ObjectionDrillReps';
+import { DAY_ANCHORS } from '@/lib/dojo/v3/dayAnchors';
+import { saveActiveLane } from '@/lib/sessionDurability';
 
 import type { RecommendedMode } from '@/lib/learning/practiceMapping';
 
@@ -42,6 +44,27 @@ export function TrainingModes({ skillStats, onStartAutopilot, highlightMode }: T
     navigate('/dojo/session', { state: { skillFocus: skill, mode: 'review', sessionType: 'review' } });
   };
 
+  const startLane = (anchor: string) => {
+    const def = DAY_ANCHORS[anchor as keyof typeof DAY_ANCHORS];
+    if (!def) return;
+    saveActiveLane({
+      anchor,
+      label: def.shortLabel,
+      skillFocus: def.primarySkills[0] as SkillFocus,
+      startedAt: Date.now(),
+      repsThisSession: 0,
+      recentScores: [],
+    });
+    navigate('/dojo/session', {
+      state: {
+        skillFocus: def.primarySkills[0],
+        laneAnchor: anchor,
+        laneLabel: def.shortLabel,
+        mode: 'custom',
+      },
+    });
+  };
+
   return (
     <div className="space-y-4">
       {/* Mode cards */}
@@ -50,6 +73,13 @@ export function TrainingModes({ skillStats, onStartAutopilot, highlightMode }: T
           Training Modes
         </p>
         <div className="grid grid-cols-3 gap-2">
+          <ModeCard
+            icon={Phone}
+            title="Cold Call"
+            description="Pattern interrupt drills"
+            highlight={highlightMode === 'drill'}
+            onClick={() => startLane('opening_cold_call')}
+          />
           <ModeCard
             icon={Swords}
             title="Drill"
@@ -114,12 +144,29 @@ export function TrainingModes({ skillStats, onStartAutopilot, highlightMode }: T
         </div>
       )}
 
-      {/* Skill picker */}
+      {/* Skill picker — includes Cold Calling as a lane-based entry */}
       <div>
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
           Pick a Skill
         </p>
         <div className="grid grid-cols-1 gap-2">
+          {/* Cold Calling — lane-based entry */}
+          <button
+            onClick={() => startLane('opening_cold_call')}
+            className="flex items-center gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors text-left"
+          >
+            <div className="h-9 w-9 rounded-lg bg-primary/15 flex items-center justify-center">
+              <Phone className="h-4 w-4 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">Cold Calling</p>
+              <p className="text-xs text-muted-foreground">
+                Pattern interrupt · Openers · Meeting close
+              </p>
+            </div>
+            <Play className="h-4 w-4 text-primary" />
+          </button>
+
           {(['objection_handling', 'discovery', 'executive_response', 'deal_control', 'qualification'] as SkillFocus[]).map(skill => {
             const stat = skillStats.find(s => s.skill === skill);
             return (

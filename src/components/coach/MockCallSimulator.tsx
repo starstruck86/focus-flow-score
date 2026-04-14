@@ -26,11 +26,12 @@ import ReactMarkdown from 'react-markdown';
 import { toast } from 'sonner';
 
 // ── CONSTANTS ──────────────────────────────────────────────
-const CALL_TYPES = ['Discovery', 'Demo', 'Pricing', 'Objection Handling', 'Executive Alignment', 'Deal Rescue'];
+const CALL_TYPES = ['Cold Call', 'Discovery', 'Demo', 'Pricing', 'Objection Handling', 'Executive Alignment', 'Deal Rescue'];
 const INDUSTRIES = ['DTC / Ecommerce', 'SaaS', 'Financial Services', 'Healthcare', 'Retail', 'Manufacturing'];
 const PERSONAS = ['CMO', 'Director CRM', 'CFO', 'VP Sales', 'Head of Digital', 'Skeptical CMO', 'Friendly Champion', 'Analytical CFO', 'Distracted VP', 'Technical Evaluator'];
 const SKILL_MODES = [
   { value: 'full-call', label: 'Full Call (no focus)' },
+  { value: 'cold-call-only', label: '📞 Cold Call Only' },
   { value: 'discovery-only', label: '🔍 Discovery Only' },
   { value: 'objection-only', label: '🛡️ Objection Handling Only' },
   { value: 'pricing-only', label: '💰 Pricing Only' },
