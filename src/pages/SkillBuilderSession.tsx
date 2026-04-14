@@ -43,6 +43,7 @@ export default function SkillBuilderSession() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const resolvedSession = useResolvedSkillSession();
   const state = location.state as {
     skill?: SkillFocus;
     duration?: number;
@@ -53,6 +54,11 @@ export default function SkillBuilderSession() {
     subSkill?: string;
     remediationContext?: { concept: string; weakDimensions: string[]; attemptCount: number };
   } | null;
+
+  // Resolve skill from SkillSession or legacy state
+  const effectiveSkill: SkillFocus | undefined = resolvedSession?.session.skillId ?? state?.skill;
+  const trainingContent = effectiveSkill ? getTrainingContent(effectiveSkill) : null;
+  const [showTrainingFirst, setShowTrainingFirst] = useState(true);
 
   const [sessionState, setSessionState] = useState<SessionState>('generating');
   const [track, setTrack] = useState<SkillTrack | null>(null);
