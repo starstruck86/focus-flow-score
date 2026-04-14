@@ -713,7 +713,7 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
     // has curriculum/lesson structure we can parse directly
     if (!landingResult.resolved && landingResult.directParseHtml) {
       debug.push(`[Sequence] No course links found — attempting direct curriculum parse from landing page HTML`);
-      const directLessons = parseThinkificCurriculum(landingResult.directParseHtml, origin);
+      const directLessons = parseThinkificCurriculum(landingResult.directParseHtml, origin, debug);
       if (directLessons.length > 0) {
         debug.push(`[Sequence] Direct parse SUCCESS: ${directLessons.length} lessons from landing page`);
         const titleMatch = landingResult.directParseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
