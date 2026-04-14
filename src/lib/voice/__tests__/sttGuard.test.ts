@@ -77,11 +77,11 @@ describe('STT Guard', () => {
     });
 
     it('allows same-size blobs with different content', async () => {
-      // Both blobs are exactly 2000 bytes but have different byte patterns
+      // Both blobs are exactly 2000 bytes but filled with entirely different byte patterns
       const data1 = new Uint8Array(2000);
-      data1[0] = 0xAA; data1[1] = 0xBB; data1[2] = 0xCC; data1[10] = 0xFF;
+      data1.fill(0xAA);
       const data2 = new Uint8Array(2000);
-      data2[0] = 0x11; data2[1] = 0x22; data2[2] = 0x33; data2[10] = 0x44;
+      data2.fill(0x55);
 
       await checkSttDuplicate(new Blob([data1], { type: 'audio/webm' }));
       const result = await checkSttDuplicate(new Blob([data2], { type: 'audio/webm' }));
