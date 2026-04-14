@@ -2,22 +2,24 @@
  * SkillTrainingModule — Deep structured learning surface.
  *
  * Replaces shallow Skill Builder content with: mental model, failure/better patterns,
- * before/after examples, mechanism explanation, micro drill, and practice launch.
+ * before/after examples, mechanism explanation, micro drill with feedback, and practice launch.
  * 
  * Now supports adaptive emphasis: when topBlocker or focusPattern is available,
  * the micro drill is customized to target the user's actual gap.
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, XCircle, CheckCircle2, Lightbulb, PenLine, Swords, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Brain, XCircle, CheckCircle2, Lightbulb, PenLine, Swords, ChevronRight, AlertTriangle, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 import type { TrainingContent } from '@/lib/learning/skillBuilderContent';
 import type { SkillSession } from '@/lib/learning/skillSession';
 import { skillSessionToParams } from '@/lib/learning/skillSession';
 import { deriveAdaptiveEmphasis } from '@/lib/learning/adaptiveSkillBuilder';
+import { MicroDrillResultCard, type MicroDrillResult } from '@/components/learn/MicroDrillResultCard';
 
 interface Props {
   content: TrainingContent;
@@ -40,6 +42,9 @@ export function SkillTrainingModule({ content, session, onComplete }: Props) {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [drillResponse, setDrillResponse] = useState('');
+  const [drillResult, setDrillResult] = useState<MicroDrillResult | null>(null);
+  const [drillScoring, setDrillScoring] = useState(false);
+  const [drillCoachingCue, setDrillCoachingCue] = useState<string | null>(null);
   const step = STEPS[currentStep];
 
   // Derive adaptive emphasis
@@ -53,12 +58,51 @@ export function SkillTrainingModule({ content, session, onComplete }: Props) {
     }
   };
 
+  const scoreDrill = useCallback(async () => {
+    if (drillResponse.length < 10) return;
+    setDrillScoring(true);
+    setDrillResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('score-micro-drill', {
+        body: {
+          skill: session.skillId,
+          prompt: drillPrompt,
+          instruction: drillInstruction,
+          response: drillResponse,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const result = data as MicroDrillResult;
+      setDrillResult(result);
+      setDrillCoachingCue(result.coachingCue);
+    } catch (err) {
+      console.error('Micro-drill scoring error:', err);
+      // Fallback: let user proceed anyway
+      setDrillResult({
+        score: 5,
+        strength: 'Good effort writing out your response.',
+        miss: 'Could not evaluate — try practicing live.',
+        betterVersion: drillResponse,
+        ready: true,
+        coachingCue: 'Focus on applying the pattern you just learned.',
+      });
+    } finally {
+      setDrillScoring(false);
+    }
+  }, [drillResponse, session.skillId, drillPrompt, drillInstruction]);
+
+  const handleRevise = () => {
+    setDrillResult(null);
+  };
+
   const launchPractice = () => {
     navigate(`/dojo/session?${skillSessionToParams(session)}`, {
       state: {
         skillSession: session,
         skillFocus: session.skillId,
         fromSkillBuilder: true,
+        ...(drillCoachingCue ? { microDrillCue: drillCoachingCue } : {}),
       },
     });
   };
@@ -211,18 +255,48 @@ export function SkillTrainingModule({ content, session, onComplete }: Props) {
             onChange={(e) => setDrillResponse(e.target.value)}
             className="w-full h-24 rounded-md border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"
             placeholder="Write your response…"
+            disabled={drillScoring}
           />
 
-          <Button
-            onClick={advance}
-            className="w-full gap-1.5"
-            disabled={drillResponse.length < 10}
-          >
-            Ready to Practice <Swords className="h-3.5 w-3.5" />
-          </Button>
-          <p className="text-[10px] text-muted-foreground text-center">
-            Write at least a short response before practicing live
-          </p>
+          {/* Result card — shown after scoring */}
+          {(drillResult || drillScoring) && (
+            <MicroDrillResultCard result={drillResult!} isLoading={drillScoring} />
+          )}
+
+          {/* CTAs — change based on state */}
+          {!drillResult && !drillScoring && (
+            <>
+              <Button
+                onClick={scoreDrill}
+                className="w-full gap-1.5"
+                disabled={drillResponse.length < 10}
+              >
+                Check My Answer
+              </Button>
+              <p className="text-[10px] text-muted-foreground text-center">
+                Write at least a short response to get feedback
+              </p>
+            </>
+          )}
+
+          {drillResult && (
+            <div className="flex gap-2">
+              <Button
+                onClick={handleRevise}
+                variant="outline"
+                className="flex-1 gap-1.5"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Revise Answer
+              </Button>
+              <Button
+                onClick={advance}
+                className="flex-1 gap-1.5"
+              >
+                Continue to Practice <Swords className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -232,6 +306,15 @@ export function SkillTrainingModule({ content, session, onComplete }: Props) {
             <Swords className="h-5 w-5 text-primary" />
             <p className="text-base font-bold text-foreground">Practice: {session.skillName}</p>
           </div>
+
+          {/* Coaching cue from micro-drill */}
+          {drillCoachingCue && (
+            <div className="rounded-md bg-primary/5 border border-primary/15 px-3 py-2">
+              <p className="text-xs text-foreground leading-relaxed">
+                <span className="font-semibold text-primary">Your focus:</span> {drillCoachingCue}
+              </p>
+            </div>
+          )}
 
           <p className="text-sm text-muted-foreground leading-relaxed">
             You've reviewed the mental model, studied the pattern shift, and completed a micro drill.
