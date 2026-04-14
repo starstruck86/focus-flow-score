@@ -48,6 +48,7 @@ const EVENT_COLORS: Record<string, string> = {
 export function DaveDebugPanel({ meta, eventHistory = [], extraInfo, onDumpSummary }: Props) {
   const [visible, setVisible] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [tab, setTab] = useState<'connection' | 'voice'>('connection');
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
