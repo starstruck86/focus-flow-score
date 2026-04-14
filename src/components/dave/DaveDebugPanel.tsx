@@ -127,7 +127,7 @@ export function DaveDebugPanel({ meta, eventHistory = [], extraInfo, onDumpSumma
           </div>
 
           {/* Event History */}
-          {eventHistory.length > 0 && (
+          {tab === 'connection' && eventHistory.length > 0 && (
             <div className="mt-2 mx-3 pt-2 border-t border-border/50">
               <div className="text-[10px] text-muted-foreground/50 mb-1">Event History (last {eventHistory.length})</div>
               <div className="max-h-32 overflow-y-auto space-y-px">
