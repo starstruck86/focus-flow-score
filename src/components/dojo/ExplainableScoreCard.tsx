@@ -68,14 +68,19 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
         </CardContent>
       </Card>
 
-      {/* Biggest Miss */}
+      {/* Primary Coaching Lever */}
       {biggestMiss && (
         <div className="rounded-lg border-l-4 border-l-destructive bg-destructive/5 px-3.5 py-3 space-y-1.5">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+            <Crosshair className="h-3.5 w-3.5 text-destructive shrink-0" />
             <p className="text-[10px] font-bold uppercase tracking-wider text-destructive">
-              Biggest Scoring Drag
+              Primary Coaching Lever
             </p>
+            {lever?.leverDiffersFromWeakest && (
+              <Badge variant="outline" className="text-[9px] border-destructive/30 text-destructive">
+                ≠ lowest score
+              </Badge>
+            )}
           </div>
           <p className="text-[13px] font-semibold text-foreground leading-snug pl-[22px]">
             {biggestMiss.dimensionLabel} — {biggestMiss.score}/10
@@ -96,6 +101,11 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
               <span className="text-destructive">Fix: </span>{biggestMiss.fix}
             </p>
           </div>
+          {lever?.whyChosen && lever.leverDiffersFromWeakest && (
+            <p className="text-[10px] text-muted-foreground pl-[22px] italic">
+              {lever.whyChosen}
+            </p>
+          )}
         </div>
       )}
 
