@@ -48,6 +48,8 @@ import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedb
 import { DimensionFeedbackCard } from '@/components/dojo/DimensionFeedbackCard';
 import { ExecVerdictBanner, ExecSideBySide, ExecRetryConstraintBox } from '@/components/dojo/ExecRetryCoaching';
 import { SkillVerdictBanner, SkillSideBySide, SkillRetryConstraintBox } from '@/components/dojo/SkillRetryCoaching';
+import { ExplainableScoreCard } from '@/components/dojo/ExplainableScoreCard';
+import { NextStepCard } from '@/components/dojo/NextStepCard';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
@@ -642,11 +644,12 @@ function FeedbackView({
         </div>
       </div>
 
-      {/* ── Dimension Feedback ── */}
+      {/* ── Explainable Score Breakdown ── */}
       {(currentResult as unknown as Record<string, unknown>).dimensions && (
-        <DimensionFeedbackCard
+        <ExplainableScoreCard
           dimensions={(currentResult as unknown as Record<string, unknown>).dimensions as Record<string, number>}
           skill={skillFocus}
+          totalScore={currentResult.score}
         />
       )}
 
@@ -1120,17 +1123,28 @@ function FeedbackView({
         </Card>
       )}
 
-      {/* Actions */}
-      <div className="flex gap-3 pt-2">
-        {sessionType === 'drill' && (
-          <Button variant="outline" className="flex-1 gap-2" onClick={onRetry}>
-            <RotateCcw className="h-4 w-4" />Try Again
+      {/* ── Next Step Recommendation ── */}
+      {sessionType === 'drill' && (
+        <NextStepCard
+          score={currentResult.score}
+          dimensions={(currentResult as unknown as Record<string, unknown>).dimensions as Record<string, number> | undefined}
+          skill={skillFocus}
+          retryCount={retryCount}
+          topMistake={currentResult.topMistake}
+          previousTopMistake={retryResult && firstAttemptResult ? firstAttemptResult.topMistake : undefined}
+          onRetry={onRetry}
+          onNextRep={onNextRep}
+        />
+      )}
+
+      {/* Actions (non-drill or fallback) */}
+      {sessionType !== 'drill' && (
+        <div className="flex gap-3 pt-2">
+          <Button variant="ghost" className="flex-1 gap-2 text-muted-foreground" onClick={onNextRep}>
+            Back to Dojo<ChevronRight className="h-4 w-4" />
           </Button>
-        )}
-        <Button variant="ghost" className="flex-1 gap-2 text-muted-foreground" onClick={onNextRep}>
-          Back to Dojo<ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
+        </div>
+      )}
     </>
   );
 }
