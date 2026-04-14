@@ -6,6 +6,7 @@ import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
 import { useDojoStats } from '@/lib/dojo/useDojoStreak';
 import { getSmartAutopilotRecommendation } from '@/lib/dojo/smartAutopilot';
+import { getRandomScenario } from '@/lib/dojo/scenarios';
 import { buildPatternMemory, deriveCoachingInsights } from '@/lib/dojo/patternMemory';
 import { buildSkillMemory } from '@/lib/dojo/skillMemory';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,6 +35,10 @@ export default function Dojo() {
   const location = useLocation();
   const { user } = useAuth();
   const { data: stats } = useDojoStats();
+
+  // Resolve SkillSession from Learn → Dojo navigation
+  const stateObj = (location.state ?? {}) as Record<string, unknown>;
+  const skillSession = stateObj.skillSession as import('@/lib/learning/skillSession').SkillSession | undefined;
 
   const lessonContext = (location.state as LessonContext | null)?.fromLesson
     ? (location.state as LessonContext)
@@ -118,6 +123,20 @@ export default function Dojo() {
   }, [stats?.skillBreakdown]);
 
   const startAutopilot = () => {
+    // If launched with SkillSession from Learn, go directly to session with skill context
+    if (skillSession) {
+      const matchingScenario = getRandomScenario(skillSession.skillId);
+      navigate('/dojo/session', {
+        state: {
+          scenario: matchingScenario,
+          skillFocus: skillSession.skillId,
+          skillSession,
+          mode: 'autopilot',
+        },
+      });
+      return;
+    }
+
     const firstSpec = dailyAssignment?.scenarios[0];
     const scenario = firstSpec?.scenario ?? recommendation.scenario;
     const isSimulation = dailyAssignment?.simulationExpected && dailyAssignment?.simulationArcId;

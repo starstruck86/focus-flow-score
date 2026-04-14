@@ -3,6 +3,7 @@
  *
  * Runs a structured skill training session block by block.
  * Supports both visual and audio (Dave) modes with full resilience.
+ * Now supports deep training content via SkillTrainingModule when launched with SkillSession.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -28,6 +29,10 @@ import { useDaveVoiceController } from '@/hooks/useDaveVoiceController';
 import { prefetchSkillBuilderBlocks } from '@/lib/daveSessionPrefetch';
 import DaveSignalBanner from '@/components/DaveSignalBanner';
 import { DaveCoachingFocusChip } from '@/components/DaveCoachingFocusChip';
+import { useResolvedSkillSession } from '@/lib/learning/skillSessionResolver';
+import { getTrainingContent } from '@/lib/learning/skillBuilderContent';
+import { SkillTrainingModule } from '@/components/learn/SkillTrainingModule';
+import { SkillSessionDebugPanel } from '@/components/learn/SkillSessionDebugPanel';
 import { makeOpKey, runIdempotent, clearIdempotencyRecords } from '@/lib/daveIdempotency';
 import { monitorLifecycle, getResumeMessage } from '@/lib/daveLifecycleRecovery';
 
@@ -38,6 +43,7 @@ export default function SkillBuilderSession() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const resolvedSession = useResolvedSkillSession();
   const state = location.state as {
     skill?: SkillFocus;
     duration?: number;
@@ -48,6 +54,11 @@ export default function SkillBuilderSession() {
     subSkill?: string;
     remediationContext?: { concept: string; weakDimensions: string[]; attemptCount: number };
   } | null;
+
+  // Resolve skill from SkillSession or legacy state
+  const effectiveSkill: SkillFocus | undefined = resolvedSession?.session.skillId ?? state?.skill;
+  const trainingContent = effectiveSkill ? getTrainingContent(effectiveSkill) : null;
+  const [showTrainingFirst, setShowTrainingFirst] = useState(true);
 
   const [sessionState, setSessionState] = useState<SessionState>('generating');
   const [track, setTrack] = useState<SkillTrack | null>(null);
@@ -250,6 +261,22 @@ export default function SkillBuilderSession() {
     setDeliveryMode(prev => prev === 'audio' ? 'visual' : 'audio');
     toast.info(deliveryMode === 'audio' ? 'Switched to visual mode' : 'Switched to audio mode');
   }, [deliveryMode]);
+
+  // Show deep training content first when SkillSession is present and content exists
+  if (showTrainingFirst && trainingContent && resolvedSession && !state?.fromClosedLoop) {
+    return (
+      <Layout>
+        <div className={cn('px-4 pt-4 space-y-4', SHELL.main.bottomPad)}>
+          <SkillSessionDebugPanel />
+          <SkillTrainingModule
+            content={trainingContent}
+            session={resolvedSession.session}
+            onComplete={() => setShowTrainingFirst(false)}
+          />
+        </div>
+      </Layout>
+    );
+  }
 
   // Loading state
   if (sessionState === 'generating') {

@@ -28,8 +28,8 @@ export function LearnFocusCard({ level, insight }: Props) {
   };
 
   const handlePractice = () => {
-    navigate(`/dojo?${skillSessionToParams(session)}`, {
-      state: { skillSession: session },
+    navigate(`/dojo/session?${skillSessionToParams(session)}`, {
+      state: { skillSession: session, skillFocus: session.skillId },
     });
   };
 

@@ -102,7 +102,7 @@ export default function DojoSession() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isAudio, toggleMode } = useAudioPreference();
 
-  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean; pressureLevel?: string; pressureDimensions?: string[]; simulationArcId?: string } | null;
+  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; skillSession?: import('@/lib/learning/skillSession').SkillSession; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean; fromSkillBuilder?: boolean; pressureLevel?: string; pressureDimensions?: string[]; simulationArcId?: string } | null;
   const transcriptOrigin = state?.transcriptOrigin ?? null;
   const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
   const assignmentId = state?.assignmentId ?? null;
@@ -111,9 +111,14 @@ export default function DojoSession() {
   const pressureLevel = state?.pressureLevel ?? null;
   const pressureDimensions = state?.pressureDimensions ?? null;
   const simulationArc: SimulationArc | null = state?.simulationArcId ? getArcById(state.simulationArcId) ?? null : null;
+
+  // Resolve skill focus — SkillSession takes priority, then legacy skillFocus, then scenario
+  const resolvedSkillFocus: SkillFocus | undefined = state?.skillSession?.skillId ?? state?.skillFocus;
+
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
-    return getRandomScenario(state?.skillFocus);
+    // Use resolved skill from SkillSession for scenario selection
+    return getRandomScenario(resolvedSkillFocus);
   });
 
   const [phase, setPhase] = useState<Phase>('respond');
