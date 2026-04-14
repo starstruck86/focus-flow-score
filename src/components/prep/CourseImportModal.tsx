@@ -1020,6 +1020,55 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
             </div>
           )}
 
+          {/* Landing page resolution banner */}
+          {landingPageResolved && !courseOptions.length && resolvedFrom && (
+            <div className="flex items-start gap-2 p-2.5 rounded-md bg-primary/10 border border-primary/20 text-sm flex-shrink-0">
+              <Info className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
+              <span className="text-muted-foreground">
+                Landing page detected — automatically resolved to course player URL.
+              </span>
+            </div>
+          )}
+
+          {/* Multi-course selection (when landing page has multiple courses) */}
+          {courseOptions.length > 0 && (
+            <div className="space-y-2 flex-shrink-0">
+              <div className="flex items-start gap-2 p-2.5 rounded-md bg-primary/10 border border-primary/20 text-sm">
+                <Info className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
+                <span className="text-muted-foreground">
+                  Found {courseOptions.length} courses on this page. Select one to import:
+                </span>
+              </div>
+              <div className="space-y-1">
+                {courseOptions.map((option, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleSelectCourse(option)}
+                    disabled={fetching}
+                    className="w-full flex items-center gap-3 p-3 rounded-md border border-border hover:border-primary hover:bg-primary/5 transition-colors text-left"
+                  >
+                    <BookOpen className="h-4 w-4 text-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{option.name}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{option.url}</div>
+                    </div>
+                    <ChevronDown className="h-4 w-4 -rotate-90 text-muted-foreground flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* No course found error for landing pages */}
+          {!fetching && !importing && lessons.length === 0 && courseOptions.length === 0 && discoverMeta && discoverMeta.lessons_discovered === 0 && !authError && (
+            <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-sm flex-shrink-0">
+              <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600" />
+              <span className="text-muted-foreground">
+                We couldn't find the course player. Open the course and paste the URL from inside the lesson view.
+              </span>
+            </div>
+          )}
+
           {lessons.length > 0 && !importing && (
             <>
               <div className="flex items-center justify-between flex-shrink-0">
