@@ -877,6 +877,7 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
     debug,
     ...(landingPageResolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
   };
+}
 
 // ── NAV / JUNK LINK BLOCKLIST ──
 const NAV_TITLE_BLOCKLIST = new Set([
