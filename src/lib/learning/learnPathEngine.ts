@@ -93,10 +93,12 @@ export async function getAdaptiveStudyPath(userId: string): Promise<AdaptiveStud
       const kis = await getRecommendedKIsForFocus(userId, {
         type: 'anchor',
         anchor: activeLane.anchor,
+        subSkillHint: weakSubSkill ?? undefined,
       });
       const lessons = await getRecommendedLessonsForFocus(userId, {
         type: 'anchor',
         anchor: activeLane.anchor,
+        subSkillHint: weakSubSkill ?? undefined,
       });
       return {
         mode: 'active_lane' as StudyMode,
