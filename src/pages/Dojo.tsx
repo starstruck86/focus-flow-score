@@ -6,6 +6,7 @@ import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
 import { useDojoStats } from '@/lib/dojo/useDojoStreak';
 import { getSmartAutopilotRecommendation } from '@/lib/dojo/smartAutopilot';
+import { getRandomScenario } from '@/lib/dojo/scenarios';
 import { buildPatternMemory, deriveCoachingInsights } from '@/lib/dojo/patternMemory';
 import { buildSkillMemory } from '@/lib/dojo/skillMemory';
 import { useAuth } from '@/contexts/AuthContext';
