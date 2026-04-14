@@ -11,11 +11,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { getWeeklyCoachingPlan, getFridayReadiness, getBlockRemediationPlan } from './learnWeeklyEngine';
 import { getPressureBreakdown, getRecentMultiThreadMiss } from './learnAdaptationEngine';
 import { DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
+import { loadActiveLane } from '@/lib/sessionDurability';
+import { getSubSkillsForAnchor } from './learnSubSkillMap';
+import { evaluateAllSubSkills } from './learnSubSkillEvaluator';
 import type { CourseWithModules, LearningProgress } from './types';
 
 // ── Types ──────────────────────────────────────────────────────────
 
 export type StudyMode =
+  | 'active_lane'
   | 'today_rep'
   | 'weak_anchor'
   | 'friday_prep'
