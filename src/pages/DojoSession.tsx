@@ -530,26 +530,31 @@ export default function DojoSession() {
 
           {phase === 'retry' && (
             <motion.div key="retry" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
-              {/* Retry constraint box — all skills */}
-              {currentResult && (
-                scenario.skillFocus === 'executive_response'
-                  ? <ExecRetryConstraintBox result={currentResult} scenarioContext={scenario.context} />
-                  : <SkillRetryConstraintBox result={currentResult} skill={scenario.skillFocus} scenarioContext={scenario.context} />
-              )}
+               {/* Retry constraint box — all skills */}
+               {currentResult && (
+                 scenario.skillFocus === 'executive_response'
+                   ? <ExecRetryConstraintBox result={currentResult} scenarioContext={scenario.context} />
+                   : <SkillRetryConstraintBox result={currentResult} skill={scenario.skillFocus} scenarioContext={scenario.context} />
+               )}
 
-              {/* Remind scenario objection to maintain pressure */}
-              <Card className="border-border/60">
-                <CardContent className="p-3">
-                  <p className="text-xs text-muted-foreground mb-1">The buyer is still waiting:</p>
-                  <p className="text-sm font-medium italic text-foreground">"{scenario.objection}"</p>
-                </CardContent>
-              </Card>
+               {/* Next rep goal — prominent above retry input */}
+               {currentResult?.practiceCue && (
+                 <NextRepGoalBanner practiceCue={currentResult.practiceCue} compact />
+               )}
 
-              <Textarea ref={textareaRef} value={retryResponse} onChange={(e) => setRetryResponse(e.target.value)} placeholder="Answer sharper this time..." className="min-h-[100px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRetrySubmit(); }} />
-              <Button className="w-full gap-2 h-11" disabled={!retryResponse.trim()} onClick={handleRetrySubmit}>
-                <Send className="h-4 w-4" />
-                Give Sharper Answer
-              </Button>
+               {/* Remind scenario objection to maintain pressure */}
+               <Card className="border-border/60">
+                 <CardContent className="p-3">
+                   <p className="text-xs text-muted-foreground mb-1">The buyer is still waiting:</p>
+                   <p className="text-sm font-medium italic text-foreground">"{scenario.objection}"</p>
+                 </CardContent>
+               </Card>
+
+               <Textarea ref={textareaRef} value={retryResponse} onChange={(e) => setRetryResponse(e.target.value)} placeholder="Answer sharper this time..." className="min-h-[100px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRetrySubmit(); }} />
+               <Button className="w-full gap-2 h-11" disabled={!retryResponse.trim()} onClick={handleRetrySubmit}>
+                 <Send className="h-4 w-4" />
+                 Give Sharper Answer
+               </Button>
             </motion.div>
           )}
         </AnimatePresence>
