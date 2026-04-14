@@ -42,6 +42,24 @@ export function createNavigationTools(ctx: ToolContext): ToolMap {
     },
 
     start_drill: () => {
+      // Check for active training context to preserve the learning loop
+      const lastSkill = localStorage.getItem('dave-last-skill');
+      const lastBlocker = localStorage.getItem('dave-last-blocker');
+
+      if (lastSkill) {
+        const skillSession = {
+          skillId: lastSkill,
+          skillName: lastSkill.replace(/_/g, ' '),
+          currentTier: 3,
+          currentLevel: 3,
+          targetTier: 4,
+          topBlocker: lastBlocker || undefined,
+        };
+        ctx.navigate('/dojo/session', { state: { skillSession, skillFocus: lastSkill } });
+        return `Launching drill for ${lastSkill.replace(/_/g, ' ')}${lastBlocker ? ` — targeting ${lastBlocker}` : ''}`;
+      }
+
+      // No context available — fall back to hub
       ctx.navigate('/dojo');
       return 'Opening the Dojo — pick your rep or I\'ll choose one for you.';
     },

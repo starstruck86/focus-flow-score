@@ -45,10 +45,20 @@ export function deriveAdaptiveEmphasis(
 
   // Priority 2: weakest scoring dimension (from focusPattern as proxy)
   if (session.focusPattern) {
+    const patternDrill = getFocusPatternDrill(session.skillId, session.focusPattern);
+    if (patternDrill) {
+      return {
+        drillVariant: 'dimension_specific',
+        customDrillPrompt: patternDrill.prompt,
+        customDrillInstruction: patternDrill.instruction,
+        emphasisNote: `Focused on: ${session.focusPattern.replace(/_/g, ' ')}. This drill targets your weakest dimension.`,
+        adaptationReason: `focusPattern: ${session.focusPattern}`,
+      };
+    }
     return {
       drillVariant: 'dimension_specific',
       emphasisNote: `Focused on: ${session.focusPattern.replace(/_/g, ' ')}. This is where your recent scores are weakest.`,
-      adaptationReason: `focusPattern: ${session.focusPattern}`,
+      adaptationReason: `focusPattern: ${session.focusPattern} (no drill override)`,
     };
   }
 
@@ -145,4 +155,75 @@ function getBlockerDrill(skill: SkillFocus, blocker: string): DrillOverride | nu
   };
 
   return drills[skill]?.[blocker] ?? null;
+}
+
+// ── FocusPattern-specific drill overrides ─────────────────────────
+
+function getFocusPatternDrill(skill: SkillFocus, pattern: string): DrillOverride | null {
+  const drills: Record<string, Record<string, DrillOverride>> = {
+    executive_response: {
+      too_much_setup: {
+        prompt: 'A CEO stops you 5 seconds in: "Skip the context. What\'s the punchline?"',
+        instruction: 'Start with the outcome or number. Zero setup sentences allowed. If your first word isn\'t a metric or result, you\'ve failed.',
+      },
+      brevity: {
+        prompt: 'A CFO says: "You have one sentence. Why should this be in our budget?"',
+        instruction: 'Respond in exactly one sentence. It must contain a number and a business outcome.',
+      },
+      numberLed: {
+        prompt: 'A board member asks: "What\'s the financial case in 10 seconds?"',
+        instruction: 'Your first three words must include a dollar amount or percentage. Build everything from that anchor.',
+      },
+      priorityAnchoring: {
+        prompt: 'The CEO just announced a pivot to retention. She asks: "How do you fit into that?"',
+        instruction: 'Reference her stated priority in your first sentence. Do not introduce any goal she did not name.',
+      },
+    },
+    objection_handling: {
+      isolate_before_answering: {
+        prompt: 'A buyer says: "There are too many reasons this won\'t work." Name each one.',
+        instruction: 'Do NOT answer the objection. Ask exactly one question to isolate which concern is the real blocker.',
+      },
+      composure: {
+        prompt: 'A VP snaps: "This is the third vendor this month. I\'m done."',
+        instruction: 'Pause. Acknowledge without defending. Then ask one question about what the previous vendors got wrong.',
+      },
+      reframing: {
+        prompt: 'Procurement says: "Your competitor is 30% cheaper with the same features."',
+        instruction: 'Do not discuss pricing. Reframe to cost of inaction or risk of choosing the cheaper option.',
+      },
+    },
+    discovery: {
+      painExcavation: {
+        prompt: 'The buyer says: "Everything\'s working okay, we\'re just looking around."',
+        instruction: 'Ask one question that tests whether "okay" means "good" or "we stopped measuring."',
+      },
+      painQuantification: {
+        prompt: 'A Director says: "We lose some customers after first purchase."',
+        instruction: 'Ask a question that converts "some" into a specific revenue number or percentage.',
+      },
+    },
+    deal_control: {
+      nextStepControl: {
+        prompt: 'The buyer says: "Let me think about it and circle back."',
+        instruction: 'Propose a specific next step with a date. State what you\'ll deliver and what they need to prepare.',
+      },
+      riskNaming: {
+        prompt: 'Your champion hasn\'t responded in 10 days after promising a technical review.',
+        instruction: 'Write a message that names the deal risk directly without being passive or accusatory.',
+      },
+    },
+    qualification: {
+      painValidation: {
+        prompt: 'An enthusiastic manager says: "We definitely need better automation."',
+        instruction: 'Ask one question that separates genuine business pain from aspirational interest.',
+      },
+      disqualification: {
+        prompt: 'A junior coordinator with no budget wants a full demo this week.',
+        instruction: 'Respond in a way that tests whether this is worth pursuing or should be disqualified.',
+      },
+    },
+  };
+
+  return drills[skill]?.[pattern] ?? null;
 }
