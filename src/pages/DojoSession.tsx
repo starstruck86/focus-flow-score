@@ -48,6 +48,8 @@ import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedb
 import { DimensionFeedbackCard } from '@/components/dojo/DimensionFeedbackCard';
 import { ExecVerdictBanner, ExecSideBySide, ExecRetryConstraintBox } from '@/components/dojo/ExecRetryCoaching';
 import { SkillVerdictBanner, SkillSideBySide, SkillRetryConstraintBox } from '@/components/dojo/SkillRetryCoaching';
+import { ExplainableScoreCard } from '@/components/dojo/ExplainableScoreCard';
+import { NextStepCard } from '@/components/dojo/NextStepCard';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
