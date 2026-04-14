@@ -366,6 +366,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       if (items.length === 0) {
         if (data.meta?.auth_status === 'auth_failed') {
           toast.error('Login failed — no lessons accessible');
+        } else if (data.parser_failure_reason) {
+          toast.error(data.parser_failure_reason);
         } else {
           toast.error('No lessons found. If this is a landing page, try opening the course and pasting the URL from inside a lesson.');
         }
