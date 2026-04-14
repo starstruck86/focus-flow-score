@@ -29,6 +29,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { completeAssignment } from '@/lib/dojo/v3/assignmentManager';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import {
+  updateLaneAfterRep,
+  loadActiveLane,
+  saveActiveLane,
+  type ActiveLane,
+} from '@/lib/sessionDurability';
 import { motion, AnimatePresence } from 'framer-motion';
 import DojoRoleplay from '@/components/dojo/DojoRoleplay';
 import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview';
