@@ -525,28 +525,26 @@ async function resolveThinkificLandingPage(
   pageUrl: string,
   jar: CookieJar,
   debug: string[],
-): Promise<{ resolved: boolean; courseLinks: CourseLink[]; resolvedUrl?: string }> {
+): Promise<{ resolved: boolean; courseLinks: CourseLink[]; resolvedUrl?: string; directParseHtml?: string }> {
   const parsed = new URL(pageUrl);
 
-  // Only trigger for /pages/ paths on thinkific domains (or custom domains with Thinkific content)
-  const isExplicitPages = /\/pages\//i.test(parsed.pathname);
-  const isThinkificDomain = /thinkific/i.test(parsed.hostname);
-
-  // Also check for root/marketing pages on thinkific domains (no /courses/take/ in path)
+  // Already a course player URL — no resolution needed
   const hasCoursePlayer = /\/courses\/take\//i.test(parsed.pathname);
-
   if (hasCoursePlayer) {
-    // Already a course player URL — no resolution needed
     return { resolved: false, courseLinks: [] };
   }
+
+  const isExplicitPages = /\/pages\//i.test(parsed.pathname);
+  const isThinkificDomain = /thinkific/i.test(parsed.hostname);
 
   if (!isExplicitPages && !isThinkificDomain) {
     return { resolved: false, courseLinks: [] };
   }
 
   debug.push(`[Landing Page] Detected potential landing page: ${pageUrl}`);
+  debug.push(`[Landing Page] Fetching WITH auth cookies (${jar.cookies.size} cookies)...`);
 
-  // Fetch the page
+  // Fetch the page WITH authenticated cookies
   const resp = await fetch(pageUrl, {
     headers: {
       'User-Agent': UA,
@@ -557,7 +555,7 @@ async function resolveThinkificLandingPage(
   });
   jar.addFromHeaders(resp.headers);
   const html = await resp.text();
-  debug.push(`[Landing Page] Fetched: ${resp.status}, ${html.length} chars`);
+  debug.push(`[Landing Page] Fetched: ${resp.status}, ${html.length} chars, final URL: ${resp.url}`);
 
   // Confirm it's Thinkific (check for Thinkific markers in the HTML)
   const isThinkificContent = /thinkific/i.test(html) || /courses\/take\//i.test(html);
@@ -577,7 +575,6 @@ async function resolveThinkificLandingPage(
     const href = m[1];
     const text = m[2].replace(/<[^>]+>/g, '').trim();
     const fullUrl = href.startsWith('http') ? href : `${parsed.origin}${href}`;
-    // Normalize: strip query/hash, take just the course base (up to course slug)
     const courseBase = fullUrl.replace(/[?#].*$/, '').replace(/(\/courses\/take\/[^/]+)\/.*$/, '$1');
     if (seen.has(courseBase)) continue;
     seen.add(courseBase);
@@ -623,9 +620,21 @@ async function resolveThinkificLandingPage(
     }
   }
 
-  debug.push(`[Landing Page] Found ${courseLinks.length} course link(s)`);
+  debug.push(`[Landing Page] Found ${courseLinks.length} /courses/take/ link(s)`);
+
+  // Check for direct curriculum indicators (lesson sidebar, chapter lists, etc.)
+  const hasCurriculumElements = /class="[^"]*(?:chapter-title|lesson-group|course-curriculum|lesson-list|sidebar-lesson)[^"]*"/i.test(html) ||
+    /\/lessons\//i.test(html) ||
+    /<a[^>]*href="[^"]*(?:\/posts\/|\/lessons\/|\/chapters\/)[^"]*"/i.test(html);
+  debug.push(`[Landing Page] Direct curriculum elements detected: ${hasCurriculumElements}`);
 
   if (courseLinks.length === 0) {
+    // No course player links found — return the HTML for direct parsing fallback
+    if (hasCurriculumElements) {
+      debug.push(`[Landing Page] No /courses/take/ links, but curriculum structure exists — enabling direct parse fallback`);
+      return { resolved: false, courseLinks: [], directParseHtml: html };
+    }
+    debug.push(`[Landing Page] No course links or curriculum elements found`);
     return { resolved: false, courseLinks: [] };
   }
 
@@ -651,29 +660,92 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
   const jar = createCookieJar();
   const parsedUrl = new URL(courseUrl);
   const origin = parsedUrl.origin;
-
-  // ── Thinkific landing page resolution ──
-  // Detect /pages/ or marketing pages and resolve to actual course player URLs
-  const landingResult = await resolveThinkificLandingPage(courseUrl, jar, []);
   const debug: string[] = [];
 
-  if (landingResult.resolved && !landingResult.resolvedUrl && landingResult.courseLinks.length > 1) {
-    // Multiple courses found — return options for user selection
-    return {
-      platform: 'thinkific',
-      title: 'Multiple Courses Found',
-      lessons: [],
-      debug: [`[Landing Page] Resolved ${courseUrl} — found ${landingResult.courseLinks.length} courses`],
-      landing_page_resolved: true,
-      resolved_from: courseUrl,
-      course_options: landingResult.courseLinks,
-    };
+  // ── STEP 1: Detect if this looks like a Thinkific/landing page URL ──
+  const isExplicitPages = /\/pages\//i.test(parsedUrl.pathname);
+  const isThinkificDomain = /thinkific/i.test(parsedUrl.hostname);
+  const hasCoursePlayer = /\/courses\/take\//i.test(parsedUrl.pathname);
+  const needsLandingResolution = !hasCoursePlayer && (isExplicitPages || isThinkificDomain);
+
+  debug.push(`[Sequence] URL: ${courseUrl}`);
+  debug.push(`[Sequence] isPages=${isExplicitPages}, isThinkific=${isThinkificDomain}, hasCoursePlayer=${hasCoursePlayer}, needsLandingResolution=${needsLandingResolution}`);
+
+  // ── STEP 2: AUTHENTICATE FIRST (before landing page resolution) ──
+  // Thinkific course-player links may only appear after login/session cookies
+  debug.push(`[Sequence] Step 2: Authenticating BEFORE landing page resolution...`);
+  const { success: loggedIn, debug: loginDebug } = await kajabiLogin(courseUrl, jar, creds);
+  debug.push(...loginDebug);
+  debug.push(`[Sequence] Login ${loggedIn ? 'SUCCEEDED' : 'FAILED'} — cookies: ${jar.cookies.size}`);
+
+  if (!loggedIn) {
+    debug.push('[Sequence] Login failed — will attempt fetches anyway with current cookies');
   }
 
+  // ── STEP 3: Resolve landing page WITH authenticated cookies ──
   let effectiveUrl = courseUrl;
-  if (landingResult.resolved && landingResult.resolvedUrl) {
-    debug.push(`[Landing Page] Resolved ${courseUrl} → ${landingResult.resolvedUrl}`);
-    effectiveUrl = landingResult.resolvedUrl;
+  let landingPageResolved = false;
+
+  if (needsLandingResolution) {
+    debug.push(`[Sequence] Step 3: Resolving landing page WITH auth cookies...`);
+    const landingResult = await resolveThinkificLandingPage(courseUrl, jar, debug);
+
+    if (landingResult.resolved && !landingResult.resolvedUrl && landingResult.courseLinks.length > 1) {
+      // Multiple courses found — return options for user selection
+      return {
+        platform: 'thinkific',
+        title: 'Multiple Courses Found',
+        lessons: [],
+        debug,
+        landing_page_resolved: true,
+        resolved_from: courseUrl,
+        course_options: landingResult.courseLinks,
+      };
+    }
+
+    if (landingResult.resolved && landingResult.resolvedUrl) {
+      debug.push(`[Sequence] Landing page resolved: ${courseUrl} → ${landingResult.resolvedUrl}`);
+      effectiveUrl = landingResult.resolvedUrl;
+      landingPageResolved = true;
+    }
+
+    // FALLBACK: If no /courses/take/ links found, check if the page itself
+    // has curriculum/lesson structure we can parse directly
+    if (!landingResult.resolved && landingResult.directParseHtml) {
+      debug.push(`[Sequence] No course links found — attempting direct curriculum parse from landing page HTML`);
+      const directLessons = parseThinkificCurriculum(landingResult.directParseHtml, origin);
+      if (directLessons.length > 0) {
+        debug.push(`[Sequence] Direct parse SUCCESS: ${directLessons.length} lessons from landing page`);
+        const titleMatch = landingResult.directParseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const title = titleMatch?.[1]?.replace(/<[^>]+>/g, '').replace(/\s*[|–—-]\s*[^|–—-]*$/, '').trim() || 'Untitled Course';
+        return {
+          platform: 'thinkific',
+          title,
+          lessons: directLessons,
+          debug,
+          landing_page_resolved: true,
+          resolved_from: courseUrl,
+        };
+      }
+      // Also try generic parser
+      const genericLessons = parseCurriculum(landingResult.directParseHtml, origin);
+      if (genericLessons.length > 0) {
+        debug.push(`[Sequence] Generic parse SUCCESS: ${genericLessons.length} lessons from landing page`);
+        const titleMatch = landingResult.directParseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const title = titleMatch?.[1]?.replace(/<[^>]+>/g, '').replace(/\s*[|–—-]\s*[^|–—-]*$/, '').trim() || 'Untitled Course';
+        return {
+          platform: 'thinkific',
+          title,
+          lessons: genericLessons,
+          debug,
+          landing_page_resolved: true,
+          resolved_from: courseUrl,
+        };
+      }
+      debug.push(`[Sequence] Direct curriculum parse found 0 lessons — will proceed to fetch effective URL`);
+    }
+  } else {
+    debug.push(`[Sequence] Step 3: Skipped landing page resolution (not needed)`);
   }
 
   // Auto-strip /categories/... suffix to scan the full product page
@@ -681,20 +753,13 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
   if (categoryMatch) {
     effectiveUrl = `${origin}${categoryMatch[1]}`;
   }
-  
-  const { success: loggedIn, debug: loginDebug } = await kajabiLogin(effectiveUrl, jar, creds);
-  debug.push(...loginDebug);
-  
-  if (!loggedIn) {
-    debug.push('Login failed — attempting course page fetch anyway');
-  }
-  
+
   if (effectiveUrl !== courseUrl) {
-    debug.push(`Effective URL: ${effectiveUrl}`);
+    debug.push(`[Sequence] Effective URL: ${effectiveUrl}`);
   }
-  
-  // Fetch the course page with session cookies
-  debug.push(`Fetching course page: ${effectiveUrl}`);
+
+  // ── STEP 4: Fetch the course page with authenticated session cookies ──
+  debug.push(`[Sequence] Step 4: Fetching course page: ${effectiveUrl}`);
   const courseResp = await fetch(effectiveUrl, {
     headers: {
       'User-Agent': UA,
@@ -703,7 +768,7 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
     },
     redirect: 'follow',
   });
-  
+
   jar.addFromHeaders(courseResp.headers);
   const courseHtml = await courseResp.text();
   debug.push(`Course page: ${courseResp.status}, ${courseHtml.length} chars, final URL: ${courseResp.url}`);
@@ -745,7 +810,7 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
         title: courseTitle,
         lessons: thinkificLessons,
         debug,
-        ...(landingResult.resolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
+        ...(landingPageResolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
       };
     }
     debug.push('[Thinkific] No Thinkific-specific lessons found, falling back to generic parser');
@@ -796,7 +861,7 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
     title: courseTitle,
     lessons,
     debug,
-    ...(landingResult.resolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
+    ...(landingPageResolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
   };
 }
 
