@@ -1,6 +1,6 @@
 /**
- * SubSkillProgressPanel — Shows sub-skill cards for all skills.
- * Sorted weakest-first.
+ * SubSkillProgressPanel — Compact grid of sub-skill cards.
+ * Sorted weakest-first, side-by-side on desktop.
  */
 
 import type { SkillSubSkillSummary } from '@/lib/learning/learnSubSkillProgress';
@@ -13,7 +13,6 @@ interface SubSkillProgressPanelProps {
 export function SubSkillProgressPanel({ summaries }: SubSkillProgressPanelProps) {
   if (!summaries || summaries.length === 0) return null;
 
-  // Sort: most blockers first, then lowest avg score
   const sorted = [...summaries].sort((a, b) => {
     if (b.blockersForNextTier.length !== a.blockersForNextTier.length) {
       return b.blockersForNextTier.length - a.blockersForNextTier.length;
@@ -24,13 +23,15 @@ export function SubSkillProgressPanel({ summaries }: SubSkillProgressPanelProps)
   });
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
         Sub-Skill Breakdown
       </p>
-      {sorted.map(summary => (
-        <SubSkillProgressCard key={summary.skill} summary={summary} />
-      ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {sorted.map(summary => (
+          <SubSkillProgressCard key={summary.skill} summary={summary} />
+        ))}
+      </div>
     </div>
   );
 }
