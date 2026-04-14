@@ -341,9 +341,6 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       }
 
       if (data.meta) setDiscoverMeta(data.meta);
-      if (data.thinkific_debug) {
-        console.log('[CourseImport][ThinkificDebug]', data.thinkific_debug);
-      }
 
       // Handle landing page resolution → multiple courses
       if (data.course_options && data.course_options.length > 1) {
