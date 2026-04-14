@@ -87,6 +87,9 @@ export function SkillSessionDebugPanel() {
                   <Row label="Retryable" value={rubric.retryableDimensions.join(', ')} />
                   <Row label="Failures" value={rubric.commonFailures.join(', ')} />
                   <Row label="Level" value={`Dev: ${rubric.levelExpectations.developing.substring(0, 40)}...`} />
+                  <p className="text-[9px] text-muted-foreground mt-1">
+                    Per-dimension trace (reason, evidence, targetFor7, targetFor9) visible in ExplainableScoreCard after scoring.
+                  </p>
                 </Section>
               )}
             </div>
