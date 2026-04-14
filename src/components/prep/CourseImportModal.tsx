@@ -266,6 +266,13 @@ function ExtractionTraceExpander({ trace, metadataOnly }: { trace: ExtractionTra
   );
 }
 
+type CourseOption = {
+  name: string;
+  url: string;
+  modulesHint?: number;
+  lessonsHint?: number;
+};
+
 export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps) {
   const [url, setUrl] = useState('');
   const [fetching, setFetching] = useState(false);
@@ -276,7 +283,6 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0, current: '' });
   const [lessonResults, setLessonResults] = useState<LessonImportResult[]>([]);
-  // Mirror of lessonResults that is always current (avoids stale closure reads)
   const lessonResultsRef = useRef<LessonImportResult[]>([]);
 
   // Per-import credentials (never persisted)
@@ -286,6 +292,11 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [authError, setAuthError] = useState<string | null>(null);
   const [authWallHit, setAuthWallHit] = useState(false);
   const [discoverMeta, setDiscoverMeta] = useState<Record<string, any> | null>(null);
+
+  // Landing page → multi-course resolution
+  const [courseOptions, setCourseOptions] = useState<CourseOption[]>([]);
+  const [landingPageResolved, setLandingPageResolved] = useState(false);
+  const [resolvedFrom, setResolvedFrom] = useState<string | null>(null);
 
   const clearCredPassword = () => setCredPassword('');
   const getCredsBody = () => {
@@ -299,22 +310,23 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const classify = useClassifyResource();
   const addUrl = useAddUrlResource();
 
-  const handleFetch = useCallback(async () => {
-    if (!url.trim()) return;
+  const discoverCourse = useCallback(async (courseUrl: string) => {
     setFetching(true);
     setLessons([]);
     setCourseTitle('');
     setAuthError(null);
     setDiscoverMeta(null);
+    setCourseOptions([]);
+    setLandingPageResolved(false);
+    setResolvedFrom(null);
     try {
       const { data, error } = await trackedInvoke<any>('import-course', {
-        body: { url: url.trim(), action: 'discover', ...getCredsBody() },
+        body: { url: courseUrl.trim(), action: 'discover', ...getCredsBody() },
         timeoutMs: 120_000,
       });
       if (error) throw error;
       if (!data?.success) {
         const errMsg = data?.error || 'Failed to fetch course';
-        // Classify the error
         if (/credentials|password|email/i.test(errMsg)) {
           setAuthError('Invalid credentials — please check email and password.');
         } else if (/authentication required|login/i.test(errMsg)) {
@@ -328,10 +340,23 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         throw new Error(errMsg);
       }
 
-      // Store metadata
       if (data.meta) setDiscoverMeta(data.meta);
 
-      // Check auth-failed state (authenticated but redirected back to login)
+      // Handle landing page resolution → multiple courses
+      if (data.course_options && data.course_options.length > 1) {
+        setCourseOptions(data.course_options);
+        setLandingPageResolved(true);
+        setResolvedFrom(data.resolved_from || courseUrl);
+        toast.info(`Found ${data.course_options.length} courses on this page`);
+        return;
+      }
+
+      // Track if resolved from landing page
+      if (data.landing_page_resolved) {
+        setLandingPageResolved(true);
+        setResolvedFrom(data.resolved_from || courseUrl);
+      }
+
       if (data.meta?.auth_status === 'auth_failed') {
         setAuthError('Authentication failed — check your credentials or try entering them below.');
         if (!showCreds) setShowCreds(true);
@@ -342,7 +367,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         if (data.meta?.auth_status === 'auth_failed') {
           toast.error('Login failed — no lessons accessible');
         } else {
-          toast.error('Authenticated but no lessons found in this course');
+          toast.error('No lessons found. If this is a landing page, try opening the course and pasting the URL from inside a lesson.');
         }
         return;
       }
@@ -355,7 +380,18 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     } finally {
       setFetching(false);
     }
-  }, [url, credEmail, credPassword, showCreds]);
+  }, [credEmail, credPassword, showCreds]);
+
+  const handleFetch = useCallback(async () => {
+    if (!url.trim()) return;
+    await discoverCourse(url.trim());
+  }, [url, discoverCourse]);
+
+  const handleSelectCourse = useCallback(async (option: CourseOption) => {
+    setUrl(option.url);
+    setCourseOptions([]);
+    await discoverCourse(option.url);
+  }, [discoverCourse]);
 
   const toggleLesson = (index: number) => {
     setSelected(prev => {
