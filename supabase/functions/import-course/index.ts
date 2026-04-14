@@ -510,26 +510,187 @@ function parseCurriculum(html: string, baseOrigin: string): LessonInfo[] {
   return lessons;
 }
 
-async function discoverCurriculum(courseUrl: string, creds?: { email?: string; password?: string }): Promise<{ platform: string; title: string; lessons: LessonInfo[]; debug: string[] }> {
+interface CourseLink {
+  name: string;
+  url: string;
+  modulesHint?: number;
+  lessonsHint?: number;
+}
+
+/**
+ * Detect if URL is a Thinkific landing/marketing page (e.g. /pages/...).
+ * If so, fetch the page and scan for actual course player URLs (/courses/take/).
+ */
+async function resolveThinkificLandingPage(
+  pageUrl: string,
+  jar: CookieJar,
+  debug: string[],
+): Promise<{ resolved: boolean; courseLinks: CourseLink[]; resolvedUrl?: string }> {
+  const parsed = new URL(pageUrl);
+
+  // Only trigger for /pages/ paths on thinkific domains (or custom domains with Thinkific content)
+  const isExplicitPages = /\/pages\//i.test(parsed.pathname);
+  const isThinkificDomain = /thinkific/i.test(parsed.hostname);
+
+  // Also check for root/marketing pages on thinkific domains (no /courses/take/ in path)
+  const hasCoursePlayer = /\/courses\/take\//i.test(parsed.pathname);
+
+  if (hasCoursePlayer) {
+    // Already a course player URL — no resolution needed
+    return { resolved: false, courseLinks: [] };
+  }
+
+  if (!isExplicitPages && !isThinkificDomain) {
+    return { resolved: false, courseLinks: [] };
+  }
+
+  debug.push(`[Landing Page] Detected potential landing page: ${pageUrl}`);
+
+  // Fetch the page
+  const resp = await fetch(pageUrl, {
+    headers: {
+      'User-Agent': UA,
+      'Cookie': jar.toString(),
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    },
+    redirect: 'follow',
+  });
+  jar.addFromHeaders(resp.headers);
+  const html = await resp.text();
+  debug.push(`[Landing Page] Fetched: ${resp.status}, ${html.length} chars`);
+
+  // Confirm it's Thinkific (check for Thinkific markers in the HTML)
+  const isThinkificContent = /thinkific/i.test(html) || /courses\/take\//i.test(html);
+  if (!isThinkificContent && !isThinkificDomain) {
+    debug.push('[Landing Page] Not a Thinkific page — skipping resolution');
+    return { resolved: false, courseLinks: [] };
+  }
+
+  // Scan for course player links: /courses/take/...
+  const courseLinks: CourseLink[] = [];
+  const seen = new Set<string>();
+
+  // Pattern 1: <a> tags with /courses/take/ hrefs
+  const linkRegex = /<a[^>]*href="([^"]*\/courses\/take\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = linkRegex.exec(html)) !== null) {
+    const href = m[1];
+    const text = m[2].replace(/<[^>]+>/g, '').trim();
+    const fullUrl = href.startsWith('http') ? href : `${parsed.origin}${href}`;
+    // Normalize: strip query/hash, take just the course base (up to course slug)
+    const courseBase = fullUrl.replace(/[?#].*$/, '').replace(/(\/courses\/take\/[^/]+)\/.*$/, '$1');
+    if (seen.has(courseBase)) continue;
+    seen.add(courseBase);
+    courseLinks.push({
+      name: text || courseBase.split('/').pop() || 'Unknown Course',
+      url: courseBase,
+    });
+  }
+
+  // Pattern 2: Links/buttons with enrollment/start text pointing to /courses/
+  if (courseLinks.length === 0) {
+    const enrollRegex = /<a[^>]*href="([^"]*\/courses\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+    while ((m = enrollRegex.exec(html)) !== null) {
+      const href = m[1];
+      const text = m[2].replace(/<[^>]+>/g, '').trim();
+      if (/start|enroll|continue|begin|access|take/i.test(text) || /\/courses\/take\//i.test(href)) {
+        const fullUrl = href.startsWith('http') ? href : `${parsed.origin}${href}`;
+        const courseBase = fullUrl.replace(/[?#].*$/, '');
+        if (seen.has(courseBase)) continue;
+        seen.add(courseBase);
+        courseLinks.push({
+          name: text || courseBase.split('/').pop() || 'Unknown Course',
+          url: courseBase,
+        });
+      }
+    }
+  }
+
+  // Pattern 3: JavaScript/data attributes with course URLs
+  if (courseLinks.length === 0) {
+    const jsRegex = /["']((?:https?:\/\/[^"']*|\/courses\/take\/[^"']*))/gi;
+    while ((m = jsRegex.exec(html)) !== null) {
+      const href = m[1];
+      if (!/\/courses\/take\//i.test(href)) continue;
+      const fullUrl = href.startsWith('http') ? href : `${parsed.origin}${href}`;
+      const courseBase = fullUrl.replace(/[?#].*$/, '').replace(/(\/courses\/take\/[^/]+)\/.*$/, '$1');
+      if (seen.has(courseBase)) continue;
+      seen.add(courseBase);
+      courseLinks.push({
+        name: courseBase.split('/').pop() || 'Unknown Course',
+        url: courseBase,
+      });
+    }
+  }
+
+  debug.push(`[Landing Page] Found ${courseLinks.length} course link(s)`);
+
+  if (courseLinks.length === 0) {
+    return { resolved: false, courseLinks: [] };
+  }
+
+  if (courseLinks.length === 1) {
+    debug.push(`[Landing Page] Auto-resolved to: ${courseLinks[0].url}`);
+    return { resolved: true, courseLinks, resolvedUrl: courseLinks[0].url };
+  }
+
+  // Multiple courses — return for user selection
+  debug.push(`[Landing Page] Multiple courses found — returning for user selection`);
+  return { resolved: true, courseLinks };
+}
+
+async function discoverCurriculum(courseUrl: string, creds?: { email?: string; password?: string }): Promise<{
+  platform: string;
+  title: string;
+  lessons: LessonInfo[];
+  debug: string[];
+  landing_page_resolved?: boolean;
+  resolved_from?: string;
+  course_options?: CourseLink[];
+}> {
   const jar = createCookieJar();
   const parsedUrl = new URL(courseUrl);
   const origin = parsedUrl.origin;
-  
-  // Auto-strip /categories/... suffix to scan the full product page
-  const categoryMatch = parsedUrl.pathname.match(/^(\/products\/[^/]+)\/categories\/.+$/);
+
+  // ── Thinkific landing page resolution ──
+  // Detect /pages/ or marketing pages and resolve to actual course player URLs
+  const landingResult = await resolveThinkificLandingPage(courseUrl, jar, []);
+  const debug: string[] = [];
+
+  if (landingResult.resolved && !landingResult.resolvedUrl && landingResult.courseLinks.length > 1) {
+    // Multiple courses found — return options for user selection
+    return {
+      platform: 'thinkific',
+      title: 'Multiple Courses Found',
+      lessons: [],
+      debug: [`[Landing Page] Resolved ${courseUrl} — found ${landingResult.courseLinks.length} courses`],
+      landing_page_resolved: true,
+      resolved_from: courseUrl,
+      course_options: landingResult.courseLinks,
+    };
+  }
+
   let effectiveUrl = courseUrl;
+  if (landingResult.resolved && landingResult.resolvedUrl) {
+    debug.push(`[Landing Page] Resolved ${courseUrl} → ${landingResult.resolvedUrl}`);
+    effectiveUrl = landingResult.resolvedUrl;
+  }
+
+  // Auto-strip /categories/... suffix to scan the full product page
+  const categoryMatch = new URL(effectiveUrl).pathname.match(/^(\/products\/[^/]+)\/categories\/.+$/);
   if (categoryMatch) {
     effectiveUrl = `${origin}${categoryMatch[1]}`;
   }
   
-  const { success: loggedIn, debug } = await kajabiLogin(effectiveUrl, jar, creds);
+  const { success: loggedIn, debug: loginDebug } = await kajabiLogin(effectiveUrl, jar, creds);
+  debug.push(...loginDebug);
   
   if (!loggedIn) {
     debug.push('Login failed — attempting course page fetch anyway');
   }
   
   if (effectiveUrl !== courseUrl) {
-    debug.push(`Category URL detected — scanning full product page instead: ${effectiveUrl}`);
+    debug.push(`Effective URL: ${effectiveUrl}`);
   }
   
   // Fetch the course page with session cookies
@@ -559,12 +720,11 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
     };
   }
   
-  // Extract course title — prefer <title> (usually "Course Name | Platform") over <h1> (can be a lesson name)
+  // Extract course title
   const titleTagMatch = courseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const h1Match = courseHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
   let courseTitle = 'Untitled Course';
   if (titleTagMatch) {
-    // Strip platform suffix like " | Kajabi" or " - pclub.io"
     courseTitle = titleTagMatch[1].replace(/<[^>]+>/g, '').replace(/\s*[|–—-]\s*[^|–—-]*$/, '').trim() || courseTitle;
   } else if (h1Match) {
     courseTitle = h1Match[1].replace(/<[^>]+>/g, '').trim() || courseTitle;
@@ -574,8 +734,24 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
   let platform = 'kajabi';
   if (/thinkific/i.test(courseHtml)) platform = 'thinkific';
   else if (/teachable/i.test(courseHtml)) platform = 'teachable';
+
+  // ── Thinkific course player: parse curriculum from the player page ──
+  if (platform === 'thinkific') {
+    const thinkificLessons = parseThinkificCurriculum(courseHtml, origin);
+    if (thinkificLessons.length > 0) {
+      debug.push(`[Thinkific] Found ${thinkificLessons.length} lessons from course player`);
+      return {
+        platform,
+        title: courseTitle,
+        lessons: thinkificLessons,
+        debug,
+        ...(landingResult.resolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
+      };
+    }
+    debug.push('[Thinkific] No Thinkific-specific lessons found, falling back to generic parser');
+  }
   
-  // Parse curriculum
+  // Parse curriculum (generic/Kajabi)
   const lessons = parseCurriculum(courseHtml, origin);
   debug.push(`Found ${lessons.length} lessons`);
   
@@ -609,14 +785,122 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
     
     debug.push(`Broad extraction found ${broadLessons.length} links`);
     
-    // Also log some HTML structure for debugging
     const bodySnippet = courseHtml.substring(0, 2000).replace(/\s+/g, ' ');
     debug.push(`HTML start: ${bodySnippet.substring(0, 500)}`);
     
     return { platform, title: courseTitle, lessons: broadLessons, debug };
   }
   
-  return { platform, title: courseTitle, lessons, debug };
+  return {
+    platform,
+    title: courseTitle,
+    lessons,
+    debug,
+    ...(landingResult.resolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
+  };
+}
+
+/**
+ * Parse Thinkific course player curriculum.
+ * Thinkific uses /courses/take/<slug>/lessons/<id> URL patterns
+ * and structures content in chapter/lesson hierarchies.
+ */
+function parseThinkificCurriculum(html: string, baseOrigin: string): LessonInfo[] {
+  const lessons: LessonInfo[] = [];
+  const seen = new Set<string>();
+  let currentModule = 'Course Content';
+  let index = 0;
+
+  // Thinkific chapter headings
+  const chapterHeadings: { text: string; position: number }[] = [];
+  const chapterRegex = /class="[^"]*(?:chapter-title|lesson-group__title|course-curriculum__chapter-title)[^"]*"[^>]*>([\s\S]*?)<\//gi;
+  let cm;
+  while ((cm = chapterRegex.exec(html)) !== null) {
+    const text = cm[1].replace(/<[^>]+>/g, '').trim();
+    if (text && text.length > 1 && text.length < 200) {
+      chapterHeadings.push({ text, position: cm.index });
+    }
+  }
+
+  // Also grab h2/h3 headings as fallback chapter markers
+  if (chapterHeadings.length === 0) {
+    const hRegex = /<h[2-3][^>]*>([\s\S]*?)<\/h[2-3]>/gi;
+    while ((cm = hRegex.exec(html)) !== null) {
+      const text = cm[1].replace(/<[^>]+>/g, '').trim();
+      if (text && text.length > 2 && text.length < 200) {
+        chapterHeadings.push({ text, position: cm.index });
+      }
+    }
+  }
+
+  // Thinkific lesson links: /courses/take/.../lessons/... or /courses/take/.../multimedia/...
+  const linkRegex = /<a[^>]*href="([^"]*\/courses\/take\/[^"]*(?:\/lessons\/|\/multimedia\/|\/quizzes\/)[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = linkRegex.exec(html)) !== null) {
+    const href = m[1];
+    const rawText = m[2].replace(/<[^>]+>/g, '').trim();
+    const cleanTitle = rawText.split('\n')[0].trim();
+    if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 300) continue;
+
+    // Skip nav items
+    if (/^(next|previous|back|continue|go back|next lesson|prev)$/i.test(cleanTitle)) continue;
+
+    const fullUrl = href.startsWith('http') ? href : `${baseOrigin}${href}`;
+    const normalized = fullUrl.replace(/[?#].*$/, '');
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+
+    // Determine module from nearest preceding chapter heading
+    for (let i = chapterHeadings.length - 1; i >= 0; i--) {
+      if (chapterHeadings[i].position < m.index) {
+        currentModule = chapterHeadings[i].text;
+        break;
+      }
+    }
+
+    // Detect type from URL pattern and context
+    const context = html.substring(Math.max(0, m.index - 200), m.index + m[0].length + 200);
+    let type = 'text';
+    if (/\/multimedia\//i.test(href) || /video|wistia|vimeo|youtube/i.test(context)) type = 'video';
+    else if (/\/quizzes\//i.test(href) || /quiz|assessment/i.test(context)) type = 'quiz';
+
+    const durMatch = context.match(/(\d+)\s*(?:min|minutes?)/i);
+
+    lessons.push({
+      title: cleanTitle,
+      url: fullUrl,
+      module: currentModule,
+      index: index++,
+      duration: durMatch?.[0],
+      type,
+    });
+  }
+
+  // Fallback: broader /courses/take/ links if the specific patterns missed
+  if (lessons.length === 0) {
+    const broadRegex = /<a[^>]*href="([^"]*\/courses\/take\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+    while ((m = broadRegex.exec(html)) !== null) {
+      const href = m[1];
+      const text = m[2].replace(/<[^>]+>/g, '').trim().split('\n')[0].trim();
+      if (!text || text.length < 2 || text.length > 300) continue;
+      if (/^(next|previous|back|continue|home|go back)$/i.test(text)) continue;
+
+      const fullUrl = href.startsWith('http') ? href : `${baseOrigin}${href}`;
+      const normalized = fullUrl.replace(/[?#].*$/, '');
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+
+      lessons.push({
+        title: text,
+        url: fullUrl,
+        module: 'Course Content',
+        index: index++,
+        type: 'text',
+      });
+    }
+  }
+
+  return lessons;
 }
 
 interface LessonQuality {

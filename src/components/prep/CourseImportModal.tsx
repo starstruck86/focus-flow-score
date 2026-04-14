@@ -266,6 +266,13 @@ function ExtractionTraceExpander({ trace, metadataOnly }: { trace: ExtractionTra
   );
 }
 
+type CourseOption = {
+  name: string;
+  url: string;
+  modulesHint?: number;
+  lessonsHint?: number;
+};
+
 export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps) {
   const [url, setUrl] = useState('');
   const [fetching, setFetching] = useState(false);
@@ -276,7 +283,6 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0, current: '' });
   const [lessonResults, setLessonResults] = useState<LessonImportResult[]>([]);
-  // Mirror of lessonResults that is always current (avoids stale closure reads)
   const lessonResultsRef = useRef<LessonImportResult[]>([]);
 
   // Per-import credentials (never persisted)
@@ -286,6 +292,11 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [authError, setAuthError] = useState<string | null>(null);
   const [authWallHit, setAuthWallHit] = useState(false);
   const [discoverMeta, setDiscoverMeta] = useState<Record<string, any> | null>(null);
+
+  // Landing page → multi-course resolution
+  const [courseOptions, setCourseOptions] = useState<CourseOption[]>([]);
+  const [landingPageResolved, setLandingPageResolved] = useState(false);
+  const [resolvedFrom, setResolvedFrom] = useState<string | null>(null);
 
   const clearCredPassword = () => setCredPassword('');
   const getCredsBody = () => {
@@ -299,22 +310,23 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const classify = useClassifyResource();
   const addUrl = useAddUrlResource();
 
-  const handleFetch = useCallback(async () => {
-    if (!url.trim()) return;
+  const discoverCourse = useCallback(async (courseUrl: string) => {
     setFetching(true);
     setLessons([]);
     setCourseTitle('');
     setAuthError(null);
     setDiscoverMeta(null);
+    setCourseOptions([]);
+    setLandingPageResolved(false);
+    setResolvedFrom(null);
     try {
       const { data, error } = await trackedInvoke<any>('import-course', {
-        body: { url: url.trim(), action: 'discover', ...getCredsBody() },
+        body: { url: courseUrl.trim(), action: 'discover', ...getCredsBody() },
         timeoutMs: 120_000,
       });
       if (error) throw error;
       if (!data?.success) {
         const errMsg = data?.error || 'Failed to fetch course';
-        // Classify the error
         if (/credentials|password|email/i.test(errMsg)) {
           setAuthError('Invalid credentials — please check email and password.');
         } else if (/authentication required|login/i.test(errMsg)) {
@@ -328,10 +340,23 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         throw new Error(errMsg);
       }
 
-      // Store metadata
       if (data.meta) setDiscoverMeta(data.meta);
 
-      // Check auth-failed state (authenticated but redirected back to login)
+      // Handle landing page resolution → multiple courses
+      if (data.course_options && data.course_options.length > 1) {
+        setCourseOptions(data.course_options);
+        setLandingPageResolved(true);
+        setResolvedFrom(data.resolved_from || courseUrl);
+        toast.info(`Found ${data.course_options.length} courses on this page`);
+        return;
+      }
+
+      // Track if resolved from landing page
+      if (data.landing_page_resolved) {
+        setLandingPageResolved(true);
+        setResolvedFrom(data.resolved_from || courseUrl);
+      }
+
       if (data.meta?.auth_status === 'auth_failed') {
         setAuthError('Authentication failed — check your credentials or try entering them below.');
         if (!showCreds) setShowCreds(true);
@@ -342,7 +367,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         if (data.meta?.auth_status === 'auth_failed') {
           toast.error('Login failed — no lessons accessible');
         } else {
-          toast.error('Authenticated but no lessons found in this course');
+          toast.error('No lessons found. If this is a landing page, try opening the course and pasting the URL from inside a lesson.');
         }
         return;
       }
@@ -355,7 +380,18 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     } finally {
       setFetching(false);
     }
-  }, [url, credEmail, credPassword, showCreds]);
+  }, [credEmail, credPassword, showCreds]);
+
+  const handleFetch = useCallback(async () => {
+    if (!url.trim()) return;
+    await discoverCourse(url.trim());
+  }, [url, discoverCourse]);
+
+  const handleSelectCourse = useCallback(async (option: CourseOption) => {
+    setUrl(option.url);
+    setCourseOptions([]);
+    await discoverCourse(option.url);
+  }, [discoverCourse]);
 
   const toggleLesson = (index: number) => {
     setSelected(prev => {
@@ -894,6 +930,9 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       setCredPassword('');
       setAuthError(null);
       setAuthWallHit(false);
+      setCourseOptions([]);
+      setLandingPageResolved(false);
+      setResolvedFrom(null);
     }
     onOpenChange(newOpen);
   };
@@ -981,6 +1020,55 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                 <Badge variant="outline" className="text-[9px] h-4">using typed credentials</Badge>
               )}
               <span>{discoverMeta.lessons_discovered} lessons found</span>
+            </div>
+          )}
+
+          {/* Landing page resolution banner */}
+          {landingPageResolved && !courseOptions.length && resolvedFrom && (
+            <div className="flex items-start gap-2 p-2.5 rounded-md bg-primary/10 border border-primary/20 text-sm flex-shrink-0">
+              <Info className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
+              <span className="text-muted-foreground">
+                Landing page detected — automatically resolved to course player URL.
+              </span>
+            </div>
+          )}
+
+          {/* Multi-course selection (when landing page has multiple courses) */}
+          {courseOptions.length > 0 && (
+            <div className="space-y-2 flex-shrink-0">
+              <div className="flex items-start gap-2 p-2.5 rounded-md bg-primary/10 border border-primary/20 text-sm">
+                <Info className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
+                <span className="text-muted-foreground">
+                  Found {courseOptions.length} courses on this page. Select one to import:
+                </span>
+              </div>
+              <div className="space-y-1">
+                {courseOptions.map((option, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleSelectCourse(option)}
+                    disabled={fetching}
+                    className="w-full flex items-center gap-3 p-3 rounded-md border border-border hover:border-primary hover:bg-primary/5 transition-colors text-left"
+                  >
+                    <BookOpen className="h-4 w-4 text-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{option.name}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{option.url}</div>
+                    </div>
+                    <ChevronDown className="h-4 w-4 -rotate-90 text-muted-foreground flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* No course found error for landing pages */}
+          {!fetching && !importing && lessons.length === 0 && courseOptions.length === 0 && discoverMeta && discoverMeta.lessons_discovered === 0 && !authError && (
+            <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-sm flex-shrink-0">
+              <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600" />
+              <span className="text-muted-foreground">
+                We couldn't find the course player. Open the course and paste the URL from inside the lesson view.
+              </span>
             </div>
           )}
 
