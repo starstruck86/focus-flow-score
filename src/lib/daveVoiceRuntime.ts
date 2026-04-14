@@ -229,6 +229,7 @@ async function fetchTtsWithRetry(
   options?: { previousText?: string; nextText?: string },
 ): Promise<Blob> {
   let lastError = '';
+  let lastStatus = 0;
 
   for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
     if (abortController.signal.aborted) throw new Error('TTS aborted');
@@ -237,8 +238,6 @@ async function fetchTtsWithRetry(
       if (!decision.shouldRetry) break;
       await new Promise(r => setTimeout(r, getRetryDelay(attempt)));
     }
-
-    let lastStatus = 0;
     const attemptAbort = new AbortController();
     const onOuter = () => attemptAbort.abort();
     abortController.signal.addEventListener('abort', onOuter, { once: true });
