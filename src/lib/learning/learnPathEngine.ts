@@ -426,7 +426,7 @@ export async function getRecommendedKIsForFocus(
 // ── Lesson Recommender ────────────────────────────────────────────
 
 type LessonFocusQuery =
-  | { type: 'anchor'; anchor: string }
+  | { type: 'anchor'; anchor: string; subSkillHint?: string }
   | { type: 'skill'; skill: string }
   | { type: 'topic'; topic: string }
   | { type: 'incomplete' };
@@ -482,9 +482,16 @@ export async function getRecommendedLessonsForFocus(
   let reasonPrefix = 'Relevant to your focus';
 
   if (query.type === 'anchor') {
-    keywords = ANCHOR_TOPICS[query.anchor] ?? [];
-    const anchorInfo = DAY_ANCHORS[query.anchor as DayAnchor];
-    reasonPrefix = `Covers ${anchorInfo?.shortLabel ?? query.anchor}`;
+    keywords = [...(ANCHOR_TOPICS[query.anchor] ?? [])];
+    // Add sub-skill keywords when available
+    if (query.subSkillHint) {
+      const ssKw = SUB_SKILL_KEYWORDS[query.subSkillHint] ?? query.subSkillHint.toLowerCase().split(/[\s_-]+/);
+      keywords.push(...ssKw);
+      reasonPrefix = `Targets ${query.subSkillHint}`;
+    } else {
+      const anchorInfo = DAY_ANCHORS[query.anchor as DayAnchor];
+      reasonPrefix = `Covers ${anchorInfo?.shortLabel ?? query.anchor}`;
+    }
   } else if (query.type === 'skill') {
     keywords = [query.skill.replace(/_/g, ' ')];
     reasonPrefix = `Builds ${query.skill.replace(/_/g, ' ')}`;
