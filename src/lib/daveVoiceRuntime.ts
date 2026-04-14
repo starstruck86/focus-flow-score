@@ -11,7 +11,7 @@
 import { createLogger } from '@/lib/logger';
 import { requestMicrophoneAccess, releaseMicrophoneStream } from '@/lib/microphoneAccess';
 import { ttsCacheKey, lookupMemoryCache, racePersistentCache, storeInCache, recordCacheHit, type TtsCacheKeyInputs } from '@/lib/voice/ttsCache';
-import { validateSttRequest, checkSttDuplicate, shouldRetryStt, shouldRetryTts, getSttRetryDelay, getRetryDelay, isCircuitOpen, recordSttFailure, recordSttSuccess, recordSttCall, recordSttBlocked } from '@/lib/voice/sttGuard';
+import { validateSttRequest, checkSttDuplicate, shouldRetryStt, shouldRetryTts, getSttRetryDelay, getRetryDelay, isCircuitOpen, recordSttFailure, recordSttSuccess, recordSttBlocked, recordSttTransportAttempt, recordSttRetryAttempt } from '@/lib/voice/sttGuard';
 import { trackTtsCall, trackSttCall, trackSttRetry, trackSttMalformed } from '@/lib/voice/voiceUsageTracker';
 import { classifyUtterance, selectModel, markTurnStart, markTurnEnd } from '@/lib/voice/voiceCostController';
 
@@ -289,7 +289,7 @@ async function fetchTtsWithRetry(
   throw new Error(`TTS failed: ${lastError}`);
 }
 
-/** Play a blob and return when audio ends. */
+/** Play a blob and return when audio ends. Cleans up objectUrl on completion. */
 function playBlob(blob: Blob, active: ActivePlayback): Promise<ActivePlayback> {
   return new Promise<ActivePlayback>((resolve, reject) => {
     const objectUrl = URL.createObjectURL(blob);
@@ -297,13 +297,24 @@ function playBlob(blob: Blob, active: ActivePlayback): Promise<ActivePlayback> {
     active.audio = audio;
     active.objectUrl = objectUrl;
 
-    audio.addEventListener('ended', () => resolve(active), { once: true });
+    const cleanupAfterPlay = () => {
+      URL.revokeObjectURL(objectUrl);
+      active.objectUrl = null;
+      active.audio = null;
+    };
+
+    audio.addEventListener('ended', () => {
+      cleanupAfterPlay();
+      resolve(active);
+    }, { once: true });
     audio.addEventListener('error', () => {
+      cleanupAfterPlay();
       const msg = audio.error?.message ?? 'Audio playback error';
       reject(new Error(msg));
     }, { once: true });
 
     audio.play().catch(err => {
+      cleanupAfterPlay();
       reject(new Error(err instanceof Error ? err.message : 'play() failed'));
     });
   });
@@ -462,19 +473,25 @@ async function transcribeAudio(
     throw new Error('STT circuit breaker open — too many recent failures');
   }
 
+  // Per-utterance usage tracking (once per utterance, not per retry)
   trackSttCall(actualDurationSeconds);
 
   const formData = new FormData();
   formData.append('audio', audioBlob, 'recording.webm');
 
   let lastStatus = 0;
+  let transportAttempts = 0;
+
   for (let attempt = 0; attempt <= 1; attempt++) {
     if (attempt > 0) {
       const decision = shouldRetryStt(lastStatus, attempt);
       if (!decision.shouldRetry) break;
       trackSttRetry();
+      recordSttRetryAttempt();
       await new Promise(r => setTimeout(r, getSttRetryDelay(attempt)));
     }
+
+    transportAttempts++;
 
     try {
       const response = await fetch(
@@ -493,17 +510,19 @@ async function transcribeAudio(
 
       if (!response.ok) {
         recordSttFailure();
-        recordSttCall(false);
+        // Transport stats: record failed attempt (not utterance-level)
+        recordSttTransportAttempt(false);
         continue;
       }
 
       recordSttSuccess();
-      recordSttCall(true, actualDurationSeconds);
+      // Transport stats: record successful attempt
+      recordSttTransportAttempt(true, actualDurationSeconds);
       const result = await response.json();
       return result.text ?? '';
     } catch (err) {
       recordSttFailure();
-      recordSttCall(false);
+      recordSttTransportAttempt(false);
       if (attempt === 0) continue;
       throw err;
     }

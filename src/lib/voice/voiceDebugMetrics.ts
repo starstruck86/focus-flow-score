@@ -43,13 +43,13 @@ export function formatDebugSnapshot(snap: VoiceDebugSnapshot): Record<string, st
     'Persistent Cache Hits': snap.cache.persistentHits,
     'Cache Misses': snap.cache.misses,
     'Memory Cache Entries': snap.cache.memoryEntries,
-    'STT Total Calls': snap.stt.totalCalls,
-    'STT Success': snap.stt.successCalls,
-    'STT Failed': snap.stt.failedCalls,
+    'STT Transport Attempts': snap.stt.totalTransportAttempts,
+    'STT Transport Success': snap.stt.successTransportAttempts,
+    'STT Transport Failed': snap.stt.failedTransportAttempts,
     'STT Blocked (preflight)': snap.stt.blockedByPreflight,
     'STT Blocked (circuit)': snap.stt.blockedByCircuit,
     'STT Blocked (duplicate)': snap.stt.blockedByDuplicate,
-    'STT Retries': snap.stt.retriedCalls,
+    'STT Transport Retries': snap.stt.retryAttempts,
   };
 
   if (snap.usage) {

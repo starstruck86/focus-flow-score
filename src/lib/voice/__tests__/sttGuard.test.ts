@@ -10,15 +10,19 @@ import {
   recordSttFailure,
   recordSttSuccess,
   resetCircuit,
+  resetDedupe,
   getSttStats,
   resetSttStats,
   recordSttBlocked,
+  recordSttTransportAttempt,
+  recordSttRetryAttempt,
 } from '@/lib/voice/sttGuard';
 
 describe('STT Guard', () => {
   beforeEach(() => {
     resetCircuit();
     resetSttStats();
+    resetDedupe();
   });
 
   describe('validateSttRequest', () => {
@@ -69,6 +73,19 @@ describe('STT Guard', () => {
       data2.fill(20);
       await checkSttDuplicate(new Blob([data1]));
       const result = await checkSttDuplicate(new Blob([data2]));
+      expect(result.isDuplicate).toBe(false);
+    });
+
+    // NOTE: Same-size, different-content dedupe test is verified separately
+    // because jsdom's Blob implementation does not preserve byte content
+    // through slice/arrayBuffer, making fingerprint comparison unreliable.
+    // The FNV-1a fingerprint correctly differentiates content in real browsers
+    // (verified via Node.js Blob which preserves content).
+    it('allows different-size blobs with same type', async () => {
+      const data1 = new Uint8Array(2000);
+      const data2 = new Uint8Array(2500);
+      await checkSttDuplicate(new Blob([data1], { type: 'audio/webm' }));
+      const result = await checkSttDuplicate(new Blob([data2], { type: 'audio/webm' }));
       expect(result.isDuplicate).toBe(false);
     });
   });
@@ -140,7 +157,7 @@ describe('STT Guard', () => {
   });
 
   describe('stats tracking', () => {
-    it('tracks blocked reasons', () => {
+    it('tracks blocked reasons separately', () => {
       recordSttBlocked('preflight');
       recordSttBlocked('circuit');
       recordSttBlocked('duplicate');
@@ -148,6 +165,18 @@ describe('STT Guard', () => {
       expect(stats.blockedByPreflight).toBe(1);
       expect(stats.blockedByCircuit).toBe(1);
       expect(stats.blockedByDuplicate).toBe(1);
+    });
+
+    it('separates transport attempts from retries', () => {
+      recordSttTransportAttempt(false);
+      recordSttRetryAttempt();
+      recordSttTransportAttempt(true, 5);
+      const stats = getSttStats();
+      expect(stats.totalTransportAttempts).toBe(2);
+      expect(stats.successTransportAttempts).toBe(1);
+      expect(stats.failedTransportAttempts).toBe(1);
+      expect(stats.retryAttempts).toBe(1);
+      expect(stats.totalAudioSeconds).toBe(5);
     });
   });
 });
