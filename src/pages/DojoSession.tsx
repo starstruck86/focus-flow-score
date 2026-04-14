@@ -925,8 +925,8 @@ function FeedbackView({
           : <SkillSideBySide userText={userText} improvedVersion={currentResult.improvedVersion} />
       )}
 
-      {/* ── Your Response (drill only, non-exec) ── */}
-      {sessionType === 'drill' && userText && !(skillFocus === 'executive_response' && currentResult.improvedVersion) && (
+      {/* ── Your Response (drill only, when no side-by-side) ── */}
+      {sessionType === 'drill' && userText && !currentResult.improvedVersion && (
         <Card className="border-border/40">
           <CardContent className="p-3 space-y-1.5">
             <div className="flex items-center gap-1.5">
@@ -938,8 +938,8 @@ function FeedbackView({
         </Card>
       )}
 
-      {/* ── Stronger Answer (non-exec or no user text for side-by-side) ── */}
-      {currentResult.improvedVersion && !(skillFocus === 'executive_response' && sessionType === 'drill' && userText) && (
+      {/* ── Stronger Answer (non-drill or no user text for side-by-side) ── */}
+      {currentResult.improvedVersion && !(sessionType === 'drill' && userText) && (
         <Card className="border-green-500/20 bg-green-500/5">
           <CardContent className="p-3 space-y-1.5">
             <div className="flex items-center gap-1.5">
