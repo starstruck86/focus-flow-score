@@ -262,6 +262,22 @@ export default function SkillBuilderSession() {
     toast.info(deliveryMode === 'audio' ? 'Switched to visual mode' : 'Switched to audio mode');
   }, [deliveryMode]);
 
+  // Show deep training content first when SkillSession is present and content exists
+  if (showTrainingFirst && trainingContent && resolvedSession && !state?.fromClosedLoop) {
+    return (
+      <Layout>
+        <div className={cn('px-4 pt-4 space-y-4', SHELL.main.bottomPad)}>
+          <SkillSessionDebugPanel />
+          <SkillTrainingModule
+            content={trainingContent}
+            session={resolvedSession.session}
+            onComplete={() => setShowTrainingFirst(false)}
+          />
+        </div>
+      </Layout>
+    );
+  }
+
   // Loading state
   if (sessionState === 'generating') {
     return (
