@@ -28,6 +28,23 @@
  * In JS runtime calculations:
  *   import { PX } from '@/lib/layout';
  *   const availableHeight = windowHeight - PX.HEADER - PX.BOTTOM_NAV;
+ *
+ * ⚠️  ANTI-PATTERNS — DO NOT USE AT PAGE LEVEL:
+ * ─────────────────────────────────────────────────────────────────────
+ *  ✗  `sticky top-0`          → use SHELL.stickyHeader.className
+ *  ✗  `fixed top-0`           → use SHELL.fixedTop.className
+ *  ✗  `min-h-screen` alone    → use <SafePage> or add SHELL.top.safeArea
+ *
+ *  These raw patterns ignore the notch / Dynamic Island and WILL clip
+ *  headers, close buttons, and sticky banners on iOS devices.
+ *
+ * STANDALONE PAGE PATTERN:
+ *   import { SafePage } from '@/components/SafePage';
+ *   const MyPage = () => (
+ *     <SafePage className="flex items-center justify-center">
+ *       <Card>…</Card>
+ *     </SafePage>
+ *   );
  */
 
 // ═══════════════════════════════════════════════════════════════════════
