@@ -191,11 +191,52 @@ export const SCENARIOS: DojoScenario[] = [
   { id: 'q-8', skillFocus: 'qualification', title: 'Wants a pilot with no commitment',
     context: "Final stage with a Director of Marketing at a $25M DTC wellness brand. She wants to move forward but proposes a 'no-commitment pilot' — 30 days, no contract, and she'll 'see how it goes.' Your product requires a 2-week implementation and meaningful data integration. A no-commitment pilot would consume significant CS resources with no guarantee of conversion. Your win rate on unpaid pilots is 15%.",
     objection: "Here's what I'm thinking — let's do a 30-day pilot, no contract. If we see results, we'll sign. If not, no hard feelings. That way there's zero risk for us.", difficulty: 'intermediate' },
+  // ── Cold Call / Opening ───────────────────────────────────────────
+  { id: 'cc-1', skillFocus: 'objection_handling', title: 'Cold call — pattern interrupt',
+    context: "You're cold calling a VP of Marketing at a $20M DTC beauty brand. You've never spoken before. She picked up on the second ring but sounds rushed. You have 15 seconds to earn 60 more.",
+    objection: "Who is this? I'm about to walk into a meeting.", difficulty: 'foundational' },
+
+  { id: 'cc-2', skillFocus: 'objection_handling', title: 'Cold call — gatekeeper deflect',
+    context: "You're calling a Director of E-Commerce at a $35M fashion retailer. Her assistant answered first, confirmed she was available, and transferred you. The Director picks up skeptical — she doesn't recognize your company.",
+    objection: "I don't know how you got my number but I'm not interested in a demo. We're happy with what we have.", difficulty: 'intermediate' },
+
+  { id: 'cc-3', skillFocus: 'deal_control', title: 'Cold call — meeting close',
+    context: "You cold called a Sr. Director of CRM at a $50M health brand. She gave you 2 minutes. You delivered a strong opening — referenced their recent product launch and a retention gap. She's intrigued but non-committal.",
+    objection: "Okay, that's interesting. Send me something and I'll take a look when I have time.", difficulty: 'intermediate' },
+
+  { id: 'cc-4', skillFocus: 'objection_handling', title: 'Cold call — early brush-off',
+    context: "You're cold calling a Head of Growth at a DTC supplements brand doing $12M. You're 10 seconds in. She interrupted your opening line.",
+    objection: "Hey sorry — we're not looking at anything new right now. Thanks though.", difficulty: 'foundational' },
+
+  { id: 'cc-5', skillFocus: 'deal_control', title: 'Cold call — hook to meeting',
+    context: "You cold called a VP of Digital at a $25M home goods brand. Your pattern interrupt worked — you mentioned their abandoned cart rate is likely 3x industry because they're on Mailchimp. She paused and asked 'How do you know that?' You now have her attention for 60 seconds.",
+    objection: "Okay you have my attention. But I've heard this pitch before. What makes you different?", difficulty: 'intermediate' },
+
+  { id: 'cc-6', skillFocus: 'objection_handling', title: 'Cold call — competitor loyalty',
+    context: "Cold calling a Director of Lifecycle Marketing at a $15M DTC wellness brand. She picked up and let you talk for 20 seconds. She's on Klaviyo and was just renewed.",
+    objection: "We literally just renewed Klaviyo last month. There's no way I'm switching. Don't call me again.", difficulty: 'advanced' },
 ];
+
+/** All cold-call scenario IDs for lane-based selection */
+const COLD_CALL_IDS = new Set(['cc-1', 'cc-2', 'cc-3', 'cc-4', 'cc-5', 'cc-6']);
 
 export function getRandomScenario(skillFocus?: SkillFocus): DojoScenario {
   const pool = skillFocus ? SCENARIOS.filter(s => s.skillFocus === skillFocus) : SCENARIOS;
   return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/**
+ * Get a scenario appropriate for a specific mastery lane anchor.
+ * Falls back to skill-filtered random if no lane-specific scenarios exist.
+ */
+export function getLaneScenario(anchor: string, primarySkill: SkillFocus): DojoScenario {
+  // Lane-specific scenario pools
+  if (anchor === 'opening_cold_call') {
+    const ccPool = SCENARIOS.filter(s => COLD_CALL_IDS.has(s.id));
+    if (ccPool.length > 0) return ccPool[Math.floor(Math.random() * ccPool.length)];
+  }
+  // For other lanes, filter by primary skill (scenarios are already well-matched)
+  return getRandomScenario(primarySkill);
 }
 
 export const SKILL_LABELS: Record<SkillFocus, string> = {
