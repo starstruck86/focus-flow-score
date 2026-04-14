@@ -46,6 +46,7 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
               const detail = normalized[dim.key];
               const score = detail?.score ?? 0;
               const hasDetail = !!(detail?.reason || detail?.evidence);
+              const isPrimary = dim.key === primaryKey;
 
               return (
                 <DimensionRow
@@ -59,6 +60,7 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
                   targetFor7={detail?.targetFor7 || dim.good}
                   targetFor9={detail?.targetFor9 || dim.elite}
                   hasDetail={hasDetail}
+                  isPrimaryLever={isPrimary}
                 />
               );
             })}
