@@ -70,8 +70,14 @@ export function SummaryCards({ health, activeBucket, onBucketClick, deltaComplet
       const b = mapVerifiedToBucket(r);
       counts[b]++;
     }
+    // Override complete/needs_extraction with health stats which have KI awareness
+    if (health.needsExtraction > 0) {
+      const overCounted = Math.min(health.needsExtraction, counts.complete);
+      counts.complete -= overCounted;
+      counts.needs_extraction = health.needsExtraction;
+    }
     return counts;
-  }, [verifiedResources]);
+  }, [verifiedResources, health.needsExtraction]);
 
   const platformBreakdown = useMemo(() => {
     if (!verifiedResources?.length) return [];
