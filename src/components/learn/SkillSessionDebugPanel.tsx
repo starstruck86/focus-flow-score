@@ -10,6 +10,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useResolvedSkillSession } from '@/lib/learning/skillSessionResolver';
 import { getTrainingContent } from '@/lib/learning/skillBuilderContent';
 import { SKILL_SCENARIO_CONSTRAINTS } from '@/lib/learning/skillScenarioSelector';
+import { SKILL_RUBRICS } from '@/lib/dojo/skillRubric';
 import { Bug, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
@@ -23,6 +24,7 @@ export function SkillSessionDebugPanel() {
 
   const content = resolved ? getTrainingContent(resolved.session.skillId) : null;
   const constraints = resolved ? SKILL_SCENARIO_CONSTRAINTS[resolved.session.skillId] : null;
+  const rubric = resolved ? SKILL_RUBRICS[resolved.session.skillId] : null;
 
   return (
     <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2 text-[11px] font-mono">
@@ -77,6 +79,16 @@ export function SkillSessionDebugPanel() {
                 <Row label="Scoring" value={content ? `Dimensions: ${content.scoringDimensions.length}` : 'Default rubric'} />
                 <Row label="Next Action" value="Weakest dimension → recommended focus" />
               </Section>
+
+              {/* Canonical rubric */}
+              {rubric && (
+                <Section title="5. Canonical Rubric">
+                  <Row label="Dimensions" value={rubric.dimensions.map(d => `${d.key}(${d.weight}%)`).join(', ')} />
+                  <Row label="Retryable" value={rubric.retryableDimensions.join(', ')} />
+                  <Row label="Failures" value={rubric.commonFailures.join(', ')} />
+                  <Row label="Level" value={`Dev: ${rubric.levelExpectations.developing.substring(0, 40)}...`} />
+                </Section>
+              )}
             </div>
           )}
         </>
