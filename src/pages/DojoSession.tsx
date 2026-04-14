@@ -9,7 +9,7 @@ import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
 import {
   ArrowLeft, Send, RotateCcw, Loader2, Target, AlertTriangle,
-  CheckCircle2, Lightbulb, Swords, ChevronRight, Crown, Sparkles,
+  CheckCircle2, Lightbulb, Swords, ChevronRight, ChevronUp, ChevronDown, Crown, Sparkles,
   Crosshair, ListOrdered, MessageCircle, GraduationCap,
   TrendingUp, TrendingDown, Minus, Zap, Shield, XCircle,
   Eye, PenLine, Volume2, VolumeX,
