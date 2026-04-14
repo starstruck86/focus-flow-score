@@ -168,7 +168,7 @@ export async function fetchKICatalogForAnchor(
     .eq('active', true)
     .in('chapter', chapters)
     .order('confidence_score', { ascending: false })
-    .limit(50);
+    .limit(200);
 
   if (!data || data.length === 0) {
     // Fallback: broaden to any KI with roleplay context
