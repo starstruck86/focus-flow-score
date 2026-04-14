@@ -37,6 +37,7 @@ import {
 } from '@/lib/sessionDurability';
 import { motion, AnimatePresence } from 'framer-motion';
 import DojoRoleplay from '@/components/dojo/DojoRoleplay';
+import { LaneContextBanner } from '@/components/dojo/LaneContextBanner';
 import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview';
 import DaveCoachingDelivery from '@/components/dojo/DaveCoachingDelivery';
 import AudioSessionMode from '@/components/dojo/AudioSessionMode';
