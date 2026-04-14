@@ -128,8 +128,8 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
     dayAnchor,
   );
 
-  // Step 4: KI selection — default 1
-  const kis = selectKIs(focusPattern, primarySkill, kiCatalog);
+  // Step 4: KI selection — default 1, with chapter rotation
+  const kis = selectKIs(focusPattern, primarySkill, kiCatalog, recentAssignments);
 
   // Step 5: Scenarios
   const isFriday = dayAnchor === 'executive_roi_mixed';
