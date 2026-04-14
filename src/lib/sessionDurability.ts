@@ -10,6 +10,58 @@
 const DOJO_KEY = 'qc_dojo_session_state';
 const LEARN_KEY = 'qc_learn_session_state';
 const WRITE_QUEUE_KEY = 'qc_pending_writes';
+const LANE_KEY = 'qc_active_lane';
+
+// ── Active practice lane ───────────────────────────────────────────
+
+export interface ActiveLane {
+  anchor: string;           // e.g. 'opening_cold_call'
+  label: string;            // e.g. 'Cold Calling'
+  skillFocus: string;       // primary skill being tracked
+  repsThisSession: number;  // how many reps completed in this continuous session
+  recentScores: number[];   // last N scores in this lane (max 10)
+  startedAt: number;
+  lastRepAt: number;
+  focusPattern?: string;    // current sub-skill target
+  subSkillTarget?: string;  // human-readable sub-skill name
+}
+
+export function saveActiveLane(lane: ActiveLane): void {
+  try {
+    localStorage.setItem(LANE_KEY, JSON.stringify({ ...lane, lastRepAt: Date.now() }));
+  } catch { /* noop */ }
+}
+
+export function loadActiveLane(): ActiveLane | null {
+  try {
+    const raw = localStorage.getItem(LANE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ActiveLane;
+    // Expire after 4 hours of inactivity
+    if (Date.now() - parsed.lastRepAt > 4 * 60 * 60 * 1000) {
+      clearActiveLane();
+      return null;
+    }
+    return parsed;
+  } catch {
+    clearActiveLane();
+    return null;
+  }
+}
+
+export function clearActiveLane(): void {
+  try { localStorage.removeItem(LANE_KEY); } catch { /* noop */ }
+}
+
+export function updateLaneAfterRep(score: number): ActiveLane | null {
+  const lane = loadActiveLane();
+  if (!lane) return null;
+  lane.repsThisSession++;
+  lane.recentScores = [score, ...lane.recentScores].slice(0, 10);
+  lane.lastRepAt = Date.now();
+  saveActiveLane(lane);
+  return lane;
+}
 
 // ── Dojo session state ─────────────────────────────────────────
 
