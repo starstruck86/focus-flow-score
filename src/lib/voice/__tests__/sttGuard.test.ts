@@ -13,6 +13,8 @@ import {
   getSttStats,
   resetSttStats,
   recordSttBlocked,
+  recordSttTransportAttempt,
+  recordSttRetryAttempt,
 } from '@/lib/voice/sttGuard';
 
 describe('STT Guard', () => {
@@ -69,6 +71,18 @@ describe('STT Guard', () => {
       data2.fill(20);
       await checkSttDuplicate(new Blob([data1]));
       const result = await checkSttDuplicate(new Blob([data2]));
+      expect(result.isDuplicate).toBe(false);
+    });
+
+    it('allows same-size blobs with different content', async () => {
+      // Both blobs are exactly 2000 bytes but have different byte patterns
+      const data1 = new Uint8Array(2000);
+      data1[0] = 0xAA; data1[1] = 0xBB; data1[2] = 0xCC; data1[10] = 0xFF;
+      const data2 = new Uint8Array(2000);
+      data2[0] = 0x11; data2[1] = 0x22; data2[2] = 0x33; data2[10] = 0x44;
+
+      await checkSttDuplicate(new Blob([data1], { type: 'audio/webm' }));
+      const result = await checkSttDuplicate(new Blob([data2], { type: 'audio/webm' }));
       expect(result.isDuplicate).toBe(false);
     });
   });
@@ -140,7 +154,7 @@ describe('STT Guard', () => {
   });
 
   describe('stats tracking', () => {
-    it('tracks blocked reasons', () => {
+    it('tracks blocked reasons separately', () => {
       recordSttBlocked('preflight');
       recordSttBlocked('circuit');
       recordSttBlocked('duplicate');
@@ -148,6 +162,18 @@ describe('STT Guard', () => {
       expect(stats.blockedByPreflight).toBe(1);
       expect(stats.blockedByCircuit).toBe(1);
       expect(stats.blockedByDuplicate).toBe(1);
+    });
+
+    it('separates transport attempts from retries', () => {
+      recordSttTransportAttempt(false);
+      recordSttRetryAttempt();
+      recordSttTransportAttempt(true, 5);
+      const stats = getSttStats();
+      expect(stats.totalTransportAttempts).toBe(2);
+      expect(stats.successTransportAttempts).toBe(1);
+      expect(stats.failedTransportAttempts).toBe(1);
+      expect(stats.retryAttempts).toBe(1);
+      expect(stats.totalAudioSeconds).toBe(5);
     });
   });
 });
