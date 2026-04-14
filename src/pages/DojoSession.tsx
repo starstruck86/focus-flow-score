@@ -606,9 +606,9 @@ function FeedbackView({
       </div>
 
       {/* ── Dimension Feedback ── */}
-      {currentResult.dimensions && (
+      {(currentResult as unknown as Record<string, unknown>).dimensions && (
         <DimensionFeedbackCard
-          dimensions={currentResult.dimensions as Record<string, number>}
+          dimensions={(currentResult as unknown as Record<string, unknown>).dimensions as Record<string, number>}
           skill={skillFocus}
         />
       )}
