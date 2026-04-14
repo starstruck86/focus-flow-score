@@ -46,6 +46,7 @@ import { PressureAnalysisCard } from '@/components/dojo/PressureAnalysisCard';
 import { TransferProgressCard } from '@/components/dojo/TransferProgressCard';
 import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedbackCard';
 import { DimensionFeedbackCard } from '@/components/dojo/DimensionFeedbackCard';
+import { ExecVerdictBanner, ExecSideBySide, ExecRetryConstraintBox } from '@/components/dojo/ExecRetryCoaching';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
