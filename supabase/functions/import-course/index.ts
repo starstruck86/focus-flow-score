@@ -861,7 +861,7 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
     title: courseTitle,
     lessons,
     debug,
-    ...(landingResult.resolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
+    ...(landingPageResolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
   };
 }
 
