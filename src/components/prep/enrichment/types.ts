@@ -121,6 +121,7 @@ export const BUCKET_META: Record<BucketFilter, { label: string; color: string; i
   all: { label: 'All Resources', color: 'text-foreground', icon: 'list' },
   complete: { label: 'Complete', color: 'text-status-green', icon: 'check-circle' },
   auto_fixable: { label: 'Auto-fixable', color: 'text-primary', icon: 'zap' },
+  needs_extraction: { label: 'Needs Extraction', color: 'text-amber-600', icon: 'package-search' },
   advanced_extraction: { label: 'Deep Extract', color: 'text-primary', icon: 'scan' },
   assisted_resolution: { label: 'Assisted', color: 'text-status-yellow', icon: 'hand-helping' },
   needs_input: { label: 'Needs Input', color: 'text-status-yellow', icon: 'file-text' },
