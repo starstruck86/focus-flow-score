@@ -292,6 +292,7 @@ function mapKIToEntry(ki: any, anchor?: DayAnchor): KICatalogEntry {
     skills: allSkills as SkillFocus[],
     focusPatterns: allPatterns,
     lastTaughtAt: ki.updated_at ?? null,
+    chapter,
   };
 }
 
