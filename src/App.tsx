@@ -34,6 +34,12 @@ import PrepHub from "./pages/PrepHub";
 import NotFound from "./pages/NotFound";
 import { lazy, Suspense } from "react";
 
+const LazyFallback = ({ text = "Loading…" }: { text?: string }) => (
+  <div className="min-h-screen pt-[env(safe-area-inset-top)] flex items-center justify-center bg-background">
+    <p className="text-muted-foreground">{text}</p>
+  </div>
+);
+
 const Diagnostics = lazy(() => import("./pages/Diagnostics"));
 const Cockpit = lazy(() => import("./pages/Cockpit"));
 const EnrichmentVerification = lazy(() => import("./pages/EnrichmentVerification"));
