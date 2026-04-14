@@ -224,3 +224,38 @@ export function getAllSubSkillDefinitions(): SubSkillDefinition[] {
 export function getSubSkillDefinition(skill: SkillFocus, name: string): SubSkillDefinition | null {
   return ALL_SUB_SKILL_DEFINITIONS.find(d => d.skill === skill && d.name === name) ?? null;
 }
+
+// ── Anchor-based sub-skill grouping ───────────────────────────────
+// Maps day anchors to their specific sub-skills for lane-based mastery tracking.
+
+const ANCHOR_SUB_SKILL_NAMES: Record<string, string[]> = {
+  opening_cold_call: [
+    'Pattern Interrupt', 'Opening Hook', 'Early Objection Handling',
+    'Meeting Setting Close', 'Early Call Control', 'Tonality and Pacing',
+  ],
+  discovery_qualification: [
+    'Pain Excavation', 'Depth Creation', 'Business Impact Mapping',
+    'Urgency Testing', 'Stakeholder Discovery',
+    'Pain Validation', 'Stakeholder Mapping', 'Pipeline Discipline', 'Budget and Priority Testing',
+  ],
+  objection_pricing: [
+    'Containment', 'Reframing', 'Proof Deployment', 'Commitment Recovery',
+  ],
+  deal_control_negotiation: [
+    'Next Step Discipline', 'Risk Naming', 'Mutual Action Planning', 'Urgency Creation',
+  ],
+  executive_roi_mixed: [
+    'Brevity Under Pressure', 'Executive Anchoring', 'Number-Led Communication', 'Composure and Certainty',
+  ],
+};
+
+/**
+ * Get sub-skill definitions relevant to a specific day anchor (mastery lane).
+ * This allows tracking cold-calling progress as a distinct lane
+ * while keeping it inside the existing 5-skill model.
+ */
+export function getSubSkillsForAnchor(anchor: string): SubSkillDefinition[] {
+  const names = ANCHOR_SUB_SKILL_NAMES[anchor];
+  if (!names) return [];
+  return ALL_SUB_SKILL_DEFINITIONS.filter(d => names.includes(d.name));
+}
