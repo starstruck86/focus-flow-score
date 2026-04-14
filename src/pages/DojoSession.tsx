@@ -14,7 +14,7 @@ import {
   TrendingUp, TrendingDown, Minus, Zap, Shield, XCircle,
   Eye, PenLine, Volume2, VolumeX,
 } from 'lucide-react';
-import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
+import { getRandomScenario, getLaneScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import { selectSkillShapedScenario } from '@/lib/learning/skillScenarioSelector';
 import { DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 import {
@@ -119,7 +119,7 @@ export default function DojoSession() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isAudio, toggleMode } = useAudioPreference();
 
-  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; skillSession?: import('@/lib/learning/skillSession').SkillSession; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean; fromSkillBuilder?: boolean; pressureLevel?: string; pressureDimensions?: string[]; simulationArcId?: string } | null;
+  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; skillSession?: import('@/lib/learning/skillSession').SkillSession; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean; fromSkillBuilder?: boolean; pressureLevel?: string; pressureDimensions?: string[]; simulationArcId?: string; laneAnchor?: string; laneLabel?: string } | null;
   const transcriptOrigin = state?.transcriptOrigin ?? null;
   const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
   const assignmentId = state?.assignmentId ?? null;
@@ -134,6 +134,10 @@ export default function DojoSession() {
 
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
+    // Lane-aware selection: honor laneAnchor when present
+    if (state?.laneAnchor) {
+      return getLaneScenario(state.laneAnchor, resolvedSkillFocus ?? 'objection_handling');
+    }
     // Use skill-shaped selection when SkillSession is available
     if (state?.skillSession) {
       const selection = selectSkillShapedScenario(state.skillSession);

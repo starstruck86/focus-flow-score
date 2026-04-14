@@ -72,8 +72,10 @@ export async function getAdaptiveStudyPath(userId: string): Promise<AdaptiveStud
   // ── Mode selection (priority order) ──
 
   // 0. active_lane — if user is actively drilling a mastery lane, reinforce it
+  //    Yields to: block_remediation with 2+ gaps (critical), and benchmark/retest assignments
   const activeLane = loadActiveLane();
-  if (activeLane && activeLane.repsThisSession > 0) {
+  const hasUrgentRemediation = blockRemediation && blockRemediation.gaps.length >= 3;
+  if (activeLane && activeLane.repsThisSession > 0 && !hasUrgentRemediation) {
     const anchorDef = DAY_ANCHORS[activeLane.anchor as DayAnchor];
     if (anchorDef) {
       // Find weakest sub-skill in this lane
@@ -93,10 +95,12 @@ export async function getAdaptiveStudyPath(userId: string): Promise<AdaptiveStud
       const kis = await getRecommendedKIsForFocus(userId, {
         type: 'anchor',
         anchor: activeLane.anchor,
+        subSkillHint: weakSubSkill ?? undefined,
       });
       const lessons = await getRecommendedLessonsForFocus(userId, {
         type: 'anchor',
         anchor: activeLane.anchor,
+        subSkillHint: weakSubSkill ?? undefined,
       });
       return {
         mode: 'active_lane' as StudyMode,
@@ -321,6 +325,7 @@ const ANCHOR_SKILL_MAP: Record<string, string> = {
 };
 
 const ANCHOR_TOPICS: Record<string, string[]> = {
+  opening_cold_call: ['cold call', 'opening', 'pattern interrupt', 'hook', 'gatekeeper', 'tonality', 'first 30 seconds'],
   objection_handling: ['objection', 'handling', 'reframe'],
   discovery_qualification: ['discovery', 'qualification', 'question'],
   advanced_objection: ['objection', 'advanced', 'reframe', 'price'],
@@ -328,10 +333,26 @@ const ANCHOR_TOPICS: Record<string, string[]> = {
   executive_roi_mixed: ['executive', 'roi', 'value', 'business case'],
 };
 
+/** Maps sub-skill names to search keywords for content matching */
+const SUB_SKILL_KEYWORDS: Record<string, string[]> = {
+  'Pattern Interrupt': ['pattern interrupt', 'opening line', 'attention', 'hook', 'cold call opening'],
+  'Opening Hook': ['hook', 'opening', 'value prop', 'first sentence', 'curiosity'],
+  'Early Objection Handling': ['early objection', 'brush off', 'not interested', 'cold call objection'],
+  'Meeting Setting Close': ['meeting', 'book', 'calendar', 'close for time', 'next step'],
+  'Early Call Control': ['call control', 'agenda', 'permission', 'frame', 'direct'],
+  'Tonality and Pacing': ['tonality', 'pacing', 'voice', 'tone', 'delivery', 'confidence'],
+  'Pain Excavation': ['pain', 'root cause', 'why', 'dig deeper'],
+  'Depth Creation': ['depth', 'quantify', 'impact', 'peel back'],
+  'Containment': ['contain', 'acknowledge', 'isolate', 'objection'],
+  'Reframing': ['reframe', 'perspective', 'flip', 'redirect'],
+  'Next Step Discipline': ['next step', 'commitment', 'action item'],
+  'Brevity Under Pressure': ['brevity', 'concise', 'executive', 'short'],
+};
+
 // ── KI Recommender ────────────────────────────────────────────────
 
 type KIFocusQuery =
-  | { type: 'anchor'; anchor: string }
+  | { type: 'anchor'; anchor: string; subSkillHint?: string }
   | { type: 'theme'; theme: string }
   | { type: 'remediation'; themes: string[] }
   | { type: 'recent' };
@@ -340,21 +361,21 @@ export async function getRecommendedKIsForFocus(
   userId: string,
   query: KIFocusQuery,
 ): Promise<Array<{ id: string; title: string; reason: string }>> {
-  // Strategy: get KIs from recent assignments related to the focus area
   let anchorFilter: string | null = null;
   let reasonPrefix = 'Relevant to your current focus';
+  let subSkillKeywords: string[] = [];
 
   if (query.type === 'anchor') {
     anchorFilter = query.anchor;
     const anchorInfo = DAY_ANCHORS[query.anchor as DayAnchor];
     reasonPrefix = `Tied to ${anchorInfo?.shortLabel ?? query.anchor}`;
-  } else if (query.type === 'theme') {
-    // Map theme to anchor
-    if (query.theme === 'pressure') {
-      reasonPrefix = 'Helps with pressure execution';
-    } else if (query.theme === 'multi_thread') {
-      reasonPrefix = 'Covers multi-stakeholder dynamics';
+    if (query.subSkillHint) {
+      subSkillKeywords = SUB_SKILL_KEYWORDS[query.subSkillHint] ?? query.subSkillHint.toLowerCase().split(/[\s_-]+/);
+      reasonPrefix = `Targets ${query.subSkillHint}`;
     }
+  } else if (query.type === 'theme') {
+    if (query.theme === 'pressure') reasonPrefix = 'Helps with pressure execution';
+    else if (query.theme === 'multi_thread') reasonPrefix = 'Covers multi-stakeholder dynamics';
   } else if (query.type === 'remediation') {
     reasonPrefix = 'Addresses a persistent gap';
   } else {
@@ -376,7 +397,7 @@ export async function getRecommendedKIsForFocus(
   const { data: assignments } = await assignmentQuery;
   if (!assignments || assignments.length === 0) return [];
 
-  const kiIds = [...new Set(assignments.flatMap(a => (a.kis as unknown as string[]) ?? []))].slice(0, 10);
+  const kiIds = [...new Set(assignments.flatMap(a => (a.kis as unknown as string[]) ?? []))].slice(0, 20);
   if (kiIds.length === 0) return [];
 
   const { data: kiRows } = await supabase
@@ -384,8 +405,20 @@ export async function getRecommendedKIsForFocus(
     .select('id, title')
     .in('id', kiIds);
 
-  return ((kiRows ?? []) as any[])
-    .filter((ki: any) => ki.title)
+  let results = ((kiRows ?? []) as any[]).filter((ki: any) => ki.title);
+
+  // Sub-skill keyword scoring: prioritize KIs whose titles match the weak sub-skill
+  if (subSkillKeywords.length > 0 && results.length > 0) {
+    const scored = results.map((ki: any) => {
+      const titleLower = ki.title.toLowerCase();
+      const matchCount = subSkillKeywords.filter(kw => titleLower.includes(kw)).length;
+      return { ...ki, subSkillScore: matchCount };
+    });
+    scored.sort((a: any, b: any) => b.subSkillScore - a.subSkillScore);
+    results = scored;
+  }
+
+  return results
     .slice(0, 3)
     .map((ki: any) => ({
       id: ki.id,
@@ -397,7 +430,7 @@ export async function getRecommendedKIsForFocus(
 // ── Lesson Recommender ────────────────────────────────────────────
 
 type LessonFocusQuery =
-  | { type: 'anchor'; anchor: string }
+  | { type: 'anchor'; anchor: string; subSkillHint?: string }
   | { type: 'skill'; skill: string }
   | { type: 'topic'; topic: string }
   | { type: 'incomplete' };
@@ -453,9 +486,16 @@ export async function getRecommendedLessonsForFocus(
   let reasonPrefix = 'Relevant to your focus';
 
   if (query.type === 'anchor') {
-    keywords = ANCHOR_TOPICS[query.anchor] ?? [];
-    const anchorInfo = DAY_ANCHORS[query.anchor as DayAnchor];
-    reasonPrefix = `Covers ${anchorInfo?.shortLabel ?? query.anchor}`;
+    keywords = [...(ANCHOR_TOPICS[query.anchor] ?? [])];
+    // Add sub-skill keywords when available
+    if (query.subSkillHint) {
+      const ssKw = SUB_SKILL_KEYWORDS[query.subSkillHint] ?? query.subSkillHint.toLowerCase().split(/[\s_-]+/);
+      keywords.push(...ssKw);
+      reasonPrefix = `Targets ${query.subSkillHint}`;
+    } else {
+      const anchorInfo = DAY_ANCHORS[query.anchor as DayAnchor];
+      reasonPrefix = `Covers ${anchorInfo?.shortLabel ?? query.anchor}`;
+    }
   } else if (query.type === 'skill') {
     keywords = [query.skill.replace(/_/g, ' ')];
     reasonPrefix = `Builds ${query.skill.replace(/_/g, ' ')}`;
