@@ -525,28 +525,26 @@ async function resolveThinkificLandingPage(
   pageUrl: string,
   jar: CookieJar,
   debug: string[],
-): Promise<{ resolved: boolean; courseLinks: CourseLink[]; resolvedUrl?: string }> {
+): Promise<{ resolved: boolean; courseLinks: CourseLink[]; resolvedUrl?: string; directParseHtml?: string }> {
   const parsed = new URL(pageUrl);
 
-  // Only trigger for /pages/ paths on thinkific domains (or custom domains with Thinkific content)
-  const isExplicitPages = /\/pages\//i.test(parsed.pathname);
-  const isThinkificDomain = /thinkific/i.test(parsed.hostname);
-
-  // Also check for root/marketing pages on thinkific domains (no /courses/take/ in path)
+  // Already a course player URL — no resolution needed
   const hasCoursePlayer = /\/courses\/take\//i.test(parsed.pathname);
-
   if (hasCoursePlayer) {
-    // Already a course player URL — no resolution needed
     return { resolved: false, courseLinks: [] };
   }
+
+  const isExplicitPages = /\/pages\//i.test(parsed.pathname);
+  const isThinkificDomain = /thinkific/i.test(parsed.hostname);
 
   if (!isExplicitPages && !isThinkificDomain) {
     return { resolved: false, courseLinks: [] };
   }
 
   debug.push(`[Landing Page] Detected potential landing page: ${pageUrl}`);
+  debug.push(`[Landing Page] Fetching WITH auth cookies (${jar.cookies.size} cookies)...`);
 
-  // Fetch the page
+  // Fetch the page WITH authenticated cookies
   const resp = await fetch(pageUrl, {
     headers: {
       'User-Agent': UA,
@@ -557,7 +555,7 @@ async function resolveThinkificLandingPage(
   });
   jar.addFromHeaders(resp.headers);
   const html = await resp.text();
-  debug.push(`[Landing Page] Fetched: ${resp.status}, ${html.length} chars`);
+  debug.push(`[Landing Page] Fetched: ${resp.status}, ${html.length} chars, final URL: ${resp.url}`);
 
   // Confirm it's Thinkific (check for Thinkific markers in the HTML)
   const isThinkificContent = /thinkific/i.test(html) || /courses\/take\//i.test(html);
@@ -577,7 +575,6 @@ async function resolveThinkificLandingPage(
     const href = m[1];
     const text = m[2].replace(/<[^>]+>/g, '').trim();
     const fullUrl = href.startsWith('http') ? href : `${parsed.origin}${href}`;
-    // Normalize: strip query/hash, take just the course base (up to course slug)
     const courseBase = fullUrl.replace(/[?#].*$/, '').replace(/(\/courses\/take\/[^/]+)\/.*$/, '$1');
     if (seen.has(courseBase)) continue;
     seen.add(courseBase);
@@ -623,9 +620,21 @@ async function resolveThinkificLandingPage(
     }
   }
 
-  debug.push(`[Landing Page] Found ${courseLinks.length} course link(s)`);
+  debug.push(`[Landing Page] Found ${courseLinks.length} /courses/take/ link(s)`);
+
+  // Check for direct curriculum indicators (lesson sidebar, chapter lists, etc.)
+  const hasCurriculumElements = /class="[^"]*(?:chapter-title|lesson-group|course-curriculum|lesson-list|sidebar-lesson)[^"]*"/i.test(html) ||
+    /\/lessons\//i.test(html) ||
+    /<a[^>]*href="[^"]*(?:\/posts\/|\/lessons\/|\/chapters\/)[^"]*"/i.test(html);
+  debug.push(`[Landing Page] Direct curriculum elements detected: ${hasCurriculumElements}`);
 
   if (courseLinks.length === 0) {
+    // No course player links found — return the HTML for direct parsing fallback
+    if (hasCurriculumElements) {
+      debug.push(`[Landing Page] No /courses/take/ links, but curriculum structure exists — enabling direct parse fallback`);
+      return { resolved: false, courseLinks: [], directParseHtml: html };
+    }
+    debug.push(`[Landing Page] No course links or curriculum elements found`);
     return { resolved: false, courseLinks: [] };
   }
 
