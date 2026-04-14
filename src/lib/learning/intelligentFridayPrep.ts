@@ -53,20 +53,20 @@ export function selectFridayPrepSkill(
       });
     }
 
-    // Declining trend
-    if (level.trend === 'declining') {
+    // Many blockers = at risk
+    if (level.blockers.length >= 2) {
       riskSignals.push({
         skill: level.skill,
-        reason: `${SKILL_LABELS[level.skill]} is declining — scores are getting worse, not better.`,
+        reason: `${SKILL_LABELS[level.skill]} has ${level.blockers.length} active blockers: ${level.blockers.slice(0, 2).join(', ')}.`,
         priority: 2,
       });
     }
 
-    // Low consistency
-    if (level.consistencyLabel === 'inconsistent') {
+    // Low progress in current tier
+    if (level.progressWithinTier < 20 && level.currentTier >= 2) {
       riskSignals.push({
         skill: level.skill,
-        reason: `${SKILL_LABELS[level.skill]} is inconsistent — good one rep, weak the next.`,
+        reason: `${SKILL_LABELS[level.skill]} stalled at Tier ${level.currentTier} — only ${level.progressWithinTier}% through.`,
         priority: 3,
       });
     }
