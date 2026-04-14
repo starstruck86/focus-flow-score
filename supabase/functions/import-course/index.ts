@@ -1653,7 +1653,7 @@ function classifyLessonContent(text: string, html: string, finalUrl: string, les
   };
 }
 
-async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: { email?: string; password?: string }): Promise<{ title: string; content: string; type: string; debug: string[]; quality: LessonQuality; media_url?: string; video_duration?: number; transcript_source?: string; has_video_transcript?: boolean }> {
+async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: { email?: string; password?: string }): Promise<{ title: string; content: string; type: string; debug: string[]; quality: LessonQuality; media_url?: string; video_duration?: number; transcript_source?: string; has_video_transcript?: boolean; extraction_trace?: Record<string, unknown>; detected_assets?: Array<Record<string, unknown>> }> {
   const jar = createCookieJar();
   const debug: string[] = [];
   
