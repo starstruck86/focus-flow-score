@@ -524,7 +524,13 @@ export default function DojoSession() {
 
           {phase === 'retry' && (
             <motion.div key="retry" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
-              {activeFocus && (
+              {/* Executive Response: pressure continuity + constraint */}
+              {scenario.skillFocus === 'executive_response' && currentResult && (
+                <ExecRetryConstraintBox result={currentResult} scenarioContext={scenario.context} />
+              )}
+
+              {/* Generic focus card (non-exec) */}
+              {scenario.skillFocus !== 'executive_response' && activeFocus && (
                 <Card className="border-amber-500/30 bg-amber-500/5">
                   <CardContent className="p-3 space-y-1.5">
                     <div className="flex items-center gap-2">
@@ -540,12 +546,27 @@ export default function DojoSession() {
                   </CardContent>
                 </Card>
               )}
-              <div className="flex items-start gap-2 px-1">
-                <Swords className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                <p className="text-sm text-foreground leading-relaxed">{currentResult?.feedback}</p>
-              </div>
+
+              {/* Exec: remind scenario objection to maintain pressure */}
+              {scenario.skillFocus === 'executive_response' && (
+                <Card className="border-border/60">
+                  <CardContent className="p-3">
+                    <p className="text-xs text-muted-foreground mb-1">The exec is still waiting:</p>
+                    <p className="text-sm font-medium italic text-foreground">"{scenario.objection}"</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Generic feedback (non-exec) */}
+              {scenario.skillFocus !== 'executive_response' && (
+                <div className="flex items-start gap-2 px-1">
+                  <Swords className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                  <p className="text-sm text-foreground leading-relaxed">{currentResult?.feedback}</p>
+                </div>
+              )}
+
               <p className="text-sm text-muted-foreground font-medium">Try again:</p>
-              <Textarea ref={textareaRef} value={retryResponse} onChange={(e) => setRetryResponse(e.target.value)} placeholder="Give it another shot..." className="min-h-[120px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRetrySubmit(); }} />
+              <Textarea ref={textareaRef} value={retryResponse} onChange={(e) => setRetryResponse(e.target.value)} placeholder={scenario.skillFocus === 'executive_response' ? 'Answer the exec — sharper this time...' : 'Give it another shot...'} className="min-h-[120px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRetrySubmit(); }} />
               <Button className="w-full gap-2" disabled={!retryResponse.trim()} onClick={handleRetrySubmit}><Send className="h-4 w-4" />Submit Retry</Button>
             </motion.div>
           )}
@@ -605,6 +626,12 @@ function FeedbackView({
           enableVoice={true}
         />
       )}
+
+      {/* ── Executive Response: Sharp Verdict Banner ── */}
+      {skillFocus === 'executive_response' && (
+        <ExecVerdictBanner result={currentResult} />
+      )}
+
       {/* Score */}
       <div className="flex items-center gap-4">
         <div className={cn(
@@ -912,8 +939,13 @@ function FeedbackView({
         </div>
       )}
 
-      {/* ── Your Response (drill only) ── */}
-      {sessionType === 'drill' && userText && (
+      {/* ── Executive Response: Side-by-Side Comparison ── */}
+      {skillFocus === 'executive_response' && sessionType === 'drill' && userText && currentResult.improvedVersion && (
+        <ExecSideBySide userText={userText} improvedVersion={currentResult.improvedVersion} />
+      )}
+
+      {/* ── Your Response (drill only, non-exec) ── */}
+      {sessionType === 'drill' && userText && !(skillFocus === 'executive_response' && currentResult.improvedVersion) && (
         <Card className="border-border/40">
           <CardContent className="p-3 space-y-1.5">
             <div className="flex items-center gap-1.5">
@@ -925,8 +957,8 @@ function FeedbackView({
         </Card>
       )}
 
-      {/* ── Stronger Answer ── */}
-      {currentResult.improvedVersion && (
+      {/* ── Stronger Answer (non-exec or no user text for side-by-side) ── */}
+      {currentResult.improvedVersion && !(skillFocus === 'executive_response' && sessionType === 'drill' && userText) && (
         <Card className="border-green-500/20 bg-green-500/5">
           <CardContent className="p-3 space-y-1.5">
             <div className="flex items-center gap-1.5">
