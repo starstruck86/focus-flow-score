@@ -180,25 +180,55 @@ function getDimensionPromptBlock(skill: string): string {
   const dims = SKILL_DIMENSIONS[skill];
   if (!dims) return '';
   const entries = Object.entries(dims)
-    .map(([key, desc]) => `    "${key}": 0-10  // ${desc}`)
+    .map(([key, desc]) => `    "${key}": { "score": 0-10, "reason": "why this score on THIS answer", "evidence": "quote or paraphrase from the rep's actual words", "improvementAction": "specific action to raise this dimension", "targetFor7": "what ~7/10 looks like for this dimension", "targetFor9": "what ~9/10 looks like for this dimension" }  // ${desc}`)
     .join(',\n');
-  return `\nSTRUCTURED SCORING (REQUIRED):\nYou MUST return a "dimensions" object scoring each dimension 0-10 for this skill.\nOnly score dimensions listed below. Do NOT invent new ones.\n\n  "dimensions": {\n${entries}\n  }\n\nDimension scoring guide: 0-2 not present, 3-4 attempted but weak, 5-6 competent, 7-8 genuinely strong, 9-10 elite.`;
+  return `\nSTRUCTURED SCORING (REQUIRED):\nYou MUST return a "dimensions" object with RICH per-dimension explanations tied to the rep's ACTUAL response.\nOnly score dimensions listed below. Do NOT invent new ones.\n\n  "dimensions": {\n${entries}\n  }\n\nDimension scoring guide: 0-2 not present, 3-4 attempted but weak, 5-6 competent, 7-8 genuinely strong, 9-10 elite.\n\nCRITICAL for dimensions:\n- "reason" must reference the rep's actual answer, not generic rubric language\n- "evidence" must quote or closely paraphrase actual words from the rep's response\n- "improvementAction" must be a concrete, single-sentence behavioral fix\n- "targetFor7" and "targetFor9" must be specific to this scenario, not generic`;
 }
 
-function parseDimensions(raw: unknown, skill: string): Record<string, number> | null {
+interface DimensionDetail {
+  score: number;
+  reason: string;
+  evidence: string;
+  improvementAction: string;
+  targetFor7: string;
+  targetFor9: string;
+}
+
+function parseDimensions(raw: unknown, skill: string): Record<string, DimensionDetail> | null {
   if (!raw || typeof raw !== 'object') return null;
   const validKeys = new Set(Object.keys(SKILL_DIMENSIONS[skill] || {}));
-  const result: Record<string, number> = {};
+  const result: Record<string, DimensionDetail> = {};
   let found = 0;
   for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
-    if (validKeys.has(key) && typeof val === 'number') {
-      result[key] = Math.max(0, Math.min(10, Math.round(val)));
+    if (!validKeys.has(key)) continue;
+    // Support both rich object format and legacy number format
+    if (typeof val === 'number') {
+      result[key] = {
+        score: Math.max(0, Math.min(10, Math.round(val))),
+        reason: '',
+        evidence: '',
+        improvementAction: '',
+        targetFor7: '',
+        targetFor9: '',
+      };
+      found++;
+    } else if (val && typeof val === 'object') {
+      const v = val as Record<string, unknown>;
+      const score = typeof v.score === 'number' ? Math.max(0, Math.min(10, Math.round(v.score))) : 5;
+      result[key] = {
+        score,
+        reason: typeof v.reason === 'string' ? v.reason : '',
+        evidence: typeof v.evidence === 'string' ? v.evidence : '',
+        improvementAction: typeof v.improvementAction === 'string' ? v.improvementAction : '',
+        targetFor7: typeof v.targetFor7 === 'string' ? v.targetFor7 : '',
+        targetFor9: typeof v.targetFor9 === 'string' ? v.targetFor9 : '',
+      };
       found++;
     }
   }
   if (found < Math.ceil(validKeys.size / 2)) return null;
   for (const key of validKeys) {
-    if (!(key in result)) result[key] = 5;
+    if (!(key in result)) result[key] = { score: 5, reason: '', evidence: '', improvementAction: '', targetFor7: '', targetFor9: '' };
   }
   return result;
 }

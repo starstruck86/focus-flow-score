@@ -5,7 +5,7 @@
  * missed dimensions, retry count, and consistency of misses.
  */
 
-import { SKILL_RUBRICS } from './skillRubric';
+import { SKILL_RUBRICS, normalizeDimensionScores } from './skillRubric';
 
 export type NextAction =
   | 'retry_same'           // Same scenario, apply the constraint
@@ -32,22 +32,23 @@ const ACTION_LABELS: Record<NextAction, string> = {
 
 export function recommendNextStep(opts: {
   score: number;
-  dimensions: Record<string, number> | null | undefined;
+  dimensions: Record<string, unknown> | null | undefined;
   skill: string;
   retryCount: number;
   topMistake: string;
-  previousTopMistake?: string; // from prior attempt
+  previousTopMistake?: string;
 }): NextStepRecommendation {
   const { score, dimensions, skill, retryCount, topMistake, previousTopMistake } = opts;
   const rubric = SKILL_RUBRICS[skill];
+  const normalized = normalizeDimensionScores(dimensions);
 
   // Find weakest dimension
   let weakestDim: string | undefined;
   let weakestScore = 10;
   let weakestLabel = '';
-  if (dimensions && rubric) {
+  if (normalized && rubric) {
     for (const dim of rubric.dimensions) {
-      const s = dimensions[dim.key] ?? 5;
+      const s = normalized[dim.key]?.score ?? 5;
       if (s < weakestScore) {
         weakestScore = s;
         weakestDim = dim.key;
