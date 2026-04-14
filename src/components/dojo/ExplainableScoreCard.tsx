@@ -1,7 +1,7 @@
 /**
  * ExplainableScoreCard — Transparent, rep-specific scoring breakdown.
  * Shows: rubric dimensions with scores, expandable per-dimension explanations,
- * biggest miss with evidence, point-lift suggestions tied to actual response.
+ * primary coaching lever (not always weakest), point-lift suggestions tied to actual response.
  */
 
 import { useState } from 'react';
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { TrendingUp, AlertTriangle, Target, ChevronUp, ChevronDown, ChevronRight, Quote, Crosshair } from 'lucide-react';
-import { getSkillRubric, computePointLiftSuggestions, findBiggestMiss, normalizeDimensionScores } from '@/lib/dojo/skillRubric';
+import { getSkillRubric, computePointLiftSuggestions, findBiggestMiss, normalizeDimensionScores, selectPrimaryCoachingLever } from '@/lib/dojo/skillRubric';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 
 interface Props {
