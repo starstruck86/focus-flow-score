@@ -622,9 +622,12 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     // ── Parse and validate structured dimensions ──────────────────
     parsed.dimensions = parseDimensions(parsed.dimensions, skill);
 
-    // ── Compute Primary Coaching Lever (server-side, deterministic) ──
+    // ── Compute Primary Coaching Lever (server-side, canonical algorithm) ──
+    // This MUST match the client-side computeLeverSelection in leverConfig.ts.
+    // Constants are duplicated here because edge functions can't import from src/.
+    // Any change to leverConfig.ts MUST be mirrored here.
     if (parsed.dimensions) {
-      const STRATEGIC_PRIORITY: Record<string, string[]> = {
+      const STRAT_PRIORITY: Record<string, string[]> = {
         executive_response: ['numberLed', 'brevity', 'priorityAnchoring', 'executivePresence'],
         objection_handling: ['isolation', 'reframing', 'commitmentControl', 'proof', 'composure'],
         discovery: ['painExcavation', 'businessImpact', 'questionArchitecture', 'painQuantification', 'urgencyTesting', 'stakeholderDiscovery'],
@@ -632,7 +635,22 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
         qualification: ['painValidation', 'disqualification', 'decisionProcess', 'stakeholderMapping'],
       };
       const OPENING_DIMS = new Set(['numberLed', 'brevity', 'composure', 'questionArchitecture', 'painValidation', 'nextStepControl']);
-      const priorities = STRATEGIC_PRIORITY[skill] || [];
+      const DIM_WEIGHTS: Record<string, Record<string, number>> = {
+        executive_response: { brevity: 25, numberLed: 25, priorityAnchoring: 25, executivePresence: 25 },
+        objection_handling: { composure: 15, isolation: 25, reframing: 25, proof: 15, commitmentControl: 20 },
+        discovery: { questionArchitecture: 15, painExcavation: 25, painQuantification: 15, businessImpact: 20, urgencyTesting: 15, stakeholderDiscovery: 10 },
+        deal_control: { nextStepControl: 30, riskNaming: 25, mutualPlan: 25, stakeholderAlignment: 20 },
+        qualification: { painValidation: 30, stakeholderMapping: 20, decisionProcess: 25, disqualification: 25 },
+      };
+      // Tuning constants — MUST match leverConfig.ts LEVER_TUNING
+      const STRAT_MAX = 35;
+      const OPEN_MAX = 20;
+      const BONUS_THRESH = 6;
+      const SEVERE_MULT = 1.3;
+      const SEVERE_THRESH = 3;
+
+      const priorities = STRAT_PRIORITY[skill] || [];
+      const weights = DIM_WEIGHTS[skill] || {};
       const dims = parsed.dimensions as Record<string, DimensionDetail>;
 
       let bestKey = ''; let bestLeverScore = -1;
@@ -640,22 +658,28 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       let biggestDragKey = ''; let biggestDragGap = -1;
 
       for (const [key, detail] of Object.entries(dims)) {
+        if (!(key in weights)) continue;
         const s = detail.score;
-        const dimDef = Object.keys(SKILL_DIMENSIONS[skill] || {});
-        if (!dimDef.includes(key)) continue;
-
-        // Find weight from rubric position (equal weights if not defined)
-        const rubricDims = Object.keys(SKILL_DIMENSIONS[skill] || {});
-        const weight = 100 / rubricDims.length;
+        const w = weights[key];
 
         if (s < weakestScore) { weakestScore = s; weakestKey = key; }
-        const wGap = (10 - s) * weight;
+        let wGap = (10 - s) * w;
+        if (s <= SEVERE_THRESH) wGap *= SEVERE_MULT;
         if (wGap > biggestDragGap) { biggestDragGap = wGap; biggestDragKey = key; }
 
         if (s >= 8) continue;
         const pIdx = priorities.indexOf(key);
-        const stratBonus = pIdx >= 0 ? Math.max(0, (priorities.length - pIdx) * (50 / priorities.length)) : 0;
-        const openBonus = OPENING_DIMS.has(key) ? 30 : 0;
+        let stratBonus = 0;
+        if (pIdx >= 0) {
+          const rawB = (priorities.length - pIdx) / priorities.length * STRAT_MAX;
+          const scale = Math.max(0, Math.min(1, (BONUS_THRESH - s + 2) / (BONUS_THRESH - 2)));
+          stratBonus = rawB * scale;
+        }
+        let openBonus = 0;
+        if (OPENING_DIMS.has(key)) {
+          const scale = Math.max(0, Math.min(1, (BONUS_THRESH - s + 2) / (BONUS_THRESH - 2)));
+          openBonus = OPEN_MAX * scale;
+        }
         const leverScore = wGap + stratBonus + openBonus;
         if (leverScore > bestLeverScore) { bestLeverScore = leverScore; bestKey = key; }
       }
@@ -665,13 +689,16 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
         parsed.weakestDimension = weakestKey;
         parsed.biggestWeightedDrag = biggestDragKey;
         const parts: string[] = [];
-        if (priorities.indexOf(bestKey) >= 0 && priorities.indexOf(bestKey) < 2) parts.push('strategically critical');
-        if (OPENING_DIMS.has(bestKey)) parts.push('shapes the opening');
+        const pIdx = priorities.indexOf(bestKey);
+        if (pIdx >= 0 && pIdx < 2) parts.push('strategic priority');
+        if (OPENING_DIMS.has(bestKey)) parts.push('opening-shaping');
         if (bestKey === biggestDragKey) parts.push('biggest weighted drag');
+        if (weakestScore <= SEVERE_THRESH && bestKey === weakestKey) parts.push('severe miss');
         parsed.whyPrimaryLeverWasChosen = parts.length > 0
-          ? `${bestKey} selected: ${parts.join(', ')}.`
-          : `${bestKey} selected as highest-leverage fix.`;
+          ? `${bestKey}: ${parts.join(', ')} (leverScore=${bestLeverScore.toFixed(1)})`
+          : `${bestKey}: highest combined leverage (${bestLeverScore.toFixed(1)})`;
         parsed.leverDiffersFromWeakest = bestKey !== weakestKey;
+        parsed.serverLeverScore = bestLeverScore; // for client-side mismatch detection
       }
     }
 

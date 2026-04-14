@@ -2,7 +2,7 @@
  * SkillSession Debug Panel — Dev-only visibility into the shared context loop.
  *
  * Shows resolved SkillSession, source of truth, mapped scenario, scoring rubric,
- * and full training loop trace: skill → scenario → dimensions → scored → recommendation.
+ * full training loop trace, and server/client lever mismatch detection.
  * Hidden in production unless ?debug=skill is present.
  */
 
@@ -11,10 +11,30 @@ import { useResolvedSkillSession } from '@/lib/learning/skillSessionResolver';
 import { getTrainingContent } from '@/lib/learning/skillBuilderContent';
 import { SKILL_SCENARIO_CONSTRAINTS } from '@/lib/learning/skillScenarioSelector';
 import { SKILL_RUBRICS } from '@/lib/dojo/skillRubric';
-import { Bug, ChevronDown, ChevronRight } from 'lucide-react';
+import { LEVER_TUNING } from '@/lib/dojo/leverConfig';
+import { Bug, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 
-export function SkillSessionDebugPanel() {
+interface DebugPanelProps {
+  /** Server-returned lever data for mismatch detection */
+  serverLeverData?: {
+    primaryCoachingLever?: string;
+    weakestDimension?: string;
+    biggestWeightedDrag?: string;
+    whyPrimaryLeverWasChosen?: string;
+    serverLeverScore?: number;
+  } | null;
+  /** Client-computed lever data for mismatch detection */
+  clientLeverData?: {
+    primaryLever?: string;
+    weakestDimension?: string;
+    biggestWeightedDrag?: string;
+    whyChosen?: string;
+    candidates?: Array<{ key: string; leverScore: number }>;
+  } | null;
+}
+
+export function SkillSessionDebugPanel({ serverLeverData, clientLeverData }: DebugPanelProps = {}) {
   const [searchParams] = useSearchParams();
   const resolved = useResolvedSkillSession();
   const isDebug = searchParams.get('debug') === 'skill';
@@ -26,6 +46,12 @@ export function SkillSessionDebugPanel() {
   const constraints = resolved ? SKILL_SCENARIO_CONSTRAINTS[resolved.session.skillId] : null;
   const rubric = resolved ? SKILL_RUBRICS[resolved.session.skillId] : null;
 
+  // Detect server/client mismatch
+  const hasMismatch = serverLeverData && clientLeverData
+    && serverLeverData.primaryCoachingLever
+    && clientLeverData.primaryLever
+    && serverLeverData.primaryCoachingLever !== clientLeverData.primaryLever;
+
   return (
     <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2 text-[11px] font-mono">
       <button
@@ -34,6 +60,7 @@ export function SkillSessionDebugPanel() {
       >
         <Bug className="h-3 w-3" />
         <span className="font-semibold">Training Loop Trace</span>
+        {hasMismatch && <AlertTriangle className="h-3 w-3 text-destructive ml-1" />}
         {expanded ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronRight className="h-3 w-3 ml-auto" />}
       </button>
 
@@ -90,19 +117,42 @@ export function SkillSessionDebugPanel() {
                 </Section>
               )}
 
-              {/* Lever Selection Trace (populated after scoring) */}
-              <Section title="6. Coaching Lever Trace">
-                <p className="text-[9px] text-muted-foreground">
-                  After scoring, the response includes: weakestDimension, primaryCoachingLever, 
-                  biggestWeightedDrag, whyPrimaryLeverWasChosen, leverDiffersFromWeakest.
-                </p>
-                <p className="text-[9px] text-muted-foreground">
-                  UI computes lever client-side via selectPrimaryCoachingLever() using: 
-                  weightedGap + strategicBonus + openingBonus.
-                </p>
-                <Row label="Strategic priority" value={`Per-skill ordering in STRATEGIC_PRIORITY map`} />
-                <Row label="Opening bonus" value="numberLed, brevity, composure, questionArchitecture, painValidation, nextStepControl" />
+              {/* Coaching Lever Trace */}
+              <Section title="6. Coaching Lever Config">
+                <Row label="Strat max bonus" value={String(LEVER_TUNING.strategicMaxBonus)} />
+                <Row label="Opening max bonus" value={String(LEVER_TUNING.openingMaxBonus)} />
+                <Row label="Bonus threshold" value={`Full at ≤${LEVER_TUNING.bonusActivationThreshold}, scaled to 8`} />
+                <Row label="Severe miss" value={`≤${LEVER_TUNING.severeMissThreshold} → ${LEVER_TUNING.severeMissMultiplier}× weightedGap`} />
               </Section>
+
+              {/* Server/Client Mismatch Detection */}
+              {(serverLeverData || clientLeverData) && (
+                <Section title="7. Lever Mismatch Detection">
+                  {serverLeverData?.primaryCoachingLever && (
+                    <Row label="Server lever" value={`${serverLeverData.primaryCoachingLever} (${serverLeverData.whyPrimaryLeverWasChosen || '—'})`} />
+                  )}
+                  {clientLeverData?.primaryLever && (
+                    <Row label="Client lever" value={`${clientLeverData.primaryLever} (${clientLeverData.whyChosen || '—'})`} />
+                  )}
+                  {hasMismatch ? (
+                    <div className="bg-destructive/10 border border-destructive/30 rounded px-2 py-1">
+                      <p className="text-destructive font-bold text-[10px]">
+                        ⚠ MISMATCH: Server chose "{serverLeverData?.primaryCoachingLever}" but client chose "{clientLeverData?.primaryLever}"
+                      </p>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">
+                        This indicates constants or logic divergence between edge function and leverConfig.ts
+                      </p>
+                    </div>
+                  ) : serverLeverData?.primaryCoachingLever && clientLeverData?.primaryLever ? (
+                    <Row label="Match" value="✓ Server and client agree" />
+                  ) : (
+                    <p className="text-[9px] text-muted-foreground">Score a rep to populate lever data.</p>
+                  )}
+                  {clientLeverData?.candidates && clientLeverData.candidates.length > 0 && (
+                    <Row label="Candidates" value={clientLeverData.candidates.map(c => `${c.key}(${c.leverScore.toFixed(0)})`).join(', ')} />
+                  )}
+                </Section>
+              )}
             </div>
           )}
         </>
