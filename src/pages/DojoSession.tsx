@@ -44,6 +44,7 @@ import { useScoreOriginalResponse } from '@/hooks/useScoreOriginalResponse';
 import { PressureAnalysisCard } from '@/components/dojo/PressureAnalysisCard';
 import { TransferProgressCard } from '@/components/dojo/TransferProgressCard';
 import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedbackCard';
+import { DimensionFeedbackCard } from '@/components/dojo/DimensionFeedbackCard';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
@@ -603,6 +604,14 @@ function FeedbackView({
           </p>
         </div>
       </div>
+
+      {/* ── Dimension Feedback ── */}
+      {currentResult.dimensions && (
+        <DimensionFeedbackCard
+          dimensions={currentResult.dimensions as Record<string, number>}
+          skill={skillFocus}
+        />
+      )}
 
       {/* ── V4 Pressure Analysis ── */}
       {pressureLevel && pressureLevel !== 'none' && (
