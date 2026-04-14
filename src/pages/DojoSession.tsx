@@ -350,12 +350,6 @@ export default function DojoSession() {
     navigate('/dojo');
   };
 
-  // Track lane rep completion when a score is recorded
-  useEffect(() => {
-    if (currentResult && phase === 'feedback') {
-      updateLaneAfterRep(currentResult.score);
-    }
-  }, [currentResult, phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle roleplay completion — extract roleplay-specific extras
   const handleRoleplayComplete = useCallback((scoreResult: DojoScoreResult) => {
