@@ -10,6 +10,7 @@ import {
   recordSttFailure,
   recordSttSuccess,
   resetCircuit,
+  resetDedupe,
   getSttStats,
   resetSttStats,
   recordSttBlocked,
@@ -21,6 +22,7 @@ describe('STT Guard', () => {
   beforeEach(() => {
     resetCircuit();
     resetSttStats();
+    resetDedupe();
   });
 
   describe('validateSttRequest', () => {

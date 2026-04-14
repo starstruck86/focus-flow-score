@@ -36,6 +36,11 @@ interface SubmissionRecord {
 const DEDUPE_WINDOW_MS = 3000; // 3 second window
 const recentSubmissions: SubmissionRecord[] = [];
 
+/** Reset dedupe state (for testing). */
+export function resetDedupe(): void {
+  recentSubmissions.length = 0;
+}
+
 /**
  * Generate a lightweight content fingerprint by sampling the blob.
  * Reads first 64 bytes + size + type for fast uniqueness without full hash.
