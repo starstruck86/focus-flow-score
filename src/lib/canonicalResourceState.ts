@@ -391,6 +391,7 @@ export function resolveCanonicalState(
 export interface EnrichmentHealthStats {
   total: number;
   trulyComplete: number;
+  needsExtraction: number;
   readyToEnrich: number;
   enriching: number;
   retryableFailure: number;
@@ -417,6 +418,7 @@ export function computeEnrichmentHealth(
   const stats: EnrichmentHealthStats = {
     total: resources.length,
     trulyComplete: 0,
+    needsExtraction: 0,
     readyToEnrich: 0,
     enriching: 0,
     retryableFailure: 0,
@@ -441,6 +443,7 @@ export function computeEnrichmentHealth(
     const { state } = resolveCanonicalState(r, job);
     switch (state) {
       case 'truly_complete': stats.trulyComplete++; break;
+      case 'needs_extraction': stats.needsExtraction++; break;
       case 'ready_to_enrich': stats.readyToEnrich++; break;
       case 'enriching': stats.enriching++; break;
       case 'retryable_failure': stats.retryableFailure++; break;
@@ -459,7 +462,7 @@ export function computeEnrichmentHealth(
   }
 
   stats.completionPct = stats.total > 0 ? Math.round((stats.trulyComplete / stats.total) * 100) : 0;
-  stats.machinFixable = stats.readyToEnrich + stats.retryableFailure + stats.advancedExtractionPending;
+  stats.machinFixable = stats.readyToEnrich + stats.retryableFailure + stats.advancedExtractionPending + stats.needsExtraction;
   stats.needsInput = stats.needsTranscript + stats.needsPastedContent + stats.needsAccessAuth + stats.needsAlternateSource + stats.awaitingAssistedResolution;
 
   return stats;
