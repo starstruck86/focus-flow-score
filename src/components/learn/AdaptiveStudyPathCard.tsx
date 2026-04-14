@@ -1,11 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Compass, BookOpen, Target, Zap, Users, Wrench, Shield } from 'lucide-react';
+import { Compass, BookOpen, Target, Zap, Users, Wrench, Shield, Flame } from 'lucide-react';
 import type { AdaptiveStudyPath, StudyMode } from '@/lib/learning/learnPathEngine';
 import { RecommendedKIListCard } from './RecommendedKIListCard';
 import { RecommendedLessonListCard } from './RecommendedLessonListCard';
 
 const MODE_CONFIG: Record<StudyMode, { icon: typeof Compass; badge: string; color: string }> = {
+  active_lane: { icon: Flame, badge: 'Active Lane', color: 'bg-primary/10 text-primary' },
   today_rep: { icon: Target, badge: 'Today\'s Rep', color: 'bg-primary/10 text-primary' },
   friday_prep: { icon: Zap, badge: 'Friday Prep', color: 'bg-amber-500/10 text-amber-600' },
   block_remediation: { icon: Wrench, badge: 'Remediation', color: 'bg-red-500/10 text-red-600' },
