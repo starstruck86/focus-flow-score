@@ -23,11 +23,48 @@ import type { SkillFocus } from '../scenarios';
 // A KI belongs to an anchor if its chapter falls within that anchor's domain.
 
 const ANCHOR_CHAPTER_MAP: Record<DayAnchor, string[]> = {
-  opening_cold_call: ['cold_calling', 'opening', 'prospecting', 'messaging'],
-  discovery_qualification: ['discovery', 'qualification', 'needs_analysis', 'stakeholder_navigation'],
-  objection_pricing: ['objection_handling', 'pricing', 'competitive', 'value_proposition'],
-  deal_control_negotiation: ['negotiation', 'closing', 'deal_control', 'deal_strategy', 'follow_up', 'pipeline', 'pipeline_management', 'pipeline_patterns', 'account_strategy'],
-  executive_roi_mixed: ['executive', 'roi', 'business_case', 'leadership', 'c_suite', 'demo', 'expansion'],
+  opening_cold_call: [
+    'cold_calling', 'opening', 'prospecting', 'messaging',
+    // Previously unmapped chapters — cold-call-adjacent
+    'social_selling', 'call_opening', 'rapport_building', 're_engagement',
+    'preparation', 'running_your_sales_day', 'running_sales_day',
+    'time_management', 'self_management', 'mindset',
+  ],
+  discovery_qualification: [
+    'discovery', 'Discovery', 'qualification', 'needs_analysis', 'stakeholder_navigation',
+    'Stakeholder Navigation', 'Stakeholder_Navigation',
+    // Previously unmapped chapters — discovery-adjacent
+    'personas', 'building_trust', 'on_site_meetings', 'in_person_meetings',
+    'meeting_strategy', 'meeting_strategies', 'meeting_management', 'meeting_facilitation',
+    'sales_meetings', 'customer_success', 'retention',
+  ],
+  objection_pricing: [
+    'objection_handling', 'pricing', 'competitive', 'Competitive', 'value_proposition',
+    // Previously unmapped chapters — objection-adjacent
+    'competitors', 'presenting_price', 'rfp_strategy', 'managing_scope',
+  ],
+  deal_control_negotiation: [
+    'negotiation', 'closing', 'Closing', 'deal_control', 'deal_strategy', 'follow_up',
+    'pipeline', 'pipeline_management', 'pipeline_patterns', 'account_strategy',
+    // Previously unmapped chapters — deal-control-adjacent
+    'pipeline_generation', 'pipeline_diagnosis', 'deal_reviews', 'deal_inspection',
+    'deal_management', 'next_steps', 'champion_enablement', 'champion_building',
+    'account_planning', 'account_management', 'territory_planning', 'territory_management',
+    'forecasting', 'forecast', 'team_selling', 'strategic_planning', 'product',
+    'product_feedback',
+  ],
+  executive_roi_mixed: [
+    'executive', 'roi', 'business_case', 'leadership', 'c_suite', 'demo', 'expansion',
+    'executive_engagement',
+    // Previously unmapped chapters — coaching/general/management (executive-adjacent)
+    'coaching', 'call_coaching', 'general', 'General',
+    'hiring', 'Hiring Top Talent', 'hiring_top_talent',
+    'onboarding', 'management', 'team_management', 'sales_management', 'sales_leadership',
+    'training', 'sales_process', 'career_development', 'career_pathing', 'career_growth',
+    'developing_people', 'developing_your_people', 'SDR_management', 'sdr_management',
+    'sales_enablement', 'skill_development', 'compensation', 'ai_enablement',
+    'strategy',
+  ],
 };
 
 // ── Anchor → Skill Mapping ────────────────────────────────────────
