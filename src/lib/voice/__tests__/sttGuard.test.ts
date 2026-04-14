@@ -64,9 +64,9 @@ describe('STT Guard', () => {
 
     it('allows different content', async () => {
       const data1 = new Uint8Array(2000);
-      data1[0] = 1;
-      const data2 = new Uint8Array(2000);
-      data2[0] = 2;
+      data1.fill(10);
+      const data2 = new Uint8Array(3000);
+      data2.fill(20);
       await checkSttDuplicate(new Blob([data1]));
       const result = await checkSttDuplicate(new Blob([data2]));
       expect(result.isDuplicate).toBe(false);
