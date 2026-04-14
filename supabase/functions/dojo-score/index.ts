@@ -180,9 +180,9 @@ function getDimensionPromptBlock(skill: string): string {
   const dims = SKILL_DIMENSIONS[skill];
   if (!dims) return '';
   const entries = Object.entries(dims)
-    .map(([key, desc]) => `    "${key}": 0-10  // ${desc}`)
+    .map(([key, desc]) => `    "${key}": { "score": 0-10, "reason": "why this score on THIS answer", "evidence": "quote or paraphrase from the rep's actual words", "improvementAction": "specific action to raise this dimension", "targetFor7": "what ~7/10 looks like for this dimension", "targetFor9": "what ~9/10 looks like for this dimension" }  // ${desc}`)
     .join(',\n');
-  return `\nSTRUCTURED SCORING (REQUIRED):\nYou MUST return a "dimensions" object scoring each dimension 0-10 for this skill.\nOnly score dimensions listed below. Do NOT invent new ones.\n\n  "dimensions": {\n${entries}\n  }\n\nDimension scoring guide: 0-2 not present, 3-4 attempted but weak, 5-6 competent, 7-8 genuinely strong, 9-10 elite.`;
+  return `\nSTRUCTURED SCORING (REQUIRED):\nYou MUST return a "dimensions" object with RICH per-dimension explanations tied to the rep's ACTUAL response.\nOnly score dimensions listed below. Do NOT invent new ones.\n\n  "dimensions": {\n${entries}\n  }\n\nDimension scoring guide: 0-2 not present, 3-4 attempted but weak, 5-6 competent, 7-8 genuinely strong, 9-10 elite.\n\nCRITICAL for dimensions:\n- "reason" must reference the rep's actual answer, not generic rubric language\n- "evidence" must quote or closely paraphrase actual words from the rep's response\n- "improvementAction" must be a concrete, single-sentence behavioral fix\n- "targetFor7" and "targetFor9" must be specific to this scenario, not generic`;
 }
 
 function parseDimensions(raw: unknown, skill: string): Record<string, number> | null {
