@@ -10,6 +10,10 @@
 
 import { createLogger } from '@/lib/logger';
 import { requestMicrophoneAccess, releaseMicrophoneStream } from '@/lib/microphoneAccess';
+import { ttsCacheKey, lookupCache, storeInCache, recordCacheHit } from '@/lib/voice/ttsCache';
+import { validateSttRequest, shouldRetryStt, getSttRetryDelay, isCircuitOpen, recordSttFailure, recordSttSuccess, recordSttCall, recordSttBlocked } from '@/lib/voice/sttGuard';
+import { trackTtsCall, trackSttCall, trackSttRetry, trackSttMalformed } from '@/lib/voice/voiceUsageTracker';
+import { classifyUtterance, selectModel } from '@/lib/voice/voiceCostController';
 
 const logger = createLogger('DaveVoiceRuntime');
 
