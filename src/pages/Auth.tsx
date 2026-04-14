@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { SafePage } from '@/components/SafePage';
 import { lovable } from '@/integrations/lovable';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -52,7 +53,7 @@ export default function Auth() {
   }
 
   return (
-    <div data-testid="auth-page" className="min-h-screen flex items-center justify-center bg-background p-4 pt-[env(safe-area-inset-top)]">
+    <SafePage data-testid="auth-page" className="flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-display">Quota CoPilot</CardTitle>
@@ -81,6 +82,6 @@ export default function Auth() {
           <p className="text-xs text-center text-muted-foreground">Access is by invitation only</p>
         </CardContent>
       </Card>
-    </div>
+    </SafePage>
   );
 }

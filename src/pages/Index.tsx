@@ -1,13 +1,15 @@
 // Update this page (the content is just a fallback if you fail to update the page)
 
+import { SafePage } from '@/components/SafePage';
+
 const Index = () => {
   return (
-    <div className="flex min-h-screen pt-[env(safe-area-inset-top)] items-center justify-center bg-background">
+    <SafePage className="flex items-center justify-center">
       <div className="text-center">
         <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
         <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
       </div>
-    </div>
+    </SafePage>
   );
 };
 

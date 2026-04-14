@@ -38,6 +38,10 @@ try {
     </ErrorBoundary>
   );
   console.log('[main] React root mounted');
+  // DEV-ONLY: audit for safe-area violations after first paint
+  if (import.meta.env.DEV) {
+    import('./lib/safeAreaDevWarning').then(m => setTimeout(m.runSafeAreaDevAudit, 3000));
+  }
 } catch (err) {
   console.error('[main] Fatal render error:', err);
   renderFatalFallback(err);
