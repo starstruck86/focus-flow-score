@@ -656,6 +656,11 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
   landing_page_resolved?: boolean;
   resolved_from?: string;
   course_options?: CourseLink[];
+  parser_failure?: boolean;
+  parser_failure_reason?: string;
+  failure_type?: ThinkificFailureType;
+  thinkific_debug?: ThinkificDebugDump;
+  auth_failed?: boolean;
 }> {
   const jar = createCookieJar();
   const parsedUrl = new URL(courseUrl);
@@ -713,18 +718,19 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
     // has curriculum/lesson structure we can parse directly
     if (!landingResult.resolved && landingResult.directParseHtml) {
       debug.push(`[Sequence] No course links found — attempting direct curriculum parse from landing page HTML`);
-      const directLessons = parseThinkificCurriculum(landingResult.directParseHtml, origin, debug);
-      if (directLessons.length > 0) {
-        debug.push(`[Sequence] Direct parse SUCCESS: ${directLessons.length} lessons from landing page`);
+      const directParse = parseThinkificCurriculum(landingResult.directParseHtml, courseUrl, debug, { finalUrl: courseUrl, status: 200 });
+      if (directParse.lessons.length > 0) {
+        debug.push(`[Sequence] Direct parse SUCCESS: ${directParse.lessons.length} lessons from landing page`);
         const titleMatch = landingResult.directParseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
         const title = titleMatch?.[1]?.replace(/<[^>]+>/g, '').replace(/\s*[|–—-]\s*[^|–—-]*$/, '').trim() || 'Untitled Course';
         return {
           platform: 'thinkific',
           title,
-          lessons: directLessons,
+          lessons: directParse.lessons,
           debug,
           landing_page_resolved: true,
           resolved_from: courseUrl,
+          thinkific_debug: directParse.debugDump,
         };
       }
       // Also try generic parser
@@ -774,14 +780,25 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
   debug.push(`Course page: ${courseResp.status}, ${courseHtml.length} chars, final URL: ${courseResp.url}`);
   
   // Check if still on login page
-  const isLoginPage = courseHtml.includes('member[password]') && courseHtml.includes('new_member_session');
+  const isLoginPage =
+    (courseHtml.includes('member[password]') && courseHtml.includes('new_member_session')) ||
+    /\/(?:users\/)?sign_in|\/login/i.test(courseResp.url);
   if (isLoginPage) {
     debug.push('Still on login page — authentication did not persist');
     return {
-      platform: 'kajabi',
+      platform: isThinkificDomain ? 'thinkific' : 'kajabi',
       title: 'Authentication Required',
       lessons: [],
       debug,
+      auth_failed: true,
+      ...(isThinkificDomain
+        ? {
+            failure_type: 'fetch_side' as ThinkificFailureType,
+            parser_failure: true,
+            parser_failure_reason: 'Authenticated fetch did not contain curriculum markup or app state',
+            thinkific_debug: buildThinkificDebugDump(courseHtml, courseUrl, courseResp.url, courseResp.status),
+          }
+        : {}),
     };
   }
   
@@ -802,28 +819,30 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
 
   // ── Thinkific course player: parse curriculum from the player page ──
   if (platform === 'thinkific') {
-    const thinkificLessons = parseThinkificCurriculum(courseHtml, origin, debug);
-    if (thinkificLessons.length > 0) {
-      debug.push(`[Thinkific] Found ${thinkificLessons.length} lessons from course player`);
+    const thinkificParse = parseThinkificCurriculum(courseHtml, effectiveUrl, debug, { finalUrl: courseResp.url, status: courseResp.status });
+    if (thinkificParse.lessons.length > 0) {
+      debug.push(`[Thinkific] Found ${thinkificParse.lessons.length} lessons from course player`);
       return {
         platform,
         title: courseTitle,
-        lessons: thinkificLessons,
+        lessons: thinkificParse.lessons,
         debug,
+        thinkific_debug: thinkificParse.debugDump,
         ...(landingPageResolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
       };
     }
-    // For Thinkific: do NOT fall through to generic/broad extraction.
-    // Return zero lessons with a clear parser failure message.
-    debug.push('[Thinkific] All 4 parsing strategies failed — returning 0 lessons instead of junk');
-    debug.push(`[Thinkific] Couldn't detect Thinkific lesson structure. The course player may use client-side rendering.`);
+    const parserFailureReason = thinkificParse.failureReason || "Couldn't detect Thinkific lesson structure. Open the course and paste the URL from inside a lesson view (e.g. /courses/take/.../lessons/...).";
+    debug.push('[Thinkific] Structured parser returned 0 lessons — returning diagnostics instead of junk');
     return {
       platform,
       title: courseTitle,
       lessons: [],
       debug,
       parser_failure: true,
-      parser_failure_reason: "Couldn't detect Thinkific lesson structure. Open the course and paste the URL from inside a lesson view (e.g. /courses/take/.../lessons/...).",
+      parser_failure_reason: parserFailureReason,
+      failure_type: thinkificParse.failureType,
+      thinkific_debug: thinkificParse.debugDump,
+      auth_failed: thinkificParse.debugDump.markers.redirected_to_login,
       ...(landingPageResolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
     };
   }
@@ -890,117 +909,512 @@ const NAV_TITLE_BLOCKLIST = new Set([
   'forgot password', 'reset password', 'profile',
 ]);
 
+type ThinkificFailureType = 'fetch_side' | 'parser_side';
+
+interface ThinkificScriptSummary {
+  index: number;
+  length: number;
+  type: string;
+  markers: string[];
+}
+
+interface ThinkificDebugDump {
+  requested_url: string;
+  final_fetched_url: string;
+  response_status: number;
+  response_length: number;
+  lesson_id_from_url: string | null;
+  current_lesson_title_from_url: string | null;
+  markers: {
+    contains_lesson_id_from_url: boolean;
+    contains_current_lesson_title: boolean;
+    contains_sibling_lesson_titles: boolean;
+    contains_lessons_path: boolean;
+    contains_next_data: boolean;
+    contains_curriculum: boolean;
+    contains_chapter: boolean;
+    contains_lesson_group: boolean;
+    contains_sidebar: boolean;
+    contains_app_state: boolean;
+    contains_curriculum_markup: boolean;
+    redirected_to_login: boolean;
+  };
+  sibling_lesson_candidates: string[];
+  candidate_lesson_titles: string[];
+  top_script_tags: ThinkificScriptSummary[];
+  lesson_metadata_script_found: boolean;
+  app_state_found: boolean;
+  app_state_sources: string[];
+  promising_json_preview: string | null;
+  parser_stages_attempted: string[];
+  failure_type?: ThinkificFailureType;
+  failure_reason?: string;
+}
+
+interface ThinkificParseResult {
+  lessons: LessonInfo[];
+  debugDump: ThinkificDebugDump;
+  failureType?: ThinkificFailureType;
+  failureReason?: string;
+}
+
 function isNavJunkTitle(title: string): boolean {
   const lower = title.toLowerCase().trim();
   if (NAV_TITLE_BLOCKLIST.has(lower)) return true;
-  // Very short single-word generic nav items
   if (lower.length < 3) return true;
-  // Looks like a site nav link (no spaces, very short)
   if (/^(menu|close|open|toggle|skip|back|next|previous|cancel)$/i.test(lower)) return true;
   return false;
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function stripHtmlTags(value: string): string {
+  return decodeHtmlEntities(value.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+}
+
+function normalizeForComparison(value: string): string {
+  return stripHtmlTags(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function humanizeLessonSlug(slug: string | null): string | null {
+  if (!slug) return null;
+  const cleaned = slug.replace(/[-_]+/g, ' ').trim();
+  return cleaned ? cleaned.replace(/\b\w/g, (c) => c.toUpperCase()) : null;
+}
+
+function truncateForDebug(value: string, max = 500): string {
+  return value.length <= max ? value : `${value.slice(0, max)}…`;
+}
+
+function getThinkificCourseRoot(pageUrl: string): string {
+  const parsed = new URL(pageUrl);
+  const match = parsed.pathname.match(/(\/courses\/take\/[^/]+)/i);
+  return match ? `${parsed.origin}${match[1]}` : parsed.origin;
+}
+
+function buildThinkificLessonUrl(rawUrl: unknown, pageUrl: string, fallbackId?: unknown): string {
+  const origin = new URL(pageUrl).origin;
+  const courseRoot = getThinkificCourseRoot(pageUrl);
+
+  if (typeof rawUrl === 'string' && rawUrl.trim()) {
+    const value = rawUrl.trim();
+    if (value.startsWith('http')) return value;
+    if (value.startsWith('/')) return `${origin}${value}`;
+    if (/^(lessons|multimedia|quizzes)\//i.test(value)) return `${courseRoot}/${value}`;
+    if (/^[\w-]+$/.test(value) && String(fallbackId || '').trim()) {
+      return `${courseRoot}/lessons/${fallbackId}-${value}`;
+    }
+  }
+
+  if (fallbackId != null && String(fallbackId).trim()) {
+    return `${courseRoot}/lessons/${String(fallbackId).trim()}`;
+  }
+
+  return '';
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function extractBalancedJsonFragment(input: string, startIndex: number): string | null {
+  const opening = input[startIndex];
+  const closing = opening === '{' ? '}' : opening === '[' ? ']' : '';
+  if (!closing) return null;
+
+  let depth = 0;
+  let inString = false;
+  let stringChar = '';
+  let escaped = false;
+
+  for (let i = startIndex; i < input.length; i++) {
+    const char = input[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === stringChar) {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      inString = true;
+      stringChar = char;
+      continue;
+    }
+
+    if (char === opening) depth++;
+    if (char === closing) {
+      depth--;
+      if (depth === 0) {
+        return input.slice(startIndex, i + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractScriptBody(block: string): string {
+  return block.replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, '').trim();
+}
+
+function summarizeScriptMarkers(text: string): string[] {
+  const markers: string[] = [];
+  if (/__NEXT_DATA__/i.test(text)) markers.push('__NEXT_DATA__');
+  if (/__INITIAL_STATE__/i.test(text)) markers.push('__INITIAL_STATE__');
+  if (/curriculum/i.test(text)) markers.push('curriculum');
+  if (/chapter/i.test(text)) markers.push('chapter');
+  if (/lesson/i.test(text)) markers.push('lesson');
+  if (/module/i.test(text)) markers.push('module');
+  return markers;
+}
+
+function extractThinkificCandidateTitles(html: string): string[] {
+  const seen = new Set<string>();
+  const titles: string[] = [];
+
+  const pushTitle = (value: string) => {
+    const cleaned = stripHtmlTags(value).split('\n')[0].trim();
+    if (!cleaned || cleaned.length < 3 || cleaned.length > 250) return;
+    if (isNavJunkTitle(cleaned)) return;
+    if (seen.has(cleaned.toLowerCase())) return;
+    seen.add(cleaned.toLowerCase());
+    titles.push(cleaned);
+  };
+
+  const lessonLinkRegex = /<a[^>]*href="([^"]*(?:\/lessons\/|\/multimedia\/|\/quizzes\/|\/courses\/take\/)[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = lessonLinkRegex.exec(html)) !== null && titles.length < 20) {
+    pushTitle(m[2]);
+  }
+
+  const titlePatterns = [
+    /class="[^"]*(?:lesson-name|lesson__name|lesson-title|lesson__title|item-title|content-item__title|sidebar-item__title|chapter-title|section-title)[^"]*"[^>]*>([\s\S]*?)<\//gi,
+    /data-lesson-(?:title|name)="([^"]+)"/gi,
+  ];
+
+  for (const pattern of titlePatterns) {
+    let match;
+    while ((match = pattern.exec(html)) !== null && titles.length < 20) {
+      pushTitle(match[1]);
+    }
+  }
+
+  return titles;
+}
+
+function looksLikeLessonObject(value: unknown): value is Record<string, unknown> {
+  if (!isPlainObject(value)) return false;
+  const title = value.title || value.name || value.lesson_title || value.display_title || value.label;
+  if (typeof title !== 'string' || !title.trim() || isNavJunkTitle(title)) return false;
+
+  const locator = value.url || value.href || value.path || value.lesson_url || value.slug || value.id || value.lesson_id || value.content_id;
+  const typeHint = String(value.type || value.kind || value.content_type || value.lesson_type || '');
+
+  return !!locator || /lesson|lecture|multimedia|quiz|content/i.test(typeHint);
+}
+
+function inferModuleNameFromObject(value: Record<string, unknown>, fallback: string): string {
+  const explicit = value.chapter_name || value.chapterTitle || value.chapter_title || value.section || value.section_name || value.section_title || value.module || value.module_name || value.module_title || value.category_name;
+  if (typeof explicit === 'string' && explicit.trim() && !isNavJunkTitle(explicit)) {
+    return explicit.trim();
+  }
+
+  const hasChildren = Object.values(value).some((child) => Array.isArray(child) || isPlainObject(child));
+  const titled = value.title || value.name || value.label;
+  if (hasChildren && typeof titled === 'string' && titled.trim() && !looksLikeLessonObject(value) && !isNavJunkTitle(titled)) {
+    return titled.trim();
+  }
+
+  return fallback;
+}
+
+function extractLessonsFromJson(obj: unknown, pageUrl: string): LessonInfo[] {
+  const lessons: LessonInfo[] = [];
+  const seen = new Set<string>();
+
+  const pushLesson = (value: Record<string, unknown>, moduleName: string) => {
+    const title = String(value.title || value.name || value.lesson_title || value.display_title || value.label || '').trim();
+    if (!title || isNavJunkTitle(title)) return;
+
+    const rawUrl = value.url || value.href || value.path || value.lesson_url || value.permalink || value.slug;
+    const fallbackId = value.id || value.lesson_id || value.content_id || value.slug;
+    const url = buildThinkificLessonUrl(rawUrl, pageUrl, fallbackId);
+    const key = `${moduleName}::${title}::${url || String(fallbackId || '')}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    const durationValue = value.duration || value.duration_in_minutes || value.video_duration;
+    const duration = durationValue != null && String(durationValue).trim() ? `${String(durationValue).trim()} min` : undefined;
+
+    lessons.push({
+      title,
+      url,
+      module: moduleName,
+      index: lessons.length,
+      type: String(value.content_type || value.type || value.lesson_type || 'text') || 'text',
+      duration,
+    });
+  };
+
+  const walk = (value: unknown, moduleName = 'Course Content', depth = 0) => {
+    if (depth > 10 || value == null) return;
+
+    if (Array.isArray(value)) {
+      if (value.some((entry) => looksLikeLessonObject(entry))) {
+        for (const entry of value) {
+          if (looksLikeLessonObject(entry)) {
+            pushLesson(entry, moduleName);
+          }
+        }
+      }
+
+      for (const entry of value) {
+        walk(entry, moduleName, depth + 1);
+      }
+      return;
+    }
+
+    if (!isPlainObject(value)) return;
+
+    if (looksLikeLessonObject(value)) {
+      pushLesson(value, moduleName);
+    }
+
+    const nextModule = inferModuleNameFromObject(value, moduleName);
+    for (const child of Object.values(value)) {
+      if (Array.isArray(child) || isPlainObject(child)) {
+        walk(child, nextModule, depth + 1);
+      }
+    }
+  };
+
+  walk(obj);
+  return lessons;
+}
+
+function extractJsonCandidatesFromScript(block: string): Array<{ source: string; jsonText: string }> {
+  const candidates: Array<{ source: string; jsonText: string }> = [];
+  const body = extractScriptBody(block);
+  if (!body) return candidates;
+
+  const addCandidate = (source: string, startIndex: number) => {
+    const jsonText = extractBalancedJsonFragment(body, startIndex);
+    if (jsonText) {
+      candidates.push({ source, jsonText });
+    }
+  };
+
+  if (/id="__NEXT_DATA__"/i.test(block) || /__NEXT_DATA__/i.test(body)) {
+    const idx = body.search(/[\[{]/);
+    if (idx >= 0) addCandidate('__NEXT_DATA__', idx);
+  }
+
+  const assignmentPatterns = [
+    { source: '__INITIAL_STATE__', regex: /__INITIAL_STATE__\s*=\s*/gi },
+    { source: 'window.__NEXT_DATA__', regex: /window\.__NEXT_DATA__\s*=\s*/gi },
+    { source: 'window.__NUXT__', regex: /window\.__NUXT__\s*=\s*/gi },
+    { source: 'curriculum_state', regex: /(?:coursePlayer|curriculum|lessonData)\s*[:=]\s*/gi },
+  ];
+
+  for (const { source, regex } of assignmentPatterns) {
+    let match;
+    while ((match = regex.exec(body)) !== null) {
+      const idx = body.slice(match.index + match[0].length).search(/[\[{]/);
+      if (idx >= 0) {
+        addCandidate(source, match.index + match[0].length + idx);
+      }
+    }
+  }
+
+  if ((/^\s*[\[{]/.test(body)) && /lesson|chapter|curriculum|module/i.test(body)) {
+    addCandidate('inline_json', body.search(/[\[{]/));
+  }
+
+  return candidates;
+}
+
+function buildThinkificDebugDump(
+  html: string,
+  requestedUrl: string,
+  finalUrl: string,
+  responseStatus: number,
+): ThinkificDebugDump {
+  const lessonIdMatch = requestedUrl.match(/\/lessons\/(\d+)/i);
+  const lessonTitleMatch = requestedUrl.match(/\/lessons\/\d+-([^/?#]+)/i);
+  const lessonId = lessonIdMatch?.[1] || null;
+  const currentLessonTitle = humanizeLessonSlug(lessonTitleMatch?.[1] || null);
+  const normalizedHtml = normalizeForComparison(html);
+  const candidateTitles = extractThinkificCandidateTitles(html);
+  const normalizedCurrentTitle = currentLessonTitle ? normalizeForComparison(currentLessonTitle) : '';
+  const siblingCandidates = normalizedCurrentTitle
+    ? candidateTitles.filter((title) => normalizeForComparison(title) !== normalizedCurrentTitle).slice(0, 10)
+    : candidateTitles.slice(0, 10);
+
+  const scriptBlocks = html.match(/<script[^>]*>[\s\S]{0,250000}?<\/script>/gi) || [];
+  const topScriptTags = scriptBlocks
+    .map((block, index) => {
+      const body = extractScriptBody(block);
+      const type = block.match(/type="([^"]+)"/i)?.[1] || 'inline';
+      return {
+        index,
+        length: body.length,
+        type,
+        markers: summarizeScriptMarkers(block),
+      } satisfies ThinkificScriptSummary;
+    })
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 10);
+
+  let promisingJsonPreview: string | null = null;
+  const appStateSources = new Set<string>();
+  let lessonMetadataScriptFound = false;
+
+  for (const block of scriptBlocks) {
+    const candidates = extractJsonCandidatesFromScript(block);
+    for (const candidate of candidates) {
+      appStateSources.add(candidate.source);
+      if (/lesson|chapter|curriculum|module/i.test(candidate.jsonText)) {
+        lessonMetadataScriptFound = true;
+        if (!promisingJsonPreview) {
+          promisingJsonPreview = truncateForDebug(candidate.jsonText.replace(/\s+/g, ' '), 500);
+        }
+      }
+    }
+  }
+
+  const containsLessonsPath = /\/lessons\//i.test(html);
+  const containsNextData = /__NEXT_DATA__/i.test(html);
+  const containsCurriculum = /curriculum/i.test(html);
+  const containsChapter = /chapter/i.test(html);
+  const containsLessonGroup = /lesson-group/i.test(html);
+  const containsSidebar = /sidebar/i.test(html);
+  const containsCurriculumMarkup = containsLessonsPath || containsCurriculum || containsChapter || containsLessonGroup || containsSidebar || candidateTitles.length > 0;
+  const redirectedToLogin = /\/(?:users\/)?sign_in|\/login/i.test(finalUrl);
+
+  return {
+    requested_url: requestedUrl,
+    final_fetched_url: finalUrl,
+    response_status: responseStatus,
+    response_length: html.length,
+    lesson_id_from_url: lessonId,
+    current_lesson_title_from_url: currentLessonTitle,
+    markers: {
+      contains_lesson_id_from_url: !!lessonId && html.includes(lessonId),
+      contains_current_lesson_title: !!normalizedCurrentTitle && normalizedHtml.includes(normalizedCurrentTitle),
+      contains_sibling_lesson_titles: siblingCandidates.length > 0,
+      contains_lessons_path: containsLessonsPath,
+      contains_next_data: containsNextData,
+      contains_curriculum: containsCurriculum,
+      contains_chapter: containsChapter,
+      contains_lesson_group: containsLessonGroup,
+      contains_sidebar: containsSidebar,
+      contains_app_state: appStateSources.size > 0,
+      contains_curriculum_markup: containsCurriculumMarkup,
+      redirected_to_login: redirectedToLogin,
+    },
+    sibling_lesson_candidates: siblingCandidates,
+    candidate_lesson_titles: candidateTitles.slice(0, 20),
+    top_script_tags: topScriptTags,
+    lesson_metadata_script_found: lessonMetadataScriptFound,
+    app_state_found: appStateSources.size > 0,
+    app_state_sources: [...appStateSources],
+    promising_json_preview: promisingJsonPreview,
+    parser_stages_attempted: [],
+  };
+}
+
+function pushThinkificDiagnosticsToDebug(debugOut: string[], dump: ThinkificDebugDump) {
+  debugOut.push(`[Thinkific Debug] final fetched URL: ${dump.final_fetched_url}`);
+  debugOut.push(`[Thinkific Debug] response status: ${dump.response_status}, length: ${dump.response_length}`);
+  debugOut.push(`[Thinkific Debug] lesson ID from URL: ${dump.lesson_id_from_url || 'n/a'}, current lesson title: ${dump.current_lesson_title_from_url || 'n/a'}`);
+  debugOut.push(`[Thinkific Debug] markers: lessonId=${dump.markers.contains_lesson_id_from_url}, currentTitle=${dump.markers.contains_current_lesson_title}, siblingTitles=${dump.markers.contains_sibling_lesson_titles}, /lessons/=${dump.markers.contains_lessons_path}, __NEXT_DATA__=${dump.markers.contains_next_data}, curriculum=${dump.markers.contains_curriculum}, chapter=${dump.markers.contains_chapter}, lesson-group=${dump.markers.contains_lesson_group}, sidebar=${dump.markers.contains_sidebar}`);
+  debugOut.push(`[Thinkific Debug] app state found: ${dump.app_state_found} via ${dump.app_state_sources.join(', ') || 'none'}`);
+  debugOut.push(`[Thinkific Debug] candidate lesson titles: ${JSON.stringify(dump.candidate_lesson_titles.slice(0, 10))}`);
+  debugOut.push(`[Thinkific Debug] top script tags: ${JSON.stringify(dump.top_script_tags.map((tag) => `#${tag.index} ${tag.length} chars [${tag.markers.join(', ') || 'no markers'}]`))}`);
+  debugOut.push(`[Thinkific Debug] lesson metadata script found: ${dump.lesson_metadata_script_found}`);
+  if (dump.promising_json_preview) {
+    debugOut.push(`[Thinkific Debug] promising JSON preview: ${dump.promising_json_preview}`);
+  }
+}
+
 /**
  * Parse Thinkific course player curriculum.
- * Thinkific uses /courses/take/<slug>/lessons/<id> URL patterns
- * and structures content in chapter/lesson hierarchies.
- * 
- * Strategy order:
- *   1. Embedded JSON/script state blobs with curriculum data
- *   2. Sidebar lesson links with /lessons/ or /multimedia/ URLs
- *   3. Broader /courses/take/ links
- *   4. Chapter/section + lesson-title DOM patterns (no links required)
+ * Thinkific uses /courses/take/<slug>/lessons/<id> URL patterns.
  */
-function parseThinkificCurriculum(html: string, baseOrigin: string, debugOut?: string[]): LessonInfo[] {
+function parseThinkificCurriculum(
+  html: string,
+  pageUrl: string,
+  debugOut?: string[],
+  fetchMeta?: { finalUrl?: string; status?: number },
+): ThinkificParseResult {
+  const dbg = debugOut || [];
+  const finalUrl = fetchMeta?.finalUrl || pageUrl;
+  const responseStatus = fetchMeta?.status || 200;
+  const debugDump = buildThinkificDebugDump(html, pageUrl, finalUrl, responseStatus);
+  const parserStagesAttempted = debugDump.parser_stages_attempted;
   const lessons: LessonInfo[] = [];
   const seen = new Set<string>();
   let currentModule = 'Course Content';
   let index = 0;
-  const dbg = debugOut || [];
 
-  // ── STRATEGY 1: Embedded JSON state ──
-  // Thinkific often embeds curriculum data in <script> tags or data attributes
-  dbg.push(`[Thinkific Parse] Strategy 1: Scanning for embedded JSON curriculum data...`);
-
-  // Look for JSON blobs containing lesson/chapter arrays
-  const scriptBlocks = html.match(/<script[^>]*>[\s\S]{0,100000}?<\/script>/gi) || [];
+  parserStagesAttempted.push('embedded_app_state');
+  dbg.push(`[Thinkific Parse] Strategy 1: Scanning for embedded app-state JSON...`);
+  const scriptBlocks = html.match(/<script[^>]*>[\s\S]{0,250000}?<\/script>/gi) || [];
   for (const block of scriptBlocks) {
-    // Look for curriculum-like JSON structures
-    // Pattern: arrays of objects with "name"/"title" + "lessons" or "contents"
-    const jsonCandidates = block.match(/\{[^{}]*"(?:chapters?|sections?|modules?|curriculum)"[^{}]*\[[\s\S]*?\]\s*\}/gi) || [];
-    for (const candidate of jsonCandidates) {
+    const candidates = extractJsonCandidatesFromScript(block);
+    for (const candidate of candidates) {
       try {
-        // Try to extract a broader JSON object
-        const startIdx = block.indexOf(candidate);
-        // Find the balanced JSON from this point
-        let depth = 0;
-        let jsonStart = -1;
-        let jsonEnd = -1;
-        for (let i = startIdx; i < block.length && i < startIdx + 50000; i++) {
-          if (block[i] === '{') { if (depth === 0) jsonStart = i; depth++; }
-          if (block[i] === '}') { depth--; if (depth === 0) { jsonEnd = i + 1; break; } }
-        }
-        if (jsonStart >= 0 && jsonEnd > jsonStart) {
-          const jsonStr = block.substring(jsonStart, jsonEnd);
-          const parsed = JSON.parse(jsonStr);
-          const extracted = extractLessonsFromJson(parsed, baseOrigin);
-          if (extracted.length > 0) {
-            dbg.push(`[Thinkific Parse] Strategy 1 SUCCESS: ${extracted.length} lessons from embedded JSON`);
-            return extracted;
+        const parsed = JSON.parse(candidate.jsonText);
+        const extracted = extractLessonsFromJson(parsed, pageUrl);
+        if (extracted.length > 0) {
+          debugDump.app_state_found = true;
+          if (!debugDump.app_state_sources.includes(candidate.source)) {
+            debugDump.app_state_sources.push(candidate.source);
           }
+          dbg.push(`[Thinkific Parse] Strategy 1 SUCCESS: ${extracted.length} lessons from ${candidate.source}`);
+          pushThinkificDiagnosticsToDebug(dbg, debugDump);
+          return { lessons: extracted, debugDump };
         }
-      } catch { /* not valid JSON, continue */ }
-    }
-
-    // Also look for direct lesson arrays: [{name: "...", id: ...}, ...]
-    const lessonArrays = block.match(/\[\s*\{[^[\]]*"(?:name|title)"[^[\]]*"(?:id|slug|url)"[^[\]]*\}[\s\S]*?\]/gi) || [];
-    for (const arr of lessonArrays) {
-      try {
-        const parsed = JSON.parse(arr);
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.name) {
-          const extracted: LessonInfo[] = [];
-          for (const item of parsed) {
-            const title = (item.name || item.title || '').trim();
-            if (!title || isNavJunkTitle(title)) continue;
-            const lessonId = item.id || item.slug || '';
-            const url = item.url || (lessonId ? `${baseOrigin}/courses/take/course/lessons/${lessonId}` : '');
-            extracted.push({
-              title,
-              url,
-              module: item.chapter_name || item.section || 'Course Content',
-              index: extracted.length,
-              type: item.type || 'text',
-            });
-          }
-          if (extracted.length > 0) {
-            dbg.push(`[Thinkific Parse] Strategy 1 SUCCESS: ${extracted.length} lessons from JSON array`);
-            return extracted;
-          }
-        }
-      } catch { /* continue */ }
+      } catch {
+        // Ignore malformed candidates and continue scanning.
+      }
     }
   }
-  dbg.push(`[Thinkific Parse] Strategy 1: No JSON curriculum found`);
+  dbg.push(`[Thinkific Parse] Strategy 1: No lessons extracted from app-state JSON`);
 
-  // ── STRATEGY 2: Sidebar lesson links ──
+  parserStagesAttempted.push('sidebar_links');
   dbg.push(`[Thinkific Parse] Strategy 2: Scanning for sidebar lesson links...`);
-
-  // Thinkific chapter headings
   const chapterHeadings: { text: string; position: number }[] = [];
   const chapterRegex = /class="[^"]*(?:chapter-title|lesson-group__title|course-curriculum__chapter-title|chapter__title|section-title)[^"]*"[^>]*>([\s\S]*?)<\//gi;
   let cm;
   while ((cm = chapterRegex.exec(html)) !== null) {
-    const text = cm[1].replace(/<[^>]+>/g, '').trim();
-    if (text && text.length > 1 && text.length < 200) {
+    const text = stripHtmlTags(cm[1]);
+    if (text && text.length > 1 && text.length < 200 && !isNavJunkTitle(text)) {
       chapterHeadings.push({ text, position: cm.index });
     }
   }
-
-  // Also grab h2/h3 headings as fallback chapter markers
   if (chapterHeadings.length === 0) {
     const hRegex = /<h[2-3][^>]*>([\s\S]*?)<\/h[2-3]>/gi;
     while ((cm = hRegex.exec(html)) !== null) {
-      const text = cm[1].replace(/<[^>]+>/g, '').trim();
+      const text = stripHtmlTags(cm[1]);
       if (text && text.length > 2 && text.length < 200 && !isNavJunkTitle(text)) {
         chapterHeadings.push({ text, position: cm.index });
       }
@@ -1008,19 +1422,16 @@ function parseThinkificCurriculum(html: string, baseOrigin: string, debugOut?: s
   }
   dbg.push(`[Thinkific Parse] Found ${chapterHeadings.length} chapter headings`);
 
-  // Thinkific lesson links: /courses/take/.../lessons/... or /courses/take/.../multimedia/...
   const linkRegex = /<a[^>]*href="([^"]*\/courses\/take\/[^"]*(?:\/lessons\/|\/multimedia\/|\/quizzes\/)[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
   let m;
   while ((m = linkRegex.exec(html)) !== null) {
     const href = m[1];
-    const rawText = m[2].replace(/<[^>]+>/g, '').trim();
-    const cleanTitle = rawText.split('\n')[0].trim();
-    if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 300) continue;
-    if (isNavJunkTitle(cleanTitle)) continue;
+    const cleanTitle = stripHtmlTags(m[2]).split('\n')[0].trim();
+    if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 300 || isNavJunkTitle(cleanTitle)) continue;
 
-    const fullUrl = href.startsWith('http') ? href : `${baseOrigin}${href}`;
+    const fullUrl = buildThinkificLessonUrl(href, pageUrl);
     const normalized = fullUrl.replace(/[?#].*$/, '');
-    if (seen.has(normalized)) continue;
+    if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
 
     for (let i = chapterHeadings.length - 1; i >= 0; i--) {
@@ -1036,7 +1447,6 @@ function parseThinkificCurriculum(html: string, baseOrigin: string, debugOut?: s
     else if (/\/quizzes\//i.test(href) || /quiz|assessment/i.test(context)) type = 'quiz';
 
     const durMatch = context.match(/(\d+)\s*(?:min|minutes?)/i);
-
     lessons.push({
       title: cleanTitle,
       url: fullUrl,
@@ -1049,22 +1459,22 @@ function parseThinkificCurriculum(html: string, baseOrigin: string, debugOut?: s
 
   if (lessons.length > 0) {
     dbg.push(`[Thinkific Parse] Strategy 2 SUCCESS: ${lessons.length} lessons from sidebar links`);
-    return lessons;
+    pushThinkificDiagnosticsToDebug(dbg, debugDump);
+    return { lessons, debugDump };
   }
-  dbg.push(`[Thinkific Parse] Strategy 2: No /lessons/ links found`);
+  dbg.push(`[Thinkific Parse] Strategy 2: No sidebar lesson links found`);
 
-  // ── STRATEGY 3: Broader /courses/take/ links ──
-  dbg.push(`[Thinkific Parse] Strategy 3: Scanning for broader /courses/take/ links...`);
+  parserStagesAttempted.push('lesson_links');
+  dbg.push(`[Thinkific Parse] Strategy 3: Scanning for broader lesson links...`);
   const broadRegex = /<a[^>]*href="([^"]*\/courses\/take\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
   while ((m = broadRegex.exec(html)) !== null) {
     const href = m[1];
-    const text = m[2].replace(/<[^>]+>/g, '').trim().split('\n')[0].trim();
-    if (!text || text.length < 2 || text.length > 300) continue;
-    if (isNavJunkTitle(text)) continue;
+    const text = stripHtmlTags(m[2]).split('\n')[0].trim();
+    if (!text || text.length < 2 || text.length > 300 || isNavJunkTitle(text)) continue;
 
-    const fullUrl = href.startsWith('http') ? href : `${baseOrigin}${href}`;
+    const fullUrl = buildThinkificLessonUrl(href, pageUrl);
     const normalized = fullUrl.replace(/[?#].*$/, '');
-    if (seen.has(normalized)) continue;
+    if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
 
     lessons.push({
@@ -1077,114 +1487,60 @@ function parseThinkificCurriculum(html: string, baseOrigin: string, debugOut?: s
   }
 
   if (lessons.length > 0) {
-    dbg.push(`[Thinkific Parse] Strategy 3 SUCCESS: ${lessons.length} lessons from broad links`);
-    return lessons;
+    dbg.push(`[Thinkific Parse] Strategy 3 SUCCESS: ${lessons.length} lessons from lesson links`);
+    pushThinkificDiagnosticsToDebug(dbg, debugDump);
+    return { lessons, debugDump };
   }
-  dbg.push(`[Thinkific Parse] Strategy 3: No /courses/take/ links found`);
+  dbg.push(`[Thinkific Parse] Strategy 3: No broader lesson links found`);
 
-  // ── STRATEGY 4: DOM-based lesson title extraction (no links required) ──
-  // Some Thinkific pages render lesson titles in sidebar without <a> tags
-  dbg.push(`[Thinkific Parse] Strategy 4: Scanning for DOM lesson title patterns...`);
+  parserStagesAttempted.push('dom_curriculum_nodes');
+  dbg.push(`[Thinkific Parse] Strategy 4: Scanning for DOM lesson/sidebar nodes...`);
+  const domLessons: LessonInfo[] = [];
   const lessonTitlePatterns = [
-    /class="[^"]*(?:lesson-name|lesson__name|lesson-title|lesson__title|item-title|content-item__title)[^"]*"[^>]*>([\s\S]*?)<\//gi,
-    /class="[^"]*(?:course-player__content-item|sidebar-item__title)[^"]*"[^>]*>([\s\S]*?)<\//gi,
+    /class="[^"]*(?:lesson-name|lesson__name|lesson-title|lesson__title|item-title|content-item__title|course-player__content-item|sidebar-item__title)[^"]*"[^>]*>([\s\S]*?)<\//gi,
     /data-lesson-(?:title|name)="([^"]+)"/gi,
   ];
-  for (const pat of lessonTitlePatterns) {
-    let lm;
-    while ((lm = pat.exec(html)) !== null) {
-      const title = lm[1].replace(/<[^>]+>/g, '').trim();
-      if (!title || title.length < 3 || title.length > 300) continue;
-      if (isNavJunkTitle(title)) continue;
-      if (seen.has(title)) continue;
-      seen.add(title);
-      lessons.push({
+  for (const pattern of lessonTitlePatterns) {
+    let match;
+    while ((match = pattern.exec(html)) !== null) {
+      const title = stripHtmlTags(match[1]);
+      if (!title || title.length < 3 || title.length > 300 || isNavJunkTitle(title)) continue;
+      const dedupeKey = `dom::${title.toLowerCase()}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      domLessons.push({
         title,
-        url: '', // No URL available from DOM-only extraction
+        url: '',
         module: 'Course Content',
-        index: index++,
+        index: domLessons.length,
         type: 'text',
       });
     }
   }
 
-  if (lessons.length > 0) {
-    dbg.push(`[Thinkific Parse] Strategy 4 SUCCESS: ${lessons.length} lessons from DOM patterns`);
-  } else {
-    dbg.push(`[Thinkific Parse] Strategy 4: No DOM lesson patterns found`);
+  if (domLessons.length > 0) {
+    dbg.push(`[Thinkific Parse] Strategy 4 SUCCESS: ${domLessons.length} lessons from DOM curriculum nodes`);
+    pushThinkificDiagnosticsToDebug(dbg, debugDump);
+    return { lessons: domLessons, debugDump };
   }
+  dbg.push(`[Thinkific Parse] Strategy 4: No DOM lesson/sidebar nodes found`);
 
-  // ── DEBUG: Report what we saw ──
-  const hasLessonsPath = /\/lessons\//i.test(html);
-  const hasSidebarClasses = /class="[^"]*(?:sidebar|lesson-list|course-curriculum|chapter|lesson-group)[^"]*"/i.test(html);
-  const hasJsonBlocks = scriptBlocks.length;
-  dbg.push(`[Thinkific Debug] /lessons/ in HTML: ${hasLessonsPath}, sidebar classes: ${hasSidebarClasses}, script blocks: ${hasJsonBlocks}`);
+  const hasMeaningfulCurriculumData =
+    debugDump.markers.redirected_to_login
+      ? false
+      : debugDump.markers.contains_curriculum_markup || debugDump.markers.contains_app_state || debugDump.candidate_lesson_titles.length > 0;
 
-  // Log top 20 candidate link/text pairs for debugging
-  const allLinks: { text: string; href: string }[] = [];
-  const allLinkRegex = /<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
-  let al;
-  while ((al = allLinkRegex.exec(html)) !== null && allLinks.length < 20) {
-    const text = al[2].replace(/<[^>]+>/g, '').trim().split('\n')[0].trim();
-    if (text && text.length >= 2) {
-      allLinks.push({ text, href: al[1] });
-    }
-  }
-  dbg.push(`[Thinkific Debug] Top ${allLinks.length} candidate links: ${JSON.stringify(allLinks.map(l => `${l.text} → ${l.href.substring(0, 60)}`))}`);
+  const failureType: ThinkificFailureType = hasMeaningfulCurriculumData ? 'parser_side' : 'fetch_side';
+  const failureReason = hasMeaningfulCurriculumData
+    ? 'Curriculum data detected but parser could not extract lessons'
+    : 'Authenticated fetch did not contain curriculum markup or app state';
 
-  return lessons;
-}
+  debugDump.failure_type = failureType;
+  debugDump.failure_reason = failureReason;
+  pushThinkificDiagnosticsToDebug(dbg, debugDump);
+  dbg.push(`[Thinkific] ${failureReason}`);
 
-/** Extract lessons from a parsed JSON curriculum structure */
-function extractLessonsFromJson(obj: any, baseOrigin: string): LessonInfo[] {
-  const lessons: LessonInfo[] = [];
-  if (!obj || typeof obj !== 'object') return lessons;
-
-  // Look for chapter/section arrays
-  const chapterKeys = ['chapters', 'sections', 'modules', 'curriculum', 'course_contents', 'contents'];
-  for (const key of chapterKeys) {
-    if (Array.isArray(obj[key])) {
-      for (const chapter of obj[key]) {
-        const moduleName = chapter.name || chapter.title || 'Course Content';
-        const lessonKeys = ['lessons', 'contents', 'items', 'content_items'];
-        for (const lk of lessonKeys) {
-          if (Array.isArray(chapter[lk])) {
-            for (const lesson of chapter[lk]) {
-              const title = (lesson.name || lesson.title || '').trim();
-              if (!title || isNavJunkTitle(title)) continue;
-              const id = lesson.id || lesson.slug || '';
-              const url = lesson.url || (id ? `${baseOrigin}/courses/take/course/lessons/${id}` : '');
-              lessons.push({
-                title,
-                url,
-                module: moduleName,
-                index: lessons.length,
-                type: lesson.content_type || lesson.type || 'text',
-                duration: lesson.duration ? `${lesson.duration} min` : undefined,
-              });
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Direct lesson array at root
-  if (lessons.length === 0 && Array.isArray(obj)) {
-    for (const item of obj) {
-      const title = (item.name || item.title || '').trim();
-      if (!title || isNavJunkTitle(title)) continue;
-      lessons.push({
-        title,
-        url: item.url || '',
-        module: item.chapter || 'Course Content',
-        index: lessons.length,
-        type: item.type || 'text',
-      });
-    }
-  }
-
-  return lessons;
+  return { lessons: [], debugDump, failureType, failureReason };
 }
 
 interface LessonQuality {
@@ -1297,7 +1653,7 @@ function classifyLessonContent(text: string, html: string, finalUrl: string, les
   };
 }
 
-async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: { email?: string; password?: string }): Promise<{ title: string; content: string; type: string; debug: string[]; quality: LessonQuality; media_url?: string; video_duration?: number; transcript_source?: string; has_video_transcript?: boolean }> {
+async function fetchLessonContent(courseUrl: string, lessonUrl: string, creds?: { email?: string; password?: string }): Promise<{ title: string; content: string; type: string; debug: string[]; quality: LessonQuality; media_url?: string; video_duration?: number; transcript_source?: string; has_video_transcript?: boolean; extraction_trace?: Record<string, unknown>; detected_assets?: unknown[] }> {
   const jar = createCookieJar();
   const debug: string[] = [];
   
@@ -2178,8 +2534,10 @@ Deno.serve(async (req) => {
         meta: {
           domain,
           used_request_credentials: !!creds,
-          auth_status: result.lessons.length === 0 && result.title === 'Authentication Required' ? 'auth_failed' : 'authenticated',
+          auth_status: result.auth_failed || (result.lessons.length === 0 && result.title === 'Authentication Required') ? 'auth_failed' : 'authenticated',
           lessons_discovered: result.lessons.length,
+          failure_type: result.failure_type || null,
+          thinkific_debug_available: !!result.thinkific_debug,
         },
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
