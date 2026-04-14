@@ -18,7 +18,7 @@ export interface SkillStat {
   recentFirstAttempts: number[];
 }
 
-const SCENARIOS: DojoScenario[] = [
+export const SCENARIOS: DojoScenario[] = [
   // ── Objection Handling ──────────────────────────────────────────────
   { id: 'oh-1', skillFocus: 'objection_handling', title: 'Incumbent loyalty',
     context: "You're mid-discovery with a VP of Marketing at a DTC skincare brand doing $12M ARR. They've used Braze for 2 years, renewed 3 months ago, and their lifecycle team of 4 built all automations in Braze. The VP personally championed the Braze deal.",
