@@ -3,17 +3,21 @@
  *
  * Replaces shallow Skill Builder content with: mental model, failure/better patterns,
  * before/after examples, mechanism explanation, micro drill, and practice launch.
+ * 
+ * Now supports adaptive emphasis: when topBlocker or focusPattern is available,
+ * the micro drill is customized to target the user's actual gap.
  */
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, XCircle, CheckCircle2, Lightbulb, PenLine, Swords, ChevronRight } from 'lucide-react';
+import { Brain, XCircle, CheckCircle2, Lightbulb, PenLine, Swords, ChevronRight, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { TrainingContent } from '@/lib/learning/skillBuilderContent';
 import type { SkillSession } from '@/lib/learning/skillSession';
 import { skillSessionToParams } from '@/lib/learning/skillSession';
+import { deriveAdaptiveEmphasis } from '@/lib/learning/adaptiveSkillBuilder';
 
 interface Props {
   content: TrainingContent;
@@ -38,6 +42,11 @@ export function SkillTrainingModule({ content, session, onComplete }: Props) {
   const [drillResponse, setDrillResponse] = useState('');
   const step = STEPS[currentStep];
 
+  // Derive adaptive emphasis
+  const emphasis = deriveAdaptiveEmphasis(session, content);
+  const drillPrompt = emphasis.customDrillPrompt ?? content.microDrill.prompt;
+  const drillInstruction = emphasis.customDrillInstruction ?? content.microDrill.instruction;
+
   const advance = () => {
     if (currentStep < STEPS.length - 1) {
       setCurrentStep(prev => prev + 1);
@@ -53,8 +62,6 @@ export function SkillTrainingModule({ content, session, onComplete }: Props) {
       },
     });
   };
-
-  const progress = Math.round(((currentStep + 1) / STEPS.length) * 100);
 
   return (
     <div className="space-y-4">
@@ -77,6 +84,14 @@ export function SkillTrainingModule({ content, session, onComplete }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Adaptive emphasis note */}
+      {emphasis.emphasisNote && step !== 'practice' && (
+        <div className="flex gap-2 px-2.5 py-2 rounded-md bg-amber-500/5 border border-amber-500/15">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-foreground leading-relaxed">{emphasis.emphasisNote}</p>
+        </div>
+      )}
 
       {/* Step content */}
       {step === 'mental_model' && (
@@ -175,19 +190,20 @@ export function SkillTrainingModule({ content, session, onComplete }: Props) {
           <div className="flex items-center gap-2">
             <PenLine className="h-4.5 w-4.5 text-primary" />
             <p className="text-sm font-bold text-foreground">Micro Drill</p>
+            {emphasis.drillVariant !== 'default' && (
+              <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-600 dark:text-amber-400">
+                Adapted
+              </Badge>
+            )}
           </div>
 
           {/* Scenario */}
           <div className="rounded-lg bg-muted/50 border border-border p-3">
-            <p className="text-sm text-foreground leading-relaxed">
-              {content.microDrill.prompt}
-            </p>
+            <p className="text-sm text-foreground leading-relaxed">{drillPrompt}</p>
           </div>
 
           {/* Instruction */}
-          <p className="text-xs text-muted-foreground leading-relaxed italic">
-            {content.microDrill.instruction}
-          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed italic">{drillInstruction}</p>
 
           {/* Response area */}
           <textarea

@@ -1,13 +1,15 @@
 /**
- * LearnPressureCard — "Prepare for Friday" card.
- * Routes to scenario-based prep instead of doing nothing.
+ * LearnPressureCard — Intelligent Friday Prep card.
+ * Dynamically selects the most at-risk skill instead of hardcoding.
  */
 
 import { useNavigate } from 'react-router-dom';
-import { Flame, AlertTriangle, Shield, ArrowRight } from 'lucide-react';
+import { Flame, AlertTriangle, Shield, ArrowRight, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { FridayReadiness } from '@/lib/learning/learnWeeklyEngine';
+import { useSkillLevels } from '@/hooks/useSkillLevels';
+import { selectFridayPrepSkill } from '@/lib/learning/intelligentFridayPrep';
 
 interface Props {
   readiness: FridayReadiness;
@@ -15,29 +17,21 @@ interface Props {
 
 export function LearnPressureCard({ readiness }: Props) {
   const navigate = useNavigate();
+  const { data: skillLevels } = useSkillLevels();
 
   if (!readiness.expected) return null;
+
+  const prep = selectFridayPrepSkill(skillLevels);
 
   const handlePrepare = () => {
     navigate('/dojo/session', {
       state: {
-        skillSession: {
-          skillId: 'objection_handling',
-          skillName: 'Friday Pressure Prep',
-          currentTier: 0,
-          currentLevel: 0,
-          targetTier: 0,
-          scenarioType: 'advanced' as const,
-        },
-        skillFocus: 'objection_handling',
+        skillSession: prep.session,
+        skillFocus: prep.skill,
         pressurePrep: true,
         fridayReadiness: readiness,
         pressureLevel: 'high',
-        pressureDimensions: [
-          readiness.pressureExpected ? 'time_pressure' : '',
-          readiness.multiThreadLikely ? 'multi_thread' : '',
-          'executive_scrutiny',
-        ].filter(Boolean),
+        pressureDimensions: prep.pressureDimensions,
       },
     });
   };
@@ -52,12 +46,23 @@ export function LearnPressureCard({ readiness }: Props) {
           </div>
           <div>
             <p className="text-sm font-bold text-foreground">Prepare for Friday</p>
-            <p className="text-[11px] text-muted-foreground">High-pressure simulation day</p>
+            <p className="text-[11px] text-muted-foreground">Pressure skill: {prep.skillName}</p>
           </div>
         </div>
       </div>
 
-      {/* Expectations */}
+      {/* Why this skill */}
+      <div className="flex gap-2 px-2.5 py-2 rounded-md bg-orange-500/5 border border-orange-500/15">
+        <Target className="h-3.5 w-3.5 text-orange-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-foreground leading-relaxed">
+          <span className="font-semibold">Why:</span> {prep.reason}
+        </p>
+      </div>
+
+      {/* What will be tested */}
+      <p className="text-xs text-muted-foreground leading-relaxed">{prep.whatWillBeTested}</p>
+
+      {/* Tags */}
       <div className="flex flex-wrap gap-1.5">
         {readiness.pressureExpected && (
           <Badge variant="outline" className="text-[9px] border-orange-500/30 text-orange-600 dark:text-orange-400">
@@ -76,24 +81,11 @@ export function LearnPressureCard({ readiness }: Props) {
         )}
       </div>
 
-      {/* Why */}
-      <p className="text-xs text-foreground leading-relaxed">{readiness.whyItMatters}</p>
-
-      {/* Risk */}
-      {readiness.primaryRisk && (
-        <div className="flex gap-2 px-2.5 py-2 rounded-md bg-destructive/5 border border-destructive/15">
-          <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
-          <p className="text-xs text-foreground leading-relaxed">
-            <span className="font-semibold">Risk:</span> {readiness.primaryRisk}
-          </p>
-        </div>
-      )}
-
-      {/* Prep focus */}
+      {/* What ready looks like */}
       <div className="flex gap-2 px-2.5 py-2 rounded-md bg-primary/5 border border-primary/10">
         <Shield className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
         <p className="text-xs text-foreground leading-relaxed">
-          <span className="font-semibold">Focus:</span> {readiness.prepFocus}
+          <span className="font-semibold">Ready =</span> {prep.whatReadyLooksLike}
         </p>
       </div>
 
