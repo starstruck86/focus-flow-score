@@ -59,6 +59,7 @@ export const CANONICAL_STATE_LABELS: Record<CanonicalState, string> = {
   metadata_only_candidate: 'Metadata Only',
   quarantined: 'Quarantined',
   truly_complete: 'Complete',
+  needs_extraction: 'Needs Extraction',
   system_gap: 'System Gap',
 };
 
@@ -77,6 +78,7 @@ export const CANONICAL_STATE_COLORS: Record<CanonicalState, string> = {
   metadata_only_candidate: 'bg-muted text-muted-foreground',
   quarantined: 'bg-destructive/20 text-destructive',
   truly_complete: 'bg-status-green/20 text-status-green',
+  needs_extraction: 'bg-amber-500/20 text-amber-600',
   system_gap: 'bg-destructive/20 text-destructive',
 };
 
