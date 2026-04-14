@@ -11,6 +11,7 @@ export type BucketFilter =
   | 'all'
   | 'complete'
   | 'auto_fixable'
+  | 'needs_extraction'
   | 'advanced_extraction'
   | 'assisted_resolution'
   | 'needs_input'
