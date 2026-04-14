@@ -337,6 +337,45 @@ export const SKILL_RUBRICS: Record<string, SkillRubric> = {
 };
 
 /**
+ * Rich dimension detail returned from scoring edge function.
+ */
+export interface DimensionScoreDetail {
+  score: number;
+  reason: string;
+  evidence: string;
+  improvementAction: string;
+  targetFor7: string;
+  targetFor9: string;
+}
+
+/**
+ * Normalize dimensions — supports both legacy Record<string, number>
+ * and rich Record<string, DimensionScoreDetail> formats.
+ */
+export function normalizeDimensionScores(
+  dimensions: Record<string, unknown> | null | undefined,
+): Record<string, DimensionScoreDetail> | null {
+  if (!dimensions) return null;
+  const result: Record<string, DimensionScoreDetail> = {};
+  for (const [key, val] of Object.entries(dimensions)) {
+    if (typeof val === 'number') {
+      result[key] = { score: val, reason: '', evidence: '', improvementAction: '', targetFor7: '', targetFor9: '' };
+    } else if (val && typeof val === 'object') {
+      const v = val as Record<string, unknown>;
+      result[key] = {
+        score: typeof v.score === 'number' ? v.score : 5,
+        reason: typeof v.reason === 'string' ? v.reason : '',
+        evidence: typeof v.evidence === 'string' ? v.evidence : '',
+        improvementAction: typeof v.improvementAction === 'string' ? v.improvementAction : '',
+        targetFor7: typeof v.targetFor7 === 'string' ? v.targetFor7 : '',
+        targetFor9: typeof v.targetFor9 === 'string' ? v.targetFor9 : '',
+      };
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/**
  * Get the rubric for a skill, with fallback.
  */
 export function getSkillRubric(skill: string): SkillRubric | null {
@@ -344,7 +383,7 @@ export function getSkillRubric(skill: string): SkillRubric | null {
 }
 
 /**
- * Given dimension scores, compute point-lift suggestions.
+ * Given dimension scores (rich or simple), compute point-lift suggestions.
  * Returns concrete actions sorted by likely impact.
  */
 export interface PointLiftSuggestion {
@@ -353,41 +392,48 @@ export interface PointLiftSuggestion {
   earned: number;
   max: number;
   action: string;
+  evidence: string;      // what in the rep's answer triggered this
   estimatedLift: [number, number]; // [min, max] point range
 }
 
 export function computePointLiftSuggestions(
-  dimensions: Record<string, number> | null | undefined,
+  dimensions: Record<string, unknown> | null | undefined,
   skill: string,
 ): PointLiftSuggestion[] {
   if (!dimensions) return [];
   const rubric = SKILL_RUBRICS[skill];
   if (!rubric) return [];
+  const normalized = normalizeDimensionScores(dimensions);
+  if (!normalized) return [];
 
   const suggestions: PointLiftSuggestion[] = [];
 
   for (const dim of rubric.dimensions) {
-    const earned = dimensions[dim.key] ?? 5;
+    const detail = normalized[dim.key];
+    const earned = detail?.score ?? 5;
     if (earned >= 8) continue; // already strong
 
     const gap = 10 - earned;
-    // Scale estimated lift to the 100-point total using weight
     const maxLift = Math.round((gap / 10) * dim.weight);
     const minLift = Math.max(1, Math.round(maxLift * 0.5));
+
+    // Prefer rep-specific action from AI, fall back to rubric cue
+    const action = detail?.improvementAction || dim.pointLiftCue;
+    const evidence = detail?.evidence || '';
 
     suggestions.push({
       dimension: dim.key,
       dimensionLabel: dim.label,
       earned,
       max: 10,
-      action: dim.pointLiftCue,
+      action,
+      evidence,
       estimatedLift: [minLift, maxLift],
     });
   }
 
-  // Sort by estimated max lift descending
   suggestions.sort((a, b) => b.estimatedLift[1] - a.estimatedLift[1]);
-  return suggestions.slice(0, 3); // top 3
+  return suggestions.slice(0, 3);
 }
 
 /**
@@ -398,36 +444,41 @@ export interface BiggestMiss {
   dimensionLabel: string;
   score: number;
   weight: number;
-  reason: string; // what bad looks like for this dimension
-  fix: string;    // the point lift cue
+  reason: string;
+  evidence: string;
+  fix: string;
 }
 
 export function findBiggestMiss(
-  dimensions: Record<string, number> | null | undefined,
+  dimensions: Record<string, unknown> | null | undefined,
   skill: string,
 ): BiggestMiss | null {
   if (!dimensions) return null;
   const rubric = SKILL_RUBRICS[skill];
   if (!rubric) return null;
+  const normalized = normalizeDimensionScores(dimensions);
+  if (!normalized) return null;
 
-  let worst: { dim: DimensionDef; score: number; weightedGap: number } | null = null;
+  let worst: { dim: DimensionDef; detail: DimensionScoreDetail; weightedGap: number } | null = null;
 
   for (const dim of rubric.dimensions) {
-    const score = dimensions[dim.key] ?? 5;
+    const detail = normalized[dim.key];
+    const score = detail?.score ?? 5;
     const weightedGap = (10 - score) * dim.weight;
     if (!worst || weightedGap > worst.weightedGap) {
-      worst = { dim, score, weightedGap };
+      worst = { dim, detail: detail || { score: 5, reason: '', evidence: '', improvementAction: '', targetFor7: '', targetFor9: '' }, weightedGap };
     }
   }
 
-  if (!worst || worst.score >= 8) return null;
+  if (!worst || worst.detail.score >= 8) return null;
 
   return {
     dimension: worst.dim.key,
     dimensionLabel: worst.dim.label,
-    score: worst.score,
+    score: worst.detail.score,
     weight: worst.dim.weight,
-    reason: worst.dim.bad,
-    fix: worst.dim.pointLiftCue,
+    reason: worst.detail.reason || worst.dim.bad,
+    evidence: worst.detail.evidence || '',
+    fix: worst.detail.improvementAction || worst.dim.pointLiftCue,
   };
 }
