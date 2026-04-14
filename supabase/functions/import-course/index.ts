@@ -651,29 +651,92 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
   const jar = createCookieJar();
   const parsedUrl = new URL(courseUrl);
   const origin = parsedUrl.origin;
-
-  // ── Thinkific landing page resolution ──
-  // Detect /pages/ or marketing pages and resolve to actual course player URLs
-  const landingResult = await resolveThinkificLandingPage(courseUrl, jar, []);
   const debug: string[] = [];
 
-  if (landingResult.resolved && !landingResult.resolvedUrl && landingResult.courseLinks.length > 1) {
-    // Multiple courses found — return options for user selection
-    return {
-      platform: 'thinkific',
-      title: 'Multiple Courses Found',
-      lessons: [],
-      debug: [`[Landing Page] Resolved ${courseUrl} — found ${landingResult.courseLinks.length} courses`],
-      landing_page_resolved: true,
-      resolved_from: courseUrl,
-      course_options: landingResult.courseLinks,
-    };
+  // ── STEP 1: Detect if this looks like a Thinkific/landing page URL ──
+  const isExplicitPages = /\/pages\//i.test(parsedUrl.pathname);
+  const isThinkificDomain = /thinkific/i.test(parsedUrl.hostname);
+  const hasCoursePlayer = /\/courses\/take\//i.test(parsedUrl.pathname);
+  const needsLandingResolution = !hasCoursePlayer && (isExplicitPages || isThinkificDomain);
+
+  debug.push(`[Sequence] URL: ${courseUrl}`);
+  debug.push(`[Sequence] isPages=${isExplicitPages}, isThinkific=${isThinkificDomain}, hasCoursePlayer=${hasCoursePlayer}, needsLandingResolution=${needsLandingResolution}`);
+
+  // ── STEP 2: AUTHENTICATE FIRST (before landing page resolution) ──
+  // Thinkific course-player links may only appear after login/session cookies
+  debug.push(`[Sequence] Step 2: Authenticating BEFORE landing page resolution...`);
+  const { success: loggedIn, debug: loginDebug } = await kajabiLogin(courseUrl, jar, creds);
+  debug.push(...loginDebug);
+  debug.push(`[Sequence] Login ${loggedIn ? 'SUCCEEDED' : 'FAILED'} — cookies: ${jar.cookies.size}`);
+
+  if (!loggedIn) {
+    debug.push('[Sequence] Login failed — will attempt fetches anyway with current cookies');
   }
 
+  // ── STEP 3: Resolve landing page WITH authenticated cookies ──
   let effectiveUrl = courseUrl;
-  if (landingResult.resolved && landingResult.resolvedUrl) {
-    debug.push(`[Landing Page] Resolved ${courseUrl} → ${landingResult.resolvedUrl}`);
-    effectiveUrl = landingResult.resolvedUrl;
+  let landingPageResolved = false;
+
+  if (needsLandingResolution) {
+    debug.push(`[Sequence] Step 3: Resolving landing page WITH auth cookies...`);
+    const landingResult = await resolveThinkificLandingPage(courseUrl, jar, debug);
+
+    if (landingResult.resolved && !landingResult.resolvedUrl && landingResult.courseLinks.length > 1) {
+      // Multiple courses found — return options for user selection
+      return {
+        platform: 'thinkific',
+        title: 'Multiple Courses Found',
+        lessons: [],
+        debug,
+        landing_page_resolved: true,
+        resolved_from: courseUrl,
+        course_options: landingResult.courseLinks,
+      };
+    }
+
+    if (landingResult.resolved && landingResult.resolvedUrl) {
+      debug.push(`[Sequence] Landing page resolved: ${courseUrl} → ${landingResult.resolvedUrl}`);
+      effectiveUrl = landingResult.resolvedUrl;
+      landingPageResolved = true;
+    }
+
+    // FALLBACK: If no /courses/take/ links found, check if the page itself
+    // has curriculum/lesson structure we can parse directly
+    if (!landingResult.resolved && landingResult.directParseHtml) {
+      debug.push(`[Sequence] No course links found — attempting direct curriculum parse from landing page HTML`);
+      const directLessons = parseThinkificCurriculum(landingResult.directParseHtml, origin);
+      if (directLessons.length > 0) {
+        debug.push(`[Sequence] Direct parse SUCCESS: ${directLessons.length} lessons from landing page`);
+        const titleMatch = landingResult.directParseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const title = titleMatch?.[1]?.replace(/<[^>]+>/g, '').replace(/\s*[|–—-]\s*[^|–—-]*$/, '').trim() || 'Untitled Course';
+        return {
+          platform: 'thinkific',
+          title,
+          lessons: directLessons,
+          debug,
+          landing_page_resolved: true,
+          resolved_from: courseUrl,
+        };
+      }
+      // Also try generic parser
+      const genericLessons = parseCurriculum(landingResult.directParseHtml, origin);
+      if (genericLessons.length > 0) {
+        debug.push(`[Sequence] Generic parse SUCCESS: ${genericLessons.length} lessons from landing page`);
+        const titleMatch = landingResult.directParseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const title = titleMatch?.[1]?.replace(/<[^>]+>/g, '').replace(/\s*[|–—-]\s*[^|–—-]*$/, '').trim() || 'Untitled Course';
+        return {
+          platform: 'thinkific',
+          title,
+          lessons: genericLessons,
+          debug,
+          landing_page_resolved: true,
+          resolved_from: courseUrl,
+        };
+      }
+      debug.push(`[Sequence] Direct curriculum parse found 0 lessons — will proceed to fetch effective URL`);
+    }
+  } else {
+    debug.push(`[Sequence] Step 3: Skipped landing page resolution (not needed)`);
   }
 
   // Auto-strip /categories/... suffix to scan the full product page
@@ -681,20 +744,13 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
   if (categoryMatch) {
     effectiveUrl = `${origin}${categoryMatch[1]}`;
   }
-  
-  const { success: loggedIn, debug: loginDebug } = await kajabiLogin(effectiveUrl, jar, creds);
-  debug.push(...loginDebug);
-  
-  if (!loggedIn) {
-    debug.push('Login failed — attempting course page fetch anyway');
-  }
-  
+
   if (effectiveUrl !== courseUrl) {
-    debug.push(`Effective URL: ${effectiveUrl}`);
+    debug.push(`[Sequence] Effective URL: ${effectiveUrl}`);
   }
-  
-  // Fetch the course page with session cookies
-  debug.push(`Fetching course page: ${effectiveUrl}`);
+
+  // ── STEP 4: Fetch the course page with authenticated session cookies ──
+  debug.push(`[Sequence] Step 4: Fetching course page: ${effectiveUrl}`);
   const courseResp = await fetch(effectiveUrl, {
     headers: {
       'User-Agent': UA,
@@ -703,7 +759,7 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
     },
     redirect: 'follow',
   });
-  
+
   jar.addFromHeaders(courseResp.headers);
   const courseHtml = await courseResp.text();
   debug.push(`Course page: ${courseResp.status}, ${courseHtml.length} chars, final URL: ${courseResp.url}`);
