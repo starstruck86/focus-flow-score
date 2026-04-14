@@ -14,6 +14,7 @@ import {
   Eye, PenLine, Volume2, VolumeX,
 } from 'lucide-react';
 import { getRandomScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
+import { selectSkillShapedScenario } from '@/lib/learning/skillScenarioSelector';
 import { DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 import {
   type DojoScoreResult,
@@ -118,7 +119,12 @@ export default function DojoSession() {
 
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
-    // Use resolved skill from SkillSession for scenario selection
+    // Use skill-shaped selection when SkillSession is available
+    if (state?.skillSession) {
+      const selection = selectSkillShapedScenario(state.skillSession);
+      return selection.scenario;
+    }
+    // Fallback: legacy filter-by-label
     return getRandomScenario(resolvedSkillFocus);
   });
 
@@ -300,7 +306,18 @@ export default function DojoSession() {
   };
 
   const handleNextRep = () => {
-    navigate('/dojo');
+    // If we have skill context, stay in the same skill for the next rep
+    if (state?.skillSession) {
+      navigate('/dojo/session', {
+        state: {
+          skillSession: state.skillSession,
+          skillFocus: state.skillSession.skillId,
+          fromSkillBuilder: state?.fromSkillBuilder,
+        },
+      });
+    } else {
+      navigate('/dojo');
+    }
   };
 
   // Handle roleplay completion — extract roleplay-specific extras
