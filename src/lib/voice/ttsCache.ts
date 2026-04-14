@@ -4,9 +4,9 @@
  * Level 1: In-memory Map (instant replay, session-scoped)
  * Level 2: IndexedDB (persistent across sessions, write-behind)
  *
- * Cache key = deterministic hash of (text + voiceId + model).
- * Hot path: memory lookup is synchronous. Persistent lookup is async
- * but non-blocking — if slow, we skip and generate fresh.
+ * Cache key = deterministic hash of (text + voiceId + modelId + settings).
+ * Hot path: memory lookup is synchronous. Persistent lookup NEVER blocks
+ * the hot path — it races against the live fetch.
  */
 
 import { createLogger } from '@/lib/logger';
@@ -15,12 +15,31 @@ const logger = createLogger('TtsCache');
 
 // ── Cache Key ──────────────────────────────────────────────────────
 
-export function ttsCacheKey(text: string, voiceId: string): string {
-  // Simple deterministic hash — fast, no crypto needed
-  const input = `${text}|${voiceId}`;
+export interface TtsCacheKeyInputs {
+  text: string;
+  voiceId: string;
+  modelId?: string;
+  speed?: number;
+  stability?: number;
+  similarityBoost?: number;
+}
+
+/**
+ * Deterministic cache key including all output-shaping inputs.
+ * Any parameter that materially changes audio output must be included.
+ */
+export function ttsCacheKey(inputs: TtsCacheKeyInputs): string {
+  const parts = [
+    inputs.text,
+    inputs.voiceId,
+    inputs.modelId ?? 'default',
+    String(inputs.speed ?? 1),
+    String(inputs.stability ?? 0.5),
+    String(inputs.similarityBoost ?? 0.75),
+  ].join('|');
   let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    const chr = input.charCodeAt(i);
+  for (let i = 0; i < parts.length; i++) {
+    const chr = parts.charCodeAt(i);
     hash = ((hash << 5) - hash) + chr;
     hash |= 0;
   }
@@ -37,7 +56,6 @@ export function getMemoryCache(key: string): Blob | null {
 }
 
 export function setMemoryCache(key: string, blob: Blob): void {
-  // LRU-ish: if at capacity, delete oldest entry
   if (memoryCache.size >= MAX_MEMORY_ENTRIES) {
     const first = memoryCache.keys().next().value;
     if (first) memoryCache.delete(first);
@@ -55,7 +73,8 @@ const DB_NAME = 'dave-tts-cache';
 const STORE_NAME = 'audio';
 const DB_VERSION = 1;
 const MAX_PERSISTENT_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const PERSISTENT_LOOKUP_TIMEOUT_MS = 150; // don't block hot path
+const MAX_PERSISTENT_ENTRIES = 200;
+const MAX_PERSISTENT_BYTES = 100 * 1024 * 1024; // 100MB
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -85,15 +104,11 @@ function openDb(): Promise<IDBDatabase> {
 
 /**
  * Non-blocking persistent cache read.
- * Returns null if slow (>150ms) or unavailable.
+ * Used ONLY in race mode — never blocks the hot path.
  */
 export async function getPersistentCache(key: string): Promise<Blob | null> {
   try {
-    const result = await Promise.race([
-      readFromDb(key),
-      new Promise<null>(r => setTimeout(() => r(null), PERSISTENT_LOOKUP_TIMEOUT_MS)),
-    ]);
-    return result;
+    return await readFromDb(key);
   } catch {
     return null;
   }
@@ -109,10 +124,8 @@ async function readFromDb(key: string): Promise<Blob | null> {
       req.onsuccess = () => {
         const entry = req.result;
         if (!entry) { resolve(null); return; }
-        // Check age
         if (Date.now() - (entry.timestamp ?? 0) > MAX_PERSISTENT_AGE_MS) {
           resolve(null);
-          // Delete expired entry in background
           deletePersistentEntry(key);
           return;
         }
@@ -127,13 +140,14 @@ async function readFromDb(key: string): Promise<Blob | null> {
 
 /** Write-behind: call after playback starts, never blocks hot path. */
 export function setPersistentCache(key: string, blob: Blob): void {
-  // Fire and forget
   (async () => {
     try {
       const db = await openDb();
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      store.put({ blob, timestamp: Date.now() }, key);
+      store.put({ blob, timestamp: Date.now(), size: blob.size }, key);
+      // Trigger bounds enforcement in background
+      enforcePersistentBounds();
     } catch (e) {
       logger.warn('Persistent cache write failed', { error: e });
     }
@@ -150,6 +164,81 @@ function deletePersistentEntry(key: string): void {
   })();
 }
 
+/**
+ * Enforce max entries and max total bytes.
+ * Evicts oldest entries first. Runs in background, never blocks.
+ */
+let boundsEnforcementRunning = false;
+
+function enforcePersistentBounds(): void {
+  if (boundsEnforcementRunning) return;
+  boundsEnforcementRunning = true;
+
+  (async () => {
+    try {
+      const db = await openDb();
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.getAllKeys();
+
+      req.onsuccess = async () => {
+        const keys = req.result;
+        if (keys.length <= MAX_PERSISTENT_ENTRIES) {
+          boundsEnforcementRunning = false;
+          return;
+        }
+
+        // Read all entries to get timestamps and sizes
+        const entries: Array<{ key: IDBValidKey; timestamp: number; size: number }> = [];
+        const readTx = db.transaction(STORE_NAME, 'readonly');
+        const readStore = readTx.objectStore(STORE_NAME);
+
+        for (const key of keys) {
+          const entryReq = readStore.get(key);
+          await new Promise<void>(resolve => {
+            entryReq.onsuccess = () => {
+              const e = entryReq.result;
+              if (e) entries.push({ key, timestamp: e.timestamp ?? 0, size: e.size ?? 0 });
+              resolve();
+            };
+            entryReq.onerror = () => resolve();
+          });
+        }
+
+        // Sort oldest first
+        entries.sort((a, b) => a.timestamp - b.timestamp);
+
+        // Determine what to evict
+        const toDelete: IDBValidKey[] = [];
+        let totalSize = entries.reduce((s, e) => s + e.size, 0);
+        let remaining = entries.length;
+
+        for (const entry of entries) {
+          if (remaining <= MAX_PERSISTENT_ENTRIES && totalSize <= MAX_PERSISTENT_BYTES) break;
+          toDelete.push(entry.key);
+          totalSize -= entry.size;
+          remaining--;
+        }
+
+        if (toDelete.length > 0) {
+          const delTx = db.transaction(STORE_NAME, 'readwrite');
+          const delStore = delTx.objectStore(STORE_NAME);
+          for (const key of toDelete) {
+            delStore.delete(key);
+          }
+          logger.info('Persistent cache evicted entries', { count: toDelete.length });
+        }
+
+        boundsEnforcementRunning = false;
+      };
+
+      req.onerror = () => { boundsEnforcementRunning = false; };
+    } catch {
+      boundsEnforcementRunning = false;
+    }
+  })();
+}
+
 // ── Unified Cache Lookup ───────────────────────────────────────────
 
 export interface CacheLookupResult {
@@ -158,23 +247,33 @@ export interface CacheLookupResult {
 }
 
 /**
- * Two-level cache lookup. Memory first (instant), then persistent (fast but bounded).
- * Never blocks more than PERSISTENT_LOOKUP_TIMEOUT_MS.
+ * Memory-only synchronous lookup for the hot path.
+ * Does NOT check persistent cache — that happens via racePersistentCache.
  */
-export async function lookupCache(key: string): Promise<CacheLookupResult> {
-  // L1: memory (synchronous)
+export function lookupMemoryCache(key: string): CacheLookupResult {
   const memBlob = getMemoryCache(key);
   if (memBlob) return { blob: memBlob, source: 'memory' };
-
-  // L2: persistent (async, bounded)
-  const persistBlob = await getPersistentCache(key);
-  if (persistBlob) {
-    // Promote to memory for instant replay next time
-    setMemoryCache(key, persistBlob);
-    return { blob: persistBlob, source: 'persistent' };
-  }
-
   return { blob: null, source: 'miss' };
+}
+
+/**
+ * Race persistent cache against an in-flight fetch.
+ * Returns the blob if persistent wins, null otherwise.
+ * The caller should abort the fetch if persistent wins.
+ *
+ * This is NOT on the hot path — the fetch starts immediately on memory miss.
+ */
+export async function racePersistentCache(key: string): Promise<Blob | null> {
+  try {
+    const blob = await getPersistentCache(key);
+    if (blob) {
+      // Promote to memory for instant replay next time
+      setMemoryCache(key, blob);
+    }
+    return blob;
+  } catch {
+    return null;
+  }
 }
 
 /**

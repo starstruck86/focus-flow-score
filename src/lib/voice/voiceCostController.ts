@@ -5,7 +5,7 @@
  * - Which TTS model to use based on context
  * - Voice verbosity mode (minimal / balanced / full)
  * - Utterance batching (combine short consecutive utterances)
- * - Auto-downgrade when credits are high
+ * - UX-safe auto-downgrade (only between turns, never mid-turn)
  */
 
 import { getUsageLevel, type UsageLevel } from './voiceUsageTracker';
@@ -15,6 +15,11 @@ import { getUsageLevel, type UsageLevel } from './voiceUsageTracker';
 export type VoiceMode = 'minimal' | 'balanced' | 'full';
 
 let currentMode: VoiceMode = 'balanced';
+
+/** Whether a coaching turn is currently in progress. Prevents mid-turn downgrades. */
+let turnInProgress = false;
+/** Pending downgrade to apply after the current turn ends. */
+let pendingDowngrade: VoiceMode | null = null;
 
 export function setVoiceMode(mode: VoiceMode): void {
   currentMode = mode;
@@ -31,11 +36,26 @@ try {
   if (stored && ['minimal', 'balanced', 'full'].includes(stored)) currentMode = stored;
 } catch { /* noop */ }
 
+// ── Turn boundary guards ───────────────────────────────────────────
+
+/** Call when a coaching turn begins. Locks mode changes. */
+export function markTurnStart(): void {
+  turnInProgress = true;
+}
+
+/** Call when a coaching turn ends. Applies any pending downgrade. */
+export function markTurnEnd(): void {
+  turnInProgress = false;
+  if (pendingDowngrade) {
+    setVoiceMode(pendingDowngrade);
+    pendingDowngrade = null;
+  }
+}
+
 // ── Utterance Classification ───────────────────────────────────────
 
 export type UtteranceType = 'static' | 'semi_dynamic' | 'dynamic';
 
-/** Static phrases that are always the same */
 const STATIC_PATTERNS = [
   /^(alright|okay|good|great|nice|let'?s)/i,
   /give me your best shot/i,
@@ -52,11 +72,9 @@ const STATIC_PATTERNS = [
 
 export function classifyUtterance(text: string): UtteranceType {
   const trimmed = text.trim();
-  // Short phrases that match static patterns
   if (trimmed.length < 100 && STATIC_PATTERNS.some(p => p.test(trimmed))) {
     return 'static';
   }
-  // Longer text with user-specific content is dynamic
   if (trimmed.length > 200) return 'dynamic';
   return 'semi_dynamic';
 }
@@ -64,26 +82,17 @@ export function classifyUtterance(text: string): UtteranceType {
 // ── Model Routing ──────────────────────────────────────────────────
 
 export interface ModelSelection {
-  /** Model ID to pass to ElevenLabs */
   modelId: string;
-  /** Readable label for debug panel */
   label: string;
 }
 
-// eleven_turbo_v2_5 is ~2x cheaper than eleven_multilingual_v2
 const FAST_MODEL: ModelSelection = { modelId: 'eleven_turbo_v2_5', label: 'Turbo (fast/cheap)' };
 const PREMIUM_MODEL: ModelSelection = { modelId: 'eleven_multilingual_v2', label: 'Multilingual (premium)' };
 
 export function selectModel(_utteranceType: UtteranceType): ModelSelection {
   const usage = getUsageLevel();
-
-  // If credits are high, always use fast model
   if (usage === 'critical' || usage === 'warning') return FAST_MODEL;
-
-  // For English coaching, turbo v2.5 is sufficient and faster
-  // Only use premium if explicitly set to 'full' mode AND it's a dynamic utterance
   if (currentMode === 'full' && _utteranceType === 'dynamic') return PREMIUM_MODEL;
-
   return FAST_MODEL;
 }
 
@@ -93,23 +102,16 @@ export function getActiveModel(): ModelSelection {
 
 // ── Utterance Batching ─────────────────────────────────────────────
 
-const MIN_BATCH_LENGTH = 15; // Don't speak anything under 15 chars alone
+const MIN_BATCH_LENGTH = 15;
 const MAX_BATCH_LENGTH = 500;
 
-/**
- * Combine consecutive short utterances into fewer TTS calls.
- * Reduces API call count without degrading quality.
- */
 export function batchUtterances(texts: string[]): string[] {
   if (texts.length <= 1) return texts;
-
   const batched: string[] = [];
   let current = '';
-
   for (const text of texts) {
     const trimmed = text.trim();
     if (!trimmed) continue;
-
     if (current.length === 0) {
       current = trimmed;
     } else if (current.length + trimmed.length + 1 <= MAX_BATCH_LENGTH
@@ -121,58 +123,62 @@ export function batchUtterances(texts: string[]): string[] {
     }
   }
   if (current) batched.push(current);
-
   return batched;
 }
 
 // ── Verbosity Filter ───────────────────────────────────────────────
 
-/**
- * Filter speech queue items based on voice mode.
- * In 'minimal' mode, skip non-essential items.
- * In 'balanced' mode, skip only redundant transitions.
- */
 export function filterByVerbosity<T extends { text: string }>(items: T[]): T[] {
   if (currentMode === 'full') return items;
-
   return items.filter(item => {
     const t = item.text.trim().toLowerCase();
-
-    // Always keep: questions, core teaching, user-specific feedback
     if (t.endsWith('?')) return true;
     if (t.length > 100) return true;
-
-    // In minimal mode, skip transitional phrases
     if (currentMode === 'minimal') {
       if (/^(alright|okay|good|great|nice|now)[,.]?\s/i.test(t) && t.length < 40) return false;
       if (/let'?s (move on|continue|keep going)/i.test(t)) return false;
     }
-
     return true;
   });
 }
 
-// ── Auto-downgrade on high usage ───────────────────────────────────
+// ── UX-safe auto-downgrade ─────────────────────────────────────────
 
+/**
+ * Check if auto-downgrade is needed. If a turn is in progress,
+ * defers the downgrade until the turn ends. Returns true if a
+ * downgrade was applied or queued.
+ */
 export function checkAutoDowngrade(): boolean {
   const usage = getUsageLevel();
+  let targetMode: VoiceMode | null = null;
+
   if (usage === 'critical' && currentMode !== 'minimal') {
-    setVoiceMode('minimal');
+    targetMode = 'minimal';
+  } else if (usage === 'warning' && currentMode === 'full') {
+    targetMode = 'balanced';
+  }
+
+  if (!targetMode) return false;
+
+  if (turnInProgress) {
+    pendingDowngrade = targetMode;
     return true;
   }
-  if (usage === 'warning' && currentMode === 'full') {
-    setVoiceMode('balanced');
-    return true;
-  }
-  return false;
+
+  setVoiceMode(targetMode);
+  return true;
 }
 
-// ── Session Cost Estimator ─────────────────────────────────────────
+// ── Session Cost Estimator (ESTIMATES — not calibrated) ────────────
 
-export interface SessionEstimate {
+export interface SessionCostEstimate {
+  /** Approximate TTS characters (heuristic, not calibrated) */
   estimatedTtsCharacters: number;
+  /** Approximate STT seconds (heuristic) */
   estimatedSttSeconds: number;
-  estimatedCredits: number;
+  /** Approximate credit cost (heuristic — not calibrated against ElevenLabs billing) */
+  estimatedCreditsApprox: number;
   mode: VoiceMode;
 }
 
@@ -180,7 +186,7 @@ export function estimateSessionCost(
   expectedTurns: number = 5,
   avgCharsPerTurn: number = 400,
   avgSttSecondsPerTurn: number = 15,
-): SessionEstimate {
+): SessionCostEstimate {
   const modeMultiplier = currentMode === 'minimal' ? 0.5 : currentMode === 'balanced' ? 0.75 : 1.0;
   const ttsChars = Math.round(expectedTurns * avgCharsPerTurn * modeMultiplier);
   const sttSeconds = expectedTurns * avgSttSecondsPerTurn;
@@ -189,7 +195,7 @@ export function estimateSessionCost(
   return {
     estimatedTtsCharacters: ttsChars,
     estimatedSttSeconds: sttSeconds,
-    estimatedCredits: credits,
+    estimatedCreditsApprox: credits,
     mode: currentMode,
   };
 }

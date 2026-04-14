@@ -1,22 +1,17 @@
 /**
  * Voice Usage Tracker — Local-first session cost tracking.
  *
- * Tracks per-session:
- * - TTS call count & characters
- * - STT call count & audio seconds
- * - Cache hit rates
- * - Retry counts
- * - Estimated credits used
+ * All credit values are ESTIMATES (heuristic, not calibrated against
+ * ElevenLabs billing). Labeled with "~" prefix in summaries.
  *
  * All tracking is lightweight and synchronous — never blocks the hot path.
  */
 
 // ── Credit Cost Estimates ──────────────────────────────────────────
-// ElevenLabs charges by character for TTS, and by second for STT.
-// These are approximate multipliers.
+// Approximate multipliers — not calibrated against actual ElevenLabs billing.
 
-const TTS_CREDITS_PER_CHAR = 1; // 1 credit per character (approximate)
-const STT_CREDITS_PER_SECOND = 10; // ~10 credits per second of audio
+const TTS_CREDITS_PER_CHAR_APPROX = 1;
+const STT_CREDITS_PER_SECOND_APPROX = 10;
 
 // ── Session State ──────────────────────────────────────────────────
 
@@ -37,8 +32,8 @@ export interface VoiceSessionUsage {
   sttRetries: number;
   sttMalformed: number;
 
-  // Totals
-  estimatedCredits: number;
+  // Totals (approximate)
+  estimatedCreditsApprox: number;
 
   // Top repeated utterances (for waste detection)
   utteranceCounts: Map<string, number>;
@@ -59,7 +54,7 @@ export function startUsageSession(sessionId?: string): VoiceSessionUsage {
     sttAudioSeconds: 0,
     sttRetries: 0,
     sttMalformed: 0,
-    estimatedCredits: 0,
+    estimatedCreditsApprox: 0,
     utteranceCounts: new Map(),
   };
   return currentSession;
@@ -88,21 +83,24 @@ export function trackTtsCall(text: string, cacheSource: 'memory' | 'persistent' 
     currentSession.ttsCacheMisses++;
     currentSession.ttsCalls++;
     currentSession.ttsCharacters += text.length;
-    currentSession.estimatedCredits += text.length * TTS_CREDITS_PER_CHAR;
+    currentSession.estimatedCreditsApprox += text.length * TTS_CREDITS_PER_CHAR_APPROX;
   }
 
-  // Track utterance frequency
   const short = text.slice(0, 80);
   currentSession.utteranceCounts.set(short, (currentSession.utteranceCounts.get(short) ?? 0) + 1);
 }
 
 // ── STT Tracking ───────────────────────────────────────────────────
 
-export function trackSttCall(audioSeconds: number): void {
+/**
+ * Track an STT call. Pass actual recording duration in seconds
+ * from recorder timing metadata, NOT estimated from blob size.
+ */
+export function trackSttCall(actualDurationSeconds: number): void {
   if (!currentSession) return;
   currentSession.sttCalls++;
-  currentSession.sttAudioSeconds += audioSeconds;
-  currentSession.estimatedCredits += audioSeconds * STT_CREDITS_PER_SECOND;
+  currentSession.sttAudioSeconds += actualDurationSeconds;
+  currentSession.estimatedCreditsApprox += actualDurationSeconds * STT_CREDITS_PER_SECOND_APPROX;
 }
 
 export function trackSttRetry(): void {
@@ -124,8 +122,8 @@ export type UsageLevel = 'normal' | 'warning' | 'critical';
 
 export function getUsageLevel(): UsageLevel {
   if (!currentSession) return 'normal';
-  if (currentSession.estimatedCredits >= CRITICAL_CREDITS) return 'critical';
-  if (currentSession.estimatedCredits >= WARNING_CREDITS) return 'warning';
+  if (currentSession.estimatedCreditsApprox >= CRITICAL_CREDITS) return 'critical';
+  if (currentSession.estimatedCreditsApprox >= WARNING_CREDITS) return 'warning';
   return 'normal';
 }
 
@@ -140,7 +138,8 @@ export interface UsageSummary {
   sttAudioSeconds: number;
   sttRetries: number;
   sttMalformed: number;
-  estimatedCredits: number;
+  /** Approximate — not calibrated against ElevenLabs billing */
+  estimatedCreditsApprox: number;
   usageLevel: UsageLevel;
   topRepeatedUtterances: Array<{ text: string; count: number }>;
 }
@@ -169,7 +168,7 @@ export function getUsageSummary(): UsageSummary | null {
     sttAudioSeconds: currentSession.sttAudioSeconds,
     sttRetries: currentSession.sttRetries,
     sttMalformed: currentSession.sttMalformed,
-    estimatedCredits: currentSession.estimatedCredits,
+    estimatedCreditsApprox: currentSession.estimatedCreditsApprox,
     usageLevel: getUsageLevel(),
     topRepeatedUtterances: topRepeated,
   };
