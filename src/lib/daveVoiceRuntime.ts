@@ -131,63 +131,80 @@ export async function speak(
   const abortController = new AbortController();
   const active: ActivePlayback = { ...clean, abortController, _cleaned: false };
 
-  // Fetch TTS with retry
-  let blob: Blob | null = null;
-  let lastError = '';
+  const voiceId = config.voiceId ?? DEFAULT_VOICE_ID;
+  const cacheKey = ttsCacheKey(text, voiceId);
 
-  for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
-    if (abortController.signal.aborted) return active;
-    if (attempt > 0) await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+  // ── Hot path: cache lookup (effectively instant) ──
+  const cached = await lookupCache(cacheKey);
+  recordCacheHit(cached.source);
+  trackTtsCall(text, cached.source);
 
-    const attemptAbort = new AbortController();
-    const onOuter = () => attemptAbort.abort();
-    abortController.signal.addEventListener('abort', onOuter, { once: true });
+  let blob: Blob | null = cached.blob;
 
-    try {
-      const body: Record<string, unknown> = {
-        text,
-        voiceId: config.voiceId ?? DEFAULT_VOICE_ID,
-      };
-      if (options?.previousText) body.previous_text = options.previousText;
-      if (options?.nextText) body.next_text = options.nextText;
-
-      const timeoutId = setTimeout(() => attemptAbort.abort(), TTS_FETCH_TIMEOUT_MS);
-      let response: Response;
-      try {
-        response = await fetch(
-          `${config.supabaseUrl}/functions/v1/elevenlabs-tts-stream`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              apikey: config.supabaseAnonKey,
-              Authorization: `Bearer ${config.supabaseAnonKey}`,
-            },
-            body: JSON.stringify(body),
-            signal: attemptAbort.signal,
-          },
-        );
-      } finally {
-        clearTimeout(timeoutId);
-        abortController.signal.removeEventListener('abort', onOuter);
-      }
-
-      if (!response.ok) {
-        lastError = `TTS HTTP ${response.status}`;
-        continue;
-      }
-      blob = await response.blob();
-      break;
-    } catch (err) {
-      abortController.signal.removeEventListener('abort', onOuter);
-      if (abortController.signal.aborted) return active;
-      lastError = err instanceof Error ? err.message : 'TTS fetch error';
-    }
-  }
-
+  // ── If cache miss, fetch from API ──
   if (!blob) {
-    logger.warn('TTS failed after retries', { lastError });
-    throw new Error(`TTS failed: ${lastError}`);
+    const utteranceType = classifyUtterance(text);
+    const model = selectModel(utteranceType);
+    let lastError = '';
+
+    for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
+      if (abortController.signal.aborted) return active;
+      if (attempt > 0) await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+
+      const attemptAbort = new AbortController();
+      const onOuter = () => attemptAbort.abort();
+      abortController.signal.addEventListener('abort', onOuter, { once: true });
+
+      try {
+        const body: Record<string, unknown> = {
+          text,
+          voiceId,
+          model_id: model.modelId,
+        };
+        if (options?.previousText) body.previous_text = options.previousText;
+        if (options?.nextText) body.next_text = options.nextText;
+
+        const timeoutId = setTimeout(() => attemptAbort.abort(), TTS_FETCH_TIMEOUT_MS);
+        let response: Response;
+        try {
+          response = await fetch(
+            `${config.supabaseUrl}/functions/v1/elevenlabs-tts-stream`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                apikey: config.supabaseAnonKey,
+                Authorization: `Bearer ${config.supabaseAnonKey}`,
+              },
+              body: JSON.stringify(body),
+              signal: attemptAbort.signal,
+            },
+          );
+        } finally {
+          clearTimeout(timeoutId);
+          abortController.signal.removeEventListener('abort', onOuter);
+        }
+
+        if (!response.ok) {
+          lastError = `TTS HTTP ${response.status}`;
+          continue;
+        }
+        blob = await response.blob();
+
+        // Write-behind: cache the blob after we have it (non-blocking)
+        storeInCache(cacheKey, blob);
+        break;
+      } catch (err) {
+        abortController.signal.removeEventListener('abort', onOuter);
+        if (abortController.signal.aborted) return active;
+        lastError = err instanceof Error ? err.message : 'TTS fetch error';
+      }
+    }
+
+    if (!blob) {
+      logger.warn('TTS failed after retries', { lastError });
+      throw new Error(`TTS failed: ${lastError}`);
+    }
   }
 
   // Play audio
