@@ -604,9 +604,11 @@ function FeedbackView({
         />
       )}
 
-      {/* ── Executive Response: Sharp Verdict Banner ── */}
-      {skillFocus === 'executive_response' && (
+      {/* ── Sharp Verdict Banner — all skills ── */}
+      {skillFocus === 'executive_response' ? (
         <ExecVerdictBanner result={currentResult} />
+      ) : (
+        <SkillVerdictBanner result={currentResult} skill={skillFocus} />
       )}
 
       {/* Score */}
@@ -916,9 +918,11 @@ function FeedbackView({
         </div>
       )}
 
-      {/* ── Executive Response: Side-by-Side Comparison ── */}
-      {skillFocus === 'executive_response' && sessionType === 'drill' && userText && currentResult.improvedVersion && (
-        <ExecSideBySide userText={userText} improvedVersion={currentResult.improvedVersion} />
+      {/* ── Side-by-Side Comparison — all skills ── */}
+      {sessionType === 'drill' && userText && currentResult.improvedVersion && (
+        skillFocus === 'executive_response'
+          ? <ExecSideBySide userText={userText} improvedVersion={currentResult.improvedVersion} />
+          : <SkillSideBySide userText={userText} improvedVersion={currentResult.improvedVersion} />
       )}
 
       {/* ── Your Response (drill only, non-exec) ── */}
