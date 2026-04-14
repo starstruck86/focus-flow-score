@@ -47,6 +47,7 @@ import { TransferProgressCard } from '@/components/dojo/TransferProgressCard';
 import { LevelProgressFeedbackCard } from '@/components/learn/LevelProgressFeedbackCard';
 import { DimensionFeedbackCard } from '@/components/dojo/DimensionFeedbackCard';
 import { ExecVerdictBanner, ExecSideBySide, ExecRetryConstraintBox } from '@/components/dojo/ExecRetryCoaching';
+import { SkillVerdictBanner, SkillSideBySide, SkillRetryConstraintBox } from '@/components/dojo/SkillRetryCoaching';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 import type { TranscriptOrigin } from '@/hooks/useExtractScenarios';
@@ -524,51 +525,25 @@ export default function DojoSession() {
 
           {phase === 'retry' && (
             <motion.div key="retry" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
-              {/* Executive Response: pressure continuity + constraint */}
-              {scenario.skillFocus === 'executive_response' && currentResult && (
-                <ExecRetryConstraintBox result={currentResult} scenarioContext={scenario.context} />
+              {/* Retry constraint box — all skills */}
+              {currentResult && (
+                scenario.skillFocus === 'executive_response'
+                  ? <ExecRetryConstraintBox result={currentResult} scenarioContext={scenario.context} />
+                  : <SkillRetryConstraintBox result={currentResult} skill={scenario.skillFocus} scenarioContext={scenario.context} />
               )}
 
-              {/* Generic focus card (non-exec) */}
-              {scenario.skillFocus !== 'executive_response' && activeFocus && (
-                <Card className="border-amber-500/30 bg-amber-500/5">
-                  <CardContent className="p-3 space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <Crosshair className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                      <p className="text-sm"><span className="text-muted-foreground">Focus on: </span><span className="font-semibold text-foreground">{FOCUS_PATTERN_LABELS[activeFocus] || activeFocus.replace(/_/g, ' ')}</span></p>
-                    </div>
-                    {currentResult?.practiceCue && (
-                      <div className="flex items-start gap-1.5 pl-6">
-                        <MessageCircle className="h-3 w-3 text-amber-500/70 mt-0.5 shrink-0" />
-                        <p className="text-xs font-medium text-foreground">{currentResult.practiceCue}</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+              {/* Remind scenario objection to maintain pressure */}
+              <Card className="border-border/60">
+                <CardContent className="p-3">
+                  <p className="text-xs text-muted-foreground mb-1">The buyer is still waiting:</p>
+                  <p className="text-sm font-medium italic text-foreground">"{scenario.objection}"</p>
+                </CardContent>
+              </Card>
 
-              {/* Exec: remind scenario objection to maintain pressure */}
-              {scenario.skillFocus === 'executive_response' && (
-                <Card className="border-border/60">
-                  <CardContent className="p-3">
-                    <p className="text-xs text-muted-foreground mb-1">The exec is still waiting:</p>
-                    <p className="text-sm font-medium italic text-foreground">"{scenario.objection}"</p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Generic feedback (non-exec) */}
-              {scenario.skillFocus !== 'executive_response' && (
-                <div className="flex items-start gap-2 px-1">
-                  <Swords className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                  <p className="text-sm text-foreground leading-relaxed">{currentResult?.feedback}</p>
-                </div>
-              )}
-
-              <Textarea ref={textareaRef} value={retryResponse} onChange={(e) => setRetryResponse(e.target.value)} placeholder={scenario.skillFocus === 'executive_response' ? 'Answer the exec — sharper this time...' : 'Give it another shot...'} className="min-h-[100px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRetrySubmit(); }} />
+              <Textarea ref={textareaRef} value={retryResponse} onChange={(e) => setRetryResponse(e.target.value)} placeholder="Answer sharper this time..." className="min-h-[100px] text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRetrySubmit(); }} />
               <Button className="w-full gap-2 h-11" disabled={!retryResponse.trim()} onClick={handleRetrySubmit}>
                 <Send className="h-4 w-4" />
-                {scenario.skillFocus === 'executive_response' ? 'Give Sharper Answer' : 'Submit Retry'}
+                Give Sharper Answer
               </Button>
             </motion.div>
           )}
