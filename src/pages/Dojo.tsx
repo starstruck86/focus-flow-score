@@ -29,6 +29,8 @@ import { TrainingModes } from '@/components/dojo/TrainingModes';
 import { PerformanceSignals } from '@/components/dojo/PerformanceSignals';
 import { WeeklySummaryCard } from '@/components/dojo/WeeklySummaryCard';
 import { BlockComparisonView } from '@/components/dojo/BlockComparisonView';
+import { MasteryLanes } from '@/components/dojo/MasteryLanes';
+import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
 
 export default function Dojo() {
   const navigate = useNavigate();
@@ -173,6 +175,9 @@ export default function Dojo() {
           />
         )}
 
+        {/* Resume active lane banner */}
+        <ResumeLaneBanner />
+
         {/* V3: Daily Assignment Card */}
         {dailyAssignment && (
           <DailyAssignmentCard assignment={dailyAssignment} />
@@ -201,6 +206,9 @@ export default function Dojo() {
           hideScenarioPreview={!!dailyAssignment}
           assignmentCompleted={dailyAssignment?.completed ?? false}
         />
+
+        {/* Mastery Lanes — explicit lane entry */}
+        <MasteryLanes todayAnchor={todayAnchor} />
 
         {/* Section 2: Training Modes */}
         <TrainingModes
