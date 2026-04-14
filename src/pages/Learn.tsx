@@ -1,47 +1,34 @@
 import { useNavigate } from 'react-router-dom';
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Layout } from '@/components/Layout';
-import { Badge } from '@/components/ui/badge';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
-import { BookOpen, Loader2, TrendingUp, TrendingDown, GraduationCap } from 'lucide-react';
+import { GraduationCap, Loader2, BookOpen } from 'lucide-react';
 import { useCourses, useUserProgress } from '@/lib/learning/hooks';
 import type { LearningProgress } from '@/lib/learning/types';
-import { useMemo } from 'react';
 import { useDailyKI } from '@/hooks/useDailyKI';
 import { useLearnLoop } from '@/hooks/useLearnLoop';
-import { DailyKICard } from '@/components/learn/DailyKICard';
-import { TodaysMentalModel } from '@/components/learn/TodaysMentalModel';
-import { LastRepInsights } from '@/components/learn/LastRepInsights';
-import { ReinforcementQueue } from '@/components/learn/ReinforcementQueue';
-import { CourseCard } from '@/components/learn/CourseCard';
-import { NextRepExecutionCard } from '@/components/learn/NextRepExecutionCard';
-import { ReplayMomentCard } from '@/components/learn/ReplayMomentCard';
-import { PatternRecognitionCard } from '@/components/learn/PatternRecognitionCard';
-import { PressureBreakdownCard } from '@/components/learn/PressureBreakdownCard';
-import { StakeholderMissCard } from '@/components/learn/StakeholderMissCard';
-import { ReinforcementDecayCard } from '@/components/learn/ReinforcementDecayCard';
-import { TransferSignalCard } from '@/components/learn/TransferSignalCard';
-import { WeeklyCoachingPlanCard } from '@/components/learn/WeeklyCoachingPlanCard';
-import { FridayReadinessCard } from '@/components/learn/FridayReadinessCard';
-import { WeakestAnchorCard } from '@/components/learn/WeakestAnchorCard';
-import { BlockRemediationCard } from '@/components/learn/BlockRemediationCard';
-import { AdaptiveStudyPathCard } from '@/components/learn/AdaptiveStudyPathCard';
-import { PrimaryActionCard } from '@/components/learn/PrimaryActionCard';
-import { SkillBuilderEntryCard } from '@/components/learn/SkillBuilderEntryCard';
-import { SkillLevelsPanel } from '@/components/learn/SkillLevelsPanel';
-import { SkillTierUpModal } from '@/components/learn/SkillTierUpModal';
-import { SkillProgressTimeline } from '@/components/learn/SkillProgressTimeline';
-import { SubSkillProgressPanel } from '@/components/learn/SubSkillProgressPanel';
 import { useSkillLevels } from '@/hooks/useSkillLevels';
 import { useSubSkillProgress } from '@/hooks/useSubSkillProgress';
-import { isTierUpDismissed } from '@/lib/learning/levelEventStore';
-import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
-import { DaveActiveLoopCard } from '@/components/DaveActiveLoopCard';
-import { DaveCoachingHistory } from '@/components/DaveCoachingHistory';
-import { DaveLoopCompletionCard } from '@/components/DaveLoopCompletionCard';
 import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
+import { isTierUpDismissed } from '@/lib/learning/levelEventStore';
 import { buildLoopResumeInfo } from '@/lib/daveClosedLoopResume';
+import { SKILL_LABELS } from '@/lib/dojo/scenarios';
+import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
+
+// Cards — new grid system
+import { LearnFocusCard } from '@/components/learn/cards/LearnFocusCard';
+import { LearnSkillCard } from '@/components/learn/cards/LearnSkillCard';
+import { LearnPressureCard } from '@/components/learn/cards/LearnPressureCard';
+import { LearnMomentumCard } from '@/components/learn/cards/LearnMomentumCard';
+
+// Existing cards kept for deep data
+import { PrimaryActionCard } from '@/components/learn/PrimaryActionCard';
+import { DaveActiveLoopCard } from '@/components/DaveActiveLoopCard';
+import { DaveLoopCompletionCard } from '@/components/DaveLoopCompletionCard';
+import { SkillTierUpModal } from '@/components/learn/SkillTierUpModal';
+import { SubSkillProgressPanel } from '@/components/learn/SubSkillProgressPanel';
+import { DaveCoachingHistory } from '@/components/DaveCoachingHistory';
 
 export default function Learn() {
   const navigate = useNavigate();
@@ -87,38 +74,6 @@ export default function Learn() {
     return map;
   }, [progress]);
 
-  const topicMastery = useMemo(() => {
-    if (!courses || !progress) return [];
-    const topics: Record<string, { total: number; completed: number; totalScore: number }> = {};
-    courses.forEach(c => {
-      if (!topics[c.topic]) topics[c.topic] = { total: 0, completed: 0, totalScore: 0 };
-      c.learning_modules.forEach(m => {
-        m.learning_lessons.forEach(l => {
-          topics[c.topic].total++;
-          const p = progressMap[l.id];
-          if (p?.status === 'completed') {
-            topics[c.topic].completed++;
-            topics[c.topic].totalScore += p.mastery_score ?? 0;
-          }
-        });
-      });
-    });
-    return Object.entries(topics).map(([topic, data]) => ({
-      topic,
-      total: data.total,
-      completed: data.completed,
-      avgMastery: data.completed > 0 ? data.totalScore / data.completed : 0,
-      pct: data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0,
-    }));
-  }, [courses, progress, progressMap]);
-
-  const strongest = topicMastery.length > 0
-    ? topicMastery.reduce((a, b) => a.avgMastery > b.avgMastery ? a : b)
-    : null;
-  const weakest = topicMastery.length > 1
-    ? topicMastery.reduce((a, b) => a.avgMastery < b.avgMastery ? a : b)
-    : null;
-
   const nextLesson = useMemo(() => {
     if (!courses) return null;
     for (const course of courses) {
@@ -133,6 +88,20 @@ export default function Learn() {
     }
     return null;
   }, [courses, progressMap]);
+
+  // Sorted skill levels: weakest first
+  const sortedLevels = useMemo(() => {
+    if (!skillLevels || skillLevels.length === 0) return [];
+    return [...skillLevels].sort((a, b) => {
+      if (a.currentTier !== b.currentTier) return a.currentTier - b.currentTier;
+      return a.progressWithinTier - b.progressWithinTier;
+    });
+  }, [skillLevels]);
+
+  // Focus skill = weakest
+  const focusSkill = sortedLevels[0] ?? null;
+  // Other skills = everything except focus
+  const otherSkills = sortedLevels.slice(1);
 
   const handlePrimaryAction = useCallback(() => {
     const action = learnLoop?.primaryAction;
@@ -149,8 +118,6 @@ export default function Learn() {
     const info = buildLoopResumeInfo(closedLoop.session);
     if (info.nextSurface === 'dojo') {
       navigate('/dojo/session', { state: info.launchState });
-    } else if (info.nextSurface === 'learn') {
-      // Already on learn — the loop will continue via existing lesson flow
     } else if (info.nextSurface === 'skill_builder') {
       navigate('/skill-builder/session', { state: info.launchState });
     }
@@ -166,11 +133,10 @@ export default function Learn() {
     );
   }
 
-  const ki = dailyKI?.items[0];
+  const activeLoopShown = closedLoop.session && closedLoop.isActive;
 
   return (
     <Layout>
-      {/* Tier-Up Modal */}
       <SkillTierUpModal
         level={tierUpLevel}
         open={tierUpOpen}
@@ -184,18 +150,18 @@ export default function Learn() {
             <GraduationCap className="h-5 w-5 text-primary" />
           </div>
           <div className="space-y-1 pt-0.5">
-            <p className="text-sm font-medium text-foreground">Learning Engine</p>
+            <p className="text-sm font-medium text-foreground">Training System</p>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {closedLoop.session && closedLoop.isActive
-                ? `Dave is coaching: ${closedLoop.session.subSkill || closedLoop.session.taughtConcept}`
-                : nextLesson
-                  ? `Up next: ${nextLesson.lesson.title}`
-                  : 'All lessons completed. Review weak areas below.'}
+              {activeLoopShown
+                ? `Dave is coaching: ${closedLoop.session!.subSkill || closedLoop.session!.taughtConcept}`
+                : focusSkill
+                  ? `Focus: ${SKILL_LABELS[focusSkill.skill]} — Tier ${focusSkill.currentTier}`
+                  : 'All skills progressing.'}
             </p>
           </div>
         </div>
 
-        {/* Loop completion card — shown briefly after mastery */}
+        {/* Loop completion */}
         {closedLoop.session && !closedLoop.isActive && closedLoop.session.status === 'completed' && (
           <DaveLoopCompletionCard
             concept={closedLoop.session.subSkill || closedLoop.session.taughtConcept}
@@ -209,96 +175,54 @@ export default function Learn() {
           />
         )}
 
-        {/* Active Coaching Loop — top priority when present */}
-        {closedLoop.session && closedLoop.isActive && (
+        {/* Active coaching loop — top priority */}
+        {activeLoopShown && (
           <DaveActiveLoopCard
-            session={closedLoop.session}
+            session={closedLoop.session!}
             onResume={handleResumeLoop}
           />
         )}
 
-        {/* 1. Today's Mental Model */}
-        {learnLoop?.mentalModel && <TodaysMentalModel model={learnLoop.mentalModel} />}
-
-        {/* 2. Primary Action — suppressed when active loop dominates */}
-        {learnLoop?.primaryAction && !(closedLoop.session && closedLoop.isActive) && (
+        {/* Primary Action — suppressed when active loop dominates */}
+        {learnLoop?.primaryAction && !activeLoopShown && (
           <PrimaryActionCard action={learnLoop.primaryAction} onExecute={handlePrimaryAction} />
         )}
 
-        {/* 3. Skill Progression Levels */}
-        {skillLevels && skillLevels.length > 0 && (
-          <SkillLevelsPanel levels={skillLevels} />
-        )}
+        {/* ═══ CARD GRID ═══ */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Focus Card — spans full width */}
+          {focusSkill && (
+            <LearnFocusCard
+              level={focusSkill}
+              insight={learnLoop?.topMistake}
+            />
+          )}
 
-        {/* 3b. Progress Timeline */}
-        <SkillProgressTimeline />
+          {/* Pressure Card */}
+          {learnLoop?.fridayReadiness && (
+            <LearnPressureCard readiness={learnLoop.fridayReadiness} />
+          )}
 
-        {/* 3c. Sub-Skill Breakdown */}
+          {/* Momentum Card */}
+          {sortedLevels.length > 0 && (
+            <LearnMomentumCard levels={sortedLevels} />
+          )}
+
+          {/* Skill Cards — rest of grid */}
+          {otherSkills.map(level => (
+            <LearnSkillCard key={level.skill} level={level} />
+          ))}
+        </div>
+
+        {/* Sub-Skill Breakdown */}
         {subSkillSummaries && subSkillSummaries.length > 0 && (
           <SubSkillProgressPanel summaries={subSkillSummaries} />
         )}
 
-        {/* 4. Adaptive Study Path (Phase 5) */}
-        {learnLoop?.adaptiveStudyPath && <AdaptiveStudyPathCard path={learnLoop.adaptiveStudyPath} />}
-
-        {/* Skill Builder Entry (Mode 2) */}
-        <SkillBuilderEntryCard />
-
-        {/* 3. Weekly Coaching Plan (Phase 4) */}
-        {learnLoop?.weeklyPlan && <WeeklyCoachingPlanCard plan={learnLoop.weeklyPlan} />}
-
-        {/* 3. In Your Next Rep */}
-        {ki && <NextRepExecutionCard ki={ki} topMistake={learnLoop?.topMistake} />}
-
-        {/* 4. Daily KI */}
-        {dailyKI && <DailyKICard context={dailyKI} topMistake={learnLoop?.topMistake} />}
-
-        {/* 5. Friday Readiness (Phase 4, conditional) */}
-        {learnLoop?.fridayReadiness && <FridayReadinessCard readiness={learnLoop.fridayReadiness} />}
-
-        {/* 6. Replay That Moment (conditional) */}
-        {learnLoop?.lastRep && <ReplayMomentCard lastRep={learnLoop.lastRep} />}
-
-        {/* 7. Last Rep Insights */}
-        {learnLoop?.lastRep && <LastRepInsights insight={learnLoop.lastRep} />}
-
-        {/* 8. Under Pressure (Phase 3) */}
-        {learnLoop?.pressureBreakdown && <PressureBreakdownCard pressure={learnLoop.pressureBreakdown} />}
-
-        {/* 9. Who You Missed (Phase 3) */}
-        {learnLoop?.multiThreadMiss && <StakeholderMissCard miss={learnLoop.multiThreadMiss} />}
-
-        {/* 10. Weakest Anchor (Phase 4, conditional) */}
-        {learnLoop?.weeklyPlan?.weakestAnchorLabel && learnLoop.weeklyPlan.weakestAnchorReason && (
-          <WeakestAnchorCard
-            anchorLabel={learnLoop.weeklyPlan.weakestAnchorLabel}
-            reason={learnLoop.weeklyPlan.weakestAnchorReason}
-          />
-        )}
-
-        {/* 11. Pattern Recognition */}
-        {learnLoop?.skillMemory && <PatternRecognitionCard skillMemory={learnLoop.skillMemory} />}
-
-        {/* 12. What's Fading (Phase 3) */}
-        {learnLoop?.decayItems && learnLoop.decayItems.length > 0 && (
-          <ReinforcementDecayCard items={learnLoop.decayItems} />
-        )}
-
-        {/* 13. Is It Sticking? (Phase 3) */}
-        {learnLoop?.transferSignal && <TransferSignalCard signal={learnLoop.transferSignal} />}
-
-        {/* 14. Block Remediation (Phase 4, conditional) */}
-        {learnLoop?.blockRemediation && <BlockRemediationCard remediation={learnLoop.blockRemediation} />}
-
-        {/* 15. Reinforcement Queue */}
-        {learnLoop?.reinforcement && learnLoop.reinforcement.length > 0 && (
-          <ReinforcementQueue items={learnLoop.reinforcement} />
-        )}
-
-        {/* 16. Coaching History */}
+        {/* Coaching History */}
         <DaveCoachingHistory />
 
-        {/* Secondary lesson CTA (downgraded from primary) */}
+        {/* Secondary lesson CTA */}
         {nextLesson && !learnLoop?.primaryAction && (
           <button
             onClick={() => navigate(`/learn/lesson/${nextLesson.lesson.id}`)}
@@ -308,60 +232,6 @@ export default function Learn() {
             Continue: {nextLesson.lesson.title}
           </button>
         )}
-
-        {/* 17. Topic mastery */}
-        {topicMastery.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Topic Mastery
-            </p>
-            {topicMastery.map(t => (
-              <div key={t.topic} className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium capitalize">{t.topic.replace(/_/g, ' ')}</p>
-                  <span className="text-xs text-muted-foreground">{t.completed}/{t.total} lessons · {t.pct}%</span>
-                </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all',
-                      t.pct >= 75 ? 'bg-green-500' : t.pct >= 40 ? 'bg-amber-500' : 'bg-primary'
-                    )}
-                    style={{ width: `${t.pct}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              {strongest && strongest.completed > 0 && (
-                <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-green-500/5 border border-green-500/15">
-                  <TrendingUp className="h-3 w-3 text-green-500 shrink-0" />
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    <span className="font-medium text-foreground">Strong:</span> {strongest.topic.replace(/_/g, ' ')}
-                  </p>
-                </div>
-              )}
-              {weakest && weakest !== strongest && (
-                <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-red-500/5 border border-red-500/15">
-                  <TrendingDown className="h-3 w-3 text-red-500 shrink-0" />
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    <span className="font-medium text-foreground">Needs work:</span> {weakest.topic.replace(/_/g, ' ')}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 18. Course list */}
-        {(courses || []).map(course => (
-          <CourseCard
-            key={course.id}
-            course={course}
-            progressMap={progressMap}
-            onLessonClick={(id) => navigate(`/learn/lesson/${id}`)}
-          />
-        ))}
       </div>
     </Layout>
   );
