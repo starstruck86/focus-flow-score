@@ -454,6 +454,7 @@ export interface PipelineStats {
   total: number;
   ready: number;
   blocked: number;
+  pipelineBlocked: number;
   extracted: number;
   completed: number;
   blockedBreakdown: Record<string, number>;
@@ -480,11 +481,22 @@ export async function getPipelineStats(userId: string): Promise<PipelineStats> {
     .order('created_at', { ascending: false })
     .limit(10);
 
+  // Also fetch canonical lifecycle for truth-aligned blocked count
+  const { data: lifecycleData } = await (supabase as any).from('canonical_resource_status')
+    .select('resource_id, canonical_stage, blocked_reason')
+    .eq('user_id', userId);
+
   const all = resources ?? [];
   const activeKIResources = new Set((kiData ?? []).map((k: any) => k.source_resource_id));
+  const lifecycleMap = new Map<string, { stage: string; blocked: string }>();
+  for (const lc of (lifecycleData ?? [])) {
+    lifecycleMap.set(lc.resource_id, { stage: lc.canonical_stage, blocked: lc.blocked_reason });
+  }
 
   const blockedBreakdown: Record<string, number> = {};
   let recoverableBlocked = 0, terminalBlocked = 0, ready = 0, blocked = 0, extracted = 0, completed = 0;
+  // Canonical blocked count aligned with Control Plane / SystemHealthBar
+  let canonicalBlocked = 0;
   const queueBreakdown: Record<string, number> = {};
 
   for (const r of all) {
@@ -497,11 +509,18 @@ export async function getPipelineStats(userId: string): Promise<PipelineStats> {
       ready++;
     }
 
+    // Pipeline-specific block_reason (detail breakdown)
     if (r.block_reason) {
       blocked++;
       blockedBreakdown[r.block_reason] = (blockedBreakdown[r.block_reason] ?? 0) + 1;
       if (r.block_terminal) terminalBlocked++;
       else recoverableBlocked++;
+    }
+
+    // Canonical lifecycle blocked (aligned with Control Plane)
+    const lc = lifecycleMap.get(r.id);
+    if (lc && lc.blocked !== 'none') {
+      canonicalBlocked++;
     }
 
     if (activeKIResources.has(r.id)) extracted++;
@@ -512,7 +531,8 @@ export async function getPipelineStats(userId: string): Promise<PipelineStats> {
   return {
     total: all.length,
     ready,
-    blocked,
+    blocked: canonicalBlocked, // Use canonical count for top-level stat (aligned with Control Plane)
+    pipelineBlocked: blocked,  // Pipeline-specific blocked (for detail breakdown)
     extracted,
     completed,
     blockedBreakdown,

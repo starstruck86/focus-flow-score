@@ -138,7 +138,7 @@ export function KnowledgeOpsDashboard() {
       </Card>
 
       {/* Blocked Breakdown */}
-      {stats && stats.blocked > 0 && (
+      {stats && stats.pipelineBlocked > 0 && (
         <Collapsible open={blockedDetailOpen} onOpenChange={setBlockedDetailOpen}>
           <Card>
             <CollapsibleTrigger className="w-full">
@@ -146,7 +146,7 @@ export function KnowledgeOpsDashboard() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-[hsl(var(--status-red))]" />
-                    Blocked Resources ({stats.blocked})
+                    Pipeline Blockers ({stats.pipelineBlocked})
                     <Badge variant="outline" className="text-[10px]">
                       {stats.recoverableBlocked} recoverable · {stats.terminalBlocked} terminal
                     </Badge>
