@@ -29,6 +29,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { completeAssignment } from '@/lib/dojo/v3/assignmentManager';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import {
+  updateLaneAfterRep,
+  loadActiveLane,
+  saveActiveLane,
+  type ActiveLane,
+} from '@/lib/sessionDurability';
 import { motion, AnimatePresence } from 'framer-motion';
 import DojoRoleplay from '@/components/dojo/DojoRoleplay';
 import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview';
@@ -322,11 +328,28 @@ export default function DojoSession() {
           skillFocus: state.skillSession.skillId,
           fromSkillBuilder: state?.fromSkillBuilder,
         },
+        replace: true,
       });
-    } else {
-      navigate('/dojo');
+      return;
     }
+
+    // If we have an active lane, continue in it
+    const lane = loadActiveLane();
+    if (lane) {
+      navigate('/dojo/session', {
+        state: {
+          skillFocus: scenario.skillFocus,
+          laneAnchor: lane.anchor,
+          laneLabel: lane.label,
+        },
+        replace: true,
+      });
+      return;
+    }
+
+    navigate('/dojo');
   };
+
 
   // Handle roleplay completion — extract roleplay-specific extras
   const handleRoleplayComplete = useCallback((scoreResult: DojoScoreResult) => {
@@ -360,6 +383,13 @@ export default function DojoSession() {
   const scoreDelta = retryResult && result ? retryResult.score - result.score : null;
   const userText = retryResult ? retryResponse : response;
   const activeFocus = currentResult?.focusPattern;
+
+  // Track lane rep completion when a score is recorded
+  useEffect(() => {
+    if (currentResult && phase === 'feedback') {
+      updateLaneAfterRep(currentResult.score);
+    }
+  }, [currentResult, phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={`min-h-screen bg-background flex flex-col ${SHELL.top.safeArea}`}>

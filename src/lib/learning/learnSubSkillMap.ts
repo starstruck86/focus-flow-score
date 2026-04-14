@@ -76,6 +76,31 @@ const OBJECTION_HANDLING_SUB_SKILLS: SubSkillDefinition[] = [
     patterns: ['recover_commitment', 'micro_commitment', 'close_after_objection'],
     concepts: ['momentum_recovery', 'next_step_lock', 'micro_commitments'],
   },
+  // ── Cold Calling sub-skills (Monday anchor, tracked under objection_handling) ──
+  {
+    skill: 'objection_handling',
+    name: 'Pattern Interrupt',
+    patterns: ['pattern_interrupt', 'opening_cold_call', 'opening_hook'],
+    concepts: ['cold_call_opening', 'attention_capture', 'pattern_break'],
+  },
+  {
+    skill: 'objection_handling',
+    name: 'Opening Hook',
+    patterns: ['opening_hook', 'value_prop_hook', 'opening_cold_call'],
+    concepts: ['first_impression', 'relevance_signal', 'hook_construction'],
+  },
+  {
+    skill: 'objection_handling',
+    name: 'Early Objection Handling',
+    patterns: ['early_objection_handling', 'gatekeeper_navigation', 'brush_off_recovery'],
+    concepts: ['initial_resistance', 'early_rapport', 'persistence_without_pushiness'],
+  },
+  {
+    skill: 'objection_handling',
+    name: 'Meeting Setting Close',
+    patterns: ['meeting_setting_close', 'micro_commitment', 'calendar_close'],
+    concepts: ['call_to_action', 'meeting_conversion', 'closing_on_cold_call'],
+  },
 ];
 
 // ── Deal Control ──────────────────────────────────────────────────
@@ -104,6 +129,19 @@ const DEAL_CONTROL_SUB_SKILLS: SubSkillDefinition[] = [
     name: 'Urgency Creation',
     patterns: ['create_urgency', 'consequence_framing', 'timeline_pressure'],
     concepts: ['cost_of_delay', 'decision_forcing', 'commercial_pressure'],
+  },
+  // ── Cold Calling sub-skills (Monday anchor, tracked under deal_control) ──
+  {
+    skill: 'deal_control',
+    name: 'Early Call Control',
+    patterns: ['early_call_control', 'opening_cold_call', 'call_direction'],
+    concepts: ['call_steering', 'frame_setting', 'early_authority'],
+  },
+  {
+    skill: 'deal_control',
+    name: 'Tonality and Pacing',
+    patterns: ['tonality_and_pacing', 'vocal_control', 'pacing_management'],
+    concepts: ['vocal_authority', 'speech_pacing', 'confidence_signaling'],
   },
 ];
 
@@ -185,4 +223,39 @@ export function getAllSubSkillDefinitions(): SubSkillDefinition[] {
 
 export function getSubSkillDefinition(skill: SkillFocus, name: string): SubSkillDefinition | null {
   return ALL_SUB_SKILL_DEFINITIONS.find(d => d.skill === skill && d.name === name) ?? null;
+}
+
+// ── Anchor-based sub-skill grouping ───────────────────────────────
+// Maps day anchors to their specific sub-skills for lane-based mastery tracking.
+
+const ANCHOR_SUB_SKILL_NAMES: Record<string, string[]> = {
+  opening_cold_call: [
+    'Pattern Interrupt', 'Opening Hook', 'Early Objection Handling',
+    'Meeting Setting Close', 'Early Call Control', 'Tonality and Pacing',
+  ],
+  discovery_qualification: [
+    'Pain Excavation', 'Depth Creation', 'Business Impact Mapping',
+    'Urgency Testing', 'Stakeholder Discovery',
+    'Pain Validation', 'Stakeholder Mapping', 'Pipeline Discipline', 'Budget and Priority Testing',
+  ],
+  objection_pricing: [
+    'Containment', 'Reframing', 'Proof Deployment', 'Commitment Recovery',
+  ],
+  deal_control_negotiation: [
+    'Next Step Discipline', 'Risk Naming', 'Mutual Action Planning', 'Urgency Creation',
+  ],
+  executive_roi_mixed: [
+    'Brevity Under Pressure', 'Executive Anchoring', 'Number-Led Communication', 'Composure and Certainty',
+  ],
+};
+
+/**
+ * Get sub-skill definitions relevant to a specific day anchor (mastery lane).
+ * This allows tracking cold-calling progress as a distinct lane
+ * while keeping it inside the existing 5-skill model.
+ */
+export function getSubSkillsForAnchor(anchor: string): SubSkillDefinition[] {
+  const names = ANCHOR_SUB_SKILL_NAMES[anchor];
+  if (!names) return [];
+  return ALL_SUB_SKILL_DEFINITIONS.filter(d => names.includes(d.name));
 }

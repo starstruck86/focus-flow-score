@@ -29,6 +29,7 @@ import { selectPressureProfile } from '../v4/pressureSelectors';
 import { getArcsForStage, type SimulationArc } from '../v5/simulationArcs';
 import type { MultiThreadContext } from '../v6/multiThreadTypes';
 import { shouldInjectMultiThread, generateMultiThreadContext } from '../v6/multiThreadSelector';
+import { getSubSkillsForAnchor } from '@/lib/learning/learnSubSkillMap';
 
 // ── DailyAssignment — the contract ────────────────────────────────
 
@@ -345,6 +346,28 @@ function selectFocus(
       reason: `${p.label} is declining (${p.trendDelta} pts). Reversing the slide.`,
       source: 'weakness',
     };
+  }
+
+  // B2: Sub-skill weakness targeting — if anchor has defined sub-skills,
+  // find patterns tied to weak sub-skills and prefer those.
+  const anchorSubSkills = getSubSkillsForAnchor(dayAnchor);
+  if (anchorSubSkills.length > 0 && anchorProfiles.length > 0) {
+    // Check which sub-skill patterns haven't been recently assigned
+    const recentPatterns = new Set(recentAssignments.map(a => a.focusPattern));
+    const untargetedSubSkills = anchorSubSkills.filter(ss =>
+      !ss.patterns.some(p => recentPatterns.has(p))
+    );
+    if (untargetedSubSkills.length > 0) {
+      // Prefer the one with the most patterns not recently hit
+      const target = untargetedSubSkills[0];
+      const targetSkill = anchorProfiles.find(p => p.skill === target.skill) ?? anchorProfiles[0];
+      return {
+        primarySkill: targetSkill.skill,
+        focusPattern: target.patterns[0],
+        reason: `Targeting weak sub-skill: ${target.name}. This area needs deliberate practice.`,
+        source: 'coverage' as const,
+      };
+    }
   }
 
   // C: Lowest confidence
