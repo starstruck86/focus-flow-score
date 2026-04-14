@@ -47,10 +47,19 @@ export function buildAudioScript(scenario: DojoScenario): AudioScenarioScript {
 /**
  * Build retry script with coaching cue from feedback.
  */
-export function buildRetryScript(practiceCue?: string): {
+export function buildRetryScript(practiceCue?: string, skillFocus?: string): {
   retryPrompt: string;
   retryInstruction: string;
 } {
+  // Executive Response gets tighter retry constraints
+  if (skillFocus === 'executive_response') {
+    const execCue = practiceCue ? ` Focus on this: ${practiceCue}.` : '';
+    return {
+      retryPrompt: `Again.${execCue} This time — two sentences maximum. First word must be a number or dollar amount. No setup.`,
+      retryInstruction: "Go.",
+    };
+  }
+
   const cue = practiceCue ? ` This time, focus on this: ${practiceCue}.` : '';
   return {
     retryPrompt: `Let's run that again.${cue}`,
@@ -184,10 +193,13 @@ function getDifficultyFlavor(difficulty: string): string {
 }
 
 function buildWhatGoodSoundsLike(scenario: DojoScenario): string {
+  if (scenario.skillFocus === 'executive_response') {
+    return "This is a high-pressure executive scenario. The exec doesn't want context — they want the answer. Lead with a number or outcome in your first sentence. Keep it under three sentences total. No setup, no hedging, no 'we help companies.' If you wouldn't say it to a CEO who's already standing up to leave — don't say it here.";
+  }
+
   const cues: Record<string, string> = {
     objection_handling: "In this one, I want you to acknowledge the concern, reframe it around business value, and keep the conversation moving forward.",
     discovery: "Here, I want you to go deeper than the surface answer. Ask a second-level question that gets to the business impact.",
-    executive_response: "For this one, lead with business outcomes, not features. Executives care about revenue, risk, and speed.",
     deal_control: "You need to maintain control of the process. Set a clear next step and get commitment.",
     qualification: "Focus on qualifying the opportunity. Understand timeline, budget authority, and decision process.",
   };
@@ -195,10 +207,13 @@ function buildWhatGoodSoundsLike(scenario: DojoScenario): string {
 }
 
 function buildEvaluationCriteria(scenario: DojoScenario): string {
+  if (scenario.skillFocus === 'executive_response') {
+    return "I'm grading four things: Did your first sentence contain a number or outcome? Was your total response under 3 sentences? Did you anchor to what the exec actually cares about? Did you project certainty — no hedging, no qualifiers? Miss any one of those and you're below 70.";
+  }
+
   const criteria: Record<string, string> = {
     objection_handling: "I'll be evaluating whether you acknowledged the objection, reanchored on value, and advanced the conversation — not just whether you had a response.",
     discovery: "I'll be looking at whether you uncovered business impact, not just surface symptoms. Did you make the prospect think?",
-    executive_response: "I'm looking for executive-level framing. Did you quantify value? Did you speak their language?",
     deal_control: "I'll check if you maintained process control and secured a specific next step.",
     qualification: "I'm looking at whether you qualified effectively — timeline, authority, budget, and decision criteria.",
   };

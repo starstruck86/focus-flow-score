@@ -8,6 +8,12 @@
 
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 
+export interface EliteExample {
+  label: string;
+  response: string;
+  why: string;
+}
+
 export interface TrainingContent {
   skill: SkillFocus;
   mentalModel: {
@@ -30,6 +36,8 @@ export interface TrainingContent {
     instruction: string;
   };
   scoringDimensions: string[];
+  /** Elite examples shown before practice — "what good sounds like" */
+  eliteExamples?: EliteExample[];
 }
 
 export const TRAINING_CONTENT: Record<string, TrainingContent> = {
@@ -55,6 +63,23 @@ export const TRAINING_CONTENT: Record<string, TrainingContent> = {
       instruction: 'Respond in 3 sentences or fewer. Lead with the business outcome, include a specific number, and end with a timeline. Do NOT name a single feature.',
     },
     scoringDimensions: ['brevity', 'numberLed', 'priorityAnchoring', 'executivePresence'],
+    eliteExamples: [
+      {
+        label: 'CFO pushback — cost justification',
+        response: '"You\'re losing ~$340K per quarter in repeat-purchase revenue from customers who churn in month 3. We cut that by 40% for brands your size — payback is 11 weeks."',
+        why: 'Opens with a dollar figure the CFO can act on. Specific timeline. No features mentioned.',
+      },
+      {
+        label: 'CEO 30-second pitch',
+        response: '"Your retention rate is 22% — industry top-quartile is 38%. That 16-point gap is roughly $4.2M in annual revenue you\'re not capturing. We close that gap in 90 days."',
+        why: 'Benchmark creates urgency. Dollar figure makes it fundable. Timeline makes it actionable.',
+      },
+      {
+        label: 'Board-ready positioning',
+        response: '"For every dollar you spend with us, you\'re recovering $6.40 in retained revenue. That\'s a better return than any acquisition channel on your P&L right now."',
+        why: 'Speaks the board\'s language — ROI comparison against alternatives. One sentence, undeniable.',
+      },
+    ],
   },
 
   objection_handling: {

@@ -103,14 +103,20 @@ COMMON MISTAKES (pick the single most impactful):
 - stacked_questions / failed_to_deepen / no_business_impact / too_generic / lack_of_control / weak_close / pitched_too_early`,
 
   executive_response: `GRADING CRITERIA (total 100pts):
-1. BREVITY (25pts): Could this be delivered in under 30 seconds? More than 4 sentences drops fast.
-2. BUSINESS FRAMING (25pts): Did they lead with an outcome the exec cares about — revenue, margin, speed, risk?
-3. CONFIDENCE (15pts): Did they project certainty? No hedging.
-4. SPECIFICITY (15pts): Concrete number, benchmark, customer example?
-5. STRATEGIC RELEVANCE (10pts): Connected to the exec's stated priority?
-6. CONTROL (10pts): Clear, executive-appropriate ask at the end?
+1. BREVITY (25pts): Could this be delivered in under 30 seconds? ≤2 sentences is elite. 3 sentences is acceptable. 4+ sentences is a fail on this dimension. If the rep opens with setup or context before the outcome, deduct heavily — executives tune out after the first clause if it's not the answer.
+2. BUSINESS FRAMING (25pts): Did they lead with an outcome the exec cares about — revenue, margin, speed, risk? First words matter: if the opening sentence doesn't contain a number, dollar amount, or quantified business result, cap this at 12pts. "We help companies..." is a 0.
+3. CONFIDENCE (15pts): Did they project certainty? No hedging ("I think," "we believe," "potentially," "it depends"). Every qualifier costs 3pts. Elite reps state outcomes as facts with proof.
+4. SPECIFICITY (15pts): Concrete number, benchmark, or customer example? Generic claims ("best in class," "industry-leading," "proven") score 0. A specific customer with a specific metric scores 12+.
+5. STRATEGIC RELEVANCE (10pts): Connected to the exec's stated priority? If the exec named a specific initiative and the rep didn't reference it, this is 0. Anchoring to a priority the exec didn't mention is worse than not anchoring at all.
+6. CONTROL (10pts): Clear, executive-appropriate ask at the end? Not "thoughts?" but a specific next step.
 
-COMMON MISTAKES: too_long / no_business_impact / too_generic / weak_close / lack_of_control / no_proof / pitched_too_early`,
+EXECUTIVE-SPECIFIC SCORING PENALTIES:
+- Setup sentence before the answer: -10pts from total. Executives don't need warming up.
+- First sentence doesn't contain a number or outcome: -5pts from BUSINESS FRAMING.
+- Response exceeds 4 sentences: cap BREVITY at 3/25.
+- Uses "I think" or "we believe": cap CONFIDENCE at 8/15.
+
+COMMON MISTAKES: too_long / no_business_impact / too_generic / weak_close / lack_of_control / no_proof / pitched_too_early / vendor_language`,
 
   deal_control: `GRADING CRITERIA (total 100pts):
 1. CONTROL (25pts): Did they take ownership of the next step? Propose a specific action with a date?
@@ -157,10 +163,10 @@ const SKILL_DIMENSIONS: Record<string, Record<string, string>> = {
     stakeholderAlignment: 'Ensured alignment across multiple stakeholders or created urgency',
   },
   executive_response: {
-    brevity: 'Response could be delivered in under 30 seconds, no filler',
-    numberLed: 'Opened with a specific metric or quantified outcome',
-    priorityAnchoring: 'Anchored to the executive\'s stated priority, not own agenda',
-    executivePresence: 'Projected certainty and confidence — no hedging',
+    brevity: 'Response deliverable in under 30 seconds. ≤2 sentences = elite. 4+ sentences = fail. Setup before outcome = 0.',
+    numberLed: 'First sentence contains a specific metric, dollar amount, or quantified outcome. "We help companies..." = 0.',
+    priorityAnchoring: 'Anchored to the exec\'s stated priority — not the rep\'s pitch. If exec named a goal and rep ignored it = 0.',
+    executivePresence: 'Projected certainty. Zero hedging ("I think," "we believe," "potentially"). States outcomes as facts with proof.',
   },
   qualification: {
     painValidation: 'Distinguished genuine business pain from casual interest',
@@ -202,7 +208,7 @@ function parseDimensions(raw: unknown, skill: string): Record<string, number> | 
 const COACHING_TONE: Record<string, string> = {
   objection_handling: `You are an elite sales coach doing a post-call debrief. Be direct and specific — name the exact moment they lost the thread or missed the opening. But be encouraging: you believe this rep can get sharper with focused practice. Don't pad with fake praise, but do acknowledge real progress. Your tone is: "You're close — here's the one thing that would level this up."`,
   discovery: `You are a veteran sales leader who has run thousands of discoveries. Point out exactly where they stayed surface-level when they should have gone deeper. Be specific about what question they should have asked and why.`,
-  executive_response: `You are someone who coaches reps for C-suite meetings. Grade against a high standard: executives give you 30 seconds. If they rambled, say "tighten this to 2 sentences." Your tone is confident and encouraging.`,
+  executive_response: `You are someone who coaches reps for C-suite meetings. You've sat in 500 board rooms. You grade against the highest standard: executives give you one chance to prove you're worth their time. If they rambled, say "You buried the value — the exec checked out after your first sentence." If they opened with setup, say "You started with context instead of the answer — that's where you lose them." Name the exact sentence that should have been first. Your rewrites should sound like a top 1% rep — tight, number-led, and impossible to ignore. Never say "good effort" — say exactly what was wrong and show exactly what great sounds like.`,
   deal_control: `You are a sales leader reviewing pipeline discipline. If they accepted a vague timeline, name it directly. Build confidence: "You spotted the risk — now lock down the commitment."`,
   qualification: `You are a sales leader who values pipeline quality over quantity. If the rep chased a weak opportunity, say so clearly. Frame coaching around judgment.`,
 };
@@ -210,7 +216,7 @@ const COACHING_TONE: Record<string, string> = {
 const WORLD_CLASS_TONE: Record<string, string> = {
   objection_handling: 'calm, specific, isolates before pitching, reframes to business value, moves forward with control',
   discovery: 'deepens pain fast, connects to business implications, asks sharp singular questions, sounds like a business advisor',
-  executive_response: 'concise, commercially sharp, confident, outcome-led, zero filler, under 30 seconds spoken',
+  executive_response: 'concise (≤2 sentences), opens with a specific number or dollar figure, anchors to the exec\'s stated priority, projects absolute certainty, ends with a clear ask — zero filler, zero hedging, zero setup',
   deal_control: 'disciplined, clear about next steps, unafraid to name drift or risk, locks mutual accountability',
   qualification: 'rigorous, skeptical in the right way, willing to disqualify, tests urgency and stakeholders before advancing',
 };

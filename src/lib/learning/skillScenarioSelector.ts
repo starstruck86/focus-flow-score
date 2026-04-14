@@ -54,10 +54,10 @@ export const SKILL_SCENARIO_CONSTRAINTS: Record<SkillFocus, ScenarioConstraints>
  */
 const BLOCKER_SCENARIO_SIGNALS: Record<string, string[]> = {
   // Executive Response blockers
-  brevity: ['30-second', '2 minutes', 'under a minute', 'give me the', 'bottom line', 'concretely'],
-  numberLed: ['ROI', 'payback', 'math', '3x', 'cost', 'margin', 'investment', '$', 'revenue'],
-  priorityAnchoring: ['board priority', 'CAC', 'LTV', 'retention', 'strategy', 'shifted', 'pivot'],
-  executivePresence: ['skeptic', 'heard this before', 'pitch a dozen', 'what\'s actually different', 'category'],
+  brevity: ['30-second', '2 minutes', 'under a minute', 'give me the', 'bottom line', 'concretely', '90 seconds', '20 seconds', 'two sentences', 'get to the point'],
+  numberLed: ['ROI', 'payback', 'math', '3x', 'cost', 'margin', 'investment', '$', 'revenue', 'actual numbers', 'marketing math', '$2M', '$165K', '$400K', 'line item'],
+  priorityAnchoring: ['board priority', 'CAC', 'LTV', 'retention', 'strategy', 'shifted', 'pivot', 'international expansion', '2027 initiative', 'board mandate'],
+  executivePresence: ['skeptic', 'heard this before', 'pitch a dozen', 'what\'s actually different', 'category', 'same three things', 'every company', 'convinced me', 'waste of my time'],
   // Objection Handling blockers
   composure: ['waste of my time', 'competitor already', 'mutiny', 'snaps'],
   isolation: ['not interested', 'just send me', 'think about it', 'circle back'],
@@ -281,6 +281,17 @@ export function analyzeDimensionScores(
 }
 
 function getImprovementCue(dim: string, skill: SkillFocus): string {
+  // Executive Response gets sharper, coach-like cues
+  if (skill === 'executive_response') {
+    const execCues: Record<string, string> = {
+      brevity: 'your answer was too long. Strip it to ≤2 sentences. If your first sentence is setup, delete it entirely.',
+      numberLed: 'you didn\'t open with a number. Your first words should be a dollar amount, percentage, or metric — not "we help companies."',
+      priorityAnchoring: 'you pitched your value, not theirs. The exec named a priority — your first sentence must reference it, not your product.',
+      executivePresence: 'you hedged. "I think," "we believe," "potentially" — executives hear uncertainty. State outcomes as facts with one proof point.',
+    };
+    if (execCues[dim]) return execCues[dim];
+  }
+
   const cues: Record<string, string> = {
     brevity: 'cut to 3 sentences max, no setup or filler.',
     numberLed: 'open with a specific metric or dollar amount.',
