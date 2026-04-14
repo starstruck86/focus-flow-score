@@ -106,6 +106,26 @@ export const SCENARIOS: DojoScenario[] = [
     context: "CEO of a $70M ecomm company just announced a strategic pivot from acquisition to retention at their all-hands. She's meeting with vendors her CMO recommended. She's smart, impatient, and thinks in terms of unit economics and customer lifetime value. This is a 15-minute slot.",
     objection: "We just shifted our entire company strategy from acquisition to retention. I need to know — concretely — how you fit into that and what the first 90 days look like. Don't give me a sales pitch.", difficulty: 'intermediate' },
 
+  { id: 'ex-7', skillFocus: 'executive_response', title: 'Board pressure — justify the line item',
+    context: "The CEO of a $120M ecomm company pulls you into an unscheduled call. The board just challenged every SaaS line item over $100K. Your $165K contract is on the cut list. The CEO isn't hostile — she's under pressure and needs ammunition to defend the spend. She has 3 minutes before her next board prep session.",
+    objection: "My board is asking me to justify every dollar over $100K. You're at $165K. In two sentences — why should I fight for this line item instead of cutting it?", difficulty: 'advanced' },
+
+  { id: 'ex-8', skillFocus: 'executive_response', title: 'CFO ROI pushback — "show me the math"',
+    context: "CFO of a PE-backed fashion brand ($85M revenue). He's been in the role 4 months, inherited a bloated tech stack, and has already killed 2 vendor contracts. He opens the call by sliding your proposal across the table. He doesn't do small talk.",
+    objection: "We've spent $2M on tools like this already. None of them delivered what they promised. You have 20 seconds — tell me why this is different and give me actual numbers, not marketing math.", difficulty: 'advanced' },
+
+  { id: 'ex-9', skillFocus: 'executive_response', title: 'CEO impatience — "get to the point"',
+    context: "CEO of a $200M multi-brand retailer. She took this call as a favor to your champion, who she trusts. She's checking Slack on her phone, has already glanced at the clock twice, and interrupted your champion's introduction. She runs a company with 1,200 employees and processes information in headlines.",
+    objection: "I've got about 90 seconds. My VP says you're important. I don't know why yet. Go.", difficulty: 'advanced' },
+
+  { id: 'ex-10', skillFocus: 'executive_response', title: '"Heard this before" skepticism',
+    context: "SVP of Digital at a $300M department store chain. She's evaluated 6 vendors in your category over 3 years and bought two — both underdelivered. She was burned on a $400K implementation that took 9 months and never hit adoption targets. She speaks slowly, asks precise questions, and trusts nothing she can't verify.",
+    objection: "Every company in your space says the same three things: 'AI-powered,' 'easy to implement,' 'proven ROI.' The last two vendors told me that too. One cost me $400K and a year of my team's time. What makes you any different — and don't give me a case study from a company that looks nothing like mine.", difficulty: 'advanced' },
+
+  { id: 'ex-11', skillFocus: 'executive_response', title: 'Strategic misalignment — wrong priority',
+    context: "COO of a $90M DTC wellness brand. The company just closed a Series D and the board mandate is aggressive international expansion — not retention optimization. Your champion in marketing positioned your tool as a retention play, but the COO controls budget and doesn't see how retention fits the current 18-month plan. He's direct and analytical.",
+    objection: "I appreciate the meeting, but I think there's a disconnect. We're laser-focused on international expansion right now. Retention is a 2027 initiative for us. Convince me this matters now, or we're done.", difficulty: 'advanced' },
+
   // ── Deal Control ────────────────────────────────────────────────────
   { id: 'dc-1', skillFocus: 'deal_control', title: 'Champion goes dark after demo',
     context: "You ran a strong demo 10 days ago with a Director of CRM at a $25M beauty brand. She was engaged, asked great questions, introduced you to her VP on the call. She said she'd set up a technical review that week. Since then — nothing. Two follow-up emails, one voicemail, no response. Your manager is asking for a forecast update.",
