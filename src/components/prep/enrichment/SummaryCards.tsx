@@ -4,7 +4,7 @@
  * Phase 2: includes platform breakdown reporting.
  */
 import { useMemo } from 'react';
-import { CheckCircle2, Zap, FileText, Clock, Ban, Wrench, ScanSearch, HandHelping } from 'lucide-react';
+import { CheckCircle2, Zap, FileText, Clock, Ban, Wrench, ScanSearch, HandHelping, PackageSearch } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { BucketFilter } from './types';
@@ -30,6 +30,7 @@ const CARD_DEFS: Array<{
 }> = [
   { bucket: 'complete', icon: <CheckCircle2 className="h-4 w-4" />, healthKey: 'trulyComplete', label: 'Complete', color: 'text-status-green', bg: 'bg-status-green/10 border-status-green/30' },
   { bucket: 'auto_fixable', icon: <Zap className="h-4 w-4" />, healthKey: 'machinFixable', label: 'Auto-fixable', color: 'text-primary', bg: 'bg-primary/10 border-primary/30' },
+  { bucket: 'needs_extraction', icon: <PackageSearch className="h-4 w-4" />, healthKey: 'needsExtraction', label: 'Needs Extraction', color: 'text-amber-600', bg: 'bg-amber-500/10 border-amber-500/30' },
   { bucket: 'advanced_extraction', icon: <ScanSearch className="h-4 w-4" />, healthKey: 'advancedExtractionPending', label: 'Deep Extract', color: 'text-primary', bg: 'bg-primary/10 border-primary/30' },
   { bucket: 'assisted_resolution', icon: <HandHelping className="h-4 w-4" />, healthKey: 'awaitingAssistedResolution', label: 'Assisted', color: 'text-status-yellow', bg: 'bg-status-yellow/10 border-status-yellow/30' },
   { bucket: 'needs_input', icon: <FileText className="h-4 w-4" />, healthKey: 'needsInput', label: 'Needs Input', color: 'text-status-yellow', bg: 'bg-status-yellow/10 border-status-yellow/30' },
@@ -64,13 +65,19 @@ export function SummaryCards({ health, activeBucket, onBucketClick, deltaComplet
   // Compute bucket counts from verified resources (same logic as workbench filter)
   const bucketCounts = useMemo(() => {
     if (!verifiedResources?.length) return null;
-    const counts: Record<BucketFilter, number> = { all: verifiedResources.length, complete: 0, auto_fixable: 0, advanced_extraction: 0, assisted_resolution: 0, needs_input: 0, processing: 0, quarantined: 0, system_gap: 0 };
+    const counts: Record<BucketFilter, number> = { all: verifiedResources.length, complete: 0, auto_fixable: 0, needs_extraction: 0, advanced_extraction: 0, assisted_resolution: 0, needs_input: 0, processing: 0, quarantined: 0, system_gap: 0 };
     for (const r of verifiedResources) {
       const b = mapVerifiedToBucket(r);
       counts[b]++;
     }
+    // Override complete/needs_extraction with health stats which have KI awareness
+    if (health.needsExtraction > 0) {
+      const overCounted = Math.min(health.needsExtraction, counts.complete);
+      counts.complete -= overCounted;
+      counts.needs_extraction = health.needsExtraction;
+    }
     return counts;
-  }, [verifiedResources]);
+  }, [verifiedResources, health.needsExtraction]);
 
   const platformBreakdown = useMemo(() => {
     if (!verifiedResources?.length) return [];

@@ -28,6 +28,7 @@ export type CanonicalState =
   | 'metadata_only_candidate'
   | 'quarantined'
   | 'truly_complete'
+  | 'needs_extraction'
   | 'system_gap';
 
 export interface CanonicalStateResult {
@@ -58,6 +59,7 @@ export const CANONICAL_STATE_LABELS: Record<CanonicalState, string> = {
   metadata_only_candidate: 'Metadata Only',
   quarantined: 'Quarantined',
   truly_complete: 'Complete',
+  needs_extraction: 'Needs Extraction',
   system_gap: 'System Gap',
 };
 
@@ -76,6 +78,7 @@ export const CANONICAL_STATE_COLORS: Record<CanonicalState, string> = {
   metadata_only_candidate: 'bg-muted text-muted-foreground',
   quarantined: 'bg-destructive/20 text-destructive',
   truly_complete: 'bg-status-green/20 text-status-green',
+  needs_extraction: 'bg-amber-500/20 text-amber-600',
   system_gap: 'bg-destructive/20 text-destructive',
 };
 
@@ -194,10 +197,15 @@ export function resolveCanonicalState(
     return { ...base, state: 'quarantined', label: 'Quarantined', description: 'Removed from auto-retry after repeated failures', nextAction: 'Manual review only', qualityScore: quality.score };
   }
 
-  // ── 3. Truly complete ──
+  // ── 3. Truly complete (enrichment + extraction) ──
   if (status === 'deep_enriched' && quality.score >= 70 && !isBinaryContent(content)) {
     // Check for contradictions
     if (!resource.failure_reason) {
+      // If enriched but no KIs extracted yet, surface as needs_extraction
+      const kiCount = (resource as any).current_resource_ki_count ?? null;
+      if (kiCount === 0) {
+        return { ...base, state: 'needs_extraction' as CanonicalState, label: 'Needs Extraction', description: `Enriched (${quality.score}/100) but 0 KIs`, nextAction: 'Run extraction', qualityScore: quality.score };
+      }
       return { ...base, state: 'truly_complete', label: 'Complete', description: `Score ${quality.score}/100`, nextAction: null, qualityScore: quality.score };
     }
   }
@@ -383,6 +391,7 @@ export function resolveCanonicalState(
 export interface EnrichmentHealthStats {
   total: number;
   trulyComplete: number;
+  needsExtraction: number;
   readyToEnrich: number;
   enriching: number;
   retryableFailure: number;
@@ -409,6 +418,7 @@ export function computeEnrichmentHealth(
   const stats: EnrichmentHealthStats = {
     total: resources.length,
     trulyComplete: 0,
+    needsExtraction: 0,
     readyToEnrich: 0,
     enriching: 0,
     retryableFailure: 0,
@@ -433,6 +443,7 @@ export function computeEnrichmentHealth(
     const { state } = resolveCanonicalState(r, job);
     switch (state) {
       case 'truly_complete': stats.trulyComplete++; break;
+      case 'needs_extraction': stats.needsExtraction++; break;
       case 'ready_to_enrich': stats.readyToEnrich++; break;
       case 'enriching': stats.enriching++; break;
       case 'retryable_failure': stats.retryableFailure++; break;
@@ -451,7 +462,7 @@ export function computeEnrichmentHealth(
   }
 
   stats.completionPct = stats.total > 0 ? Math.round((stats.trulyComplete / stats.total) * 100) : 0;
-  stats.machinFixable = stats.readyToEnrich + stats.retryableFailure + stats.advancedExtractionPending;
+  stats.machinFixable = stats.readyToEnrich + stats.retryableFailure + stats.advancedExtractionPending + stats.needsExtraction;
   stats.needsInput = stats.needsTranscript + stats.needsPastedContent + stats.needsAccessAuth + stats.needsAlternateSource + stats.awaitingAssistedResolution;
 
   return stats;
