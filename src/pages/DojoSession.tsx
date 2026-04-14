@@ -384,6 +384,13 @@ export default function DojoSession() {
   const userText = retryResult ? retryResponse : response;
   const activeFocus = currentResult?.focusPattern;
 
+  // Track lane rep completion when a score is recorded
+  useEffect(() => {
+    if (currentResult && phase === 'feedback') {
+      updateLaneAfterRep(currentResult.score);
+    }
+  }, [currentResult, phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className={`min-h-screen bg-background flex flex-col ${SHELL.top.safeArea}`}>
       {/* ── Header ── */}
