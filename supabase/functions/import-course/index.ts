@@ -2534,8 +2534,10 @@ Deno.serve(async (req) => {
         meta: {
           domain,
           used_request_credentials: !!creds,
-          auth_status: result.lessons.length === 0 && result.title === 'Authentication Required' ? 'auth_failed' : 'authenticated',
+          auth_status: result.auth_failed || (result.lessons.length === 0 && result.title === 'Authentication Required') ? 'auth_failed' : 'authenticated',
           lessons_discovered: result.lessons.length,
+          failure_type: result.failure_type || null,
+          thinkific_debug_available: !!result.thinkific_debug,
         },
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
