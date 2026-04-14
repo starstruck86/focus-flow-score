@@ -14,6 +14,8 @@ import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
 import { isTierUpDismissed } from '@/lib/learning/levelEventStore';
 import { buildLoopResumeInfo } from '@/lib/daveClosedLoopResume';
 import { SKILL_LABELS } from '@/lib/dojo/scenarios';
+import { loadActiveLane } from '@/lib/sessionDurability';
+import { DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 
 // Cards — new grid system
@@ -145,21 +147,32 @@ export default function Learn() {
 
       <div className={cn('px-4 pt-4 space-y-5', SHELL.main.bottomPad)}>
         {/* Header */}
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            <GraduationCap className="h-5 w-5 text-primary" />
-          </div>
-          <div className="space-y-1 pt-0.5">
-            <p className="text-sm font-medium text-foreground">Training System</p>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {activeLoopShown
-                ? `Dave is coaching: ${closedLoop.session!.subSkill || closedLoop.session!.taughtConcept}`
-                : focusSkill
-                  ? `Focus: ${SKILL_LABELS[focusSkill.skill]} — Tier ${focusSkill.currentTier}`
-                  : 'All skills progressing.'}
-            </p>
-          </div>
-        </div>
+        {(() => {
+          const activeLane = loadActiveLane();
+          const laneAnchorDef = activeLane?.anchor ? DAY_ANCHORS[activeLane.anchor as DayAnchor] : null;
+          const isLaneActive = activeLane && activeLane.repsThisSession > 0 && laneAnchorDef;
+          return (
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <GraduationCap className="h-5 w-5 text-primary" />
+              </div>
+              <div className="space-y-1 pt-0.5">
+                <p className="text-sm font-medium text-foreground">
+                  {isLaneActive ? `Reinforcing: ${laneAnchorDef.shortLabel}` : 'Training System'}
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {isLaneActive
+                    ? `${activeLane.repsThisSession} reps completed · Content targets your ${laneAnchorDef.shortLabel} lane`
+                    : activeLoopShown
+                      ? `Dave is coaching: ${closedLoop.session!.subSkill || closedLoop.session!.taughtConcept}`
+                      : focusSkill
+                        ? `Focus: ${SKILL_LABELS[focusSkill.skill]} — Tier ${focusSkill.currentTier}`
+                        : 'All skills progressing.'}
+                </p>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Loop completion */}
         {closedLoop.session && !closedLoop.isActive && closedLoop.session.status === 'completed' && (
