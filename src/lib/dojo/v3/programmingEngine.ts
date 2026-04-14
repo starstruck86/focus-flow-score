@@ -96,6 +96,7 @@ export interface KICatalogEntry {
   focusPatterns: string[];
   lastTaughtAt: string | null;
   title: string;
+  chapter?: string;
 }
 
 // ── Generate Daily Assignment ─────────────────────────────────────
@@ -421,6 +422,7 @@ function selectKIs(
   focusPattern: string,
   primarySkill: SkillFocus,
   kiCatalog: KICatalogEntry[],
+  recentAssignments?: RecentAssignment[],
 ): string[] {
   if (!focusPattern || kiCatalog.length === 0) return [];
 
@@ -436,14 +438,25 @@ function selectKIs(
 
   if (candidates.length === 0) return [];
 
-  // Prefer untaught or stale (>14 days since last taught)
+  // ── Chapter rotation: prioritize chapters with 0 recent sessions ──
+  // Build set of recently-assigned chapters from recent assignments
+  const recentChapters = new Set<string>();
+  if (recentAssignments) {
+    for (const a of recentAssignments) {
+      if ((a as any).chapter) recentChapters.add((a as any).chapter);
+    }
+  }
+
+  // Score candidates: chapter novelty + staleness
   const now = Date.now();
   const scored = candidates.map(ki => {
     const daysSinceTaught = ki.lastTaughtAt
       ? (now - new Date(ki.lastTaughtAt).getTime()) / (1000 * 60 * 60 * 24)
       : 999;
-    return { ki, staleness: daysSinceTaught };
-  }).sort((a, b) => b.staleness - a.staleness);
+    // Bonus for chapters not recently assigned (100 = large boost)
+    const chapterBonus = (ki.chapter && !recentChapters.has(ki.chapter)) ? 100 : 0;
+    return { ki, score: daysSinceTaught + chapterBonus };
+  }).sort((a, b) => b.score - a.score);
 
   // Default: 1 KI. Period.
   return [scored[0].ki.id];
