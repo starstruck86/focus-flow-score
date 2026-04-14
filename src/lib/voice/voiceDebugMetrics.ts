@@ -3,6 +3,7 @@
  * for the debug/inspection panel.
  *
  * Read-only, never blocks runtime. All data is pulled from other modules.
+ * All credit values are labeled as estimates (~).
  */
 
 import { getCacheStats, type CacheStats } from './ttsCache';
@@ -32,6 +33,7 @@ export function captureDebugSnapshot(): VoiceDebugSnapshot {
 
 /**
  * Format snapshot for display in debug panel.
+ * Credit values are labeled with "~" to indicate estimates.
  */
 export function formatDebugSnapshot(snap: VoiceDebugSnapshot): Record<string, string | number> {
   const out: Record<string, string | number> = {
@@ -46,6 +48,7 @@ export function formatDebugSnapshot(snap: VoiceDebugSnapshot): Record<string, st
     'STT Failed': snap.stt.failedCalls,
     'STT Blocked (preflight)': snap.stt.blockedByPreflight,
     'STT Blocked (circuit)': snap.stt.blockedByCircuit,
+    'STT Blocked (duplicate)': snap.stt.blockedByDuplicate,
     'STT Retries': snap.stt.retriedCalls,
   };
 
@@ -55,7 +58,7 @@ export function formatDebugSnapshot(snap: VoiceDebugSnapshot): Record<string, st
     out['TTS Characters'] = snap.usage.ttsCharacters;
     out['Cache Hit Rate'] = `${(snap.usage.cacheHitRate * 100).toFixed(0)}%` as unknown as number;
     out['STT Audio Seconds'] = Math.round(snap.usage.sttAudioSeconds);
-    out['Est. Credits Used'] = snap.usage.estimatedCredits;
+    out['~Est. Credits (approx)'] = snap.usage.estimatedCreditsApprox;
     out['Usage Level'] = snap.usage.usageLevel;
   }
 
