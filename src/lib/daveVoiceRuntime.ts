@@ -344,27 +344,70 @@ function getSupportedMimeType(): string {
 }
 
 async function transcribeAudio(audioBlob: Blob, config: TtsConfig): Promise<string> {
+  // ── Preflight validation ──
+  const preflight = validateSttRequest(audioBlob);
+  if (!preflight.valid) {
+    trackSttMalformed();
+    recordSttBlocked('preflight');
+    logger.warn('STT preflight failed', { reason: preflight.reason });
+    return '';
+  }
+
+  // ── Circuit breaker ──
+  if (isCircuitOpen()) {
+    recordSttBlocked('circuit');
+    throw new Error('STT circuit breaker open — too many recent failures');
+  }
+
+  const estimatedSeconds = audioBlob.size / 16000; // rough estimate
+  trackSttCall(estimatedSeconds);
+
   const formData = new FormData();
   formData.append('audio', audioBlob, 'recording.webm');
 
-  const response = await fetch(
-    `${config.supabaseUrl}/functions/v1/elevenlabs-transcribe`,
-    {
-      method: 'POST',
-      headers: {
-        apikey: config.supabaseAnonKey,
-        Authorization: `Bearer ${config.supabaseAnonKey}`,
-      },
-      body: formData,
-    },
-  );
+  let lastStatus = 0;
+  for (let attempt = 0; attempt <= 1; attempt++) {
+    if (attempt > 0) {
+      const decision = shouldRetryStt(lastStatus, attempt);
+      if (!decision.shouldRetry) break;
+      trackSttRetry();
+      await new Promise(r => setTimeout(r, getSttRetryDelay(attempt)));
+    }
 
-  if (!response.ok) {
-    throw new Error(`STT failed: HTTP ${response.status}`);
+    try {
+      const response = await fetch(
+        `${config.supabaseUrl}/functions/v1/elevenlabs-transcribe`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: config.supabaseAnonKey,
+            Authorization: `Bearer ${config.supabaseAnonKey}`,
+          },
+          body: formData,
+        },
+      );
+
+      lastStatus = response.status;
+
+      if (!response.ok) {
+        recordSttFailure();
+        recordSttCall(false);
+        continue;
+      }
+
+      recordSttSuccess();
+      recordSttCall(true, estimatedSeconds);
+      const result = await response.json();
+      return result.text ?? '';
+    } catch (err) {
+      recordSttFailure();
+      recordSttCall(false);
+      if (attempt === 0) continue;
+      throw err;
+    }
   }
 
-  const result = await response.json();
-  return result.text ?? '';
+  throw new Error(`STT failed: HTTP ${lastStatus}`);
 }
 
 // ── Turn Lifecycle ────────────────────────────────────────────────
