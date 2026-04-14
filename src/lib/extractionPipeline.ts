@@ -454,6 +454,7 @@ export interface PipelineStats {
   total: number;
   ready: number;
   blocked: number;
+  pipelineBlocked: number;
   extracted: number;
   completed: number;
   blockedBreakdown: Record<string, number>;
