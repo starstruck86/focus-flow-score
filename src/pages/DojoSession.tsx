@@ -134,6 +134,10 @@ export default function DojoSession() {
 
   const [scenario] = useState<DojoScenario>(() => {
     if (state?.scenario) return state.scenario;
+    // Lane-aware selection: honor laneAnchor when present
+    if (state?.laneAnchor) {
+      return getLaneScenario(state.laneAnchor, resolvedSkillFocus ?? 'objection_handling');
+    }
     // Use skill-shaped selection when SkillSession is available
     if (state?.skillSession) {
       const selection = selectSkillShapedScenario(state.skillSession);
