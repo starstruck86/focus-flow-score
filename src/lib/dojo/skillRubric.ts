@@ -4,6 +4,10 @@
  * Do NOT duplicate dimension definitions elsewhere.
  */
 
+// Re-export lever types for consumers
+import { computeLeverSelection, COACHING_WHY_EXPLANATIONS } from '@/lib/dojo/leverConfig';
+export type { LeverSelectionResult, LeverCandidate } from '@/lib/dojo/leverConfig';
+
 export interface DimensionDef {
   key: string;
   label: string;
@@ -392,8 +396,8 @@ export interface PointLiftSuggestion {
   earned: number;
   max: number;
   action: string;
-  evidence: string;      // what in the rep's answer triggered this
-  estimatedLift: [number, number]; // [min, max] point range
+  evidence: string;
+  estimatedLift: [number, number];
 }
 
 export function computePointLiftSuggestions(
@@ -411,13 +415,12 @@ export function computePointLiftSuggestions(
   for (const dim of rubric.dimensions) {
     const detail = normalized[dim.key];
     const earned = detail?.score ?? 5;
-    if (earned >= 8) continue; // already strong
+    if (earned >= 8) continue;
 
     const gap = 10 - earned;
     const maxLift = Math.round((gap / 10) * dim.weight);
     const minLift = Math.max(1, Math.round(maxLift * 0.5));
 
-    // Prefer rep-specific action from AI, fall back to rubric cue
     const action = detail?.improvementAction || dim.pointLiftCue;
     const evidence = detail?.evidence || '';
 
@@ -438,7 +441,7 @@ export function computePointLiftSuggestions(
 
 /**
  * Primary Coaching Lever — the most strategically important dimension to coach on.
- * Not always the lowest score or biggest weighted gap.
+ * Now delegates to the canonical computeLeverSelection from leverConfig.ts.
  */
 export interface CoachingLeverResult {
   primaryLever: string;
@@ -447,46 +450,19 @@ export interface CoachingLeverResult {
   primaryLeverReason: string;
   primaryLeverEvidence: string;
   primaryLeverFix: string;
-  whyChosen: string;
+  whyChosen: string;            // technical (debug)
+  whyChosenCoaching: string;    // user-facing (coach-like)
   weakestDimension: string;
   weakestDimensionLabel: string;
   weakestDimensionScore: number;
   biggestWeightedDrag: string;
   biggestWeightedDragLabel: string;
   leverDiffersFromWeakest: boolean;
+  candidates: import('@/lib/dojo/leverConfig').LeverCandidate[];
 }
 
 /**
- * Strategic priority order per skill — which dimensions matter most for coaching,
- * independent of score. Ordered from most strategically important to least.
- * A dimension appearing earlier gets a strategic bonus in lever selection.
- */
-const STRATEGIC_PRIORITY: Record<string, string[]> = {
-  executive_response: ['numberLed', 'brevity', 'priorityAnchoring', 'executivePresence'],
-  objection_handling: ['isolation', 'reframing', 'commitmentControl', 'proof', 'composure'],
-  discovery: ['painExcavation', 'businessImpact', 'questionArchitecture', 'painQuantification', 'urgencyTesting', 'stakeholderDiscovery'],
-  deal_control: ['nextStepControl', 'riskNaming', 'mutualPlan', 'stakeholderAlignment'],
-  qualification: ['painValidation', 'disqualification', 'decisionProcess', 'stakeholderMapping'],
-};
-
-/**
- * Dimensions that affect the OPENING of the answer — higher coaching leverage
- * because they shape the entire response trajectory.
- */
-const OPENING_DIMENSIONS: Set<string> = new Set([
-  'numberLed', 'brevity', 'composure', 'questionArchitecture', 'painValidation', 'nextStepControl',
-]);
-
-/**
- * Select the primary coaching lever — the single dimension that a great coach
- * would focus on, considering strategic importance beyond just lowest score.
- *
- * Scoring formula per dimension:
- *   leverScore = weightedGap + strategicBonus + openingBonus
- *
- * - weightedGap: (10 - score) * weight  — same as biggest-drag calc
- * - strategicBonus: 0-50 based on position in STRATEGIC_PRIORITY
- * - openingBonus: 30 if dimension affects answer opening
+ * Select the primary coaching lever using the shared canonical algorithm.
  */
 export function selectPrimaryCoachingLever(
   dimensions: Record<string, unknown> | null | undefined,
@@ -498,73 +474,35 @@ export function selectPrimaryCoachingLever(
   const normalized = normalizeDimensionScores(dimensions);
   if (!normalized) return null;
 
-  const priorities = STRATEGIC_PRIORITY[skill] || [];
-
-  interface Candidate {
-    dim: DimensionDef;
-    detail: DimensionScoreDetail;
-    weightedGap: number;
-    strategicBonus: number;
-    openingBonus: number;
-    leverScore: number;
+  const scores: Record<string, number> = {};
+  for (const [key, detail] of Object.entries(normalized)) {
+    scores[key] = detail.score;
   }
 
-  const candidates: Candidate[] = [];
+  const result = computeLeverSelection(scores, skill);
+  if (!result) return null;
 
-  // Track weakest raw and biggest weighted drag
-  let weakestRaw: { key: string; label: string; score: number } = { key: '', label: '', score: 11 };
-  let biggestDrag: { key: string; label: string; gap: number } = { key: '', label: '', gap: -1 };
-
-  for (const dim of rubric.dimensions) {
-    const detail = normalized[dim.key] || { score: 5, reason: '', evidence: '', improvementAction: '', targetFor7: '', targetFor9: '' };
-    const score = detail.score;
-    if (score >= 8) continue; // skip strong dimensions
-
-    const weightedGap = (10 - score) * dim.weight;
-    const priorityIndex = priorities.indexOf(dim.key);
-    const strategicBonus = priorityIndex >= 0 ? Math.max(0, (priorities.length - priorityIndex) * (50 / priorities.length)) : 0;
-    const openingBonus = OPENING_DIMENSIONS.has(dim.key) ? 30 : 0;
-    const leverScore = weightedGap + strategicBonus + openingBonus;
-
-    candidates.push({ dim, detail, weightedGap, strategicBonus, openingBonus, leverScore });
-
-    if (score < weakestRaw.score) {
-      weakestRaw = { key: dim.key, label: dim.label, score };
-    }
-    if (weightedGap > biggestDrag.gap) {
-      biggestDrag = { key: dim.key, label: dim.label, gap: weightedGap };
-    }
-  }
-
-  if (candidates.length === 0) return null;
-
-  // Sort by leverScore descending
-  candidates.sort((a, b) => b.leverScore - a.leverScore);
-  const winner = candidates[0];
-
-  // Build explanation
-  const parts: string[] = [];
-  if (winner.strategicBonus > 0) parts.push(`strategically critical for ${rubric.label}`);
-  if (winner.openingBonus > 0) parts.push('shapes the opening of the answer');
-  if (winner.weightedGap === biggestDrag.gap) parts.push('biggest weighted drag');
-  const whyChosen = parts.length > 0
-    ? `${winner.dim.label} selected because it is ${parts.join(', ')}.`
-    : `${winner.dim.label} selected as the highest-leverage fix based on combined score gap and weight.`;
+  const winnerDim = rubric.dimensions.find(d => d.key === result.primaryLever);
+  const weakestDim = rubric.dimensions.find(d => d.key === result.weakestDimension);
+  const biggestDragDim = rubric.dimensions.find(d => d.key === result.biggestWeightedDrag);
+  const winnerDetail = normalized[result.primaryLever];
 
   return {
-    primaryLever: winner.dim.key,
-    primaryLeverLabel: winner.dim.label,
-    primaryLeverScore: winner.detail.score,
-    primaryLeverReason: winner.detail.reason || winner.dim.bad,
-    primaryLeverEvidence: winner.detail.evidence || '',
-    primaryLeverFix: winner.detail.improvementAction || winner.dim.pointLiftCue,
-    whyChosen,
-    weakestDimension: weakestRaw.key,
-    weakestDimensionLabel: weakestRaw.label,
-    weakestDimensionScore: weakestRaw.score,
-    biggestWeightedDrag: biggestDrag.key,
-    biggestWeightedDragLabel: biggestDrag.label,
-    leverDiffersFromWeakest: winner.dim.key !== weakestRaw.key,
+    primaryLever: result.primaryLever,
+    primaryLeverLabel: winnerDim?.label || result.primaryLever,
+    primaryLeverScore: result.primaryLeverScore,
+    primaryLeverReason: winnerDetail?.reason || winnerDim?.bad || '',
+    primaryLeverEvidence: winnerDetail?.evidence || '',
+    primaryLeverFix: winnerDetail?.improvementAction || winnerDim?.pointLiftCue || '',
+    whyChosen: result.whyChosen,
+    whyChosenCoaching: result.whyChosenCoaching,
+    weakestDimension: result.weakestDimension,
+    weakestDimensionLabel: weakestDim?.label || result.weakestDimension,
+    weakestDimensionScore: result.weakestDimensionScore,
+    biggestWeightedDrag: result.biggestWeightedDrag,
+    biggestWeightedDragLabel: biggestDragDim?.label || result.biggestWeightedDrag,
+    leverDiffersFromWeakest: result.leverDiffersFromWeakest,
+    candidates: result.candidates,
   };
 }
 
