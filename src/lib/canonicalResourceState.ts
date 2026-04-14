@@ -28,6 +28,7 @@ export type CanonicalState =
   | 'metadata_only_candidate'
   | 'quarantined'
   | 'truly_complete'
+  | 'needs_extraction'
   | 'system_gap';
 
 export interface CanonicalStateResult {
@@ -194,10 +195,15 @@ export function resolveCanonicalState(
     return { ...base, state: 'quarantined', label: 'Quarantined', description: 'Removed from auto-retry after repeated failures', nextAction: 'Manual review only', qualityScore: quality.score };
   }
 
-  // ── 3. Truly complete ──
+  // ── 3. Truly complete (enrichment + extraction) ──
   if (status === 'deep_enriched' && quality.score >= 70 && !isBinaryContent(content)) {
     // Check for contradictions
     if (!resource.failure_reason) {
+      // If enriched but no KIs extracted yet, surface as needs_extraction
+      const kiCount = (resource as any).current_resource_ki_count ?? null;
+      if (kiCount === 0) {
+        return { ...base, state: 'needs_extraction' as CanonicalState, label: 'Needs Extraction', description: `Enriched (${quality.score}/100) but 0 KIs`, nextAction: 'Run extraction', qualityScore: quality.score };
+      }
       return { ...base, state: 'truly_complete', label: 'Complete', description: `Score ${quality.score}/100`, nextAction: null, qualityScore: quality.score };
     }
   }
