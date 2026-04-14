@@ -42,7 +42,8 @@ const recentSubmissions: SubmissionRecord[] = [];
  */
 async function blobFingerprint(blob: Blob): Promise<string> {
   const sampleSize = Math.min(64, blob.size);
-  const sample = await blob.slice(0, sampleSize).arrayBuffer();
+  const sliced = blob.slice(0, sampleSize);
+  const sample = await new Response(sliced).arrayBuffer();
   const bytes = new Uint8Array(sample);
   let hash = blob.size ^ (blob.type.length << 16);
   for (let i = 0; i < bytes.length; i++) {
