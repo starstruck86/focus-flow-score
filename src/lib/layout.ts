@@ -67,6 +67,19 @@ export const PX_HEADER_HEIGHT = PX.HEADER;
 // ═══════════════════════════════════════════════════════════════════════
 // All bottom offsets use CSS calc() + env(safe-area-inset-bottom) so
 // they adapt to notched devices automatically.
+//
+// ═══════════════════════════════════════════════════════════════════════
+// MOBILE SAFE-AREA RULES (must always hold):
+// ═══════════════════════════════════════════════════════════════════════
+// 7. Every full-screen root (<div className="min-h-screen …">) MUST
+//    include SHELL.top.safeArea so content clears the notch/Dynamic Island.
+// 8. Standalone pages that don't use <Layout> MUST apply SHELL.top.safeArea
+//    on their root wrapper AND use SHELL.stickyHeader.className on their
+//    sticky header instead of bare "sticky top-0".
+// 9. Fixed overlays at top-0 (banners, toasts) MUST use
+//    top-[env(safe-area-inset-top)] so they don't clip under the notch.
+// 10. Close/back buttons MUST always be reachable — never hidden behind
+//     the status bar or notch. Use min-h-[44px] tap targets.
 
 /**
  * Structured shell tokens organized by concern.
@@ -92,6 +105,16 @@ export const SHELL = {
   top: {
     /** Padding for the app root to respect notch/dynamic-island */
     safeArea: 'pt-[env(safe-area-inset-top)]',
+  },
+  /** Sticky header for standalone pages (accounts for safe-area-inset-top) */
+  stickyHeader: {
+    /** Use instead of "sticky top-0" on standalone pages that apply SHELL.top.safeArea on their root */
+    className: 'sticky top-[env(safe-area-inset-top)] z-10 bg-background/95 backdrop-blur-sm',
+  },
+  /** Fixed overlays (banners, toasts) that must clear the notch */
+  fixedTop: {
+    /** Use instead of "fixed top-0" */
+    className: 'fixed top-[env(safe-area-inset-top)] left-0 right-0',
   },
   /** Sticky header */
   header: {
