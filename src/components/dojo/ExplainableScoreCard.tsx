@@ -151,7 +151,7 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
 
 /** Expandable dimension row */
 function DimensionRow({
-  label, weight, score, reason, evidence, improvementAction, targetFor7, targetFor9, hasDetail,
+  label, weight, score, reason, evidence, improvementAction, targetFor7, targetFor9, hasDetail, isPrimaryLever,
 }: {
   label: string;
   weight: number;
@@ -162,6 +162,7 @@ function DimensionRow({
   targetFor7: string;
   targetFor9: string;
   hasDetail: boolean;
+  isPrimaryLever?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const isWeak = score <= 4;
