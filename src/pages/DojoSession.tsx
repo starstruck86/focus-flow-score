@@ -328,11 +328,34 @@ export default function DojoSession() {
           skillFocus: state.skillSession.skillId,
           fromSkillBuilder: state?.fromSkillBuilder,
         },
+        replace: true,
       });
-    } else {
-      navigate('/dojo');
+      return;
     }
+
+    // If we have an active lane, continue in it
+    const lane = loadActiveLane();
+    if (lane) {
+      navigate('/dojo/session', {
+        state: {
+          skillFocus: scenario.skillFocus,
+          laneAnchor: lane.anchor,
+          laneLabel: lane.label,
+        },
+        replace: true,
+      });
+      return;
+    }
+
+    navigate('/dojo');
   };
+
+  // Track lane rep completion when a score is recorded
+  useEffect(() => {
+    if (currentResult && phase === 'feedback') {
+      updateLaneAfterRep(currentResult.score);
+    }
+  }, [currentResult, phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle roleplay completion — extract roleplay-specific extras
   const handleRoleplayComplete = useCallback((scoreResult: DojoScoreResult) => {
