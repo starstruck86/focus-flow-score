@@ -159,23 +159,49 @@ export function recordSttSuccess(): void {
 }
 
 // ── Stats ──────────────────────────────────────────────────────────
+// Split into:
+// - Transport attempts: per HTTP request (including retries)
+// - Blocked counts: per utterance blocked before sending
+// - Retry count: transport-level retries
 
 let sttStats = {
-  totalCalls: 0,
-  successCalls: 0,
-  failedCalls: 0,
+  /** Total transport-level HTTP attempts (includes retries) */
+  totalTransportAttempts: 0,
+  /** Successful transport attempts */
+  successTransportAttempts: 0,
+  /** Failed transport attempts */
+  failedTransportAttempts: 0,
+  /** Utterances blocked by preflight validation */
   blockedByPreflight: 0,
+  /** Utterances blocked by circuit breaker */
   blockedByCircuit: 0,
+  /** Utterances blocked by duplicate detection */
   blockedByDuplicate: 0,
-  retriedCalls: 0,
+  /** Transport-level retries (subset of totalTransportAttempts) */
+  retryAttempts: 0,
+  /** Total audio seconds (from successful requests) */
   totalAudioSeconds: 0,
 };
 
+/** Record a transport-level HTTP attempt (success or failure). */
+export function recordSttTransportAttempt(success: boolean, audioSeconds?: number): void {
+  sttStats.totalTransportAttempts++;
+  if (success) {
+    sttStats.successTransportAttempts++;
+    if (audioSeconds) sttStats.totalAudioSeconds += audioSeconds;
+  } else {
+    sttStats.failedTransportAttempts++;
+  }
+}
+
+/** Record a transport-level retry. */
+export function recordSttRetryAttempt(): void {
+  sttStats.retryAttempts++;
+}
+
+/** @deprecated Use recordSttTransportAttempt instead */
 export function recordSttCall(success: boolean, audioSeconds?: number): void {
-  sttStats.totalCalls++;
-  if (success) sttStats.successCalls++;
-  else sttStats.failedCalls++;
-  if (audioSeconds) sttStats.totalAudioSeconds += audioSeconds;
+  recordSttTransportAttempt(success, audioSeconds);
 }
 
 export function recordSttBlocked(reason: 'preflight' | 'circuit' | 'duplicate'): void {
@@ -185,7 +211,7 @@ export function recordSttBlocked(reason: 'preflight' | 'circuit' | 'duplicate'):
 }
 
 export function recordSttRetry(): void {
-  sttStats.retriedCalls++;
+  sttStats.retryAttempts++;
 }
 
 export function getSttStats() {
@@ -194,9 +220,9 @@ export function getSttStats() {
 
 export function resetSttStats(): void {
   sttStats = {
-    totalCalls: 0, successCalls: 0, failedCalls: 0,
+    totalTransportAttempts: 0, successTransportAttempts: 0, failedTransportAttempts: 0,
     blockedByPreflight: 0, blockedByCircuit: 0, blockedByDuplicate: 0,
-    retriedCalls: 0, totalAudioSeconds: 0,
+    retryAttempts: 0, totalAudioSeconds: 0,
   };
 }
 
