@@ -810,7 +810,7 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
         title: courseTitle,
         lessons: thinkificLessons,
         debug,
-        ...(landingResult.resolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
+        ...(landingPageResolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
       };
     }
     debug.push('[Thinkific] No Thinkific-specific lessons found, falling back to generic parser');
