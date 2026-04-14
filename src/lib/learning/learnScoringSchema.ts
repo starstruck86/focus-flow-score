@@ -152,10 +152,10 @@ const DIMENSION_DESCRIPTIONS: Record<SkillFocus, Record<string, string>> = {
     stakeholderAlignment: 'Ensured alignment across multiple stakeholders or created urgency',
   },
   executive_response: {
-    brevity: 'Response could be delivered in under 30 seconds, no filler',
-    numberLed: 'Opened with a specific metric or quantified outcome',
-    priorityAnchoring: 'Anchored to the executive\'s stated priority, not own agenda',
-    executivePresence: 'Projected certainty and confidence — no hedging',
+    brevity: 'Response deliverable in under 30 seconds. ≤2 sentences = elite (9-10). 3 sentences = competent (5-6). 4+ sentences = fail (0-2). Setup sentence before the answer = 0.',
+    numberLed: 'First sentence contains a specific metric, dollar amount, or quantified outcome. "We help companies..." = 0-1. Generic claim without a number = 2-3. Specific dollar figure in opening clause = 8-10.',
+    priorityAnchoring: 'Anchored to the exec\'s stated priority, not own agenda. If exec named a specific goal and rep didn\'t reference it = 0-2. Referenced but loosely = 4-5. First sentence connects directly = 8-10.',
+    executivePresence: 'Projected certainty and confidence. "I think" / "we believe" / "potentially" = cap at 4. States outcomes as facts with proof = 8-10. Zero hedging + specific proof point = 9-10.',
   },
   qualification: {
     painValidation: 'Distinguished genuine business pain from casual interest',

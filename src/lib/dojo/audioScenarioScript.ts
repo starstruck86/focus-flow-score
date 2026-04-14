@@ -47,10 +47,19 @@ export function buildAudioScript(scenario: DojoScenario): AudioScenarioScript {
 /**
  * Build retry script with coaching cue from feedback.
  */
-export function buildRetryScript(practiceCue?: string): {
+export function buildRetryScript(practiceCue?: string, skillFocus?: string): {
   retryPrompt: string;
   retryInstruction: string;
 } {
+  // Executive Response gets tighter retry constraints
+  if (skillFocus === 'executive_response') {
+    const execCue = practiceCue ? ` Focus on this: ${practiceCue}.` : '';
+    return {
+      retryPrompt: `Again.${execCue} This time — two sentences maximum. First word must be a number or dollar amount. No setup.`,
+      retryInstruction: "Go.",
+    };
+  }
+
   const cue = practiceCue ? ` This time, focus on this: ${practiceCue}.` : '';
   return {
     retryPrompt: `Let's run that again.${cue}`,
