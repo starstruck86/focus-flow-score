@@ -437,7 +437,139 @@ export function computePointLiftSuggestions(
 }
 
 /**
- * Find the biggest scoring drag (lowest dimension relative to weight).
+ * Primary Coaching Lever — the most strategically important dimension to coach on.
+ * Not always the lowest score or biggest weighted gap.
+ */
+export interface CoachingLeverResult {
+  primaryLever: string;
+  primaryLeverLabel: string;
+  primaryLeverScore: number;
+  primaryLeverReason: string;
+  primaryLeverEvidence: string;
+  primaryLeverFix: string;
+  whyChosen: string;
+  weakestDimension: string;
+  weakestDimensionLabel: string;
+  weakestDimensionScore: number;
+  biggestWeightedDrag: string;
+  biggestWeightedDragLabel: string;
+  leverDiffersFromWeakest: boolean;
+}
+
+/**
+ * Strategic priority order per skill — which dimensions matter most for coaching,
+ * independent of score. Ordered from most strategically important to least.
+ * A dimension appearing earlier gets a strategic bonus in lever selection.
+ */
+const STRATEGIC_PRIORITY: Record<string, string[]> = {
+  executive_response: ['numberLed', 'brevity', 'priorityAnchoring', 'executivePresence'],
+  objection_handling: ['isolation', 'reframing', 'commitmentControl', 'proof', 'composure'],
+  discovery: ['painExcavation', 'businessImpact', 'questionArchitecture', 'painQuantification', 'urgencyTesting', 'stakeholderDiscovery'],
+  deal_control: ['nextStepControl', 'riskNaming', 'mutualPlan', 'stakeholderAlignment'],
+  qualification: ['painValidation', 'disqualification', 'decisionProcess', 'stakeholderMapping'],
+};
+
+/**
+ * Dimensions that affect the OPENING of the answer — higher coaching leverage
+ * because they shape the entire response trajectory.
+ */
+const OPENING_DIMENSIONS: Set<string> = new Set([
+  'numberLed', 'brevity', 'composure', 'questionArchitecture', 'painValidation', 'nextStepControl',
+]);
+
+/**
+ * Select the primary coaching lever — the single dimension that a great coach
+ * would focus on, considering strategic importance beyond just lowest score.
+ *
+ * Scoring formula per dimension:
+ *   leverScore = weightedGap + strategicBonus + openingBonus
+ *
+ * - weightedGap: (10 - score) * weight  — same as biggest-drag calc
+ * - strategicBonus: 0-50 based on position in STRATEGIC_PRIORITY
+ * - openingBonus: 30 if dimension affects answer opening
+ */
+export function selectPrimaryCoachingLever(
+  dimensions: Record<string, unknown> | null | undefined,
+  skill: string,
+): CoachingLeverResult | null {
+  if (!dimensions) return null;
+  const rubric = SKILL_RUBRICS[skill];
+  if (!rubric) return null;
+  const normalized = normalizeDimensionScores(dimensions);
+  if (!normalized) return null;
+
+  const priorities = STRATEGIC_PRIORITY[skill] || [];
+
+  interface Candidate {
+    dim: DimensionDef;
+    detail: DimensionScoreDetail;
+    weightedGap: number;
+    strategicBonus: number;
+    openingBonus: number;
+    leverScore: number;
+  }
+
+  const candidates: Candidate[] = [];
+
+  // Track weakest raw and biggest weighted drag
+  let weakestRaw: { key: string; label: string; score: number } = { key: '', label: '', score: 11 };
+  let biggestDrag: { key: string; label: string; gap: number } = { key: '', label: '', gap: -1 };
+
+  for (const dim of rubric.dimensions) {
+    const detail = normalized[dim.key] || { score: 5, reason: '', evidence: '', improvementAction: '', targetFor7: '', targetFor9: '' };
+    const score = detail.score;
+    if (score >= 8) continue; // skip strong dimensions
+
+    const weightedGap = (10 - score) * dim.weight;
+    const priorityIndex = priorities.indexOf(dim.key);
+    const strategicBonus = priorityIndex >= 0 ? Math.max(0, (priorities.length - priorityIndex) * (50 / priorities.length)) : 0;
+    const openingBonus = OPENING_DIMENSIONS.has(dim.key) ? 30 : 0;
+    const leverScore = weightedGap + strategicBonus + openingBonus;
+
+    candidates.push({ dim, detail, weightedGap, strategicBonus, openingBonus, leverScore });
+
+    if (score < weakestRaw.score) {
+      weakestRaw = { key: dim.key, label: dim.label, score };
+    }
+    if (weightedGap > biggestDrag.gap) {
+      biggestDrag = { key: dim.key, label: dim.label, gap: weightedGap };
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Sort by leverScore descending
+  candidates.sort((a, b) => b.leverScore - a.leverScore);
+  const winner = candidates[0];
+
+  // Build explanation
+  const parts: string[] = [];
+  if (winner.strategicBonus > 0) parts.push(`strategically critical for ${rubric.label}`);
+  if (winner.openingBonus > 0) parts.push('shapes the opening of the answer');
+  if (winner.weightedGap === biggestDrag.gap) parts.push('biggest weighted drag');
+  const whyChosen = parts.length > 0
+    ? `${winner.dim.label} selected because it is ${parts.join(', ')}.`
+    : `${winner.dim.label} selected as the highest-leverage fix based on combined score gap and weight.`;
+
+  return {
+    primaryLever: winner.dim.key,
+    primaryLeverLabel: winner.dim.label,
+    primaryLeverScore: winner.detail.score,
+    primaryLeverReason: winner.detail.reason || winner.dim.bad,
+    primaryLeverEvidence: winner.detail.evidence || '',
+    primaryLeverFix: winner.detail.improvementAction || winner.dim.pointLiftCue,
+    whyChosen,
+    weakestDimension: weakestRaw.key,
+    weakestDimensionLabel: weakestRaw.label,
+    weakestDimensionScore: weakestRaw.score,
+    biggestWeightedDrag: biggestDrag.key,
+    biggestWeightedDragLabel: biggestDrag.label,
+    leverDiffersFromWeakest: winner.dim.key !== weakestRaw.key,
+  };
+}
+
+/**
+ * Find the biggest scoring drag — now uses primary coaching lever when available.
  */
 export interface BiggestMiss {
   dimension: string;
@@ -447,6 +579,7 @@ export interface BiggestMiss {
   reason: string;
   evidence: string;
   fix: string;
+  isPrimaryLever: boolean;
 }
 
 export function findBiggestMiss(
@@ -454,31 +587,21 @@ export function findBiggestMiss(
   skill: string,
 ): BiggestMiss | null {
   if (!dimensions) return null;
+  const lever = selectPrimaryCoachingLever(dimensions, skill);
+  if (!lever) return null;
+
   const rubric = SKILL_RUBRICS[skill];
   if (!rubric) return null;
-  const normalized = normalizeDimensionScores(dimensions);
-  if (!normalized) return null;
-
-  let worst: { dim: DimensionDef; detail: DimensionScoreDetail; weightedGap: number } | null = null;
-
-  for (const dim of rubric.dimensions) {
-    const detail = normalized[dim.key];
-    const score = detail?.score ?? 5;
-    const weightedGap = (10 - score) * dim.weight;
-    if (!worst || weightedGap > worst.weightedGap) {
-      worst = { dim, detail: detail || { score: 5, reason: '', evidence: '', improvementAction: '', targetFor7: '', targetFor9: '' }, weightedGap };
-    }
-  }
-
-  if (!worst || worst.detail.score >= 8) return null;
+  const dim = rubric.dimensions.find(d => d.key === lever.primaryLever);
 
   return {
-    dimension: worst.dim.key,
-    dimensionLabel: worst.dim.label,
-    score: worst.detail.score,
-    weight: worst.dim.weight,
-    reason: worst.detail.reason || worst.dim.bad,
-    evidence: worst.detail.evidence || '',
-    fix: worst.detail.improvementAction || worst.dim.pointLiftCue,
+    dimension: lever.primaryLever,
+    dimensionLabel: lever.primaryLeverLabel,
+    score: lever.primaryLeverScore,
+    weight: dim?.weight ?? 25,
+    reason: lever.primaryLeverReason,
+    evidence: lever.primaryLeverEvidence,
+    fix: lever.primaryLeverFix,
+    isPrimaryLever: true,
   };
 }

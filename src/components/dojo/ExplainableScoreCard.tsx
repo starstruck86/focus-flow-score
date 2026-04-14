@@ -1,7 +1,7 @@
 /**
  * ExplainableScoreCard — Transparent, rep-specific scoring breakdown.
  * Shows: rubric dimensions with scores, expandable per-dimension explanations,
- * biggest miss with evidence, point-lift suggestions tied to actual response.
+ * primary coaching lever (not always weakest), point-lift suggestions tied to actual response.
  */
 
 import { useState } from 'react';
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { TrendingUp, AlertTriangle, Target, ChevronUp, ChevronDown, ChevronRight, Quote, Crosshair } from 'lucide-react';
-import { getSkillRubric, computePointLiftSuggestions, findBiggestMiss, normalizeDimensionScores } from '@/lib/dojo/skillRubric';
+import { getSkillRubric, computePointLiftSuggestions, findBiggestMiss, normalizeDimensionScores, selectPrimaryCoachingLever } from '@/lib/dojo/skillRubric';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 
 interface Props {
@@ -23,9 +23,10 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
   const normalized = normalizeDimensionScores(dimensions);
   if (!normalized || !rubric) return null;
 
-  // Extract simple scores for point-lift / biggest-miss functions
+  const lever = selectPrimaryCoachingLever(dimensions, skill);
   const biggestMiss = findBiggestMiss(dimensions, skill);
   const pointLifts = computePointLiftSuggestions(dimensions, skill);
+  const primaryKey = lever?.primaryLever;
 
   return (
     <div className="space-y-3">
@@ -45,6 +46,7 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
               const detail = normalized[dim.key];
               const score = detail?.score ?? 0;
               const hasDetail = !!(detail?.reason || detail?.evidence);
+              const isPrimary = dim.key === primaryKey;
 
               return (
                 <DimensionRow
@@ -58,6 +60,7 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
                   targetFor7={detail?.targetFor7 || dim.good}
                   targetFor9={detail?.targetFor9 || dim.elite}
                   hasDetail={hasDetail}
+                  isPrimaryLever={isPrimary}
                 />
               );
             })}
@@ -65,14 +68,19 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
         </CardContent>
       </Card>
 
-      {/* Biggest Miss */}
+      {/* Primary Coaching Lever */}
       {biggestMiss && (
         <div className="rounded-lg border-l-4 border-l-destructive bg-destructive/5 px-3.5 py-3 space-y-1.5">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+            <Crosshair className="h-3.5 w-3.5 text-destructive shrink-0" />
             <p className="text-[10px] font-bold uppercase tracking-wider text-destructive">
-              Biggest Scoring Drag
+              Primary Coaching Lever
             </p>
+            {lever?.leverDiffersFromWeakest && (
+              <Badge variant="outline" className="text-[9px] border-destructive/30 text-destructive">
+                ≠ lowest score
+              </Badge>
+            )}
           </div>
           <p className="text-[13px] font-semibold text-foreground leading-snug pl-[22px]">
             {biggestMiss.dimensionLabel} — {biggestMiss.score}/10
@@ -93,6 +101,11 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
               <span className="text-destructive">Fix: </span>{biggestMiss.fix}
             </p>
           </div>
+          {lever?.whyChosen && lever.leverDiffersFromWeakest && (
+            <p className="text-[10px] text-muted-foreground pl-[22px] italic">
+              {lever.whyChosen}
+            </p>
+          )}
         </div>
       )}
 
@@ -138,7 +151,7 @@ export function ExplainableScoreCard({ dimensions, skill, totalScore }: Props) {
 
 /** Expandable dimension row */
 function DimensionRow({
-  label, weight, score, reason, evidence, improvementAction, targetFor7, targetFor9, hasDetail,
+  label, weight, score, reason, evidence, improvementAction, targetFor7, targetFor9, hasDetail, isPrimaryLever,
 }: {
   label: string;
   weight: number;
@@ -149,6 +162,7 @@ function DimensionRow({
   targetFor7: string;
   targetFor9: string;
   hasDetail: boolean;
+  isPrimaryLever?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const isWeak = score <= 4;
@@ -157,14 +171,16 @@ function DimensionRow({
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className="w-full" disabled={!hasDetail}>
-        <div className="space-y-0.5 py-1">
+        <div className={`space-y-0.5 py-1 ${isPrimaryLever ? 'bg-destructive/5 -mx-1 px-1 rounded' : ''}`}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <span className={`text-[11px] flex items-center gap-1 ${isPrimaryLever ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
               {hasDetail && (
                 open ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />
               )}
+              {isPrimaryLever && <Crosshair className="h-3 w-3 shrink-0" />}
               {label}
               <span className="text-[9px] opacity-60">({weight}%)</span>
+              {isPrimaryLever && <Badge variant="outline" className="text-[8px] py-0 px-1 border-destructive/30 text-destructive ml-1">lever</Badge>}
             </span>
             <span className={`text-[11px] font-mono font-bold ${
               isStrong ? 'text-green-500' : isWeak ? 'text-destructive' : 'text-amber-500'

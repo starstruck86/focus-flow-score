@@ -622,6 +622,59 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     // ── Parse and validate structured dimensions ──────────────────
     parsed.dimensions = parseDimensions(parsed.dimensions, skill);
 
+    // ── Compute Primary Coaching Lever (server-side, deterministic) ──
+    if (parsed.dimensions) {
+      const STRATEGIC_PRIORITY: Record<string, string[]> = {
+        executive_response: ['numberLed', 'brevity', 'priorityAnchoring', 'executivePresence'],
+        objection_handling: ['isolation', 'reframing', 'commitmentControl', 'proof', 'composure'],
+        discovery: ['painExcavation', 'businessImpact', 'questionArchitecture', 'painQuantification', 'urgencyTesting', 'stakeholderDiscovery'],
+        deal_control: ['nextStepControl', 'riskNaming', 'mutualPlan', 'stakeholderAlignment'],
+        qualification: ['painValidation', 'disqualification', 'decisionProcess', 'stakeholderMapping'],
+      };
+      const OPENING_DIMS = new Set(['numberLed', 'brevity', 'composure', 'questionArchitecture', 'painValidation', 'nextStepControl']);
+      const priorities = STRATEGIC_PRIORITY[skill] || [];
+      const dims = parsed.dimensions as Record<string, DimensionDetail>;
+
+      let bestKey = ''; let bestLeverScore = -1;
+      let weakestKey = ''; let weakestScore = 11;
+      let biggestDragKey = ''; let biggestDragGap = -1;
+
+      for (const [key, detail] of Object.entries(dims)) {
+        const s = detail.score;
+        const dimDef = Object.keys(SKILL_DIMENSIONS[skill] || {});
+        if (!dimDef.includes(key)) continue;
+
+        // Find weight from rubric position (equal weights if not defined)
+        const rubricDims = Object.keys(SKILL_DIMENSIONS[skill] || {});
+        const weight = 100 / rubricDims.length;
+
+        if (s < weakestScore) { weakestScore = s; weakestKey = key; }
+        const wGap = (10 - s) * weight;
+        if (wGap > biggestDragGap) { biggestDragGap = wGap; biggestDragKey = key; }
+
+        if (s >= 8) continue;
+        const pIdx = priorities.indexOf(key);
+        const stratBonus = pIdx >= 0 ? Math.max(0, (priorities.length - pIdx) * (50 / priorities.length)) : 0;
+        const openBonus = OPENING_DIMS.has(key) ? 30 : 0;
+        const leverScore = wGap + stratBonus + openBonus;
+        if (leverScore > bestLeverScore) { bestLeverScore = leverScore; bestKey = key; }
+      }
+
+      if (bestKey) {
+        parsed.primaryCoachingLever = bestKey;
+        parsed.weakestDimension = weakestKey;
+        parsed.biggestWeightedDrag = biggestDragKey;
+        const parts: string[] = [];
+        if (priorities.indexOf(bestKey) >= 0 && priorities.indexOf(bestKey) < 2) parts.push('strategically critical');
+        if (OPENING_DIMS.has(bestKey)) parts.push('shapes the opening');
+        if (bestKey === biggestDragKey) parts.push('biggest weighted drag');
+        parsed.whyPrimaryLeverWasChosen = parts.length > 0
+          ? `${bestKey} selected: ${parts.join(', ')}.`
+          : `${bestKey} selected as highest-leverage fix.`;
+        parsed.leverDiffersFromWeakest = bestKey !== weakestKey;
+      }
+    }
+
     // Ensure fields exist
     if (!Array.isArray(parsed.patternTags)) parsed.patternTags = [];
     if (typeof parsed.focusPattern !== "string") parsed.focusPattern = "";

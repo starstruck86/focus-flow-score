@@ -5,7 +5,7 @@
  * missed dimensions, retry count, and consistency of misses.
  */
 
-import { SKILL_RUBRICS, normalizeDimensionScores } from './skillRubric';
+import { SKILL_RUBRICS, normalizeDimensionScores, selectPrimaryCoachingLever } from './skillRubric';
 
 export type NextAction =
   | 'retry_same'           // Same scenario, apply the constraint
@@ -40,22 +40,12 @@ export function recommendNextStep(opts: {
 }): NextStepRecommendation {
   const { score, dimensions, skill, retryCount, topMistake, previousTopMistake } = opts;
   const rubric = SKILL_RUBRICS[skill];
-  const normalized = normalizeDimensionScores(dimensions);
+  const lever = selectPrimaryCoachingLever(dimensions, skill);
 
-  // Find weakest dimension
-  let weakestDim: string | undefined;
-  let weakestScore = 10;
-  let weakestLabel = '';
-  if (normalized && rubric) {
-    for (const dim of rubric.dimensions) {
-      const s = normalized[dim.key]?.score ?? 5;
-      if (s < weakestScore) {
-        weakestScore = s;
-        weakestDim = dim.key;
-        weakestLabel = dim.label;
-      }
-    }
-  }
+  // Use primary coaching lever for focus, not just weakest
+  const weakestDim = lever?.primaryLever;
+  const weakestScore = lever?.primaryLeverScore ?? 10;
+  const weakestLabel = lever?.primaryLeverLabel ?? '';
 
   const sameMistakeRepeated = previousTopMistake && topMistake === previousTopMistake;
 
