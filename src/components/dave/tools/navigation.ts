@@ -51,7 +51,7 @@ export function createNavigationTools(ctx: ToolContext): ToolMap {
         ctx.navigate('/dojo/session', { state: { skillFocus: params.skill, mode: 'custom' } });
         return `Starting ${params.skill} drill in the Dojo.`;
       }
-      ctx.navigate('/dojo');
+      ctx.navigate('/dojo/session');
       return 'Opening the Dojo — let\'s get a rep in.';
     },
 

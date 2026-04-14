@@ -306,7 +306,18 @@ export default function DojoSession() {
   };
 
   const handleNextRep = () => {
-    navigate('/dojo');
+    // If we have skill context, stay in the same skill for the next rep
+    if (state?.skillSession) {
+      navigate('/dojo/session', {
+        state: {
+          skillSession: state.skillSession,
+          skillFocus: state.skillSession.skillId,
+          fromSkillBuilder: state?.fromSkillBuilder,
+        },
+      });
+    } else {
+      navigate('/dojo');
+    }
   };
 
   // Handle roleplay completion — extract roleplay-specific extras

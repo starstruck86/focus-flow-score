@@ -345,7 +345,7 @@ export default function LearnLesson() {
               <Button
                 size="lg"
                 className="w-full h-14 text-base font-semibold gap-2"
-                onClick={() => navigate('/dojo', {
+                onClick={() => navigate('/dojo/session', {
                   state: {
                     fromLesson: true,
                     lessonId: lesson.id,
