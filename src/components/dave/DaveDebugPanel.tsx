@@ -6,10 +6,11 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bug, X } from 'lucide-react';
+import { Bug, X, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DaveConnectionMeta } from '@/lib/daveConnectionManager';
 import type { DaveEventRecord } from '@/hooks/useDaveConnectionManager';
+import { VoiceDebugTab } from './VoiceDebugTab';
 
 interface Props {
   meta: DaveConnectionMeta;
