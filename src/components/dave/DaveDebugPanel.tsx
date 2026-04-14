@@ -82,12 +82,32 @@ export function DaveDebugPanel({ meta, eventHistory = [], extraInfo, onDumpSumma
               <Bug className="w-3.5 h-3.5" />
               Dave Debug
             </div>
-            <button onClick={() => setVisible(false)} className="text-muted-foreground hover:text-foreground">
-              <X className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setTab('connection')}
+                className={cn('px-1.5 py-0.5 rounded text-[10px] font-medium', tab === 'connection' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}
+              >
+                Conn
+              </button>
+              <button
+                onClick={() => setTab('voice')}
+                className={cn('px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5', tab === 'voice' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}
+              >
+                <Activity className="w-2.5 h-2.5" /> Voice
+              </button>
+              <button onClick={() => setVisible(false)} className="ml-1 text-muted-foreground hover:text-foreground">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
-          <div className="px-3 space-y-1 text-muted-foreground">
+          {/* Voice Tab */}
+          <div className={cn('px-3', tab !== 'voice' && 'hidden')}>
+            <VoiceDebugTab visible={tab === 'voice' && visible} />
+          </div>
+
+          {/* Connection Tab */}
+          <div className={cn('px-3 space-y-1 text-muted-foreground', tab !== 'connection' && 'hidden')}>
             <Row label="State" value={meta.state} highlight={meta.state === 'failed' || meta.state === 'offline'} />
             <Row label="Session" value={meta.sessionId ? meta.sessionId.substring(0, 12) + '…' : '—'} />
             <Row label="Connected" value={formatTimestamp(meta.lastConnectedAt)} />
