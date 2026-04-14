@@ -117,112 +117,112 @@ const App = () => (
                   <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />
                   <Route path="/cockpit" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <Cockpit />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/ops" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading diagnostics…</p></div>}>
+                      <Suspense fallback={<LazyFallback text="Loading diagnostics…" />}>
                         <Diagnostics />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/verify-enrichment" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading verification…</p></div>}>
+                      <Suspense fallback={<LazyFallback text="Loading verification…" />}>
                         <EnrichmentVerification />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/execute" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <ExecuteWorkspace />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/bulk-extract" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <BulkExtractRunner />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/extraction-admin" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <ExtractionAdmin />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/dojo" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <Dojo />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/dojo/session" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <DojoSession />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/dojo/qa" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <DojoQA />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/dojo/v6-qa" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <DojoV6QA />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/learn" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <Learn />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/learn/lesson/:id" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <LearnLesson />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/learn/skill-builder" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <SkillBuilderSession />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/learn/skill-builder-audit" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <SkillBuilderAudit />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/reliability" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <ReliabilityQA />
                       </Suspense>
                     </ProtectedRoute>
                   } />
                   <Route path="/observability" element={
                     <ProtectedRoute>
-                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                      <Suspense fallback={<LazyFallback />}>
                         <ObservabilityDashboard />
                       </Suspense>
                     </ProtectedRoute>
