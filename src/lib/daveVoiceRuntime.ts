@@ -10,10 +10,10 @@
 
 import { createLogger } from '@/lib/logger';
 import { requestMicrophoneAccess, releaseMicrophoneStream } from '@/lib/microphoneAccess';
-import { ttsCacheKey, lookupCache, storeInCache, recordCacheHit } from '@/lib/voice/ttsCache';
-import { validateSttRequest, shouldRetryStt, getSttRetryDelay, isCircuitOpen, recordSttFailure, recordSttSuccess, recordSttCall, recordSttBlocked } from '@/lib/voice/sttGuard';
+import { ttsCacheKey, lookupMemoryCache, racePersistentCache, storeInCache, recordCacheHit, type TtsCacheKeyInputs } from '@/lib/voice/ttsCache';
+import { validateSttRequest, checkSttDuplicate, shouldRetryStt, shouldRetryTts, getSttRetryDelay, getRetryDelay, isCircuitOpen, recordSttFailure, recordSttSuccess, recordSttCall, recordSttBlocked } from '@/lib/voice/sttGuard';
 import { trackTtsCall, trackSttCall, trackSttRetry, trackSttMalformed } from '@/lib/voice/voiceUsageTracker';
-import { classifyUtterance, selectModel } from '@/lib/voice/voiceCostController';
+import { classifyUtterance, selectModel, markTurnStart, markTurnEnd } from '@/lib/voice/voiceCostController';
 
 const logger = createLogger('DaveVoiceRuntime');
 
@@ -45,7 +45,6 @@ const COMMAND_PATTERNS: [VoiceCommand, RegExp][] = [
 
 export function parseVoiceCommand(transcript: string): VoiceCommand {
   const trimmed = transcript.trim();
-  // Only match commands in short utterances (≤6 words) to avoid false positives
   if (trimmed.split(/\s+/).length > 6) return null;
   for (const [cmd, pattern] of COMMAND_PATTERNS) {
     if (pattern.test(trimmed)) return cmd;
@@ -62,11 +61,8 @@ export interface DaveVoiceState {
   isProcessing: boolean;
   lastTranscript: string | null;
   error: string | null;
-  /** Current surface using the runtime */
   activeSurface: VoiceSurface | null;
-  /** Whether TTS is available (false = text fallback) */
   ttsAvailable: boolean;
-  /** Whether STT is available (false = text input fallback) */
   sttAvailable: boolean;
 }
 
@@ -119,7 +115,12 @@ function cleanupPlayback(p: ActivePlayback): ActivePlayback {
 
 /**
  * Speak a text segment via ElevenLabs TTS.
- * Returns a promise that resolves when speech completes or rejects on failure.
+ *
+ * Hot path architecture:
+ * 1. Memory cache lookup (synchronous, instant)
+ * 2. If miss: start fetch IMMEDIATELY, race persistent cache in parallel
+ * 3. If persistent cache wins the race, abort the fetch and use cached blob
+ * 4. Otherwise use fetch result and write-behind to cache
  */
 export async function speak(
   text: string,
@@ -132,84 +133,167 @@ export async function speak(
   const active: ActivePlayback = { ...clean, abortController, _cleaned: false };
 
   const voiceId = config.voiceId ?? DEFAULT_VOICE_ID;
-  const cacheKey = ttsCacheKey(text, voiceId);
+  const utteranceType = classifyUtterance(text);
+  const model = selectModel(utteranceType);
 
-  // ── Hot path: cache lookup (effectively instant) ──
-  const cached = await lookupCache(cacheKey);
-  recordCacheHit(cached.source);
-  trackTtsCall(text, cached.source);
+  const cacheKeyInputs: TtsCacheKeyInputs = { text, voiceId, modelId: model.modelId };
+  const cacheKey = ttsCacheKey(cacheKeyInputs);
 
-  let blob: Blob | null = cached.blob;
+  // ── Step 1: Memory cache (synchronous, zero latency) ──
+  const memResult = lookupMemoryCache(cacheKey);
+  if (memResult.blob) {
+    recordCacheHit('memory');
+    trackTtsCall(text, 'memory');
+    return playBlob(memResult.blob, active);
+  }
 
-  // ── If cache miss, fetch from API ──
-  if (!blob) {
-    const utteranceType = classifyUtterance(text);
-    const model = selectModel(utteranceType);
-    let lastError = '';
+  // ── Step 2: Memory miss — start fetch AND race persistent cache ──
+  // Fetch starts IMMEDIATELY — persistent cache does NOT block it.
+  const fetchAbort = new AbortController();
+  const onOuterAbort = () => fetchAbort.abort();
+  abortController.signal.addEventListener('abort', onOuterAbort, { once: true });
 
-    for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
-      if (abortController.signal.aborted) return active;
-      if (attempt > 0) await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+  const fetchPromise = fetchTtsWithRetry(text, voiceId, model.modelId, config, fetchAbort, options);
+  const persistentPromise = racePersistentCache(cacheKey);
 
-      const attemptAbort = new AbortController();
-      const onOuter = () => attemptAbort.abort();
-      abortController.signal.addEventListener('abort', onOuter, { once: true });
+  // Race: persistent cache vs fetch
+  let blob: Blob | null = null;
+  let source: 'persistent' | 'miss' = 'miss';
 
-      try {
-        const body: Record<string, unknown> = {
-          text,
-          voiceId,
-          model_id: model.modelId,
-        };
-        if (options?.previousText) body.previous_text = options.previousText;
-        if (options?.nextText) body.next_text = options.nextText;
+  try {
+    const winner = await Promise.race([
+      persistentPromise.then(b => ({ type: 'persistent' as const, blob: b })),
+      fetchPromise.then(b => ({ type: 'fetch' as const, blob: b })),
+    ]);
 
-        const timeoutId = setTimeout(() => attemptAbort.abort(), TTS_FETCH_TIMEOUT_MS);
-        let response: Response;
-        try {
-          response = await fetch(
-            `${config.supabaseUrl}/functions/v1/elevenlabs-tts-stream`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                apikey: config.supabaseAnonKey,
-                Authorization: `Bearer ${config.supabaseAnonKey}`,
-              },
-              body: JSON.stringify(body),
-              signal: attemptAbort.signal,
-            },
-          );
-        } finally {
-          clearTimeout(timeoutId);
-          abortController.signal.removeEventListener('abort', onOuter);
+    if (winner.type === 'persistent' && winner.blob) {
+      // Persistent cache won — abort the fetch
+      fetchAbort.abort();
+      blob = winner.blob;
+      source = 'persistent';
+    } else if (winner.type === 'fetch' && winner.blob) {
+      blob = winner.blob;
+      source = 'miss';
+      // Write-behind to cache
+      storeInCache(cacheKey, blob);
+    } else {
+      // Winner returned null, wait for the other
+      if (winner.type === 'persistent') {
+        // Persistent was null, wait for fetch
+        const fetchResult = await fetchPromise;
+        blob = fetchResult;
+        source = 'miss';
+        if (blob) storeInCache(cacheKey, blob);
+      } else {
+        // Fetch was null (shouldn't happen — it throws), try persistent
+        const persistResult = await persistentPromise;
+        if (persistResult) {
+          blob = persistResult;
+          source = 'persistent';
         }
-
-        if (!response.ok) {
-          lastError = `TTS HTTP ${response.status}`;
-          continue;
-        }
-        blob = await response.blob();
-
-        // Write-behind: cache the blob after we have it (non-blocking)
-        storeInCache(cacheKey, blob);
-        break;
-      } catch (err) {
-        abortController.signal.removeEventListener('abort', onOuter);
-        if (abortController.signal.aborted) return active;
-        lastError = err instanceof Error ? err.message : 'TTS fetch error';
       }
     }
-
-    if (!blob) {
-      logger.warn('TTS failed after retries', { lastError });
-      throw new Error(`TTS failed: ${lastError}`);
+  } catch (err) {
+    // Fetch threw — check if persistent cache has it
+    const persistResult = await persistentPromise;
+    if (persistResult) {
+      blob = persistResult;
+      source = 'persistent';
+    } else {
+      abortController.signal.removeEventListener('abort', onOuterAbort);
+      throw err;
     }
   }
 
-  // Play audio
+  abortController.signal.removeEventListener('abort', onOuterAbort);
+
+  recordCacheHit(source);
+  trackTtsCall(text, source);
+
+  if (!blob) {
+    throw new Error('TTS failed: no audio produced');
+  }
+
+  return playBlob(blob, active);
+}
+
+/**
+ * Fetch TTS from API with retry logic and explicit retry classification.
+ */
+async function fetchTtsWithRetry(
+  text: string,
+  voiceId: string,
+  modelId: string,
+  config: TtsConfig,
+  abortController: AbortController,
+  options?: { previousText?: string; nextText?: string },
+): Promise<Blob> {
+  let lastError = '';
+
+  for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
+    if (abortController.signal.aborted) throw new Error('TTS aborted');
+    if (attempt > 0) {
+      const decision = shouldRetryTts(lastStatus, attempt);
+      if (!decision.shouldRetry) break;
+      await new Promise(r => setTimeout(r, getRetryDelay(attempt)));
+    }
+
+    let lastStatus = 0;
+    const attemptAbort = new AbortController();
+    const onOuter = () => attemptAbort.abort();
+    abortController.signal.addEventListener('abort', onOuter, { once: true });
+
+    try {
+      const body: Record<string, unknown> = { text, voiceId, model_id: modelId };
+      if (options?.previousText) body.previous_text = options.previousText;
+      if (options?.nextText) body.next_text = options.nextText;
+
+      const timeoutId = setTimeout(() => attemptAbort.abort(), TTS_FETCH_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(
+          `${config.supabaseUrl}/functions/v1/elevenlabs-tts-stream`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: config.supabaseAnonKey,
+              Authorization: `Bearer ${config.supabaseAnonKey}`,
+            },
+            body: JSON.stringify(body),
+            signal: attemptAbort.signal,
+          },
+        );
+      } finally {
+        clearTimeout(timeoutId);
+        abortController.signal.removeEventListener('abort', onOuter);
+      }
+
+      lastStatus = response.status;
+
+      if (!response.ok) {
+        lastError = `TTS HTTP ${response.status}`;
+        // Check if retryable using explicit classification
+        const decision = shouldRetryTts(response.status, attempt);
+        if (!decision.shouldRetry) break;
+        continue;
+      }
+
+      return await response.blob();
+    } catch (err) {
+      abortController.signal.removeEventListener('abort', onOuter);
+      if (abortController.signal.aborted) throw new Error('TTS aborted');
+      lastError = err instanceof Error ? err.message : 'TTS fetch error';
+    }
+  }
+
+  throw new Error(`TTS failed: ${lastError}`);
+}
+
+/** Play a blob and return when audio ends. */
+function playBlob(blob: Blob, active: ActivePlayback): Promise<ActivePlayback> {
   return new Promise<ActivePlayback>((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(blob!);
+    const objectUrl = URL.createObjectURL(blob);
     const audio = new Audio(objectUrl);
     active.audio = audio;
     active.objectUrl = objectUrl;
@@ -235,13 +319,13 @@ export function interruptSpeech(playback: ActivePlayback): ActivePlayback {
 
 export interface ListenOptions {
   timeoutMs?: number;
-  /** Abort signal to cancel listening externally */
   signal?: AbortSignal;
 }
 
 /**
  * Listen for user speech using browser MediaRecorder + ElevenLabs STT.
  * Returns the transcript string.
+ * Uses actual recorder timing for duration tracking (not blob size).
  */
 export async function listen(
   config: TtsConfig,
@@ -259,6 +343,7 @@ export async function listen(
   return new Promise<string>((resolve, reject) => {
     const chunks: Blob[] = [];
     const mediaRecorder = new MediaRecorder(stream!, { mimeType: getSupportedMimeType() });
+    const recordingStartTime = Date.now();
 
     let resolved = false;
     const cleanup = () => {
@@ -268,19 +353,24 @@ export async function listen(
       releaseMicrophoneStream(stream);
     };
 
-    // Timeout
-    const timer = setTimeout(() => {
-      cleanup();
+    const finishAndTranscribe = () => {
+      const actualDurationSeconds = (Date.now() - recordingStartTime) / 1000;
       if (chunks.length > 0) {
-        transcribeAudio(new Blob(chunks, { type: mediaRecorder.mimeType }), config)
-          .then(resolve)
-          .catch(reject);
+        transcribeAudio(
+          new Blob(chunks, { type: mediaRecorder.mimeType }),
+          config,
+          actualDurationSeconds,
+        ).then(resolve).catch(reject);
       } else {
         resolve('');
       }
+    };
+
+    const timer = setTimeout(() => {
+      cleanup();
+      finishAndTranscribe();
     }, timeoutMs);
 
-    // External abort
     if (options?.signal) {
       options.signal.addEventListener('abort', () => {
         clearTimeout(timer);
@@ -316,9 +406,7 @@ export async function listen(
           clearTimeout(timer);
           cleanup();
           audioCtx.close();
-          transcribeAudio(new Blob(chunks, { type: mediaRecorder.mimeType }), config)
-            .then(resolve)
-            .catch(reject);
+          finishAndTranscribe();
           return;
         }
       } else {
@@ -331,7 +419,7 @@ export async function listen(
       checkSilence();
     };
 
-    mediaRecorder.start(250); // collect in 250ms chunks
+    mediaRecorder.start(250);
   });
 }
 
@@ -343,7 +431,15 @@ function getSupportedMimeType(): string {
   return 'audio/webm';
 }
 
-async function transcribeAudio(audioBlob: Blob, config: TtsConfig): Promise<string> {
+/**
+ * Transcribe audio via ElevenLabs STT edge function.
+ * Uses actual recording duration (from recorder timing), not blob size estimation.
+ */
+async function transcribeAudio(
+  audioBlob: Blob,
+  config: TtsConfig,
+  actualDurationSeconds: number,
+): Promise<string> {
   // ── Preflight validation ──
   const preflight = validateSttRequest(audioBlob);
   if (!preflight.valid) {
@@ -353,14 +449,21 @@ async function transcribeAudio(audioBlob: Blob, config: TtsConfig): Promise<stri
     return '';
   }
 
+  // ── Duplicate check (async, lightweight content fingerprint) ──
+  const dupeCheck = await checkSttDuplicate(audioBlob);
+  if (dupeCheck.isDuplicate) {
+    recordSttBlocked('duplicate');
+    logger.warn('STT duplicate submission blocked');
+    return '';
+  }
+
   // ── Circuit breaker ──
   if (isCircuitOpen()) {
     recordSttBlocked('circuit');
     throw new Error('STT circuit breaker open — too many recent failures');
   }
 
-  const estimatedSeconds = audioBlob.size / 16000; // rough estimate
-  trackSttCall(estimatedSeconds);
+  trackSttCall(actualDurationSeconds);
 
   const formData = new FormData();
   formData.append('audio', audioBlob, 'recording.webm');
@@ -396,7 +499,7 @@ async function transcribeAudio(audioBlob: Blob, config: TtsConfig): Promise<stri
       }
 
       recordSttSuccess();
-      recordSttCall(true, estimatedSeconds);
+      recordSttCall(true, actualDurationSeconds);
       const result = await response.json();
       return result.text ?? '';
     } catch (err) {
@@ -413,13 +516,9 @@ async function transcribeAudio(audioBlob: Blob, config: TtsConfig): Promise<stri
 // ── Turn Lifecycle ────────────────────────────────────────────────
 
 export interface TurnConfig {
-  /** Text Dave speaks as a prompt */
   prompt: string;
-  /** Handler for user's spoken response — returns Dave's feedback text */
   onUserResponse: (transcript: string) => Promise<string>;
-  /** Optional: called before feedback is spoken */
   onFeedbackReady?: (feedback: string) => void;
-  /** Previous text for TTS stitching */
   previousText?: string;
 }
 
@@ -427,13 +526,12 @@ export interface TurnResult {
   transcript: string;
   feedback: string;
   command: VoiceCommand;
-  /** Whether the turn completed normally */
   completed: boolean;
 }
 
 /**
  * Execute a complete turn: speak → listen → process → speak feedback.
- * Returns the result. Surfaces call this for each practice rep.
+ * Marks turn boundaries for UX-safe auto-downgrade.
  */
 export async function runTurn(
   turn: TurnConfig,
@@ -443,73 +541,73 @@ export async function runTurn(
 ): Promise<TurnResult> {
   const update = (p: Partial<DaveVoiceState>) => onStateChange?.(p);
 
-  // 1. Speak prompt
-  update({ isSpeaking: true, isListening: false });
+  markTurnStart();
+
   try {
-    playbackRef.current = await speak(turn.prompt, ttsConfig, playbackRef.current, {
-      previousText: turn.previousText,
-    });
-  } catch {
-    update({ isSpeaking: false, ttsAvailable: false });
-    // TTS failed — continue without voice, surface will show text
-  }
-  update({ isSpeaking: false });
+    // 1. Speak prompt
+    update({ isSpeaking: true, isListening: false });
+    try {
+      playbackRef.current = await speak(turn.prompt, ttsConfig, playbackRef.current, {
+        previousText: turn.previousText,
+      });
+    } catch {
+      update({ isSpeaking: false, ttsAvailable: false });
+    }
+    update({ isSpeaking: false });
 
-  // 2. Listen
-  update({ isListening: true });
-  let transcript = '';
-  try {
-    transcript = await listen(ttsConfig, { timeoutMs: 30_000 });
-  } catch {
-    update({ isListening: false, sttAvailable: false });
-    return { transcript: '', feedback: '', command: null, completed: false };
-  }
-  update({ isListening: false, lastTranscript: transcript });
+    // 2. Listen
+    update({ isListening: true });
+    let transcript = '';
+    try {
+      transcript = await listen(ttsConfig, { timeoutMs: 30_000 });
+    } catch {
+      update({ isListening: false, sttAvailable: false });
+      return { transcript: '', feedback: '', command: null, completed: false };
+    }
+    update({ isListening: false, lastTranscript: transcript });
 
-  // 3. Check for voice command
-  const command = parseVoiceCommand(transcript);
-  if (command) {
-    return { transcript, feedback: '', command, completed: false };
-  }
+    // 3. Check for voice command
+    const command = parseVoiceCommand(transcript);
+    if (command) {
+      return { transcript, feedback: '', command, completed: false };
+    }
 
-  // 4. Process response
-  update({ isProcessing: true });
-  let feedback = '';
-  try {
-    feedback = await turn.onUserResponse(transcript);
-  } catch (err) {
-    logger.error('Turn handler failed', { error: err });
-    feedback = "I couldn't process that response. Let's try again.";
-  }
-  update({ isProcessing: false });
-  turn.onFeedbackReady?.(feedback);
+    // 4. Process response
+    update({ isProcessing: true });
+    let feedback = '';
+    try {
+      feedback = await turn.onUserResponse(transcript);
+    } catch (err) {
+      logger.error('Turn handler failed', { error: err });
+      feedback = "I couldn't process that response. Let's try again.";
+    }
+    update({ isProcessing: false });
+    turn.onFeedbackReady?.(feedback);
 
-  // 5. Speak feedback
-  update({ isSpeaking: true });
-  try {
-    playbackRef.current = await speak(feedback, ttsConfig, playbackRef.current, {
-      previousText: turn.prompt,
-    });
-  } catch {
-    update({ isSpeaking: false, ttsAvailable: false });
-  }
-  update({ isSpeaking: false });
+    // 5. Speak feedback
+    update({ isSpeaking: true });
+    try {
+      playbackRef.current = await speak(feedback, ttsConfig, playbackRef.current, {
+        previousText: turn.prompt,
+      });
+    } catch {
+      update({ isSpeaking: false, ttsAvailable: false });
+    }
+    update({ isSpeaking: false });
 
-  return { transcript, feedback, command: null, completed: true };
+    return { transcript, feedback, command: null, completed: true };
+  } finally {
+    markTurnEnd();
+  }
 }
 
 // ── Speech Queue (for multi-segment narration) ─────────────────────
 
 export interface SpeechQueueItem {
   text: string;
-  /** Pause in ms after this segment */
   pauseAfter?: number;
 }
 
-/**
- * Speak a sequence of text segments with pauses between them.
- * Used by Learn and Skill Builder for narration flow.
- */
 export async function speakQueue(
   items: SpeechQueueItem[],
   ttsConfig: TtsConfig,
@@ -535,7 +633,6 @@ export async function speakQueue(
         nextText: next,
       });
     } catch {
-      // TTS failed — skip but don't break the queue
       logger.warn('Speech queue segment failed', { index: i });
     }
 
@@ -553,11 +650,8 @@ export interface VoiceSession {
   id: string;
   surface: VoiceSurface;
   startedAt: number;
-  /** Transcript log for continuity across mode switches */
   transcriptLog: Array<{ role: 'dave' | 'user'; text: string; timestamp: number }>;
-  /** Current position in the session (surface-specific) */
   position: number;
-  /** Whether the session is paused */
   paused: boolean;
 }
 
