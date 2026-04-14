@@ -420,6 +420,19 @@ export default function DojoSession() {
           </Card>
         )}
 
+        {/* Executive pressure label */}
+        {scenario.skillFocus === 'executive_response' && phase === 'respond' && (
+          <div className="flex items-center gap-2 px-1">
+            <Zap className="h-3 w-3 text-red-500" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-red-500">
+              High-Pressure Executive Scenario
+            </span>
+            {scenario.difficulty === 'advanced' && (
+              <Badge variant="outline" className="text-[9px] border-red-500/30 text-red-500">Advanced</Badge>
+            )}
+          </div>
+        )}
+
         {/* Scenario context */}
         <Card className="border-border/60">
           <CardContent className="p-4 space-y-3">
