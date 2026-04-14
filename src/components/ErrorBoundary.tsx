@@ -60,7 +60,7 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background px-4 text-center">
+        <div className="min-h-screen pt-[env(safe-area-inset-top)] flex flex-col items-center justify-center gap-4 bg-background px-4 text-center">
           <h1 className="text-2xl font-bold font-display text-foreground">Quota CoPilot</h1>
           <p className="text-sm text-muted-foreground">Something went wrong.</p>
           <div className="flex gap-3">

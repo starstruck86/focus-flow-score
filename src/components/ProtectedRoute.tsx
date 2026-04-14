@@ -20,7 +20,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (loading) {
     return (
-      <div data-testid="protected-loading" className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+      <div data-testid="protected-loading" className="min-h-screen pt-[env(safe-area-inset-top)] flex flex-col items-center justify-center bg-background gap-4">
         <h1 className="text-2xl font-bold text-foreground font-display">Quota CoPilot</h1>
         <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
         <p className="text-sm text-muted-foreground">Loading...</p>
@@ -35,7 +35,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Allowlist enforcement (only when ENFORCE_ALLOWLIST flag is on)
   if (approvalStatus === 'loading') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+      <div className="min-h-screen pt-[env(safe-area-inset-top)] flex flex-col items-center justify-center bg-background gap-4">
         <h1 className="text-2xl font-bold text-foreground font-display">Quota CoPilot</h1>
         <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
         <p className="text-sm text-muted-foreground">Verifying access…</p>
