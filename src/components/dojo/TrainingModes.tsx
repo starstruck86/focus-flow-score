@@ -52,6 +52,7 @@ export function TrainingModes({ skillStats, onStartAutopilot, highlightMode }: T
       label: def.shortLabel,
       skillFocus: def.primarySkills[0] as SkillFocus,
       startedAt: Date.now(),
+      lastRepAt: Date.now(),
       repsThisSession: 0,
       recentScores: [],
     });

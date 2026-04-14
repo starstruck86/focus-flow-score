@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { SalesCoachPanel } from '@/components/SalesCoachPanel';
 import { useNavigate } from 'react-router-dom';
 
-const CALL_TYPES = ['Discovery', 'Demo', 'Negotiation', 'QBR', 'Follow-up', 'Other'];
+const CALL_TYPES = ['Cold Call', 'Discovery', 'Demo', 'Negotiation', 'QBR', 'Follow-up', 'Other'];
 
 interface TranscriptViewerProps {
   open: boolean;
