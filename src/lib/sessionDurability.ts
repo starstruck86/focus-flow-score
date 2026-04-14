@@ -220,6 +220,17 @@ export function checkForResumableSessions(): ResumeInfo | null {
     };
   }
 
+  // Check for active lane (user was drilling continuously and left)
+  const lane = loadActiveLane();
+  if (lane && lane.repsThisSession > 0) {
+    return {
+      type: 'lane',
+      label: `Continue ${lane.label} (${lane.repsThisSession} reps, avg ${lane.recentScores.length > 0 ? Math.round(lane.recentScores.reduce((a, b) => a + b, 0) / lane.recentScores.length) : '—'})`,
+      path: '/dojo',
+      lane,
+    };
+  }
+
   const learn = loadLearnState();
   if (learn && learn.phase !== 'complete') {
     return {
