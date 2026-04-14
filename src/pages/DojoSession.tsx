@@ -412,6 +412,9 @@ export default function DojoSession() {
 
       {/* ── Content ── */}
       <div className={cn('flex-1 px-4 py-4 space-y-4', SHELL.main.bottomPad)}>
+        {/* Lane context — mastery lane progress strip */}
+        <LaneContextBanner />
+
         {/* Assignment context — why today */}
         {state?.assignmentReason && (
           <Card className="border-primary/20 bg-primary/5">
