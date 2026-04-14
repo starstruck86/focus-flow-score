@@ -656,6 +656,11 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
   landing_page_resolved?: boolean;
   resolved_from?: string;
   course_options?: CourseLink[];
+  parser_failure?: boolean;
+  parser_failure_reason?: string;
+  failure_type?: ThinkificFailureType;
+  thinkific_debug?: ThinkificDebugDump;
+  auth_failed?: boolean;
 }> {
   const jar = createCookieJar();
   const parsedUrl = new URL(courseUrl);
@@ -713,18 +718,19 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
     // has curriculum/lesson structure we can parse directly
     if (!landingResult.resolved && landingResult.directParseHtml) {
       debug.push(`[Sequence] No course links found — attempting direct curriculum parse from landing page HTML`);
-      const directLessons = parseThinkificCurriculum(landingResult.directParseHtml, origin, debug);
-      if (directLessons.length > 0) {
-        debug.push(`[Sequence] Direct parse SUCCESS: ${directLessons.length} lessons from landing page`);
+      const directParse = parseThinkificCurriculum(landingResult.directParseHtml, courseUrl, debug, { finalUrl: courseUrl, status: 200 });
+      if (directParse.lessons.length > 0) {
+        debug.push(`[Sequence] Direct parse SUCCESS: ${directParse.lessons.length} lessons from landing page`);
         const titleMatch = landingResult.directParseHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
         const title = titleMatch?.[1]?.replace(/<[^>]+>/g, '').replace(/\s*[|–—-]\s*[^|–—-]*$/, '').trim() || 'Untitled Course';
         return {
           platform: 'thinkific',
           title,
-          lessons: directLessons,
+          lessons: directParse.lessons,
           debug,
           landing_page_resolved: true,
           resolved_from: courseUrl,
+          thinkific_debug: directParse.debugDump,
         };
       }
       // Also try generic parser
@@ -774,14 +780,25 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
   debug.push(`Course page: ${courseResp.status}, ${courseHtml.length} chars, final URL: ${courseResp.url}`);
   
   // Check if still on login page
-  const isLoginPage = courseHtml.includes('member[password]') && courseHtml.includes('new_member_session');
+  const isLoginPage =
+    (courseHtml.includes('member[password]') && courseHtml.includes('new_member_session')) ||
+    /\/(?:users\/)?sign_in|\/login/i.test(courseResp.url);
   if (isLoginPage) {
     debug.push('Still on login page — authentication did not persist');
     return {
-      platform: 'kajabi',
+      platform: isThinkificDomain ? 'thinkific' : 'kajabi',
       title: 'Authentication Required',
       lessons: [],
       debug,
+      auth_failed: true,
+      ...(isThinkificDomain
+        ? {
+            failure_type: 'fetch_side' as ThinkificFailureType,
+            parser_failure: true,
+            parser_failure_reason: 'Authenticated fetch did not contain curriculum markup or app state',
+            thinkific_debug: buildThinkificDebugDump(courseHtml, courseUrl, courseResp.url, courseResp.status),
+          }
+        : {}),
     };
   }
   
@@ -802,28 +819,30 @@ async function discoverCurriculum(courseUrl: string, creds?: { email?: string; p
 
   // ── Thinkific course player: parse curriculum from the player page ──
   if (platform === 'thinkific') {
-    const thinkificLessons = parseThinkificCurriculum(courseHtml, origin, debug);
-    if (thinkificLessons.length > 0) {
-      debug.push(`[Thinkific] Found ${thinkificLessons.length} lessons from course player`);
+    const thinkificParse = parseThinkificCurriculum(courseHtml, effectiveUrl, debug, { finalUrl: courseResp.url, status: courseResp.status });
+    if (thinkificParse.lessons.length > 0) {
+      debug.push(`[Thinkific] Found ${thinkificParse.lessons.length} lessons from course player`);
       return {
         platform,
         title: courseTitle,
-        lessons: thinkificLessons,
+        lessons: thinkificParse.lessons,
         debug,
+        thinkific_debug: thinkificParse.debugDump,
         ...(landingPageResolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
       };
     }
-    // For Thinkific: do NOT fall through to generic/broad extraction.
-    // Return zero lessons with a clear parser failure message.
-    debug.push('[Thinkific] All 4 parsing strategies failed — returning 0 lessons instead of junk');
-    debug.push(`[Thinkific] Couldn't detect Thinkific lesson structure. The course player may use client-side rendering.`);
+    const parserFailureReason = thinkificParse.failureReason || "Couldn't detect Thinkific lesson structure. Open the course and paste the URL from inside a lesson view (e.g. /courses/take/.../lessons/...).";
+    debug.push('[Thinkific] Structured parser returned 0 lessons — returning diagnostics instead of junk');
     return {
       platform,
       title: courseTitle,
       lessons: [],
       debug,
       parser_failure: true,
-      parser_failure_reason: "Couldn't detect Thinkific lesson structure. Open the course and paste the URL from inside a lesson view (e.g. /courses/take/.../lessons/...).",
+      parser_failure_reason: parserFailureReason,
+      failure_type: thinkificParse.failureType,
+      thinkific_debug: thinkificParse.debugDump,
+      auth_failed: thinkificParse.debugDump.markers.redirected_to_login,
       ...(landingPageResolved ? { landing_page_resolved: true, resolved_from: courseUrl } : {}),
     };
   }
