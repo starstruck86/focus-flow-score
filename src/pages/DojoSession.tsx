@@ -611,10 +611,9 @@ function FeedbackView({
   return (
     <>
       {/* ════════════════════════════════════════════════════════════
-       *  TIER 1 — INSTANT UNDERSTANDING (always visible, one screen)
+       *  TIER 1 — INSTANT READ (score + verdict + coaching delivery)
        * ════════════════════════════════════════════════════════════ */}
 
-      {/* Dave's Audio/Text Coaching Delivery */}
       {sessionId && (
         <DaveCoachingDelivery
           scoreResult={currentResult}
@@ -623,26 +622,24 @@ function FeedbackView({
         />
       )}
 
-      {/* 1. Verdict Banner — sharp one-liner */}
-      {skillFocus === 'executive_response' ? (
-        <ExecVerdictBanner result={currentResult} />
-      ) : (
-        <SkillVerdictBanner result={currentResult} skill={skillFocus} />
-      )}
-
-      {/* 2. Score + Label */}
-      <div className="flex items-center gap-4">
-        <div className={cn(
-          'text-4xl font-bold',
-          currentResult.score >= 80 ? 'text-green-500' :
-          currentResult.score >= 70 ? 'text-amber-500' :
-          currentResult.score >= 50 ? 'text-orange-500' : 'text-destructive'
-        )}>
-          {currentResult.score}
-        </div>
-        <div className="flex-1 space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">
+      {/* Verdict + Score — single tight row */}
+      <div className="space-y-1.5">
+        {skillFocus === 'executive_response' ? (
+          <ExecVerdictBanner result={currentResult} />
+        ) : (
+          <SkillVerdictBanner result={currentResult} skill={skillFocus} />
+        )}
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            'text-3xl font-bold leading-none',
+            currentResult.score >= 80 ? 'text-green-500' :
+            currentResult.score >= 70 ? 'text-amber-500' :
+            currentResult.score >= 50 ? 'text-orange-500' : 'text-destructive'
+          )}>
+            {currentResult.score}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium text-foreground">
               {currentResult.score >= 80 ? 'Strong' :
                currentResult.score >= 70 ? 'Solid' :
                currentResult.score >= 50 ? 'Average' : 'Needs Work'}
@@ -652,55 +649,53 @@ function FeedbackView({
                 {scoreDelta > 0 ? '+' : ''}{scoreDelta} pts
               </Badge>
             )}
+            <span className="text-[10px] text-muted-foreground">
+              {retryResult ? `Retry #${retryCount}` :
+               sessionType === 'roleplay' ? 'Roleplay' :
+               sessionType === 'review' ? 'Review' : 'First attempt'}
+            </span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {retryResult ? `Retry #${retryCount}` :
-             sessionType === 'roleplay' ? 'Roleplay' :
-             sessionType === 'review' ? 'Review' : 'First attempt'}
-          </p>
         </div>
       </div>
 
       {/* ════════════════════════════════════════════════════════════
-       *  TIER 2 — COACHING ACTION (what to fix, how, next step)
+       *  TIER 2 — COACHING ACTION (diagnosis → goal → lifts → action)
        * ════════════════════════════════════════════════════════════ */}
 
-      {/* 3. Primary Coaching Lever — single most important fix */}
+      {/* Diagnosis: what broke */}
       {dims && (
-        <PrimaryLeverCard dimensions={dims} skill={skillFocus} />
+        <PrimaryLeverCard dimensions={dims} skill={skillFocus} compact />
       )}
 
-      {/* 4. Next Rep Goal — unmissable instruction */}
+      {/* Instruction: what to do next rep */}
       {currentResult.practiceCue && (
-        <NextRepGoalBanner practiceCue={currentResult.practiceCue} />
+        <NextRepGoalBanner practiceCue={currentResult.practiceCue} retryCount={retryCount} />
       )}
 
-      {/* 5. How to Raise Your Score — top 2-3 actions */}
-      {dims && (
-        <PointLiftCard dimensions={dims} skill={skillFocus} />
-      )}
-
-      {/* 6. Next Step Recommendation — retry, advance, return to training */}
-      {sessionType === 'drill' && (
-        <NextStepCard
-          score={currentResult.score}
-          dimensions={dims}
-          skill={skillFocus}
-          retryCount={retryCount}
-          topMistake={currentResult.topMistake}
-          previousTopMistake={retryResult && firstAttemptResult ? firstAttemptResult.topMistake : undefined}
-          onRetry={onRetry}
-          onNextRep={onNextRep}
-        />
-      )}
+      {/* Secondary lifts (excluding primary lever) + next action */}
+      <div className="space-y-2">
+        {dims && <PointLiftCard dimensions={dims} skill={skillFocus} />}
+        {sessionType === 'drill' && (
+          <NextStepCard
+            score={currentResult.score}
+            dimensions={dims}
+            skill={skillFocus}
+            retryCount={retryCount}
+            topMistake={currentResult.topMistake}
+            previousTopMistake={retryResult && firstAttemptResult ? firstAttemptResult.topMistake : undefined}
+            onRetry={onRetry}
+            onNextRep={onNextRep}
+          />
+        )}
+      </div>
 
       {/* ════════════════════════════════════════════════════════════
-       *  TIER 3 — RETRY CONTEXT (visible on retries only)
+       *  TIER 3 — RETRY PROGRESS (visible on retries only)
        * ════════════════════════════════════════════════════════════ */}
 
       {retryAssessment && retryResult && (
         <Card className="border-border/60">
-          <CardContent className="p-4 space-y-3">
+          <CardContent className="p-3 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {retryAssessment.retryOutcome === 'breakthrough' ? <TrendingUp className="h-4 w-4 text-green-500" /> :
@@ -711,16 +706,14 @@ function FeedbackView({
                   {RETRY_OUTCOME_LABELS[retryAssessment.retryOutcome]}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5">
-                {retryAssessment.liveReady ? (
-                  <Badge className="text-xs bg-green-600 hover:bg-green-600"><Shield className="h-3 w-3 mr-1" />Live Ready</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-xs">Keep Drilling</Badge>
-                )}
-              </div>
+              {retryAssessment.liveReady ? (
+                <Badge className="text-xs bg-green-600 hover:bg-green-600"><Shield className="h-3 w-3 mr-1" />Live Ready</Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs">Keep Drilling</Badge>
+              )}
             </div>
             {currentResult.focusApplied && (
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 <Badge variant={currentResult.focusApplied === 'yes' ? 'default' : 'outline'} className={cn('text-xs font-semibold',
                   currentResult.focusApplied === 'yes' && 'bg-green-600 hover:bg-green-600',
                   currentResult.focusApplied === 'partial' && 'border-amber-500 text-amber-600 dark:text-amber-400',
@@ -729,11 +722,11 @@ function FeedbackView({
                   <Target className="h-3 w-3 mr-1" />
                   {currentResult.focusApplied === 'yes' ? 'Focus Applied' : currentResult.focusApplied === 'partial' ? 'Partially Applied' : 'Missed Focus'}
                 </Badge>
-                {currentResult.focusAppliedReason && <p className="text-xs text-muted-foreground leading-tight flex-1">{currentResult.focusAppliedReason}</p>}
+                {currentResult.focusAppliedReason && <p className="text-[11px] text-muted-foreground leading-tight flex-1">{currentResult.focusAppliedReason}</p>}
               </div>
             )}
-            <div className="space-y-1.5 text-xs text-muted-foreground">
-              <p><span className="font-medium text-foreground">Improved most:</span> {retryAssessment.whatImprovedMost}</p>
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              <p><span className="font-medium text-foreground">Improved:</span> {retryAssessment.whatImprovedMost}</p>
               <p><span className="font-medium text-foreground">Still needs work:</span> {retryAssessment.whatStillNeedsWork}</p>
             </div>
           </CardContent>
@@ -741,18 +734,14 @@ function FeedbackView({
       )}
 
       {/* ════════════════════════════════════════════════════════════
-       *  TIER 4 — SIDE-BY-SIDE & COACHING DETAIL (always visible for drill)
+       *  TIER 4 — COACH EXPLANATION + COMPARISON
        * ════════════════════════════════════════════════════════════ */}
 
-      {/* Feedback text */}
-      <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-start gap-2">
-            <Swords className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-            <p className="text-sm text-foreground leading-relaxed">{currentResult.feedback}</p>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Coach interpretation — compact inline */}
+      <div className="flex items-start gap-2 px-0.5">
+        <Swords className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground leading-relaxed">{currentResult.feedback}</p>
+      </div>
 
       {/* Side-by-Side Comparison — drill only */}
       {sessionType === 'drill' && userText && currentResult.improvedVersion && (
@@ -763,25 +752,23 @@ function FeedbackView({
 
       {/* Stronger Answer (non-drill) */}
       {currentResult.improvedVersion && !(sessionType === 'drill' && userText) && (
-        <Card className="border-green-500/20 bg-green-500/5">
-          <CardContent className="p-3 space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <Lightbulb className="h-3.5 w-3.5 text-green-500" />
-              <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">Stronger Answer</p>
-            </div>
-            <p className="text-sm text-foreground leading-relaxed italic">"{currentResult.improvedVersion}"</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-2.5 space-y-1">
+          <div className="flex items-center gap-1.5">
+            <Lightbulb className="h-3.5 w-3.5 text-green-500" />
+            <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">Stronger Answer</p>
+          </div>
+          <p className="text-xs text-foreground leading-relaxed italic">"{currentResult.improvedVersion}"</p>
+        </div>
       )}
 
       {/* ════════════════════════════════════════════════════════════
-       *  TIER 5 — DEEP DIVE (collapsible, for users who want details)
+       *  TIER 5 — DEEP DIVE (collapsible, internally grouped)
        * ════════════════════════════════════════════════════════════ */}
 
       <Collapsible open={showDeepDive} onOpenChange={setShowDeepDive}>
         <CollapsibleTrigger className="w-full">
-          <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5 hover:bg-muted/30 transition-colors">
-            <span className="text-xs font-semibold text-muted-foreground">Full Scoring Breakdown & Details</span>
+          <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2 hover:bg-muted/30 transition-colors">
+            <span className="text-xs font-semibold text-muted-foreground">Deep Dive</span>
             {showDeepDive
               ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
               : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -789,261 +776,260 @@ function FeedbackView({
           </div>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="space-y-3 pt-3">
-            {/* Full scoring breakdown with dimension details */}
+          <div className="space-y-4 pt-3">
+
+            {/* ── GROUP: Scoring ── */}
             {dims && (
-              <ExplainableScoreCard
-                dimensions={dims}
-                skill={skillFocus}
-                totalScore={currentResult.score}
-                defaultExpanded={true}
-              />
-            )}
-
-            {/* Top mistake */}
-            {currentResult.topMistake && (
-              <div className="flex items-center gap-2 px-1">
-                <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
-                <p className="text-sm">
-                  <span className="text-muted-foreground">Main issue: </span>
-                  <span className="font-medium">{MISTAKE_LABELS[currentResult.topMistake] || currentResult.topMistake.replace(/_/g, ' ')}</span>
-                </p>
-              </div>
-            )}
-
-            {/* World-Class Standard */}
-            {currentResult.worldClassResponse && (
-              <Card className="border-primary/40 bg-gradient-to-br from-primary/5 to-primary/10 shadow-md ring-1 ring-primary/10">
-                <CardContent className="p-5 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Crown className="h-4 w-4 text-primary" />
-                    <p className="text-xs font-bold text-primary uppercase tracking-wider">World-Class Standard</p>
-                  </div>
-                  <p className="text-sm text-foreground leading-relaxed italic pl-0.5">"{currentResult.worldClassResponse}"</p>
-
-                  {currentResult.whyItWorks.length > 0 && (
-                    <div className="pt-3 border-t border-primary/15 space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <Sparkles className="h-3.5 w-3.5 text-primary/70" />
-                        <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Why It Works</p>
-                      </div>
-                      <ul className="space-y-1.5">
-                        {currentResult.whyItWorks.map((bullet, i) => (
-                          <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
-                            <span className="text-primary/50 mt-0.5 shrink-0">•</span>
-                            <span>{bullet}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {currentResult.moveSequence.length > 0 && (
-                    <div className="pt-3 border-t border-primary/15 space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <ListOrdered className="h-3.5 w-3.5 text-primary/70" />
-                        <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Move Sequence</p>
-                      </div>
-                      <ol className="space-y-1">
-                        {currentResult.moveSequence.map((step, i) => (
-                          <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                            <span className="text-primary/60 font-bold shrink-0 w-4 text-right">{i + 1}.</span>
-                            <span className="capitalize">{step}</span>
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  )}
-
-                  {currentResult.patternTags.length > 0 && (
-                    <div className="pt-3 border-t border-primary/15 space-y-2">
-                      <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Reusable Patterns</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {currentResult.patternTags.map((tag, i) => (
-                          <Badge key={i} variant="secondary" className="text-[10px] font-medium">
-                            {PATTERN_TAG_LABELS[tag] || tag.replace(/_/g, ' ')}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Delta Note */}
-            {currentResult.deltaNote && currentResult.worldClassResponse && (
-              <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-primary/5 border border-primary/15">
-                <ChevronRight className="h-3.5 w-3.5 text-primary/60 mt-0.5 shrink-0" />
-                <p className="text-xs text-muted-foreground leading-relaxed italic">{currentResult.deltaNote}</p>
-              </div>
-            )}
-
-            {/* Teaching Note */}
-            {currentResult.teachingNote && (
-              <div className="flex items-start gap-2.5 px-3 py-3 rounded-lg bg-muted/30 border border-border/40">
-                <GraduationCap className="h-4 w-4 text-muted-foreground/70 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1">Coach's Takeaway</p>
-                  <p className="text-sm text-muted-foreground italic leading-relaxed">"{currentResult.teachingNote}"</p>
-                </div>
-              </div>
-            )}
-
-            {/* V4 Pressure Analysis */}
-            {pressureLevel && pressureLevel !== 'none' && (
-              <PressureAnalysisCard
-                pressureLevel={pressureLevel}
-                pressureDimensions={pressureDimensions ?? []}
-                sessionScore={currentResult.score}
-                recentAvg={currentResult.score}
-                topMistake={currentResult.topMistake}
-                focusPattern={activeFocus}
-                retryScore={retryResult?.score}
-              />
-            )}
-
-            {/* Transcript Origin Context */}
-            {transcriptOrigin && currentResult && (
-              <Card className="border-l-4 border-l-primary/60 border-border/60">
-                <CardContent className="p-4 space-y-2">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    From Real Call: {transcriptOrigin.transcriptTitle}
-                  </p>
-                  <div className="bg-muted/50 rounded-md p-2 border border-border/40">
-                    <p className="text-xs italic text-muted-foreground">"{transcriptOrigin.sourceExcerpt}"</p>
-                  </div>
-                  <p className="text-xs text-primary/80 font-medium">💡 Original coaching hint: {transcriptOrigin.coachingHint}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* V4 Transfer Progress */}
-            {transcriptOrigin && originalCallScore && firstAttemptResult && (
-              <TransferProgressCard
-                originalScore={originalCallScore.score}
-                practiceScore={firstAttemptResult.score}
-                retryScore={retryResult?.score}
-                originalMistake={originalCallScore.topMistake}
-                practiceMistake={currentResult.topMistake}
-              />
-            )}
-
-            {/* Three-Stage Comparison */}
-            {originalCallScore && firstAttemptResult && (
-              <ThreeStageComparison
-                original={originalCallScore}
-                attempt1={firstAttemptResult}
-                retry={retryResult}
-              />
-            )}
-
-            {/* Review extras */}
-            {reviewExtras && sessionType === 'review' && (
-              <div className="space-y-3">
-                {(reviewExtras.diagnosisScore != null || reviewExtras.rewriteScore != null) && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {reviewExtras.diagnosisScore != null && (
-                      <Card className="border-border/60"><CardContent className="p-3 text-center"><p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Diagnosis</p><p className="text-xl font-bold">{reviewExtras.diagnosisScore}<span className="text-xs text-muted-foreground font-normal">/50</span></p></CardContent></Card>
-                    )}
-                    {reviewExtras.rewriteScore != null && (
-                      <Card className="border-border/60"><CardContent className="p-3 text-center"><p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Rewrite</p><p className="text-xl font-bold">{reviewExtras.rewriteScore}<span className="text-xs text-muted-foreground font-normal">/50</span></p></CardContent></Card>
-                    )}
+              <div className="space-y-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 px-0.5">Scoring</p>
+                <ExplainableScoreCard
+                  dimensions={dims}
+                  skill={skillFocus}
+                  totalScore={currentResult.score}
+                  defaultExpanded={true}
+                />
+                {currentResult.topMistake && (
+                  <div className="flex items-center gap-2 px-1">
+                    <AlertTriangle className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                    <p className="text-xs">
+                      <span className="text-muted-foreground">Main issue: </span>
+                      <span className="font-medium">{MISTAKE_LABELS[currentResult.topMistake] || currentResult.topMistake.replace(/_/g, ' ')}</span>
+                    </p>
                   </div>
                 )}
-                <div className="flex items-center gap-2 flex-wrap">
-                  {reviewExtras.diagnosisAccuracy && (
-                    <Badge variant="outline" className={cn('text-xs font-semibold gap-1',
-                      reviewExtras.diagnosisAccuracy === 'correct' && 'border-green-500 text-green-600 dark:text-green-400',
-                      reviewExtras.diagnosisAccuracy === 'partial' && 'border-amber-500 text-amber-600 dark:text-amber-400',
-                      reviewExtras.diagnosisAccuracy === 'missed' && 'border-destructive text-destructive',
-                    )}>
-                      <Eye className="h-3 w-3" />
-                      {reviewExtras.diagnosisAccuracy === 'correct' ? 'Diagnosis Correct' : reviewExtras.diagnosisAccuracy === 'partial' ? 'Partial Diagnosis' : 'Missed the Issue'}
-                    </Badge>
-                  )}
-                  {reviewExtras.rewriteFixedIssue != null && (
-                    <Badge variant="outline" className={cn('text-xs font-semibold gap-1',
-                      reviewExtras.rewriteFixedIssue ? 'border-green-500 text-green-600 dark:text-green-400' : 'border-destructive text-destructive',
-                    )}>
-                      <PenLine className="h-3 w-3" />
-                      {reviewExtras.rewriteFixedIssue ? 'Rewrite Fixed the Issue' : 'Rewrite Still Missed the Issue'}
-                    </Badge>
-                  )}
-                </div>
-                {reviewExtras.diagnosisFeedback && (
-                  <Card className="border-border/40"><CardContent className="p-3 space-y-1.5"><div className="flex items-center gap-1.5"><Eye className="h-3.5 w-3.5 text-muted-foreground" /><p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Diagnosis Assessment</p></div><p className="text-xs text-muted-foreground leading-relaxed">{reviewExtras.diagnosisFeedback}</p></CardContent></Card>
-                )}
-                {reviewExtras.rewriteFeedback && (
-                  <Card className="border-border/40"><CardContent className="p-3 space-y-1.5"><div className="flex items-center gap-1.5"><PenLine className="h-3.5 w-3.5 text-muted-foreground" /><p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Rewrite Assessment</p></div><p className="text-xs text-muted-foreground leading-relaxed">{reviewExtras.rewriteFeedback}</p></CardContent></Card>
-                )}
               </div>
             )}
 
-            {/* Roleplay extras */}
-            {sessionType === 'roleplay' && roleplayExtras?.turnAnalysis && roleplayExtras.turnAnalysis.length > 0 && (
-              <Card className="border-border/60">
-                <CardContent className="p-4 space-y-3">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Turn-by-Turn Analysis</p>
-                  <div className="space-y-2.5">
-                    {roleplayExtras.turnAnalysis.map((ta, i) => (
-                      <div key={i} className="flex items-start gap-2.5">
-                        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                          <span className="text-[10px] font-bold text-muted-foreground w-5 text-right">T{ta.turn}</span>
-                          <Badge variant="outline" className={cn('text-[9px] px-1.5 py-0',
-                            ta.verdict === 'strong' && 'border-green-500 text-green-600 dark:text-green-400',
-                            ta.verdict === 'adequate' && 'border-amber-500 text-amber-600 dark:text-amber-400',
-                            ta.verdict === 'weak' && 'border-destructive text-destructive',
-                          )}>{ta.verdict}</Badge>
+            {/* ── GROUP: Teaching ── */}
+            {(currentResult.worldClassResponse || currentResult.teachingNote) && (
+              <div className="space-y-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 px-0.5">Teaching</p>
+
+                {currentResult.worldClassResponse && (
+                  <Card className="border-primary/40 bg-gradient-to-br from-primary/5 to-primary/10 ring-1 ring-primary/10">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Crown className="h-4 w-4 text-primary" />
+                        <p className="text-xs font-bold text-primary uppercase tracking-wider">World-Class Standard</p>
+                      </div>
+                      <p className="text-sm text-foreground leading-relaxed italic">"{currentResult.worldClassResponse}"</p>
+                      {currentResult.whyItWorks.length > 0 && (
+                        <div className="pt-2 border-t border-primary/15 space-y-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles className="h-3.5 w-3.5 text-primary/70" />
+                            <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Why It Works</p>
+                          </div>
+                          <ul className="space-y-1">
+                            {currentResult.whyItWorks.map((bullet, i) => (
+                              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
+                                <span className="text-primary/50 mt-0.5 shrink-0">•</span>
+                                <span>{bullet}</span>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{ta.assessment}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {sessionType === 'roleplay' && (roleplayExtras?.controlArc || roleplayExtras?.adaptationNote) && (
-              <div className="grid grid-cols-1 gap-2">
-                {roleplayExtras?.controlArc && (
-                  <Card className="border-border/40"><CardContent className="p-3 space-y-1"><div className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5 text-primary/70" /><p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Conversation Control</p></div><p className="text-xs text-muted-foreground leading-relaxed">{roleplayExtras.controlArc}</p></CardContent></Card>
+                      )}
+                      {currentResult.moveSequence.length > 0 && (
+                        <div className="pt-2 border-t border-primary/15 space-y-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <ListOrdered className="h-3.5 w-3.5 text-primary/70" />
+                            <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Move Sequence</p>
+                          </div>
+                          <ol className="space-y-0.5">
+                            {currentResult.moveSequence.map((step, i) => (
+                              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <span className="text-primary/60 font-bold shrink-0 w-4 text-right">{i + 1}.</span>
+                                <span className="capitalize">{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+                      {currentResult.patternTags.length > 0 && (
+                        <div className="pt-2 border-t border-primary/15 space-y-1.5">
+                          <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Reusable Patterns</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {currentResult.patternTags.map((tag, i) => (
+                              <Badge key={i} variant="secondary" className="text-[10px] font-medium">
+                                {PATTERN_TAG_LABELS[tag] || tag.replace(/_/g, ' ')}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 )}
-                {roleplayExtras?.adaptationNote && (
-                  <Card className="border-border/40"><CardContent className="p-3 space-y-1"><div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-primary/70" /><p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Adaptation</p></div><p className="text-xs text-muted-foreground leading-relaxed">{roleplayExtras.adaptationNote}</p></CardContent></Card>
+
+                {currentResult.deltaNote && currentResult.worldClassResponse && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-primary/5 border border-primary/15">
+                    <ChevronRight className="h-3.5 w-3.5 text-primary/60 mt-0.5 shrink-0" />
+                    <p className="text-xs text-muted-foreground leading-relaxed italic">{currentResult.deltaNote}</p>
+                  </div>
+                )}
+
+                {currentResult.teachingNote && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-muted/30 border border-border/40">
+                    <GraduationCap className="h-3.5 w-3.5 text-muted-foreground/70 mt-0.5 shrink-0" />
+                    <p className="text-xs text-muted-foreground italic leading-relaxed">{currentResult.teachingNote}</p>
+                  </div>
                 )}
               </div>
             )}
 
-            {/* V6 Deal Movement */}
-            {currentResult.multiThread && (
-              <DealMovementCard assessment={currentResult.multiThread} />
-            )}
+            {/* ── GROUP: Context & Extras ── */}
+            {(pressureLevel && pressureLevel !== 'none' || transcriptOrigin || originalCallScore || assignmentContext || reviewExtras || roleplayExtras?.turnAnalysis || currentResult.multiThread || skillLevelForFeedback) && (
+              <div className="space-y-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 px-0.5">Session Context</p>
 
-            {/* Level Progress */}
-            {skillLevelForFeedback && (
-              <LevelProgressFeedbackCard current={skillLevelForFeedback} />
-            )}
+                {pressureLevel && pressureLevel !== 'none' && (
+                  <PressureAnalysisCard
+                    pressureLevel={pressureLevel}
+                    pressureDimensions={pressureDimensions ?? []}
+                    sessionScore={currentResult.score}
+                    recentAvg={currentResult.score}
+                    topMistake={currentResult.topMistake}
+                    focusPattern={activeFocus}
+                    retryScore={retryResult?.score}
+                  />
+                )}
 
-            {/* Assignment context */}
-            {assignmentContext && (
-              <Card className="border-primary/15 bg-primary/5">
-                <CardContent className="p-4 space-y-2">
-                  <p className="text-[10px] font-bold text-primary uppercase tracking-wider">Today's Assignment</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">{DAY_ANCHORS[assignmentContext.anchor as DayAnchor]?.icon ?? '📋'}</span>
-                    <span className="text-sm font-semibold text-foreground">
-                      {DAY_ANCHORS[assignmentContext.anchor as DayAnchor]?.label ?? assignmentContext.anchor}
-                    </span>
-                    <span className="text-xs text-muted-foreground">·</span>
-                    <span className="text-xs text-muted-foreground">
-                      {FOCUS_PATTERN_LABELS[assignmentContext.focusPattern] || assignmentContext.focusPattern.replace(/_/g, ' ')}
-                    </span>
+                {transcriptOrigin && (
+                  <Card className="border-l-4 border-l-primary/60 border-border/60">
+                    <CardContent className="p-3 space-y-1.5">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        From Real Call: {transcriptOrigin.transcriptTitle}
+                      </p>
+                      <div className="bg-muted/50 rounded-md p-2 border border-border/40">
+                        <p className="text-[11px] italic text-muted-foreground">"{transcriptOrigin.sourceExcerpt}"</p>
+                      </div>
+                      <p className="text-[11px] text-primary/80 font-medium">💡 {transcriptOrigin.coachingHint}</p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {transcriptOrigin && originalCallScore && firstAttemptResult && (
+                  <TransferProgressCard
+                    originalScore={originalCallScore.score}
+                    practiceScore={firstAttemptResult.score}
+                    retryScore={retryResult?.score}
+                    originalMistake={originalCallScore.topMistake}
+                    practiceMistake={currentResult.topMistake}
+                  />
+                )}
+
+                {originalCallScore && firstAttemptResult && (
+                  <ThreeStageComparison
+                    original={originalCallScore}
+                    attempt1={firstAttemptResult}
+                    retry={retryResult}
+                  />
+                )}
+
+                {reviewExtras && sessionType === 'review' && (
+                  <div className="space-y-2">
+                    {(reviewExtras.diagnosisScore != null || reviewExtras.rewriteScore != null) && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {reviewExtras.diagnosisScore != null && (
+                          <Card className="border-border/60"><CardContent className="p-2.5 text-center"><p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Diagnosis</p><p className="text-lg font-bold">{reviewExtras.diagnosisScore}<span className="text-xs text-muted-foreground font-normal">/50</span></p></CardContent></Card>
+                        )}
+                        {reviewExtras.rewriteScore != null && (
+                          <Card className="border-border/60"><CardContent className="p-2.5 text-center"><p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Rewrite</p><p className="text-lg font-bold">{reviewExtras.rewriteScore}<span className="text-xs text-muted-foreground font-normal">/50</span></p></CardContent></Card>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {reviewExtras.diagnosisAccuracy && (
+                        <Badge variant="outline" className={cn('text-xs font-semibold gap-1',
+                          reviewExtras.diagnosisAccuracy === 'correct' && 'border-green-500 text-green-600 dark:text-green-400',
+                          reviewExtras.diagnosisAccuracy === 'partial' && 'border-amber-500 text-amber-600 dark:text-amber-400',
+                          reviewExtras.diagnosisAccuracy === 'missed' && 'border-destructive text-destructive',
+                        )}>
+                          <Eye className="h-3 w-3" />
+                          {reviewExtras.diagnosisAccuracy === 'correct' ? 'Diagnosis Correct' : reviewExtras.diagnosisAccuracy === 'partial' ? 'Partial Diagnosis' : 'Missed the Issue'}
+                        </Badge>
+                      )}
+                      {reviewExtras.rewriteFixedIssue != null && (
+                        <Badge variant="outline" className={cn('text-xs font-semibold gap-1',
+                          reviewExtras.rewriteFixedIssue ? 'border-green-500 text-green-600 dark:text-green-400' : 'border-destructive text-destructive',
+                        )}>
+                          <PenLine className="h-3 w-3" />
+                          {reviewExtras.rewriteFixedIssue ? 'Rewrite Fixed the Issue' : 'Rewrite Still Missed the Issue'}
+                        </Badge>
+                      )}
+                    </div>
+                    {reviewExtras.diagnosisFeedback && (
+                      <Card className="border-border/40"><CardContent className="p-2.5 space-y-1"><div className="flex items-center gap-1.5"><Eye className="h-3 w-3 text-muted-foreground" /><p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Diagnosis</p></div><p className="text-xs text-muted-foreground leading-relaxed">{reviewExtras.diagnosisFeedback}</p></CardContent></Card>
+                    )}
+                    {reviewExtras.rewriteFeedback && (
+                      <Card className="border-border/40"><CardContent className="p-2.5 space-y-1"><div className="flex items-center gap-1.5"><PenLine className="h-3 w-3 text-muted-foreground" /><p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Rewrite</p></div><p className="text-xs text-muted-foreground leading-relaxed">{reviewExtras.rewriteFeedback}</p></CardContent></Card>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground">{assignmentContext.reason}</p>
-                </CardContent>
-              </Card>
+                )}
+
+                {sessionType === 'roleplay' && roleplayExtras?.turnAnalysis && roleplayExtras.turnAnalysis.length > 0 && (
+                  <Card className="border-border/60">
+                    <CardContent className="p-3 space-y-2">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Turn-by-Turn</p>
+                      <div className="space-y-2">
+                        {roleplayExtras.turnAnalysis.map((ta, i) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                              <span className="text-[10px] font-bold text-muted-foreground w-4 text-right">T{ta.turn}</span>
+                              <Badge variant="outline" className={cn('text-[9px] px-1.5 py-0',
+                                ta.verdict === 'strong' && 'border-green-500 text-green-600 dark:text-green-400',
+                                ta.verdict === 'adequate' && 'border-amber-500 text-amber-600 dark:text-amber-400',
+                                ta.verdict === 'weak' && 'border-destructive text-destructive',
+                              )}>{ta.verdict}</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{ta.assessment}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {sessionType === 'roleplay' && (roleplayExtras?.controlArc || roleplayExtras?.adaptationNote) && (
+                  <div className="grid grid-cols-1 gap-2">
+                    {roleplayExtras?.controlArc && (
+                      <Card className="border-border/40"><CardContent className="p-2.5 space-y-1"><div className="flex items-center gap-1.5"><Shield className="h-3 w-3 text-primary/70" /><p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Control</p></div><p className="text-xs text-muted-foreground leading-relaxed">{roleplayExtras.controlArc}</p></CardContent></Card>
+                    )}
+                    {roleplayExtras?.adaptationNote && (
+                      <Card className="border-border/40"><CardContent className="p-2.5 space-y-1"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-primary/70" /><p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider">Adaptation</p></div><p className="text-xs text-muted-foreground leading-relaxed">{roleplayExtras.adaptationNote}</p></CardContent></Card>
+                    )}
+                  </div>
+                )}
+
+                {currentResult.multiThread && (
+                  <DealMovementCard assessment={currentResult.multiThread} />
+                )}
+
+                {skillLevelForFeedback && (
+                  <LevelProgressFeedbackCard current={skillLevelForFeedback} />
+                )}
+
+                {assignmentContext && (
+                  <Card className="border-primary/15 bg-primary/5">
+                    <CardContent className="p-3 space-y-1.5">
+                      <p className="text-[10px] font-bold text-primary uppercase tracking-wider">Today's Assignment</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{DAY_ANCHORS[assignmentContext.anchor as DayAnchor]?.icon ?? '📋'}</span>
+                        <span className="text-xs font-semibold text-foreground">
+                          {DAY_ANCHORS[assignmentContext.anchor as DayAnchor]?.label ?? assignmentContext.anchor}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">·</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {FOCUS_PATTERN_LABELS[assignmentContext.focusPattern] || assignmentContext.focusPattern.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">{assignmentContext.reason}</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             )}
+
           </div>
         </CollapsibleContent>
       </Collapsible>
