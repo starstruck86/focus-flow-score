@@ -35,7 +35,7 @@ interface AddTranscriptModalProps {
 }
 
 const CALL_TYPES = [
-  'Discovery Call', 'Demo', 'Technical Review', 'Executive Meeting',
+  'Cold Call', 'Discovery Call', 'Demo', 'Technical Review', 'Executive Meeting',
   'Pricing Discussion', 'Contract Review', 'Renewal Check-in',
   'QBR', 'Follow-up', 'Other',
 ];
