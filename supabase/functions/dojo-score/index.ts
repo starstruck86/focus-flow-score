@@ -435,16 +435,15 @@ YOUR DEFAULT SCORE IS 58-63. If you're about to give above 70, ask yourself: "Wo
 ${retryBlock}
 
 RESPONSE RULES:
-- "feedback": Exactly 2 sentences. Sentence 1: what they attempted or got right (specific). Sentence 2: the ONE thing that would make this significantly better.${skill === 'executive_response' ? `
-  FOR EXECUTIVE RESPONSE: Sentence 1 must quote or paraphrase the rep's actual words to show what went wrong. Sentence 2 must name the exact structural fix. Example: "You opened with 'So our platform helps companies...' — that's a setup sentence the exec didn't ask for. Lead with the dollar figure: their cost of inaction."` : ''}
-- "improvedVersion": Exact words a better rep would say OUT LOUD. ${skill === 'executive_response' ? '≤2 sentences. First sentence must contain a number. Zero setup.' : '3-5 sentences.'} Achievable upgrade.
+- "feedback": Exactly 2 sentences. Sentence 1: quote or paraphrase the rep's actual words to show what went right or wrong — be specific. Sentence 2: the ONE structural fix that would make this significantly better.${skill === 'executive_response' ? ` Example: "You opened with 'So our platform helps companies...' — that's a setup sentence the exec didn't ask for. Lead with the dollar figure: their cost of inaction."` : ''}
+- "improvedVersion": Exact words a better rep would say OUT LOUD. ${skill === 'executive_response' ? '≤2 sentences. First sentence must contain a number. Zero setup.' : '3-5 sentences. Must fix the specific mistake identified.'} Achievable upgrade.
 - "worldClassResponse": What a top 1% rep would ACTUALLY SAY from scratch. MATERIALLY STRONGER than improvedVersion. For ${skill}: ${wcTone}
 - "whyItWorks": 2-3 bullets explaining UNDERLYING PATTERNS of worldClassResponse. Reusable principles.
 - "moveSequence": 2-4 verb-first steps showing the STRUCTURE of worldClassResponse. Scenario-specific.
 - "patternTags": 2-4 snake_case REUSABLE selling behaviors. Portable across scenarios.
 - "focusPattern": Single pattern from the FOCUS PATTERNS list above. MUST be from that exact list.
 - "focusReason": One sentence starting with "Because" explaining why this is highest-leverage.
-- "practiceCue": One concrete behavioral instruction for the retry. ${skill === 'executive_response' ? 'Must be a single constraint: "First three words must be a dollar amount" or "No sentence can start with We or Our."' : 'Immediately executable.'}
+- "practiceCue": One concrete, constraint-based behavioral instruction for the retry. Must be a single rule the rep can immediately apply. Good: "Your first sentence must acknowledge using their exact words." Bad: "Be more confident."
 - "teachingNote": One sentence generalizing the lesson beyond this scenario.
 - "deltaNote": One sentence explaining the BIGGEST DIFFERENCE between improvedVersion and worldClassResponse.
 - "topMistake": REQUIRED. Pick exactly ONE from the COMMON MISTAKES list above. You MUST always return a valid mistake code — never leave this empty or invent a new one.
