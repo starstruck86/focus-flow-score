@@ -1,5 +1,6 @@
 /**
  * NextStepCard — Shows the recommended next action after a rep.
+ * Varies phrasing on retries to avoid robotic repetition.
  */
 
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +25,15 @@ const ACTION_VARIANTS: Record<NextAction, 'default' | 'outline' | 'secondary'> =
   switch_scenario_same_skill: 'outline',
 };
 
+// Retry-aware label variations to keep repeated reps feeling fresh
+const RETRY_LABELS: Record<NextAction, string[]> = {
+  retry_same: ['Retry This Scenario', 'Go Again', 'One More Rep'],
+  retry_dimension_focus: ['Isolate & Retry', 'Focus Drill', 'Target This Dimension'],
+  return_to_training: ['Review the Concept', 'Back to Skill Builder', 'Revisit Fundamentals'],
+  advance_pressure: ['Try Harder Scenario', 'Level Up', 'Raise the Stakes'],
+  switch_scenario_same_skill: ['Fresh Scenario', 'New Context', 'Different Scenario'],
+};
+
 interface Props {
   score: number;
   dimensions: Record<string, unknown> | null | undefined;
@@ -46,7 +56,10 @@ export function NextStepCard({
   const Icon = ACTION_ICONS[rec.action];
   const variant = ACTION_VARIANTS[rec.action];
 
-  // Map actions to handlers
+  // Pick a label variant based on retry count
+  const labels = RETRY_LABELS[rec.action];
+  const label = labels[Math.min(retryCount, labels.length - 1)];
+
   const handleAction = () => {
     if (rec.action === 'retry_same' || rec.action === 'retry_dimension_focus') {
       onRetry();
@@ -56,34 +69,21 @@ export function NextStepCard({
   };
 
   return (
-    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3.5 space-y-2.5">
-      <div className="flex items-center gap-2">
-        <ArrowRight className="h-3.5 w-3.5 text-primary shrink-0" />
-        <p className="text-[10px] font-bold uppercase tracking-wider text-primary">
-          Recommended Next Step
+    <div className="flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2.5">
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+          {rec.reason}
         </p>
       </div>
-      <p className="text-xs text-muted-foreground leading-relaxed pl-[22px]">
-        {rec.reason}
-      </p>
-      {rec.focusDimensionLabel && (
-        <div className="pl-[22px]">
-          <Badge variant="outline" className="text-[9px]">
-            Focus: {rec.focusDimensionLabel}
-          </Badge>
-        </div>
-      )}
-      <div className="pl-[22px]">
-        <Button
-          variant={variant}
-          size="sm"
-          className="gap-2 h-9"
-          onClick={handleAction}
-        >
-          <Icon className="h-3.5 w-3.5" />
-          {rec.label}
-        </Button>
-      </div>
+      <Button
+        variant={variant}
+        size="sm"
+        className="gap-1.5 h-8 shrink-0"
+        onClick={handleAction}
+      >
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </Button>
     </div>
   );
 }
