@@ -72,8 +72,10 @@ export async function getAdaptiveStudyPath(userId: string): Promise<AdaptiveStud
   // ── Mode selection (priority order) ──
 
   // 0. active_lane — if user is actively drilling a mastery lane, reinforce it
+  //    Yields to: block_remediation with 2+ gaps (critical), and benchmark/retest assignments
   const activeLane = loadActiveLane();
-  if (activeLane && activeLane.repsThisSession > 0) {
+  const hasUrgentRemediation = blockRemediation && blockRemediation.gaps.length >= 3;
+  if (activeLane && activeLane.repsThisSession > 0 && !hasUrgentRemediation) {
     const anchorDef = DAY_ANCHORS[activeLane.anchor as DayAnchor];
     if (anchorDef) {
       // Find weakest sub-skill in this lane
