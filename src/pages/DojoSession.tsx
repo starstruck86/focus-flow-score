@@ -647,7 +647,7 @@ function FeedbackView({
       {/* ── Explainable Score Breakdown ── */}
       {(currentResult as unknown as Record<string, unknown>).dimensions && (
         <ExplainableScoreCard
-          dimensions={(currentResult as unknown as Record<string, unknown>).dimensions as Record<string, number>}
+          dimensions={(currentResult as unknown as Record<string, unknown>).dimensions as Record<string, unknown>}
           skill={skillFocus}
           totalScore={currentResult.score}
         />
@@ -1127,7 +1127,7 @@ function FeedbackView({
       {sessionType === 'drill' && (
         <NextStepCard
           score={currentResult.score}
-          dimensions={(currentResult as unknown as Record<string, unknown>).dimensions as Record<string, number> | undefined}
+          dimensions={(currentResult as unknown as Record<string, unknown>).dimensions as Record<string, unknown> | undefined}
           skill={skillFocus}
           retryCount={retryCount}
           topMistake={currentResult.topMistake}
