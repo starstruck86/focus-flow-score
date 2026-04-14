@@ -51,6 +51,8 @@ export interface AdaptiveStudyPath {
     label: string;
   } | null;
   confidence: 'high' | 'medium' | 'low';
+  /** When mode is 'active_lane', the weakest sub-skill in the lane */
+  weakSubSkill?: string | null;
 }
 
 // ── Main Entry ─────────────────────────────────────────────────────
