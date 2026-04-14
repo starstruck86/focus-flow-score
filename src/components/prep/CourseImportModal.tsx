@@ -930,6 +930,9 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       setCredPassword('');
       setAuthError(null);
       setAuthWallHit(false);
+      setCourseOptions([]);
+      setLandingPageResolved(false);
+      setResolvedFrom(null);
     }
     onOpenChange(newOpen);
   };
