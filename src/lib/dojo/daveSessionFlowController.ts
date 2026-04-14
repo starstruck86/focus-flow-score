@@ -199,7 +199,7 @@ export async function runAudioFirstDojoSession(config: DojoSessionConfig): Promi
       result.retryCount = retryCount;
       telemetry.trackRetryLoop();
 
-      const retryScript = buildRetryScript(latestScore.practiceCue || latestScore.topMistake);
+      const retryScript = buildRetryScript(latestScore.practiceCue || latestScore.topMistake, config.scenario.skillFocus);
 
       setPhase('retry_prompt');
       const retryBargeIn = await speakWithBargeIn(retryScript.retryPrompt, ctx, { role: 'retry_prompt' });
