@@ -339,7 +339,7 @@ export default function DojoSession() {
   return (
     <div className={`min-h-screen bg-background flex flex-col ${SHELL.top.safeArea}`}>
       {/* ── Header ── */}
-      <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-sm px-4 py-3 flex items-center gap-3">
+      <div className="sticky top-[env(safe-area-inset-top)] z-10 border-b border-border/60 bg-background/95 backdrop-blur-sm px-4 py-3 flex items-center gap-3">
         <button onClick={() => navigate('/dojo')} className="p-1 -ml-1">
           <ArrowLeft className="h-5 w-5 text-muted-foreground" />
         </button>

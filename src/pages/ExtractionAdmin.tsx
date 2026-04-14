@@ -190,14 +190,14 @@ export default function ExtractionAdmin() {
 
   if (selectedResourceId) {
     return (
-      <div className="min-h-screen bg-background p-4 md:p-8 max-w-7xl mx-auto">
+      <div className="min-h-screen bg-background pt-[env(safe-area-inset-top)] p-4 md:p-8 max-w-7xl mx-auto">
         <ResourceDetail resourceId={selectedResourceId} onBack={() => setSelectedResourceId(null)} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background pt-[env(safe-area-inset-top)] p-4 md:p-8 max-w-7xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Extraction Admin</h1>
         <p className="text-muted-foreground text-sm">Operational monitoring for the extraction pipeline</p>

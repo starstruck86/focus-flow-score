@@ -71,7 +71,7 @@ export default function ReliabilityQA() {
   const sessionDurationMin = Math.round((Date.now() - telemetry.sessionStartMs) / 60000);
 
   return (
-    <div className="min-h-screen bg-background p-4 sm:p-6 space-y-6">
+    <div className="min-h-screen bg-background pt-[env(safe-area-inset-top)] p-4 sm:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Reliability QA</h1>

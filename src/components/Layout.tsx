@@ -288,7 +288,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div data-testid="app-layout" className={`min-h-screen bg-background flex flex-col w-full ${SHELL.top.safeArea}`}>
       <header
         data-testid="app-header"
-        className="flex items-center gap-2 px-3 py-2 border-b sticky top-0 z-40 bg-background/95 backdrop-blur-md"
+        className="flex items-center gap-2 px-3 py-2 border-b sticky top-[env(safe-area-inset-top)] z-40 bg-background/95 backdrop-blur-md"
         style={headerAccentStyle}
       >
         <div className="flex items-center gap-1 shrink-0">

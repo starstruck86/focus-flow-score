@@ -412,9 +412,9 @@ export default function EnrichmentVerification() {
   const isLoading = loadingResources || loadingAudio;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pt-[env(safe-area-inset-top)]">
       {/* Header */}
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-4 py-3">
+      <div className="sticky top-[env(safe-area-inset-top)] z-20 bg-background/95 backdrop-blur border-b border-border px-4 py-3">
         <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate('/prep')}>
