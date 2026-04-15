@@ -319,12 +319,13 @@ export function StrategyMainPanel({
 
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="px-3 py-1">{/* tighter top padding */}
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <div className="px-3 py-1">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-6 gap-2.5">
+            <div className="flex flex-col items-center justify-center py-4 gap-2">
               <div className="h-8 w-8 rounded-lg bg-muted/40 flex items-center justify-center">
                 <ThreadIcon className="h-4 w-4 text-foreground/30" />
               </div>
