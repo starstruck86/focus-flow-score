@@ -1,7 +1,6 @@
 /**
  * Strategy Workspace — durable strategic operating system.
- * Three-column layout: thread sidebar, main working area, right rail.
- * Mounted inside the standard app shell via <Layout>.
+ * Three-column layout: thread sidebar (drawer on mobile), main working area, right rail.
  */
 import { useState, useCallback } from 'react';
 import { Layout } from '@/components/Layout';
@@ -17,8 +16,16 @@ import { useStrategyOutputs } from '@/hooks/strategy/useStrategyOutputs';
 import { useStrategyArtifacts } from '@/hooks/strategy/useStrategyArtifacts';
 import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
 import { useStrategyRollups } from '@/hooks/strategy/useStrategyRollups';
+import { useIsMobile } from '@/hooks/use-mobile';
+import {
+  Drawer, DrawerContent, DrawerTrigger, DrawerTitle,
+} from '@/components/ui/drawer';
+import { Button } from '@/components/ui/button';
+import { PanelLeftOpen } from 'lucide-react';
+import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 
 export default function Strategy() {
+  const isMobile = useIsMobile();
   const {
     threads, activeThread, setActiveThreadId, createThread, createThreadWithOpts, updateThread, isLoading,
   } = useStrategyThreads();
@@ -27,6 +34,7 @@ export default function Strategy() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [rightRailCollapsed, setRightRailCollapsed] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   const { linkedContext } = useLinkedObjectContext(activeThread);
 
@@ -54,6 +62,11 @@ export default function Strategy() {
   const handleCreateThreadWithOpts = useCallback((opts: CreateThreadOpts) => {
     createThreadWithOpts(opts);
   }, [createThreadWithOpts]);
+
+  const handleSelectThread = useCallback((id: string) => {
+    setActiveThreadId(id);
+    if (isMobile) setMobileDrawerOpen(false);
+  }, [setActiveThreadId, isMobile]);
 
   const handleBranchThread = useCallback(async (title: string, content: string) => {
     const newThreadId = await createThread(title, 'strategy', 'freeform');
@@ -85,28 +98,42 @@ export default function Strategy() {
     }
   }, [transformOutput, handleWorkflowComplete]);
 
+  const sidebarContent = (
+    <StrategyThreadSidebar
+      threads={threads}
+      activeThreadId={activeThread?.id ?? null}
+      onSelectThread={handleSelectThread}
+      onOpenCreateDialog={() => setCreateDialogOpen(true)}
+      laneFilter={laneFilter}
+      onLaneFilterChange={setLaneFilter}
+      onCollapse={() => isMobile ? setMobileDrawerOpen(false) : setSidebarCollapsed(true)}
+      isLoading={isLoading}
+    />
+  );
+
   return (
     <Layout>
-      {/* Strategy uses a flex column that fills Layout's <main> which is flex-1 overflow-y-auto */}
       <div className="flex h-full overflow-hidden">
-        {!sidebarCollapsed && (
-          <StrategyThreadSidebar
-            threads={threads}
-            activeThreadId={activeThread?.id ?? null}
-            onSelectThread={setActiveThreadId}
-            onOpenCreateDialog={() => setCreateDialogOpen(true)}
-            laneFilter={laneFilter}
-            onLaneFilterChange={setLaneFilter}
-            onCollapse={() => setSidebarCollapsed(true)}
-            isLoading={isLoading}
-          />
+        {/* Desktop sidebar */}
+        {!isMobile && !sidebarCollapsed && sidebarContent}
+
+        {/* Mobile sidebar drawer */}
+        {isMobile && (
+          <Drawer open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen} direction="left">
+            <DrawerContent className="h-full w-[280px] rounded-none border-r border-border fixed inset-y-0 left-0 right-auto">
+              <VisuallyHidden.Root>
+                <DrawerTitle>Thread Navigation</DrawerTitle>
+              </VisuallyHidden.Root>
+              {sidebarContent}
+            </DrawerContent>
+          </Drawer>
         )}
 
         <StrategyMainPanel
           thread={activeThread}
           onUpdateThread={updateThread}
-          sidebarCollapsed={sidebarCollapsed}
-          onExpandSidebar={() => setSidebarCollapsed(false)}
+          sidebarCollapsed={isMobile || sidebarCollapsed}
+          onExpandSidebar={() => isMobile ? setMobileDrawerOpen(true) : setSidebarCollapsed(false)}
           rightRailCollapsed={rightRailCollapsed}
           onToggleRightRail={() => setRightRailCollapsed(r => !r)}
           linkedContext={linkedContext}
@@ -117,7 +144,7 @@ export default function Strategy() {
           isTransforming={isTransforming}
         />
 
-        {!rightRailCollapsed && activeThread && (
+        {!isMobile && !rightRailCollapsed && activeThread && (
           <StrategyRightRail
             thread={activeThread}
             onCollapse={() => setRightRailCollapsed(true)}

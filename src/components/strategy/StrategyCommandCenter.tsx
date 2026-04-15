@@ -187,13 +187,13 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background">
       {/* Minimal top bar */}
-      <div className="flex items-center gap-2 px-4 h-10 border-b border-border shrink-0">
+      <div className="flex items-center gap-2 px-4 h-11 border-b border-border shrink-0">
         {sidebarCollapsed && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" onClick={onExpandSidebar}>
-            <PanelLeftOpen className="h-3.5 w-3.5 mr-1" /> Threads
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-foreground/80 hover:text-foreground" onClick={onExpandSidebar}>
+            <PanelLeftOpen className="h-3.5 w-3.5 mr-1.5" /> Threads
           </Button>
         )}
-        <span className={STRATEGY_UI.labels.section}>Strategy</span>
+        <span className={cn(STRATEGY_UI.labels.section, 'ml-1')}>Strategy</span>
       </div>
 
       <ScrollArea className="flex-1">
@@ -202,11 +202,11 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
             /* ── EMPTY STATE: Composer is the hero ── */
             <div className={cn(STRATEGY_UI.layout.launchpad)}>
               {/* Heading */}
-              <div className="text-center mb-8">
+              <div className="text-center mb-8 sm:mb-10">
                 <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight">
                   What do you need?
                 </h1>
-                <p className="mt-2.5 text-sm text-muted-foreground">
+                <p className="mt-2.5 text-sm text-foreground/70">
                   {kiCount > 0
                     ? `${kiCount.toLocaleString()} knowledge items ready to ground your next run`
                     : 'Briefs, research, angles, and prep — powered by your knowledge base'}
@@ -216,7 +216,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               {/* Composer — the primary surface */}
               {composer}
 
-              {/* Quick starts — directly below composer, no wrapper card */}
+              {/* Quick starts */}
               <div className="mt-8 space-y-6">
                 {pinnedShortcuts.length > 0 && (
                   <div>
@@ -245,10 +245,12 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                       <button
                         key={s.label}
                         onClick={() => handleStarter(s.command)}
-                        className="group flex items-center gap-3 px-4 py-3.5 rounded-xl text-left border border-border bg-card hover:border-border/80 hover:shadow-sm transition-all"
+                        className="group flex items-center gap-3 px-4 py-3.5 rounded-xl text-left border border-border hover:border-primary/30 bg-card hover:bg-card hover:shadow-sm transition-all"
                       >
-                        <s.icon className="h-4 w-4 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
-                        <span className="text-sm text-foreground/90 group-hover:text-foreground transition-colors">{s.label}</span>
+                        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
+                          <s.icon className="h-4 w-4 text-primary" />
+                        </div>
+                        <span className="text-sm font-medium text-foreground">{s.label}</span>
                       </button>
                     ))}
                   </div>

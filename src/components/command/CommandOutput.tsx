@@ -30,13 +30,11 @@ function enhanceReadability(md: string): string {
       enhanced.push(trimmed);
       continue;
     }
-    // Break **Label:** Value into separated mini-blocks
     const labelMatch = trimmed.match(/^\*\*([^*]+):\*\*\s*(.+)/);
     if (labelMatch) {
       enhanced.push(`**${labelMatch[1]}**\n\n${labelMatch[2]}`);
       continue;
     }
-    // Split long paragraphs
     if (trimmed.length > 200) {
       const sentences = trimmed.match(/[^.!?]+[.!?]+\s*/g);
       if (sentences && sentences.length > 2) {
@@ -115,19 +113,19 @@ const proseClasses = cn(
   'prose-h1:text-xl prose-h1:leading-snug prose-h1:mb-6 prose-h1:mt-0',
   'prose-h2:text-base prose-h2:leading-snug prose-h2:mb-5 prose-h2:mt-10',
   'prose-h3:text-[15px] prose-h3:leading-snug prose-h3:mb-3 prose-h3:mt-7',
-  'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-5 prose-h4:text-foreground/90',
-  // Body text — readable contrast
-  'prose-p:text-[15px] prose-p:text-foreground/90 prose-p:leading-[1.85] prose-p:mb-5',
+  'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-5 prose-h4:text-foreground',
+  // Body text — full contrast
+  'prose-p:text-[15px] prose-p:text-foreground/95 prose-p:leading-[1.85] prose-p:mb-5',
   // Lists — spacious
-  'prose-li:text-[15px] prose-li:text-foreground/90 prose-li:leading-[1.75] prose-li:mb-2.5',
+  'prose-li:text-[15px] prose-li:text-foreground/95 prose-li:leading-[1.75] prose-li:mb-2.5',
   'prose-ul:my-5 prose-ol:my-5',
   '[&_ul]:space-y-2 [&_ol]:space-y-2.5',
   'prose-ul:pl-1 prose-ol:pl-1',
   // Inline formatting
   'prose-strong:text-foreground prose-strong:font-semibold',
-  'prose-em:text-muted-foreground prose-em:text-[13px]',
+  'prose-em:text-foreground/80 prose-em:text-[13px]',
   // Blockquotes
-  'prose-blockquote:border-l-2 prose-blockquote:border-primary/30 prose-blockquote:text-foreground/80 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-4 prose-blockquote:my-6',
+  'prose-blockquote:border-l-2 prose-blockquote:border-primary/30 prose-blockquote:text-foreground/85 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-4 prose-blockquote:my-6',
   // Code
   'prose-code:text-primary prose-code:bg-primary/[0.08] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
   // Dividers
@@ -255,7 +253,7 @@ export function CommandOutput({
       <div className="space-y-6">
         {segments.map((segment, index) => segment.type === 'label' ? (
           <div key={`${segment.label}-${index}`} className={cn(STRATEGY_UI.surface.subBlock, 'px-5 py-4')}>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground mb-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground/70 mb-3">
               {segment.label}
             </div>
             <div className={proseClasses}>
@@ -282,7 +280,7 @@ export function CommandOutput({
                 {docTitle}
               </h2>
               {(accountName || opportunityName) && (
-                <p className="text-sm text-muted-foreground mt-2 font-medium">
+                <p className="text-sm text-foreground/70 mt-2 font-medium">
                   {accountName}{opportunityName ? ` · ${opportunityName}` : ''}
                 </p>
               )}
@@ -295,7 +293,7 @@ export function CommandOutput({
                     'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
                     viewMode === 'clean'
                       ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
+                      : 'text-foreground/70 hover:text-foreground'
                   )}
                 >
                   <Eye className="h-3.5 w-3.5" /> Read
@@ -306,7 +304,7 @@ export function CommandOutput({
                     'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
                     viewMode === 'edit'
                       ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
+                      : 'text-foreground/70 hover:text-foreground'
                   )}
                 >
                   <Pencil className="h-3.5 w-3.5" /> Edit
@@ -316,7 +314,7 @@ export function CommandOutput({
           </div>
 
           {/* Metadata row */}
-          <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground mt-4">
+          <div className="flex items-center gap-3 flex-wrap text-xs text-foreground/60 mt-4">
             {playbookUsed && (
               <span className="inline-flex items-center gap-1.5 text-primary font-medium">
                 <BookOpen className="h-3.5 w-3.5" /> {playbookUsed}
@@ -386,7 +384,7 @@ export function CommandOutput({
               )}
 
               {hasBlocks ? (
-                <div className="divide-y divide-border/50">
+                <div className="divide-y divide-border/40">
                   {blocks.map((block, i) => {
                     const semantic = classifySectionHeading(block.heading);
                     const accent = SEMANTIC_ACCENT[semantic];
@@ -423,7 +421,7 @@ export function CommandOutput({
 
         {/* Footer Actions */}
         {!isGenerating && (
-          <div className="flex items-center justify-between px-6 sm:px-8 lg:px-10 py-3.5 border-t border-border bg-muted/20">
+          <div className="flex items-center justify-between px-6 sm:px-8 lg:px-10 py-4 border-t border-border bg-muted/20">
             <div className="flex items-center gap-1 flex-wrap">
               {[
                 { onClick: handleCopy, icon: copied ? Check : Copy, label: copied ? 'Copied' : 'Copy all', accent: copied },

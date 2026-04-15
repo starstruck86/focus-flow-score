@@ -67,7 +67,7 @@ export function StrategyThreadSidebar({
   }, [recent]);
 
   return (
-    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border flex flex-col shrink-0')}>
+    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border flex flex-col shrink-0 h-full')}>
       {/* Header */}
       <div className="p-3 border-b border-border flex items-center gap-2">
         <h2 className="text-sm font-semibold text-foreground flex-1">Threads</h2>
@@ -78,7 +78,7 @@ export function StrategyThreadSidebar({
 
       {/* New Thread */}
       <div className="p-2.5 border-b border-border">
-        <Button size="sm" className="w-full gap-1.5" onClick={onOpenCreateDialog}>
+        <Button size="sm" className="w-full gap-1.5 font-medium" onClick={onOpenCreateDialog}>
           <Plus className="h-3.5 w-3.5" /> New Thread
         </Button>
       </div>
@@ -113,12 +113,17 @@ export function StrategyThreadSidebar({
       {/* Thread List */}
       <ScrollArea className="flex-1">
         {isLoading ? (
-          <p className="text-xs text-muted-foreground p-3">Loading…</p>
+          <div className="p-3 space-y-2">
+            {[1,2,3].map(i => (
+              <div key={i} className="h-10 rounded-md bg-muted/40 animate-pulse" />
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center p-4 space-y-2">
-            <p className="text-xs text-muted-foreground">No threads yet.</p>
-            <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={onOpenCreateDialog}>
-              <Plus className="h-3 w-3" /> Create first thread
+          <div className="text-center p-6 space-y-3">
+            <p className="text-sm text-foreground/70">No threads yet</p>
+            <p className="text-xs text-muted-foreground">Create your first thread to get started</p>
+            <Button size="sm" className="text-xs gap-1.5 mt-2" onClick={onOpenCreateDialog}>
+              <Plus className="h-3 w-3" /> Create thread
             </Button>
           </div>
         ) : (
