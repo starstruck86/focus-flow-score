@@ -1,5 +1,6 @@
 /**
  * useCommandExecution — orchestrates template execution with context-aware KI retrieval.
+ * Now returns KI explainability metadata and captures feedback signals.
  */
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,6 +10,8 @@ import { toast } from 'sonner';
 import type { ParsedCommand, TemplateMetadata, ExecutionResult } from '@/lib/commandTypes';
 import { parseOutputBlocks } from '@/lib/commandTypes';
 import { retrieveContextualKIs } from '@/lib/contextAwareKIRetrieval';
+import type { KIExplainability } from '@/lib/contextAwareKIRetrieval';
+import { useCommandFeedback } from '@/hooks/useCommandFeedback';
 
 // ─── Built-in templates with full metadata ───
 
@@ -138,8 +141,10 @@ Prioritized actions to pursue.`,
 export function useCommandExecution() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const { capture } = useCommandFeedback();
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<ExecutionResult | null>(null);
+  const [lastKIExplainability, setLastKIExplainability] = useState<KIExplainability | null>(null);
 
   // Load accounts
   const { data: accounts = [] } = useQuery({
@@ -174,7 +179,7 @@ export function useCommandExecution() {
     },
   });
 
-  // Load user-saved templates with metadata
+  // Load user-saved templates
   const { data: savedTemplates = [] } = useQuery({
     queryKey: ['cmd-saved-templates', user?.id],
     enabled: !!user,
@@ -205,7 +210,23 @@ export function useCommandExecution() {
     },
   });
 
-  // Merge built-in + saved, pinned first
+  // Load saved shortcuts
+  const { data: savedShortcuts = [] } = useQuery({
+    queryKey: ['cmd-shortcuts', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('command_shortcuts' as any)
+        .select('*')
+        .eq('user_id', user!.id)
+        .order('is_pinned', { ascending: false })
+        .order('times_used', { ascending: false })
+        .limit(20);
+      return data || [];
+    },
+  });
+
+  // Merge built-in + saved templates, pinned first
   const allTemplates: TemplateMetadata[] = [
     ...BUILT_IN_TEMPLATES,
     ...savedTemplates,
@@ -220,9 +241,9 @@ export function useCommandExecution() {
 
     setIsGenerating(true);
     setResult(null);
+    setLastKIExplainability(null);
 
     try {
-      // Resolve template with full metadata
       const template = allTemplates.find(
         t => t.id === command.template?.id || t.name === command.template?.name
       );
@@ -231,7 +252,7 @@ export function useCommandExecution() {
       const templateLabel = template?.name || command.template?.name || 'Custom';
       const depth = template?.preferred_ki_depth || 'standard';
 
-      // Context-aware KI retrieval
+      // Context-aware KI retrieval with explainability
       let kiContext = '';
       let kiCount = 0;
       if (useKIs) {
@@ -245,6 +266,7 @@ export function useCommandExecution() {
         });
         kiContext = kis.text;
         kiCount = kis.count;
+        setLastKIExplainability(kis.explainability);
       }
 
       const resourceContext = kiContext
@@ -300,7 +322,6 @@ export function useCommandExecution() {
     }
   }, [user, allTemplates, qc]);
 
-  // Create a new account inline
   const createAccount = useCallback(async (name: string): Promise<{ id: string; name: string } | null> => {
     if (!user) return null;
     const { data, error } = await supabase
@@ -308,16 +329,12 @@ export function useCommandExecution() {
       .insert({ name, user_id: user.id })
       .select('id, name')
       .single();
-    if (error) {
-      toast.error('Failed to create account');
-      return null;
-    }
+    if (error) { toast.error('Failed to create account'); return null; }
     qc.invalidateQueries({ queryKey: ['cmd-accounts'] });
     toast.success(`Account "${name}" created`);
     return data;
   }, [user, qc]);
 
-  // Create a new opportunity inline
   const createOpportunity = useCallback(async (name: string, accountId?: string): Promise<{ id: string; name: string } | null> => {
     if (!user) return null;
     const { data, error } = await supabase
@@ -325,10 +342,7 @@ export function useCommandExecution() {
       .insert({ name, user_id: user.id, account_id: accountId || null } as any)
       .select('id, name')
       .single();
-    if (error) {
-      toast.error('Failed to create opportunity');
-      return null;
-    }
+    if (error) { toast.error('Failed to create opportunity'); return null; }
     qc.invalidateQueries({ queryKey: ['cmd-opportunities'] });
     toast.success(`Opportunity "${name}" created`);
     return data;
@@ -338,31 +352,62 @@ export function useCommandExecution() {
     if (!user) return;
     try {
       await supabase.from('execution_templates' as any).insert({
-        user_id: user.id,
-        title: name,
-        body: content,
-        output_type: 'custom',
-        template_origin: 'promoted_from_output',
-        created_by_user: true,
-        status: 'active',
-        times_used: 0,
+        user_id: user.id, title: name, body: content,
+        output_type: 'custom', template_origin: 'promoted_from_output',
+        created_by_user: true, status: 'active', times_used: 0,
       } as any);
       qc.invalidateQueries({ queryKey: ['cmd-saved-templates'] });
+      capture('saved_template', { templateName: name });
       toast.success(`Template "${name}" saved`);
-    } catch {
-      toast.error('Failed to save template');
-    }
+    } catch { toast.error('Failed to save template'); }
+  }, [user, qc, capture]);
+
+  const saveShortcut = useCallback(async (command: ParsedCommand, label?: string) => {
+    if (!user) return;
+    const shortcutLabel = label || [
+      command.template?.name,
+      command.account?.name ? `@${command.account.name}` : null,
+    ].filter(Boolean).join(' ') || command.rawText.slice(0, 40);
+
+    try {
+      await supabase.from('command_shortcuts' as any).insert({
+        user_id: user.id,
+        label: shortcutLabel,
+        raw_command: command.rawText,
+        template_id: command.template?.id || null,
+        template_name: command.template?.name || null,
+        account_id: command.account?.id || null,
+        account_name: command.account?.name || null,
+        opportunity_id: command.opportunity?.id || null,
+        opportunity_name: command.opportunity?.name || null,
+        free_text: command.freeText || null,
+      } as any);
+      qc.invalidateQueries({ queryKey: ['cmd-shortcuts'] });
+      toast.success('Shortcut saved');
+    } catch { toast.error('Failed to save shortcut'); }
   }, [user, qc]);
+
+  const pinShortcut = useCallback(async (id: string, pinned: boolean) => {
+    await supabase.from('command_shortcuts' as any)
+      .update({ is_pinned: pinned } as any)
+      .eq('id', id);
+    qc.invalidateQueries({ queryKey: ['cmd-shortcuts'] });
+  }, [qc]);
 
   return {
     accounts,
     opportunities,
     allTemplates,
+    savedShortcuts,
     isGenerating,
     result,
+    lastKIExplainability,
     execute,
     createAccount,
     createOpportunity,
     saveAsTemplate,
+    saveShortcut,
+    pinShortcut,
+    capture,
   };
 }

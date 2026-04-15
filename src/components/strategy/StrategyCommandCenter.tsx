@@ -1,11 +1,16 @@
 /**
  * StrategyCommandCenter — command-driven workspace embedded in the Strategy page.
- * This is the main canvas when no thread is active.
+ *
+ * Primary entry point for strategic work:
+ * - Token-first structured composer
+ * - Pre-run context strip with KI explainability
+ * - Saved/pinned/recent workflow system
+ * - Lightweight feedback capture
  */
 import { useState, useCallback } from 'react';
 import { CommandBar } from '@/components/command/CommandBar';
 import { CommandOutput } from '@/components/command/CommandOutput';
-import { ContextPreview } from '@/components/command/ContextPreview';
+import { PreRunContext } from '@/components/command/PreRunContext';
 import { useCommandExecution } from '@/hooks/useCommandExecution';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,8 +18,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { PanelLeftOpen, Search, FileText, Mail, Zap, Clock } from 'lucide-react';
-import type { ParsedCommand } from '@/lib/commandTypes';
+import {
+  PanelLeftOpen, Search, FileText, Mail, Zap,
+  Clock, Pin, Bookmark, PlusCircle,
+} from 'lucide-react';
+import type { ParsedCommand, CommandToken } from '@/lib/commandTypes';
+import { cn } from '@/lib/utils';
 
 interface Props {
   sidebarCollapsed: boolean;
@@ -31,7 +40,6 @@ const STARTERS = [
 interface RecentItem {
   label: string;
   command: string;
-  type: 'template' | 'account' | 'command';
 }
 
 export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Props) {
@@ -41,18 +49,24 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
     accounts,
     opportunities,
     allTemplates,
+    savedShortcuts,
     isGenerating,
     result,
+    lastKIExplainability,
     execute,
     createAccount,
     createOpportunity,
     saveAsTemplate,
+    saveShortcut,
+    pinShortcut,
+    capture,
   } = useCommandExecution();
 
   const [useKIs, setUseKIs] = useState(true);
   const [lastCommand, setLastCommand] = useState<ParsedCommand | null>(null);
   const [prefill, setPrefill] = useState('');
   const [recents, setRecents] = useState<RecentItem[]>([]);
+  const [activeTokens, setActiveTokens] = useState<CommandToken[]>([]);
 
   const { data: kiCount = 0 } = useQuery({
     queryKey: ['ki-count', user?.id],
@@ -76,7 +90,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
 
     setRecents(prev => {
       const filtered = prev.filter(r => r.command !== command.rawText);
-      return [{ label, command: command.rawText, type: 'command' as const }, ...filtered].slice(0, 5);
+      return [{ label, command: command.rawText }, ...filtered].slice(0, 5);
     });
   }, []);
 
@@ -87,28 +101,39 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
   }, [execute, useKIs, addRecent]);
 
   const handleRegenerate = useCallback(() => {
-    if (lastCommand) execute(lastCommand, useKIs);
-  }, [lastCommand, execute, useKIs]);
+    if (lastCommand) {
+      capture('regenerated', { templateName: lastCommand.template?.name });
+      execute(lastCommand, useKIs);
+    }
+  }, [lastCommand, execute, useKIs, capture]);
 
   const handleSaveAsTemplate = useCallback((name: string) => {
     if (result?.output) saveAsTemplate(name, result.output);
   }, [result, saveAsTemplate]);
 
+  const handleSaveShortcut = useCallback(() => {
+    if (lastCommand) saveShortcut(lastCommand);
+  }, [lastCommand, saveShortcut]);
+
   const handleStarter = useCallback((command: string) => {
     setPrefill(command);
   }, []);
 
-  const handleRecent = useCallback((command: string) => {
-    setPrefill(command);
-  }, []);
+  const handleShortcut = useCallback((shortcut: any) => {
+    // Bump usage
+    supabase.from('command_shortcuts' as any)
+      .update({ times_used: (shortcut.times_used || 0) + 1, last_used_at: new Date().toISOString() } as any)
+      .eq('id', shortcut.id)
+      .then(() => {});
+    capture('reused_shortcut', { templateName: shortcut.template_name });
+    setPrefill(shortcut.raw_command);
+  }, [capture]);
 
   const showEmpty = !result && !isGenerating;
 
-  // Build intelligence stack line
-  const stackParts: string[] = [];
-  if (allTemplates.length > 0) stackParts.push('templates');
-  if (lastCommand?.account || lastCommand?.opportunity) stackParts.push('linked context');
-  if (useKIs && kiCount > 0) stackParts.push(`${kiCount.toLocaleString()} KIs`);
+  // Separate pinned and saved shortcuts
+  const pinnedShortcuts = (savedShortcuts as any[]).filter((s: any) => s.is_pinned);
+  const recentShortcuts = (savedShortcuts as any[]).filter((s: any) => !s.is_pinned).slice(0, 5);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background">
@@ -123,10 +148,13 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
       </div>
 
       <ScrollArea className="flex-1">
-        <div className={`flex flex-col items-center px-4 ${isMobile ? 'pt-6 pb-4' : 'pt-12 pb-8'}`}>
-          {/* Header — compact working-surface feel */}
+        <div className={cn(
+          'flex flex-col items-center px-4',
+          isMobile ? 'pt-6 pb-4' : 'pt-10 pb-8'
+        )}>
+          {/* Header */}
           {showEmpty && (
-            <div className="text-center mb-5 animate-in fade-in-0 slide-in-from-bottom-2 duration-400">
+            <div className="text-center mb-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-400">
               <h1 className="text-lg font-semibold text-foreground mb-0.5">What do you need?</h1>
               <p className="text-xs text-muted-foreground">
                 {kiCount > 0
@@ -136,8 +164,8 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
             </div>
           )}
 
-          {/* Command bar */}
-          <div className={`w-full max-w-2xl ${result || isGenerating ? 'mb-5' : ''}`}>
+          {/* Command bar + context strip */}
+          <div className={cn('w-full max-w-2xl', (result || isGenerating) && 'mb-5')}>
             <CommandBar
               accounts={accounts}
               opportunities={opportunities.map(o => ({ id: o.id, name: o.name, account_name: (o as any).account_name }))}
@@ -149,32 +177,48 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               prefill={prefill}
               onPrefillConsumed={() => setPrefill('')}
               preserveAfterExecute
+              onTokensChange={setActiveTokens}
             />
 
-            <ContextPreview
-              accountName={lastCommand?.account?.name}
-              opportunityName={lastCommand?.opportunity?.name}
-              templateName={lastCommand?.template?.name}
+            {/* Pre-run context strip */}
+            <PreRunContext
+              tokens={activeTokens}
               useKIs={useKIs}
               onToggleKIs={setUseKIs}
               kiCount={kiCount}
+              lastKIExplainability={lastKIExplainability}
             />
-
-            {/* Intelligence stack line */}
-            {stackParts.length > 0 && (
-              <p className="text-[10px] text-muted-foreground/50 px-1 mt-1">
-                Using {stackParts.join(', ')}
-              </p>
-            )}
           </div>
 
-          {/* Starter commands — only when idle */}
+          {/* Empty state — starters + saved + recents */}
           {showEmpty && (
-            <div className={`w-full max-w-2xl mt-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 delay-100`}>
+            <div className="w-full max-w-2xl mt-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 delay-100">
+              {/* Pinned shortcuts */}
+              {pinnedShortcuts.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider mb-2 px-0.5 flex items-center gap-1">
+                    <Pin className="h-2.5 w-2.5" /> Pinned
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {pinnedShortcuts.map((s: any) => (
+                      <button
+                        key={s.id}
+                        onClick={() => handleShortcut(s)}
+                        className="inline-flex items-center gap-1.5 text-xs text-foreground/80 hover:text-foreground px-2.5 py-1.5 rounded-lg border border-border/50 bg-card/50 hover:bg-accent/40 hover:border-border transition-all"
+                      >
+                        <Pin className="h-2.5 w-2.5 text-primary shrink-0" />
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick start */}
               <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider mb-2 px-0.5">
                 Quick start
               </p>
-              <div className={`grid ${isMobile ? 'grid-cols-1 gap-1.5' : 'grid-cols-2 gap-2'}`}>
+              <div className={cn('grid gap-2', isMobile ? 'grid-cols-1' : 'grid-cols-2')}>
                 {STARTERS.map(s => (
                   <button
                     key={s.label}
@@ -182,25 +226,44 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                     className="group flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border/40 bg-card/50 hover:bg-accent/40 hover:border-border transition-all text-left"
                   >
                     <s.icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
-                    <div className="min-w-0">
-                      <span className="text-xs font-medium text-foreground/90 group-hover:text-foreground">{s.label}</span>
-                    </div>
+                    <span className="text-xs font-medium text-foreground/90 group-hover:text-foreground">{s.label}</span>
                   </button>
                 ))}
               </div>
 
-              {/* Lightweight recents */}
+              {/* Saved shortcuts */}
+              {recentShortcuts.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider mb-1.5 px-0.5 flex items-center gap-1">
+                    <Bookmark className="h-2.5 w-2.5" /> Saved
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {recentShortcuts.map((s: any) => (
+                      <button
+                        key={s.id}
+                        onClick={() => handleShortcut(s)}
+                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-md bg-muted/50 hover:bg-muted transition-colors truncate max-w-[220px]"
+                      >
+                        <Bookmark className="h-2.5 w-2.5 shrink-0" />
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Session recents */}
               {recents.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider mb-1.5 px-0.5">
-                    Recent
+                  <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider mb-1.5 px-0.5 flex items-center gap-1">
+                    <Clock className="h-2.5 w-2.5" /> Recent
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {recents.map((r, i) => (
                       <button
                         key={i}
-                        onClick={() => handleRecent(r.command)}
-                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-md bg-muted/60 hover:bg-muted transition-colors truncate max-w-[200px]"
+                        onClick={() => setPrefill(r.command)}
+                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-md bg-muted/40 hover:bg-muted transition-colors truncate max-w-[200px]"
                       >
                         <Clock className="h-2.5 w-2.5 shrink-0" />
                         {r.label}
@@ -215,6 +278,18 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
           {/* Output area */}
           {(result || isGenerating) && (
             <div className="w-full max-w-2xl">
+              {/* Save shortcut action */}
+              {result && lastCommand && (
+                <div className="flex items-center justify-end mb-2">
+                  <button
+                    onClick={handleSaveShortcut}
+                    className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <PlusCircle className="h-3 w-3" /> Save as shortcut
+                  </button>
+                </div>
+              )}
+
               <CommandOutput
                 output={result?.output || ''}
                 blocks={result?.blocks || []}
