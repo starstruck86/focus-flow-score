@@ -11,7 +11,7 @@ const corsHeaders = {
 // LAYER 1 — DIRECT PROVIDER ADAPTERS
 // No Lovable gateway — all providers called directly.
 // ═══════════════════════════════════════════════════════════
-type ProviderKey = "openai" | "anthropic" | "perplexity";
+type ProviderKey = "openai" | "anthropic" | "perplexity" | "lovable";
 
 interface NormalizedResponse {
   text: string;
@@ -229,12 +229,65 @@ async function perplexityAdapter(req: AdapterRequest, signal: AbortSignal): Prom
   return { text, citations, provider: "perplexity", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
 }
 
+// ── Lovable AI Gateway Adapter ────────────────────────────
+async function lovableAdapter(req: AdapterRequest, signal: AbortSignal): Promise<NormalizedResponse> {
+  const start = Date.now();
+  const key = Deno.env.get("LOVABLE_API_KEY");
+  if (!key) {
+    return { text: "", provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+      error: { type: "config", message: "LOVABLE_API_KEY not configured" } };
+  }
+
+  const body: any = {
+    model: req.model,
+    messages: req.messages,
+    temperature: req.temperature ?? 0.7,
+  };
+  if (req.maxTokens) body.max_tokens = req.maxTokens;
+  if (req.tools?.length) {
+    body.tools = req.tools;
+    if (req.toolChoice) body.tool_choice = req.toolChoice;
+  }
+  if (req.reasoning) body.reasoning = req.reasoning;
+
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => "");
+    console.error(`[lovable-gateway] error ${resp.status}: ${errText.slice(0, 200)}`);
+    return { text: "", provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+      error: { type: `http_${resp.status}`, message: `Lovable gateway error: ${resp.status}` } };
+  }
+
+  const data = await resp.json();
+  const choice = data.choices?.[0];
+  if (!choice) {
+    return { text: "", provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+      error: { type: "empty_response", message: "Lovable gateway returned no choices" } };
+  }
+
+  let text = choice.message?.content || "";
+  let structured: any = undefined;
+  const toolCall = choice.message?.tool_calls?.[0];
+  if (toolCall?.function?.arguments) {
+    try { structured = JSON.parse(toolCall.function.arguments); } catch { /* ignore */ }
+  }
+
+  return { text, structured, provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
+}
+
 type AdapterFn = (req: AdapterRequest, signal: AbortSignal) => Promise<NormalizedResponse>;
 
 const ADAPTERS: Record<ProviderKey, AdapterFn> = {
   openai: openaiAdapter,
   anthropic: anthropicAdapter,
   perplexity: perplexityAdapter,
+  lovable: lovableAdapter,
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -245,8 +298,9 @@ const PROVIDER_HEALTH = {
   openaiDirect: !!Deno.env.get("OPENAI_API_KEY"),
   anthropicDirect: !!Deno.env.get("ANTHROPIC_API_KEY"),
   perplexityDirect: !!Deno.env.get("PERPLEXITY_API_KEY"),
+  lovableGateway: !!Deno.env.get("LOVABLE_API_KEY"),
 };
-console.log(`[provider-health] OpenAI direct: ${PROVIDER_HEALTH.openaiDirect ? "ENABLED" : "DISABLED"} | Anthropic direct: ${PROVIDER_HEALTH.anthropicDirect ? "ENABLED" : "DISABLED"} | Perplexity direct: ${PROVIDER_HEALTH.perplexityDirect ? "ENABLED" : "DISABLED"}`);
+console.log(`[provider-health] OpenAI: ${PROVIDER_HEALTH.openaiDirect ? "ON" : "OFF"} | Anthropic: ${PROVIDER_HEALTH.anthropicDirect ? "ON" : "OFF"} | Perplexity: ${PROVIDER_HEALTH.perplexityDirect ? "ON" : "OFF"} | Lovable: ${PROVIDER_HEALTH.lovableGateway ? "ON" : "OFF"}`);
 
 // ═══════════════════════════════════════════════════════════
 // LAYER 2 — ROUTER
@@ -270,14 +324,14 @@ interface LLMRoute {
 // - Perplexity = external research ONLY — fallback: OpenAI
 // - Anthropic = artifact engine ONLY (in strategy-transform-output, NOT here as primary)
 const ROUTES: Record<TaskType, LLMRoute> = {
-  chat_general:         { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.7, maxTokens: 4096, useTools: false },
-  deep_research:        { primaryProvider: "perplexity", model: "sonar-pro",     fallbackProvider: "openai", fallbackModel: "openai/gpt-5-mini", temperature: 0.3, maxTokens: 8192, useTools: false },
-  email_evaluation:     { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.4, maxTokens: 4096, useTools: true },
-  territory_tiering:    { primaryProvider: "openai", model: "openai/gpt-5",      fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.2, maxTokens: 8192, useTools: true, reasoning: { effort: "medium" } },
-  account_plan:         { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
-  opportunity_strategy: { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
-  brainstorm:           { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.9, maxTokens: 4096, useTools: true },
-  rollup:               { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.3, maxTokens: 4096, useTools: true },
+  chat_general:         { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.7, maxTokens: 4096, useTools: false },
+  deep_research:        { primaryProvider: "perplexity", model: "sonar-pro",                   fallbackProvider: "lovable", fallbackModel: "google/gemini-3-flash-preview", temperature: 0.3, maxTokens: 8192, useTools: false },
+  email_evaluation:     { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.4, maxTokens: 4096, useTools: true },
+  territory_tiering:    { primaryProvider: "lovable", model: "google/gemini-2.5-pro",         fallbackProvider: "lovable", fallbackModel: "google/gemini-3-flash-preview", temperature: 0.2, maxTokens: 8192, useTools: true, reasoning: { effort: "medium" } },
+  account_plan:         { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.5, maxTokens: 8192, useTools: true },
+  opportunity_strategy: { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.5, maxTokens: 8192, useTools: true },
+  brainstorm:           { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.9, maxTokens: 4096, useTools: true },
+  rollup:               { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.3, maxTokens: 4096, useTools: true },
 };
 
 function resolveLLMRoute(taskType: string): LLMRoute {
@@ -285,35 +339,19 @@ function resolveLLMRoute(taskType: string): LLMRoute {
 
   // ── PERPLEXITY GUARDRAIL — only deep_research may use Perplexity ──
   if (route.primaryProvider === "perplexity" && taskType !== "deep_research") {
-    console.error(`[routing] GUARDRAIL: task=${taskType} tried to use Perplexity — forcing OpenAI`);
-    route.primaryProvider = "openai";
-    route.model = "openai/gpt-5-mini";
+    console.error(`[routing] GUARDRAIL: task=${taskType} tried to use Perplexity — forcing Lovable`);
+    route.primaryProvider = "lovable";
+    route.model = "google/gemini-3-flash-preview";
   }
 
   // ── RUNTIME KEY GUARDS ──
-  if (route.primaryProvider === "openai" && !PROVIDER_HEALTH.openaiDirect) {
-    console.error(`[routing] OPENAI_API_KEY missing — cannot serve task=${taskType}`);
-    if (PROVIDER_HEALTH.anthropicDirect) {
-      console.warn(`[routing] Downgrading ${taskType} to Anthropic`);
-      route.primaryProvider = "anthropic";
-      route.model = "claude-sonnet-4-20250514";
-    }
-  }
   if (route.primaryProvider === "perplexity" && !PROVIDER_HEALTH.perplexityDirect) {
-    console.warn(`[routing] PERPLEXITY_API_KEY missing — downgrading deep_research to OpenAI`);
-    route.primaryProvider = "openai";
-    route.model = "openai/gpt-5-mini";
+    console.warn(`[routing] PERPLEXITY_API_KEY missing — downgrading deep_research to Lovable`);
+    route.primaryProvider = "lovable";
+    route.model = "google/gemini-3-flash-preview";
   }
-  if (route.fallbackProvider === "anthropic" && !PROVIDER_HEALTH.anthropicDirect) {
-    console.warn(`[routing] ANTHROPIC_API_KEY missing — fallback downgraded to OpenAI for ${taskType}`);
-    route.fallbackProvider = "openai";
-    route.fallbackModel = "openai/gpt-5";
-  }
-  if (route.fallbackProvider === "openai" && !PROVIDER_HEALTH.openaiDirect) {
-    if (PROVIDER_HEALTH.anthropicDirect) {
-      route.fallbackProvider = "anthropic";
-      route.fallbackModel = "claude-sonnet-4-20250514";
-    }
+  if (route.primaryProvider === "lovable" && !PROVIDER_HEALTH.lovableGateway) {
+    console.error(`[routing] LOVABLE_API_KEY missing — cannot serve task=${taskType}`);
   }
 
   return route;
