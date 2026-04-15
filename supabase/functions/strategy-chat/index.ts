@@ -315,6 +315,12 @@ async function callWithFallback(
   adapterReq: Omit<AdapterRequest, "model">,
   route: LLMRoute,
 ): Promise<NormalizedResponse> {
+  // ── SMOKE TEST MODE: force primary failure for fallback testing ──
+  const smokeTestForceFail = route._smokeTestForceFail === true;
+  if (smokeTestForceFail) {
+    console.log(`[routing] SMOKE_TEST_MODE: forcing primary failure for task=${taskType}`);
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 55000);
 
