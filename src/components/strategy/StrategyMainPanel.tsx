@@ -300,7 +300,7 @@ export function StrategyMainPanel({
       {/* Lane Tabs */}
       <div className="px-4 pt-2.5 shrink-0">
         <Tabs value={activeLane} onValueChange={setActiveLane}>
-          <TabsList className="h-8 bg-muted/30">
+          <TabsList className="h-8">
             {LANES.map(l => (
               <TabsTrigger key={l.value} value={l.value} className="text-xs px-3 h-6 data-[state=active]:bg-background">
                 {l.label}
@@ -318,14 +318,14 @@ export function StrategyMainPanel({
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-5">
-            <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center">
-              <ThreadIcon className="h-7 w-7 text-muted-foreground/50" />
+            <div className="h-14 w-14 rounded-2xl bg-muted flex items-center justify-center">
+              <ThreadIcon className="h-7 w-7 text-muted-foreground" />
             </div>
             <div className="text-center space-y-1.5">
-              <p className="text-sm font-medium text-foreground/80">
+              <p className="text-sm font-medium text-foreground">
                 {hasLinkedObject ? `Ready to strategize on ${linkedContext?.account?.name || linkedContext?.opportunity?.name}` : 'Ready to strategize'}
               </p>
-              <p className="text-xs text-muted-foreground max-w-[260px]">
+              <p className="text-xs text-muted-foreground max-w-[280px]">
                 Start a conversation, run a workflow above, or drop files to add context.
               </p>
             </div>
@@ -335,7 +335,7 @@ export function StrategyMainPanel({
                   key={i}
                   size="sm"
                   variant="outline"
-                  className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                  className="h-8 text-xs gap-1.5"
                   onClick={() => handleSuggestedPrompt(sp.text)}
                 >
                   <sp.icon className="h-3 w-3" />
