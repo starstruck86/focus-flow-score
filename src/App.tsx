@@ -56,6 +56,7 @@ const SkillBuilderSession = lazy(() => import("./pages/SkillBuilderSession"));
 const SkillBuilderAudit = lazy(() => import("./pages/SkillBuilderAudit"));
 const ReliabilityQA = lazy(() => import("./pages/ReliabilityQA"));
 const ObservabilityDashboard = lazy(() => import("./pages/ObservabilityDashboard"));
+const SmokeTest = lazy(() => import("./pages/SmokeTest"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -224,6 +225,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>
                         <ObservabilityDashboard />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/smoke-test" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback />}>
+                        <SmokeTest />
                       </Suspense>
                     </ProtectedRoute>
                   } />
