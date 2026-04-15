@@ -2,7 +2,7 @@
  * Strategy Workspace — durable strategic operating system.
  * Three-column layout: thread sidebar (drawer on mobile), main working area, right rail.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { StrategyThreadSidebar } from '@/components/strategy/StrategyThreadSidebar';
 import { StrategyMainPanel } from '@/components/strategy/StrategyMainPanel';
@@ -26,6 +26,16 @@ import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 
 export default function Strategy() {
   const isMobile = useIsMobile();
+
+  // Make Layout's <main> act as a flex container so Strategy fills it
+  useEffect(() => {
+    const main = document.querySelector('main[data-testid="main-content"]');
+    if (!main) return;
+    main.classList.add('!overflow-hidden', '!flex', '!flex-col', '!p-0', '!pb-0');
+    return () => {
+      main.classList.remove('!overflow-hidden', '!flex', '!flex-col', '!p-0', '!pb-0');
+    };
+  }, []);
   const {
     threads, activeThread, setActiveThreadId, createThread, createThreadWithOpts, updateThread, isLoading,
   } = useStrategyThreads();
