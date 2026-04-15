@@ -90,8 +90,8 @@ function RailSection({ title, icon: Icon, children, empty, count, action }: {
 }
 
 export function StrategyRightRail({
-  thread, onCollapse, linkedContext, memories, uploads, outputs,
-  onSaveMemory, rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
+  thread, onCollapse, linkedContext, memories, uploads, outputs, artifacts,
+  onSaveMemory, rollup, memorySuggestions, isRollupLoading, onTriggerRollup, onRegenerateArtifact,
 }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
