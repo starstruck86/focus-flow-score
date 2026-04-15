@@ -6128,6 +6128,7 @@ export type Database = {
           file_name: string
           file_type: string | null
           id: string
+          metadata_json: Json | null
           parsed_text: string | null
           storage_path: string
           suggested_object_id: string | null
@@ -6141,6 +6142,7 @@ export type Database = {
           file_name: string
           file_type?: string | null
           id?: string
+          metadata_json?: Json | null
           parsed_text?: string | null
           storage_path: string
           suggested_object_id?: string | null
@@ -6154,6 +6156,7 @@ export type Database = {
           file_name?: string
           file_type?: string | null
           id?: string
+          metadata_json?: Json | null
           parsed_text?: string | null
           storage_path?: string
           suggested_object_id?: string | null
