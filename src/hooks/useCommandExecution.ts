@@ -252,9 +252,10 @@ export function useCommandExecution() {
       const templateLabel = template?.name || command.template?.name || 'Custom';
       const depth = template?.preferred_ki_depth || 'standard';
 
-      // Context-aware KI retrieval with explainability
+      // Context-aware KI retrieval with playbook orchestration
       let kiContext = '';
       let kiCount = 0;
+      let playbookUsed: string | undefined;
       if (useKIs) {
         const kis = await retrieveContextualKIs({
           userId: user.id,
@@ -266,12 +267,28 @@ export function useCommandExecution() {
         });
         kiContext = kis.text;
         kiCount = kis.count;
+        playbookUsed = kis.explainability.playbookUsed;
         setLastKIExplainability(kis.explainability);
       }
 
+      // Build attachment context
+      let attachmentContext = '';
+      if (command.attachments && command.attachments.length > 0) {
+        const attDescriptions = command.attachments.map(att => {
+          if (att.type === 'url') return `[Link: ${att.url}]`;
+          return `[Attached: ${att.name} (${att.mimeType || att.type})]`;
+        });
+        attachmentContext = `\n--- ATTACHED CONTEXT ---\n${attDescriptions.join('\n')}\n--- END ATTACHMENTS ---\n`;
+      }
+
       const resourceContext = kiContext
-        ? `\n--- ACTIVE KNOWLEDGE (${kiCount} items, context-matched) ---\n${kiContext}\n--- END KNOWLEDGE ---\nUse this knowledge to ground your output. Reference specific tactics, frameworks, and strategies where relevant.`
+        ? `\n--- STRATEGIC KNOWLEDGE${playbookUsed ? ` (${playbookUsed})` : ''} ---\n${kiContext}\n--- END KNOWLEDGE ---\nUse this organized strategic knowledge to ground your output. Reference specific tactics, frameworks, and strategies where relevant.`
         : '';
+
+      const fullContext = [
+        command.freeText || undefined,
+        attachmentContext || undefined,
+      ].filter(Boolean).join('\n\n');
 
       const { data, error } = await supabase.functions.invoke('generate-execution-draft', {
         body: {
@@ -279,7 +296,7 @@ export function useCommandExecution() {
           actionLabel: templateLabel,
           actionPrompt,
           accountName: command.account?.name,
-          contextText: command.freeText || undefined,
+          contextText: fullContext || undefined,
           resourceContext: resourceContext || undefined,
         },
       });
@@ -290,9 +307,11 @@ export function useCommandExecution() {
       const blocks = parseOutputBlocks(rawOutput);
 
       const sources: string[] = [];
-      if (kiCount > 0) sources.push(`${kiCount} KIs (context-matched)`);
+      if (playbookUsed) sources.push(`Playbook: ${playbookUsed}`);
+      if (kiCount > 0) sources.push(`${kiCount} KIs`);
+      if (command.attachments?.length) sources.push(`${command.attachments.length} attachment${command.attachments.length !== 1 ? 's' : ''}`);
       if (command.account) sources.push(`Account: ${command.account.name}`);
-      if (command.opportunity) sources.push(`Opportunity: ${command.opportunity.name}`);
+      if (command.opportunity) sources.push(`Opp: ${command.opportunity.name}`);
       sources.push('AI Generation');
 
       setResult({
@@ -302,6 +321,7 @@ export function useCommandExecution() {
         sources,
         kiCount,
         templateId: command.template?.id || null,
+        playbookUsed,
       });
 
       // Track template usage
