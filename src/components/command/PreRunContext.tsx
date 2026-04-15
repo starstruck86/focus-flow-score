@@ -1,11 +1,8 @@
 /**
  * PreRunContext — compact pre-run trust strip.
- * Shows exactly what context will be used in the run.
- *
- * CONTRAST: All text here is informational/interactive and must be readable.
- * Uses muted-foreground (not /30 or /40).
  */
 import { Building2, DollarSign, FileText, Brain, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Sparkles, BookOpen, Paperclip } from 'lucide-react';
+import { STRATEGY_UI } from '@/lib/strategy-ui';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import type { CommandToken } from '@/lib/commandTypes';
@@ -33,11 +30,10 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
   const ex = lastKIExplainability;
 
   return (
-    <div className="mt-2.5 px-1 space-y-2">
-      {/* Context strip */}
-      <div className="flex items-center gap-3 flex-wrap text-[11px]">
+    <div className="mt-3 px-0.5 space-y-3">
+      <div className={cn(STRATEGY_UI.surface.context, 'flex items-center gap-3 flex-wrap text-[11px] px-3.5 py-2.5')}>
         {template && (
-          <span className="inline-flex items-center gap-1 text-amber-400 font-medium">
+          <span className="inline-flex items-center gap-1 text-amber-400/90 font-medium">
             <FileText className="h-3 w-3 opacity-70" />
             {template.name}
           </span>
@@ -54,24 +50,20 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
             {opportunity.name}
           </span>
         )}
-
         {attachmentCount > 0 && (
           <span className="inline-flex items-center gap-1 text-muted-foreground font-medium">
             <Paperclip className="h-3 w-3" />
             {attachmentCount} file{attachmentCount !== 1 ? 's' : ''}
           </span>
         )}
-
         {(template || account || opportunity || attachmentCount > 0) && kiCount > 0 && (
-          <span className="text-border">·</span>
+          <span className="text-muted-foreground/60">·</span>
         )}
-
-        {/* KI toggle */}
         <button
           onClick={() => onToggleKIs(!useKIs)}
           className={cn(
             'inline-flex items-center gap-1 transition-colors duration-100',
-            useKIs ? 'text-primary/80 font-medium' : 'text-muted-foreground/60'
+            useKIs ? 'text-primary/80 font-medium' : 'text-foreground/80 font-medium hover:text-foreground'
           )}
         >
           <Brain className="h-3 w-3" />
@@ -87,20 +79,16 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
             </>
           )}
         </button>
-
-        {/* Playbook indicator */}
         {useKIs && ex?.playbookUsed && (
-          <span className="inline-flex items-center gap-1 text-primary/70 text-[10px] font-medium">
+          <span className="inline-flex items-center gap-1 text-primary/80 text-[10px] font-medium">
             <BookOpen className="h-2.5 w-2.5" />
             {ex.playbookUsed}
           </span>
         )}
-
-        {/* Detail toggle */}
         {useKIs && ex && ex.topThemes.length > 0 && (
           <button
             onClick={() => setShowKIDetail(!showKIDetail)}
-            className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-foreground/80 transition-colors duration-100"
+            className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-foreground transition-colors duration-100"
           >
             {showKIDetail ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             <span className="text-[10px]">detail</span>
@@ -108,35 +96,27 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
         )}
       </div>
 
-      {/* KI explainability panel */}
       {showKIDetail && ex && (
-        <div className="rounded-lg border border-border/20 bg-card/40 px-4 py-3 space-y-2.5 animate-in fade-in-0 slide-in-from-top-1 duration-100">
-          {/* Retrieval reasoning */}
+        <div className={cn(STRATEGY_UI.surface.context, 'px-4 py-3.5 space-y-3 animate-in fade-in-0 slide-in-from-top-1 duration-100')}>
           <div className="flex items-start gap-2">
             <Sparkles className="h-3 w-3 text-primary/60 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-muted-foreground leading-relaxed">{ex.retrievalReasoning}</p>
+            <p className="text-[11px] text-foreground/80 leading-relaxed">{ex.retrievalReasoning}</p>
           </div>
-
-          {/* Retrieval layers */}
           {ex.retrievalLayers && ex.retrievalLayers.length > 0 && (
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground/80">
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground flex-wrap">
               {ex.retrievalLayers.map((layer, i) => (
                 <span key={layer} className="flex items-center gap-1">
-                  {i > 0 && <span className="text-border">→</span>}
+                  {i > 0 && <span className="text-muted-foreground/60">→</span>}
                   {layer}
                 </span>
               ))}
             </div>
           )}
-
-          {/* Relevance breakdown */}
-          <div className="flex items-center gap-4 text-[11px]">
+          <div className="flex items-center gap-4 text-[11px] flex-wrap">
             <span className="text-foreground/80 font-medium">{ex.relevanceBreakdown.high} strategic</span>
-            <span className="text-muted-foreground">{ex.relevanceBreakdown.medium} tactical</span>
-            <span className="text-muted-foreground/70">{ex.relevanceBreakdown.low} supporting</span>
+            <span className="text-foreground/75">{ex.relevanceBreakdown.medium} tactical</span>
+            <span className="text-muted-foreground">{ex.relevanceBreakdown.low} supporting</span>
           </div>
-
-          {/* Themes + Frameworks */}
           {(ex.topThemes.length > 0 || ex.topFrameworks.length > 0) && (
             <div className="flex items-center gap-1.5 flex-wrap">
               {ex.topThemes.map(theme => (
@@ -145,7 +125,7 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
                 </span>
               ))}
               {ex.topFrameworks.map(fw => (
-                <span key={fw} className="text-[10px] px-2 py-0.5 rounded-md bg-muted/30 text-muted-foreground font-medium">
+                <span key={fw} className="text-[10px] px-2 py-0.5 rounded-md bg-muted/35 text-foreground/75 font-medium">
                   {fw}
                 </span>
               ))}
