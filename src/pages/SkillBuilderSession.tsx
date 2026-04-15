@@ -219,42 +219,31 @@ export default function SkillBuilderSession() {
     toast.success('Skill Builder session complete!');
   }, [sessionId, repScores]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Audio: auto-narrate current block
+  // Audio: narrate current block (non-blocking — text always shown first)
+  const [audioUnavailable, setAudioUnavailable] = useState(false);
   useEffect(() => {
     if (deliveryMode !== 'audio' || sessionState !== 'active' || !currentBlock) return;
 
-    const narrateBlock = async () => {
-      const block = currentBlock;
-      let text = '';
+    const block = currentBlock;
+    let text = '';
 
-      if (block.type === 'mental_model') {
-        text = `Mental model. ${block.levelName}. ${block.levelDescription}`;
-      } else if (block.type === 'ki_intro') {
-        text = `Key insight. ${block.kiTitle}. Pattern: ${FOCUS_PATTERN_LABELS[block.focusPattern] ?? block.focusPattern}.`;
-      } else if (block.type === 'reflection') {
-        text = `Time to reflect. ${block.prompt}`;
-      } else if (block.type === 'rep') {
-        text = `Practice rep. ${block.scenarioContext}. The buyer says: "${block.scenarioObjection}"`;
-      }
+    if (block.type === 'mental_model') {
+      text = `Mental model. ${block.levelName}. ${block.levelDescription}`;
+    } else if (block.type === 'ki_intro') {
+      text = `Key insight. ${block.kiTitle}. Pattern: ${FOCUS_PATTERN_LABELS[block.focusPattern] ?? block.focusPattern}.`;
+    } else if (block.type === 'reflection') {
+      text = `Time to reflect. ${block.prompt}`;
+    } else if (block.type === 'rep') {
+      text = `Practice rep. ${block.scenarioContext}. The buyer says: "${block.scenarioObjection}"`;
+    }
 
-      if (!text) return;
+    if (!text) return;
 
-      dave.recordTranscript('dave', text);
-      try {
-        await dave.speak(text);
-      } catch {
-        // TTS failed — continue in visual
-      }
-
-      // Auto-advance narration blocks
-      if (block.type === 'mental_model' || block.type === 'ki_intro') {
-        // Small pause then advance
-        await new Promise(r => setTimeout(r, 1500));
-        advanceBlock();
-      }
-    };
-
-    narrateBlock();
+    dave.recordTranscript('dave', text);
+    // Fire-and-forget: audio plays alongside visible text, never blocks flow
+    dave.speak(text).catch(() => {
+      setAudioUnavailable(true);
+    });
   }, [currentBlockIndex, deliveryMode, sessionState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleMode = useCallback(() => {
@@ -312,11 +301,19 @@ export default function SkillBuilderSession() {
       <div className={cn('px-4 pt-4 space-y-4', SHELL.main.bottomPad)}>
         {/* Signal banner for audio mode */}
         {deliveryMode === 'audio' && (
-          <DaveSignalBanner
-            message={dave.signalMessage}
-            isOffline={dave.isOffline}
-            pendingOpsCount={dave.pendingOpsCount}
-          />
+          <>
+            <DaveSignalBanner
+              message={dave.signalMessage}
+              isOffline={dave.isOffline}
+              pendingOpsCount={dave.pendingOpsCount}
+            />
+            {audioUnavailable && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted border border-border">
+                <VolumeX className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <p className="text-[11px] text-muted-foreground">Audio unavailable — showing text instead</p>
+              </div>
+            )}
+          </>
         )}
 
         {/* Remediation context from closed-loop */}
@@ -444,6 +441,8 @@ export default function SkillBuilderSession() {
             onAdvance={advanceBlock}
             onStartRep={startRep}
             onRepComplete={handleRepComplete}
+            dave={deliveryMode === 'audio' ? dave : undefined}
+            isFromTraining={!!trainingContent && !!resolvedSession}
           />
         )}
       </div>
@@ -458,32 +457,61 @@ function BlockRenderer({
   onAdvance,
   onStartRep,
   onRepComplete,
+  dave,
+  isFromTraining,
 }: {
   block: SkillBlock;
   onAdvance: () => void;
   onStartRep: (block: SkillBlock) => void;
   onRepComplete: (score?: number) => void;
+  dave?: ReturnType<typeof useDaveVoiceController>;
+  isFromTraining?: boolean;
 }) {
   switch (block.type) {
     case 'mental_model':
-      return <MentalModelBlock block={block} onAdvance={onAdvance} />;
+      return <MentalModelBlock block={block} onAdvance={onAdvance} dave={dave} />;
     case 'ki_intro':
-      return <KIIntroBlock block={block} onAdvance={onAdvance} />;
+      return <KIIntroBlock block={block} onAdvance={onAdvance} dave={dave} />;
     case 'rep':
-      return <RepBlock block={block} onStartRep={onStartRep} />;
+      return <RepBlock block={block} onStartRep={onStartRep} isFromTraining={isFromTraining} dave={dave} />;
     case 'reflection':
-      return <ReflectionBlock block={block} onAdvance={onAdvance} />;
+      return <ReflectionBlock block={block} onAdvance={onAdvance} dave={dave} />;
     default:
       return null;
   }
 }
+// ── Optional audio play button ─────────────────────────────────────
+type DaveController = ReturnType<typeof useDaveVoiceController>;
 
-function MentalModelBlock({ block, onAdvance }: { block: SkillBlock & { type: 'mental_model' }; onAdvance: () => void }) {
+function PlayAudioButton({ text, dave }: { text: string; dave?: DaveController }) {
+  const [playing, setPlaying] = useState(false);
+  if (!dave) return null;
+  return (
+    <button
+      onClick={async () => {
+        setPlaying(true);
+        try { await dave.speak(text); } catch { /* ignore */ }
+        setPlaying(false);
+      }}
+      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+      disabled={playing}
+    >
+      <Volume2 className="h-3 w-3" />
+      {playing ? 'Playing…' : 'Play Audio'}
+    </button>
+  );
+}
+
+function MentalModelBlock({ block, onAdvance, dave }: { block: SkillBlock & { type: 'mental_model' }; onAdvance: () => void; dave?: DaveController }) {
+  const narration = `Mental model. ${block.levelName}. ${block.levelDescription}`;
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Brain className="h-4 w-4 text-primary" />
-        <p className="text-sm font-medium">Mental Model</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-primary" />
+          <p className="text-sm font-medium">Mental Model</p>
+        </div>
+        <PlayAudioButton text={narration} dave={dave} />
       </div>
       <div className="space-y-2">
         <p className="text-sm font-semibold text-foreground">{block.levelName}</p>
@@ -506,12 +534,16 @@ function MentalModelBlock({ block, onAdvance }: { block: SkillBlock & { type: 'm
   );
 }
 
-function KIIntroBlock({ block, onAdvance }: { block: SkillBlock & { type: 'ki_intro' }; onAdvance: () => void }) {
+function KIIntroBlock({ block, onAdvance, dave }: { block: SkillBlock & { type: 'ki_intro' }; onAdvance: () => void; dave?: DaveController }) {
+  const narration = `Key insight. ${block.kiTitle}. Pattern: ${FOCUS_PATTERN_LABELS[block.focusPattern] ?? block.focusPattern}.`;
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <BookOpen className="h-4 w-4 text-primary" />
-        <p className="text-sm font-medium">Knowledge Focus</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BookOpen className="h-4 w-4 text-primary" />
+          <p className="text-sm font-medium">Knowledge Focus</p>
+        </div>
+        <PlayAudioButton text={narration} dave={dave} />
       </div>
       <div className="space-y-2">
         <p className="text-sm font-semibold text-foreground">{block.kiTitle}</p>
@@ -529,22 +561,33 @@ function KIIntroBlock({ block, onAdvance }: { block: SkillBlock & { type: 'ki_in
   );
 }
 
-function RepBlock({ block, onStartRep }: { block: SkillBlock & { type: 'rep' }; onStartRep: (block: SkillBlock) => void }) {
+function RepBlock({ block, onStartRep, isFromTraining, dave }: { block: SkillBlock & { type: 'rep' }; onStartRep: (block: SkillBlock) => void; isFromTraining?: boolean; dave?: DaveController }) {
+  const narration = `Practice rep. ${block.scenarioContext}. The buyer says: "${block.scenarioObjection}"`;
   return (
     <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Dumbbell className="h-4 w-4 text-primary" />
-        <p className="text-sm font-medium">Practice Rep</p>
-      </div>
-      <div className="space-y-2">
-        <p className="text-sm text-foreground">{block.scenarioContext}</p>
-        <div className="rounded-md bg-muted/50 p-3">
-          <p className="text-xs text-muted-foreground italic">"{block.scenarioObjection}"</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Dumbbell className="h-4 w-4 text-primary" />
+          <p className="text-sm font-medium">Practice Rep</p>
         </div>
-        <Badge variant="outline" className="text-[10px]">
-          {block.difficulty}
-        </Badge>
+        <PlayAudioButton text={narration} dave={dave} />
       </div>
+      {isFromTraining ? (
+        <div className="space-y-1.5">
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground italic">"{block.scenarioObjection}"</p>
+          </div>
+          <Badge variant="outline" className="text-[10px]">{block.difficulty}</Badge>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm text-foreground">{block.scenarioContext}</p>
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground italic">"{block.scenarioObjection}"</p>
+          </div>
+          <Badge variant="outline" className="text-[10px]">{block.difficulty}</Badge>
+        </div>
+      )}
       <button
         onClick={() => onStartRep(block)}
         className="w-full h-10 rounded-md bg-primary text-primary-foreground text-sm font-semibold flex items-center justify-center gap-1"
@@ -555,14 +598,18 @@ function RepBlock({ block, onStartRep }: { block: SkillBlock & { type: 'rep' }; 
   );
 }
 
-function ReflectionBlock({ block, onAdvance }: { block: SkillBlock & { type: 'reflection' }; onAdvance: () => void }) {
+function ReflectionBlock({ block, onAdvance, dave }: { block: SkillBlock & { type: 'reflection' }; onAdvance: () => void; dave?: DaveController }) {
   const [reflection, setReflection] = useState('');
+  const narration = `Time to reflect. ${block.prompt}`;
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Brain className="h-4 w-4 text-amber-500" />
-        <p className="text-sm font-medium">Reflect</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-accent-foreground" />
+          <p className="text-sm font-medium">Reflect</p>
+        </div>
+        <PlayAudioButton text={narration} dave={dave} />
       </div>
       <p className="text-sm text-muted-foreground leading-relaxed">{block.prompt}</p>
       <textarea
