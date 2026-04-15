@@ -15,10 +15,27 @@ import { SourceInspectorPanel } from './SourceInspectorPanel';
 /** Extract only human-readable text from content_json, never raw debug/provider metadata */
 function extractDisplayText(contentJson: any): string {
   if (!contentJson) return '';
-  if (typeof contentJson.text === 'string' && contentJson.text.trim()) return contentJson.text;
-  if (typeof contentJson.content === 'string' && contentJson.content.trim()) return contentJson.content;
-  if (typeof contentJson.message === 'string' && contentJson.message.trim()) return contentJson.message;
+
+  // Priority: explicit text fields only
+  for (const key of ['text', 'content', 'message', 'summary', 'executive_summary'] as const) {
+    const val = contentJson[key];
+    if (typeof val === 'string' && val.trim()) {
+      // Guard: reject anything that looks like raw JSON/debug payload
+      const trimmed = val.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try { JSON.parse(trimmed); continue; } catch { /* not JSON, safe to use */ }
+      }
+      return val;
+    }
+  }
+
+  // Never fall through to JSON.stringify — return empty to trigger placeholder
   return '';
+}
+
+/** Check if a value is safe to render (not a raw object/debug blob) */
+function isSafeToRender(val: any): val is string {
+  return typeof val === 'string' && val.trim().length > 0;
 }
 
 interface Props {
@@ -95,16 +112,16 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
               : 'rounded-xl rounded-bl-sm px-3.5 py-2.5 bg-card border border-border/30 text-foreground shadow-sm',
         )}
       >
-        {text ? (
+        {isSafeToRender(text) ? (
           <div className="whitespace-pre-wrap">{text}</div>
         ) : (
-          <div className="flex items-center gap-2 py-0.5">
+          <div className="flex items-center gap-1.5 py-0.5">
             <div className="flex gap-0.5">
-              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:0ms]" />
-              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:150ms]" />
-              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:300ms]" />
+              <span className="h-0.5 w-0.5 rounded-full bg-primary/30 animate-bounce [animation-delay:0ms]" />
+              <span className="h-0.5 w-0.5 rounded-full bg-primary/30 animate-bounce [animation-delay:150ms]" />
+              <span className="h-0.5 w-0.5 rounded-full bg-primary/30 animate-bounce [animation-delay:300ms]" />
             </div>
-            <span className="text-[11px] text-foreground/35">Generating…</span>
+            <span className="text-[10px] text-foreground/30">Generating…</span>
           </div>
         )}
         {!isUser && !isSystem && text && (
