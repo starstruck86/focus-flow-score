@@ -243,7 +243,11 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { sourceOutputId, targetArtifactType, threadId, parentArtifactId, refineInstructions } = body;
+    const { sourceOutputId, targetArtifactType, threadId, parentArtifactId, refineInstructions, force_primary_failure } = body;
+
+    // Smoke test mode: allow forced fallback only when SMOKE_TEST_MODE env is set
+    const smokeTestMode = Deno.env.get("SMOKE_TEST_MODE") === "true";
+    const forceFallback = smokeTestMode && force_primary_failure === true;
 
     if (!targetArtifactType || !ARTIFACT_TOOLS[targetArtifactType]) {
       return new Response(JSON.stringify({ error: "Invalid targetArtifactType" }), {
