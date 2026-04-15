@@ -2,13 +2,16 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   PanelLeftOpen, PanelRightOpen, Search, Mail, Target, Map,
   FileText, Send, Paperclip, Upload, Loader2, Zap, Database,
-  Building2, MessageSquare,
+  Building2, MessageSquare, MoreHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+} from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { STRATEGY_UI } from '@/lib/strategy-ui';
 import { StrategyCommandCenter } from './StrategyCommandCenter';
@@ -16,7 +19,6 @@ import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
 import { StrategyMessageBubble } from './StrategyMessageBubble';
 import type { StrategyThread } from '@/types/strategy';
-import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 const WORKFLOWS = [
@@ -102,11 +104,22 @@ export function StrategyMainPanel({
   const [activeLane, setActiveLane] = useState<string>(thread?.lane ?? 'research');
   const [isDragOver, setIsDragOver] = useState(false);
   const [activeWorkflow, setActiveWorkflow] = useState<string | null>(null);
+  const [workflowSheetOpen, setWorkflowSheetOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const suggestedPrompts = useMemo(() => getSuggestedPrompts(thread, linkedContext), [thread?.id, linkedContext]);
   const recommendedWorkflows = useMemo(() => getRecommendedWorkflows(thread), [thread?.id]);
+
+  // Split workflows into visible (recommended) and overflow (rest)
+  const visibleWorkflows = useMemo(() =>
+    isMobile ? WORKFLOWS.filter(w => recommendedWorkflows.includes(w.key)).slice(0, 3) : WORKFLOWS,
+    [isMobile, recommendedWorkflows]
+  );
+  const overflowWorkflows = useMemo(() =>
+    isMobile ? WORKFLOWS.filter(w => !recommendedWorkflows.includes(w.key)) : [],
+    [isMobile, recommendedWorkflows]
+  );
 
   useEffect(() => {
     if (thread?.lane) setActiveLane(thread.lane);
@@ -129,6 +142,7 @@ export function StrategyMainPanel({
 
   const handleWorkflow = useCallback(async (workflowType: string) => {
     if (!thread || activeWorkflow || isSending) return;
+    setWorkflowSheetOpen(false);
     setActiveWorkflow(workflowType);
     try {
       const result = await runWorkflow(workflowType, { content: input.trim() || undefined });
@@ -191,6 +205,10 @@ export function StrategyMainPanel({
     : thread.thread_type === 'territory_linked' ? Map
     : MessageSquare;
 
+  const activeWorkflowLabel = activeWorkflow
+    ? WORKFLOWS.find(w => w.key === activeWorkflow)?.label ?? activeWorkflow.replace(/_/g, ' ')
+    : null;
+
   return (
     <div
       className={cn('flex-1 flex flex-col min-w-0 min-h-0 bg-background relative', isDragOver && 'ring-2 ring-primary/30 ring-inset')}
@@ -201,10 +219,10 @@ export function StrategyMainPanel({
       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect}
         accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.json,.xml,.html" />
 
-      {/* ── HEADER REGION (auto height, shrink-0) ── */}
-      <div className="shrink-0">
-        {/* Top Bar — thread title is the clear anchor */}
-        <div className="border-b border-border px-3 py-2 flex items-center gap-2">
+      {/* ── HEADER REGION ── */}
+      <div className="shrink-0 border-b border-border">
+        {/* Title bar */}
+        <div className="px-3 py-2 flex items-center gap-2">
           {sidebarCollapsed && (
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExpandSidebar}>
               <PanelLeftOpen className="h-4 w-4" />
@@ -212,6 +230,14 @@ export function StrategyMainPanel({
           )}
           <ThreadIcon className="h-4 w-4 text-primary/70 shrink-0" />
           <h1 className="text-sm font-semibold text-foreground truncate flex-1">{thread.title}</h1>
+
+          {/* Running status — lightweight inline pill next to title */}
+          {activeWorkflow && (
+            <Badge variant="secondary" className="text-[10px] gap-1 shrink-0 animate-pulse font-medium">
+              <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              {activeWorkflowLabel}
+            </Badge>
+          )}
           {isUploading && (
             <Badge variant="secondary" className="text-[10px] gap-1 animate-pulse">
               <Loader2 className="h-3 w-3 animate-spin" /> Uploading
@@ -224,43 +250,36 @@ export function StrategyMainPanel({
           )}
         </div>
 
-        {/* Scope + Workflows */}
-        <div className="px-3 pt-1.5 pb-1">
-          {/* Context badges — hidden on mobile */}
+        {/* Workflow row — single tight row with overflow affordance */}
+        <div className="px-3 pb-2 flex items-center gap-1.5">
+          {/* Context badges — desktop only, inline with workflows */}
           {!isMobile && (
-            <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-              <Badge variant="outline" className="text-[10px] font-medium">
+            <>
+              <Badge variant="outline" className="text-[10px] font-medium shrink-0">
                 {thread.thread_type.replace(/_/g, ' ')}
               </Badge>
-              <Badge variant="outline" className={cn('text-[10px]', getLaneColor(thread.lane))}>
+              <Badge variant="outline" className={cn('text-[10px] shrink-0', getLaneColor(thread.lane))}>
                 {thread.lane}
               </Badge>
               {linkedContext?.account && (
-                <Badge variant="secondary" className="text-[10px] gap-1">
+                <Badge variant="secondary" className="text-[10px] gap-1 shrink-0">
                   <Building2 className="h-2.5 w-2.5" />
                   {linkedContext.account.name}
                 </Badge>
               )}
               {linkedContext?.opportunity && (
-                <Badge variant="secondary" className="text-[10px] gap-1">
+                <Badge variant="secondary" className="text-[10px] gap-1 shrink-0">
                   <Target className="h-2.5 w-2.5" />
                   {linkedContext.opportunity.name}
                 </Badge>
               )}
-            </div>
+              <div className="w-px h-4 bg-border mx-0.5 shrink-0" />
+            </>
           )}
 
-          {/* Summary — only show on desktop */}
-          {thread.summary && !isMobile && (
-            <p className="text-xs text-foreground/60 line-clamp-1 leading-relaxed mb-1.5">{thread.summary}</p>
-          )}
-
-          {/* Workflow buttons — mobile: only recommended (max 3), desktop: all */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-            {(isMobile
-              ? WORKFLOWS.filter(w => recommendedWorkflows.includes(w.key)).slice(0, 3)
-              : WORKFLOWS
-            ).map(w => {
+          {/* Workflow buttons */}
+          <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+            {visibleWorkflows.map(w => {
               const isRunning = activeWorkflow === w.key;
               const isRecommended = recommendedWorkflows.includes(w.key);
               return (
@@ -286,99 +305,92 @@ export function StrategyMainPanel({
                 </Button>
               );
             })}
-            {/* Mobile: show "More" button if there are hidden workflows */}
-            {isMobile && WORKFLOWS.length > recommendedWorkflows.filter(k => WORKFLOWS.some(w => w.key === k)).length && (
+
+            {/* Overflow trigger — visually attached to workflow row */}
+            {overflowWorkflows.length > 0 && (
               <Button
-                size="sm"
+                size="icon"
                 variant="ghost"
-                className="h-7 text-[10px] px-2 shrink-0 text-foreground/50"
-                onClick={() => {
-                  toast.info('All workflows', {
-                    description: WORKFLOWS.filter(w => !recommendedWorkflows.includes(w.key)).map(w => w.label).join(', '),
-                    duration: 4000,
-                  });
-                }}
+                className="h-7 w-7 shrink-0 text-foreground/40 hover:text-foreground"
+                onClick={() => setWorkflowSheetOpen(true)}
+                title="More workflows"
               >
-                More…
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
             )}
           </div>
         </div>
-
-        {/* Active Workflow Banner — inside header region, above scroll */}
-        {activeWorkflow && (
-          <div className="px-3 pb-1.5">
-            <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5 flex items-center gap-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
-              <span className="text-xs font-medium text-primary">
-                Running {activeWorkflow.replace(/_/g, ' ')}…
-              </span>
-            </div>
-          </div>
-        )}
-
       </div>
 
-      {/* ── SCROLLABLE CONVERSATION (flex-1, min-h-0) ── */}
-      <ScrollArea className="flex-1 min-h-0 px-3 py-2" ref={scrollRef}>
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 gap-4">
-            <div className="h-12 w-12 rounded-2xl bg-muted/60 flex items-center justify-center">
-              <ThreadIcon className="h-6 w-6 text-foreground/40" />
+      {/* ── SCROLLABLE CONVERSATION ── */}
+      <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
+        <div className="px-3 py-3">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-            <div className="text-center space-y-1.5">
-              <p className="text-sm font-semibold text-foreground">
-                {hasLinkedObject ? `Ready to strategize on ${linkedContext?.account?.name || linkedContext?.opportunity?.name}` : 'Ready to strategize'}
-              </p>
-              <p className="text-sm text-foreground/55 max-w-[300px] leading-relaxed">
-                Start a conversation, run a workflow above, or drop files to add context.
-              </p>
-            </div>
-            <div className="flex flex-wrap justify-center gap-2 max-w-md">
-              {suggestedPrompts.map((sp, i) => (
-                <Button
-                  key={i}
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs gap-1.5 border-border hover:border-primary/30 hover:bg-primary/5 transition-all"
-                  onClick={() => handleSuggestedPrompt(sp.text)}
-                >
-                  <sp.icon className="h-3 w-3 text-primary/70" />
-                  <span className="text-foreground/80">{sp.text}</span>
-                </Button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {messages.map(m => (
-              <StrategyMessageBubble
-                key={m.id}
-                message={m}
-                onSaveAsMemory={onSaveMemory ? handleSaveFromMessage : undefined}
-                onTransformOutput={handleTransformOutput}
-                onBranchThread={handleBranchThread}
-                isTransforming={isTransforming}
-              />
-            ))}
-            {isSending && !activeWorkflow && (
-              <div className="flex justify-start">
-                <div className="bg-muted/60 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
-                  <div className="flex gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:0ms]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:150ms]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:300ms]" />
-                  </div>
-                  <span className="text-xs text-foreground/50">Thinking…</span>
-                </div>
+          ) : messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-4">
+              <div className="h-12 w-12 rounded-2xl bg-muted/60 flex items-center justify-center">
+                <ThreadIcon className="h-6 w-6 text-foreground/40" />
               </div>
-            )}
-          </div>
-        )}
+              <div className="text-center space-y-1.5">
+                <p className="text-sm font-semibold text-foreground">
+                  {hasLinkedObject ? `Ready to strategize on ${linkedContext?.account?.name || linkedContext?.opportunity?.name}` : 'Ready to strategize'}
+                </p>
+                <p className="text-sm text-foreground/55 max-w-[300px] leading-relaxed">
+                  Start a conversation, run a workflow, or drop files to add context.
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-2 max-w-md">
+                {suggestedPrompts.map((sp, i) => (
+                  <Button
+                    key={i}
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs gap-1.5 border-border hover:border-primary/30 hover:bg-primary/5 transition-all"
+                    onClick={() => handleSuggestedPrompt(sp.text)}
+                  >
+                    <sp.icon className="h-3 w-3 text-primary/70" />
+                    <span className="text-foreground/80">{sp.text}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {messages.map((m, i) => {
+                // Add subtle visual separator between role switches for rhythm
+                const prevRole = i > 0 ? messages[i - 1].role : null;
+                const roleSwitch = prevRole && prevRole !== m.role && prevRole !== 'system' && m.role !== 'system';
+                return (
+                  <div key={m.id}>
+                    {roleSwitch && <div className="border-t border-border/30 my-2" />}
+                    <StrategyMessageBubble
+                      message={m}
+                      onSaveAsMemory={onSaveMemory ? handleSaveFromMessage : undefined}
+                      onTransformOutput={handleTransformOutput}
+                      onBranchThread={handleBranchThread}
+                      isTransforming={isTransforming}
+                    />
+                  </div>
+                );
+              })}
+              {isSending && !activeWorkflow && (
+                <div className="flex justify-start">
+                  <div className="bg-muted/60 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
+                    <div className="flex gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:0ms]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:150ms]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:300ms]" />
+                    </div>
+                    <span className="text-xs text-foreground/50">Thinking…</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </ScrollArea>
 
       {/* Drop overlay */}
@@ -392,61 +404,110 @@ export function StrategyMainPanel({
         </div>
       )}
 
-      {/* ── COMPOSER (shrink-0, anchored at bottom, clears bottom nav) ── */}
-      <div className="border-t border-border px-3 pt-2.5 pb-[calc(0.625rem+var(--shell-nav-height,101)*1px+env(safe-area-inset-bottom))] shrink-0 bg-card/80 backdrop-blur-sm">
-        {/* Depth selector row — above textarea on mobile for cleaner stacking */}
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="flex rounded-md border border-border overflow-hidden">
-            {DEPTH_OPTIONS.map(d => (
-              <button
-                key={d}
-                type="button"
-                className={cn(
-                  'px-2.5 py-1 text-[10px] font-medium transition-colors',
-                  depth === d
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-card text-foreground/60 hover:bg-muted hover:text-foreground'
-                )}
-                onClick={() => setDepth(d)}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
-          <Button
-            size="icon" variant="ghost" className="h-7 w-7 text-foreground/50 hover:text-foreground"
-            title="Attach file"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isSending}
-          >
-            <Paperclip className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-        {/* Input + Send row */}
-        <div className="flex items-end gap-2">
+      {/* ── COMPOSER — unified card surface ── */}
+      <div className="shrink-0 border-t border-border bg-card px-3 pt-2 pb-[calc(0.5rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))]">
+        <div className="rounded-lg border border-border bg-background overflow-hidden">
+          {/* Textarea */}
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isSending ? 'Waiting…' : hasLinkedObject ? `Ask about ${linkedContext?.account?.name || linkedContext?.opportunity?.name || 'this'}…` : 'Message…'}
+            placeholder={isSending ? 'Waiting…' : hasLinkedObject ? `Message about ${linkedContext?.account?.name || linkedContext?.opportunity?.name || 'this'}…` : 'Message…'}
             className={cn(
-              'flex-1 max-h-[120px] text-sm resize-none border-border focus-visible:ring-primary/20',
+              'w-full border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none text-sm resize-none bg-transparent',
               isMobile ? 'min-h-[48px]' : 'min-h-[40px]'
             )}
             rows={isMobile ? 2 : 1}
             disabled={isSending}
           />
-          <Button
-            size="sm"
-            className="h-10 gap-1.5 px-4 shrink-0"
-            onClick={handleSend}
-            disabled={!input.trim() || isSending}
-          >
-            {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-            Send
-          </Button>
+          {/* Controls row — depth, attach, send — all in one bar */}
+          <div className="flex items-center justify-between px-2 py-1.5 border-t border-border/50 bg-muted/30">
+            <div className="flex items-center gap-1.5">
+              {/* Depth selector */}
+              <div className="flex rounded-md border border-border overflow-hidden">
+                {DEPTH_OPTIONS.map(d => (
+                  <button
+                    key={d}
+                    type="button"
+                    className={cn(
+                      'px-2 py-0.5 text-[10px] font-medium transition-colors',
+                      depth === d
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-transparent text-foreground/50 hover:bg-muted hover:text-foreground'
+                    )}
+                    onClick={() => setDepth(d)}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+              {/* Attach */}
+              <Button
+                size="icon" variant="ghost" className="h-7 w-7 text-foreground/40 hover:text-foreground"
+                title="Attach file"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isSending}
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            {/* Send */}
+            <Button
+              size="sm"
+              className="h-8 gap-1.5 px-3 shrink-0"
+              onClick={handleSend}
+              disabled={!input.trim() || isSending}
+            >
+              {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              Send
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* ── Workflow overflow sheet (mobile) ── */}
+      <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[50vh]">
+          <SheetHeader className="pb-3">
+            <SheetTitle className="text-sm">All Workflows</SheetTitle>
+            <SheetDescription className="text-xs text-foreground/60">
+              Choose a workflow to run on this thread
+            </SheetDescription>
+          </SheetHeader>
+          <div className="grid grid-cols-2 gap-2 pb-4">
+            {WORKFLOWS.map(w => {
+              const isRunning = activeWorkflow === w.key;
+              const isRecommended = recommendedWorkflows.includes(w.key);
+              return (
+                <Button
+                  key={w.key}
+                  variant="outline"
+                  className={cn(
+                    'h-auto py-3 px-3 flex flex-col items-start gap-1 text-left',
+                    isRecommended && 'border-primary/20',
+                    isRunning && 'border-primary/40 bg-primary/5'
+                  )}
+                  disabled={isSending || !!activeWorkflow}
+                  onClick={() => handleWorkflow(w.key)}
+                >
+                  <div className="flex items-center gap-1.5">
+                    {isRunning ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    ) : (
+                      <w.icon className={cn('h-3.5 w-3.5', isRecommended ? 'text-primary' : 'text-foreground/60')} />
+                    )}
+                    <span className="text-xs font-medium">{w.label}</span>
+                    {isRecommended && (
+                      <Badge variant="secondary" className="text-[8px] px-1 py-0 h-3.5 ml-auto">rec</Badge>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-foreground/50 leading-tight">{w.description}</span>
+                </Button>
+              );
+            })}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
