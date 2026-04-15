@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useSystemHealth } from '@/hooks/useSystemHealth';
-import { useNavigate } from 'react-router-dom';
+
 import { Activity, CheckCircle2, AlertTriangle, XCircle, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function SystemHealthBadge() {
   const { health, isLoading } = useSystemHealth();
   const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
+  
 
   if (isLoading || !health) return null;
 
@@ -79,7 +79,7 @@ export function SystemHealthBadge() {
           )}
 
           <button
-            onClick={() => { setOpen(false); navigate('/smoke-test'); }}
+            onClick={() => { setOpen(false); window.location.href = '/smoke-test'; }}
             className="flex items-center gap-1 text-xs text-primary hover:underline"
           >
             <ExternalLink className="size-3" /> Open full dashboard
