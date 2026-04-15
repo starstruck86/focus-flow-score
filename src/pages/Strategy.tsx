@@ -1,6 +1,11 @@
 /**
  * Strategy Workspace — durable strategic operating system.
  * Three-column layout: thread sidebar (drawer on mobile), main working area, right rail.
+ * 
+ * Layout: true flex-column shell. No calc-based height math.
+ *   header/meta = auto height
+ *   content = flex-1 min-h-0 overflow-y-auto
+ *   composer = shrink-0 anchored at bottom
  */
 import { useState, useCallback, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
@@ -27,15 +32,17 @@ import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 export default function Strategy() {
   const isMobile = useIsMobile();
 
-  // Make Layout's <main> act as a flex container so Strategy fills it
+  // Make Layout's <main> a flex container so Strategy fills it properly
   useEffect(() => {
     const main = document.querySelector('main[data-testid="main-content"]');
     if (!main) return;
+    // Override main's scroll behavior — Strategy manages its own scrolling
     main.classList.add('!overflow-hidden', '!flex', '!flex-col');
     return () => {
       main.classList.remove('!overflow-hidden', '!flex', '!flex-col');
     };
   }, []);
+
   const {
     threads, activeThread, setActiveThreadId, createThread, createThreadWithOpts, updateThread, isLoading,
   } = useStrategyThreads();
@@ -122,8 +129,10 @@ export default function Strategy() {
   );
 
   return (
-    <Layout>
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+    <Layout hideFloatingFab>
+      {/* Strategy fills the flex main — no calc, no absolute */}
+      <div className="flex flex-1 min-h-0">
+
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
 

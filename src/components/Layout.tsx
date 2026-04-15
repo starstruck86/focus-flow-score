@@ -76,7 +76,7 @@ function DaveTapPrompt({ onTap }: { onTap: () => void }) {
 // ─── Cross-Tab Dave Guard ───
 const DAVE_CHANNEL_NAME = 'dave-session';
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout({ children, hideFloatingFab }: { children: React.ReactNode; hideFloatingFab?: boolean }) {
   const { user, signOut } = useAuth();
   const { isReviewMode, guardDestructive } = useReviewMode();
   const location = useLocation();
@@ -353,17 +353,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <BottomNav />
       <BackToToday />
-      <GlobalFAB position="bottom-left" />
+      {!hideFloatingFab && <GlobalFAB position="bottom-left" />}
 
       {/* Dave is the PRIMARY floating action — bottom-right, thumb-accessible */}
-      {!daveDrift && (
+      {!daveDrift && !hideFloatingFab && (
         <DaveMicFAB
           onTap={handleOpenDave}
           isLoading={isFetchingDaveSession}
           isActive={daveOpen}
         />
       )}
-      {daveDrift && !daveOpen && (
+      {daveDrift && !daveOpen && !hideFloatingFab && (
         <div className={`fixed right-4 ${SHELL.fab.bottom} z-50`}>
           <button
             onClick={() => toast.error(
