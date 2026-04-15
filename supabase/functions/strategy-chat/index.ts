@@ -218,7 +218,28 @@ const ROUTES: Record<TaskType, LLMRoute> = {
 };
 
 function resolveLLMRoute(taskType: string): LLMRoute {
-  return ROUTES[taskType as TaskType] || ROUTES.chat_general;
+  const route = ROUTES[taskType as TaskType] || ROUTES.chat_general;
+
+  // ── PROVIDER POLICY GUARDRAIL ──
+  const ARTIFACT_TASKS = new Set(["transform_output", "regenerate_artifact", "refine_artifact"]);
+  const RESEARCH_TASKS = new Set(["deep_research"]);
+
+  if (!ARTIFACT_TASKS.has(taskType) && (route.primaryProvider === "anthropic" || route.fallbackProvider === "anthropic")) {
+    console.error(`[POLICY VIOLATION] task=${taskType} resolved to anthropic — Claude is artifact-only. Overriding to openai.`);
+    route.primaryProvider = "openai";
+    route.fallbackProvider = "openai";
+    route.model = "openai/gpt-5-mini";
+    route.fallbackModel = "openai/gpt-5";
+  }
+  if (!RESEARCH_TASKS.has(taskType) && (route.primaryProvider === "perplexity" || route.fallbackProvider === "perplexity")) {
+    console.error(`[POLICY VIOLATION] task=${taskType} resolved to perplexity — Perplexity is research-only. Overriding to openai.`);
+    route.primaryProvider = "openai";
+    route.fallbackProvider = "openai";
+    route.model = "openai/gpt-5-mini";
+    route.fallbackModel = "openai/gpt-5";
+  }
+
+  return route;
 }
 
 // ═══════════════════════════════════════════════════════════
