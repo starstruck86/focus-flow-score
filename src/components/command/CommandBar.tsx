@@ -26,6 +26,8 @@ interface Props {
   onCreateOpportunity?: (name: string) => Promise<{ id: string; name: string } | null>;
   isLoading?: boolean;
   placeholder?: string;
+  prefill?: string;
+  onPrefillConsumed?: () => void;
 }
 
 const TRIGGER_CHARS: Record<string, 'account' | 'opportunity' | 'template'> = {
@@ -49,7 +51,7 @@ const TRIGGER_COLORS: Record<string, string> = {
 export function CommandBar({
   accounts, opportunities, templates, onExecute,
   onCreateAccount, onCreateOpportunity,
-  isLoading, placeholder,
+  isLoading, placeholder, prefill, onPrefillConsumed,
 }: Props) {
   const [value, setValue] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -60,6 +62,7 @@ export function CommandBar({
   const [tokens, setTokens] = useState<CommandToken[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  
 
   const updateSuggestions = useCallback((text: string, cursor: number) => {
     let trigger: string | null = null;
@@ -221,6 +224,22 @@ export function CommandBar({
 
     onExecute({ rawText: value, account, opportunity, template, freeText });
   }, [value, tokens, onExecute, isLoading]);
+
+  // Prefill from starter commands
+  useEffect(() => {
+    if (prefill) {
+      setValue(prefill);
+      onPrefillConsumed?.();
+      requestAnimationFrame(() => {
+        const el = inputRef.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(prefill.length, prefill.length);
+          updateSuggestions(prefill, prefill.length);
+        }
+      });
+    }
+  }, [prefill]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {

@@ -10,9 +10,10 @@ import { useCommandExecution } from '@/hooks/useCommandExecution';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { PanelLeftOpen } from 'lucide-react';
+import { PanelLeftOpen, Search, FileText, Mail, Zap } from 'lucide-react';
 import type { ParsedCommand } from '@/lib/commandTypes';
 
 interface Props {
@@ -20,8 +21,16 @@ interface Props {
   onExpandSidebar: () => void;
 }
 
+const STARTERS = [
+  { label: 'Discovery Prep', command: '+Discovery Prep @', icon: Search },
+  { label: 'Executive Brief', command: '+Executive Brief @', icon: FileText },
+  { label: 'Follow-Up Email', command: '+Follow-Up Email @', icon: Mail },
+  { label: 'Brainstorm', command: '+Brainstorm @', icon: Zap },
+] as const;
+
 export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Props) {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const {
     accounts,
     opportunities,
@@ -36,6 +45,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
 
   const [useKIs, setUseKIs] = useState(true);
   const [lastCommand, setLastCommand] = useState<ParsedCommand | null>(null);
+  const [prefill, setPrefill] = useState('');
 
   const { data: kiCount = 0 } = useQuery({
     queryKey: ['ki-count', user?.id],
@@ -63,30 +73,40 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
     if (result?.output) saveAsTemplate(name, result.output);
   }, [result, saveAsTemplate]);
 
+  const handleStarter = useCallback((command: string) => {
+    setPrefill(command);
+  }, []);
+
+  const showEmpty = !result && !isGenerating;
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50">
+      {/* Compact toolbar */}
+      <div className="flex items-center gap-2 px-4 h-10 border-b border-border/40 shrink-0">
         {sidebarCollapsed && (
-          <Button size="sm" variant="ghost" onClick={onExpandSidebar}>
-            <PanelLeftOpen className="h-4 w-4 mr-1" /> Threads
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={onExpandSidebar}>
+            <PanelLeftOpen className="h-3.5 w-3.5 mr-1" /> Threads
           </Button>
         )}
-        <span className="text-sm font-semibold text-foreground">Strategy Command Center</span>
+        <span className="text-xs font-medium text-muted-foreground tracking-wide uppercase">Strategy</span>
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="flex flex-col items-center justify-start px-4 py-8">
-          {!result && !isGenerating && (
-            <div className="text-center mb-8 animate-in fade-in-0 duration-500">
-              <h1 className="text-2xl font-bold text-foreground mb-1">What do you need?</h1>
-              <p className="text-sm text-muted-foreground">
-                Type a command to get started. Your {kiCount.toLocaleString()} KIs power every output.
+        <div className={`flex flex-col items-center px-4 ${isMobile ? 'pt-6 pb-4' : 'pt-12 pb-8'}`}>
+          {/* Header — compact working-surface feel */}
+          {showEmpty && (
+            <div className="text-center mb-5 animate-in fade-in-0 slide-in-from-bottom-2 duration-400">
+              <h1 className="text-lg font-semibold text-foreground mb-0.5">What do you need?</h1>
+              <p className="text-xs text-muted-foreground">
+                {kiCount > 0
+                  ? `${kiCount.toLocaleString()} KIs powering every output`
+                  : 'Type a command to get started'}
               </p>
             </div>
           )}
 
-          <div className={`w-full max-w-2xl transition-all duration-300 ${result || isGenerating ? 'mb-6' : ''}`}>
+          {/* Command bar */}
+          <div className={`w-full max-w-2xl ${result || isGenerating ? 'mb-5' : ''}`}>
             <CommandBar
               accounts={accounts}
               opportunities={opportunities.map(o => ({ id: o.id, name: o.name, account_name: (o as any).account_name }))}
@@ -95,6 +115,8 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               onCreateAccount={createAccount}
               onCreateOpportunity={createOpportunity}
               isLoading={isGenerating}
+              prefill={prefill}
+              onPrefillConsumed={() => setPrefill('')}
             />
 
             <ContextPreview
@@ -107,6 +129,31 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
             />
           </div>
 
+          {/* Starter commands — only when idle */}
+          {showEmpty && (
+            <div className={`w-full max-w-2xl mt-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 delay-100`}>
+              <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider mb-2 px-0.5">
+                Quick start
+              </p>
+              <div className={`grid ${isMobile ? 'grid-cols-1 gap-1.5' : 'grid-cols-2 gap-2'}`}>
+                {STARTERS.map(s => (
+                  <button
+                    key={s.label}
+                    onClick={() => handleStarter(s.command)}
+                    className="group flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border/40 bg-card/50 hover:bg-accent/40 hover:border-border transition-all text-left"
+                  >
+                    <s.icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
+                    <div className="min-w-0">
+                      <span className="text-xs font-medium text-foreground/90 group-hover:text-foreground">{s.label}</span>
+                      <span className="text-[10px] text-muted-foreground/50 ml-1.5">@Account</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Output area */}
           {(result || isGenerating) && (
             <div className="w-full max-w-2xl">
               <CommandOutput
