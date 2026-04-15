@@ -2,7 +2,7 @@
  * StrategyCommandCenter — unified workspace empty state.
  * Composer-dominant layout. No nested cards. Flat, confident, wide.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { CommandBar } from '@/components/command/CommandBar';
 import { CommandOutput } from '@/components/command/CommandOutput';
 import { PreRunContext } from '@/components/command/PreRunContext';
@@ -22,6 +22,50 @@ import {
 } from 'lucide-react';
 import type { ParsedCommand, CommandToken } from '@/lib/commandTypes';
 import { cn } from '@/lib/utils';
+
+const DEMO_OUTPUT = `## Executive Summary
+
+Franklin Park Conservatory is evaluating Acoustic's marketing automation platform as a replacement for their current Tessitura-native email tooling. This represents a mid-market arts & culture opportunity with strong product-market fit.
+
+## Strategic Context
+
+The Conservatory operates a complex multi-channel engagement model spanning memberships, events, education programs, and seasonal exhibitions. Their current stack relies heavily on Tessitura for CRM and ticketing, with limited marketing automation capabilities.
+
+**Key Insight:** Their recent website redesign signals investment in digital experience — making this an ideal time to propose integrated lifecycle marketing.
+
+## Stakeholder Hypotheses
+
+- **Director of Marketing** — Primary champion. Frustrated with Tessitura's email limitations. Needs segmentation and automation.
+- **IT Director** — Technical evaluator. Will care about Tessitura API integration and data security.
+- **CFO** — Economic buyer. Will need ROI justification against current spend.
+
+## Recommended Approach
+
+1. **Lead with integration story** — Show how Acoustic connects to Tessitura without replacing it
+2. **Quantify the gap** — Help them measure what they're losing with current tooling (open rates, conversion, time spent)
+3. **Reference similar wins** — Use performing arts case studies from similar-sized organizations
+
+## Key Risks
+
+- Tessitura has a strong ecosystem lock-in; switching costs may be perceived as high
+- Budget cycle timing — arts organizations often plan 12-18 months ahead
+- Champion may not have direct budget authority
+
+## Next Steps
+
+1. Schedule technical discovery with IT Director to map Tessitura integration requirements
+2. Prepare ROI calculator based on their current email volume and conversion rates
+3. Identify 2-3 peer organizations using Acoustic for social proof
+4. Draft a mutual action plan targeting their Q3 budget planning window`;
+
+const DEMO_BLOCKS = [
+  { heading: 'Executive Summary', content: 'Franklin Park Conservatory is evaluating Acoustic\'s marketing automation platform as a replacement for their current Tessitura-native email tooling. This represents a mid-market arts & culture opportunity with strong product-market fit.' },
+  { heading: 'Strategic Context', content: 'The Conservatory operates a complex multi-channel engagement model spanning memberships, events, education programs, and seasonal exhibitions. Their current stack relies heavily on Tessitura for CRM and ticketing, with limited marketing automation capabilities.\n\n**Key Insight:** Their recent website redesign signals investment in digital experience — making this an ideal time to propose integrated lifecycle marketing.' },
+  { heading: 'Stakeholder Hypotheses', content: '- **Director of Marketing** — Primary champion. Frustrated with Tessitura\'s email limitations. Needs segmentation and automation.\n- **IT Director** — Technical evaluator. Will care about Tessitura API integration and data security.\n- **CFO** — Economic buyer. Will need ROI justification against current spend.' },
+  { heading: 'Recommended Approach', content: '1. **Lead with integration story** — Show how Acoustic connects to Tessitura without replacing it\n2. **Quantify the gap** — Help them measure what they\'re losing with current tooling\n3. **Reference similar wins** — Use performing arts case studies from similar-sized organizations' },
+  { heading: 'Key Risks', content: '- Tessitura has a strong ecosystem lock-in; switching costs may be perceived as high\n- Budget cycle timing — arts organizations often plan 12-18 months ahead\n- Champion may not have direct budget authority' },
+  { heading: 'Next Steps', content: '1. Schedule technical discovery with IT Director to map Tessitura integration requirements\n2. Prepare ROI calculator based on their current email volume and conversion rates\n3. Identify 2-3 peer organizations using Acoustic for social proof\n4. Draft a mutual action plan targeting their Q3 budget planning window' },
+];
 
 interface Props {
   sidebarCollapsed: boolean;
