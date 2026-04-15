@@ -314,9 +314,11 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
             )}
           </div>
         </div>
-        <div className="sm:hidden">
-          <BostonClock />
-        </div>
+        {location.pathname !== '/strategy' && (
+          <div className="sm:hidden">
+            <BostonClock />
+          </div>
+        )}
       </header>
 
       {/*
