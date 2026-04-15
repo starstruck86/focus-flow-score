@@ -18,7 +18,7 @@ interface Props {
   allArtifacts: StrategyArtifact[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onRegenerate?: (artifactId: string, artifactType: string) => Promise<StrategyArtifact | null>;
+  onRegenerate?: (artifactId: string, artifactType: string, refineInstructions?: string) => Promise<StrategyArtifact | null>;
   isTransforming?: boolean;
 }
 
@@ -35,6 +35,13 @@ export function ArtifactDetailModal({
 }: Props) {
   const [view, setView] = useState<'detail' | 'history' | 'refine'>('detail');
   const [refineInstructions, setRefineInstructions] = useState('');
+  const [viewingArtifact, setViewingArtifact] = useState<StrategyArtifact | null>(null);
+
+  // The artifact currently being displayed (either selected or a version from history)
+  const displayArtifact = viewingArtifact || artifact;
+
+  // Reset viewing artifact when modal artifact changes
+  const resetOnChange = artifact?.id;
 
   // Build version chain
   const versionChain = useMemo(() => {
@@ -45,14 +52,14 @@ export function ArtifactDetailModal({
       .sort((a, b) => a.version - b.version);
   }, [artifact, allArtifacts]);
 
-  if (!artifact) return null;
+  if (!artifact || !displayArtifact) return null;
 
-  const TypeIcon = TYPE_ICONS[artifact.artifact_type] || FileText;
-  const typeLabel = artifact.artifact_type.replace(/_/g, ' ');
-  const structured = artifact.content_json as any;
+  const TypeIcon = TYPE_ICONS[displayArtifact.artifact_type] || FileText;
+  const typeLabel = displayArtifact.artifact_type.replace(/_/g, ' ');
+  const structured = displayArtifact.content_json as any;
 
   const copyContent = () => {
-    navigator.clipboard.writeText(artifact.rendered_text || JSON.stringify(artifact.content_json, null, 2));
+    navigator.clipboard.writeText(displayArtifact.rendered_text || JSON.stringify(displayArtifact.content_json, null, 2));
     toast.success('Copied to clipboard');
   };
 
@@ -66,13 +73,17 @@ export function ArtifactDetailModal({
 
   const handleRefine = async () => {
     if (!onRegenerate || !refineInstructions.trim()) return;
-    // Regenerate creates a new version from the same source
-    const result = await onRegenerate(artifact.id, artifact.artifact_type);
+    const result = await onRegenerate(artifact.id, artifact.artifact_type, refineInstructions.trim());
     if (result) {
       setRefineInstructions('');
       setView('detail');
-      toast.success('Refined version created');
+      setViewingArtifact(null);
     }
+  };
+
+  const handleViewVersion = (v: StrategyArtifact) => {
+    setViewingArtifact(v);
+    setView('detail');
   };
 
   return (

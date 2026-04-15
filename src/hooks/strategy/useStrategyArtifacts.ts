@@ -77,6 +77,7 @@ export function useStrategyArtifacts(threadId: string | null) {
   const regenerateArtifact = useCallback(async (
     artifactId: string,
     targetArtifactType: string,
+    refineInstructions?: string,
   ): Promise<StrategyArtifact | null> => {
     if (!user || isTransforming) return null;
     setIsTransforming(true);
@@ -89,7 +90,12 @@ export function useStrategyArtifacts(threadId: string | null) {
           Authorization: `Bearer ${session?.access_token}`,
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
-        body: JSON.stringify({ parentArtifactId: artifactId, targetArtifactType, threadId }),
+        body: JSON.stringify({
+          parentArtifactId: artifactId,
+          targetArtifactType,
+          threadId,
+          ...(refineInstructions ? { refineInstructions } : {}),
+        }),
       });
 
       if (!resp.ok) {
@@ -98,7 +104,7 @@ export function useStrategyArtifacts(threadId: string | null) {
       }
 
       const { artifact } = await resp.json();
-      toast.success('New version created');
+      toast.success(refineInstructions ? 'Refined version created' : 'New version created');
       await fetchArtifacts();
       return artifact as StrategyArtifact;
     } catch (e: any) {
