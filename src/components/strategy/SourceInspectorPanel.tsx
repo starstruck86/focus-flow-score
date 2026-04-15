@@ -17,6 +17,8 @@ interface RetrievalMeta {
   pinnedMemories?: number;
   uploadNames?: string[];
   outputTitles?: string[];
+  contextType?: string;
+  topSources?: string[];
 }
 
 interface Props {
@@ -60,6 +62,13 @@ export function SourceInspectorPanel({ sourcesUsed, retrievalMeta, modelUsed, wo
       </button>
       {expanded && (
         <div className="mt-1.5 space-y-1.5 bg-muted/20 rounded-lg p-2 border border-border/30">
+          {retrievalMeta?.contextType && retrievalMeta.contextType !== 'minimal' && (
+            <div className="flex items-center gap-1.5 mb-1">
+              <Badge variant="outline" className="text-[8px] px-1.5 py-0 capitalize">
+                {retrievalMeta.contextType.replace('-', ' ')}
+              </Badge>
+            </div>
+          )}
           <p className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-wider">Sources used</p>
           <div className="space-y-1">
             {memCount > 0 && (
@@ -105,6 +114,14 @@ export function SourceInspectorPanel({ sourcesUsed, retrievalMeta, modelUsed, wo
               </div>
             )}
           </div>
+          {retrievalMeta?.topSources && retrievalMeta.topSources.length > 0 && (
+            <div className="border-t border-border/30 pt-1 mt-1">
+              <p className="text-[8px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-0.5">Top influences</p>
+              {retrievalMeta.topSources.map((src, i) => (
+                <p key={i} className="text-[8px] text-muted-foreground/50 truncate">• {src}</p>
+              ))}
+            </div>
+          )}
           {(modelUsed || workflowType) && (
             <div className="border-t border-border/30 pt-1 mt-1 flex items-center gap-2">
               {modelUsed && (
