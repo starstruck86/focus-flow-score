@@ -481,3 +481,60 @@ function RollupList({ label, items, icon, color }: { label: string; items?: stri
     </div>
   );
 }
+
+const ARTIFACT_TYPE_ICONS: Record<string, typeof FileText> = {
+  email: Mail,
+  account_plan: FileText,
+  call_prep: Target,
+  memo: FileText,
+  next_steps: ArrowRight,
+};
+
+function ArtifactRailCard({ artifact, onRegenerate }: {
+  artifact: StrategyArtifact;
+  onRegenerate?: (id: string, type: string) => Promise<StrategyArtifact | null>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const TypeIcon = ARTIFACT_TYPE_ICONS[artifact.artifact_type] || FileText;
+  const typeLabel = artifact.artifact_type.replace(/_/g, ' ');
+
+  const copyContent = () => {
+    navigator.clipboard.writeText(artifact.rendered_text || JSON.stringify(artifact.content_json, null, 2));
+    toast.success('Copied');
+  };
+
+  return (
+    <div className="bg-muted/20 rounded-lg border border-border/20 overflow-hidden">
+      <button
+        className="w-full px-2.5 py-2 flex items-center gap-1.5 text-left hover:bg-muted/30 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <TypeIcon className="h-3 w-3 text-primary/70 shrink-0" />
+        <span className="text-[11px] font-medium truncate flex-1">{artifact.title}</span>
+        <Badge variant="outline" className="text-[8px] px-1 py-0 capitalize shrink-0">{typeLabel}</Badge>
+        {artifact.version > 1 && (
+          <Badge variant="secondary" className="text-[7px] px-1 py-0">v{artifact.version}</Badge>
+        )}
+      </button>
+      {expanded && (
+        <div className="border-t border-border/20 px-2.5 py-2 space-y-1.5">
+          <p className="text-[9px] text-foreground/70 line-clamp-4 leading-relaxed whitespace-pre-wrap">
+            {(artifact.rendered_text || '').slice(0, 300)}
+          </p>
+          <div className="flex gap-1">
+            <Button size="sm" variant="ghost" className="h-5 text-[9px] px-1.5 gap-0.5" onClick={copyContent}>
+              <Copy className="h-2 w-2" /> Copy
+            </Button>
+            {onRegenerate && (
+              <Button size="sm" variant="ghost" className="h-5 text-[9px] px-1.5 gap-0.5"
+                onClick={() => onRegenerate(artifact.id, artifact.artifact_type)}
+              >
+                <RefreshCw className="h-2 w-2" /> New Version
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
