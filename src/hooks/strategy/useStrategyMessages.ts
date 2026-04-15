@@ -28,16 +28,11 @@ export function useStrategyMessages(threadId: string | null) {
 
   const sendMessage = useCallback(async (
     content: string,
-    options?: {
-      linkedContext?: any;
-      uploadedResources?: any[];
-      depth?: string;
-    }
+    options?: { depth?: string }
   ) => {
     if (!threadId || !user || !content.trim()) return;
     setIsSending(true);
 
-    // Optimistic user message
     const optimisticId = `opt-${Date.now()}`;
     const userMsg: StrategyMessage = {
       id: optimisticId,
@@ -64,8 +59,6 @@ export function useStrategyMessages(threadId: string | null) {
           action: 'chat',
           threadId,
           content,
-          linkedContext: options?.linkedContext,
-          uploadedResources: options?.uploadedResources,
           depth: options?.depth,
         }),
       });
@@ -75,22 +68,29 @@ export function useStrategyMessages(threadId: string | null) {
         throw new Error(err.error || `Error ${resp.status}`);
       }
 
-      // Stream response
       if (!resp.body) throw new Error('No response body');
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let assistantText = '';
       const assistantId = `ast-${Date.now()}`;
 
+      let textBuffer = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
+        textBuffer += decoder.decode(value, { stream: true });
 
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ') || line.includes('[DONE]')) continue;
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+          if (line.endsWith('\r')) line = line.slice(0, -1);
+          if (line.startsWith(':') || line.trim() === '') continue;
+          if (!line.startsWith('data: ')) continue;
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === '[DONE]') break;
           try {
-            const parsed = JSON.parse(line.slice(6));
+            const parsed = JSON.parse(jsonStr);
             const delta = parsed.choices?.[0]?.delta?.content;
             if (delta) {
               assistantText += delta;
@@ -114,15 +114,54 @@ export function useStrategyMessages(threadId: string | null) {
                 }];
               });
             }
-          } catch {}
+          } catch {
+            textBuffer = line + '\n' + textBuffer;
+            break;
+          }
         }
       }
 
-      // Refetch to get real IDs
+      // Final buffer flush
+      if (textBuffer.trim()) {
+        for (let raw of textBuffer.split('\n')) {
+          if (!raw) continue;
+          if (raw.endsWith('\r')) raw = raw.slice(0, -1);
+          if (raw.startsWith(':') || raw.trim() === '') continue;
+          if (!raw.startsWith('data: ')) continue;
+          const jsonStr = raw.slice(6).trim();
+          if (jsonStr === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) {
+              assistantText += delta;
+              setMessages(prev => {
+                const last = prev[prev.length - 1];
+                if (last?.id === assistantId) {
+                  return prev.map((m, i) => i === prev.length - 1
+                    ? { ...m, content_json: { text: assistantText } }
+                    : m
+                  );
+                }
+                return [...prev, {
+                  id: assistantId,
+                  thread_id: threadId,
+                  user_id: user.id,
+                  role: 'assistant',
+                  message_type: 'chat',
+                  content_json: { text: assistantText },
+                  citations_json: null,
+                  created_at: new Date().toISOString(),
+                }];
+              });
+            }
+          } catch { /* partial leftover */ }
+        }
+      }
+
       setTimeout(() => fetchMessages(), 500);
     } catch (e: any) {
       toast.error(e.message || 'Failed to send message');
-      // Remove optimistic message on error
       setMessages(prev => prev.filter(m => m.id !== optimisticId));
     } finally {
       setIsSending(false);
@@ -131,23 +170,18 @@ export function useStrategyMessages(threadId: string | null) {
 
   const runWorkflow = useCallback(async (
     workflowType: string,
-    options?: {
-      content?: string;
-      linkedContext?: any;
-      uploadedResources?: any[];
-    }
+    options?: { content?: string }
   ) => {
     if (!threadId || !user) return null;
     setIsSending(true);
 
-    // Optimistic workflow message
     setMessages(prev => [...prev, {
       id: `wf-${Date.now()}`,
       thread_id: threadId,
       user_id: user.id,
       role: 'system',
       message_type: 'workflow_update',
-      content_json: { text: `Running ${workflowType}…` },
+      content_json: { text: `Running ${workflowType.replace(/_/g, ' ')}…` },
       citations_json: null,
       created_at: new Date().toISOString(),
     }]);
@@ -166,8 +200,6 @@ export function useStrategyMessages(threadId: string | null) {
           threadId,
           workflowType,
           content: options?.content,
-          linkedContext: options?.linkedContext,
-          uploadedResources: options?.uploadedResources,
         }),
       });
 
