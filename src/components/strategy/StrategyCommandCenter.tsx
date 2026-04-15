@@ -193,7 +193,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
             <PanelLeftOpen className="h-3.5 w-3.5 mr-1.5" /> Threads
           </Button>
         )}
-        <span className={cn(STRATEGY_UI.labels.section, 'ml-1')}>Strategy</span>
+        <span className={cn(STRATEGY_UI.labels.section, 'ml-1 text-foreground/50')}>Strategy</span>
       </div>
 
       <ScrollArea className="flex-1">
@@ -206,7 +206,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                 <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight">
                   What do you need?
                 </h1>
-                <p className="mt-2.5 text-sm text-foreground/70">
+                <p className="mt-2.5 text-sm text-foreground/60">
                   {kiCount > 0
                     ? `${kiCount.toLocaleString()} knowledge items ready to ground your next run`
                     : 'Briefs, research, angles, and prep — powered by your knowledge base'}
