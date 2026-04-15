@@ -260,6 +260,8 @@ interface ContextPack {
     pinnedMemories: number;
     uploadNames: string[];
     outputTitles: string[];
+    contextType: string; // "memory-driven" | "upload-driven" | "mixed" | "minimal"
+    topSources: string[];
   };
 }
 
