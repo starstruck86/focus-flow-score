@@ -30,6 +30,8 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
   const sourcesUsed = contentJson?.sources_used;
   const retrievalMeta = contentJson?.retrieval_meta;
   const modelUsed = contentJson?.model_used;
+  const providerUsed = contentJson?.provider_used;
+  const fallbackUsed = contentJson?.fallback_used;
 
   if (message.message_type === 'workflow_update') {
     return (
