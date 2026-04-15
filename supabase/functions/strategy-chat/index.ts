@@ -397,6 +397,22 @@ async function callStreaming(
   const timeout = setTimeout(() => controller.abort(), 55000);
 
   try {
+    // SMOKE TEST MODE: skip primary if forced fail
+    if (route._smokeTestForceFail) {
+      console.log(`[routing] SMOKE_TEST_MODE: forcing stream primary failure for task=${taskType}`);
+      console.warn(`[routing] stream primary failed: SMOKE_TEST_MODE forced. Falling back to ${route.fallbackProvider} (non-stream)`);
+      clearTimeout(timeout);
+      const fbController = new AbortController();
+      const fbTimeout = setTimeout(() => fbController.abort(), 55000);
+      try {
+        const fbAdapter = ADAPTERS[route.fallbackProvider];
+        const fbResult = await fbAdapter({ ...adapterReq, model: route.fallbackModel }, fbController.signal);
+        fbResult.fallbackUsed = true;
+        console.log(`[routing] stream fallback task=${taskType} provider=${fbResult.provider} model=${fbResult.model} latency=${fbResult.latencyMs}ms`);
+        return fbResult;
+      } finally { clearTimeout(fbTimeout); }
+    }
+
     console.log(`[routing] stream task=${taskType} provider=${route.primaryProvider} model=${route.model}`);
     const result = await openaiAdapter({ ...adapterReq, model: route.model, stream: true }, controller.signal);
     if (result.error) {
