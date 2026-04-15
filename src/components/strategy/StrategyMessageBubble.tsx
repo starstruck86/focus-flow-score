@@ -12,6 +12,15 @@ import { toast } from 'sonner';
 import type { StrategyMessage } from '@/types/strategy';
 import { SourceInspectorPanel } from './SourceInspectorPanel';
 
+/** Extract only human-readable text from content_json, never raw debug/provider metadata */
+function extractDisplayText(contentJson: any): string {
+  if (!contentJson) return '';
+  if (typeof contentJson.text === 'string' && contentJson.text.trim()) return contentJson.text;
+  if (typeof contentJson.content === 'string' && contentJson.content.trim()) return contentJson.content;
+  if (typeof contentJson.message === 'string' && contentJson.message.trim()) return contentJson.message;
+  return '';
+}
+
 interface Props {
   message: StrategyMessage;
   onSaveAsMemory?: (content: string, type: string) => void;
