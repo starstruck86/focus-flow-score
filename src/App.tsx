@@ -87,7 +87,7 @@ const ProtectedPage = ({ children, routeName }: { children: React.ReactNode; rou
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
       <TooltipProvider>
         <AuthProvider>
           <ReviewModeProvider>
