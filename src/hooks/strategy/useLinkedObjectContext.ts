@@ -53,10 +53,10 @@ export function useLinkedObjectContext(thread: StrategyThread | null) {
     if (thread.linked_opportunity_id) {
       const { data: opp } = await supabase
         .from('opportunities')
-        .select('id, name, stage, amount, close_date, notes')
+        .select('id, name, stage, close_date, notes')
         .eq('id', thread.linked_opportunity_id)
         .maybeSingle();
-      ctx.opportunity = opp;
+      ctx.opportunity = opp ? { ...opp, amount: null } : null;
 
       const { data: mem } = await supabase
         .from('opportunity_strategy_memory')
