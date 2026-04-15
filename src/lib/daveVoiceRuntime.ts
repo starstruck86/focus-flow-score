@@ -289,7 +289,7 @@ async function fetchTtsWithRetry(
   throw new Error(`TTS failed: ${lastError}`);
 }
 
-/** Play a blob and return when audio ends. Cleans up objectUrl on completion. */
+/** Play a blob and return when audio ends. Handles ended/error/stalled with cleanup. */
 function playBlob(blob: Blob, active: ActivePlayback): Promise<ActivePlayback> {
   return new Promise<ActivePlayback>((resolve, reject) => {
     const objectUrl = URL.createObjectURL(blob);
@@ -297,7 +297,17 @@ function playBlob(blob: Blob, active: ActivePlayback): Promise<ActivePlayback> {
     active.audio = audio;
     active.objectUrl = objectUrl;
 
+    let settled = false;
+    let stallTimer: ReturnType<typeof setTimeout> | undefined;
+
     const cleanupAfterPlay = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(stallTimer);
+      audio.onended = null;
+      audio.onerror = null;
+      audio.onstalled = null;
+      audio.onplaying = null;
       URL.revokeObjectURL(objectUrl);
       active.objectUrl = null;
       active.audio = null;
@@ -307,11 +317,25 @@ function playBlob(blob: Blob, active: ActivePlayback): Promise<ActivePlayback> {
       cleanupAfterPlay();
       resolve(active);
     }, { once: true });
+
     audio.addEventListener('error', () => {
       cleanupAfterPlay();
       const msg = audio.error?.message ?? 'Audio playback error';
       reject(new Error(msg));
     }, { once: true });
+
+    // Stall detection: if stalled for >10s, fail gracefully
+    audio.onstalled = () => {
+      stallTimer = setTimeout(() => {
+        logger.warn('Audio stalled for >10s, failing');
+        cleanupAfterPlay();
+        reject(new Error('Audio playback stalled'));
+      }, 10_000);
+    };
+
+    audio.onplaying = () => {
+      clearTimeout(stallTimer);
+    };
 
     audio.play().catch(err => {
       cleanupAfterPlay();
@@ -319,7 +343,6 @@ function playBlob(blob: Blob, active: ActivePlayback): Promise<ActivePlayback> {
     });
   });
 }
-
 /** Stop current speech immediately. */
 export function interruptSpeech(playback: ActivePlayback): ActivePlayback {
   return cleanupPlayback(playback);

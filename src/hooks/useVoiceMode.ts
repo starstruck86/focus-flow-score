@@ -230,14 +230,22 @@ export function useVoiceMode() {
     activeObjectUrlsRef.current.delete(url);
   };
 
-  /** Play a single audio element with a hard timeout guard and external-pause detection */
+  /** Play a single audio element with settle handlers for ended/error/stalled/timeout */
   const playAudioWithTimeout = (audio: HTMLAudioElement): Promise<void> => {
     return new Promise<void>((resolve, reject) => {
       let settled = false;
+      let stallTimer: ReturnType<typeof setTimeout> | undefined;
+
       const settle = (fn: () => void) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        clearTimeout(stallTimer);
+        audio.onended = null;
+        audio.onerror = null;
+        audio.onstalled = null;
+        audio.onplaying = null;
+        audio.onpause = null;
         fn();
       };
 
@@ -259,14 +267,27 @@ export function useVoiceMode() {
         reject(new Error('Audio playback failed'));
       });
 
-      // Detect external pause (from stopPlayback) — resolve immediately instead of
-      // hanging for 120s. This fires when stopPlayback() calls audio.pause().
+      // Stall detection: wait 10s before giving up
+      audio.onstalled = () => {
+        stallTimer = setTimeout(() => {
+          settle(() => {
+            audio.pause();
+            revokeUrl(audio.src);
+            reject(new Error('Audio playback stalled'));
+          });
+        }, 10_000);
+      };
+
+      audio.onplaying = () => {
+        clearTimeout(stallTimer);
+      };
+
+      // Detect external pause (from stopPlayback)
       audio.onpause = () => {
-        // Only treat as abort if playback was stopped externally (not natural end)
         if (!audio.ended) {
           settle(() => {
             revokeUrl(audio.src);
-            resolve(); // resolve (not reject) — caller checks playbackAbortRef
+            resolve();
           });
         }
       };
