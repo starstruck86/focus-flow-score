@@ -1,8 +1,8 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   PanelLeftOpen, PanelRightOpen, Search, Mail, Target, Map,
   FileText, Send, Paperclip, Upload, Loader2, Zap, Database,
-  Sparkles, AlertCircle,
+  Sparkles, Building2, MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -28,13 +28,6 @@ const WORKFLOWS = [
 
 const DEPTH_OPTIONS = ['Fast', 'Standard', 'Deep'] as const;
 
-const SUGGESTED_PROMPTS = [
-  { text: 'Research this account deeply', icon: Search },
-  { text: 'Evaluate this email draft', icon: Mail },
-  { text: 'Build an account plan', icon: FileText },
-  { text: 'Brainstorm approach options', icon: Zap },
-];
-
 interface Props {
   thread: StrategyThread | null;
   onUpdateThread: (id: string, updates: Partial<StrategyThread>) => void;
@@ -45,6 +38,51 @@ interface Props {
   linkedContext?: any;
   onSaveMemory?: (type: string, content: string) => void;
   onWorkflowComplete?: () => void;
+}
+
+/** Get suggested prompts based on thread type and linked object */
+function getSuggestedPrompts(thread: StrategyThread | null, linkedContext?: any) {
+  const accountName = linkedContext?.account?.name;
+  const oppName = linkedContext?.opportunity?.name;
+
+  if (thread?.thread_type === 'account_linked' && accountName) {
+    return [
+      { text: `Research ${accountName} deeply`, icon: Search },
+      { text: `Build an account plan for ${accountName}`, icon: FileText },
+      { text: `What's the best approach for ${accountName}?`, icon: Zap },
+      { text: `Evaluate my outreach to ${accountName}`, icon: Mail },
+    ];
+  }
+  if (thread?.thread_type === 'opportunity_linked' && oppName) {
+    return [
+      { text: `Build deal strategy for ${oppName}`, icon: Target },
+      { text: `Who is the champion in this deal?`, icon: Building2 },
+      { text: `What are the risks in this opportunity?`, icon: FileText },
+      { text: `Brainstorm closing approaches`, icon: Zap },
+    ];
+  }
+  if (thread?.thread_type === 'territory_linked') {
+    return [
+      { text: `Tier my territory accounts`, icon: Map },
+      { text: `Which accounts should I prioritize?`, icon: Target },
+      { text: `Build a territory plan`, icon: FileText },
+      { text: `Research market trends`, icon: Search },
+    ];
+  }
+  return [
+    { text: 'Research this account deeply', icon: Search },
+    { text: 'Evaluate this email draft', icon: Mail },
+    { text: 'Build an account plan', icon: FileText },
+    { text: 'Brainstorm approach options', icon: Zap },
+  ];
+}
+
+/** Get recommended workflows based on thread type */
+function getRecommendedWorkflows(thread: StrategyThread | null): string[] {
+  if (thread?.thread_type === 'account_linked') return ['deep_research', 'account_plan', 'brainstorm'];
+  if (thread?.thread_type === 'opportunity_linked') return ['opportunity_strategy', 'deep_research', 'email_evaluation'];
+  if (thread?.thread_type === 'territory_linked') return ['territory_tiering', 'deep_research', 'brainstorm'];
+  return [];
 }
 
 export function StrategyMainPanel({
@@ -61,6 +99,9 @@ export function StrategyMainPanel({
   const [activeWorkflow, setActiveWorkflow] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const suggestedPrompts = useMemo(() => getSuggestedPrompts(thread, linkedContext), [thread?.id, linkedContext]);
+  const recommendedWorkflows = useMemo(() => getRecommendedWorkflows(thread), [thread?.id]);
 
   useEffect(() => {
     if (thread?.lane) setActiveLane(thread.lane);
@@ -143,6 +184,10 @@ export function StrategyMainPanel({
   }
 
   const hasLinkedObject = linkedContext?.account || linkedContext?.opportunity;
+  const ThreadIcon = thread.thread_type === 'account_linked' ? Building2
+    : thread.thread_type === 'opportunity_linked' ? Target
+    : thread.thread_type === 'territory_linked' ? Map
+    : MessageSquare;
 
   return (
     <div
@@ -160,6 +205,7 @@ export function StrategyMainPanel({
             <PanelLeftOpen className="h-4 w-4" />
           </Button>
         )}
+        <ThreadIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         <h1 className="text-sm font-semibold truncate flex-1">{thread.title}</h1>
         {isUploading && (
           <Badge variant="secondary" className="text-[9px] gap-1 animate-pulse">
@@ -184,14 +230,16 @@ export function StrategyMainPanel({
               </Badge>
               {linkedContext?.account && (
                 <Badge variant="secondary" className="text-[10px] gap-1">
-                  <Database className="h-2.5 w-2.5" />
+                  <Building2 className="h-2.5 w-2.5" />
                   {linkedContext.account.name}
+                  {linkedContext.account.tier && <span className="opacity-60">· {linkedContext.account.tier}</span>}
                 </Badge>
               )}
               {linkedContext?.opportunity && (
                 <Badge variant="secondary" className="text-[10px] gap-1">
                   <Target className="h-2.5 w-2.5" />
                   {linkedContext.opportunity.name}
+                  {linkedContext.opportunity.stage && <span className="opacity-60">· {linkedContext.opportunity.stage}</span>}
                 </Badge>
               )}
             </div>
@@ -201,6 +249,7 @@ export function StrategyMainPanel({
             <div className="flex flex-wrap gap-1.5">
               {WORKFLOWS.map(w => {
                 const isRunning = activeWorkflow === w.key;
+                const isRecommended = recommendedWorkflows.includes(w.key);
                 return (
                   <Button
                     key={w.key}
@@ -208,7 +257,8 @@ export function StrategyMainPanel({
                     variant="outline"
                     className={cn(
                       'h-7 text-[10px] px-2.5 gap-1.5 transition-all',
-                      isRunning && 'border-primary/40 bg-primary/5'
+                      isRunning && 'border-primary/40 bg-primary/5',
+                      isRecommended && !isRunning && 'border-primary/20'
                     )}
                     disabled={isSending || !!activeWorkflow}
                     onClick={() => handleWorkflow(w.key)}
@@ -217,7 +267,7 @@ export function StrategyMainPanel({
                     {isRunning ? (
                       <Loader2 className="h-3 w-3 animate-spin text-primary" />
                     ) : (
-                      <w.icon className="h-3 w-3" />
+                      <w.icon className={cn('h-3 w-3', isRecommended && 'text-primary/70')} />
                     )}
                     {w.label}
                   </Button>
@@ -239,7 +289,7 @@ export function StrategyMainPanel({
               <span className="text-xs font-medium text-primary">
                 Running {activeWorkflow.replace(/_/g, ' ')}
               </span>
-              <p className="text-[10px] text-muted-foreground">Analyzing context and generating structured output…</p>
+              <p className="text-[10px] text-muted-foreground">Retrieving context and generating structured output…</p>
             </div>
           </div>
         </div>
@@ -267,16 +317,18 @@ export function StrategyMainPanel({
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-5">
             <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center">
-              <Sparkles className="h-7 w-7 text-muted-foreground/50" />
+              <ThreadIcon className="h-7 w-7 text-muted-foreground/50" />
             </div>
             <div className="text-center space-y-1.5">
-              <p className="text-sm font-medium text-foreground/80">Ready to strategize</p>
+              <p className="text-sm font-medium text-foreground/80">
+                {hasLinkedObject ? `Ready to strategize on ${linkedContext?.account?.name || linkedContext?.opportunity?.name}` : 'Ready to strategize'}
+              </p>
               <p className="text-xs text-muted-foreground max-w-[260px]">
                 Start a conversation, run a workflow above, or drop files to add context.
               </p>
             </div>
             <div className="flex flex-wrap justify-center gap-2 max-w-sm">
-              {SUGGESTED_PROMPTS.map((sp, i) => (
+              {suggestedPrompts.map((sp, i) => (
                 <Button
                   key={i}
                   size="sm"
@@ -334,7 +386,7 @@ export function StrategyMainPanel({
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isSending ? 'Waiting for response…' : 'Type your message or paste content to analyze…'}
+              placeholder={isSending ? 'Waiting for response…' : hasLinkedObject ? `Ask about ${linkedContext?.account?.name || linkedContext?.opportunity?.name || 'this object'}…` : 'Type your message or paste content to analyze…'}
               className="min-h-[44px] max-h-[120px] pr-10 text-sm resize-none bg-background border-border/50 focus-visible:ring-primary/30"
               rows={1}
               disabled={isSending}

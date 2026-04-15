@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { StrategyThread } from '@/types/strategy';
+import type { CreateThreadOpts } from '@/components/strategy/CreateThreadDialog';
 
 export function useStrategyThreads() {
   const { user } = useAuth();
@@ -28,6 +29,7 @@ export function useStrategyThreads() {
 
   useEffect(() => { fetchThreads(); }, [fetchThreads]);
 
+  /** Legacy simple creation */
   const createThread = useCallback(async (title?: string, lane?: string, threadType?: string) => {
     if (!user) return;
     const { data, error } = await supabase
@@ -47,8 +49,32 @@ export function useStrategyThreads() {
     }
   }, [user]);
 
+  /** Object-native thread creation */
+  const createThreadWithOpts = useCallback(async (opts: CreateThreadOpts) => {
+    if (!user) return;
+    const insertData: Record<string, unknown> = {
+      user_id: user.id,
+      title: opts.title,
+      lane: opts.lane,
+      thread_type: opts.threadType,
+    };
+    if (opts.linkedAccountId) insertData.linked_account_id = opts.linkedAccountId;
+    if (opts.linkedOpportunityId) insertData.linked_opportunity_id = opts.linkedOpportunityId;
+    if (opts.linkedTerritoryId) insertData.linked_territory_id = opts.linkedTerritoryId;
+
+    const { data, error } = await supabase
+      .from('strategy_threads')
+      .insert(insertData as any)
+      .select()
+      .single();
+    if (!error && data) {
+      const thread = data as StrategyThread;
+      setThreads(prev => [thread, ...prev]);
+      setActiveThreadId(thread.id);
+    }
+  }, [user]);
+
   const updateThread = useCallback(async (id: string, updates: Partial<StrategyThread>) => {
-    // Strip to DB-safe fields
     const dbUpdates: Record<string, unknown> = { ...updates };
     const { error } = await supabase
       .from('strategy_threads')
@@ -67,6 +93,7 @@ export function useStrategyThreads() {
     activeThreadId,
     setActiveThreadId,
     createThread,
+    createThreadWithOpts,
     updateThread,
     isLoading,
     refetch: fetchThreads,

@@ -6,6 +6,8 @@ import { useState, useCallback } from 'react';
 import { StrategyThreadSidebar } from '@/components/strategy/StrategyThreadSidebar';
 import { StrategyMainPanel } from '@/components/strategy/StrategyMainPanel';
 import { StrategyRightRail } from '@/components/strategy/StrategyRightRail';
+import { CreateThreadDialog } from '@/components/strategy/CreateThreadDialog';
+import type { CreateThreadOpts } from '@/components/strategy/CreateThreadDialog';
 import { useStrategyThreads } from '@/hooks/strategy/useStrategyThreads';
 import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
 import { useStrategyMemory } from '@/hooks/strategy/useStrategyMemory';
@@ -16,12 +18,13 @@ import { SHELL } from '@/lib/layout';
 
 export default function Strategy() {
   const {
-    threads, activeThread, setActiveThreadId, createThread, updateThread, isLoading,
+    threads, activeThread, setActiveThreadId, createThread, createThreadWithOpts, updateThread, isLoading,
   } = useStrategyThreads();
 
   const [laneFilter, setLaneFilter] = useState<string>('all');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [rightRailCollapsed, setRightRailCollapsed] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const { linkedContext } = useLinkedObjectContext(activeThread);
 
@@ -44,6 +47,10 @@ export default function Strategy() {
     refetchRollup();
   }, [refetchOutputs, refetchRollup]);
 
+  const handleCreateThreadWithOpts = useCallback((opts: CreateThreadOpts) => {
+    createThreadWithOpts(opts);
+  }, [createThreadWithOpts]);
+
   return (
     <div
       className="flex h-screen bg-background overflow-hidden"
@@ -54,7 +61,7 @@ export default function Strategy() {
           threads={threads}
           activeThreadId={activeThread?.id ?? null}
           onSelectThread={setActiveThreadId}
-          onCreateThread={createThread}
+          onOpenCreateDialog={() => setCreateDialogOpen(true)}
           laneFilter={laneFilter}
           onLaneFilterChange={setLaneFilter}
           onCollapse={() => setSidebarCollapsed(true)}
@@ -89,6 +96,12 @@ export default function Strategy() {
           onTriggerRollup={triggerRollup}
         />
       )}
+
+      <CreateThreadDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onCreateThread={handleCreateThreadWithOpts}
+      />
     </div>
   );
 }

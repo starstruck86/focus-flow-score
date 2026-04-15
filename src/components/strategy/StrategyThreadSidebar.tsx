@@ -28,7 +28,7 @@ interface Props {
   threads: StrategyThread[];
   activeThreadId: string | null;
   onSelectThread: (id: string) => void;
-  onCreateThread: (title?: string, lane?: string) => void;
+  onOpenCreateDialog: () => void;
   laneFilter: string;
   onLaneFilterChange: (f: string) => void;
   onCollapse: () => void;
@@ -36,7 +36,7 @@ interface Props {
 }
 
 export function StrategyThreadSidebar({
-  threads, activeThreadId, onSelectThread, onCreateThread,
+  threads, activeThreadId, onSelectThread, onOpenCreateDialog,
   laneFilter, onLaneFilterChange, onCollapse, isLoading,
 }: Props) {
   const [search, setSearch] = useState('');
@@ -77,7 +77,7 @@ export function StrategyThreadSidebar({
 
       {/* New Thread */}
       <div className="p-2">
-        <Button size="sm" className="w-full gap-1.5" onClick={() => onCreateThread()}>
+        <Button size="sm" className="w-full gap-1.5" onClick={onOpenCreateDialog}>
           <Plus className="h-3.5 w-3.5" /> New Thread
         </Button>
       </div>
@@ -114,7 +114,12 @@ export function StrategyThreadSidebar({
         {isLoading ? (
           <p className="text-xs text-muted-foreground p-3">Loading…</p>
         ) : filtered.length === 0 ? (
-          <p className="text-xs text-muted-foreground p-3">No threads yet. Create one to start.</p>
+          <div className="text-center p-4 space-y-2">
+            <p className="text-xs text-muted-foreground">No threads yet.</p>
+            <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={onOpenCreateDialog}>
+              <Plus className="h-3 w-3" /> Create your first thread
+            </Button>
+          </div>
         ) : (
           <div className="pb-4">
             {/* Pinned */}

@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Copy, Save, ChevronDown, ChevronUp, Database, FileText, Sparkles } from 'lucide-react';
+import { Copy, Save, ChevronDown, ChevronUp, Database, FileText, Sparkles, Brain, Upload as UploadIcon, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import type { StrategyMessage } from '@/types/strategy';
 
@@ -20,6 +20,8 @@ export function StrategyMessageBubble({ message, onSaveAsMemory }: Props) {
   const structured = contentJson?.structured;
   const workflowType = contentJson?.workflowType;
   const sourcesUsed = contentJson?.sources_used;
+  const retrievalMeta = contentJson?.retrieval_meta;
+  const modelUsed = contentJson?.model_used;
 
   if (message.message_type === 'workflow_update') {
     return (
@@ -39,6 +41,8 @@ export function StrategyMessageBubble({ message, onSaveAsMemory }: Props) {
         structured={structured}
         workflowType={workflowType}
         sourcesUsed={sourcesUsed}
+        retrievalMeta={retrievalMeta}
+        modelUsed={modelUsed}
         onSaveAsMemory={onSaveAsMemory}
       />
     );
@@ -60,10 +64,7 @@ export function StrategyMessageBubble({ message, onSaveAsMemory }: Props) {
         {!isUser && !isSystem && (
           <div className="mt-2 flex items-center gap-1.5 flex-wrap">
             {sourcesUsed != null && sourcesUsed > 0 && (
-              <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-1 font-normal">
-                <Database className="h-2 w-2" />
-                {sourcesUsed} sources
-              </Badge>
+              <SourcePills sourcesUsed={sourcesUsed} retrievalMeta={retrievalMeta} />
             )}
             {onSaveAsMemory && text && (
               <Button
@@ -81,14 +82,52 @@ export function StrategyMessageBubble({ message, onSaveAsMemory }: Props) {
   );
 }
 
+function SourcePills({ sourcesUsed, retrievalMeta }: { sourcesUsed: number; retrievalMeta?: any }) {
+  if (!retrievalMeta) {
+    return (
+      <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-1 font-normal">
+        <Database className="h-2 w-2" />
+        {sourcesUsed} sources
+      </Badge>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {(retrievalMeta.memoriesScored ?? 0) > 0 && (
+        <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
+          <Brain className="h-2 w-2" /> {retrievalMeta.memoriesScored} memory
+        </Badge>
+      )}
+      {(retrievalMeta.uploadsIncluded ?? 0) > 0 && (
+        <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
+          <UploadIcon className="h-2 w-2" /> {retrievalMeta.uploadsIncluded} uploads
+        </Badge>
+      )}
+      {(retrievalMeta.outputsIncluded ?? 0) > 0 && (
+        <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
+          <FileText className="h-2 w-2" /> {retrievalMeta.outputsIncluded} outputs
+        </Badge>
+      )}
+      {(retrievalMeta.messagesIncluded ?? 0) > 0 && (
+        <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
+          <MessageSquare className="h-2 w-2" /> {retrievalMeta.messagesIncluded} history
+        </Badge>
+      )}
+    </div>
+  );
+}
+
 // ── Structured Result Card ────────────────────────────────
 function StructuredResultCard({
-  text, structured, workflowType, sourcesUsed, onSaveAsMemory,
+  text, structured, workflowType, sourcesUsed, retrievalMeta, modelUsed, onSaveAsMemory,
 }: {
   text: string;
   structured?: any;
   workflowType?: string;
   sourcesUsed?: number;
+  retrievalMeta?: any;
+  modelUsed?: string;
   onSaveAsMemory?: (content: string, type: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -99,7 +138,6 @@ function StructuredResultCard({
   };
 
   const topSummary = structured?.summary || structured?.executive_summary || structured?.deal_summary;
-
   const workflowLabel = workflowType?.replace(/_/g, ' ') || 'Result';
   const WorkflowIcon = getWorkflowIcon(workflowType);
 
@@ -113,10 +151,7 @@ function StructuredResultCard({
           </div>
           <span className="text-xs font-semibold capitalize flex-1">{workflowLabel}</span>
           {sourcesUsed != null && sourcesUsed > 0 && (
-            <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-1 font-normal">
-              <Database className="h-2 w-2" />
-              {sourcesUsed}
-            </Badge>
+            <SourcePills sourcesUsed={sourcesUsed} retrievalMeta={retrievalMeta} />
           )}
           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setExpanded(!expanded)}>
             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
@@ -161,6 +196,9 @@ function StructuredResultCard({
             >
               <Save className="h-2.5 w-2.5" /> Save to Memory
             </Button>
+          )}
+          {modelUsed && (
+            <span className="ml-auto text-[8px] text-muted-foreground/40 font-mono">{modelUsed.split('/').pop()}</span>
           )}
         </div>
       </CardContent>
