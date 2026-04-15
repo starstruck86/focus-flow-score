@@ -3,7 +3,7 @@ import {
   ChevronRight, Link2, Lightbulb, HelpCircle, FileText,
   Pin, Copy, Save, Plus, RefreshCw, Loader2, Sparkles,
   Upload, BarChart3, Building2, Target, Globe, Cpu, Tag,
-  AlertTriangle, CheckCircle2, Clock, Eye,
+  AlertTriangle, CheckCircle2, Clock, Eye, Mail, ArrowRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
