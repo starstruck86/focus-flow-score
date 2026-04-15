@@ -326,14 +326,20 @@ async function callWithFallback(
   const timeout = setTimeout(() => controller.abort(), 55000);
 
   try {
-    const primaryAdapter = ADAPTERS[route.primaryProvider];
-    console.log(`[routing] task=${taskType} primary=${route.primaryProvider} model=${route.model}`);
+    let result: NormalizedResponse | null = null;
 
-    const result = await primaryAdapter({ ...adapterReq, model: route.model }, controller.signal);
+    if (!smokeTestForceFail) {
+      const primaryAdapter = ADAPTERS[route.primaryProvider];
+      console.log(`[routing] task=${taskType} primary=${route.primaryProvider} model=${route.model}`);
+      result = await primaryAdapter({ ...adapterReq, model: route.model }, controller.signal);
 
-    if (!result.error) {
-      console.log(`[routing] task=${taskType} provider=${result.provider} model=${result.model} latency=${result.latencyMs}ms`);
-      return result;
+      if (!result.error) {
+        console.log(`[routing] task=${taskType} provider=${result.provider} model=${result.model} latency=${result.latencyMs}ms`);
+        return result;
+      }
+    } else {
+      result = { text: "", provider: route.primaryProvider, model: route.model, latencyMs: 0, fallbackUsed: false,
+        error: { type: "smoke_test_forced", message: "SMOKE_TEST_MODE: forced primary failure" } };
     }
 
     console.warn(`[routing] primary failed: ${result.error.message}. Trying fallback=${route.fallbackProvider} model=${route.fallbackModel}`);
