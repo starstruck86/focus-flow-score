@@ -280,7 +280,7 @@ export function ActivityRings() {
   );
 
   return (
-    <div className="relative flex items-center gap-3">
+    <div className="relative flex items-center gap-2 sm:gap-3">
       {RINGS.map((ring) => {
         const value = getValue(ring);
         const goal = ring.defaultGoal;
