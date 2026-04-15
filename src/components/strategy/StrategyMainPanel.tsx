@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   PanelLeftOpen, PanelRightOpen, Search, Mail, Target, Map,
-  FileText, Pin, Send, Paperclip, Upload, Loader2, Zap,
+  FileText, Send, Paperclip, Upload, Loader2, Zap, Database,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,9 +9,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
@@ -38,11 +35,14 @@ interface Props {
   rightRailCollapsed: boolean;
   onToggleRightRail: () => void;
   linkedContext?: any;
+  onSaveMemory?: (type: string, content: string) => void;
+  onWorkflowComplete?: () => void;
 }
 
 export function StrategyMainPanel({
   thread, onUpdateThread, sidebarCollapsed, onExpandSidebar,
   rightRailCollapsed, onToggleRightRail, linkedContext,
+  onSaveMemory, onWorkflowComplete,
 }: Props) {
   const { messages, sendMessage, runWorkflow, isLoading, isSending } = useStrategyMessages(thread?.id ?? null);
   const { uploads, uploadFiles, isUploading } = useStrategyUploads(thread?.id ?? null);
@@ -50,10 +50,10 @@ export function StrategyMainPanel({
   const [depth, setDepth] = useState<typeof DEPTH_OPTIONS[number]>('Standard');
   const [activeLane, setActiveLane] = useState<string>(thread?.lane ?? 'research');
   const [isDragOver, setIsDragOver] = useState(false);
+  const [activeWorkflow, setActiveWorkflow] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll on new messages
   useEffect(() => {
     const el = scrollRef.current;
     if (el) {
@@ -62,34 +62,21 @@ export function StrategyMainPanel({
     }
   }, [messages.length]);
 
-  const uploadContext = useMemo(() =>
-    uploads.filter(u => u.parsed_text).map(u => ({
-      file_name: u.file_name,
-      parsed_text: u.parsed_text,
-      summary: u.summary,
-    })),
-  [uploads]);
-
   const handleSend = useCallback(async () => {
     if (!input.trim() || !thread) return;
     const text = input.trim();
     setInput('');
-    await sendMessage(text, {
-      linkedContext,
-      uploadedResources: uploadContext,
-      depth,
-    });
-  }, [input, thread, sendMessage, linkedContext, uploadContext, depth]);
+    await sendMessage(text, { depth });
+  }, [input, thread, sendMessage, depth]);
 
   const handleWorkflow = useCallback(async (workflowType: string) => {
     if (!thread) return;
-    await runWorkflow(workflowType, {
-      content: input.trim() || undefined,
-      linkedContext,
-      uploadedResources: uploadContext,
-    });
+    setActiveWorkflow(workflowType);
+    const result = await runWorkflow(workflowType, { content: input.trim() || undefined });
+    setActiveWorkflow(null);
     setInput('');
-  }, [thread, runWorkflow, input, linkedContext, uploadContext]);
+    if (result) onWorkflowComplete?.();
+  }, [thread, runWorkflow, input, onWorkflowComplete]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -109,6 +96,10 @@ export function StrategyMainPanel({
     e.target.value = '';
   }, [uploadFiles]);
 
+  const handleSaveFromMessage = useCallback((content: string, type: string) => {
+    onSaveMemory?.(type, content);
+  }, [onSaveMemory]);
+
   if (!thread) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
@@ -126,12 +117,11 @@ export function StrategyMainPanel({
 
   return (
     <div
-      className={cn('flex-1 flex flex-col min-w-0 bg-background', isDragOver && 'ring-2 ring-primary/40 ring-inset')}
+      className={cn('flex-1 flex flex-col min-w-0 bg-background relative', isDragOver && 'ring-2 ring-primary/40 ring-inset')}
       onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
       onDragLeave={() => setIsDragOver(false)}
       onDrop={handleDrop}
     >
-      {/* Hidden file input */}
       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
 
       {/* Top Bar */}
@@ -168,7 +158,6 @@ export function StrategyMainPanel({
                 <p className="text-xs mt-1 text-foreground/80 line-clamp-2">{thread.summary}</p>
               )}
             </div>
-            {/* Workflow Actions */}
             <div className="flex flex-wrap gap-1 mt-2">
               {WORKFLOWS.map(w => (
                 <Button
@@ -179,13 +168,30 @@ export function StrategyMainPanel({
                   disabled={isSending}
                   onClick={() => handleWorkflow(w.key)}
                 >
-                  <w.icon className="h-3 w-3" /> {w.label}
+                  {activeWorkflow === w.key ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <w.icon className="h-3 w-3" />
+                  )}
+                  {w.label}
                 </Button>
               ))}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Active Workflow Banner */}
+      {activeWorkflow && (
+        <div className="px-4 pt-2">
+          <div className="bg-primary/10 border border-primary/20 rounded-md px-3 py-1.5 flex items-center gap-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+            <span className="text-xs text-primary font-medium">
+              Running {activeWorkflow.replace(/_/g, ' ')}…
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Lane Tabs */}
       <div className="px-4 pt-2 shrink-0">
@@ -216,9 +222,13 @@ export function StrategyMainPanel({
         ) : (
           <div className="space-y-3">
             {messages.map(m => (
-              <StrategyMessageBubble key={m.id} message={m} />
+              <StrategyMessageBubble
+                key={m.id}
+                message={m}
+                onSaveAsMemory={onSaveMemory ? handleSaveFromMessage : undefined}
+              />
             ))}
-            {isSending && (
+            {isSending && !activeWorkflow && (
               <div className="flex justify-start">
                 <div className="bg-muted rounded-lg px-3 py-2 flex items-center gap-2">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -230,7 +240,7 @@ export function StrategyMainPanel({
         )}
       </ScrollArea>
 
-      {/* Upload indicator */}
+      {/* Drop overlay */}
       {isDragOver && (
         <div className="absolute inset-0 bg-primary/5 flex items-center justify-center z-10 pointer-events-none">
           <div className="bg-card border-2 border-dashed border-primary/40 rounded-xl px-8 py-6 text-center">
