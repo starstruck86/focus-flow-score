@@ -15,7 +15,8 @@ import { useStrategyOutputs } from '@/hooks/strategy/useStrategyOutputs';
 import { useStrategyArtifacts } from '@/hooks/strategy/useStrategyArtifacts';
 import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
 import { useStrategyRollups } from '@/hooks/strategy/useStrategyRollups';
-import { SHELL } from '@/lib/layout';
+import { SHELL, PX } from '@/lib/layout';
+import { BottomNav } from '@/components/layout/BottomNav';
 
 export default function Strategy() {
   const {
@@ -86,8 +87,11 @@ export default function Strategy() {
 
   return (
     <div
-      className="flex h-screen bg-background overflow-hidden"
-      style={{ paddingTop: SHELL.top.safeArea }}
+      className="flex bg-background overflow-hidden"
+      style={{
+        paddingTop: 'env(safe-area-inset-top)',
+        height: `calc(100dvh - ${PX.BOTTOM_NAV}px - env(safe-area-inset-bottom))`,
+      }}
     >
       {!sidebarCollapsed && (
         <StrategyThreadSidebar
