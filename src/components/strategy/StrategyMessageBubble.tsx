@@ -87,56 +87,42 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
-          'max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
+          'max-w-[85%] text-sm leading-relaxed',
           isUser
-            ? 'bg-primary text-primary-foreground rounded-br-sm'
+            ? 'bg-primary text-primary-foreground rounded-xl rounded-br-sm px-3.5 py-2.5'
             : isSystem
-              ? 'bg-muted/30 text-muted-foreground italic text-xs'
-              : 'bg-muted/60 text-foreground rounded-bl-sm',
+              ? 'bg-transparent text-muted-foreground/60 italic text-xs px-1 py-1'
+              : 'rounded-xl rounded-bl-sm px-3.5 py-2.5 bg-card border border-border/30 text-foreground shadow-sm',
         )}
       >
         {text ? (
           <div className="whitespace-pre-wrap">{text}</div>
         ) : (
           <div className="flex items-center gap-2 py-0.5">
-            <div className="flex gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-foreground/25 animate-bounce [animation-delay:0ms]" />
-              <span className="h-1.5 w-1.5 rounded-full bg-foreground/25 animate-bounce [animation-delay:150ms]" />
-              <span className="h-1.5 w-1.5 rounded-full bg-foreground/25 animate-bounce [animation-delay:300ms]" />
+            <div className="flex gap-0.5">
+              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:0ms]" />
+              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:150ms]" />
+              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:300ms]" />
             </div>
-            <span className="text-xs text-foreground/40">Generating response…</span>
+            <span className="text-[11px] text-foreground/35">Generating…</span>
           </div>
         )}
-        {!isUser && !isSystem && (
-          <div className="mt-2 space-y-1.5">
-            {/* Provider + model pill */}
+        {!isUser && !isSystem && text && (
+          <div className="mt-2 pt-1.5 border-t border-border/20 flex items-center gap-1.5 flex-wrap">
             {providerUsed && (
-              <div className="flex items-center gap-1 flex-wrap">
-                <Badge variant="outline" className="text-[8px] px-1.5 py-0 gap-1 font-normal">
-                  <Cpu className="h-2 w-2" />
-                  {providerUsed === 'openai' ? 'ChatGPT' : providerUsed === 'anthropic' ? 'Claude' : providerUsed === 'perplexity' ? 'Perplexity' : providerUsed}
-                  {modelUsed ? ` · ${modelUsed.split('/').pop()}` : ''}
-                </Badge>
-                {fallbackUsed && (
-                  <Badge variant="destructive" className="text-[7px] px-1 py-0 font-normal">
-                    fallback
-                  </Badge>
-                )}
-              </div>
+              <span className="text-[8px] text-muted-foreground/40 flex items-center gap-0.5">
+                <Cpu className="h-2 w-2" />
+                {providerUsed === 'openai' ? 'ChatGPT' : providerUsed === 'anthropic' ? 'Claude' : providerUsed === 'perplexity' ? 'Perplexity' : providerUsed}
+                {modelUsed ? ` · ${modelUsed.split('/').pop()}` : ''}
+              </span>
             )}
-            {(sourcesUsed != null && sourcesUsed > 0) || retrievalMeta || modelUsed ? (
-              <SourceInspectorPanel
-                sourcesUsed={sourcesUsed ?? 0}
-                retrievalMeta={retrievalMeta}
-                modelUsed={modelUsed}
-                providerUsed={providerUsed}
-                fallbackUsed={fallbackUsed}
-              />
-            ) : null}
-            {onSaveAsMemory && text && (
+            {(sourcesUsed != null && sourcesUsed > 0) && (
+              <span className="text-[8px] text-muted-foreground/40">{sourcesUsed} sources</span>
+            )}
+            {onSaveAsMemory && (
               <Button
                 size="sm" variant="ghost"
-                className="h-5 text-[9px] px-1.5 gap-0.5 text-muted-foreground hover:text-foreground"
+                className="h-5 text-[9px] px-1.5 gap-0.5 text-muted-foreground/50 hover:text-foreground ml-auto"
                 onClick={() => onSaveAsMemory(text.slice(0, 500), 'fact')}
               >
                 <Save className="h-2 w-2" /> Save

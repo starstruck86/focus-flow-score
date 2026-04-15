@@ -219,32 +219,39 @@ export function StrategyMainPanel({
       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect}
         accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.json,.xml,.html" />
 
-      {/* ── HEADER REGION ── */}
-      <div className="shrink-0 border-b border-border/60">
-        {/* Title + workflows in one tight block */}
-        <div className="px-3 py-1 flex items-center gap-2">
+      {/* ── HEADER — unified title + workflow strip ── */}
+      <div className="shrink-0 border-b border-border/40 bg-card/50">
+        <div className="px-3 py-1.5 flex items-center gap-2">
           {sidebarCollapsed && (
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExpandSidebar}>
               <PanelLeftOpen className="h-4 w-4" />
             </Button>
           )}
-          <ThreadIcon className="h-4 w-4 text-primary/70 shrink-0" />
+          <ThreadIcon className="h-3.5 w-3.5 text-primary/60 shrink-0" />
           <h1 className="text-sm font-semibold text-foreground truncate flex-1">{thread.title}</h1>
           {isUploading && (
             <Badge variant="secondary" className="text-[10px] gap-1 animate-pulse shrink-0">
               <Loader2 className="h-3 w-3 animate-spin" /> Uploading
             </Badge>
           )}
+
+          {/* Running status — inline with title */}
+          {activeWorkflow && (
+            <span className="text-[10px] text-primary/60 font-medium shrink-0 flex items-center gap-1">
+              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+              {activeWorkflowLabel}
+            </span>
+          )}
+
           {!isMobile && !rightRailCollapsed && (
-            <Button size="icon" variant="ghost" className="h-7 w-7 text-foreground/40" onClick={onToggleRightRail} title="Toggle details panel">
+            <Button size="icon" variant="ghost" className="h-7 w-7 text-foreground/30" onClick={onToggleRightRail}>
               <PanelRightOpen className="h-4 w-4" />
             </Button>
           )}
         </div>
 
-        {/* Workflow row — tight, with running state and overflow */}
-        <div className="px-3 pb-1 flex items-center gap-1">
-          {/* Context badges — desktop only */}
+        {/* Workflow strip — seamless with header */}
+        <div className="px-3 pb-1.5 flex items-center gap-1">
           {!isMobile && (
             <>
               <Badge variant="outline" className="text-[10px] font-medium shrink-0">
@@ -265,11 +272,10 @@ export function StrategyMainPanel({
                   {linkedContext.opportunity.name}
                 </Badge>
               )}
-              <div className="w-px h-3.5 bg-border mx-0.5 shrink-0" />
+              <div className="w-px h-3 bg-border/40 mx-0.5 shrink-0" />
             </>
           )}
 
-          {/* Workflow buttons */}
           <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
             {visibleWorkflows.map(w => {
               const isRunning = activeWorkflow === w.key;
@@ -298,23 +304,15 @@ export function StrategyMainPanel({
               );
             })}
 
-            {/* Overflow — explicit workflows control */}
             {overflowWorkflows.length > 0 && (
               <button
-                className="h-6 px-2 text-[10px] font-medium text-foreground/50 hover:text-foreground border border-border/50 hover:border-border rounded-md transition-colors shrink-0 flex items-center gap-1"
+                className="h-6 px-2.5 text-[10px] font-medium text-foreground/45 hover:text-foreground/70 border border-border/40 hover:border-border/70 rounded-md transition-colors shrink-0 flex items-center gap-1.5"
                 onClick={() => setWorkflowSheetOpen(true)}
               >
                 <Zap className="h-2.5 w-2.5" />
-                +{overflowWorkflows.length} workflows
+                Workflows
+                <span className="text-[9px] text-foreground/30">+{overflowWorkflows.length}</span>
               </button>
-            )}
-
-            {/* Running status — inline, tied to workflow row */}
-            {activeWorkflow && (
-              <span className="text-[10px] text-primary/70 font-medium shrink-0 flex items-center gap-1 ml-auto">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                {activeWorkflowLabel}…
-              </span>
             )}
           </div>
         </div>
@@ -375,13 +373,13 @@ export function StrategyMainPanel({
               })}
               {isSending && !activeWorkflow && (
                 <div className="flex justify-start">
-                  <div className="bg-muted/60 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
-                    <div className="flex gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:0ms]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:150ms]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:300ms]" />
+                  <div className="bg-muted/40 rounded-lg px-3 py-2 flex items-center gap-2">
+                    <div className="flex gap-0.5">
+                      <span className="h-1 w-1 rounded-full bg-primary/40 animate-bounce [animation-delay:0ms]" />
+                      <span className="h-1 w-1 rounded-full bg-primary/40 animate-bounce [animation-delay:150ms]" />
+                      <span className="h-1 w-1 rounded-full bg-primary/40 animate-bounce [animation-delay:300ms]" />
                     </div>
-                    <span className="text-xs text-foreground/50">Thinking…</span>
+                    <span className="text-[11px] text-foreground/40">Thinking…</span>
                   </div>
                 </div>
               )}
@@ -401,10 +399,9 @@ export function StrategyMainPanel({
         </div>
       )}
 
-      {/* ── COMPOSER — unified card surface ── */}
-      <div className="shrink-0 border-t border-border/60 bg-card/80 backdrop-blur-sm px-3 pt-1.5 pb-[calc(0.375rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))]">
-        <div className="rounded-lg border border-border/80 bg-background shadow-sm overflow-hidden">
-          {/* Textarea */}
+      {/* ── COMPOSER ── */}
+      <div className="shrink-0 border-t border-border/30 bg-card/60 backdrop-blur-sm px-3 pt-1.5 pb-[calc(0.375rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))]">
+        <div className="rounded-lg border border-border/60 bg-background shadow-sm overflow-hidden">
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -412,16 +409,14 @@ export function StrategyMainPanel({
             placeholder={isSending ? 'Waiting…' : hasLinkedObject ? `Message about ${linkedContext?.account?.name || linkedContext?.opportunity?.name || 'this'}…` : 'Message…'}
             className={cn(
               'w-full border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none text-sm resize-none bg-transparent',
-              isMobile ? 'min-h-[40px]' : 'min-h-[36px]'
+              isMobile ? 'min-h-[38px]' : 'min-h-[36px]'
             )}
             rows={1}
             disabled={isSending}
           />
-          {/* Controls bar */}
-          <div className="flex items-center justify-between px-2 py-1 border-t border-border/40 bg-muted/20">
-            <div className="flex items-center gap-1">
-              {/* Depth selector */}
-              <div className="flex rounded-md border border-border/60 overflow-hidden">
+          <div className="flex items-center justify-between px-2 py-1 border-t border-border/30">
+            <div className="flex items-center gap-1.5">
+              <div className="flex rounded-md border border-border/50 overflow-hidden">
                 {DEPTH_OPTIONS.map(d => (
                   <button
                     key={d}
@@ -430,7 +425,7 @@ export function StrategyMainPanel({
                       'px-2 py-0.5 text-[10px] font-medium transition-colors',
                       depth === d
                         ? 'bg-primary text-primary-foreground'
-                        : 'bg-transparent text-foreground/40 hover:bg-muted hover:text-foreground/70'
+                        : 'bg-transparent text-foreground/35 hover:bg-muted hover:text-foreground/60'
                     )}
                     onClick={() => setDepth(d)}
                   >
@@ -438,20 +433,18 @@ export function StrategyMainPanel({
                   </button>
                 ))}
               </div>
-              {/* Attach — subtle but visible */}
-              <Button
-                size="icon" variant="ghost" className="h-6 w-6 text-foreground/35 hover:text-foreground/70"
+              <button
+                className="h-6 w-6 flex items-center justify-center text-foreground/30 hover:text-foreground/60 transition-colors"
                 title="Attach file"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isSending}
               >
                 <Paperclip className="h-3.5 w-3.5" />
-              </Button>
+              </button>
             </div>
-            {/* Send — primary action */}
             <Button
               size="sm"
-              className="h-7 gap-1.5 px-4 shrink-0 font-semibold shadow-md"
+              className="h-7 gap-1.5 px-4 shrink-0 font-semibold shadow-sm"
               onClick={handleSend}
               disabled={!input.trim() || isSending}
             >
