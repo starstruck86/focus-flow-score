@@ -293,6 +293,7 @@ export default function SkillBuilderSession() {
         const downgraded = evaluateModeDowngrade(deliveryMode, next);
         if (downgraded !== deliveryMode) {
           setDeliveryMode(downgraded);
+          setDowngradeReason(`${next} failures: ${deliveryMode} → ${downgraded}`);
           toast.info(
             downgraded === 'text'
               ? 'Audio unavailable — switched to text mode'
