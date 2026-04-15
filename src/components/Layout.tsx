@@ -353,7 +353,7 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
 
       <BottomNav />
       <BackToToday />
-      <GlobalFAB position="bottom-left" />
+      {!hideFloatingFab && <GlobalFAB position="bottom-left" />}
 
       {/* Dave is the PRIMARY floating action — bottom-right, thumb-accessible */}
       {!daveDrift && !hideFloatingFab && (
