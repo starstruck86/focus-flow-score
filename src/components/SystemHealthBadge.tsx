@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { useSystemHealth } from '@/hooks/useSystemHealth';
-
-import { Activity, CheckCircle2, AlertTriangle, XCircle, ExternalLink } from 'lucide-react';
+import { Activity, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function SystemHealthBadge() {
-  const { health, isLoading } = useSystemHealth();
+  const { health, hasFallbackActivity, isLoading } = useSystemHealth();
   const [open, setOpen] = useState(false);
-  
 
   if (isLoading || !health) return null;
 
@@ -28,7 +26,6 @@ export function SystemHealthBadge() {
 
   return (
     <div className="fixed bottom-4 right-4 z-50">
-      {/* Badge button */}
       <button
         onClick={() => setOpen(!open)}
         className={cn(
@@ -41,7 +38,6 @@ export function SystemHealthBadge() {
         <span className="hidden sm:inline">{label}</span>
       </button>
 
-      {/* Detail panel */}
       {open && (
         <div className="absolute bottom-full right-0 mb-2 w-72 rounded-lg border border-border bg-popover p-4 shadow-xl text-sm space-y-3">
           <div className="flex items-center justify-between">
@@ -51,7 +47,6 @@ export function SystemHealthBadge() {
 
           <div className="text-xs text-muted-foreground">Last run: {ago}</div>
 
-          {/* Provider health */}
           <div className="flex gap-2 flex-wrap">
             {Object.entries(health.provider_health).map(([p, ok]) => (
               <span key={p} className={cn('px-2 py-0.5 rounded text-xs border', ok ? 'border-green-600/30 text-green-400' : 'border-red-600/30 text-red-400')}>
@@ -60,13 +55,15 @@ export function SystemHealthBadge() {
             ))}
           </div>
 
-          {/* Counts */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>Infra: <span className="text-green-400">{health.infra_passed}✓</span> <span className="text-red-400">{health.infra_failed}✗</span></div>
             <div>E2E: <span className="text-green-400">{health.e2e_passed}✓</span> <span className="text-red-400">{health.e2e_failed}✗</span></div>
           </div>
 
-          {/* Failed tests */}
+          {hasFallbackActivity && (
+            <div className="text-xs text-amber-400">⚠️ Fallback activity detected</div>
+          )}
+
           {health.failed_tests.length > 0 && (
             <div className="space-y-1">
               <div className="text-xs font-medium text-red-400">Failing:</div>

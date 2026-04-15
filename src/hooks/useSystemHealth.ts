@@ -1,5 +1,5 @@
 /**
- * Hook to fetch latest smoke test result and detect state changes for notifications.
+ * Hook to fetch latest smoke test result with persistent notification dedupe.
  */
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -18,19 +18,15 @@ export interface HealthRecord {
   e2e_failed: number;
   failed_tests: Array<{ test: string; error?: string }>;
   created_at: string;
+  full_result?: { results?: Array<{ fallback_used?: boolean }> };
 }
 
-const CRITICAL_TESTS = [
-  'e2e_strategy_chat',
-  'e2e_strategy_workflow',
-  'e2e_artifact_transform',
-];
+const LS_NOTIFIED_ID = 'smoke_last_notified_id';
+const LS_NOTIFIED_STATUS = 'smoke_last_notified_status';
 
 export function useSystemHealth() {
   const { user } = useAuth();
-  const prevStatusRef = useRef<string | null>(null);
-  const prevHealthRef = useRef<Record<string, boolean> | null>(null);
-  const hasNotifiedRef = useRef(false);
+  const currentCreatedAtRef = useRef<string | null>(null);
 
   const query = useQuery({
     queryKey: ['system-health', user?.id],
@@ -49,65 +45,72 @@ export function useSystemHealth() {
         ...data,
         provider_health: (data.provider_health ?? {}) as Record<string, boolean>,
         failed_tests: (data.failed_tests ?? []) as Array<{ test: string; error?: string }>,
+        full_result: (data.full_result ?? undefined) as HealthRecord['full_result'],
       };
     },
     enabled: !!user,
     staleTime: 60_000,
-    refetchInterval: 5 * 60_000, // re-check every 5 min
+    refetchInterval: 5 * 60_000,
   });
 
   const health = query.data;
 
-  // Notification logic — only fire on state transitions
+  // Persistent notification dedupe
   useEffect(() => {
-    if (!health || hasNotifiedRef.current) return;
+    if (!health) return;
 
-    const prev = prevStatusRef.current;
-    const prevProviders = prevHealthRef.current;
+    // Race-condition guard: ignore stale results
+    if (currentCreatedAtRef.current && new Date(health.created_at) < new Date(currentCreatedAtRef.current)) {
+      return;
+    }
+    currentCreatedAtRef.current = health.created_at;
 
-    // Update refs
-    prevStatusRef.current = health.status;
-    prevHealthRef.current = health.provider_health;
+    const lastNotifiedId = localStorage.getItem(LS_NOTIFIED_ID);
+    const lastNotifiedStatus = localStorage.getItem(LS_NOTIFIED_STATUS);
 
-    // Skip first load (no previous state to compare)
-    if (prev === null) return;
+    // Same result already notified — skip
+    if (health.id === lastNotifiedId) return;
 
-    // Status degradation
-    if (prev === 'ok' && health.status !== 'ok') {
-      hasNotifiedRef.current = true;
+    // Degradation notification
+    if (health.status !== 'ok') {
       const failedCount = health.e2e_failed + health.infra_failed;
       toast.error(`AI System ${health.status === 'failed' ? 'Down' : 'Degraded'}`, {
         description: `${failedCount} test(s) failing`,
         duration: 10_000,
       });
-    }
+      localStorage.setItem(LS_NOTIFIED_ID, health.id);
+      localStorage.setItem(LS_NOTIFIED_STATUS, health.status);
 
-    // Provider went unhealthy
-    if (prevProviders) {
-      for (const [provider, wasHealthy] of Object.entries(prevProviders)) {
-        if (wasHealthy && health.provider_health[provider] === false) {
-          hasNotifiedRef.current = true;
-          toast.error(`${provider} is now unhealthy`, {
+      // Provider-specific alerts
+      for (const [provider, isHealthy] of Object.entries(health.provider_health)) {
+        if (!isHealthy) {
+          toast.error(`${provider} is unhealthy`, {
             description: 'Fallback may be active',
             duration: 8_000,
           });
         }
       }
+      return;
     }
 
-    // Critical test failure
-    const criticalFails = health.failed_tests
-      .filter(t => CRITICAL_TESTS.includes(t.test))
-      .map(t => t.test);
-    if (criticalFails.length > 0 && prev === 'ok') {
-      // already covered by status degradation toast above
+    // Recovery notification: previous was degraded, now ok
+    if (lastNotifiedStatus && lastNotifiedStatus !== 'ok' && health.status === 'ok') {
+      toast.success('AI System Recovered', {
+        description: 'All systems operational',
+        duration: 6_000,
+      });
+      localStorage.setItem(LS_NOTIFIED_ID, health.id);
+      localStorage.setItem(LS_NOTIFIED_STATUS, 'ok');
+      return;
     }
 
-    // Reset notification flag when healthy again
-    if (health.status === 'ok') {
-      hasNotifiedRef.current = false;
-    }
+    // Healthy and previous was healthy (or first load) — just update silently
+    localStorage.setItem(LS_NOTIFIED_ID, health.id);
+    localStorage.setItem(LS_NOTIFIED_STATUS, health.status);
   }, [health]);
 
-  return { health, ...query };
+  // Derive fallback warning from full_result
+  const hasFallbackActivity = !!(health?.full_result?.results?.some(r => r.fallback_used));
+
+  return { health, hasFallbackActivity, ...query };
 }
