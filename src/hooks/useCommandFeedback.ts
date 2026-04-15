@@ -41,8 +41,7 @@ export function useCommandFeedback() {
         section_heading: ctx.sectionHeading || null,
         metadata: ctx.metadata || null,
       } as any)
-      .then(() => {})
-      .catch(() => {});
+      .then(() => {});
   }, [user]);
 
   return { capture };
