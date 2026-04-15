@@ -67,12 +67,12 @@ export function StrategyThreadSidebar({
   }, [recent]);
 
   return (
-    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border flex flex-col shrink-0 h-full')}>
+    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/50 flex flex-col shrink-0 h-full')}>
       {/* Header */}
-      <div className="p-3 border-b border-border flex items-center gap-2">
-        <h2 className="text-sm font-semibold text-foreground flex-1">Threads</h2>
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onCollapse}>
-          <ChevronLeft className="h-4 w-4" />
+      <div className="px-3 py-2 border-b border-border/40 flex items-center gap-2">
+        <h2 className="text-xs font-semibold text-foreground/80 uppercase tracking-wider flex-1">Threads</h2>
+        <Button size="icon" variant="ghost" className="h-6 w-6 text-foreground/40" onClick={onCollapse}>
+          <ChevronLeft className="h-3.5 w-3.5" />
         </Button>
       </div>
 
@@ -172,21 +172,22 @@ function ThreadRow({ thread, isActive, onClick }: { thread: StrategyThread; isAc
       className={cn(
         'w-full text-left px-2 py-1.5 rounded-md text-xs flex items-start gap-2 transition-colors',
         isActive
-          ? 'bg-accent text-accent-foreground'
-          : 'hover:bg-muted text-foreground/80 hover:text-foreground',
+          ? 'bg-primary/8 text-foreground border-l-2 border-primary/50 pl-1.5'
+          : 'hover:bg-muted/50 text-foreground/70 hover:text-foreground',
       )}
     >
-      <Icon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+      <Icon className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', isActive ? 'text-primary/70' : 'text-muted-foreground/60')} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1">
           <span className="truncate font-medium">{thread.title}</span>
           {thread.is_pinned && <Pin className="h-2.5 w-2.5 text-amber-500 shrink-0" />}
         </div>
         <div className="flex items-center gap-1 mt-0.5">
-          <Badge variant="outline" className={cn('text-[9px] px-1 py-0 leading-tight', LANE_COLORS[thread.lane])}>
+          <span className={cn('text-[9px] font-medium', LANE_COLORS[thread.lane]?.split(' ').pop() || 'text-muted-foreground')}>
             {thread.lane}
-          </Badge>
-          <span className="text-[10px] text-muted-foreground">{timeAgo}</span>
+          </span>
+          <span className="text-[10px] text-muted-foreground/50">·</span>
+          <span className="text-[10px] text-muted-foreground/50">{timeAgo}</span>
         </div>
       </div>
     </button>
