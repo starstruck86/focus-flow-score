@@ -680,17 +680,33 @@ ${contextSection}`;
     })),
   ];
 
-  const aiResp = await fetch(provider.gateway, {
-    method: "POST",
-    headers: { [provider.authHeaderName]: provider.getAuthValue(), "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: route.model,
-      messages,
-      stream: true,
-      temperature: route.temperature,
-      max_tokens: route.maxTokens,
-    }),
-  });
+  const chatController = new AbortController();
+  const chatTimeout = setTimeout(() => chatController.abort(), 55000);
+
+  let aiResp: Response;
+  try {
+    aiResp = await fetch(provider.gateway, {
+      method: "POST",
+      headers: { [provider.authHeaderName]: provider.getAuthValue(), "Content-Type": "application/json" },
+      signal: chatController.signal,
+      body: JSON.stringify({
+        model: route.model,
+        messages,
+        stream: true,
+        temperature: route.temperature,
+        max_tokens: route.maxTokens,
+      }),
+    });
+  } catch (e: any) {
+    clearTimeout(chatTimeout);
+    if (e.name === "AbortError") {
+      return new Response(JSON.stringify({ error: "Request timed out — please try again" }), {
+        status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    throw e;
+  }
+  clearTimeout(chatTimeout);
 
   if (!aiResp.ok) return handleAIError(aiResp.status);
 
