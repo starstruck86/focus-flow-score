@@ -314,9 +314,10 @@ async function buildContextPack(
 
       const { data: mem } = await supabase
         .from("account_strategy_memory")
-        .select("id, memory_type, content, is_pinned, confidence, created_at")
+        .select("id, memory_type, content, is_pinned, confidence, last_used_at, created_at")
         .eq("account_id", thread.linked_account_id)
         .eq("user_id", userId)
+        .eq("is_irrelevant", false)
         .order("created_at", { ascending: false })
         .limit(40);
       if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "account" })));
@@ -334,9 +335,10 @@ async function buildContextPack(
 
       const { data: mem } = await supabase
         .from("opportunity_strategy_memory")
-        .select("id, memory_type, content, is_pinned, confidence, created_at")
+        .select("id, memory_type, content, is_pinned, confidence, last_used_at, created_at")
         .eq("opportunity_id", thread.linked_opportunity_id)
         .eq("user_id", userId)
+        .eq("is_irrelevant", false)
         .order("created_at", { ascending: false })
         .limit(40);
       if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "opportunity" })));
@@ -347,9 +349,10 @@ async function buildContextPack(
     promises.push((async () => {
       const { data: mem } = await supabase
         .from("territory_strategy_memory")
-        .select("id, memory_type, content, is_pinned, confidence, created_at")
+        .select("id, memory_type, content, is_pinned, confidence, last_used_at, created_at")
         .eq("territory_id", thread.linked_territory_id)
         .eq("user_id", userId)
+        .eq("is_irrelevant", false)
         .order("created_at", { ascending: false })
         .limit(40);
       if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "territory" })));
