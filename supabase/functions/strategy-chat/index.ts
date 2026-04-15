@@ -169,9 +169,22 @@ async function anthropicAdapter(req: AdapterRequest, signal: AbortSignal): Promi
   let text = "";
   let structured: any = undefined;
 
-  for (const block of (data.content || [])) {
+  if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
+    console.error("[anthropic-direct] empty content array in response");
+    return { text: "", provider: "anthropic", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+      error: { type: "empty_response", message: "Anthropic returned empty content" } };
+  }
+
+  for (const block of data.content) {
     if (block.type === "text") text += block.text;
     if (block.type === "tool_use") { structured = block.input; }
+  }
+
+  // If tools were requested but no structured output, treat as error
+  if (req.tools?.length && req.toolChoice && !structured && !text) {
+    console.warn("[anthropic-direct] tool_choice forced but no tool_use block returned");
+    return { text: "", provider: "anthropic", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+      error: { type: "missing_tool_call", message: "No tool_use block in Anthropic response" } };
   }
 
   return { text, structured, provider: "anthropic", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
