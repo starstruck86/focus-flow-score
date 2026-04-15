@@ -186,6 +186,16 @@ const ADAPTERS: Record<ProviderKey, AdapterFn> = {
 };
 
 // ═══════════════════════════════════════════════════════════
+// PROVIDER HEALTH CHECK — logged on every cold start
+// ═══════════════════════════════════════════════════════════
+const PROVIDER_HEALTH = {
+  anthropic: !!Deno.env.get("ANTHROPIC_API_KEY"),
+  lovableGateway: !!Deno.env.get("LOVABLE_API_KEY"),
+  perplexity: !!Deno.env.get("PERPLEXITY_API_KEY"),
+};
+console.log(`[provider-health] Anthropic: ${PROVIDER_HEALTH.anthropic ? "ENABLED" : "DISABLED"} | Lovable Gateway (OpenAI): ${PROVIDER_HEALTH.lovableGateway ? "ENABLED" : "DISABLED"} | Perplexity: ${PROVIDER_HEALTH.perplexity ? "ENABLED" : "DISABLED"}`);
+
+// ═══════════════════════════════════════════════════════════
 // LAYER 2 — ROUTER
 // ═══════════════════════════════════════════════════════════
 type TaskType = "chat_general" | "deep_research" | "email_evaluation" | "territory_tiering" | "account_plan" | "opportunity_strategy" | "brainstorm" | "rollup";
