@@ -235,8 +235,8 @@ export function StrategyMainPanel({
               <Loader2 className="h-3 w-3 animate-spin" /> Uploading
             </Badge>
           )}
-          {!isMobile && (
-            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onToggleRightRail}>
+          {!isMobile && !rightRailCollapsed && (
+            <Button size="icon" variant="ghost" className="h-7 w-7 text-foreground/40" onClick={onToggleRightRail} title="Toggle details panel">
               <PanelRightOpen className="h-4 w-4" />
             </Button>
           )}
@@ -298,13 +298,14 @@ export function StrategyMainPanel({
               );
             })}
 
-            {/* Overflow — readable chip, not cryptic dots */}
+            {/* Overflow — styled chip control */}
             {overflowWorkflows.length > 0 && (
               <button
-                className="h-6 px-2 text-[10px] font-medium text-foreground/50 hover:text-foreground hover:bg-muted rounded-md transition-colors shrink-0"
+                className="h-6 px-2.5 text-[10px] font-medium text-foreground/50 hover:text-foreground border border-border/50 hover:border-border rounded-md transition-colors shrink-0 flex items-center gap-1"
                 onClick={() => setWorkflowSheetOpen(true)}
               >
-                +{overflowWorkflows.length} more
+                <Zap className="h-2.5 w-2.5" />
+                +{overflowWorkflows.length}
               </button>
             )}
 
@@ -321,7 +322,7 @@ export function StrategyMainPanel({
 
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="px-3 py-1.5">
+        <div className="px-3 py-1">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -447,10 +448,10 @@ export function StrategyMainPanel({
                 <Paperclip className="h-3.5 w-3.5" />
               </Button>
             </div>
-            {/* Send — clearly primary */}
+            {/* Send — primary action */}
             <Button
               size="sm"
-              className="h-7 gap-1.5 px-3.5 shrink-0 font-semibold shadow-sm"
+              className="h-7 gap-1.5 px-4 shrink-0 font-semibold shadow-md"
               onClick={handleSend}
               disabled={!input.trim() || isSending}
             >
@@ -470,7 +471,7 @@ export function StrategyMainPanel({
               Run a workflow on this thread
             </SheetDescription>
           </SheetHeader>
-          <div className="grid grid-cols-2 gap-1.5 pb-3">
+          <div className="grid grid-cols-2 gap-2 pb-3">
             {WORKFLOWS.map(w => {
               const isRunning = activeWorkflow === w.key;
               const isRecommended = recommendedWorkflows.includes(w.key);
@@ -478,9 +479,9 @@ export function StrategyMainPanel({
                 <button
                   key={w.key}
                   className={cn(
-                    'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left transition-colors',
-                    'border-border/60 hover:bg-muted/40',
-                    isRecommended && 'border-primary/20',
+                    'flex items-center gap-2.5 px-3 py-3 rounded-lg border text-left transition-colors',
+                    'border-border/50 hover:bg-muted/30 active:bg-muted/50',
+                    isRecommended && 'border-primary/25',
                     isRunning && 'border-primary/40 bg-primary/5',
                     (isSending || !!activeWorkflow) && 'opacity-50 pointer-events-none'
                   )}
@@ -488,13 +489,13 @@ export function StrategyMainPanel({
                   disabled={isSending || !!activeWorkflow}
                 >
                   {isRunning ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                    <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
                   ) : (
-                    <w.icon className={cn('h-3.5 w-3.5 shrink-0', isRecommended ? 'text-primary' : 'text-foreground/50')} />
+                    <w.icon className={cn('h-4 w-4 shrink-0', isRecommended ? 'text-primary' : 'text-foreground/40')} />
                   )}
                   <div className="min-w-0">
                     <span className="text-xs font-medium block">{w.label}</span>
-                    <span className="text-[10px] text-foreground/40 leading-tight block truncate">{w.description}</span>
+                    <span className="text-[10px] text-foreground/35 leading-tight block">{w.description}</span>
                   </div>
                 </button>
               );
