@@ -288,29 +288,34 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div data-testid="app-layout" className={`min-h-screen bg-background flex flex-col w-full ${SHELL.top.safeArea}`}>
       <header
         data-testid="app-header"
-        className="flex items-center gap-2 px-3 py-2 border-b sticky top-[env(safe-area-inset-top)] z-40 bg-background/95 backdrop-blur-md"
+        className="flex flex-col gap-1 px-3 py-2 border-b sticky top-[env(safe-area-inset-top)] z-40 bg-background/95 backdrop-blur-md"
         style={headerAccentStyle}
       >
-        <div className="flex items-center gap-1 shrink-0">
-          <Compass className="h-5 w-5" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
-          <span className="font-display text-sm font-bold hidden lg:inline">Quota CoPilot</span>
-          <SaveIndicator />
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 shrink-0">
+            <Compass className="h-5 w-5" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
+            <span className="font-display text-sm font-bold hidden lg:inline">Quota CoPilot</span>
+            <SaveIndicator />
+          </div>
+          <GlobalSearch className="flex-1 min-w-0 max-w-xs sm:max-w-sm lg:max-w-md" />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <BostonClock className="hidden sm:inline" />
+            <GlobalRefreshButton />
+            <TerritoryCopilot />
+            {!isReviewMode && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={signOut}>
+                    <LogOut className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Sign Out</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         </div>
-        <GlobalSearch className="flex-1 min-w-0 max-w-xs sm:max-w-sm lg:max-w-md" />
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="sm:hidden">
           <BostonClock />
-          <GlobalRefreshButton />
-          <TerritoryCopilot />
-          {!isReviewMode && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={signOut}>
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Sign Out</TooltipContent>
-            </Tooltip>
-          )}
         </div>
       </header>
 
@@ -330,11 +335,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         ═══════════════════════════════════════════════════════════
       */}
       <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2 overflow-hidden">
-        <div className="flex items-start gap-3 sm:gap-4 flex-wrap">
-          <div className="flex-1 min-w-0 basis-[180px] overflow-hidden">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex-1 min-w-0 overflow-hidden">
             <GlobalWeekStrip />
           </div>
-          <div className="shrink-0 max-w-full overflow-x-auto">
+          <div className="shrink-0">
             <ActivityRings />
           </div>
         </div>

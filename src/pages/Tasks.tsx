@@ -20,7 +20,7 @@ export default function Tasks() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({ done: true, dropped: true });
   const [filterWorkstream, setFilterWorkstream] = useState<'all' | Workstream>('all');
-  const [filterDue, setFilterDue] = useState<'all' | 'today' | 'week'>('today');
+  const [filterDue, setFilterDue] = useState<'all' | 'today' | 'week'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [groupMode, setGroupMode] = useState<GroupMode>('status');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
