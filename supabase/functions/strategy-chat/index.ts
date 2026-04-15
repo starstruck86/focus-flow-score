@@ -821,7 +821,18 @@ You MUST call the provided tool function with your structured result.`;
   else if (pack.opportunity) outputTitle = `${pack.opportunity.name} — ${outputTitle}`;
   outputTitle += ` — ${new Date().toLocaleDateString()}`;
 
-  // Save result message with structured data
+  // Create durable output first so we have its ID
+  const { data: output } = await supabase.from("strategy_outputs").insert({
+    user_id: userId, thread_id: threadId, workflow_run_id: run.id,
+    output_type: workflowTypeToOutputType(workflowType),
+    title: outputTitle,
+    content_json: structuredData,
+    rendered_text: renderedText,
+    linked_account_id: pack.account?.id || null,
+    linked_opportunity_id: pack.opportunity?.id || null,
+  }).select().single();
+
+  // Save result message with structured data + outputId for artifact linking
   const { data: resultMsg } = await supabase.from("strategy_messages").insert({
     thread_id: threadId, user_id: userId, role: "assistant",
     message_type: "workflow_result",
@@ -830,6 +841,7 @@ You MUST call the provided tool function with your structured result.`;
       structured: structuredData,
       workflowType,
       runId: run.id,
+      outputId: output?.id || null,
       sources_used: pack.sourceCount,
       retrieval_meta: pack.retrievalMeta,
       model_used: route.model,
