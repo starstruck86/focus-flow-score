@@ -366,6 +366,7 @@ export function StrategyMainPanel({
                 onSaveAsMemory={onSaveMemory ? handleSaveFromMessage : undefined}
                 onTransformOutput={handleTransformOutput}
                 onBranchThread={handleBranchThread}
+                isTransforming={isTransforming}
               />
             ))}
             {isSending && !activeWorkflow && (

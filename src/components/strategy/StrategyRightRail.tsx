@@ -18,6 +18,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import type { StrategyThread, StrategyOutput } from '@/types/strategy';
+import type { StrategyArtifact } from '@/hooks/strategy/useStrategyArtifacts';
 import type { StrategyMemoryEntry } from '@/hooks/strategy/useStrategyMemory';
 import type { StrategyUpload } from '@/hooks/strategy/useStrategyUploads';
 import { getParseStatus } from '@/hooks/strategy/useStrategyUploads';
@@ -30,11 +31,13 @@ interface Props {
   memories: StrategyMemoryEntry[];
   uploads: StrategyUpload[];
   outputs: StrategyOutput[];
+  artifacts: StrategyArtifact[];
   onSaveMemory: (type: string, content: string) => void;
   rollup: StrategyRollup | null;
   memorySuggestions: MemorySuggestion[];
   isRollupLoading: boolean;
   onTriggerRollup: () => void;
+  onRegenerateArtifact?: (artifactId: string, artifactType: string) => Promise<StrategyArtifact | null>;
 }
 
 const MEMORY_TYPES = [
