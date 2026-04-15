@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   Copy, Save, ChevronDown, ChevronUp, Database, FileText, Sparkles,
   Brain, Upload as UploadIcon, MessageSquare, Eye, GitBranch,
-  Mail, Target, Map, Zap, ArrowRight,
+  Mail, Target, Map, Zap, ArrowRight, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { StrategyMessage } from '@/types/strategy';
@@ -14,11 +14,12 @@ import type { StrategyMessage } from '@/types/strategy';
 interface Props {
   message: StrategyMessage;
   onSaveAsMemory?: (content: string, type: string) => void;
-  onTransformOutput?: (workflowType: string, structured: any, action: string) => void;
-  onBranchThread?: (workflowType: string, structured: any) => void;
+  onTransformOutput?: (sourceOutputId: string, targetArtifactType: string) => void;
+  onBranchThread?: (title: string, content: string) => void;
+  isTransforming?: boolean;
 }
 
-export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutput, onBranchThread }: Props) {
+export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutput, onBranchThread, isTransforming }: Props) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system' || message.role === 'tool';
   const contentJson = (message.content_json ?? {}) as any;
@@ -40,6 +41,16 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
     );
   }
 
+  // Artifact message type
+  if (message.message_type === 'artifact') {
+    return (
+      <ArtifactCard
+        contentJson={contentJson}
+        onBranchThread={onBranchThread}
+      />
+    );
+  }
+
   if (message.message_type === 'workflow_result' || message.message_type === 'output_card') {
     return (
       <StructuredResultCard
@@ -49,9 +60,11 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         sourcesUsed={sourcesUsed}
         retrievalMeta={retrievalMeta}
         modelUsed={modelUsed}
+        contentJson={contentJson}
         onSaveAsMemory={onSaveAsMemory}
         onTransformOutput={onTransformOutput}
         onBranchThread={onBranchThread}
+        isTransforming={isTransforming}
       />
     );
   }
@@ -88,6 +101,149 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
       </div>
     </div>
   );
+}
+
+// ── Artifact Card ─────────────────────────────────────────
+function ArtifactCard({ contentJson, onBranchThread }: { contentJson: any; onBranchThread?: (title: string, content: string) => void }) {
+  const [expanded, setExpanded] = useState(true);
+  const artifactType = contentJson?.artifactType || 'custom';
+  const structured = contentJson?.structured;
+  const text = contentJson?.text || '';
+
+  const typeLabel = artifactType.replace(/_/g, ' ');
+  const TypeIcon = ARTIFACT_TYPE_ICONS[artifactType] || FileText;
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copied to clipboard');
+  };
+
+  return (
+    <Card className="border-accent/20 bg-card shadow-sm">
+      <CardContent className="p-0">
+        <div className="flex items-center gap-2 px-3.5 pt-3 pb-2 border-b border-border/50">
+          <div className="h-6 w-6 rounded-md bg-accent/10 flex items-center justify-center">
+            <TypeIcon className="h-3 w-3 text-accent-foreground" />
+          </div>
+          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 capitalize">{typeLabel}</Badge>
+          <span className="text-[9px] text-muted-foreground/50">Artifact</span>
+          <div className="flex-1" />
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setExpanded(!expanded)}>
+            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </Button>
+        </div>
+        {expanded && (
+          <div className="px-3.5 py-3">
+            {structured ? (
+              <ArtifactStructuredView type={artifactType} data={structured} />
+            ) : (
+              <div className="text-xs whitespace-pre-wrap text-foreground/75 max-h-96 overflow-y-auto leading-relaxed">{text}</div>
+            )}
+          </div>
+        )}
+        <div className="border-t border-border/50 bg-muted/20 rounded-b-lg flex items-center gap-1 px-3 py-2">
+          <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground" onClick={copyToClipboard}>
+            <Copy className="h-2.5 w-2.5" /> Copy
+          </Button>
+          {onBranchThread && (
+            <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
+              onClick={() => onBranchThread(`Follow-up: ${typeLabel}`, text.slice(0, 500))}
+            >
+              <GitBranch className="h-2.5 w-2.5" /> Branch
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+const ARTIFACT_TYPE_ICONS: Record<string, typeof FileText> = {
+  email: Mail,
+  account_plan: FileText,
+  call_prep: Target,
+  memo: FileText,
+  next_steps: ArrowRight,
+};
+
+function ArtifactStructuredView({ type, data }: { type: string; data: any }) {
+  const renderList = (items: any[] | undefined, label: string) => {
+    if (!items?.length) return null;
+    return (
+      <div>
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+        <ul className="space-y-0.5">
+          {items.map((item, i) => (
+            <li key={i} className="text-xs text-foreground/75 pl-2.5 border-l-2 border-accent/20 leading-relaxed">
+              {typeof item === 'string' ? item : `[${(item.priority || '').toUpperCase()}] ${item.action}${item.owner ? ` (${item.owner})` : ''}${item.due ? ` — ${item.due}` : ''}`}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+  const renderText = (text: string | undefined, label: string) => {
+    if (!text) return null;
+    return (
+      <div>
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">{label}</p>
+        <p className="text-xs text-foreground/75 leading-relaxed">{text}</p>
+      </div>
+    );
+  };
+
+  switch (type) {
+    case 'email':
+      return (
+        <div className="space-y-2">
+          {renderText(data.subject_line, 'Subject Line')}
+          {renderText(data.body, 'Body')}
+          {renderText(data.cta, 'CTA')}
+        </div>
+      );
+    case 'account_plan':
+      return (
+        <div className="space-y-2">
+          {renderText(data.executive_summary, 'Executive Summary')}
+          {renderText(data.account_overview, 'Overview')}
+          {renderList(data.objectives, 'Objectives')}
+          {renderList(data.stakeholders, 'Stakeholders')}
+          {renderList(data.action_plan, 'Action Plan')}
+          {renderText(data.timeline, 'Timeline')}
+          {renderList(data.risks, 'Risks')}
+          {renderList(data.success_metrics, 'Success Metrics')}
+        </div>
+      );
+    case 'call_prep':
+      return (
+        <div className="space-y-2">
+          {renderList(data.objectives, 'Objectives')}
+          {renderList(data.talking_points, 'Talking Points')}
+          {renderList(data.questions, 'Questions')}
+          {renderList(data.objections, 'Objections')}
+          {renderList(data.risks, 'Risks')}
+          {renderText(data.desired_outcome, 'Desired Outcome')}
+        </div>
+      );
+    case 'memo':
+      return (
+        <div className="space-y-2">
+          {renderText(data.summary, 'Summary')}
+          {renderList(data.key_points, 'Key Points')}
+          {renderList(data.recommendations, 'Recommendations')}
+          {renderList(data.next_steps, 'Next Steps')}
+        </div>
+      );
+    case 'next_steps':
+      return (
+        <div className="space-y-2">
+          {renderText(data.context_summary, 'Context')}
+          {renderList(data.steps, 'Actions')}
+        </div>
+      );
+    default:
+      return <pre className="text-[10px] text-foreground/60 overflow-auto">{JSON.stringify(data, null, 2)}</pre>;
+  }
 }
 
 // ── Source Inspector (collapsible) ────────────────────────
@@ -159,7 +315,7 @@ const OUTPUT_ACTIONS = [
 // ── Structured Result Card ────────────────────────────────
 function StructuredResultCard({
   text, structured, workflowType, sourcesUsed, retrievalMeta, modelUsed,
-  onSaveAsMemory, onTransformOutput, onBranchThread,
+  contentJson, onSaveAsMemory, onTransformOutput, onBranchThread, isTransforming,
 }: {
   text: string;
   structured?: any;
@@ -167,12 +323,17 @@ function StructuredResultCard({
   sourcesUsed?: number;
   retrievalMeta?: any;
   modelUsed?: string;
+  contentJson?: any;
   onSaveAsMemory?: (content: string, type: string) => void;
-  onTransformOutput?: (workflowType: string, structured: any, action: string) => void;
-  onBranchThread?: (workflowType: string, structured: any) => void;
+  onTransformOutput?: (sourceOutputId: string, targetArtifactType: string) => void;
+  onBranchThread?: (title: string, content: string) => void;
+  isTransforming?: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [showActions, setShowActions] = useState(false);
+
+  // Get the output ID that was saved alongside this workflow result
+  const outputId = contentJson?.outputId;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(text || JSON.stringify(structured, null, 2));
@@ -244,14 +405,19 @@ function StructuredResultCard({
               <Button
                 size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
                 onClick={() => setShowActions(!showActions)}
+                disabled={isTransforming}
               >
-                <Zap className="h-2.5 w-2.5" /> Turn into…
+                {isTransforming ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Zap className="h-2.5 w-2.5" />}
+                Turn into…
               </Button>
             )}
             {onBranchThread && structured && (
               <Button
                 size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
-                onClick={() => onBranchThread(workflowType || '', structured)}
+                onClick={() => {
+                  const summary = structured?.summary || structured?.executive_summary || '';
+                  onBranchThread(`Follow-up: ${workflowType?.replace(/_/g, ' ') || 'result'}`, summary);
+                }}
               >
                 <GitBranch className="h-2.5 w-2.5" /> Branch
               </Button>
@@ -269,8 +435,13 @@ function StructuredResultCard({
                   size="sm"
                   variant="outline"
                   className="h-6 text-[9px] gap-1 px-2"
+                  disabled={isTransforming}
                   onClick={() => {
-                    onTransformOutput(workflowType || '', structured, a.key);
+                    if (outputId) {
+                      onTransformOutput(outputId, a.key);
+                    } else {
+                      toast.error('No linked output found for this result');
+                    }
                     setShowActions(false);
                   }}
                 >
