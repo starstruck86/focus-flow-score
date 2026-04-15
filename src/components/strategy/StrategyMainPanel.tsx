@@ -384,7 +384,7 @@ export function StrategyMainPanel({
       )}
 
       {/* Composer */}
-      <div className="border-t border-border p-3 shrink-0 bg-card/30">
+      <div className="border-t border-border p-3 shrink-0">
         <div className="flex items-end gap-2">
           <div className="flex-1 relative">
             <Textarea
@@ -392,7 +392,7 @@ export function StrategyMainPanel({
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={isSending ? 'Waiting for response…' : hasLinkedObject ? `Ask about ${linkedContext?.account?.name || linkedContext?.opportunity?.name || 'this object'}…` : 'Type your message or paste content to analyze…'}
-              className="min-h-[44px] max-h-[120px] pr-10 text-sm resize-none bg-background border-border/50 focus-visible:ring-primary/30"
+              className="min-h-[44px] max-h-[120px] pr-10 text-sm resize-none border-border focus-visible:ring-primary/20"
               rows={1}
               disabled={isSending}
             />
