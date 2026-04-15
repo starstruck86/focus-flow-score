@@ -284,10 +284,10 @@ export function CommandBar({
       {/* Composer container */}
       <div
         className={cn(
-          'flex items-center gap-1.5 flex-wrap min-h-[44px] px-3 py-2 rounded-xl',
-          'bg-card/60 border border-border/30',
-          'focus-within:border-primary/30 focus-within:bg-card/80',
-          'focus-within:shadow-[0_0_0_2px_hsl(var(--primary)/0.05)]',
+          'flex items-center gap-2 flex-wrap min-h-[56px] px-4 py-3 rounded-[1.1rem]',
+          'bg-background/70 border border-border/40',
+          'focus-within:border-primary/30 focus-within:bg-background/85',
+          'focus-within:shadow-[0_0_0_2px_hsl(var(--primary)/0.08)]',
           'transition-all duration-200 ease-out',
           isLoading && 'opacity-50 pointer-events-none'
         )}
@@ -298,7 +298,7 @@ export function CommandBar({
           {isLoading ? (
             <Loader2 className="h-3.5 w-3.5 text-primary/70 animate-spin" />
           ) : (
-            <Zap className="h-3.5 w-3.5 text-muted-foreground/25" />
+            <Zap className="h-3.5 w-3.5 text-muted-foreground" />
           )}
         </div>
 
@@ -339,7 +339,7 @@ export function CommandBar({
           placeholder={tokens.length > 0 ? 'Add context or press ↵' : (placeholder || '+template  @account  $opportunity  or just type…')}
           className={cn(
             'flex-1 min-w-[120px] bg-transparent border-none outline-none',
-            'text-sm text-foreground placeholder:text-muted-foreground/30',
+            'text-[15px] text-foreground placeholder:text-muted-foreground',
             'disabled:cursor-not-allowed'
           )}
           autoFocus
@@ -364,14 +364,14 @@ export function CommandBar({
 
       {/* Keyboard hints — only when completely empty */}
       {!hasContent && (
-        <div className="flex items-center gap-3 mt-1 px-1">
+        <div className="flex items-center gap-3 mt-2 px-1">
           {[
             { key: '+', label: 'template' },
             { key: '@', label: 'account' },
             { key: '$', label: 'opportunity' },
           ].map(h => (
-            <span key={h.key} className="text-[10px] text-muted-foreground/25 flex items-center gap-1">
-              <kbd className="px-1 py-px rounded bg-muted/30 text-[10px] font-mono leading-none text-muted-foreground/30">{h.key}</kbd>
+            <span key={h.key} className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <kbd className="px-1 py-px rounded bg-muted/40 text-[10px] font-mono leading-none text-muted-foreground">{h.key}</kbd>
               {h.label}
             </span>
           ))}
@@ -407,11 +407,11 @@ export function CommandBar({
                       {s.is_create ? `Create "${s.name}"` : s.name}
                     </p>
                     {s.subtitle && !s.is_create && (
-                      <p className="text-[10px] text-muted-foreground/40 truncate">{s.subtitle}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{s.subtitle}</p>
                     )}
                   </div>
                   {s.is_pinned && (
-                    <span className="text-[9px] text-primary/40">pinned</span>
+                    <span className="text-[9px] text-primary/70">pinned</span>
                   )}
                 </button>
               );

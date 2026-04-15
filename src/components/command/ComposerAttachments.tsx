@@ -170,7 +170,7 @@ export function ComposerAttachments({ attachments, onAdd, onRemove, disabled }: 
                 className={cn(
                   'inline-flex items-center gap-1.5 text-[11px] font-medium',
                   'pl-2 pr-1 py-1 rounded-lg border shrink-0',
-                  'border-border/15 bg-card/40 text-foreground/55',
+                  'border-border/20 bg-card/45 text-foreground/80',
                   'animate-in fade-in-0 zoom-in-95 duration-100',
                   att.type === 'image' && 'border-violet-500/10 bg-violet-500/[0.03]',
                   att.type === 'url' && 'border-sky-500/10 bg-sky-500/[0.03]',
@@ -181,19 +181,19 @@ export function ComposerAttachments({ attachments, onAdd, onRemove, disabled }: 
                 ) : (
                   <Icon className={cn(
                     'h-3 w-3',
-                    att.type === 'image' ? 'text-violet-400/50' : att.type === 'url' ? 'text-sky-400/50' : 'text-muted-foreground/40'
+                    att.type === 'image' ? 'text-violet-400/70' : att.type === 'url' ? 'text-sky-400/70' : 'text-muted-foreground'
                   )} />
                 )}
                 <span className="truncate max-w-[130px]">{att.name}</span>
                 {att.size && (
-                  <span className="text-muted-foreground/25 text-[10px]">{formatSize(att.size)}</span>
+                  <span className="text-muted-foreground text-[10px]">{formatSize(att.size)}</span>
                 )}
                 <button
                   onClick={() => onRemove(att.id)}
                   className="rounded-md hover:bg-foreground/5 p-0.5 transition-colors"
                   tabIndex={-1}
                 >
-                  <X className="h-2.5 w-2.5 text-muted-foreground/30 hover:text-muted-foreground/60" />
+                  <X className="h-2.5 w-2.5 text-muted-foreground hover:text-foreground/80" />
                 </button>
               </span>
             );
@@ -204,8 +204,8 @@ export function ComposerAttachments({ attachments, onAdd, onRemove, disabled }: 
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled}
             className={cn(
-              'inline-flex items-center gap-1 text-[11px] text-muted-foreground/25',
-              'hover:text-muted-foreground/45 px-1.5 py-1 rounded-md transition-colors duration-100',
+              'inline-flex items-center gap-1 text-[11px] text-muted-foreground',
+              'hover:text-foreground/80 px-1.5 py-1 rounded-md transition-colors duration-100',
               'hover:bg-muted/15',
               disabled && 'opacity-50 pointer-events-none'
             )}

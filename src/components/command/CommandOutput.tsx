@@ -185,7 +185,7 @@ interface Props {
 export function CommandOutput({
   output, blocks, subjectLine, sources, kiCount, templateName,
   accountName, opportunityName, playbookUsed,
-  isGenerating, onRegenerate, onSaveAsTemplate,
+  isGenerating, onRegenerate, onSaveAsTemplate, onPromoteToTemplate,
 }: Props) {
   const [viewMode, setViewMode] = useState<'clean' | 'edit'>('clean');
   const [editedOutput, setEditedOutput] = useState(output);
@@ -332,6 +332,7 @@ export function CommandOutput({
                 { onClick: handleCopy, icon: copied ? Check : Copy, label: copied ? 'Copied' : 'Copy all', accent: copied },
                 { onClick: onRegenerate, icon: RotateCcw, label: 'Regenerate' },
                 { onClick: () => setShowSaveDialog(true), icon: BookmarkPlus, label: 'Save template' },
+                ...(onPromoteToTemplate ? [{ onClick: onPromoteToTemplate, icon: BookOpen, label: 'Use as framework' }] : []),
               ].map(action => (
                 <button key={action.label} onClick={action.onClick} className={cn('inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-md transition-all duration-100', action.accent ? 'text-emerald-500' : 'text-foreground/80 hover:text-foreground hover:bg-muted/30')}>
                   <action.icon className="h-3.5 w-3.5" /> {action.label}
