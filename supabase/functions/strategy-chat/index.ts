@@ -324,14 +324,14 @@ interface LLMRoute {
 // - Perplexity = external research ONLY — fallback: OpenAI
 // - Anthropic = artifact engine ONLY (in strategy-transform-output, NOT here as primary)
 const ROUTES: Record<TaskType, LLMRoute> = {
-  chat_general:         { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.7, maxTokens: 4096, useTools: false },
-  deep_research:        { primaryProvider: "perplexity", model: "sonar-pro",     fallbackProvider: "openai", fallbackModel: "openai/gpt-5-mini", temperature: 0.3, maxTokens: 8192, useTools: false },
-  email_evaluation:     { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.4, maxTokens: 4096, useTools: true },
-  territory_tiering:    { primaryProvider: "openai", model: "openai/gpt-5",      fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.2, maxTokens: 8192, useTools: true, reasoning: { effort: "medium" } },
-  account_plan:         { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
-  opportunity_strategy: { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
-  brainstorm:           { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.9, maxTokens: 4096, useTools: true },
-  rollup:               { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.3, maxTokens: 4096, useTools: true },
+  chat_general:         { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.7, maxTokens: 4096, useTools: false },
+  deep_research:        { primaryProvider: "perplexity", model: "sonar-pro",                   fallbackProvider: "lovable", fallbackModel: "google/gemini-3-flash-preview", temperature: 0.3, maxTokens: 8192, useTools: false },
+  email_evaluation:     { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.4, maxTokens: 4096, useTools: true },
+  territory_tiering:    { primaryProvider: "lovable", model: "google/gemini-2.5-pro",         fallbackProvider: "lovable", fallbackModel: "google/gemini-3-flash-preview", temperature: 0.2, maxTokens: 8192, useTools: true, reasoning: { effort: "medium" } },
+  account_plan:         { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.5, maxTokens: 8192, useTools: true },
+  opportunity_strategy: { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.5, maxTokens: 8192, useTools: true },
+  brainstorm:           { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.9, maxTokens: 4096, useTools: true },
+  rollup:               { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.3, maxTokens: 4096, useTools: true },
 };
 
 function resolveLLMRoute(taskType: string): LLMRoute {
