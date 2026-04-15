@@ -113,8 +113,8 @@ export default function Strategy() {
 
   return (
     <Layout>
-      <div className="flex absolute inset-0 top-auto" style={{ height: 'calc(100dvh - env(safe-area-inset-top, 0px))' }}>
-      {/* Strategy takes over the full viewport below safe area, positioned over Layout chrome */}
+      <div className="flex flex-col" style={{ height: 'calc(100dvh - var(--shell-nav-height, 101) * 1px - env(safe-area-inset-bottom, 0px))' }}>
+      {/* Full-height flex container: header auto, content flex-1 scrollable, composer anchored */}
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
 
