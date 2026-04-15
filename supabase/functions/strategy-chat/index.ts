@@ -843,8 +843,8 @@ serve(async (req) => {
     const contextSection = packToPromptSection(contextPack);
 
     if (action === "rollup") return await handleRollup(supabase, threadId, userId, contextPack);
-    if (action === "workflow") return await handleWorkflow(supabase, threadId, userId, workflowType, content, contextSection, contextPack);
-    return await handleChat(supabase, threadId, userId, content, depth, contextSection, contextPack);
+    if (action === "workflow") return await handleWorkflow(supabase, threadId, userId, workflowType, content, contextSection, contextPack, forceFallback);
+    return await handleChat(supabase, threadId, userId, content, depth, contextSection, contextPack, forceFallback);
   } catch (e) {
     console.error("strategy-chat error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
