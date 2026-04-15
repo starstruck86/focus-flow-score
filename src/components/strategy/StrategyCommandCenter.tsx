@@ -349,7 +349,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
             <div className={cn(STRATEGY_UI.layout.output, STRATEGY_UI.spacing.section)}>
               {composer}
 
-              {result && lastCommand && (
+              {(result && lastCommand) && (
                 <div className="flex items-center justify-end">
                   <button
                     onClick={handleSaveShortcut}
@@ -361,16 +361,16 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               )}
 
               <CommandOutput
-                output={result?.output || ''}
-                blocks={result?.blocks || []}
-                subjectLine={result?.subjectLine}
-                sources={result?.sources || []}
-                kiCount={result?.kiCount || 0}
-                templateName={lastCommand?.template?.name}
-                accountName={lastCommand?.account?.name}
-                opportunityName={lastCommand?.opportunity?.name}
-                outputType={lastCommand?.template?.id}
-                playbookUsed={result?.playbookUsed}
+                output={isDemoMode ? DEMO_OUTPUT : (result?.output || '')}
+                blocks={isDemoMode ? DEMO_BLOCKS : (result?.blocks || [])}
+                subjectLine={isDemoMode ? undefined : result?.subjectLine}
+                sources={isDemoMode ? ['Enrichment Data', 'Account Intel', 'CRM History'] : (result?.sources || [])}
+                kiCount={isDemoMode ? 847 : (result?.kiCount || 0)}
+                templateName={isDemoMode ? 'Opportunity Strategy' : lastCommand?.template?.name}
+                accountName={isDemoMode ? 'Franklin Park Conservatory' : lastCommand?.account?.name}
+                opportunityName={isDemoMode ? 'Tessitura Replacement' : lastCommand?.opportunity?.name}
+                outputType={isDemoMode ? 'opportunity_strategy' : lastCommand?.template?.id}
+                playbookUsed={isDemoMode ? 'Enterprise Discovery' : result?.playbookUsed}
                 isGenerating={isGenerating}
                 onRegenerate={handleRegenerate}
                 onSaveAsTemplate={handleSaveAsTemplate}
