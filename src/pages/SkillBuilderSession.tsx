@@ -90,7 +90,7 @@ export default function SkillBuilderSession() {
     const cleanup = monitorLifecycle((lifecycle) => {
       if (lifecycle.isVisible && lifecycle.hiddenDurationMs > 3000) {
         const msg = getResumeMessage(lifecycle.hiddenDurationMs);
-        if (msg && deliveryMode === 'audio') {
+        if (msg && deliveryMode !== 'text') {
           toast.info(msg);
         }
       }
@@ -229,7 +229,7 @@ export default function SkillBuilderSession() {
   // Audio: narrate current block (non-blocking — text always shown first)
   const [audioUnavailable, setAudioUnavailable] = useState(false);
   useEffect(() => {
-    if (deliveryMode !== 'audio' || sessionState !== 'active' || !currentBlock) return;
+    if (deliveryMode === 'text' || sessionState !== 'active' || !currentBlock) return;
 
     const block = currentBlock;
     let text = '';
@@ -246,16 +246,43 @@ export default function SkillBuilderSession() {
 
     if (!text) return;
 
+    const stepId = `block-${currentBlockIndex}`;
+    emitStepTelemetry('step_rendered', stepId, { blockType: block.type });
     dave.recordTranscript('dave', text);
     // Fire-and-forget: audio plays alongside visible text, never blocks flow
-    dave.speak(text).catch(() => {
+    dave.speak(text).then(() => {
+      emitStepTelemetry('audio_ended', stepId, {});
+    }).catch(() => {
       setAudioUnavailable(true);
+      setAudioFailures(prev => {
+        const next = prev + 1;
+        const downgraded = evaluateModeDowngrade(deliveryMode, next);
+        if (downgraded !== deliveryMode) {
+          setDeliveryMode(downgraded);
+          toast.info(downgraded === 'text' ? 'Audio unavailable — text mode' : 'Switched to quiet mode');
+        }
+        return next;
+      });
+      emitStepTelemetry('audio_failed', stepId, {});
     });
   }, [currentBlockIndex, deliveryMode, sessionState]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggleMode = useCallback(() => {
-    setDeliveryMode(prev => prev === 'audio' ? 'visual' : 'audio');
-    toast.info(deliveryMode === 'audio' ? 'Switched to visual mode' : 'Switched to audio mode');
+  const toggleMode = useCallback(async () => {
+    if (deliveryMode === 'text') {
+      // Unlock audio on user gesture before switching to audio mode
+      const unlocked = await unlockAudio();
+      if (!unlocked) {
+        toast.error('Could not enable audio');
+        return;
+      }
+      setDeliveryMode('full');
+      setAudioFailures(0);
+      setAudioUnavailable(false);
+      toast.info('Audio mode enabled');
+    } else {
+      setDeliveryMode('text');
+      toast.info('Switched to text mode');
+    }
   }, [deliveryMode]);
 
   // Show deep training content first when SkillSession is present and content exists
@@ -307,7 +334,7 @@ export default function SkillBuilderSession() {
     <Layout>
       <div className={cn('px-4 pt-4 space-y-4', SHELL.main.bottomPad)}>
         {/* Signal banner for audio mode */}
-        {deliveryMode === 'audio' && (
+        {deliveryMode !== 'text' && (
           <>
             <DaveSignalBanner
               message={dave.signalMessage}
@@ -351,9 +378,9 @@ export default function SkillBuilderSession() {
                 size="sm"
                 className="h-7 w-7 p-0"
                 onClick={toggleMode}
-                title={deliveryMode === 'audio' ? 'Switch to visual' : 'Switch to audio'}
+                title={deliveryMode !== 'text' ? 'Switch to text' : 'Switch to audio'}
               >
-                {deliveryMode === 'audio' ? (
+                {deliveryMode !== 'text' ? (
                   <Volume2 className="h-3.5 w-3.5 text-primary" />
                 ) : (
                   <VolumeX className="h-3.5 w-3.5 text-muted-foreground" />
@@ -448,7 +475,7 @@ export default function SkillBuilderSession() {
             onAdvance={advanceBlock}
             onStartRep={startRep}
             onRepComplete={handleRepComplete}
-            dave={deliveryMode === 'audio' ? dave : undefined}
+            dave={deliveryMode !== 'text' ? dave : undefined}
             isFromTraining={!!trainingContent && !!resolvedSession}
           />
         )}
