@@ -63,6 +63,8 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         sourcesUsed={sourcesUsed}
         retrievalMeta={retrievalMeta}
         modelUsed={modelUsed}
+        providerUsed={providerUsed}
+        fallbackUsed={fallbackUsed}
         contentJson={contentJson}
         onSaveAsMemory={onSaveAsMemory}
         onTransformOutput={onTransformOutput}
@@ -282,7 +284,7 @@ const OUTPUT_ACTIONS = [
 // ── Structured Result Card ────────────────────────────────
 function StructuredResultCard({
   text, structured, workflowType, sourcesUsed, retrievalMeta, modelUsed,
-  contentJson, onSaveAsMemory, onTransformOutput, onBranchThread, isTransforming,
+  providerUsed, fallbackUsed, contentJson, onSaveAsMemory, onTransformOutput, onBranchThread, isTransforming,
 }: {
   text: string;
   structured?: any;
@@ -290,6 +292,8 @@ function StructuredResultCard({
   sourcesUsed?: number;
   retrievalMeta?: any;
   modelUsed?: string;
+  providerUsed?: string;
+  fallbackUsed?: boolean;
   contentJson?: any;
   onSaveAsMemory?: (content: string, type: string) => void;
   onTransformOutput?: (sourceOutputId: string, targetArtifactType: string) => void;
@@ -357,6 +361,8 @@ function StructuredResultCard({
               sourcesUsed={sourcesUsed ?? 0}
               retrievalMeta={retrievalMeta}
               modelUsed={modelUsed}
+              providerUsed={providerUsed}
+              fallbackUsed={fallbackUsed}
               workflowType={workflowType}
             />
           </div>
