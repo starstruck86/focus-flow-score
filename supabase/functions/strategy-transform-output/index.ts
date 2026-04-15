@@ -372,6 +372,7 @@ serve(async (req) => {
       version, parent_artifact_id: parentArtifactId || null,
       linked_account_id: linkedAccountId, linked_opportunity_id: linkedOpportunityId,
       provider_used: artifactResult.provider, model_used: artifactResult.model,
+      fallback_used: artifactResult.fallbackUsed, latency_ms: artifactResult.latencyMs,
     }).select().single();
 
     if (insertErr) throw insertErr;
