@@ -192,7 +192,11 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
     setPrefill(shortcut.raw_command);
   }, [capture]);
 
-  const showEmpty = !result && !isGenerating;
+  const isDemoMode = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).has('demo_output');
+  }, []);
+  const showEmpty = !result && !isGenerating && !isDemoMode;
   const pinnedShortcuts = (savedShortcuts as any[]).filter((s: any) => s.is_pinned);
   const savedNonPinned = (savedShortcuts as any[]).filter((s: any) => !s.is_pinned).slice(0, 5);
 
