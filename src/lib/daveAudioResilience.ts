@@ -135,118 +135,19 @@ export async function unlockAudio(): Promise<boolean> {
   }
 }
 
-// ── Playback with Retry, Settle & Token Guard ──────────────────────
+// ── Playback Constants (used by useVoiceMode inline resilience) ─────
 
-const PLAYBACK_SETTLE_TIMEOUT_MS = 60_000;
-const STALL_TIMEOUT_MS = 10_000;
-const MIC_HANDOFF_DELAY_MS = 300;
-const MAX_TOTAL_ATTEMPTS = 2;
-
-export interface PlaybackResult {
-  success: boolean;
-  retried: boolean;
-  error?: string;
-  tokenStale?: boolean;
-}
+export const PLAYBACK_SETTLE_TIMEOUT_MS = 60_000;
+export const STALL_TIMEOUT_MS = 10_000;
+export const MIC_HANDOFF_DELAY_MS = 300;
 
 /**
- * Play an audio blob with full settle handling + token guard.
- * - Fresh Audio element per clip
- * - One retry on failure (max 2 total attempts)
- * - Token check: stale clips resolve silently
- * - Hard 60s cap, stall detection
+ * NOTE: The live TTS playback path runs through useVoiceMode.playTTS(),
+ * which implements token-guarded resilience inline (nextPlaybackId,
+ * isActivePlayback checks, interrupt handling, settle logic).
+ *
+ * This module provides the token system and telemetry that useVoiceMode consumes.
  */
-export async function playWithResilience(
-  blob: Blob,
-  stepId: string,
-  playbackId: string,
-): Promise<PlaybackResult> {
-  if (!isActivePlayback(playbackId)) {
-    return { success: false, retried: false, tokenStale: true };
-  }
-
-  const result = await attemptPlayback(blob, stepId, playbackId);
-  if (result.success || result.tokenStale) return result;
-
-  // One retry with fresh state
-  if (!isActivePlayback(playbackId)) {
-    return { success: false, retried: false, tokenStale: true };
-  }
-  emitStepTelemetry('retry_attempted', stepId, { playbackId });
-  const retryResult = await attemptPlayback(blob, stepId, playbackId);
-  return { ...retryResult, retried: true };
-}
-
-async function attemptPlayback(blob: Blob, stepId: string, playbackId: string): Promise<PlaybackResult> {
-  const objectUrl = URL.createObjectURL(blob);
-  const audio = new Audio();
-
-  return new Promise<PlaybackResult>((resolve) => {
-    let settled = false;
-    let stallTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const settle = (success: boolean, error?: string) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(overallTimer);
-      clearTimeout(stallTimer);
-
-      audio.onended = null;
-      audio.onerror = null;
-      audio.onstalled = null;
-      audio.onpause = null;
-      audio.onplaying = null;
-      audio.pause();
-      audio.removeAttribute('src');
-      audio.load();
-      URL.revokeObjectURL(objectUrl);
-
-      const stale = !isActivePlayback(playbackId);
-      if (stale) {
-        resolve({ success: false, retried: false, tokenStale: true });
-      } else {
-        resolve({ success, retried: false, error });
-      }
-    };
-
-    const overallTimer = setTimeout(() => {
-      emitStepTelemetry('audio_timeout', stepId, { playbackId });
-      settle(false, 'Playback timed out');
-    }, PLAYBACK_SETTLE_TIMEOUT_MS);
-
-    audio.onended = () => {
-      emitStepTelemetry('audio_ended', stepId, { playbackId });
-      settle(true);
-    };
-
-    audio.onerror = () => {
-      const msg = audio.error?.message ?? 'Audio playback error';
-      emitStepTelemetry('audio_failed', stepId, { error: msg, playbackId });
-      settle(false, msg);
-    };
-
-    audio.onstalled = () => {
-      stallTimer = setTimeout(() => {
-        emitStepTelemetry('audio_stalled', stepId, { playbackId });
-        settle(false, 'Audio stalled');
-      }, STALL_TIMEOUT_MS);
-    };
-
-    audio.onplaying = () => {
-      clearTimeout(stallTimer);
-      emitStepTelemetry('audio_started', stepId, { playbackId });
-    };
-
-    audio.src = objectUrl;
-    emitStepTelemetry('audio_requested', stepId, { playbackId });
-
-    audio.play().catch((err) => {
-      const msg = err instanceof Error ? err.message : 'play() rejected';
-      emitStepTelemetry('audio_failed', stepId, { error: msg, playbackId });
-      settle(false, msg);
-    });
-  });
-}
 
 // ── Mic Handoff ────────────────────────────────────────────────────
 
