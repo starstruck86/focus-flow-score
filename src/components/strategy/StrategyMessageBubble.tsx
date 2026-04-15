@@ -17,19 +17,23 @@ function extractDisplayText(contentJson: any): string {
   if (!contentJson) return '';
 
   // Priority: explicit text fields only
-  for (const key of ['text', 'content', 'message', 'summary', 'executive_summary'] as const) {
+  const safeKeys = ['text', 'content', 'message', 'summary', 'executive_summary'] as const;
+  for (const key of safeKeys) {
     const val = contentJson[key];
     if (typeof val === 'string' && val.trim()) {
-      // Guard: reject anything that looks like raw JSON/debug payload
       const trimmed = val.trim();
+      // Guard: reject raw JSON/debug payloads
       if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        try { JSON.parse(trimmed); continue; } catch { /* not JSON, safe to use */ }
+        try { JSON.parse(trimmed); continue; } catch { /* not JSON, safe */ }
       }
+      // Guard: reject provider/model metadata strings that leaked into text fields
+      if (/^(openai|anthropic|perplexity|google)\//i.test(trimmed)) continue;
+      if (/^\{?"(model|provider|usage|tokens|id)":/i.test(trimmed)) continue;
       return val;
     }
   }
 
-  // Never fall through to JSON.stringify — return empty to trigger placeholder
+  // Never stringify — return empty to trigger placeholder
   return '';
 }
 
