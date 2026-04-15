@@ -44,6 +44,8 @@ export default function Strategy() {
   const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
   const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
 
+
+
   const handleWorkflowComplete = useCallback(() => {
     refetchOutputs();
     refetchRollup();
@@ -54,14 +56,32 @@ export default function Strategy() {
     createThreadWithOpts(opts);
   }, [createThreadWithOpts]);
 
-  const handleBranchThread = useCallback((title: string, content: string) => {
-    createThread(title, 'strategy', 'freeform');
+  const handleBranchThread = useCallback(async (title: string, content: string) => {
+    const newThreadId = await createThread(title, 'strategy', 'freeform');
+    if (newThreadId && content) {
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await (supabase as any).from('strategy_messages').insert({
+            thread_id: newThreadId,
+            user_id: user.id,
+            role: 'system',
+            message_type: 'system',
+            content_json: {
+              text: `This thread continues from a previous analysis.\n\n---\n\n${content}`,
+            },
+          });
+        }
+      } catch (e) {
+        console.error('Failed to seed branch thread:', e);
+      }
+    }
   }, [createThread]);
 
   const handleTransformOutput = useCallback(async (sourceOutputId: string, targetArtifactType: string) => {
     const artifact = await transformOutput(sourceOutputId, targetArtifactType);
     if (artifact) {
-      // Refresh messages to show the artifact card in thread
       handleWorkflowComplete();
     }
   }, [transformOutput, handleWorkflowComplete]);
@@ -114,6 +134,7 @@ export default function Strategy() {
           isRollupLoading={isRollupLoading}
           onTriggerRollup={triggerRollup}
           onRegenerateArtifact={regenerateArtifact}
+          isTransforming={isTransforming}
         />
       )}
 
