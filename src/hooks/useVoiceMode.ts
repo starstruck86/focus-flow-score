@@ -360,6 +360,9 @@ export function useVoiceMode() {
     activePlaybackIdRef.current = playbackId;
     playbackAbortRef.current = false;
 
+    // Start lifecycle tracking
+    startLifecycle(playbackId, 'tts');
+
     const ac = new AbortController();
     ttsAbortControllersRef.current.add(ac);
 
@@ -369,7 +372,10 @@ export function useVoiceMode() {
     try {
       for (let i = 0; i < chunks.length; i++) {
         // Token guard: if we're no longer the active playback, bail silently
-        if (!isActivePlayback(playbackId) || playbackAbortRef.current || ac.signal.aborted) break;
+        if (!isActivePlayback(playbackId) || playbackAbortRef.current || ac.signal.aborted) {
+          recordLifecycleEvent(playbackId, 'suppressed', 'stale token before fetch');
+          break;
+        }
 
         // Fetch current chunk
         const audio = await fetchTTSChunk(chunks[i], voiceId, ac.signal);
@@ -377,16 +383,24 @@ export function useVoiceMode() {
         // Re-check token after async fetch
         if (!isActivePlayback(playbackId) || playbackAbortRef.current) {
           revokeUrl(audio.src);
+          recordLifecycleEvent(playbackId, 'suppressed', 'stale token after fetch');
           break;
         }
 
+        if (i === 0) recordLifecycleEvent(playbackId, 'started');
         audioRef.current = audio;
         await playAudioWithTimeout(audio, playbackId);
+      }
+      if (isActivePlayback(playbackId)) {
+        recordLifecycleEvent(playbackId, 'ended');
       }
     } catch (err) {
       // Only throw if this is still the active playback (not interrupted)
       if (isActivePlayback(playbackId) && !playbackAbortRef.current && !(err instanceof DOMException && err.name === 'AbortError')) {
+        recordLifecycleEvent(playbackId, 'failed', err instanceof Error ? err.message : 'unknown');
         throw err;
+      } else {
+        recordLifecycleEvent(playbackId, 'interrupted', 'aborted or stale');
       }
     } finally {
       ttsAbortControllersRef.current.delete(ac);
