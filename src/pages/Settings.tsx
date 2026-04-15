@@ -1172,18 +1172,7 @@ export default function Settings() {
           
           {/* Appearance Tab */}
           <TabsContent value="appearance" className="space-y-4">
-            <div className="metric-card">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Palette className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Appearance</h3>
-                  <p className="text-sm text-muted-foreground">Theme and display settings</p>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground">Coming soon...</p>
-            </div>
+            <AppearanceSettings />
 
             {/* Build Info */}
             <div className="metric-card">
