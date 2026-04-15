@@ -98,7 +98,14 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         {text ? (
           <div className="whitespace-pre-wrap">{text}</div>
         ) : (
-          <div className="text-muted-foreground/60 italic text-xs">Processing…</div>
+          <div className="flex items-center gap-2 py-0.5">
+            <div className="flex gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-foreground/25 animate-bounce [animation-delay:0ms]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-foreground/25 animate-bounce [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-foreground/25 animate-bounce [animation-delay:300ms]" />
+            </div>
+            <span className="text-xs text-foreground/40">Generating response…</span>
+          </div>
         )}
         {!isUser && !isSystem && (
           <div className="mt-2 space-y-1.5">
