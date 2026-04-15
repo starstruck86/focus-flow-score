@@ -298,8 +298,9 @@ const PROVIDER_HEALTH = {
   openaiDirect: !!Deno.env.get("OPENAI_API_KEY"),
   anthropicDirect: !!Deno.env.get("ANTHROPIC_API_KEY"),
   perplexityDirect: !!Deno.env.get("PERPLEXITY_API_KEY"),
+  lovableGateway: !!Deno.env.get("LOVABLE_API_KEY"),
 };
-console.log(`[provider-health] OpenAI direct: ${PROVIDER_HEALTH.openaiDirect ? "ENABLED" : "DISABLED"} | Anthropic direct: ${PROVIDER_HEALTH.anthropicDirect ? "ENABLED" : "DISABLED"} | Perplexity direct: ${PROVIDER_HEALTH.perplexityDirect ? "ENABLED" : "DISABLED"}`);
+console.log(`[provider-health] OpenAI: ${PROVIDER_HEALTH.openaiDirect ? "ON" : "OFF"} | Anthropic: ${PROVIDER_HEALTH.anthropicDirect ? "ON" : "OFF"} | Perplexity: ${PROVIDER_HEALTH.perplexityDirect ? "ON" : "OFF"} | Lovable: ${PROVIDER_HEALTH.lovableGateway ? "ON" : "OFF"}`);
 
 // ═══════════════════════════════════════════════════════════
 // LAYER 2 — ROUTER
