@@ -15,7 +15,7 @@ import { useStrategyOutputs } from '@/hooks/strategy/useStrategyOutputs';
 import { useStrategyArtifacts } from '@/hooks/strategy/useStrategyArtifacts';
 import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
 import { useStrategyRollups } from '@/hooks/strategy/useStrategyRollups';
-import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
+import { SHELL } from '@/lib/layout';
 import { SHELL } from '@/lib/layout';
 
 export default function Strategy() {
