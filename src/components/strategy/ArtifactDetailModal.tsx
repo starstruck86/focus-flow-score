@@ -95,13 +95,16 @@ export function ArtifactDetailModal({
               <TypeIcon className="h-4 w-4 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <DialogTitle className="text-sm font-semibold truncate">{artifact.title}</DialogTitle>
+              <DialogTitle className="text-sm font-semibold truncate">{displayArtifact.title}</DialogTitle>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <Badge variant="secondary" className="text-[9px] px-1.5 py-0 capitalize">{typeLabel}</Badge>
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0">v{artifact.version}</Badge>
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0">v{displayArtifact.version}</Badge>
                 <span className="text-[9px] text-muted-foreground">
-                  {new Date(artifact.created_at).toLocaleDateString()}
+                  {new Date(displayArtifact.created_at).toLocaleDateString()}
                 </span>
+                {viewingArtifact && viewingArtifact.id !== artifact.id && (
+                  <Badge variant="outline" className="text-[8px] px-1 py-0 text-amber-400 border-amber-400/30">Viewing older version</Badge>
+                )}
               </div>
             </div>
           </div>
@@ -127,12 +130,14 @@ export function ArtifactDetailModal({
         <ScrollArea className="flex-1 min-h-0">
           <div className="px-5 py-4">
             {view === 'detail' && (
-              <ArtifactFullContent type={artifact.artifact_type} data={structured} renderedText={artifact.rendered_text} />
+              <ArtifactFullContent type={displayArtifact.artifact_type} data={displayArtifact.content_json as any} renderedText={displayArtifact.rendered_text} />
             )}
             {view === 'history' && (
               <VersionHistoryView
                 versions={versionChain}
                 currentId={artifact.id}
+                viewingId={viewingArtifact?.id}
+                onViewVersion={handleViewVersion}
               />
             )}
             {view === 'refine' && (
