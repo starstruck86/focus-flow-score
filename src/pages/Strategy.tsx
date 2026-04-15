@@ -88,7 +88,7 @@ export default function Strategy() {
   return (
     <Layout>
       {/* Strategy uses a flex column that fills Layout's <main> which is flex-1 overflow-y-auto */}
-      <div className="flex h-full overflow-hidden -mx-4 lg:-mx-6">
+      <div className="flex h-full overflow-hidden">
         {!sidebarCollapsed && (
           <StrategyThreadSidebar
             threads={threads}
