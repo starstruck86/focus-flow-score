@@ -30,6 +30,42 @@ const TYPE_ICONS: Record<string, typeof FileText> = {
   next_steps: ArrowRight,
 };
 
+/** Walk full ancestry tree from any artifact to build the complete version chain */
+function buildFullVersionChain(artifact: StrategyArtifact, allArtifacts: StrategyArtifact[]): StrategyArtifact[] {
+  // Walk up to find root
+  let rootId = artifact.id;
+  const byId = new Map(allArtifacts.map(a => [a.id, a]));
+  let current: StrategyArtifact | undefined = artifact;
+  while (current?.parent_artifact_id) {
+    const parent = byId.get(current.parent_artifact_id);
+    if (!parent) break;
+    rootId = parent.id;
+    current = parent;
+  }
+
+  // BFS down from root to collect all descendants
+  const chain: StrategyArtifact[] = [];
+  const queue = [rootId];
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const node = byId.get(id);
+    if (node) {
+      chain.push(node);
+      // Find children
+      for (const a of allArtifacts) {
+        if (a.parent_artifact_id === id && !visited.has(a.id)) {
+          queue.push(a.id);
+        }
+      }
+    }
+  }
+
+  return chain.sort((a, b) => a.version - b.version);
+}
+
 export function ArtifactDetailModal({
   artifact, allArtifacts, open, onOpenChange, onRegenerate, isTransforming,
 }: Props) {
@@ -45,19 +81,26 @@ export function ArtifactDetailModal({
     setRefineInstructions('');
   }, [artifact?.id]);
 
-  // Build version chain
+  // Build full version chain using ancestry walk
   const versionChain = useMemo(() => {
     if (!artifact) return [];
-    const rootId = artifact.parent_artifact_id || artifact.id;
-    return allArtifacts
-      .filter(a => a.id === rootId || a.parent_artifact_id === rootId || a.id === artifact.id || a.parent_artifact_id === artifact.id)
-      .sort((a, b) => a.version - b.version);
+    return buildFullVersionChain(artifact, allArtifacts);
   }, [artifact, allArtifacts]);
 
   const latestVersion = useMemo(() => {
     if (versionChain.length === 0) return artifact;
     return versionChain[versionChain.length - 1];
   }, [versionChain, artifact]);
+
+  // Keep viewingArtifact in sync with updated allArtifacts (fixes stale data)
+  useEffect(() => {
+    if (viewingArtifact) {
+      const fresh = allArtifacts.find(a => a.id === viewingArtifact.id);
+      if (fresh && fresh !== viewingArtifact) {
+        setViewingArtifact(fresh);
+      }
+    }
+  }, [allArtifacts, viewingArtifact]);
 
   if (!artifact || !displayArtifact) return null;
 
@@ -237,7 +280,6 @@ export function ArtifactDetailModal({
 
 // ── Full Content Renderer ─────────────────────────────────
 function ArtifactFullContent({ type, data, renderedText }: { type: string; data: any; renderedText: string | null }) {
-  // Filter out internal metadata keys
   const cleanData = data ? Object.fromEntries(Object.entries(data).filter(([k]) => !k.startsWith('_'))) : data;
 
   switch (type) {
@@ -399,48 +441,35 @@ function VersionHistoryView({ versions, latestId, viewingId, onViewVersion }: {
         const isViewing = v.id === viewingId;
         const vContent = v.content_json as any;
         const vRefine = vContent?._refine_instructions;
+
         return (
           <button
             key={v.id}
-            className={`w-full text-left group flex items-start gap-3 p-3 rounded-lg border transition-colors ${
-              isViewing ? 'border-primary/30 bg-primary/5' : 'border-border/50 bg-card/50 hover:bg-card cursor-pointer'
-            }`}
             onClick={() => onViewVersion(v)}
+            className={`w-full text-left rounded-lg border px-3 py-2 transition-all ${
+              isViewing ? 'border-primary/40 bg-primary/5' : 'border-border/30 hover:border-border/60 hover:bg-muted/20'
+            }`}
           >
-            <div className="flex flex-col items-center gap-1 pt-0.5">
-              <Badge variant={isViewing ? 'default' : 'outline'} className="text-[10px] w-8 justify-center">
-                v{v.version}
-              </Badge>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <p className="text-sm font-medium text-foreground truncate">{v.title}</p>
-                {isLatest && (
-                  <Badge variant="secondary" className="text-[8px] px-1 py-0 gap-0.5 shrink-0">
-                    <CheckCircle2 className="h-2 w-2" /> Latest
-                  </Badge>
-                )}
-                {isViewing && !isLatest && (
-                  <Badge variant="outline" className="text-[8px] px-1 py-0 gap-0.5 shrink-0 text-primary border-primary/30">
-                    <Eye className="h-2 w-2" /> Viewing
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-1 mt-0.5 text-[10px] text-muted-foreground">
-                <Clock className="h-2.5 w-2.5" />
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium">v{v.version}</span>
+              {isLatest && (
+                <Badge variant="secondary" className="text-[8px] px-1 py-0">Latest</Badge>
+              )}
+              {isViewing && (
+                <Badge variant="outline" className="text-[8px] px-1 py-0 text-primary border-primary/30">Viewing</Badge>
+              )}
+              <span className="text-[9px] text-muted-foreground ml-auto">
                 {new Date(v.created_at).toLocaleString()}
-              </div>
-              {vRefine && (
-                <p className="text-[9px] text-muted-foreground/50 mt-1 italic truncate">
-                  Refined: "{vRefine}"
-                </p>
-              )}
-              {v.rendered_text && !vRefine && (
-                <p className="text-[11px] text-muted-foreground mt-1.5 line-clamp-2 whitespace-pre-wrap leading-relaxed">
-                  {v.rendered_text.slice(0, 200)}
-                </p>
-              )}
+              </span>
             </div>
+            {v.parent_artifact_id && (
+              <p className="text-[9px] text-muted-foreground/60 mt-0.5">
+                Refined from v{versions.find(p => p.id === v.parent_artifact_id)?.version ?? '?'}
+              </p>
+            )}
+            {vRefine && (
+              <p className="text-[9px] text-foreground/40 italic mt-0.5 truncate">"{vRefine}"</p>
+            )}
           </button>
         );
       })}
