@@ -385,7 +385,7 @@ export function StrategyMainPanel({
       )}
 
       {/* Composer */}
-      <div className="border-t border-border p-3 shrink-0 bg-card/50">
+      <div className="border-t border-border p-3 pr-[4.5rem] sm:pr-3 shrink-0 bg-card/50">
         <div className="flex items-end gap-2">
           <div className="flex-1 relative">
             <Textarea
