@@ -70,6 +70,13 @@ export default function Strategy() {
   const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
   const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
 
+  // Auto-collapse right rail when it has no meaningful content
+  const hasRailContent = !!(
+    linkedContext?.account || linkedContext?.opportunity ||
+    memories.length > 0 || uploads.length > 0 || outputs.length > 0 ||
+    artifacts.length > 0 || rollup || memorySuggestions.length > 0
+  );
+
   const handleWorkflowComplete = useCallback(() => {
     refetchOutputs();
     refetchRollup();
