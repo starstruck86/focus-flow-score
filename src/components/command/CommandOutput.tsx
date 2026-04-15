@@ -1,5 +1,6 @@
 /**
  * CommandOutput — premium strategy document renderer.
+ * Professional document with clear hierarchy, breathing room, and readable contrast.
  */
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,8 @@ import { cn } from '@/lib/utils';
 import { STRATEGY_UI } from '@/lib/strategy-ui';
 import type { OutputBlock } from '@/lib/commandTypes';
 
+/* ── Readability Enhancement ── */
+
 function enhanceReadability(md: string): string {
   const blocks = md.split('\n\n');
   const enhanced: string[] = [];
@@ -27,18 +30,20 @@ function enhanceReadability(md: string): string {
       enhanced.push(trimmed);
       continue;
     }
+    // Break **Label:** Value into separated mini-blocks
     const labelMatch = trimmed.match(/^\*\*([^*]+):\*\*\s*(.+)/);
     if (labelMatch) {
       enhanced.push(`**${labelMatch[1]}**\n\n${labelMatch[2]}`);
       continue;
     }
-    if (trimmed.length > 220) {
+    // Split long paragraphs
+    if (trimmed.length > 200) {
       const sentences = trimmed.match(/[^.!?]+[.!?]+\s*/g);
       if (sentences && sentences.length > 2) {
         const chunks: string[] = [];
         let current = '';
         for (const s of sentences) {
-          if ((current + s).length > 180 && current.length > 0) {
+          if ((current + s).length > 160 && current.length > 0) {
             chunks.push(current.trim());
             current = s;
           } else {
@@ -55,6 +60,8 @@ function enhanceReadability(md: string): string {
 
   return enhanced.join('\n\n');
 }
+
+/* ── Section Semantics ── */
 
 type SectionSemantic =
   | 'risk' | 'action' | 'takeaway' | 'question'
@@ -81,16 +88,16 @@ function classifySectionHeading(heading: string): SectionSemantic {
 }
 
 const SEMANTIC_ACCENT: Record<SectionSemantic, { color: string; Icon: React.ElementType }> = {
-  risk: { color: 'text-amber-500/70', Icon: AlertTriangle },
-  action: { color: 'text-primary/70', Icon: Target },
-  takeaway: { color: 'text-emerald-500/70', Icon: Lightbulb },
-  question: { color: 'text-blue-400/70', Icon: HelpCircle },
-  stakeholder: { color: 'text-violet-400/70', Icon: Users },
-  next_step: { color: 'text-primary/70', Icon: ArrowRight },
-  email_body: { color: 'text-foreground/60', Icon: Mail },
-  summary: { color: 'text-foreground/60', Icon: FileText },
-  idea: { color: 'text-amber-400/70', Icon: Lightbulb },
-  default: { color: 'text-foreground/50', Icon: FileText },
+  risk: { color: 'text-amber-600 dark:text-amber-400', Icon: AlertTriangle },
+  action: { color: 'text-primary', Icon: Target },
+  takeaway: { color: 'text-emerald-600 dark:text-emerald-400', Icon: Lightbulb },
+  question: { color: 'text-blue-600 dark:text-blue-400', Icon: HelpCircle },
+  stakeholder: { color: 'text-violet-600 dark:text-violet-400', Icon: Users },
+  next_step: { color: 'text-primary', Icon: ArrowRight },
+  email_body: { color: 'text-muted-foreground', Icon: Mail },
+  summary: { color: 'text-muted-foreground', Icon: FileText },
+  idea: { color: 'text-amber-600 dark:text-amber-400', Icon: Lightbulb },
+  default: { color: 'text-muted-foreground', Icon: FileText },
 };
 
 const OUTPUT_TITLES: Record<string, string> = {
@@ -100,24 +107,34 @@ const OUTPUT_TITLES: Record<string, string> = {
   'Brainstorm': 'Strategic Brainstorm',
 };
 
+/* ── Prose Classes — readable, spacious, professional ── */
 const proseClasses = cn(
   'prose prose-sm sm:prose-base dark:prose-invert max-w-none',
+  // Headings
   'prose-headings:text-foreground prose-headings:font-semibold prose-headings:tracking-tight',
   'prose-h1:text-xl prose-h1:leading-snug prose-h1:mb-6 prose-h1:mt-0',
-  'prose-h2:text-[1.05rem] prose-h2:leading-snug prose-h2:mb-5 prose-h2:mt-12',
-  'prose-h3:text-[15px] prose-h3:leading-snug prose-h3:mb-3 prose-h3:mt-8',
-  'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-5 prose-h4:text-foreground/85',
-  'prose-p:text-[15px] prose-p:text-foreground/85 prose-p:leading-[1.92] prose-p:mb-6',
-  'prose-li:text-[15px] prose-li:text-foreground/85 prose-li:leading-[1.8] prose-li:mb-3',
-  'prose-ul:my-6 prose-ol:my-6',
-  '[&_ul]:space-y-2.5 [&_ol]:space-y-3',
+  'prose-h2:text-base prose-h2:leading-snug prose-h2:mb-5 prose-h2:mt-10',
+  'prose-h3:text-[15px] prose-h3:leading-snug prose-h3:mb-3 prose-h3:mt-7',
+  'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-5 prose-h4:text-foreground/90',
+  // Body text — readable contrast
+  'prose-p:text-[15px] prose-p:text-foreground/90 prose-p:leading-[1.85] prose-p:mb-5',
+  // Lists — spacious
+  'prose-li:text-[15px] prose-li:text-foreground/90 prose-li:leading-[1.75] prose-li:mb-2.5',
+  'prose-ul:my-5 prose-ol:my-5',
+  '[&_ul]:space-y-2 [&_ol]:space-y-2.5',
   'prose-ul:pl-1 prose-ol:pl-1',
+  // Inline formatting
   'prose-strong:text-foreground prose-strong:font-semibold',
   'prose-em:text-muted-foreground prose-em:text-[13px]',
-  'prose-blockquote:border-l-2 prose-blockquote:border-primary/20 prose-blockquote:text-foreground/75 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-4 prose-blockquote:my-6',
-  'prose-code:text-primary/70 prose-code:bg-primary/[0.06] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
-  'prose-hr:border-border/20 prose-hr:my-9',
+  // Blockquotes
+  'prose-blockquote:border-l-2 prose-blockquote:border-primary/30 prose-blockquote:text-foreground/80 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-4 prose-blockquote:my-6',
+  // Code
+  'prose-code:text-primary prose-code:bg-primary/[0.08] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
+  // Dividers
+  'prose-hr:border-border prose-hr:my-8',
 );
+
+/* ── Mini-Block Detection ── */
 
 const MINI_BLOCK_LABELS = [
   'The Idea', 'Why it works', 'Key Risk', 'Approach', 'Problem Statement',
@@ -127,7 +144,9 @@ const MINI_BLOCK_LABELS = [
 ];
 
 function normalizeDocumentMarkdown(md: string): string {
-  let text = md.replace(/\r\n/g, '\n').replace(/([.!?])\s+(\d+\.\s+)/g, '$1\n\n$2').replace(/\n(\d+\.\s)/g, '\n\n$1');
+  let text = md.replace(/\r\n/g, '\n')
+    .replace(/([.!?])\s+(\d+\.\s+)/g, '$1\n\n$2')
+    .replace(/\n(\d+\.\s)/g, '\n\n$1');
   for (const label of MINI_BLOCK_LABELS) {
     const re = new RegExp(`(^|\\n)(?:\\*\\*)?${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\*\\*)?:\\s*`, 'gi');
     text = text.replace(re, `$1**${label}**\n\n`);
@@ -164,6 +183,8 @@ function splitIntoDocumentSegments(md: string): DocumentSegment[] {
   if (trailing) segments.push({ type: 'body', content: trailing });
   return segments.length ? segments : [{ type: 'body', content: normalized }];
 }
+
+/* ── Component ── */
 
 interface Props {
   output: string;
@@ -231,14 +252,20 @@ export function CommandOutput({
   const renderSegments = (content: string) => {
     const segments = splitIntoDocumentSegments(content);
     return (
-      <div className="space-y-5 sm:space-y-6">
+      <div className="space-y-6">
         {segments.map((segment, index) => segment.type === 'label' ? (
-          <div key={`${segment.label}-${index}`} className={cn(STRATEGY_UI.surface.subBlock, 'px-4 py-4 sm:px-5')}>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground mb-2.5">{segment.label}</div>
-            <div className={proseClasses}><ReactMarkdown>{enhanceReadability(segment.content)}</ReactMarkdown></div>
+          <div key={`${segment.label}-${index}`} className={cn(STRATEGY_UI.surface.subBlock, 'px-5 py-4')}>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground mb-3">
+              {segment.label}
+            </div>
+            <div className={proseClasses}>
+              <ReactMarkdown>{enhanceReadability(segment.content)}</ReactMarkdown>
+            </div>
           </div>
         ) : (
-          <div key={`body-${index}`} className={proseClasses}><ReactMarkdown>{enhanceReadability(segment.content)}</ReactMarkdown></div>
+          <div key={`body-${index}`} className={proseClasses}>
+            <ReactMarkdown>{enhanceReadability(segment.content)}</ReactMarkdown>
+          </div>
         ))}
       </div>
     );
@@ -247,71 +274,140 @@ export function CommandOutput({
   return (
     <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
       <div className={cn(STRATEGY_UI.surface.document, 'overflow-hidden')}>
-        <div className="px-6 sm:px-8 lg:px-10 pt-6 sm:pt-7 pb-4 sm:pb-5">
+        {/* Document Header */}
+        <div className="px-6 sm:px-8 lg:px-10 pt-7 sm:pt-8 pb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h2 className="text-xl sm:text-[1.6rem] font-semibold text-foreground tracking-tight leading-tight">{docTitle}</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight leading-tight">
+                {docTitle}
+              </h2>
               {(accountName || opportunityName) && (
-                <p className="text-[13px] text-muted-foreground mt-2 font-medium">{accountName}{opportunityName ? ` · ${opportunityName}` : ''}</p>
+                <p className="text-sm text-muted-foreground mt-2 font-medium">
+                  {accountName}{opportunityName ? ` · ${opportunityName}` : ''}
+                </p>
               )}
             </div>
             {!isGenerating && (
-              <div className="flex items-center gap-px rounded-lg bg-muted/25 p-0.5 shrink-0">
-                <button onClick={() => setViewMode('clean')} className={cn('flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-100', viewMode === 'clean' ? 'bg-background text-foreground shadow-sm' : 'text-foreground/75 hover:text-foreground')}><Eye className="h-3 w-3" /> Read</button>
-                <button onClick={() => setViewMode('edit')} className={cn('flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-100', viewMode === 'edit' ? 'bg-background text-foreground shadow-sm' : 'text-foreground/75 hover:text-foreground')}><Pencil className="h-3 w-3" /> Edit</button>
+              <div className="flex items-center gap-px rounded-lg border border-border p-0.5 shrink-0 bg-muted/30">
+                <button
+                  onClick={() => setViewMode('clean')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                    viewMode === 'clean'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Eye className="h-3.5 w-3.5" /> Read
+                </button>
+                <button
+                  onClick={() => setViewMode('edit')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                    viewMode === 'edit'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </button>
               </div>
             )}
           </div>
-          <div className="flex items-center gap-3 flex-wrap text-[12px] text-muted-foreground mt-3.5">
-            {playbookUsed && <span className="inline-flex items-center gap-1 text-primary/80 font-medium"><BookOpen className="h-3 w-3" /> {playbookUsed}</span>}
-            {kiCount > 0 && <span className="inline-flex items-center gap-1"><Brain className="h-3 w-3" /> {kiCount} KIs</span>}
+
+          {/* Metadata row */}
+          <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground mt-4">
+            {playbookUsed && (
+              <span className="inline-flex items-center gap-1.5 text-primary font-medium">
+                <BookOpen className="h-3.5 w-3.5" /> {playbookUsed}
+              </span>
+            )}
+            {kiCount > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <Brain className="h-3.5 w-3.5" /> {kiCount} KIs
+              </span>
+            )}
             {sources.length > 0 && (
-              <button onClick={() => setShowSources(!showSources)} className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors duration-100">
-                {showSources ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              <button
+                onClick={() => setShowSources(!showSources)}
+                className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+              >
+                {showSources ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 {sources.length} source{sources.length !== 1 ? 's' : ''}
               </button>
             )}
-            <span className="inline-flex items-center gap-1 ml-auto text-muted-foreground"><Clock className="h-3 w-3" /> {generatedAt}</span>
+            <span className="inline-flex items-center gap-1.5 ml-auto">
+              <Clock className="h-3.5 w-3.5" /> {generatedAt}
+            </span>
           </div>
+
           {showSources && sources.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">
-              {sources.map((s, i) => <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-muted/35 text-foreground/75">{s}</span>)}
+              {sources.map((s, i) => (
+                <span key={i} className="text-xs px-2.5 py-1 rounded-md bg-muted text-foreground/80">
+                  {s}
+                </span>
+              ))}
             </div>
           )}
         </div>
 
-        <div className="mx-6 sm:mx-8 lg:mx-10 border-t border-border/20" />
+        {/* Divider */}
+        <div className="mx-6 sm:mx-8 lg:mx-10 border-t border-border" />
 
+        {/* Document Body */}
         {isGenerating ? (
-          <div className="px-8 py-24"><div className="flex flex-col items-center gap-3 text-muted-foreground"><div className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" /><div className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse [animation-delay:150ms]" /><div className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse [animation-delay:300ms]" /></div><span className="text-sm">Generating…</span></div></div>
+          <div className="px-8 py-24">
+            <div className="flex flex-col items-center gap-3 text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                <div className="h-2 w-2 rounded-full bg-primary animate-pulse [animation-delay:150ms]" />
+                <div className="h-2 w-2 rounded-full bg-primary animate-pulse [animation-delay:300ms]" />
+              </div>
+              <span className="text-sm">Generating…</span>
+            </div>
+          </div>
         ) : viewMode === 'edit' ? (
           <div className="p-6 sm:p-8 lg:p-10">
-            <Textarea value={editedOutput} onChange={e => setEditedOutput(e.target.value)} className="min-h-[400px] border-0 text-[15px] leading-relaxed font-mono resize-y focus-visible:ring-0 bg-transparent" />
+            <Textarea
+              value={editedOutput}
+              onChange={e => setEditedOutput(e.target.value)}
+              className="min-h-[400px] border-0 text-[15px] leading-relaxed font-mono resize-y focus-visible:ring-0 bg-transparent"
+            />
           </div>
         ) : (
-          <div className="px-6 sm:px-8 lg:px-10 py-6 sm:py-8 lg:py-9">
+          <div className="px-6 sm:px-8 lg:px-10 py-7 sm:py-9">
             <div className={STRATEGY_UI.layout.document}>
               {subjectLine && (
-                <div className="mb-8 pb-6 border-b border-border/20">
-                  <span className={STRATEGY_UI.labels.micro}>Subject</span>
-                  <p className="text-[16px] font-semibold text-foreground mt-2 leading-snug">{subjectLine}</p>
+                <div className="mb-8 pb-6 border-b border-border">
+                  <span className={STRATEGY_UI.labels.section}>Subject</span>
+                  <p className="text-base font-semibold text-foreground mt-2 leading-snug">{subjectLine}</p>
                 </div>
               )}
+
               {hasBlocks ? (
-                <div className="divide-y divide-border/15">
+                <div className="divide-y divide-border/50">
                   {blocks.map((block, i) => {
                     const semantic = classifySectionHeading(block.heading);
                     const accent = SEMANTIC_ACCENT[semantic];
                     return (
-                      <section key={i} className={cn('group relative', i > 0 ? 'pt-9' : '', 'pb-8')}>
+                      <section key={i} className={cn('group relative', i > 0 ? 'pt-8' : '', 'pb-8')}>
                         {block.heading && (
                           <div className="flex items-center justify-between mb-5">
                             <div className="flex items-center gap-2">
-                              <accent.Icon className={cn('h-3.5 w-3.5 shrink-0', accent.color)} />
-                              <h3 className="text-[12px] font-semibold text-foreground/75 tracking-[0.08em] uppercase">{block.heading}</h3>
+                              <accent.Icon className={cn('h-4 w-4 shrink-0', accent.color)} />
+                              <h3 className="text-xs font-semibold text-foreground/80 tracking-[0.06em] uppercase">
+                                {block.heading}
+                              </h3>
                             </div>
-                            <button onClick={() => handleCopyBlock(block.heading, block.content)} className="opacity-60 group-hover:opacity-100 transition-opacity duration-150 p-1.5 rounded-md hover:bg-muted/30" title={`Copy "${block.heading}"`}>
-                              {copiedBlock === block.heading ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
+                            <button
+                              onClick={() => handleCopyBlock(block.heading, block.content)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-muted"
+                              title={`Copy "${block.heading}"`}
+                            >
+                              {copiedBlock === block.heading
+                                ? <Check className="h-3.5 w-3.5 text-emerald-500" />
+                                : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
                             </button>
                           </div>
                         )}
@@ -325,8 +421,9 @@ export function CommandOutput({
           </div>
         )}
 
+        {/* Footer Actions */}
         {!isGenerating && (
-          <div className="flex items-center justify-between px-6 sm:px-8 lg:px-10 py-3.5 border-t border-border/20">
+          <div className="flex items-center justify-between px-6 sm:px-8 lg:px-10 py-3.5 border-t border-border bg-muted/20">
             <div className="flex items-center gap-1 flex-wrap">
               {[
                 { onClick: handleCopy, icon: copied ? Check : Copy, label: copied ? 'Copied' : 'Copy all', accent: copied },
@@ -334,7 +431,16 @@ export function CommandOutput({
                 { onClick: () => setShowSaveDialog(true), icon: BookmarkPlus, label: 'Save template' },
                 ...(onPromoteToTemplate ? [{ onClick: onPromoteToTemplate, icon: BookOpen, label: 'Use as framework' }] : []),
               ].map(action => (
-                <button key={action.label} onClick={action.onClick} className={cn('inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-md transition-all duration-100', action.accent ? 'text-emerald-500' : 'text-foreground/80 hover:text-foreground hover:bg-muted/30')}>
+                <button
+                  key={action.label}
+                  onClick={action.onClick}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-md transition-colors',
+                    action.accent
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-foreground/80 hover:text-foreground hover:bg-muted/50'
+                  )}
+                >
                   <action.icon className="h-3.5 w-3.5" /> {action.label}
                 </button>
               ))}
@@ -343,9 +449,17 @@ export function CommandOutput({
         )}
       </div>
 
+      {/* Save Dialog */}
       {showSaveDialog && (
-        <div className="flex items-center gap-2 p-3 mt-2 rounded-lg border border-border/20 bg-card/50">
-          <Input value={saveName} onChange={e => setSaveName(e.target.value)} placeholder="Template name…" className="h-8 text-sm flex-1 border-border/30" autoFocus onKeyDown={e => e.key === 'Enter' && handleSave()} />
+        <div className="flex items-center gap-2 p-3 mt-3 rounded-lg border border-border bg-card">
+          <Input
+            value={saveName}
+            onChange={e => setSaveName(e.target.value)}
+            placeholder="Template name…"
+            className="h-8 text-sm flex-1"
+            autoFocus
+            onKeyDown={e => e.key === 'Enter' && handleSave()}
+          />
           <Button size="sm" onClick={handleSave} disabled={!saveName.trim()} className="h-8">Save</Button>
           <Button size="sm" variant="ghost" onClick={() => setShowSaveDialog(false)} className="h-8">Cancel</Button>
         </div>
