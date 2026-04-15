@@ -24,7 +24,7 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system' || message.role === 'tool';
   const contentJson = (message.content_json ?? {}) as any;
-  const text = contentJson?.text || '';
+  const text = extractDisplayText(contentJson);
   const structured = contentJson?.structured;
   const workflowType = contentJson?.workflowType;
   const sourcesUsed = contentJson?.sources_used;
@@ -86,7 +86,11 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
               : 'bg-muted/60 text-foreground rounded-bl-sm',
         )}
       >
-        <div className="whitespace-pre-wrap">{text || JSON.stringify(message.content_json)}</div>
+        {text ? (
+          <div className="whitespace-pre-wrap">{text}</div>
+        ) : (
+          <div className="text-muted-foreground/60 italic text-xs">Processing…</div>
+        )}
         {!isUser && !isSystem && (
           <div className="mt-2 space-y-1.5">
             {/* Provider + model pill */}
