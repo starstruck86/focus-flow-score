@@ -441,6 +441,8 @@ export default function SkillBuilderSession() {
             onAdvance={advanceBlock}
             onStartRep={startRep}
             onRepComplete={handleRepComplete}
+            dave={deliveryMode === 'audio' ? dave : undefined}
+            isFromTraining={!!trainingContent && !!resolvedSession}
           />
         )}
       </div>
@@ -455,21 +457,25 @@ function BlockRenderer({
   onAdvance,
   onStartRep,
   onRepComplete,
+  dave,
+  isFromTraining,
 }: {
   block: SkillBlock;
   onAdvance: () => void;
   onStartRep: (block: SkillBlock) => void;
   onRepComplete: (score?: number) => void;
+  dave?: ReturnType<typeof useDaveVoiceController>;
+  isFromTraining?: boolean;
 }) {
   switch (block.type) {
     case 'mental_model':
-      return <MentalModelBlock block={block} onAdvance={onAdvance} />;
+      return <MentalModelBlock block={block} onAdvance={onAdvance} dave={dave} />;
     case 'ki_intro':
-      return <KIIntroBlock block={block} onAdvance={onAdvance} />;
+      return <KIIntroBlock block={block} onAdvance={onAdvance} dave={dave} />;
     case 'rep':
-      return <RepBlock block={block} onStartRep={onStartRep} />;
+      return <RepBlock block={block} onStartRep={onStartRep} isFromTraining={isFromTraining} dave={dave} />;
     case 'reflection':
-      return <ReflectionBlock block={block} onAdvance={onAdvance} />;
+      return <ReflectionBlock block={block} onAdvance={onAdvance} dave={dave} />;
     default:
       return null;
   }
