@@ -380,6 +380,19 @@ export function StrategyRightRail({
           )}
         </RailSection>
 
+        <Divider />
+
+        {/* Artifacts */}
+        <RailSection title="Artifacts" icon={Sparkles} count={artifacts.length} empty="Transform outputs into reusable assets">
+          {artifacts.length > 0 && (
+            <div className="space-y-1.5">
+              {artifacts.slice(0, 5).map(a => (
+                <ArtifactRailCard key={a.id} artifact={a} onRegenerate={onRegenerateArtifact} />
+              ))}
+            </div>
+          )}
+        </RailSection>
+
         {/* Actions */}
         <div className="border-t border-border px-3 py-3 space-y-1.5">
           <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
