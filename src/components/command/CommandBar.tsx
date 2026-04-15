@@ -336,21 +336,21 @@ export function CommandBar({
           autoFocus
         />
 
-        {/* Run button */}
-        {hasContent && !isLoading && (
-          <button
-            onClick={handleExecute}
-            className={cn(
-              'shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg',
-              'bg-primary text-primary-foreground text-xs font-medium',
-              'hover:bg-primary/90 active:scale-[0.97]',
-              'transition-all duration-100',
-              'animate-in fade-in-0 duration-150'
-            )}
-          >
-            <ArrowRight className="h-3.5 w-3.5" />
-          </button>
-        )}
+        {/* Run button — always visible */}
+        <button
+          onClick={handleExecute}
+          disabled={!hasContent || isLoading}
+          className={cn(
+            'shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+            'text-xs font-medium transition-all duration-100',
+            hasContent && !isLoading
+              ? 'bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.97]'
+              : 'bg-muted text-muted-foreground cursor-not-allowed'
+          )}
+        >
+          <ArrowRight className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Run</span>
+        </button>
       </div>
 
       {/* Keyboard hints */}
@@ -361,11 +361,12 @@ export function CommandBar({
             { key: '@', label: 'account' },
             { key: '$', label: 'opportunity' },
           ].map(h => (
-            <span key={h.key} className="text-[11px] text-muted-foreground flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted text-[11px] font-mono leading-none text-muted-foreground">{h.key}</kbd>
+            <span key={h.key} className="text-[11px] text-foreground/60 flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 rounded bg-muted text-[11px] font-mono leading-none text-foreground/60">{h.key}</kbd>
               {h.label}
             </span>
           ))}
+          <span className="text-[11px] text-foreground/40 ml-auto">↵ to run</span>
         </div>
       )}
 
