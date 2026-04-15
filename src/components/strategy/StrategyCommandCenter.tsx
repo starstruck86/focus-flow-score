@@ -222,6 +222,9 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                 sources={result?.sources || []}
                 kiCount={result?.kiCount || 0}
                 templateName={lastCommand?.template?.name}
+                accountName={lastCommand?.account?.name}
+                opportunityName={lastCommand?.opportunity?.name}
+                outputType={lastCommand?.template?.id}
                 isGenerating={isGenerating}
                 onRegenerate={handleRegenerate}
                 onSaveAsTemplate={handleSaveAsTemplate}
