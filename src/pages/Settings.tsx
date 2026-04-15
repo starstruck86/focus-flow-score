@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useStore } from '@/store/useStore';
 import { ConversionBenchmarksSettings } from '@/components/settings/ConversionBenchmarksSettings';
+import { AppearanceSettings } from '@/components/settings/AppearanceSettings';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { Layout } from '@/components/Layout';
 import { 
