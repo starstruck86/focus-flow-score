@@ -184,9 +184,9 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
             </div>
           )}
 
-          {/* Command bar + attachments + context strip */}
-          <div className={cn('w-full max-w-2xl', (result || isGenerating) && 'mb-5')}>
-            <CommandBar
+      {/* Command bar + attachments + context strip */}
+            <div className={cn('w-full max-w-2xl', (result || isGenerating) && 'mb-6')}>
+              <CommandBar
               accounts={accounts}
               opportunities={opportunities.map(o => ({ id: o.id, name: o.name, account_name: (o as any).account_name }))}
               templates={allTemplates}

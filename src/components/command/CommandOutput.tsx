@@ -1,6 +1,6 @@
 /**
  * CommandOutput — premium strategy document renderer.
- * Professional rich-text feel with strong heading hierarchy, clean typography, and calm aesthetics.
+ * Designed for true document-quality readability: light, spacious, professional.
  */
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
@@ -42,19 +42,17 @@ function classifySectionHeading(heading: string): SectionSemantic {
   return SEMANTIC_MAP[heading.toLowerCase().trim()] || 'default';
 }
 
-const SEMANTIC_STYLES: Record<SectionSemantic, {
-  border: string; accent: string; bg: string; Icon: React.ElementType;
-}> = {
-  risk: { border: 'border-l-amber-500/30', accent: 'text-amber-500/70', bg: 'bg-amber-500/[0.02]', Icon: AlertTriangle },
-  action: { border: 'border-l-primary/30', accent: 'text-primary/70', bg: 'bg-primary/[0.02]', Icon: Target },
-  takeaway: { border: 'border-l-emerald-500/30', accent: 'text-emerald-500/70', bg: 'bg-emerald-500/[0.02]', Icon: Lightbulb },
-  question: { border: 'border-l-blue-400/30', accent: 'text-blue-400/70', bg: 'bg-blue-400/[0.02]', Icon: HelpCircle },
-  stakeholder: { border: 'border-l-violet-400/30', accent: 'text-violet-400/70', bg: 'bg-violet-400/[0.02]', Icon: Users },
-  next_step: { border: 'border-l-primary/30', accent: 'text-primary/70', bg: 'bg-primary/[0.02]', Icon: ArrowRight },
-  email_body: { border: 'border-l-border/30', accent: 'text-foreground/70', bg: 'bg-muted/[0.03]', Icon: Mail },
-  summary: { border: 'border-l-border/20', accent: 'text-foreground/70', bg: 'bg-transparent', Icon: FileText },
-  idea: { border: 'border-l-amber-400/30', accent: 'text-amber-400/70', bg: 'bg-amber-400/[0.02]', Icon: Lightbulb },
-  default: { border: 'border-l-border/15', accent: 'text-foreground/60', bg: 'bg-transparent', Icon: FileText },
+const SEMANTIC_ACCENT: Record<SectionSemantic, { color: string; Icon: React.ElementType }> = {
+  risk: { color: 'text-amber-500/60', Icon: AlertTriangle },
+  action: { color: 'text-primary/60', Icon: Target },
+  takeaway: { color: 'text-emerald-500/60', Icon: Lightbulb },
+  question: { color: 'text-blue-400/60', Icon: HelpCircle },
+  stakeholder: { color: 'text-violet-400/60', Icon: Users },
+  next_step: { color: 'text-primary/60', Icon: ArrowRight },
+  email_body: { color: 'text-foreground/50', Icon: Mail },
+  summary: { color: 'text-foreground/50', Icon: FileText },
+  idea: { color: 'text-amber-400/60', Icon: Lightbulb },
+  default: { color: 'text-foreground/40', Icon: FileText },
 };
 
 const OUTPUT_TITLES: Record<string, string> = {
@@ -93,7 +91,9 @@ export function CommandOutput({
   const [copied, setCopied] = useState(false);
   const [copiedBlock, setCopiedBlock] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showPromoteDialog, setShowPromoteDialog] = useState(false);
   const [saveName, setSaveName] = useState('');
+  const [promoteName, setPromoteName] = useState('');
   const [showSources, setShowSources] = useState(false);
 
   if (output !== editedOutput && viewMode !== 'edit') {
@@ -126,52 +126,68 @@ export function CommandOutput({
     setSaveName('');
   }, [saveName, onSaveAsTemplate]);
 
+  const handlePromote = useCallback(() => {
+    if (!promoteName.trim()) return;
+    onSaveAsTemplate(promoteName.trim());
+    setShowPromoteDialog(false);
+    setPromoteName('');
+    toast.success(`Framework "${promoteName.trim()}" saved — use it from +template`);
+  }, [promoteName, onSaveAsTemplate]);
+
   if (!output && !isGenerating) return null;
 
   const hasBlocks = blocks.length > 1;
 
-  /* Professional document prose styles */
+  /* Prose: optimized for reading comfort — lighter text, generous spacing */
   const proseClasses = cn(
     'prose prose-base dark:prose-invert max-w-none',
-    'prose-headings:text-foreground/90 prose-headings:font-semibold prose-headings:tracking-tight prose-headings:leading-tight',
-    'prose-h1:text-xl prose-h1:mb-4 prose-h1:mt-0',
-    'prose-h2:text-lg prose-h2:mb-3 prose-h2:mt-6',
-    'prose-h3:text-base prose-h3:mb-2 prose-h3:mt-4',
-    'prose-h4:text-sm prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-3',
-    'prose-p:text-[15px] prose-p:text-foreground/75 prose-p:leading-[1.75] prose-p:my-3',
-    'prose-li:text-[15px] prose-li:text-foreground/75 prose-li:leading-[1.7] prose-li:my-1',
-    'prose-ul:my-3 prose-ol:my-3',
-    '[&_ul]:space-y-1.5 [&_ol]:space-y-1.5',
-    '[&_ul_ul]:mt-1 [&_ol_ol]:mt-1',
-    'prose-ul:pl-1 prose-ol:pl-1',
-    'prose-strong:text-foreground/90 prose-strong:font-semibold',
-    'prose-em:text-foreground/80',
-    'prose-blockquote:border-l-primary/20 prose-blockquote:text-foreground/60 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-4',
-    'prose-code:text-primary/80 prose-code:bg-primary/[0.05] prose-code:rounded prose-code:px-1 prose-code:py-0.5 prose-code:text-sm prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
+    // Headings
+    'prose-headings:text-foreground/85 prose-headings:font-semibold prose-headings:tracking-tight',
+    'prose-h1:text-[20px] prose-h1:leading-[1.3] prose-h1:mb-4 prose-h1:mt-0',
+    'prose-h2:text-[17px] prose-h2:leading-[1.3] prose-h2:mb-3 prose-h2:mt-8',
+    'prose-h3:text-[15px] prose-h3:leading-[1.4] prose-h3:mb-2 prose-h3:mt-5',
+    'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-4 prose-h4:text-foreground/70',
+    // Body text — light, readable
+    'prose-p:text-[15px] prose-p:text-foreground/65 prose-p:leading-[1.8] prose-p:my-3.5',
+    // Lists — clean and well-spaced
+    'prose-li:text-[15px] prose-li:text-foreground/65 prose-li:leading-[1.75] prose-li:my-1.5',
+    'prose-ul:my-4 prose-ol:my-4',
+    '[&_ul]:space-y-2 [&_ol]:space-y-2',
+    '[&_ul_ul]:mt-1.5 [&_ol_ol]:mt-1.5',
+    'prose-ul:pl-0 prose-ol:pl-0',
+    '[&_ul>li]:pl-0 [&_ol>li]:pl-0',
+    // Emphasis
+    'prose-strong:text-foreground/80 prose-strong:font-semibold',
+    'prose-em:text-foreground/70 prose-em:not-italic prose-em:text-[14px] prose-em:text-muted-foreground/50',
+    // Quotes
+    'prose-blockquote:border-l-2 prose-blockquote:border-primary/15 prose-blockquote:text-foreground/55 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-5 prose-blockquote:my-5',
+    // Code
+    'prose-code:text-primary/70 prose-code:bg-primary/[0.04] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
   );
 
   return (
-    <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-150">
-      <div className="rounded-xl border border-border/15 bg-card/50 overflow-hidden shadow-sm">
+    <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
+      {/* Document canvas — minimal chrome, maximum readability */}
+      <div className="rounded-xl border border-border/10 bg-card/40 overflow-hidden">
 
-        {/* Document header */}
-        <div className="px-6 pt-5 pb-3 border-b border-border/10">
-          <div className="flex items-start justify-between gap-3 mb-2">
+        {/* Document header — quiet and informational */}
+        <div className="px-8 pt-6 pb-4">
+          <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h2 className="text-lg font-semibold text-foreground/90 tracking-tight leading-tight">{docTitle}</h2>
-              {accountName && (
-                <p className="text-xs text-muted-foreground/40 mt-1">
+              <h2 className="text-[18px] font-semibold text-foreground/85 tracking-tight leading-tight">{docTitle}</h2>
+              {(accountName || opportunityName) && (
+                <p className="text-[12px] text-muted-foreground/35 mt-1.5 font-medium">
                   {accountName}{opportunityName ? ` · ${opportunityName}` : ''}
                 </p>
               )}
             </div>
             {!isGenerating && (
-              <div className="flex items-center gap-px rounded-lg bg-muted/20 p-0.5 shrink-0">
+              <div className="flex items-center gap-px rounded-lg bg-muted/15 p-0.5 shrink-0">
                 <button
                   onClick={() => setViewMode('clean')}
                   className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-100',
-                    viewMode === 'clean' ? 'bg-background text-foreground/70 shadow-sm' : 'text-muted-foreground/30 hover:text-foreground/50'
+                    'flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-100',
+                    viewMode === 'clean' ? 'bg-background text-foreground/70 shadow-sm' : 'text-muted-foreground/25 hover:text-foreground/50'
                   )}
                 >
                   <Eye className="h-3 w-3" /> Read
@@ -179,8 +195,8 @@ export function CommandOutput({
                 <button
                   onClick={() => setViewMode('edit')}
                   className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-100',
-                    viewMode === 'edit' ? 'bg-background text-foreground/70 shadow-sm' : 'text-muted-foreground/30 hover:text-foreground/50'
+                    'flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-100',
+                    viewMode === 'edit' ? 'bg-background text-foreground/70 shadow-sm' : 'text-muted-foreground/25 hover:text-foreground/50'
                   )}
                 >
                   <Pencil className="h-3 w-3" /> Edit
@@ -189,10 +205,10 @@ export function CommandOutput({
             )}
           </div>
 
-          {/* Metadata */}
-          <div className="flex items-center gap-3 flex-wrap text-[10px] text-muted-foreground/30">
+          {/* Quiet metadata line */}
+          <div className="flex items-center gap-3 flex-wrap text-[10px] text-muted-foreground/25 mt-3">
             {playbookUsed && (
-              <span className="inline-flex items-center gap-1 text-primary/50">
+              <span className="inline-flex items-center gap-1 text-primary/40">
                 <BookOpen className="h-2.5 w-2.5" /> {playbookUsed}
               </span>
             )}
@@ -204,40 +220,43 @@ export function CommandOutput({
             {sources.length > 0 && (
               <button
                 onClick={() => setShowSources(!showSources)}
-                className="inline-flex items-center gap-0.5 hover:text-foreground/50 transition-colors duration-100"
+                className="inline-flex items-center gap-0.5 hover:text-foreground/40 transition-colors duration-100"
               >
                 {showSources ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
                 {sources.length} source{sources.length !== 1 ? 's' : ''}
               </button>
             )}
-            <span className="inline-flex items-center gap-1 ml-auto text-muted-foreground/20">
+            <span className="inline-flex items-center gap-1 ml-auto text-muted-foreground/18">
               <Clock className="h-2.5 w-2.5" /> {generatedAt}
             </span>
           </div>
 
           {showSources && sources.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
               {sources.map((s, i) => (
-                <span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted/20 text-muted-foreground/30">{s}</span>
+                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-muted/15 text-muted-foreground/30">{s}</span>
               ))}
             </div>
           )}
         </div>
 
+        {/* Divider */}
+        <div className="mx-8 border-t border-border/8" />
+
         {/* Document body */}
         {isGenerating ? (
-          <div className="px-6 py-20">
-            <div className="flex flex-col items-center gap-3 text-muted-foreground/30">
+          <div className="px-8 py-24">
+            <div className="flex flex-col items-center gap-3 text-muted-foreground/25">
               <div className="flex items-center gap-2">
-                <div className="h-1 w-1 rounded-full bg-primary/40 animate-pulse" />
-                <div className="h-1 w-1 rounded-full bg-primary/40 animate-pulse [animation-delay:150ms]" />
-                <div className="h-1 w-1 rounded-full bg-primary/40 animate-pulse [animation-delay:300ms]" />
+                <div className="h-1 w-1 rounded-full bg-primary/30 animate-pulse" />
+                <div className="h-1 w-1 rounded-full bg-primary/30 animate-pulse [animation-delay:150ms]" />
+                <div className="h-1 w-1 rounded-full bg-primary/30 animate-pulse [animation-delay:300ms]" />
               </div>
-              <span className="text-xs">Generating {docTitle.toLowerCase()}…</span>
+              <span className="text-xs">Generating…</span>
             </div>
           </div>
         ) : viewMode === 'edit' ? (
-          <div className="p-6">
+          <div className="p-8">
             <Textarea
               value={editedOutput}
               onChange={e => setEditedOutput(e.target.value)}
@@ -245,51 +264,40 @@ export function CommandOutput({
             />
           </div>
         ) : (
-          <div className="px-6 py-6">
-            <div className="max-w-[640px] mx-auto">
+          <div className="px-8 py-8">
+            <div className="max-w-[620px]">
               {subjectLine && (
-                <div className="mb-6 px-4 py-3 rounded-lg bg-muted/10 border border-border/10">
-                  <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/30 font-medium">Subject</span>
-                  <p className="text-[15px] font-semibold text-foreground/85 mt-1 leading-snug">{subjectLine}</p>
+                <div className="mb-8 pb-5 border-b border-border/8">
+                  <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/25 font-medium">Subject</span>
+                  <p className="text-[16px] font-semibold text-foreground/80 mt-1.5 leading-snug">{subjectLine}</p>
                 </div>
               )}
 
               {hasBlocks ? (
-                <div className="space-y-7">
+                <div className="space-y-8">
                   {blocks.map((block, i) => {
                     const semantic = classifySectionHeading(block.heading);
-                    const style = SEMANTIC_STYLES[semantic];
-                    const showBorder = !['default', 'summary'].includes(semantic);
+                    const accent = SEMANTIC_ACCENT[semantic];
 
                     return (
-                      <section
-                        key={i}
-                        className={cn(
-                          'group relative',
-                          showBorder && `rounded-lg border-l-2 ${style.border} ${style.bg} px-5 py-4`,
-                          !showBorder && 'px-0',
-                        )}
-                      >
+                      <section key={i} className="group relative">
                         {block.heading && (
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
-                              {showBorder && <style.Icon className={cn('h-3.5 w-3.5 shrink-0', style.accent)} />}
-                              <h3 className={cn(
-                                'text-base font-semibold tracking-tight',
-                                showBorder ? style.accent : 'text-foreground/80',
-                              )}>
+                              <accent.Icon className={cn('h-3.5 w-3.5 shrink-0', accent.color)} />
+                              <h3 className="text-[15px] font-semibold text-foreground/80 tracking-tight">
                                 {block.heading}
                               </h3>
                             </div>
                             <button
                               onClick={() => handleCopyBlock(block.heading, block.content)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity duration-100 p-1 rounded hover:bg-muted/30"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 p-1.5 rounded-md hover:bg-muted/20"
                               title={`Copy "${block.heading}"`}
                             >
                               {copiedBlock === block.heading ? (
-                                <Check className="h-3 w-3 text-emerald-500/60" />
+                                <Check className="h-3 w-3 text-emerald-500/50" />
                               ) : (
-                                <Copy className="h-3 w-3 text-muted-foreground/20" />
+                                <Copy className="h-3 w-3 text-muted-foreground/15" />
                               )}
                             </button>
                           </div>
@@ -310,24 +318,24 @@ export function CommandOutput({
           </div>
         )}
 
-        {/* Utility bar */}
+        {/* Utility bar — very quiet */}
         {!isGenerating && (
-          <div className="flex items-center justify-between px-6 py-2 border-t border-border/8">
-            <div className="flex items-center gap-0.5">
+          <div className="flex items-center justify-between px-8 py-2.5 border-t border-border/6">
+            <div className="flex items-center gap-1">
               {[
                 { onClick: handleCopy, icon: copied ? Check : Copy, label: copied ? 'Copied' : 'Copy all', accent: copied },
                 { onClick: onRegenerate, icon: RotateCcw, label: 'Regenerate' },
                 { onClick: () => setShowSaveDialog(true), icon: BookmarkPlus, label: 'Save template' },
-                ...(onPromoteToTemplate ? [{ onClick: onPromoteToTemplate, icon: BookOpen, label: 'Use as framework' }] : []),
+                ...(onPromoteToTemplate ? [{ onClick: () => { setPromoteName(templateName ? `${templateName} (custom)` : 'My Framework'); setShowPromoteDialog(true); }, icon: BookOpen, label: 'Use as framework' }] : []),
               ].map(action => (
                 <button
                   key={action.label}
                   onClick={action.onClick}
                   className={cn(
-                    'inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all duration-100',
+                    'inline-flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-md transition-all duration-100',
                     action.accent
                       ? 'text-emerald-500/60'
-                      : 'text-muted-foreground/25 hover:text-muted-foreground/50 hover:bg-muted/20'
+                      : 'text-muted-foreground/20 hover:text-muted-foreground/50 hover:bg-muted/15'
                   )}
                 >
                   <action.icon className="h-3 w-3" /> {action.label}
@@ -338,19 +346,45 @@ export function CommandOutput({
         )}
       </div>
 
-      {/* Save dialog */}
+      {/* Save template dialog */}
       {showSaveDialog && (
-        <div className="flex items-center gap-2 p-3 mt-2 rounded-lg border border-primary/10 bg-primary/[0.02]">
+        <div className="flex items-center gap-2 p-3 mt-2 rounded-lg border border-border/10 bg-card/30">
           <Input
             value={saveName}
             onChange={e => setSaveName(e.target.value)}
-            placeholder="Template name..."
-            className="h-8 text-sm flex-1"
+            placeholder="Template name…"
+            className="h-8 text-sm flex-1 border-border/20"
             autoFocus
             onKeyDown={e => e.key === 'Enter' && handleSave()}
           />
           <Button size="sm" onClick={handleSave} disabled={!saveName.trim()} className="h-8">Save</Button>
           <Button size="sm" variant="ghost" onClick={() => setShowSaveDialog(false)} className="h-8">Cancel</Button>
+        </div>
+      )}
+
+      {/* Promote to framework dialog */}
+      {showPromoteDialog && (
+        <div className="mt-2 rounded-lg border border-primary/10 bg-primary/[0.02] p-4 space-y-3">
+          <div>
+            <p className="text-[13px] font-medium text-foreground/70">Use as framework</p>
+            <p className="text-[11px] text-muted-foreground/40 mt-0.5">
+              Save this output's structure as a reusable template. Access it anytime from <kbd className="px-1 py-px rounded bg-muted/30 text-[10px] font-mono">+</kbd> in the composer.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              value={promoteName}
+              onChange={e => setPromoteName(e.target.value)}
+              placeholder="e.g. Mid Market Discovery Prep Sheet"
+              className="h-8 text-sm flex-1 border-border/20"
+              autoFocus
+              onKeyDown={e => e.key === 'Enter' && handlePromote()}
+            />
+            <Button size="sm" onClick={handlePromote} disabled={!promoteName.trim()} className="h-8">
+              <BookOpen className="h-3 w-3 mr-1" /> Save framework
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setShowPromoteDialog(false)} className="h-8">Cancel</Button>
+          </div>
         </div>
       )}
     </div>
