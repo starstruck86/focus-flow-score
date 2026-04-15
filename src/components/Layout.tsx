@@ -288,7 +288,10 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
     <div data-testid="app-layout" className={`min-h-screen bg-background flex flex-col w-full ${SHELL.top.safeArea}`}>
       <header
         data-testid="app-header"
-        className="flex flex-col gap-1 px-3 py-2 border-b sticky top-[env(safe-area-inset-top)] z-40 bg-background/95 backdrop-blur-md"
+        className={cn(
+          "flex flex-col gap-1 px-3 border-b sticky top-[env(safe-area-inset-top)] z-40 bg-background/95 backdrop-blur-md",
+          location.pathname === '/strategy' ? 'py-1.5' : 'py-2'
+        )}
         style={headerAccentStyle}
       >
         <div className="flex items-center gap-2">
