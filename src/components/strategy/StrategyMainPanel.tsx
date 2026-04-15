@@ -203,28 +203,30 @@ export function StrategyMainPanel({
 
       {/* ── HEADER REGION (auto height, shrink-0) ── */}
       <div className="shrink-0">
-        {/* Top Bar — compact */}
-        <div className="border-b border-border px-3 py-1.5 flex items-center gap-2">
+        {/* Top Bar — thread title is the clear anchor */}
+        <div className="border-b border-border px-3 py-2 flex items-center gap-2">
           {sidebarCollapsed && (
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExpandSidebar}>
               <PanelLeftOpen className="h-4 w-4" />
             </Button>
           )}
-          <ThreadIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <ThreadIcon className="h-4 w-4 text-primary/70 shrink-0" />
           <h1 className="text-sm font-semibold text-foreground truncate flex-1">{thread.title}</h1>
           {isUploading && (
             <Badge variant="secondary" className="text-[10px] gap-1 animate-pulse">
               <Loader2 className="h-3 w-3 animate-spin" /> Uploading
             </Badge>
           )}
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onToggleRightRail}>
-            <PanelRightOpen className="h-4 w-4" />
-          </Button>
+          {!isMobile && (
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onToggleRightRail}>
+              <PanelRightOpen className="h-4 w-4" />
+            </Button>
+          )}
         </div>
 
-        {/* Scope + Workflows — compressed on mobile */}
+        {/* Scope + Workflows */}
         <div className="px-3 pt-1.5 pb-1">
-          {/* Context badges — hidden on mobile to save space */}
+          {/* Context badges — hidden on mobile */}
           {!isMobile && (
             <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
               <Badge variant="outline" className="text-[10px] font-medium">
@@ -253,9 +255,12 @@ export function StrategyMainPanel({
             <p className="text-xs text-foreground/60 line-clamp-1 leading-relaxed mb-1.5">{thread.summary}</p>
           )}
 
-          {/* Workflow buttons — scrollable row */}
+          {/* Workflow buttons — mobile: only recommended (max 3), desktop: all */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-            {WORKFLOWS.map(w => {
+            {(isMobile
+              ? WORKFLOWS.filter(w => recommendedWorkflows.includes(w.key)).slice(0, 3)
+              : WORKFLOWS
+            ).map(w => {
               const isRunning = activeWorkflow === w.key;
               const isRecommended = recommendedWorkflows.includes(w.key);
               return (
@@ -281,12 +286,28 @@ export function StrategyMainPanel({
                 </Button>
               );
             })}
+            {/* Mobile: show "More" button if there are hidden workflows */}
+            {isMobile && WORKFLOWS.length > recommendedWorkflows.filter(k => WORKFLOWS.some(w => w.key === k)).length && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-[10px] px-2 shrink-0 text-foreground/50"
+                onClick={() => {
+                  toast.info('All workflows', {
+                    description: WORKFLOWS.filter(w => !recommendedWorkflows.includes(w.key)).map(w => w.label).join(', '),
+                    duration: 4000,
+                  });
+                }}
+              >
+                More…
+              </Button>
+            )}
           </div>
         </div>
 
-        {/* Active Workflow Banner */}
+        {/* Active Workflow Banner — inside header region, above scroll */}
         {activeWorkflow && (
-          <div className="px-3 pt-1.5">
+          <div className="px-3 pb-1.5">
             <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5 flex items-center gap-2">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
               <span className="text-xs font-medium text-primary">
@@ -372,57 +393,58 @@ export function StrategyMainPanel({
       )}
 
       {/* ── COMPOSER (shrink-0, anchored at bottom, clears bottom nav) ── */}
-      <div className="border-t border-border p-2.5 pb-[calc(0.625rem+var(--shell-nav-height,101)*1px+env(safe-area-inset-bottom))] shrink-0 bg-card/50">
-        <div className="flex items-end gap-2">
-          <div className="flex-1 relative">
-            <Textarea
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={isSending ? 'Waiting for response…' : hasLinkedObject ? `Ask about ${linkedContext?.account?.name || linkedContext?.opportunity?.name || 'this object'}…` : 'Type your message or paste content…'}
-              className="min-h-[40px] max-h-[100px] pr-10 text-sm resize-none border-border focus-visible:ring-primary/20"
-              rows={1}
-              disabled={isSending}
-            />
-            <div className="absolute right-2 bottom-2">
-              <Button
-                size="icon" variant="ghost" className="h-6 w-6 text-foreground/50 hover:text-foreground"
-                title="Attach file"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isSending}
+      <div className="border-t border-border px-3 pt-2.5 pb-[calc(0.625rem+var(--shell-nav-height,101)*1px+env(safe-area-inset-bottom))] shrink-0 bg-card/80 backdrop-blur-sm">
+        {/* Depth selector row — above textarea on mobile for cleaner stacking */}
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex rounded-md border border-border overflow-hidden">
+            {DEPTH_OPTIONS.map(d => (
+              <button
+                key={d}
+                type="button"
+                className={cn(
+                  'px-2.5 py-1 text-[10px] font-medium transition-colors',
+                  depth === d
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-card text-foreground/60 hover:bg-muted hover:text-foreground'
+                )}
+                onClick={() => setDepth(d)}
               >
-                <Paperclip className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+                {d}
+              </button>
+            ))}
           </div>
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex rounded-md border border-border overflow-hidden">
-              {DEPTH_OPTIONS.map(d => (
-                <button
-                  key={d}
-                  type="button"
-                  className={cn(
-                    'px-2.5 py-1 text-[10px] font-medium transition-colors',
-                    depth === d
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-card text-foreground/60 hover:bg-muted hover:text-foreground'
-                  )}
-                  onClick={() => setDepth(d)}
-                >
-                  {d}
-                </button>
-              ))}
-            </div>
-            <Button
-              size="sm"
-              className="h-8 gap-1.5 px-4"
-              onClick={handleSend}
-              disabled={!input.trim() || isSending}
-            >
-              {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              Send
-            </Button>
-          </div>
+          <Button
+            size="icon" variant="ghost" className="h-7 w-7 text-foreground/50 hover:text-foreground"
+            title="Attach file"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isSending}
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        {/* Input + Send row */}
+        <div className="flex items-end gap-2">
+          <Textarea
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={isSending ? 'Waiting…' : hasLinkedObject ? `Ask about ${linkedContext?.account?.name || linkedContext?.opportunity?.name || 'this'}…` : 'Message…'}
+            className={cn(
+              'flex-1 max-h-[120px] text-sm resize-none border-border focus-visible:ring-primary/20',
+              isMobile ? 'min-h-[48px]' : 'min-h-[40px]'
+            )}
+            rows={isMobile ? 2 : 1}
+            disabled={isSending}
+          />
+          <Button
+            size="sm"
+            className="h-10 gap-1.5 px-4 shrink-0"
+            onClick={handleSend}
+            disabled={!input.trim() || isSending}
+          >
+            {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            Send
+          </Button>
         </div>
       </div>
     </div>
