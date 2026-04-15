@@ -33,12 +33,19 @@ export function useStrategyMemory(
     : null;
 
   const fetchMemories = useCallback(async () => {
-    if (!tableName || !idColumn || !objectId || !user) { setMemories([]); return; }
-    const { data } = await supabase
-      .from(tableName)
-      .select('*')
-      .eq(idColumn, objectId)
-      .order('created_at', { ascending: false });
+    if (!objectType || !objectId || !user) { setMemories([]); return; }
+    
+    let data: any[] | null = null;
+    if (objectType === 'account') {
+      const res = await supabase.from('account_strategy_memory').select('*').eq('account_id', objectId).order('created_at', { ascending: false });
+      data = res.data;
+    } else if (objectType === 'opportunity') {
+      const res = await supabase.from('opportunity_strategy_memory').select('*').eq('opportunity_id', objectId).order('created_at', { ascending: false });
+      data = res.data;
+    } else if (objectType === 'territory') {
+      const res = await supabase.from('territory_strategy_memory').select('*').eq('territory_id', objectId).order('created_at', { ascending: false });
+      data = res.data;
+    }
     if (data) setMemories(data as StrategyMemoryEntry[]);
   }, [tableName, idColumn, objectId, user]);
 
