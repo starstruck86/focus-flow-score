@@ -113,8 +113,7 @@ export default function Strategy() {
 
   return (
     <Layout>
-      <div className="flex flex-col" style={{ height: 'calc(100dvh - var(--shell-nav-height, 101) * 1px - env(safe-area-inset-bottom, 0px))' }}>
-      {/* Full-height flex container: header auto, content flex-1 scrollable, composer anchored */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
 
