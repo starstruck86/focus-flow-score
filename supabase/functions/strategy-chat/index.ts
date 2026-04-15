@@ -419,6 +419,28 @@ async function buildContextPack(
 
   const pinnedCount = pack.memories.filter((m: any) => m.is_pinned).length;
   
+  // Compute context type and top sources
+  const memWeight = pack.memories.length * 2;
+  const upWeight = pack.uploads.length * 3;
+  const outWeight = pack.outputs.length * 2;
+  const totalWeight = memWeight + upWeight + outWeight;
+  let contextType = "minimal";
+  if (totalWeight > 0) {
+    if (memWeight > upWeight && memWeight > outWeight) contextType = "memory-driven";
+    else if (upWeight > memWeight && upWeight > outWeight) contextType = "upload-driven";
+    else contextType = "mixed";
+  }
+
+  // Top 3 most influential sources
+  const topSources: string[] = [];
+  const scoredMemories = pack.memories.slice(0, 2);
+  for (const m of scoredMemories) {
+    topSources.push(`Memory: ${m.content.slice(0, 60)}`);
+  }
+  for (const u of pack.uploads.slice(0, 1)) {
+    topSources.push(`Upload: ${u.file_name}`);
+  }
+
   pack.retrievalMeta = {
     memoriesScored: pack.memories.length,
     uploadsIncluded: pack.uploads.length,
@@ -427,12 +449,30 @@ async function buildContextPack(
     pinnedMemories: pinnedCount,
     uploadNames: pack.uploads.map((u: any) => u.file_name).filter(Boolean),
     outputTitles: pack.outputs.map((o: any) => o.title).filter(Boolean).slice(0, 5),
+    contextType,
+    topSources: topSources.slice(0, 3),
   };
   
   pack.sourceCount = (pack.account ? 1 : 0) + (pack.opportunity ? 1 : 0)
     + pack.memories.length + pack.uploads.length + pack.outputs.length;
 
-  console.log(`[retrieval] sources=${pack.sourceCount} memories=${pack.memories.length}(${pinnedCount} pinned) uploads=${pack.uploads.length} outputs=${pack.outputs.length} messages=${pack.recentMessages.length}`);
+  // Update last_used_at for memories used in this retrieval
+  const memoryIds = pack.memories.map((m: any) => m.id);
+  if (memoryIds.length > 0) {
+    const memTables = ["account_strategy_memory", "opportunity_strategy_memory", "territory_strategy_memory"];
+    for (const table of memTables) {
+      const idsForTable = pack.memories.filter((m: any) => {
+        if (table === "account_strategy_memory") return m.source === "account";
+        if (table === "opportunity_strategy_memory") return m.source === "opportunity";
+        return m.source === "territory";
+      }).map((m: any) => m.id);
+      if (idsForTable.length > 0) {
+        await supabase.from(table).update({ last_used_at: new Date().toISOString() }).in("id", idsForTable);
+      }
+    }
+  }
+
+  console.log(`[retrieval] sources=${pack.sourceCount} memories=${pack.memories.length}(${pinnedCount} pinned) uploads=${pack.uploads.length} outputs=${pack.outputs.length} messages=${pack.recentMessages.length} contextType=${contextType}`);
 
   return pack;
 }
