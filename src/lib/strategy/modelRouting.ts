@@ -69,7 +69,8 @@ export function getModelDisplayName(model: string): string {
   const names: Record<string, string> = {
     'openai/gpt-5': 'GPT-5',
     'openai/gpt-5-mini': 'GPT-5 Mini',
-    'gpt-4o-mini': 'GPT-4o Mini',
+    'gpt-5': 'GPT-5',
+    'gpt-5-mini': 'GPT-5 Mini',
     'claude-sonnet-4-20250514': 'Claude Sonnet 4',
     'sonar-pro': 'Sonar Pro',
   };
