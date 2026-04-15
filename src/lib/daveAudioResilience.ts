@@ -1,11 +1,14 @@
 /**
  * Dave Audio Resilience Layer
  *
- * Text-first coaching step model, audio unlock, playback resilience,
- * mic fallback, playback token system, and per-step telemetry.
+ * Playback token system, audio unlock, mic fallback,
+ * mode downgrade logic, and per-step telemetry.
  *
  * Architecture: text is the source of truth. Audio is an enhancement.
  * No coaching content is ever skipped because of audio/mic failure.
+ *
+ * Live playback resilience lives in useVoiceMode.playTTS().
+ * This module provides the token system and telemetry that useVoiceMode consumes.
  */
 
 import { createLogger } from '@/lib/logger';
@@ -66,15 +69,23 @@ let _playbackCounter = 0;
 
 /** Generate a new playback token. Invalidates any previous token. */
 export function nextPlaybackId(): string {
+  const prevId = _activePlaybackId;
   _playbackCounter++;
   const id = `pb-${_playbackCounter}-${Date.now()}`;
   _activePlaybackId = id;
+  if (prevId) {
+    logger.info('[token] playbackId transition', { from: prevId.slice(-12), to: id.slice(-12) });
+  }
   return id;
 }
 
 /** Check if a playback token is still the active one. */
 export function isActivePlayback(id: string): boolean {
-  return _activePlaybackId === id;
+  const active = _activePlaybackId === id;
+  if (!active) {
+    logger.info('[guard] stale callback suppressed', { staleId: id.slice(-12), currentId: _activePlaybackId?.slice(-12) ?? 'none' });
+  }
+  return active;
 }
 
 /** Get the current active playback ID (for debug). */
@@ -84,6 +95,9 @@ export function getActivePlaybackId(): string | null {
 
 /** Clear the active playback (e.g. on session end). */
 export function clearActivePlayback(): void {
+  if (_activePlaybackId) {
+    logger.info('[token] active playback cleared', { clearedId: _activePlaybackId.slice(-12) });
+  }
   _activePlaybackId = null;
 }
 
@@ -135,21 +149,9 @@ export async function unlockAudio(): Promise<boolean> {
   }
 }
 
-// ── Playback Constants (used by useVoiceMode inline resilience) ─────
-
-export const PLAYBACK_SETTLE_TIMEOUT_MS = 60_000;
-export const STALL_TIMEOUT_MS = 10_000;
-export const MIC_HANDOFF_DELAY_MS = 300;
-
-/**
- * NOTE: The live TTS playback path runs through useVoiceMode.playTTS(),
- * which implements token-guarded resilience inline (nextPlaybackId,
- * isActivePlayback checks, interrupt handling, settle logic).
- *
- * This module provides the token system and telemetry that useVoiceMode consumes.
- */
-
 // ── Mic Handoff ────────────────────────────────────────────────────
+
+const MIC_HANDOFF_DELAY_MS = 300;
 
 export interface MicHandoffResult {
   granted: boolean;
@@ -242,12 +244,16 @@ export function evaluateModeDowngrade(
   if (currentMode === 'text') return 'text';
 
   if (recentFailures >= 3) {
-    emitStepTelemetry('mode_downgraded', 'session', { from: currentMode, to: 'text', failures: recentFailures });
-    return 'text';
+    const to = 'text';
+    logger.info('[downgrade] mode downgraded', { from: currentMode, to, failures: recentFailures, reason: '3+ consecutive failures' });
+    emitStepTelemetry('mode_downgraded', 'session', { from: currentMode, to, failures: recentFailures });
+    return to;
   }
   if (recentFailures >= 2 && currentMode === 'full') {
-    emitStepTelemetry('mode_downgraded', 'session', { from: 'full', to: 'quiet', failures: recentFailures });
-    return 'quiet';
+    const to = 'quiet';
+    logger.info('[downgrade] mode downgraded', { from: 'full', to, failures: recentFailures, reason: '2+ failures in full mode' });
+    emitStepTelemetry('mode_downgraded', 'session', { from: 'full', to, failures: recentFailures });
+    return to;
   }
   return currentMode;
 }

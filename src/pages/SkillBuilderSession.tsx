@@ -577,6 +577,14 @@ function PlayAudioButton({ text, dave }: { text: string; dave?: DaveController }
       return;
     }
 
+    // If dave is already speaking (auto-narration or another replay),
+    // stopSpeaking first — interruptCurrentPlayback handles token invalidation
+    if (dave.isSpeaking) {
+      dave.stopSpeaking();
+      // Brief pause to let interrupt settle
+      await new Promise(r => setTimeout(r, 100));
+    }
+
     setPlaying(true);
     try {
       // speak() will interrupt any existing playback via token system

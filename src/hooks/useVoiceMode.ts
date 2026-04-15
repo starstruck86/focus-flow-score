@@ -4,6 +4,7 @@ import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import {
   nextPlaybackId,
   isActivePlayback,
+  clearActivePlayback,
   emitStepTelemetry,
 } from '@/lib/daveAudioResilience';
 
@@ -81,11 +82,16 @@ export function useVoiceMode() {
       // Stop any playing audio
       if (audioRef.current) {
         audioRef.current.pause();
+        if (audioRef.current.src) {
+          URL.revokeObjectURL(audioRef.current.src);
+          activeObjectUrlsRef.current.delete(audioRef.current.src);
+        }
         audioRef.current = null;
       }
       // Stop media stream
       streamRef.current?.getTracks().forEach((t) => t.stop());
-      // Clear playback token
+      // Clear playback token (global + local)
+      clearActivePlayback();
       activePlaybackIdRef.current = null;
     };
   }, []);
@@ -319,7 +325,7 @@ export function useVoiceMode() {
    * Stop any currently active playback — cleanly cancels previous clip,
    * fires interrupt telemetry, and ensures stale callbacks are ignored.
    */
-  const interruptCurrentPlayback = useCallback(() => {
+  const interruptCurrentPlayback = useCallback((source?: string) => {
     const prevId = activePlaybackIdRef.current;
 
     // Abort only TTS fetches — do NOT touch STT
@@ -334,7 +340,10 @@ export function useVoiceMode() {
     }
 
     if (prevId) {
-      emitStepTelemetry('audio_interrupt', 'playback', { interruptedId: prevId });
+      emitStepTelemetry('audio_interrupt', 'playback', {
+        interruptedId: prevId,
+        source: source ?? 'unknown',
+      });
     }
 
     safeSetIsPlaying(false);
@@ -342,8 +351,8 @@ export function useVoiceMode() {
 
   /** Play TTS with sequential chunk delivery, token-guarded — stale clips cannot mutate state */
   const playTTS = useCallback(async (text: string, voiceId?: string): Promise<void> => {
-    // Interrupt any existing playback cleanly
-    interruptCurrentPlayback();
+    // Interrupt any existing playback cleanly (source: new playTTS call)
+    interruptCurrentPlayback('playTTS');
 
     // Mint a new playback token — only this token can control state
     const playbackId = nextPlaybackId();
@@ -388,7 +397,7 @@ export function useVoiceMode() {
   }, [safeSetIsPlaying, interruptCurrentPlayback]);
 
   const stopPlayback = useCallback(() => {
-    interruptCurrentPlayback();
+    interruptCurrentPlayback('stopPlayback');
     // Invalidate the token so no stale callbacks can fire
     activePlaybackIdRef.current = null;
   }, [interruptCurrentPlayback]);
