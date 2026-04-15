@@ -5845,8 +5845,10 @@ export type Database = {
           artifact_type: string
           content_json: Json
           created_at: string
+          fallback_used: boolean | null
           id: string
           last_used_at: string | null
+          latency_ms: number | null
           linked_account_id: string | null
           linked_opportunity_id: string | null
           model_used: string | null
@@ -5866,8 +5868,10 @@ export type Database = {
           artifact_type?: string
           content_json?: Json
           created_at?: string
+          fallback_used?: boolean | null
           id?: string
           last_used_at?: string | null
+          latency_ms?: number | null
           linked_account_id?: string | null
           linked_opportunity_id?: string | null
           model_used?: string | null
@@ -5887,8 +5891,10 @@ export type Database = {
           artifact_type?: string
           content_json?: Json
           created_at?: string
+          fallback_used?: boolean | null
           id?: string
           last_used_at?: string | null
+          latency_ms?: number | null
           linked_account_id?: string | null
           linked_opportunity_id?: string | null
           model_used?: string | null
