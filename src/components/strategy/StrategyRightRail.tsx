@@ -1,13 +1,12 @@
 import { useState, useMemo } from 'react';
 import {
   ChevronRight, Link2, Lightbulb, HelpCircle, FileText,
-  Pin, Copy, Save, Loader2, Plus,
+  Pin, Copy, Save, Plus, RefreshCw, Loader2, Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
@@ -19,6 +18,7 @@ import { toast } from 'sonner';
 import type { StrategyThread, StrategyOutput } from '@/types/strategy';
 import type { StrategyMemoryEntry } from '@/hooks/strategy/useStrategyMemory';
 import type { StrategyUpload } from '@/hooks/strategy/useStrategyUploads';
+import type { StrategyRollup, MemorySuggestion } from '@/lib/strategy/workflowSchemas';
 
 interface Props {
   thread: StrategyThread;
@@ -28,6 +28,10 @@ interface Props {
   uploads: StrategyUpload[];
   outputs: StrategyOutput[];
   onSaveMemory: (type: string, content: string) => void;
+  rollup: StrategyRollup | null;
+  memorySuggestions: MemorySuggestion[];
+  isRollupLoading: boolean;
+  onTriggerRollup: () => void;
 }
 
 const MEMORY_TYPES = [
@@ -50,8 +54,9 @@ const MEMORY_TYPE_COLORS: Record<string, string> = {
   next_step: 'bg-orange-500/20 text-orange-300',
 };
 
-function RailSection({ title, icon: Icon, children, empty, count }: {
-  title: string; icon: React.ElementType; children?: React.ReactNode; empty?: string; count?: number;
+function RailSection({ title, icon: Icon, children, empty, count, action }: {
+  title: string; icon: React.ElementType; children?: React.ReactNode;
+  empty?: string; count?: number; action?: React.ReactNode;
 }) {
   return (
     <div className="px-3 py-2">
@@ -61,13 +66,17 @@ function RailSection({ title, icon: Icon, children, empty, count }: {
         {count !== undefined && count > 0 && (
           <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">{count}</Badge>
         )}
+        {action}
       </div>
       {children ?? <p className="text-[10px] text-muted-foreground/60 italic">{empty || 'None yet'}</p>}
     </div>
   );
 }
 
-export function StrategyRightRail({ thread, onCollapse, linkedContext, memories, uploads, outputs, onSaveMemory }: Props) {
+export function StrategyRightRail({
+  thread, onCollapse, linkedContext, memories, uploads, outputs,
+  onSaveMemory, rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
+}: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
   const [memContent, setMemContent] = useState('');
@@ -84,15 +93,19 @@ export function StrategyRightRail({ thread, onCollapse, linkedContext, memories,
     setSaveOpen(false);
   };
 
+  const handleSuggestionSave = (suggestion: MemorySuggestion) => {
+    onSaveMemory(suggestion.memory_type, suggestion.content);
+    toast.success('Insight saved from suggestion');
+  };
+
   const copyThread = () => {
-    const text = thread.summary || thread.title;
+    const text = rollup?.summary || thread.summary || thread.title;
     navigator.clipboard.writeText(text);
     toast.success('Copied to clipboard');
   };
 
   return (
     <div className="w-64 border-l border-border flex flex-col bg-card shrink-0">
-      {/* Header */}
       <div className="p-3 border-b border-border flex items-center gap-2">
         <h2 className="text-xs font-semibold text-foreground flex-1">Working Memory</h2>
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onCollapse}>
@@ -113,9 +126,7 @@ export function StrategyRightRail({ thread, onCollapse, linkedContext, memories,
           ) : linkedContext?.opportunity ? (
             <Card className="bg-muted/30"><CardContent className="p-2">
               <p className="text-xs font-medium">{linkedContext.opportunity.name}</p>
-              <p className="text-[10px] text-muted-foreground">
-                {linkedContext.opportunity.stage || 'Opportunity'}
-              </p>
+              <p className="text-[10px] text-muted-foreground">{linkedContext.opportunity.stage || 'Opportunity'}</p>
             </CardContent></Card>
           ) : (
             <p className="text-[10px] text-muted-foreground/60 italic">No linked objects</p>
@@ -123,6 +134,76 @@ export function StrategyRightRail({ thread, onCollapse, linkedContext, memories,
         </RailSection>
 
         <div className="border-t border-border" />
+
+        {/* Thread Rollup */}
+        <RailSection
+          title="Thread Rollup"
+          icon={Sparkles}
+          action={
+            <Button
+              size="icon" variant="ghost" className="h-5 w-5"
+              onClick={onTriggerRollup} disabled={isRollupLoading}
+            >
+              {isRollupLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            </Button>
+          }
+        >
+          {rollup ? (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-foreground/80 leading-relaxed">{rollup.summary}</p>
+              {rollup.key_facts.length > 0 && (
+                <RollupList label="Key Facts" items={rollup.key_facts} />
+              )}
+              {rollup.hypotheses.length > 0 && (
+                <RollupList label="Hypotheses" items={rollup.hypotheses} />
+              )}
+              {rollup.risks.length > 0 && (
+                <RollupList label="Risks" items={rollup.risks} />
+              )}
+              {rollup.open_questions.length > 0 && (
+                <RollupList label="Open Questions" items={rollup.open_questions} />
+              )}
+              {rollup.next_steps.length > 0 && (
+                <RollupList label="Next Steps" items={rollup.next_steps} />
+              )}
+            </div>
+          ) : (
+            <p className="text-[10px] text-muted-foreground/60 italic">No rollup yet. Send messages or run a workflow.</p>
+          )}
+        </RailSection>
+
+        <div className="border-t border-border" />
+
+        {/* Memory Suggestions */}
+        {memorySuggestions.length > 0 && (
+          <>
+            <RailSection title="Suggested Saves" icon={Sparkles} count={memorySuggestions.length}>
+              <div className="space-y-1">
+                {memorySuggestions.map((s, i) => (
+                  <div key={i} className="bg-primary/5 border border-primary/10 rounded px-2 py-1.5">
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <Badge variant="outline" className={`text-[8px] px-1 py-0 ${MEMORY_TYPE_COLORS[s.memory_type] || ''}`}>
+                        {s.memory_type}
+                      </Badge>
+                      <span className="text-[9px] text-muted-foreground">
+                        {Math.round(s.confidence * 100)}%
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-foreground/80 line-clamp-2">{s.content}</p>
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-5 text-[9px] px-1.5 mt-0.5 gap-0.5"
+                      onClick={() => handleSuggestionSave(s)}
+                    >
+                      <Save className="h-2 w-2" /> Save
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </RailSection>
+            <div className="border-t border-border" />
+          </>
+        )}
 
         {/* Pinned Insights */}
         <RailSection title="Pinned Insights" icon={Pin} count={pinnedMemories.length} empty="Pin insights from conversations">
@@ -155,7 +236,7 @@ export function StrategyRightRail({ thread, onCollapse, linkedContext, memories,
 
         <div className="border-t border-border" />
 
-        {/* Recent Decisions */}
+        {/* Decisions */}
         <RailSection title="Decisions & Next Steps" icon={FileText} count={recentDecisions.length} empty="No decisions yet">
           {recentDecisions.length > 0 && (
             <div className="space-y-1">
@@ -168,7 +249,7 @@ export function StrategyRightRail({ thread, onCollapse, linkedContext, memories,
 
         <div className="border-t border-border" />
 
-        {/* Open Questions / Risks */}
+        {/* Open Questions */}
         <RailSection title="Open Questions" icon={HelpCircle} count={openQuestions.length} empty="No open questions">
           {openQuestions.length > 0 && (
             <div className="space-y-1">
@@ -181,13 +262,14 @@ export function StrategyRightRail({ thread, onCollapse, linkedContext, memories,
 
         <div className="border-t border-border" />
 
-        {/* Uploaded Resources */}
+        {/* Uploads */}
         <RailSection title="Uploads" icon={FileText} count={uploads.length} empty="Drag files into composer">
           {uploads.length > 0 && (
             <div className="space-y-1">
               {uploads.slice(0, 8).map(u => (
                 <div key={u.id} className="text-[11px] bg-muted/30 rounded px-2 py-1 truncate">
                   📎 {u.file_name}
+                  {u.summary && <p className="text-[9px] text-muted-foreground mt-0.5 line-clamp-1">{u.summary}</p>}
                 </div>
               ))}
             </div>
@@ -207,17 +289,6 @@ export function StrategyRightRail({ thread, onCollapse, linkedContext, memories,
                 </div>
               ))}
             </div>
-          )}
-        </RailSection>
-
-        <div className="border-t border-border" />
-
-        {/* Latest Rollup */}
-        <RailSection title="Latest Rollup" icon={FileText}>
-          {thread.latest_rollup ? (
-            <p className="text-[11px] text-foreground/80">{JSON.stringify(thread.latest_rollup).slice(0, 150)}</p>
-          ) : (
-            <p className="text-[10px] text-muted-foreground/60 italic">No rollup generated</p>
           )}
         </RailSection>
 
@@ -252,12 +323,24 @@ export function StrategyRightRail({ thread, onCollapse, linkedContext, memories,
               </div>
             </DialogContent>
           </Dialog>
-
           <Button size="sm" variant="outline" className="w-full h-7 text-xs gap-1.5" onClick={copyThread}>
             <Copy className="h-3 w-3" /> Copy Summary
           </Button>
         </div>
       </ScrollArea>
+    </div>
+  );
+}
+
+function RollupList({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div>
+      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+      <ul className="space-y-0.5">
+        {items.slice(0, 5).map((item, i) => (
+          <li key={i} className="text-[10px] text-foreground/70 pl-1.5 border-l border-muted">{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }
