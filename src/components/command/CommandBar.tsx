@@ -8,7 +8,7 @@
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Zap, Building2, DollarSign, Plus, Loader2, X, PlusCircle } from 'lucide-react';
+import { Zap, Building2, DollarSign, Plus, Loader2, X, PlusCircle, ArrowRight } from 'lucide-react';
 import type { ParsedCommand, CommandToken, TemplateMetadata } from '@/lib/commandTypes';
 
 interface Suggestion {
@@ -47,16 +47,22 @@ const TRIGGER_ICONS: Record<string, React.ElementType> = {
   template: Plus,
 };
 
-const TRIGGER_COLORS: Record<string, string> = {
-  account: 'bg-blue-500/10 border-blue-500/20',
-  opportunity: 'bg-emerald-500/10 border-emerald-500/20',
-  template: 'bg-amber-500/10 border-amber-500/20',
-};
-
-const TRIGGER_TEXT: Record<string, string> = {
-  account: 'text-blue-400',
-  opportunity: 'text-emerald-400',
-  template: 'text-amber-400',
+const TOKEN_STYLES: Record<string, { chip: string; text: string; icon: string }> = {
+  account: {
+    chip: 'bg-blue-500/8 border-blue-500/15 hover:border-blue-500/30',
+    text: 'text-blue-400/90',
+    icon: 'text-blue-400/70',
+  },
+  opportunity: {
+    chip: 'bg-emerald-500/8 border-emerald-500/15 hover:border-emerald-500/30',
+    text: 'text-emerald-400/90',
+    icon: 'text-emerald-400/70',
+  },
+  template: {
+    chip: 'bg-amber-500/8 border-amber-500/15 hover:border-amber-500/30',
+    text: 'text-amber-400/90',
+    icon: 'text-amber-400/70',
+  },
 };
 
 export function CommandBar({
@@ -177,7 +183,6 @@ export function CommandBar({
     }
 
     closeSuggestions();
-    // Refocus without flicker
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [activeTrigger, onCreateAccount, onCreateOpportunity, closeSuggestions]);
 
@@ -279,45 +284,44 @@ export function CommandBar({
       {/* Composer container */}
       <div
         className={cn(
-          'flex items-center gap-1.5 flex-wrap min-h-[52px] px-3 py-2 rounded-xl',
-          'bg-card border border-border/60',
-          'focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_hsl(var(--primary)/0.08)]',
-          'transition-all duration-150',
-          isLoading && 'opacity-60 pointer-events-none'
+          'flex items-center gap-1.5 flex-wrap min-h-[48px] px-3.5 py-2 rounded-xl',
+          'bg-card/80 border border-border/40',
+          'focus-within:border-primary/40 focus-within:shadow-[0_0_0_3px_hsl(var(--primary)/0.06)]',
+          'transition-all duration-200 ease-out',
+          isLoading && 'opacity-50 pointer-events-none'
         )}
         onClick={() => inputRef.current?.focus()}
       >
         {/* Leading icon */}
-        <div className="shrink-0 ml-0.5">
+        <div className="shrink-0">
           {isLoading ? (
-            <Loader2 className="h-4 w-4 text-primary animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
           ) : (
-            <Zap className="h-4 w-4 text-muted-foreground/60" />
+            <Zap className="h-3.5 w-3.5 text-muted-foreground/40" />
           )}
         </div>
 
         {/* Inline token chips */}
         {tokens.map(token => {
           const Icon = TRIGGER_ICONS[token.type];
-          const colors = TRIGGER_COLORS[token.type];
-          const textColor = TRIGGER_TEXT[token.type];
+          const style = TOKEN_STYLES[token.type];
           return (
             <span
               key={token.type}
               className={cn(
-                'inline-flex items-center gap-1 text-[11px] font-semibold pl-1.5 pr-0.5 py-0.5 rounded-md border shrink-0',
-                'transition-all duration-100',
-                colors
+                'inline-flex items-center gap-1 text-[11px] font-medium pl-1.5 pr-1 py-[3px] rounded-md border shrink-0',
+                'transition-all duration-150 ease-out',
+                style.chip
               )}
             >
-              <Icon className={cn('h-2.5 w-2.5', textColor)} />
-              <span className={cn(textColor, 'truncate max-w-[140px]')}>{token.name}</span>
+              <Icon className={cn('h-2.5 w-2.5', style.icon)} />
+              <span className={cn(style.text, 'truncate max-w-[140px]')}>{token.name}</span>
               <button
                 onClick={(e) => { e.stopPropagation(); removeToken(token.type); }}
-                className={cn('rounded-sm hover:bg-foreground/10 p-0.5 transition-colors', textColor)}
+                className="rounded-sm hover:bg-foreground/8 p-px ml-0.5 transition-colors"
                 tabIndex={-1}
               >
-                <X className="h-2.5 w-2.5" />
+                <X className={cn('h-2.5 w-2.5', style.icon)} />
               </button>
             </span>
           );
@@ -334,7 +338,7 @@ export function CommandBar({
           placeholder={tokens.length > 0 ? 'Add context or press ↵' : (placeholder || '+template  @account  $opportunity  or just type…')}
           className={cn(
             'flex-1 min-w-[120px] bg-transparent border-none outline-none',
-            'text-sm text-foreground placeholder:text-muted-foreground/40',
+            'text-sm text-foreground placeholder:text-muted-foreground/30',
             'disabled:cursor-not-allowed'
           )}
           autoFocus
@@ -344,9 +348,14 @@ export function CommandBar({
         {hasContent && !isLoading && (
           <button
             onClick={handleExecute}
-            className="shrink-0 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
+            className={cn(
+              'shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg',
+              'bg-primary text-primary-foreground text-xs font-medium',
+              'hover:bg-primary/90 active:scale-[0.97]',
+              'transition-all duration-150 ease-out'
+            )}
           >
-            Run
+            Run <ArrowRight className="h-3 w-3" />
           </button>
         )}
       </div>
@@ -359,8 +368,8 @@ export function CommandBar({
             { key: '@', label: 'account' },
             { key: '$', label: 'opportunity' },
           ].map(h => (
-            <span key={h.key} className="text-[10px] text-muted-foreground/40 flex items-center gap-1">
-              <kbd className="px-1 py-px rounded bg-muted/60 text-[10px] font-mono leading-none">{h.key}</kbd>
+            <span key={h.key} className="text-[10px] text-muted-foreground/30 flex items-center gap-1">
+              <kbd className="px-1 py-px rounded bg-muted/40 text-[10px] font-mono leading-none text-muted-foreground/40">{h.key}</kbd>
               {h.label}
             </span>
           ))}
@@ -371,35 +380,41 @@ export function CommandBar({
       {suggestions.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute z-50 w-full mt-1 rounded-xl border border-border/60 bg-popover shadow-lg overflow-hidden backdrop-blur-sm"
+          className={cn(
+            'absolute z-50 w-full mt-1.5 rounded-xl border border-border/40 bg-popover/95 backdrop-blur-md',
+            'shadow-lg shadow-black/10 overflow-hidden',
+            'animate-in fade-in-0 slide-in-from-top-1 duration-150'
+          )}
         >
-          {suggestions.map((s, i) => {
-            const Icon = s.is_create ? PlusCircle : TRIGGER_ICONS[s.type];
-            const color = TRIGGER_TEXT[s.type];
-            return (
-              <button
-                key={`${s.type}-${s.id}`}
-                onClick={() => selectSuggestion(s)}
-                className={cn(
-                  'w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors',
-                  i === selectedIdx ? 'bg-accent' : 'hover:bg-accent/50'
-                )}
-              >
-                <Icon className={cn('h-3.5 w-3.5 shrink-0', color)} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-foreground truncate">
-                    {s.is_create ? `Create "${s.name}"` : s.name}
-                  </p>
-                  {s.subtitle && !s.is_create && (
-                    <p className="text-[11px] text-muted-foreground truncate">{s.subtitle}</p>
+          <div className="py-1">
+            {suggestions.map((s, i) => {
+              const Icon = s.is_create ? PlusCircle : TRIGGER_ICONS[s.type];
+              const style = TOKEN_STYLES[s.type];
+              return (
+                <button
+                  key={`${s.type}-${s.id}`}
+                  onClick={() => selectSuggestion(s)}
+                  className={cn(
+                    'w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors duration-75',
+                    i === selectedIdx ? 'bg-accent/80' : 'hover:bg-accent/40'
                   )}
-                </div>
-                {s.is_pinned && (
-                  <span className="text-[10px] text-muted-foreground/60">📌</span>
-                )}
-              </button>
-            );
-          })}
+                >
+                  <Icon className={cn('h-3.5 w-3.5 shrink-0', style.icon)} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-foreground truncate">
+                      {s.is_create ? `Create "${s.name}"` : s.name}
+                    </p>
+                    {s.subtitle && !s.is_create && (
+                      <p className="text-[11px] text-muted-foreground/50 truncate">{s.subtitle}</p>
+                    )}
+                  </div>
+                  {s.is_pinned && (
+                    <span className="text-[10px] text-muted-foreground/40">📌</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

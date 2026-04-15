@@ -119,34 +119,35 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-4 h-10 border-b border-border/30 shrink-0">
+      <div className="flex items-center gap-2 px-4 h-10 border-b border-border/20 shrink-0">
         {sidebarCollapsed && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={onExpandSidebar}>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground/60" onClick={onExpandSidebar}>
             <PanelLeftOpen className="h-3.5 w-3.5 mr-1" /> Threads
           </Button>
         )}
-        <span className="text-[11px] font-medium text-muted-foreground/60 tracking-wider uppercase">Strategy</span>
+        <span className="text-[11px] font-medium text-muted-foreground/40 tracking-wider uppercase">Strategy</span>
       </div>
 
       <ScrollArea className="flex-1">
         <div className={cn(
           'flex flex-col items-center px-4',
-          isMobile ? 'pt-6 pb-4' : 'pt-8 pb-8'
+          isMobile ? 'pt-8 pb-4' : 'pt-12 pb-8',
+          showEmpty && 'justify-center'
         )}>
           {/* Header — only on empty */}
           {showEmpty && (
-            <div className="text-center mb-3 animate-in fade-in-0 duration-300">
-              <h1 className="text-base font-semibold text-foreground/90 mb-0.5">What do you need?</h1>
+            <div className="text-center mb-5 animate-in fade-in-0 duration-300">
+              <h1 className="text-base font-semibold text-foreground/80 tracking-tight">What do you need?</h1>
               {kiCount > 0 && (
-                <p className="text-[11px] text-muted-foreground/50">
-                  {kiCount.toLocaleString()} KIs powering every output
+                <p className="text-[11px] text-muted-foreground/35 mt-1">
+                  {kiCount.toLocaleString()} KIs ready
                 </p>
               )}
             </div>
           )}
 
           {/* Command bar + context strip */}
-          <div className={cn('w-full max-w-2xl', (result || isGenerating) && 'mb-4')}>
+          <div className={cn('w-full max-w-2xl', (result || isGenerating) && 'mb-5')}>
             <CommandBar
               accounts={accounts}
               opportunities={opportunities.map(o => ({ id: o.id, name: o.name, account_name: (o as any).account_name }))}
@@ -171,11 +172,11 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
 
           {/* Empty state */}
           {showEmpty && (
-            <div className="w-full max-w-2xl mt-2 animate-in fade-in-0 duration-200">
+            <div className="w-full max-w-2xl mt-4 animate-in fade-in-0 duration-200">
               {/* Pinned — go-to plays */}
               {pinnedShortcuts.length > 0 && (
-                <div className="mb-3">
-                  <p className="text-[10px] font-medium text-muted-foreground/40 uppercase tracking-wider mb-1.5 px-0.5 flex items-center gap-1">
+                <div className="mb-5">
+                  <p className="text-[10px] font-medium text-muted-foreground/30 uppercase tracking-widest mb-2 px-0.5 flex items-center gap-1">
                     <Pin className="h-2.5 w-2.5" /> Go-to plays
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -183,9 +184,15 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                       <button
                         key={s.id}
                         onClick={() => handleShortcut(s)}
-                        className="inline-flex items-center gap-1.5 text-[11px] text-foreground/80 hover:text-foreground px-2.5 py-1.5 rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-all"
+                        className={cn(
+                          'inline-flex items-center gap-1.5 text-[11px] font-medium',
+                          'text-foreground/70 hover:text-foreground',
+                          'px-2.5 py-1.5 rounded-lg border border-primary/15 bg-primary/4',
+                          'hover:bg-primary/8 hover:border-primary/25',
+                          'transition-all duration-150'
+                        )}
                       >
-                        <Pin className="h-2.5 w-2.5 text-primary/60 shrink-0" />
+                        <Pin className="h-2.5 w-2.5 text-primary/50 shrink-0" />
                         {s.label}
                       </button>
                     ))}
@@ -194,7 +201,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               )}
 
               {/* Quick start */}
-              <p className="text-[10px] font-medium text-muted-foreground/40 uppercase tracking-wider mb-1.5 px-0.5">
+              <p className="text-[10px] font-medium text-muted-foreground/30 uppercase tracking-widest mb-2 px-0.5">
                 Quick start
               </p>
               <div className={cn('grid gap-1.5', isMobile ? 'grid-cols-1' : 'grid-cols-2')}>
@@ -202,28 +209,38 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                   <button
                     key={s.label}
                     onClick={() => handleStarter(s.command)}
-                    className="group flex items-center gap-2 px-3 py-2 rounded-lg border border-border/30 hover:border-border/60 bg-card/40 hover:bg-card transition-all text-left"
+                    className={cn(
+                      'group flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left',
+                      'border border-border/20 hover:border-border/40',
+                      'bg-card/30 hover:bg-card/60',
+                      'transition-all duration-150'
+                    )}
                   >
-                    <s.icon className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-primary shrink-0 transition-colors" />
-                    <span className="text-[12px] text-foreground/70 group-hover:text-foreground transition-colors">{s.label}</span>
+                    <s.icon className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-primary/70 shrink-0 transition-colors duration-150" />
+                    <span className="text-[12px] text-foreground/50 group-hover:text-foreground/80 transition-colors duration-150">{s.label}</span>
                   </button>
                 ))}
               </div>
 
               {/* Saved workflows */}
               {savedNonPinned.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-[10px] font-medium text-muted-foreground/40 uppercase tracking-wider mb-1 px-0.5 flex items-center gap-1">
-                    <Bookmark className="h-2.5 w-2.5" /> Saved workflows
+                <div className="mt-5">
+                  <p className="text-[10px] font-medium text-muted-foreground/30 uppercase tracking-widest mb-1.5 px-0.5 flex items-center gap-1">
+                    <Bookmark className="h-2.5 w-2.5" /> Saved
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {savedNonPinned.map((s: any) => (
                       <button
                         key={s.id}
                         onClick={() => handleShortcut(s)}
-                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-foreground px-2 py-1 rounded-md hover:bg-muted/60 transition-colors truncate max-w-[200px]"
+                        className={cn(
+                          'inline-flex items-center gap-1 text-[11px]',
+                          'text-muted-foreground/45 hover:text-foreground/70',
+                          'px-2 py-1 rounded-md hover:bg-muted/40',
+                          'transition-all duration-150 truncate max-w-[200px]'
+                        )}
                       >
-                        <Bookmark className="h-2.5 w-2.5 shrink-0 opacity-40" />
+                        <Bookmark className="h-2.5 w-2.5 shrink-0 opacity-30" />
                         {s.label}
                       </button>
                     ))}
@@ -233,8 +250,8 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
 
               {/* Session recents */}
               {recents.length > 0 && (
-                <div className="mt-2.5">
-                  <p className="text-[10px] font-medium text-muted-foreground/40 uppercase tracking-wider mb-1 px-0.5 flex items-center gap-1">
+                <div className="mt-4">
+                  <p className="text-[10px] font-medium text-muted-foreground/25 uppercase tracking-widest mb-1 px-0.5 flex items-center gap-1">
                     <Clock className="h-2.5 w-2.5" /> Recent
                   </p>
                   <div className="flex flex-wrap gap-1">
@@ -242,7 +259,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                       <button
                         key={i}
                         onClick={() => setPrefill(r.command)}
-                        className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/40 hover:text-muted-foreground px-1.5 py-0.5 rounded hover:bg-muted/40 transition-colors truncate max-w-[180px]"
+                        className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/30 hover:text-muted-foreground/60 px-1.5 py-0.5 rounded hover:bg-muted/30 transition-all duration-150 truncate max-w-[180px]"
                       >
                         {r.label}
                       </button>
@@ -257,10 +274,10 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
           {(result || isGenerating) && (
             <div className="w-full max-w-2xl">
               {result && lastCommand && (
-                <div className="flex items-center justify-end mb-1.5">
+                <div className="flex items-center justify-end mb-2">
                   <button
                     onClick={handleSaveShortcut}
-                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/35 hover:text-muted-foreground/60 transition-colors duration-150"
                   >
                     <PlusCircle className="h-3 w-3" /> Save as shortcut
                   </button>
