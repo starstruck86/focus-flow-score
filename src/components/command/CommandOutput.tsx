@@ -1,14 +1,5 @@
 /**
  * CommandOutput — premium strategy document renderer.
- *
- * Renders output as a polished, type-aware strategic document with:
- * - constrained reading width
- * - strong typography hierarchy
- * - callout blocks for risks/actions/takeaways
- * - per-section copy
- * - Clean/Edit view toggle
- * - quiet utility bar
- * - rich metadata row
  */
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
@@ -32,62 +23,38 @@ type SectionSemantic =
   | 'idea' | 'default';
 
 const SEMANTIC_MAP: Record<string, SectionSemantic> = {
-  'risks': 'risk',
-  'key risks': 'risk',
-  'red flags': 'risk',
-  'risk': 'risk',
-  'recommended actions': 'action',
-  'recommendations': 'action',
-  'recommended angle': 'action',
-  'recommended next steps': 'action',
-  'quick wins': 'action',
-  'bold moves': 'idea',
-  'key angles': 'idea',
-  'next steps': 'next_step',
-  'action items': 'next_step',
-  'cta': 'next_step',
-  'key takeaways': 'takeaway',
-  'takeaways': 'takeaway',
-  'objectives': 'takeaway',
-  'key questions': 'question',
-  'discovery questions': 'question',
-  'questions': 'question',
-  'stakeholder hypotheses': 'stakeholder',
-  'stakeholders': 'stakeholder',
-  'our position': 'summary',
-  'situation summary': 'summary',
-  'strategic context': 'summary',
-  'executive summary': 'summary',
-  'problem statement': 'summary',
-  'talking points': 'takeaway',
-  'body': 'email_body',
-  'subject': 'default',
+  'risks': 'risk', 'key risks': 'risk', 'red flags': 'risk', 'risk': 'risk',
+  'recommended actions': 'action', 'recommendations': 'action',
+  'recommended angle': 'action', 'recommended next steps': 'action',
+  'quick wins': 'action', 'bold moves': 'idea', 'key angles': 'idea',
+  'next steps': 'next_step', 'action items': 'next_step', 'cta': 'next_step',
+  'key takeaways': 'takeaway', 'takeaways': 'takeaway', 'objectives': 'takeaway',
+  'key questions': 'question', 'discovery questions': 'question', 'questions': 'question',
+  'stakeholder hypotheses': 'stakeholder', 'stakeholders': 'stakeholder',
+  'our position': 'summary', 'situation summary': 'summary',
+  'strategic context': 'summary', 'executive summary': 'summary',
+  'problem statement': 'summary', 'talking points': 'takeaway',
+  'body': 'email_body', 'subject': 'default',
 };
 
 function classifySectionHeading(heading: string): SectionSemantic {
-  const key = heading.toLowerCase().trim();
-  return SEMANTIC_MAP[key] || 'default';
+  return SEMANTIC_MAP[heading.toLowerCase().trim()] || 'default';
 }
 
 const SEMANTIC_STYLES: Record<SectionSemantic, {
-  border: string;
-  accent: string;
-  bg: string;
-  Icon: React.ElementType;
+  border: string; accent: string; bg: string; Icon: React.ElementType;
 }> = {
-  risk: { border: 'border-l-amber-500/60', accent: 'text-amber-500', bg: 'bg-amber-500/5', Icon: AlertTriangle },
-  action: { border: 'border-l-primary/60', accent: 'text-primary', bg: 'bg-primary/5', Icon: Target },
-  takeaway: { border: 'border-l-emerald-500/60', accent: 'text-emerald-500', bg: 'bg-emerald-500/5', Icon: Lightbulb },
-  question: { border: 'border-l-blue-400/60', accent: 'text-blue-400', bg: 'bg-blue-400/5', Icon: HelpCircle },
-  stakeholder: { border: 'border-l-violet-400/60', accent: 'text-violet-400', bg: 'bg-violet-400/5', Icon: Users },
-  next_step: { border: 'border-l-primary/60', accent: 'text-primary', bg: 'bg-primary/5', Icon: ArrowRight },
-  email_body: { border: 'border-l-muted-foreground/30', accent: 'text-foreground', bg: 'bg-muted/20', Icon: Mail },
-  summary: { border: 'border-l-muted-foreground/30', accent: 'text-foreground', bg: 'bg-transparent', Icon: FileText },
-  idea: { border: 'border-l-amber-400/60', accent: 'text-amber-400', bg: 'bg-amber-400/5', Icon: Lightbulb },
-  default: { border: 'border-l-border', accent: 'text-foreground', bg: 'bg-transparent', Icon: FileText },
+  risk: { border: 'border-l-amber-500/50', accent: 'text-amber-500/90', bg: 'bg-amber-500/5', Icon: AlertTriangle },
+  action: { border: 'border-l-primary/50', accent: 'text-primary/90', bg: 'bg-primary/5', Icon: Target },
+  takeaway: { border: 'border-l-emerald-500/50', accent: 'text-emerald-500/90', bg: 'bg-emerald-500/5', Icon: Lightbulb },
+  question: { border: 'border-l-blue-400/50', accent: 'text-blue-400/90', bg: 'bg-blue-400/5', Icon: HelpCircle },
+  stakeholder: { border: 'border-l-violet-400/50', accent: 'text-violet-400/90', bg: 'bg-violet-400/5', Icon: Users },
+  next_step: { border: 'border-l-primary/50', accent: 'text-primary/90', bg: 'bg-primary/5', Icon: ArrowRight },
+  email_body: { border: 'border-l-border', accent: 'text-foreground', bg: 'bg-muted/10', Icon: Mail },
+  summary: { border: 'border-l-border', accent: 'text-foreground', bg: 'bg-transparent', Icon: FileText },
+  idea: { border: 'border-l-amber-400/50', accent: 'text-amber-400/90', bg: 'bg-amber-400/5', Icon: Lightbulb },
+  default: { border: 'border-l-border/50', accent: 'text-foreground', bg: 'bg-transparent', Icon: FileText },
 };
-
-/* ── Output type → document title ── */
 
 const OUTPUT_TITLES: Record<string, string> = {
   'Discovery Prep': 'Discovery Preparation',
@@ -126,7 +93,6 @@ export function CommandOutput({
   const [saveName, setSaveName] = useState('');
   const [showSources, setShowSources] = useState(false);
 
-  // Sync edited output when new output arrives
   if (output !== editedOutput && viewMode !== 'edit') {
     setEditedOutput(output);
   }
@@ -144,8 +110,7 @@ export function CommandOutput({
   }, [displayOutput, subjectLine]);
 
   const handleCopyBlock = useCallback((heading: string, content: string) => {
-    const text = heading ? `${heading}\n\n${content}` : content;
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(heading ? `${heading}\n\n${content}` : content);
     setCopiedBlock(heading);
     toast.success(`Copied "${heading}"`);
     setTimeout(() => setCopiedBlock(null), 2000);
@@ -162,33 +127,38 @@ export function CommandOutput({
 
   const hasBlocks = blocks.length > 1;
 
-  return (
-    <div className="animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
-      {/* ── Document container ── */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+  const proseClasses = cn(
+    'prose prose-sm dark:prose-invert max-w-none',
+    'prose-headings:text-foreground prose-headings:font-semibold prose-headings:tracking-tight',
+    'prose-p:text-foreground/80 prose-p:leading-relaxed prose-p:my-2',
+    'prose-li:text-foreground/80 prose-li:leading-relaxed',
+    'prose-strong:text-foreground prose-strong:font-semibold',
+    'prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5',
+    '[&_ul]:space-y-0.5 [&_ol]:space-y-0.5',
+  );
 
-        {/* ── Document header ── */}
-        <div className="px-6 pt-5 pb-4 border-b border-border/50">
-          {/* Title row */}
-          <div className="flex items-start justify-between gap-4 mb-3">
+  return (
+    <div className="animate-in fade-in-0 slide-in-from-bottom-3 duration-200">
+      <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
+
+        {/* Document header */}
+        <div className="px-5 pt-4 pb-3 border-b border-border/30">
+          <div className="flex items-start justify-between gap-3 mb-2">
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-foreground tracking-tight">{docTitle}</h2>
+              <h2 className="text-[15px] font-semibold text-foreground tracking-tight">{docTitle}</h2>
               {accountName && (
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="text-[11px] text-muted-foreground/60 mt-0.5">
                   {accountName}{opportunityName ? ` · ${opportunityName}` : ''}
                 </p>
               )}
             </div>
-            {/* View mode toggle */}
             {!isGenerating && (
-              <div className="flex items-center gap-0.5 rounded-lg bg-muted/60 p-0.5 shrink-0">
+              <div className="flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 shrink-0">
                 <button
                   onClick={() => setViewMode('clean')}
                   className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors',
-                    viewMode === 'clean'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
+                    'flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors',
+                    viewMode === 'clean' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground/60 hover:text-foreground'
                   )}
                 >
                   <Eye className="h-3 w-3" /> Clean
@@ -196,10 +166,8 @@ export function CommandOutput({
                 <button
                   onClick={() => setViewMode('edit')}
                   className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors',
-                    viewMode === 'edit'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
+                    'flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors',
+                    viewMode === 'edit' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground/60 hover:text-foreground'
                   )}
                 >
                   <Pencil className="h-3 w-3" /> Edit
@@ -208,62 +176,61 @@ export function CommandOutput({
             )}
           </div>
 
-          {/* Metadata row */}
-          <div className="flex items-center gap-3 flex-wrap">
+          {/* Metadata */}
+          <div className="flex items-center gap-2.5 flex-wrap text-[10px] text-muted-foreground/50">
             {templateName && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                <FileText className="h-3 w-3" /> {templateName}
+              <span className="inline-flex items-center gap-1">
+                <FileText className="h-2.5 w-2.5" /> {templateName}
               </span>
             )}
             {accountName && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                <Building2 className="h-3 w-3" /> {accountName}
+              <span className="inline-flex items-center gap-1">
+                <Building2 className="h-2.5 w-2.5" /> {accountName}
               </span>
             )}
             {opportunityName && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                <DollarSign className="h-3 w-3" /> {opportunityName}
+              <span className="inline-flex items-center gap-1">
+                <DollarSign className="h-2.5 w-2.5" /> {opportunityName}
               </span>
             )}
             {kiCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                <Brain className="h-3 w-3" /> {kiCount} KIs
+              <span className="inline-flex items-center gap-1">
+                <Brain className="h-2.5 w-2.5" /> {kiCount} KIs
               </span>
             )}
             {sources.length > 0 && (
               <button
                 onClick={() => setShowSources(!showSources)}
-                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors"
               >
-                {showSources ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {showSources ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
                 {sources.length} source{sources.length !== 1 ? 's' : ''}
               </button>
             )}
-            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 ml-auto">
-              <Clock className="h-3 w-3" /> {generatedAt}
+            <span className="inline-flex items-center gap-1 ml-auto text-muted-foreground/30">
+              <Clock className="h-2.5 w-2.5" /> {generatedAt}
             </span>
           </div>
 
-          {/* Expanded sources */}
           {showSources && sources.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-2">
+            <div className="flex flex-wrap gap-1 mt-1.5">
               {sources.map((s, i) => (
-                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{s}</span>
+                <span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted/50 text-muted-foreground/50">{s}</span>
               ))}
             </div>
           )}
         </div>
 
-        {/* ── Document body ── */}
+        {/* Document body */}
         {isGenerating ? (
-          <div className="px-6 py-16">
-            <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <div className="px-5 py-14">
+            <div className="flex flex-col items-center gap-2.5 text-muted-foreground/60">
               <div className="flex items-center gap-1.5">
-                <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse [animation-delay:150ms]" />
-                <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse [animation-delay:300ms]" />
+                <div className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-pulse" />
+                <div className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-pulse [animation-delay:150ms]" />
+                <div className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-pulse [animation-delay:300ms]" />
               </div>
-              <span className="text-xs">Generating {docTitle.toLowerCase()}…</span>
+              <span className="text-[11px]">Generating {docTitle.toLowerCase()}…</span>
             </div>
           </div>
         ) : viewMode === 'edit' ? (
@@ -275,72 +242,57 @@ export function CommandOutput({
             />
           </div>
         ) : (
-          <div className="px-6 py-5">
-            {/* Constrained reading column */}
+          <div className="px-5 py-4">
             <div className="max-w-prose mx-auto">
-              {/* Subject line for emails */}
               {subjectLine && (
-                <div className="mb-5 px-4 py-3 rounded-lg bg-muted/40 border border-border/60">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Subject Line</span>
-                  <p className="text-sm font-semibold text-foreground mt-1 leading-snug">{subjectLine}</p>
+                <div className="mb-4 px-3 py-2.5 rounded-lg bg-muted/30 border border-border/30">
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 font-medium">Subject</span>
+                  <p className="text-sm font-semibold text-foreground mt-0.5 leading-snug">{subjectLine}</p>
                 </div>
               )}
 
-              {/* Structured blocks */}
               {hasBlocks ? (
-                <div className="space-y-6">
+                <div className="space-y-5">
                   {blocks.map((block, i) => {
                     const semantic = classifySectionHeading(block.heading);
                     const style = SEMANTIC_STYLES[semantic];
-                    const isCallout = semantic !== 'default' && semantic !== 'summary' && semantic !== 'email_body';
+                    const isCallout = !['default', 'summary', 'email_body'].includes(semantic) || semantic === 'email_body';
+                    const showBorder = semantic !== 'default' && semantic !== 'summary';
 
                     return (
                       <section
                         key={i}
                         className={cn(
                           'group relative',
-                          isCallout && `rounded-lg border-l-[3px] ${style.border} ${style.bg} px-4 py-3`,
+                          showBorder && `rounded-lg border-l-2 ${style.border} ${style.bg} px-4 py-3`,
+                          !showBorder && semantic === 'summary' && 'pb-1',
                         )}
                       >
-                        {/* Section header */}
                         {block.heading && (
-                          <div className="flex items-center justify-between mb-2.5">
-                            <div className="flex items-center gap-2">
-                              {isCallout && (
-                                <style.Icon className={cn('h-3.5 w-3.5 shrink-0', style.accent)} />
-                              )}
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5">
+                              {showBorder && <style.Icon className={cn('h-3.5 w-3.5 shrink-0', style.accent)} />}
                               <h3 className={cn(
-                                'text-sm font-semibold tracking-tight',
-                                isCallout ? style.accent : 'text-foreground',
+                                'text-[13px] font-semibold tracking-tight',
+                                showBorder ? style.accent : 'text-foreground',
                               )}>
                                 {block.heading}
                               </h3>
                             </div>
                             <button
                               onClick={() => handleCopyBlock(block.heading, block.content)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted/60"
                               title={`Copy "${block.heading}"`}
                             >
                               {copiedBlock === block.heading ? (
                                 <Check className="h-3 w-3 text-emerald-500" />
                               ) : (
-                                <Copy className="h-3 w-3 text-muted-foreground" />
+                                <Copy className="h-3 w-3 text-muted-foreground/40" />
                               )}
                             </button>
                           </div>
                         )}
-
-                        {/* Section content */}
-                        <div className={cn(
-                          'prose prose-sm dark:prose-invert max-w-none',
-                          // Typography refinements
-                          'prose-headings:text-foreground prose-headings:font-semibold prose-headings:tracking-tight',
-                          'prose-p:text-foreground/85 prose-p:leading-relaxed',
-                          'prose-li:text-foreground/85 prose-li:leading-relaxed',
-                          'prose-strong:text-foreground prose-strong:font-semibold',
-                          'prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5',
-                          '[&_ul]:space-y-1 [&_ol]:space-y-1',
-                        )}>
+                        <div className={proseClasses}>
                           <ReactMarkdown>{block.content}</ReactMarkdown>
                         </div>
                       </section>
@@ -348,14 +300,7 @@ export function CommandOutput({
                   })}
                 </div>
               ) : (
-                /* Single-block fallback */
-                <div className={cn(
-                  'prose prose-sm dark:prose-invert max-w-none',
-                  'prose-headings:text-foreground prose-headings:font-semibold prose-headings:tracking-tight',
-                  'prose-p:text-foreground/85 prose-p:leading-relaxed',
-                  'prose-li:text-foreground/85 prose-li:leading-relaxed',
-                  'prose-strong:text-foreground prose-strong:font-semibold',
-                )}>
+                <div className={proseClasses}>
                   <ReactMarkdown>{displayOutput}</ReactMarkdown>
                 </div>
               )}
@@ -363,38 +308,36 @@ export function CommandOutput({
           </div>
         )}
 
-        {/* ── Quiet utility bar ── */}
+        {/* Utility bar */}
         {!isGenerating && (
-          <div className="flex items-center justify-between px-6 py-2.5 border-t border-border/40 bg-muted/20">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handleCopy}
-                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-muted transition-colors"
-              >
-                {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                {copied ? 'Copied' : 'Copy All'}
-              </button>
-              <button
-                onClick={onRegenerate}
-                disabled={isGenerating}
-                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-muted transition-colors disabled:opacity-50"
-              >
-                <RotateCcw className="h-3 w-3" /> Regenerate
-              </button>
-              <button
-                onClick={() => setShowSaveDialog(true)}
-                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-muted transition-colors"
-              >
-                <BookmarkPlus className="h-3 w-3" /> Save
-              </button>
+          <div className="flex items-center justify-between px-5 py-2 border-t border-border/20">
+            <div className="flex items-center gap-0.5">
+              {[
+                { onClick: handleCopy, icon: copied ? Check : Copy, label: copied ? 'Copied' : 'Copy', accent: copied },
+                { onClick: onRegenerate, icon: RotateCcw, label: 'Regenerate' },
+                { onClick: () => setShowSaveDialog(true), icon: BookmarkPlus, label: 'Save' },
+              ].map(action => (
+                <button
+                  key={action.label}
+                  onClick={action.onClick}
+                  className={cn(
+                    'inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-colors',
+                    action.accent
+                      ? 'text-emerald-500'
+                      : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/40'
+                  )}
+                >
+                  <action.icon className="h-3 w-3" /> {action.label}
+                </button>
+              ))}
             </div>
           </div>
         )}
       </div>
 
-      {/* Save as template dialog */}
+      {/* Save dialog */}
       {showSaveDialog && (
-        <div className="flex items-center gap-2 p-3 mt-2 rounded-lg border border-primary/30 bg-primary/5">
+        <div className="flex items-center gap-2 p-3 mt-2 rounded-lg border border-primary/20 bg-primary/5">
           <Input
             value={saveName}
             onChange={e => setSaveName(e.target.value)}
