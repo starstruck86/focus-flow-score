@@ -51,6 +51,10 @@ export default function Strategy() {
     createThreadWithOpts(opts);
   }, [createThreadWithOpts]);
 
+  const handleBranchThread = useCallback((title: string, content: string) => {
+    createThread(title, 'strategy', 'freeform');
+  }, [createThread]);
+
   return (
     <div
       className="flex h-screen bg-background overflow-hidden"
@@ -79,6 +83,7 @@ export default function Strategy() {
         linkedContext={linkedContext}
         onSaveMemory={memoryObjectType ? (type, content) => saveMemory(type, content) : undefined}
         onWorkflowComplete={handleWorkflowComplete}
+        onBranchThread={handleBranchThread}
       />
 
       {!rightRailCollapsed && activeThread && (

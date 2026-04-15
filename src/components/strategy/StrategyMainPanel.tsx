@@ -16,6 +16,7 @@ import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
 import { StrategyMessageBubble } from './StrategyMessageBubble';
 import type { StrategyThread, StrategyLane } from '@/types/strategy';
 import { LANES } from '@/types/strategy';
+import { toast } from 'sonner';
 
 const WORKFLOWS = [
   { key: 'deep_research', label: 'Research', icon: Search, description: 'Deep account & market research' },
@@ -38,9 +39,9 @@ interface Props {
   linkedContext?: any;
   onSaveMemory?: (type: string, content: string) => void;
   onWorkflowComplete?: () => void;
+  onBranchThread?: (title: string, content: string) => void;
 }
 
-/** Get suggested prompts based on thread type and linked object */
 function getSuggestedPrompts(thread: StrategyThread | null, linkedContext?: any) {
   const accountName = linkedContext?.account?.name;
   const oppName = linkedContext?.opportunity?.name;
@@ -77,7 +78,6 @@ function getSuggestedPrompts(thread: StrategyThread | null, linkedContext?: any)
   ];
 }
 
-/** Get recommended workflows based on thread type */
 function getRecommendedWorkflows(thread: StrategyThread | null): string[] {
   if (thread?.thread_type === 'account_linked') return ['deep_research', 'account_plan', 'brainstorm'];
   if (thread?.thread_type === 'opportunity_linked') return ['opportunity_strategy', 'deep_research', 'email_evaluation'];
@@ -88,7 +88,7 @@ function getRecommendedWorkflows(thread: StrategyThread | null): string[] {
 export function StrategyMainPanel({
   thread, onUpdateThread, sidebarCollapsed, onExpandSidebar,
   rightRailCollapsed, onToggleRightRail, linkedContext,
-  onSaveMemory, onWorkflowComplete,
+  onSaveMemory, onWorkflowComplete, onBranchThread,
 }: Props) {
   const { messages, sendMessage, runWorkflow, isLoading, isSending } = useStrategyMessages(thread?.id ?? null);
   const { uploads, uploadFiles, isUploading } = useStrategyUploads(thread?.id ?? null);
@@ -156,6 +156,21 @@ export function StrategyMainPanel({
     onSaveMemory?.(type, content);
   }, [onSaveMemory]);
 
+  const handleTransformOutput = useCallback((workflowType: string, structured: any, action: string) => {
+    toast.success(`Transforming to ${action.replace(/_/g, ' ')}…`);
+    const summary = structured?.summary || structured?.executive_summary || structured?.deal_summary || '';
+    if (onBranchThread) {
+      onBranchThread(`${action.replace(/_/g, ' ')} — from ${workflowType.replace(/_/g, ' ')}`, summary);
+    }
+  }, [onBranchThread]);
+
+  const handleBranchThread = useCallback((workflowType: string, structured: any) => {
+    const summary = structured?.summary || structured?.executive_summary || '';
+    if (onBranchThread) {
+      onBranchThread(`Follow-up: ${workflowType.replace(/_/g, ' ')}`, summary);
+    }
+  }, [onBranchThread]);
+
   const handleSuggestedPrompt = useCallback((text: string) => {
     setInput(text);
   }, []);
@@ -169,13 +184,13 @@ export function StrategyMainPanel({
               <PanelLeftOpen className="h-4 w-4 mr-1" /> Show Threads
             </Button>
           )}
-          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto">
-            <Sparkles className="h-6 w-6 text-primary" />
+          <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
+            <Sparkles className="h-7 w-7 text-primary" />
           </div>
           <div>
-            <p className="text-sm font-medium text-foreground">Strategy Workspace</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Select a thread or create one to start researching, planning, and strategizing.
+            <p className="text-sm font-semibold text-foreground">Strategy Command Center</p>
+            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+              Research accounts, evaluate messaging, build plans, and brainstorm strategy — all with intelligent context retrieval.
             </p>
           </div>
         </div>
@@ -196,7 +211,8 @@ export function StrategyMainPanel({
       onDragLeave={() => setIsDragOver(false)}
       onDrop={handleDrop}
     >
-      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
+      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect}
+        accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.json,.xml,.html" />
 
       {/* Top Bar */}
       <div className="border-b border-border px-4 py-2.5 flex items-center gap-2 shrink-0 bg-card/50">
@@ -349,6 +365,8 @@ export function StrategyMainPanel({
                 key={m.id}
                 message={m}
                 onSaveAsMemory={onSaveMemory ? handleSaveFromMessage : undefined}
+                onTransformOutput={handleTransformOutput}
+                onBranchThread={handleBranchThread}
               />
             ))}
             {isSending && !activeWorkflow && (
@@ -373,7 +391,7 @@ export function StrategyMainPanel({
           <div className="bg-card border-2 border-dashed border-primary/30 rounded-2xl px-10 py-8 text-center shadow-lg">
             <Upload className="h-10 w-10 text-primary/60 mx-auto mb-3" />
             <p className="text-sm font-medium text-foreground">Drop files to add context</p>
-            <p className="text-[10px] text-muted-foreground mt-1">Text, CSV, and documents supported</p>
+            <p className="text-[10px] text-muted-foreground mt-1">PDF, DOCX, CSV, text files supported</p>
           </div>
         </div>
       )}

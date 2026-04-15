@@ -1,18 +1,24 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Copy, Save, ChevronDown, ChevronUp, Database, FileText, Sparkles, Brain, Upload as UploadIcon, MessageSquare } from 'lucide-react';
+import {
+  Copy, Save, ChevronDown, ChevronUp, Database, FileText, Sparkles,
+  Brain, Upload as UploadIcon, MessageSquare, Eye, GitBranch,
+  Mail, Target, Map, Zap, ArrowRight,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import type { StrategyMessage } from '@/types/strategy';
 
 interface Props {
   message: StrategyMessage;
   onSaveAsMemory?: (content: string, type: string) => void;
+  onTransformOutput?: (workflowType: string, structured: any, action: string) => void;
+  onBranchThread?: (workflowType: string, structured: any) => void;
 }
 
-export function StrategyMessageBubble({ message, onSaveAsMemory }: Props) {
+export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutput, onBranchThread }: Props) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system' || message.role === 'tool';
   const contentJson = (message.content_json ?? {}) as any;
@@ -44,6 +50,8 @@ export function StrategyMessageBubble({ message, onSaveAsMemory }: Props) {
         retrievalMeta={retrievalMeta}
         modelUsed={modelUsed}
         onSaveAsMemory={onSaveAsMemory}
+        onTransformOutput={onTransformOutput}
+        onBranchThread={onBranchThread}
       />
     );
   }
@@ -62,9 +70,9 @@ export function StrategyMessageBubble({ message, onSaveAsMemory }: Props) {
       >
         <div className="whitespace-pre-wrap">{text || JSON.stringify(message.content_json)}</div>
         {!isUser && !isSystem && (
-          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+          <div className="mt-2 space-y-1.5">
             {sourcesUsed != null && sourcesUsed > 0 && (
-              <SourcePills sourcesUsed={sourcesUsed} retrievalMeta={retrievalMeta} />
+              <SourceInspector sourcesUsed={sourcesUsed} retrievalMeta={retrievalMeta} />
             )}
             {onSaveAsMemory && text && (
               <Button
@@ -82,7 +90,10 @@ export function StrategyMessageBubble({ message, onSaveAsMemory }: Props) {
   );
 }
 
-function SourcePills({ sourcesUsed, retrievalMeta }: { sourcesUsed: number; retrievalMeta?: any }) {
+// ── Source Inspector (collapsible) ────────────────────────
+function SourceInspector({ sourcesUsed, retrievalMeta }: { sourcesUsed: number; retrievalMeta?: any }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (!retrievalMeta) {
     return (
       <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-1 font-normal">
@@ -92,35 +103,63 @@ function SourcePills({ sourcesUsed, retrievalMeta }: { sourcesUsed: number; retr
     );
   }
 
+  const memCount = retrievalMeta.memoriesScored ?? 0;
+  const upCount = retrievalMeta.uploadsIncluded ?? 0;
+  const outCount = retrievalMeta.outputsIncluded ?? 0;
+  const msgCount = retrievalMeta.messagesIncluded ?? 0;
+  const total = memCount + upCount + outCount + msgCount;
+
   return (
-    <div className="flex items-center gap-1 flex-wrap">
-      {(retrievalMeta.memoriesScored ?? 0) > 0 && (
-        <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
-          <Brain className="h-2 w-2" /> {retrievalMeta.memoriesScored} memory
-        </Badge>
-      )}
-      {(retrievalMeta.uploadsIncluded ?? 0) > 0 && (
-        <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
-          <UploadIcon className="h-2 w-2" /> {retrievalMeta.uploadsIncluded} uploads
-        </Badge>
-      )}
-      {(retrievalMeta.outputsIncluded ?? 0) > 0 && (
-        <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
-          <FileText className="h-2 w-2" /> {retrievalMeta.outputsIncluded} outputs
-        </Badge>
-      )}
-      {(retrievalMeta.messagesIncluded ?? 0) > 0 && (
-        <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
-          <MessageSquare className="h-2 w-2" /> {retrievalMeta.messagesIncluded} history
-        </Badge>
+    <div>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1 text-[9px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+      >
+        <Eye className="h-2.5 w-2.5" />
+        <span>{total} sources used</span>
+        {expanded ? <ChevronUp className="h-2 w-2" /> : <ChevronDown className="h-2 w-2" />}
+      </button>
+      {expanded && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {memCount > 0 && (
+            <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
+              <Brain className="h-2 w-2" /> {memCount} memory
+            </Badge>
+          )}
+          {upCount > 0 && (
+            <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
+              <UploadIcon className="h-2 w-2" /> {upCount} uploads
+            </Badge>
+          )}
+          {outCount > 0 && (
+            <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
+              <FileText className="h-2 w-2" /> {outCount} outputs
+            </Badge>
+          )}
+          {msgCount > 0 && (
+            <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
+              <MessageSquare className="h-2 w-2" /> {msgCount} history
+            </Badge>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
+// ── Output Action Buttons ─────────────────────────────────
+const OUTPUT_ACTIONS = [
+  { key: 'account_plan', label: 'Account Plan', icon: FileText },
+  { key: 'email', label: 'Email', icon: Mail },
+  { key: 'call_prep', label: 'Call Prep', icon: Target },
+  { key: 'memo', label: 'Memo', icon: FileText },
+  { key: 'next_steps', label: 'Next Steps', icon: ArrowRight },
+];
+
 // ── Structured Result Card ────────────────────────────────
 function StructuredResultCard({
-  text, structured, workflowType, sourcesUsed, retrievalMeta, modelUsed, onSaveAsMemory,
+  text, structured, workflowType, sourcesUsed, retrievalMeta, modelUsed,
+  onSaveAsMemory, onTransformOutput, onBranchThread,
 }: {
   text: string;
   structured?: any;
@@ -129,8 +168,11 @@ function StructuredResultCard({
   retrievalMeta?: any;
   modelUsed?: string;
   onSaveAsMemory?: (content: string, type: string) => void;
+  onTransformOutput?: (workflowType: string, structured: any, action: string) => void;
+  onBranchThread?: (workflowType: string, structured: any) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [showActions, setShowActions] = useState(false);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(text || JSON.stringify(structured, null, 2));
@@ -151,7 +193,7 @@ function StructuredResultCard({
           </div>
           <span className="text-xs font-semibold capitalize flex-1">{workflowLabel}</span>
           {sourcesUsed != null && sourcesUsed > 0 && (
-            <SourcePills sourcesUsed={sourcesUsed} retrievalMeta={retrievalMeta} />
+            <SourceInspector sourcesUsed={sourcesUsed} retrievalMeta={retrievalMeta} />
           )}
           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setExpanded(!expanded)}>
             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
@@ -185,20 +227,57 @@ function StructuredResultCard({
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-1 px-3 py-2 border-t border-border/50 bg-muted/20 rounded-b-lg">
-          <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground" onClick={copyToClipboard}>
-            <Copy className="h-2.5 w-2.5" /> Copy
-          </Button>
-          {onSaveAsMemory && topSummary && (
-            <Button
-              size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
-              onClick={() => onSaveAsMemory(topSummary, 'fact')}
-            >
-              <Save className="h-2.5 w-2.5" /> Save to Memory
+        <div className="border-t border-border/50 bg-muted/20 rounded-b-lg">
+          <div className="flex items-center gap-1 px-3 py-2">
+            <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground" onClick={copyToClipboard}>
+              <Copy className="h-2.5 w-2.5" /> Copy
             </Button>
-          )}
-          {modelUsed && (
-            <span className="ml-auto text-[8px] text-muted-foreground/40 font-mono">{modelUsed.split('/').pop()}</span>
+            {onSaveAsMemory && topSummary && (
+              <Button
+                size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
+                onClick={() => onSaveAsMemory(topSummary, 'fact')}
+              >
+                <Save className="h-2.5 w-2.5" /> Save
+              </Button>
+            )}
+            {onTransformOutput && structured && (
+              <Button
+                size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowActions(!showActions)}
+              >
+                <Zap className="h-2.5 w-2.5" /> Turn into…
+              </Button>
+            )}
+            {onBranchThread && structured && (
+              <Button
+                size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
+                onClick={() => onBranchThread(workflowType || '', structured)}
+              >
+                <GitBranch className="h-2.5 w-2.5" /> Branch
+              </Button>
+            )}
+            {modelUsed && (
+              <span className="ml-auto text-[8px] text-muted-foreground/40 font-mono">{modelUsed.split('/').pop()}</span>
+            )}
+          </div>
+          {/* Artifact transform actions */}
+          {showActions && onTransformOutput && (
+            <div className="flex flex-wrap gap-1 px-3 pb-2">
+              {OUTPUT_ACTIONS.map(a => (
+                <Button
+                  key={a.key}
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-[9px] gap-1 px-2"
+                  onClick={() => {
+                    onTransformOutput(workflowType || '', structured, a.key);
+                    setShowActions(false);
+                  }}
+                >
+                  <a.icon className="h-2.5 w-2.5" /> {a.label}
+                </Button>
+              ))}
+            </div>
           )}
         </div>
       </CardContent>
@@ -221,16 +300,16 @@ function ScoreDisplay({ score }: { score: number }) {
 function getWorkflowIcon(workflowType?: string) {
   const icons: Record<string, typeof Sparkles> = {
     deep_research: FileText,
-    email_evaluation: Sparkles,
-    territory_tiering: Database,
+    email_evaluation: Mail,
+    territory_tiering: Map,
     account_plan: FileText,
-    opportunity_strategy: Sparkles,
-    brainstorm: Sparkles,
+    opportunity_strategy: Target,
+    brainstorm: Zap,
   };
   return icons[workflowType || ''] || Sparkles;
 }
 
-// ── Section renderers by workflow type ─────────────────────
+// ── Section renderers ─────────────────────────────────────
 function StructuredSections({ structured, workflowType }: { structured: any; workflowType?: string }) {
   const renderList = (items: string[] | undefined, label: string) => {
     if (!items?.length) return null;
