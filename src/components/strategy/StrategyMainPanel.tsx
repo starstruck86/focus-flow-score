@@ -5,7 +5,6 @@ import {
   Building2, MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,8 +15,7 @@ import { StrategyCommandCenter } from './StrategyCommandCenter';
 import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
 import { StrategyMessageBubble } from './StrategyMessageBubble';
-import type { StrategyThread, StrategyLane } from '@/types/strategy';
-import { LANES } from '@/types/strategy';
+import type { StrategyThread } from '@/types/strategy';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -225,36 +223,38 @@ export function StrategyMainPanel({
         </div>
 
         {/* Scope + Workflows — compressed on mobile */}
-        <div className="px-3 pt-2">
-          {/* Context badges — inline row instead of card on mobile */}
-          <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-            <Badge variant="outline" className="text-[10px] font-medium">
-              {thread.thread_type.replace(/_/g, ' ')}
-            </Badge>
-            <Badge variant="outline" className={cn('text-[10px]', getLaneColor(thread.lane))}>
-              {thread.lane}
-            </Badge>
-            {linkedContext?.account && (
-              <Badge variant="secondary" className="text-[10px] gap-1">
-                <Building2 className="h-2.5 w-2.5" />
-                {linkedContext.account.name}
+        <div className="px-3 pt-1.5 pb-1">
+          {/* Context badges — hidden on mobile to save space */}
+          {!isMobile && (
+            <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+              <Badge variant="outline" className="text-[10px] font-medium">
+                {thread.thread_type.replace(/_/g, ' ')}
               </Badge>
-            )}
-            {linkedContext?.opportunity && (
-              <Badge variant="secondary" className="text-[10px] gap-1">
-                <Target className="h-2.5 w-2.5" />
-                {linkedContext.opportunity.name}
+              <Badge variant="outline" className={cn('text-[10px]', getLaneColor(thread.lane))}>
+                {thread.lane}
               </Badge>
-            )}
-          </div>
+              {linkedContext?.account && (
+                <Badge variant="secondary" className="text-[10px] gap-1">
+                  <Building2 className="h-2.5 w-2.5" />
+                  {linkedContext.account.name}
+                </Badge>
+              )}
+              {linkedContext?.opportunity && (
+                <Badge variant="secondary" className="text-[10px] gap-1">
+                  <Target className="h-2.5 w-2.5" />
+                  {linkedContext.opportunity.name}
+                </Badge>
+              )}
+            </div>
+          )}
 
-          {/* Summary — only show on desktop or if short */}
+          {/* Summary — only show on desktop */}
           {thread.summary && !isMobile && (
             <p className="text-xs text-foreground/60 line-clamp-1 leading-relaxed mb-1.5">{thread.summary}</p>
           )}
 
-          {/* Workflow buttons — scrollable row on mobile */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1.5 -mx-1 px-1 scrollbar-none">
+          {/* Workflow buttons — scrollable row */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
             {WORKFLOWS.map(w => {
               const isRunning = activeWorkflow === w.key;
               const isRecommended = recommendedWorkflows.includes(w.key);
@@ -296,18 +296,6 @@ export function StrategyMainPanel({
           </div>
         )}
 
-        {/* Lane Tabs — compact */}
-        <div className="px-3 pt-1.5 pb-0.5">
-          <Tabs value={activeLane} onValueChange={setActiveLane}>
-            <TabsList className="h-7">
-              {LANES.map(l => (
-                <TabsTrigger key={l.value} value={l.value} className="text-[11px] px-2.5 h-5 data-[state=active]:bg-background">
-                  {l.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
       </div>
 
       {/* ── SCROLLABLE CONVERSATION (flex-1, min-h-0) ── */}
@@ -408,19 +396,21 @@ export function StrategyMainPanel({
             </div>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <div className="flex gap-0.5">
+            <div className="flex rounded-md border border-border overflow-hidden">
               {DEPTH_OPTIONS.map(d => (
-                <Badge
+                <button
                   key={d}
-                  variant={depth === d ? 'default' : 'outline'}
+                  type="button"
                   className={cn(
-                    'cursor-pointer text-[9px] px-1.5 py-0 transition-colors',
-                    depth === d ? '' : 'text-foreground/50 hover:text-foreground'
+                    'px-2.5 py-1 text-[10px] font-medium transition-colors',
+                    depth === d
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card text-foreground/60 hover:bg-muted hover:text-foreground'
                   )}
                   onClick={() => setDepth(d)}
                 >
                   {d}
-                </Badge>
+                </button>
               ))}
             </div>
             <Button
