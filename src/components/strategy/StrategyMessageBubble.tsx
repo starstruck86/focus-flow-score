@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Copy, Pin, Save, ChevronDown, ChevronUp, Database } from 'lucide-react';
+import { Copy, Save, ChevronDown, ChevronUp, Database, FileText, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import type { StrategyMessage } from '@/types/strategy';
 
@@ -15,18 +15,18 @@ interface Props {
 export function StrategyMessageBubble({ message, onSaveAsMemory }: Props) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system' || message.role === 'tool';
-  const contentJson = message.content_json as any;
-  const text = contentJson?.text || JSON.stringify(message.content_json);
+  const contentJson = (message.content_json ?? {}) as any;
+  const text = contentJson?.text || '';
   const structured = contentJson?.structured;
   const workflowType = contentJson?.workflowType;
   const sourcesUsed = contentJson?.sources_used;
 
   if (message.message_type === 'workflow_update') {
     return (
-      <div className="flex justify-center">
-        <Badge variant="outline" className="text-[10px] text-muted-foreground gap-1">
-          <Database className="h-2.5 w-2.5 animate-pulse" />
-          {text}
+      <div className="flex justify-center py-1">
+        <Badge variant="outline" className="text-[10px] text-muted-foreground gap-1.5 py-0.5 px-2.5 font-normal">
+          <Database className="h-2.5 w-2.5 animate-pulse text-primary/60" />
+          {text || 'Processing…'}
         </Badge>
       </div>
     );
@@ -48,21 +48,32 @@ export function StrategyMessageBubble({ message, onSaveAsMemory }: Props) {
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
-          'max-w-[85%] rounded-lg px-3 py-2 text-sm',
+          'max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
           isUser
-            ? 'bg-primary text-primary-foreground'
+            ? 'bg-primary text-primary-foreground rounded-br-sm'
             : isSystem
-              ? 'bg-muted/50 text-muted-foreground italic'
-              : 'bg-muted text-foreground',
+              ? 'bg-muted/30 text-muted-foreground italic text-xs'
+              : 'bg-muted/60 text-foreground rounded-bl-sm',
         )}
       >
-        <div className="whitespace-pre-wrap">{text}</div>
-        {!isUser && sourcesUsed > 0 && (
-          <div className="mt-1.5 flex items-center gap-1">
-            <Badge variant="secondary" className="text-[8px] px-1 py-0 gap-0.5">
-              <Database className="h-2 w-2" />
-              {sourcesUsed} sources
-            </Badge>
+        <div className="whitespace-pre-wrap">{text || JSON.stringify(message.content_json)}</div>
+        {!isUser && !isSystem && (
+          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+            {sourcesUsed != null && sourcesUsed > 0 && (
+              <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-1 font-normal">
+                <Database className="h-2 w-2" />
+                {sourcesUsed} sources
+              </Badge>
+            )}
+            {onSaveAsMemory && text && (
+              <Button
+                size="sm" variant="ghost"
+                className="h-5 text-[9px] px-1.5 gap-0.5 text-muted-foreground hover:text-foreground"
+                onClick={() => onSaveAsMemory(text.slice(0, 500), 'fact')}
+              >
+                <Save className="h-2 w-2" /> Save
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -83,67 +94,69 @@ function StructuredResultCard({
   const [expanded, setExpanded] = useState(true);
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(text || JSON.stringify(structured, null, 2));
     toast.success('Copied to clipboard');
   };
 
   const topSummary = structured?.summary || structured?.executive_summary || structured?.deal_summary;
 
+  const workflowLabel = workflowType?.replace(/_/g, ' ') || 'Result';
+  const WorkflowIcon = getWorkflowIcon(workflowType);
+
   return (
-    <Card className="border-primary/20 bg-card">
-      <CardContent className="p-3 space-y-2">
+    <Card className="border-primary/15 bg-card shadow-sm">
+      <CardContent className="p-0">
         {/* Header */}
-        <div className="flex items-center gap-2">
-          <Badge variant="default" className="text-[10px]">
-            {workflowType?.replace(/_/g, ' ') || 'Result'}
-          </Badge>
+        <div className="flex items-center gap-2 px-3.5 pt-3 pb-2 border-b border-border/50">
+          <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
+            <WorkflowIcon className="h-3 w-3 text-primary" />
+          </div>
+          <span className="text-xs font-semibold capitalize flex-1">{workflowLabel}</span>
           {sourcesUsed != null && sourcesUsed > 0 && (
-            <Badge variant="secondary" className="text-[8px] px-1 py-0 gap-0.5">
+            <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-1 font-normal">
               <Database className="h-2 w-2" />
-              {sourcesUsed} sources
+              {sourcesUsed}
             </Badge>
           )}
-          <div className="flex-1" />
-          <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setExpanded(!expanded)}>
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setExpanded(!expanded)}>
             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </Button>
         </div>
 
-        {/* Top summary always visible */}
+        {/* Top summary */}
         {topSummary && (
-          <p className="text-xs text-foreground/90 leading-relaxed">{topSummary}</p>
+          <div className="px-3.5 pt-2.5 pb-2">
+            <p className="text-xs text-foreground/85 leading-relaxed">{topSummary}</p>
+          </div>
         )}
 
         {/* Structured sections */}
         {expanded && structured && (
-          <div className="space-y-2 pt-1">
+          <div className="px-3.5 pb-3 space-y-3">
             {workflowType === 'email_evaluation' && structured.overall_score != null && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Score:</span>
-                <Badge variant={structured.overall_score >= 7 ? 'default' : structured.overall_score >= 4 ? 'secondary' : 'destructive'} className="text-xs">
-                  {structured.overall_score}/10
-                </Badge>
-              </div>
+              <ScoreDisplay score={structured.overall_score} />
             )}
             <StructuredSections structured={structured} workflowType={workflowType} />
           </div>
         )}
 
-        {/* Fallback if no structured data */}
-        {expanded && !structured && (
-          <div className="text-xs whitespace-pre-wrap text-foreground/80 max-h-96 overflow-y-auto">
-            {text}
+        {/* Fallback text */}
+        {expanded && !structured && text && (
+          <div className="px-3.5 pb-3">
+            <div className="text-xs whitespace-pre-wrap text-foreground/75 max-h-96 overflow-y-auto leading-relaxed">
+              {text}
+            </div>
           </div>
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-1 pt-1 border-t border-border">
-          <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1" onClick={copyToClipboard}>
+        <div className="flex items-center gap-1 px-3 py-2 border-t border-border/50 bg-muted/20 rounded-b-lg">
+          <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground" onClick={copyToClipboard}>
             <Copy className="h-2.5 w-2.5" /> Copy
           </Button>
           {onSaveAsMemory && topSummary && (
             <Button
-              size="sm" variant="ghost" className="h-6 text-[10px] gap-1"
+              size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
               onClick={() => onSaveAsMemory(topSummary, 'fact')}
             >
               <Save className="h-2.5 w-2.5" /> Save to Memory
@@ -155,16 +168,40 @@ function StructuredResultCard({
   );
 }
 
+function ScoreDisplay({ score }: { score: number }) {
+  const color = score >= 7 ? 'text-green-400 bg-green-500/10 border-green-500/20'
+    : score >= 4 ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+    : 'text-red-400 bg-red-500/10 border-red-500/20';
+  return (
+    <div className={cn('inline-flex items-center gap-2 rounded-lg border px-3 py-1.5', color)}>
+      <span className="text-lg font-bold">{score}</span>
+      <span className="text-[10px] font-medium opacity-70">/10</span>
+    </div>
+  );
+}
+
+function getWorkflowIcon(workflowType?: string) {
+  const icons: Record<string, typeof Sparkles> = {
+    deep_research: FileText,
+    email_evaluation: Sparkles,
+    territory_tiering: Database,
+    account_plan: FileText,
+    opportunity_strategy: Sparkles,
+    brainstorm: Sparkles,
+  };
+  return icons[workflowType || ''] || Sparkles;
+}
+
 // ── Section renderers by workflow type ─────────────────────
 function StructuredSections({ structured, workflowType }: { structured: any; workflowType?: string }) {
   const renderList = (items: string[] | undefined, label: string) => {
     if (!items?.length) return null;
     return (
       <div>
-        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">{label}</p>
-        <ul className="space-y-0.5">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+        <ul className="space-y-1">
           {items.map((item, i) => (
-            <li key={i} className="text-xs text-foreground/80 pl-2 border-l-2 border-muted">{item}</li>
+            <li key={i} className="text-xs text-foreground/75 pl-2.5 border-l-2 border-primary/20 leading-relaxed">{item}</li>
           ))}
         </ul>
       </div>
@@ -175,8 +212,8 @@ function StructuredSections({ structured, workflowType }: { structured: any; wor
     if (!text) return null;
     return (
       <div>
-        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">{label}</p>
-        <p className="text-xs text-foreground/80">{text}</p>
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">{label}</p>
+        <p className="text-xs text-foreground/75 leading-relaxed">{text}</p>
       </div>
     );
   };
@@ -212,16 +249,16 @@ function StructuredSections({ structured, workflowType }: { structured: any; wor
           {renderText(structured.methodology, 'Methodology')}
           {structured.tiers?.length > 0 && (
             <div>
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Tier Results</p>
-              <div className="space-y-1">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Tier Results</p>
+              <div className="space-y-1.5">
                 {structured.tiers.map((t: any, i: number) => (
-                  <div key={i} className="bg-muted/30 rounded px-2 py-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium">{t.account_name}</span>
-                      <Badge variant="outline" className="text-[9px] px-1 py-0">{t.tier}</Badge>
+                  <div key={i} className="bg-muted/30 rounded-lg px-3 py-2 border border-border/30">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium flex-1">{t.account_name || 'Unknown'}</span>
+                      <TierBadge tier={t.tier} />
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{t.rationale}</p>
-                    <p className="text-[10px] text-primary/80 mt-0.5">→ {t.next_action}</p>
+                    {t.rationale && <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">{t.rationale}</p>}
+                    {t.next_action && <p className="text-[10px] text-primary/70 mt-1 font-medium">→ {t.next_action}</p>}
                   </div>
                 ))}
               </div>
@@ -264,4 +301,19 @@ function StructuredSections({ structured, workflowType }: { structured: any; wor
     default:
       return null;
   }
+}
+
+function TierBadge({ tier }: { tier?: string }) {
+  if (!tier) return null;
+  const colors: Record<string, string> = {
+    'Tier 1': 'bg-green-500/15 text-green-400 border-green-500/20',
+    'Tier 2': 'bg-blue-500/15 text-blue-400 border-blue-500/20',
+    'Tier 3': 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+    'Tier 4': 'bg-red-500/15 text-red-400 border-red-500/20',
+  };
+  return (
+    <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded border', colors[tier] || 'bg-muted text-muted-foreground')}>
+      {tier}
+    </span>
+  );
 }

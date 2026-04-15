@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   ChevronRight, Link2, Lightbulb, HelpCircle, FileText,
   Pin, Copy, Save, Plus, RefreshCw, Loader2, Sparkles,
+  Upload, BarChart3, Building2, Target,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -45,13 +46,13 @@ const MEMORY_TYPES = [
 ];
 
 const MEMORY_TYPE_COLORS: Record<string, string> = {
-  fact: 'bg-blue-500/20 text-blue-300',
-  hypothesis: 'bg-amber-500/20 text-amber-300',
-  risk: 'bg-red-500/20 text-red-300',
-  priority: 'bg-green-500/20 text-green-300',
-  stakeholder_note: 'bg-purple-500/20 text-purple-300',
-  messaging_note: 'bg-cyan-500/20 text-cyan-300',
-  next_step: 'bg-orange-500/20 text-orange-300',
+  fact: 'bg-blue-500/15 text-blue-300 border-blue-500/20',
+  hypothesis: 'bg-amber-500/15 text-amber-300 border-amber-500/20',
+  risk: 'bg-red-500/15 text-red-300 border-red-500/20',
+  priority: 'bg-green-500/15 text-green-300 border-green-500/20',
+  stakeholder_note: 'bg-purple-500/15 text-purple-300 border-purple-500/20',
+  messaging_note: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/20',
+  next_step: 'bg-orange-500/15 text-orange-300 border-orange-500/20',
 };
 
 function RailSection({ title, icon: Icon, children, empty, count, action }: {
@@ -59,16 +60,18 @@ function RailSection({ title, icon: Icon, children, empty, count, action }: {
   empty?: string; count?: number; action?: React.ReactNode;
 }) {
   return (
-    <div className="px-3 py-2">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-        <h3 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex-1">{title}</h3>
+    <div className="px-3 py-2.5">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Icon className="h-3.5 w-3.5 text-muted-foreground/70" />
+        <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex-1">{title}</h3>
         {count !== undefined && count > 0 && (
-          <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">{count}</Badge>
+          <Badge variant="secondary" className="text-[8px] px-1 py-0 h-4 font-normal">{count}</Badge>
         )}
         {action}
       </div>
-      {children ?? <p className="text-[10px] text-muted-foreground/60 italic">{empty || 'None yet'}</p>}
+      {children ?? (
+        <p className="text-[10px] text-muted-foreground/40 italic pl-5">{empty || 'None yet'}</p>
+      )}
     </div>
   );
 }
@@ -80,33 +83,37 @@ export function StrategyRightRail({
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
   const [memContent, setMemContent] = useState('');
+  const [savedSuggestions, setSavedSuggestions] = useState<Set<number>>(new Set());
 
   const pinnedMemories = useMemo(() => memories.filter(m => m.is_pinned), [memories]);
   const hypotheses = useMemo(() => memories.filter(m => m.memory_type === 'hypothesis'), [memories]);
-  const recentDecisions = useMemo(() => memories.filter(m => m.memory_type === 'priority' || m.memory_type === 'next_step').slice(0, 5), [memories]);
-  const openQuestions = useMemo(() => memories.filter(m => m.memory_type === 'risk').slice(0, 5), [memories]);
+  const decisions = useMemo(() => memories.filter(m => m.memory_type === 'priority' || m.memory_type === 'next_step').slice(0, 5), [memories]);
+  const risks = useMemo(() => memories.filter(m => m.memory_type === 'risk').slice(0, 5), [memories]);
 
   const handleSave = () => {
     if (!memContent.trim()) return;
     onSaveMemory(memType, memContent.trim());
     setMemContent('');
     setSaveOpen(false);
+    toast.success('Insight saved');
   };
 
-  const handleSuggestionSave = (suggestion: MemorySuggestion) => {
+  const handleSuggestionSave = useCallback((suggestion: MemorySuggestion, index: number) => {
     onSaveMemory(suggestion.memory_type, suggestion.content);
-    toast.success('Insight saved from suggestion');
-  };
+    setSavedSuggestions(prev => new Set(prev).add(index));
+    toast.success('Saved to memory');
+  }, [onSaveMemory]);
 
   const copyThread = () => {
     const text = rollup?.summary || thread.summary || thread.title;
     navigator.clipboard.writeText(text);
-    toast.success('Copied to clipboard');
+    toast.success('Copied');
   };
 
   return (
     <div className="w-64 border-l border-border flex flex-col bg-card shrink-0">
       <div className="p-3 border-b border-border flex items-center gap-2">
+        <Sparkles className="h-3.5 w-3.5 text-primary/60" />
         <h2 className="text-xs font-semibold text-foreground flex-1">Working Memory</h2>
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onCollapse}>
           <ChevronRight className="h-3.5 w-3.5" />
@@ -115,177 +122,202 @@ export function StrategyRightRail({
 
       <ScrollArea className="flex-1">
         {/* Linked Objects */}
-        <RailSection title="Linked Objects" icon={Link2}>
+        <RailSection title="Context" icon={Link2}>
           {linkedContext?.account ? (
-            <Card className="bg-muted/30"><CardContent className="p-2">
-              <p className="text-xs font-medium">{linkedContext.account.name}</p>
-              <p className="text-[10px] text-muted-foreground">
-                {[linkedContext.account.industry, linkedContext.account.tier].filter(Boolean).join(' · ') || 'Account'}
-              </p>
-            </CardContent></Card>
+            <Card className="bg-muted/20 border-border/30">
+              <CardContent className="p-2.5 flex items-start gap-2">
+                <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                  <Building2 className="h-3.5 w-3.5 text-primary/70" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium truncate">{linkedContext.account.name}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {[linkedContext.account.industry, linkedContext.account.tier].filter(Boolean).join(' · ') || 'Account'}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           ) : linkedContext?.opportunity ? (
-            <Card className="bg-muted/30"><CardContent className="p-2">
-              <p className="text-xs font-medium">{linkedContext.opportunity.name}</p>
-              <p className="text-[10px] text-muted-foreground">{linkedContext.opportunity.stage || 'Opportunity'}</p>
-            </CardContent></Card>
+            <Card className="bg-muted/20 border-border/30">
+              <CardContent className="p-2.5 flex items-start gap-2">
+                <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                  <Target className="h-3.5 w-3.5 text-primary/70" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium truncate">{linkedContext.opportunity.name}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{linkedContext.opportunity.stage || 'Opportunity'}</p>
+                </div>
+              </CardContent>
+            </Card>
           ) : (
-            <p className="text-[10px] text-muted-foreground/60 italic">No linked objects</p>
+            <p className="text-[10px] text-muted-foreground/40 italic pl-5">Freeform thread — no linked object</p>
           )}
         </RailSection>
 
-        <div className="border-t border-border" />
+        <Divider />
 
         {/* Thread Rollup */}
         <RailSection
           title="Thread Rollup"
-          icon={Sparkles}
+          icon={BarChart3}
           action={
             <Button
               size="icon" variant="ghost" className="h-5 w-5"
               onClick={onTriggerRollup} disabled={isRollupLoading}
+              title="Regenerate rollup"
             >
               {isRollupLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
             </Button>
           }
         >
           {rollup ? (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <p className="text-[11px] text-foreground/80 leading-relaxed">{rollup.summary}</p>
-              {rollup.key_facts.length > 0 && (
-                <RollupList label="Key Facts" items={rollup.key_facts} />
-              )}
-              {rollup.hypotheses.length > 0 && (
-                <RollupList label="Hypotheses" items={rollup.hypotheses} />
-              )}
-              {rollup.risks.length > 0 && (
-                <RollupList label="Risks" items={rollup.risks} />
-              )}
-              {rollup.open_questions.length > 0 && (
-                <RollupList label="Open Questions" items={rollup.open_questions} />
-              )}
-              {rollup.next_steps.length > 0 && (
-                <RollupList label="Next Steps" items={rollup.next_steps} />
-              )}
+              <RollupList label="Key Facts" items={rollup.key_facts} />
+              <RollupList label="Hypotheses" items={rollup.hypotheses} />
+              <RollupList label="Risks" items={rollup.risks} />
+              <RollupList label="Open Questions" items={rollup.open_questions} />
+              <RollupList label="Next Steps" items={rollup.next_steps} />
+            </div>
+          ) : isRollupLoading ? (
+            <div className="flex items-center gap-2 py-2">
+              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground">Generating rollup…</span>
             </div>
           ) : (
-            <p className="text-[10px] text-muted-foreground/60 italic">No rollup yet. Send messages or run a workflow.</p>
+            <p className="text-[10px] text-muted-foreground/40 italic pl-5">
+              Send messages or run a workflow to generate a rollup.
+            </p>
           )}
         </RailSection>
 
-        <div className="border-t border-border" />
+        <Divider />
 
         {/* Memory Suggestions */}
         {memorySuggestions.length > 0 && (
           <>
-            <RailSection title="Suggested Saves" icon={Sparkles} count={memorySuggestions.length}>
-              <div className="space-y-1">
-                {memorySuggestions.map((s, i) => (
-                  <div key={i} className="bg-primary/5 border border-primary/10 rounded px-2 py-1.5">
-                    <div className="flex items-center gap-1 mb-0.5">
-                      <Badge variant="outline" className={`text-[8px] px-1 py-0 ${MEMORY_TYPE_COLORS[s.memory_type] || ''}`}>
-                        {s.memory_type}
-                      </Badge>
-                      <span className="text-[9px] text-muted-foreground">
-                        {Math.round(s.confidence * 100)}%
-                      </span>
+            <RailSection title="Suggested Saves" icon={Sparkles} count={memorySuggestions.filter((_, i) => !savedSuggestions.has(i)).length}>
+              <div className="space-y-1.5">
+                {memorySuggestions.map((s, i) => {
+                  const isSaved = savedSuggestions.has(i);
+                  return (
+                    <div key={i} className={`rounded-lg px-2.5 py-2 transition-all ${isSaved ? 'bg-green-500/5 border border-green-500/15' : 'bg-primary/5 border border-primary/10'}`}>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <Badge variant="outline" className={`text-[8px] px-1 py-0 border ${MEMORY_TYPE_COLORS[s.memory_type] || ''}`}>
+                          {s.memory_type.replace(/_/g, ' ')}
+                        </Badge>
+                        <span className="text-[9px] text-muted-foreground/60">
+                          {Math.round((s.confidence ?? 0.5) * 100)}%
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-foreground/75 line-clamp-2 leading-relaxed">{s.content}</p>
+                      {!isSaved ? (
+                        <Button
+                          size="sm" variant="ghost"
+                          className="h-5 text-[9px] px-1.5 mt-1 gap-0.5 text-primary hover:text-primary"
+                          onClick={() => handleSuggestionSave(s, i)}
+                        >
+                          <Save className="h-2 w-2" /> Save
+                        </Button>
+                      ) : (
+                        <span className="text-[9px] text-green-400 mt-1 inline-block">✓ Saved</span>
+                      )}
                     </div>
-                    <p className="text-[10px] text-foreground/80 line-clamp-2">{s.content}</p>
-                    <Button
-                      size="sm" variant="ghost"
-                      className="h-5 text-[9px] px-1.5 mt-0.5 gap-0.5"
-                      onClick={() => handleSuggestionSave(s)}
-                    >
-                      <Save className="h-2 w-2" /> Save
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </RailSection>
-            <div className="border-t border-border" />
+            <Divider />
           </>
         )}
 
         {/* Pinned Insights */}
-        <RailSection title="Pinned Insights" icon={Pin} count={pinnedMemories.length} empty="Pin insights from conversations">
+        <RailSection title="Pinned" icon={Pin} count={pinnedMemories.length} empty="Pin insights from conversations">
           {pinnedMemories.length > 0 && (
             <div className="space-y-1">
               {pinnedMemories.slice(0, 5).map(m => (
-                <div key={m.id} className="text-[11px] bg-muted/30 rounded px-2 py-1">
-                  <Badge variant="outline" className={`text-[8px] px-1 py-0 mr-1 ${MEMORY_TYPE_COLORS[m.memory_type] || ''}`}>
-                    {m.memory_type}
-                  </Badge>
-                  <span className="text-foreground/80">{m.content.slice(0, 100)}</span>
-                </div>
+                <MemoryCard key={m.id} memory={m} />
               ))}
             </div>
           )}
         </RailSection>
 
-        <div className="border-t border-border" />
+        <Divider />
 
         {/* Hypotheses */}
         <RailSection title="Hypotheses" icon={Lightbulb} count={hypotheses.length} empty="No hypotheses recorded">
           {hypotheses.length > 0 && (
             <div className="space-y-1">
               {hypotheses.slice(0, 5).map(m => (
-                <p key={m.id} className="text-[11px] text-foreground/80 bg-muted/30 rounded px-2 py-1">{m.content.slice(0, 100)}</p>
+                <MemoryCard key={m.id} memory={m} />
               ))}
             </div>
           )}
         </RailSection>
 
-        <div className="border-t border-border" />
+        <Divider />
 
-        {/* Decisions */}
-        <RailSection title="Decisions & Next Steps" icon={FileText} count={recentDecisions.length} empty="No decisions yet">
-          {recentDecisions.length > 0 && (
+        {/* Decisions & Next Steps */}
+        <RailSection title="Decisions & Next Steps" icon={FileText} count={decisions.length} empty="No decisions yet">
+          {decisions.length > 0 && (
             <div className="space-y-1">
-              {recentDecisions.map(m => (
-                <p key={m.id} className="text-[11px] text-foreground/80 bg-muted/30 rounded px-2 py-1">{m.content.slice(0, 100)}</p>
+              {decisions.map(m => (
+                <MemoryCard key={m.id} memory={m} />
               ))}
             </div>
           )}
         </RailSection>
 
-        <div className="border-t border-border" />
+        <Divider />
 
-        {/* Open Questions */}
-        <RailSection title="Open Questions" icon={HelpCircle} count={openQuestions.length} empty="No open questions">
-          {openQuestions.length > 0 && (
+        {/* Risks */}
+        <RailSection title="Risks & Questions" icon={HelpCircle} count={risks.length} empty="No risks identified">
+          {risks.length > 0 && (
             <div className="space-y-1">
-              {openQuestions.map(m => (
-                <p key={m.id} className="text-[11px] text-foreground/80 bg-muted/30 rounded px-2 py-1">{m.content.slice(0, 100)}</p>
+              {risks.map(m => (
+                <MemoryCard key={m.id} memory={m} />
               ))}
             </div>
           )}
         </RailSection>
 
-        <div className="border-t border-border" />
+        <Divider />
 
         {/* Uploads */}
-        <RailSection title="Uploads" icon={FileText} count={uploads.length} empty="Drag files into composer">
+        <RailSection title="Uploads" icon={Upload} count={uploads.length} empty="Drag files into the composer">
           {uploads.length > 0 && (
             <div className="space-y-1">
               {uploads.slice(0, 8).map(u => (
-                <div key={u.id} className="text-[11px] bg-muted/30 rounded px-2 py-1 truncate">
-                  📎 {u.file_name}
-                  {u.summary && <p className="text-[9px] text-muted-foreground mt-0.5 line-clamp-1">{u.summary}</p>}
+                <div key={u.id} className="bg-muted/20 rounded-lg px-2.5 py-1.5 border border-border/20">
+                  <div className="flex items-center gap-1.5">
+                    <FileTypeIcon fileType={u.file_type} />
+                    <span className="text-[11px] font-medium truncate flex-1">{u.file_name}</span>
+                  </div>
+                  {u.summary && <p className="text-[9px] text-muted-foreground mt-0.5 line-clamp-1 pl-5">{u.summary}</p>}
+                  {!u.summary && u.parsed_text && (
+                    <Badge variant="secondary" className="text-[8px] px-1 py-0 mt-0.5 ml-5">Parsed</Badge>
+                  )}
+                  {!u.summary && !u.parsed_text && (
+                    <Badge variant="outline" className="text-[8px] px-1 py-0 mt-0.5 ml-5 text-muted-foreground/50">Binary</Badge>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </RailSection>
 
-        <div className="border-t border-border" />
+        <Divider />
 
         {/* Outputs */}
-        <RailSection title="Outputs" icon={FileText} count={outputs.length} empty="No outputs yet">
+        <RailSection title="Outputs" icon={FileText} count={outputs.length} empty="Run a workflow to create outputs">
           {outputs.length > 0 && (
             <div className="space-y-1">
               {outputs.slice(0, 5).map(o => (
-                <div key={o.id} className="text-[11px] bg-muted/30 rounded px-2 py-1">
-                  <Badge variant="outline" className="text-[8px] px-1 py-0 mr-1">{o.output_type}</Badge>
-                  <span className="truncate">{o.title}</span>
+                <div key={o.id} className="bg-muted/20 rounded-lg px-2.5 py-1.5 border border-border/20">
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-[8px] px-1 py-0 shrink-0">{(o.output_type || '').replace(/_/g, ' ')}</Badge>
+                    <span className="text-[11px] truncate">{o.title}</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -323,7 +355,7 @@ export function StrategyRightRail({
               </div>
             </DialogContent>
           </Dialog>
-          <Button size="sm" variant="outline" className="w-full h-7 text-xs gap-1.5" onClick={copyThread}>
+          <Button size="sm" variant="outline" className="w-full h-7 text-xs gap-1.5 text-muted-foreground" onClick={copyThread}>
             <Copy className="h-3 w-3" /> Copy Summary
           </Button>
         </div>
@@ -332,13 +364,38 @@ export function StrategyRightRail({
   );
 }
 
-function RollupList({ label, items }: { label: string; items: string[] }) {
+function Divider() {
+  return <div className="border-t border-border/50 mx-3" />;
+}
+
+function MemoryCard({ memory }: { memory: StrategyMemoryEntry }) {
+  return (
+    <div className="bg-muted/20 rounded-lg px-2.5 py-1.5 border border-border/20">
+      <div className="flex items-center gap-1.5">
+        <Badge variant="outline" className={`text-[8px] px-1 py-0 border shrink-0 ${MEMORY_TYPE_COLORS[memory.memory_type] || ''}`}>
+          {memory.memory_type.replace(/_/g, ' ')}
+        </Badge>
+        {memory.is_pinned && <Pin className="h-2 w-2 text-amber-400 shrink-0" />}
+      </div>
+      <p className="text-[10px] text-foreground/70 mt-0.5 line-clamp-2 leading-relaxed">{memory.content}</p>
+    </div>
+  );
+}
+
+function FileTypeIcon({ fileType }: { fileType: string | null }) {
+  const ext = fileType?.split('/')[1] || '';
+  const label = ext === 'pdf' ? '📄' : ext === 'csv' ? '📊' : fileType?.startsWith('text/') ? '📝' : '📎';
+  return <span className="text-[11px]">{label}</span>;
+}
+
+function RollupList({ label, items }: { label: string; items?: string[] }) {
+  if (!items?.length) return null;
   return (
     <div>
-      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+      <p className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-0.5">{label}</p>
       <ul className="space-y-0.5">
         {items.slice(0, 5).map((item, i) => (
-          <li key={i} className="text-[10px] text-foreground/70 pl-1.5 border-l border-muted">{item}</li>
+          <li key={i} className="text-[10px] text-foreground/65 pl-2 border-l-2 border-primary/15 leading-relaxed">{item}</li>
         ))}
       </ul>
     </div>

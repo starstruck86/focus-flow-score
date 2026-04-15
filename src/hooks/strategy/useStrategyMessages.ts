@@ -30,18 +30,14 @@ export function useStrategyMessages(threadId: string | null) {
     content: string,
     options?: { depth?: string }
   ) => {
-    if (!threadId || !user || !content.trim()) return;
+    if (!threadId || !user || !content.trim() || isSending) return;
     setIsSending(true);
 
     const optimisticId = `opt-${Date.now()}`;
     const userMsg: StrategyMessage = {
-      id: optimisticId,
-      thread_id: threadId,
-      user_id: user.id,
-      role: 'user',
-      message_type: 'chat',
-      content_json: { text: content },
-      citations_json: null,
+      id: optimisticId, thread_id: threadId, user_id: user.id,
+      role: 'user', message_type: 'chat',
+      content_json: { text: content }, citations_json: null,
       created_at: new Date().toISOString(),
     };
     setMessages(prev => [...prev, userMsg]);
@@ -55,12 +51,7 @@ export function useStrategyMessages(threadId: string | null) {
           Authorization: `Bearer ${session?.access_token}`,
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
-        body: JSON.stringify({
-          action: 'chat',
-          threadId,
-          content,
-          depth: options?.depth,
-        }),
+        body: JSON.stringify({ action: 'chat', threadId, content, depth: options?.depth }),
       });
 
       if (!resp.ok) {
@@ -69,12 +60,29 @@ export function useStrategyMessages(threadId: string | null) {
       }
 
       if (!resp.body) throw new Error('No response body');
+
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let assistantText = '';
       const assistantId = `ast-${Date.now()}`;
-
       let textBuffer = '';
+
+      const updateAssistant = (text: string) => {
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last?.id === assistantId) {
+            return prev.map((m, i) => i === prev.length - 1
+              ? { ...m, content_json: { text } } : m);
+          }
+          return [...prev, {
+            id: assistantId, thread_id: threadId, user_id: user.id,
+            role: 'assistant', message_type: 'chat',
+            content_json: { text }, citations_json: null,
+            created_at: new Date().toISOString(),
+          }];
+        });
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -92,28 +100,7 @@ export function useStrategyMessages(threadId: string | null) {
           try {
             const parsed = JSON.parse(jsonStr);
             const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) {
-              assistantText += delta;
-              setMessages(prev => {
-                const last = prev[prev.length - 1];
-                if (last?.id === assistantId) {
-                  return prev.map((m, i) => i === prev.length - 1
-                    ? { ...m, content_json: { text: assistantText } }
-                    : m
-                  );
-                }
-                return [...prev, {
-                  id: assistantId,
-                  thread_id: threadId,
-                  user_id: user.id,
-                  role: 'assistant',
-                  message_type: 'chat',
-                  content_json: { text: assistantText },
-                  citations_json: null,
-                  created_at: new Date().toISOString(),
-                }];
-              });
-            }
+            if (delta) { assistantText += delta; updateAssistant(assistantText); }
           } catch {
             textBuffer = line + '\n' + textBuffer;
             break;
@@ -121,40 +108,18 @@ export function useStrategyMessages(threadId: string | null) {
         }
       }
 
-      // Final buffer flush
+      // Flush remaining buffer
       if (textBuffer.trim()) {
         for (let raw of textBuffer.split('\n')) {
           if (!raw) continue;
           if (raw.endsWith('\r')) raw = raw.slice(0, -1);
-          if (raw.startsWith(':') || raw.trim() === '') continue;
           if (!raw.startsWith('data: ')) continue;
           const jsonStr = raw.slice(6).trim();
           if (jsonStr === '[DONE]') continue;
           try {
             const parsed = JSON.parse(jsonStr);
             const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) {
-              assistantText += delta;
-              setMessages(prev => {
-                const last = prev[prev.length - 1];
-                if (last?.id === assistantId) {
-                  return prev.map((m, i) => i === prev.length - 1
-                    ? { ...m, content_json: { text: assistantText } }
-                    : m
-                  );
-                }
-                return [...prev, {
-                  id: assistantId,
-                  thread_id: threadId,
-                  user_id: user.id,
-                  role: 'assistant',
-                  message_type: 'chat',
-                  content_json: { text: assistantText },
-                  citations_json: null,
-                  created_at: new Date().toISOString(),
-                }];
-              });
-            }
+            if (delta) { assistantText += delta; updateAssistant(assistantText); }
           } catch { /* partial leftover */ }
         }
       }
@@ -166,24 +131,20 @@ export function useStrategyMessages(threadId: string | null) {
     } finally {
       setIsSending(false);
     }
-  }, [threadId, user, fetchMessages]);
+  }, [threadId, user, fetchMessages, isSending]);
 
   const runWorkflow = useCallback(async (
     workflowType: string,
     options?: { content?: string }
   ) => {
-    if (!threadId || !user) return null;
+    if (!threadId || !user || isSending) return null;
     setIsSending(true);
 
     setMessages(prev => [...prev, {
-      id: `wf-${Date.now()}`,
-      thread_id: threadId,
-      user_id: user.id,
-      role: 'system',
-      message_type: 'workflow_update',
+      id: `wf-${Date.now()}`, thread_id: threadId, user_id: user.id,
+      role: 'system', message_type: 'workflow_update',
       content_json: { text: `Running ${workflowType.replace(/_/g, ' ')}…` },
-      citations_json: null,
-      created_at: new Date().toISOString(),
+      citations_json: null, created_at: new Date().toISOString(),
     }]);
 
     try {
@@ -195,12 +156,7 @@ export function useStrategyMessages(threadId: string | null) {
           Authorization: `Bearer ${session?.access_token}`,
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
-        body: JSON.stringify({
-          action: 'workflow',
-          threadId,
-          workflowType,
-          content: options?.content,
-        }),
+        body: JSON.stringify({ action: 'workflow', threadId, workflowType, content: options?.content }),
       });
 
       if (!resp.ok) {
@@ -217,7 +173,7 @@ export function useStrategyMessages(threadId: string | null) {
     } finally {
       setIsSending(false);
     }
-  }, [threadId, user, fetchMessages]);
+  }, [threadId, user, fetchMessages, isSending]);
 
   return { messages, isLoading, isSending, sendMessage, runWorkflow, refetch: fetchMessages };
 }
