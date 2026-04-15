@@ -87,11 +87,28 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         <div className="whitespace-pre-wrap">{text || JSON.stringify(message.content_json)}</div>
         {!isUser && !isSystem && (
           <div className="mt-2 space-y-1.5">
+            {/* Provider + model pill */}
+            {providerUsed && (
+              <div className="flex items-center gap-1 flex-wrap">
+                <Badge variant="outline" className="text-[8px] px-1.5 py-0 gap-1 font-normal">
+                  <Cpu className="h-2 w-2" />
+                  {providerUsed === 'openai' ? 'ChatGPT' : providerUsed === 'anthropic' ? 'Claude' : providerUsed === 'perplexity' ? 'Perplexity' : providerUsed}
+                  {modelUsed ? ` · ${modelUsed.split('/').pop()}` : ''}
+                </Badge>
+                {fallbackUsed && (
+                  <Badge variant="destructive" className="text-[7px] px-1 py-0 font-normal">
+                    fallback
+                  </Badge>
+                )}
+              </div>
+            )}
             {(sourcesUsed != null && sourcesUsed > 0) || retrievalMeta || modelUsed ? (
               <SourceInspectorPanel
                 sourcesUsed={sourcesUsed ?? 0}
                 retrievalMeta={retrievalMeta}
                 modelUsed={modelUsed}
+                providerUsed={providerUsed}
+                fallbackUsed={fallbackUsed}
               />
             ) : null}
             {onSaveAsMemory && text && (
