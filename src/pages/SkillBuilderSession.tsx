@@ -271,8 +271,9 @@ export default function SkillBuilderSession() {
 
     if (!text) return;
 
-    // Canonical step ID: sessionId + blockIndex + blockType
-    const stepId = makeStepId(sessionId, currentBlockIndex, block.type);
+    // Use stableSessionKey (not sessionId) — sessionId resolves async and would
+    // produce a different stepId on re-render, bypassing dedupe.
+    const stepId = makeStepId(stableSessionKey.current, currentBlockIndex, block.type);
 
     // Prevent double transcript entries using canonical step ID
     if (!recordedStepsRef.current.has(stepId)) {
