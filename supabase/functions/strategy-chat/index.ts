@@ -8,7 +8,8 @@ const corsHeaders = {
 };
 
 // ═══════════════════════════════════════════════════════════
-// LAYER 1 — PROVIDER ADAPTERS
+// LAYER 1 — DIRECT PROVIDER ADAPTERS
+// No Lovable gateway — all providers called directly.
 // ═══════════════════════════════════════════════════════════
 type ProviderKey = "openai" | "anthropic" | "perplexity";
 
@@ -21,7 +22,6 @@ interface NormalizedResponse {
   latencyMs: number;
   fallbackUsed: boolean;
   error?: { type: string; message: string };
-  // For streaming — raw Response to pipe through
   rawStream?: Response;
 }
 
@@ -36,9 +36,10 @@ interface AdapterRequest {
   stream?: boolean;
 }
 
+// ── Header helpers (direct API keys) ──────────────────────
 function getOpenAIHeaders(): Record<string, string> {
-  const key = Deno.env.get("LOVABLE_API_KEY");
-  if (!key) throw new Error("LOVABLE_API_KEY not configured");
+  const key = Deno.env.get("OPENAI_API_KEY");
+  if (!key) throw new Error("OPENAI_API_KEY not configured");
   return { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
 }
 
@@ -58,11 +59,13 @@ function getPerplexityHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
 }
 
-// ── OpenAI Adapter (via Lovable AI Gateway) ────────────────
+// ── OpenAI Adapter (DIRECT — api.openai.com) ──────────────
 async function openaiAdapter(req: AdapterRequest, signal: AbortSignal): Promise<NormalizedResponse> {
   const start = Date.now();
+  // Strip "openai/" prefix for direct API calls
+  const apiModel = req.model.startsWith("openai/") ? req.model.slice(7) : req.model;
   const body: any = {
-    model: req.model,
+    model: apiModel,
     messages: req.messages,
     temperature: req.temperature ?? 0.7,
     max_tokens: req.maxTokens ?? 4096,
@@ -71,13 +74,15 @@ async function openaiAdapter(req: AdapterRequest, signal: AbortSignal): Promise<
   if (req.reasoning) body.reasoning = req.reasoning;
   if (req.stream) body.stream = true;
 
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST", headers: getOpenAIHeaders(), signal, body: JSON.stringify(body),
   });
 
   if (!resp.ok) {
+    const errText = await resp.text().catch(() => "");
+    console.error(`[openai-direct] error ${resp.status}: ${errText.slice(0, 200)}`);
     return { text: "", provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: `http_${resp.status}`, message: `OpenAI gateway error: ${resp.status}` } };
+      error: { type: `http_${resp.status}`, message: `OpenAI direct error: ${resp.status}` } };
   }
 
   if (req.stream) {
@@ -95,11 +100,10 @@ async function openaiAdapter(req: AdapterRequest, signal: AbortSignal): Promise<
   return { text, structured, provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
 }
 
-// ── Anthropic Adapter (Claude — direct API) ────────────────
+// ── Anthropic Adapter (DIRECT — api.anthropic.com) ────────
 async function anthropicAdapter(req: AdapterRequest, signal: AbortSignal): Promise<NormalizedResponse> {
   const start = Date.now();
 
-  // Convert OpenAI-style messages to Anthropic format
   let systemPrompt = "";
   const anthropicMessages: Array<{ role: string; content: string }> = [];
   for (const m of req.messages) {
@@ -115,7 +119,6 @@ async function anthropicAdapter(req: AdapterRequest, signal: AbortSignal): Promi
   if (systemPrompt) body.system = systemPrompt;
   if (req.temperature !== undefined) body.temperature = req.temperature;
 
-  // Convert OpenAI tools to Anthropic tool format
   if (req.tools?.length) {
     body.tools = req.tools.map((t: any) => ({
       name: t.function.name,
@@ -133,7 +136,7 @@ async function anthropicAdapter(req: AdapterRequest, signal: AbortSignal): Promi
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
-    console.error(`[anthropic] error ${resp.status}: ${errText}`);
+    console.error(`[anthropic-direct] error ${resp.status}: ${errText.slice(0, 200)}`);
     return { text: "", provider: "anthropic", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
       error: { type: `http_${resp.status}`, message: `Anthropic error: ${resp.status}` } };
   }
@@ -150,7 +153,7 @@ async function anthropicAdapter(req: AdapterRequest, signal: AbortSignal): Promi
   return { text, structured, provider: "anthropic", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
 }
 
-// ── Perplexity Adapter ─────────────────────────────────────
+// ── Perplexity Adapter (DIRECT — api.perplexity.ai) ───────
 async function perplexityAdapter(req: AdapterRequest, signal: AbortSignal): Promise<NormalizedResponse> {
   const start = Date.now();
   const body: any = {
@@ -165,6 +168,8 @@ async function perplexityAdapter(req: AdapterRequest, signal: AbortSignal): Prom
   });
 
   if (!resp.ok) {
+    const errText = await resp.text().catch(() => "");
+    console.error(`[perplexity-direct] error ${resp.status}: ${errText.slice(0, 200)}`);
     return { text: "", provider: "perplexity", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
       error: { type: `http_${resp.status}`, message: `Perplexity error: ${resp.status}` } };
   }
@@ -176,7 +181,6 @@ async function perplexityAdapter(req: AdapterRequest, signal: AbortSignal): Prom
   return { text, citations, provider: "perplexity", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
 }
 
-// Adapter dispatcher
 type AdapterFn = (req: AdapterRequest, signal: AbortSignal) => Promise<NormalizedResponse>;
 
 const ADAPTERS: Record<ProviderKey, AdapterFn> = {
@@ -187,13 +191,14 @@ const ADAPTERS: Record<ProviderKey, AdapterFn> = {
 
 // ═══════════════════════════════════════════════════════════
 // PROVIDER HEALTH CHECK — logged on every cold start
+// All providers use direct API keys. No Lovable gateway.
 // ═══════════════════════════════════════════════════════════
 const PROVIDER_HEALTH = {
-  anthropic: !!Deno.env.get("ANTHROPIC_API_KEY"),
-  lovableGateway: !!Deno.env.get("LOVABLE_API_KEY"),
-  perplexity: !!Deno.env.get("PERPLEXITY_API_KEY"),
+  openaiDirect: !!Deno.env.get("OPENAI_API_KEY"),
+  anthropicDirect: !!Deno.env.get("ANTHROPIC_API_KEY"),
+  perplexityDirect: !!Deno.env.get("PERPLEXITY_API_KEY"),
 };
-console.log(`[provider-health] Anthropic: ${PROVIDER_HEALTH.anthropic ? "ENABLED" : "DISABLED"} | Lovable Gateway (OpenAI): ${PROVIDER_HEALTH.lovableGateway ? "ENABLED" : "DISABLED"} | Perplexity: ${PROVIDER_HEALTH.perplexity ? "ENABLED" : "DISABLED"}`);
+console.log(`[provider-health] OpenAI direct: ${PROVIDER_HEALTH.openaiDirect ? "ENABLED" : "DISABLED"} | Anthropic direct: ${PROVIDER_HEALTH.anthropicDirect ? "ENABLED" : "DISABLED"} | Perplexity direct: ${PROVIDER_HEALTH.perplexityDirect ? "ENABLED" : "DISABLED"}`);
 
 // ═══════════════════════════════════════════════════════════
 // LAYER 2 — ROUTER
@@ -212,53 +217,47 @@ interface LLMRoute {
 }
 
 // PROVIDER POLICY:
-// - OpenAI = default engine (chat, workflows, rollup)
-// - Perplexity = external research ONLY
-// - Anthropic/Claude = artifact engine ONLY (handled in strategy-transform-output)
-// Claude must NEVER appear as primary or fallback for non-artifact tasks.
+// - OpenAI = default engine (chat, workflows, rollup) — fallback: Anthropic
+// - Perplexity = external research ONLY — fallback: OpenAI
+// - Anthropic = artifact engine ONLY (in strategy-transform-output, NOT here as primary)
 const ROUTES: Record<TaskType, LLMRoute> = {
-  chat_general:         { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.7, maxTokens: 4096, useTools: false },
+  chat_general:         { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.7, maxTokens: 4096, useTools: false },
   deep_research:        { primaryProvider: "perplexity", model: "sonar-pro",     fallbackProvider: "openai", fallbackModel: "openai/gpt-5-mini", temperature: 0.3, maxTokens: 8192, useTools: false },
-  email_evaluation:     { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.4, maxTokens: 4096, useTools: true },
-  territory_tiering:    { primaryProvider: "openai", model: "openai/gpt-5",      fallbackProvider: "openai", fallbackModel: "openai/gpt-5-mini", temperature: 0.2, maxTokens: 8192, useTools: true, reasoning: { effort: "medium" } },
-  account_plan:         { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.5, maxTokens: 8192, useTools: true },
-  opportunity_strategy: { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.5, maxTokens: 8192, useTools: true },
-  brainstorm:           { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.9, maxTokens: 4096, useTools: true },
-  rollup:               { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.3, maxTokens: 4096, useTools: true },
+  email_evaluation:     { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.4, maxTokens: 4096, useTools: true },
+  territory_tiering:    { primaryProvider: "openai", model: "openai/gpt-5",      fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.2, maxTokens: 8192, useTools: true, reasoning: { effort: "medium" } },
+  account_plan:         { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
+  opportunity_strategy: { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
+  brainstorm:           { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.9, maxTokens: 4096, useTools: true },
+  rollup:               { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.3, maxTokens: 4096, useTools: true },
 };
 
 function resolveLLMRoute(taskType: string): LLMRoute {
-  const route = ROUTES[taskType as TaskType] || ROUTES.chat_general;
+  const route = { ...(ROUTES[taskType as TaskType] || ROUTES.chat_general) };
 
-  // ── PROVIDER POLICY GUARDRAIL ──
-  const ARTIFACT_TASKS = new Set(["transform_output", "regenerate_artifact", "refine_artifact"]);
-  const RESEARCH_TASKS = new Set(["deep_research"]);
-
-  if (!ARTIFACT_TASKS.has(taskType) && (route.primaryProvider === "anthropic" || route.fallbackProvider === "anthropic")) {
-    console.error(`[POLICY VIOLATION] task=${taskType} resolved to anthropic — Claude is artifact-only. Overriding to openai.`);
+  // ── RUNTIME KEY GUARDS ──
+  if (route.primaryProvider === "openai" && !PROVIDER_HEALTH.openaiDirect) {
+    console.error(`[routing] OPENAI_API_KEY missing — cannot serve task=${taskType}`);
+    if (PROVIDER_HEALTH.anthropicDirect) {
+      console.warn(`[routing] Downgrading ${taskType} to Anthropic`);
+      route.primaryProvider = "anthropic";
+      route.model = "claude-sonnet-4-20250514";
+    }
+  }
+  if (route.primaryProvider === "perplexity" && !PROVIDER_HEALTH.perplexityDirect) {
+    console.warn(`[routing] PERPLEXITY_API_KEY missing — downgrading deep_research to OpenAI`);
     route.primaryProvider = "openai";
-    route.fallbackProvider = "openai";
     route.model = "openai/gpt-5-mini";
+  }
+  if (route.fallbackProvider === "anthropic" && !PROVIDER_HEALTH.anthropicDirect) {
+    console.warn(`[routing] ANTHROPIC_API_KEY missing — fallback downgraded to OpenAI for ${taskType}`);
+    route.fallbackProvider = "openai";
     route.fallbackModel = "openai/gpt-5";
   }
-  if (!RESEARCH_TASKS.has(taskType) && (route.primaryProvider === "perplexity" || route.fallbackProvider === "perplexity")) {
-    console.error(`[POLICY VIOLATION] task=${taskType} resolved to perplexity — Perplexity is research-only. Overriding to openai.`);
-    route.primaryProvider = "openai";
-    route.fallbackProvider = "openai";
-    route.model = "openai/gpt-5-mini";
-    route.fallbackModel = "openai/gpt-5";
-  }
-
-  // ── RUNTIME KEY GUARD: disable providers whose keys are missing ──
-  if (route.primaryProvider === "perplexity" && !PROVIDER_HEALTH.perplexity) {
-    console.warn(`[routing] Perplexity key missing — downgrading deep_research to OpenAI`);
-    route.primaryProvider = "openai";
-    route.model = "openai/gpt-5-mini";
-  }
-  if (route.primaryProvider === "anthropic" && !PROVIDER_HEALTH.anthropic) {
-    console.warn(`[routing] Anthropic key missing — downgrading to OpenAI`);
-    route.primaryProvider = "openai";
-    route.model = "openai/gpt-5-mini";
+  if (route.fallbackProvider === "openai" && !PROVIDER_HEALTH.openaiDirect) {
+    if (PROVIDER_HEALTH.anthropicDirect) {
+      route.fallbackProvider = "anthropic";
+      route.fallbackModel = "claude-sonnet-4-20250514";
+    }
   }
 
   return route;
@@ -286,8 +285,7 @@ async function callWithFallback(
       return result;
     }
 
-    // Primary failed — try fallback
-    console.warn(`[routing] primary failed: ${result.error.message}. Trying fallback=${route.fallbackProvider}`);
+    console.warn(`[routing] primary failed: ${result.error.message}. Trying fallback=${route.fallbackProvider} model=${route.fallbackModel}`);
     clearTimeout(timeout);
     const fallbackController = new AbortController();
     const fallbackTimeout = setTimeout(() => fallbackController.abort(), 55000);
@@ -305,7 +303,6 @@ async function callWithFallback(
     }
   } catch (e: any) {
     if (e.name === "AbortError") {
-      // Try fallback on timeout too
       console.warn(`[routing] primary timed out for task=${taskType}. Trying fallback=${route.fallbackProvider}`);
       const fallbackController = new AbortController();
       const fallbackTimeout = setTimeout(() => fallbackController.abort(), 55000);
@@ -333,7 +330,7 @@ async function callWithFallback(
   }
 }
 
-// Streaming-specific call (no fallback on stream — too complex)
+// Streaming call (OpenAI direct only)
 async function callStreaming(
   taskType: string,
   adapterReq: Omit<AdapterRequest, "model" | "stream">,
@@ -343,17 +340,17 @@ async function callStreaming(
   const timeout = setTimeout(() => controller.abort(), 55000);
 
   try {
-    // Only OpenAI adapter supports streaming currently
     console.log(`[routing] stream task=${taskType} provider=${route.primaryProvider} model=${route.model}`);
     const result = await openaiAdapter({ ...adapterReq, model: route.model, stream: true }, controller.signal);
     if (result.error) {
-      // Fallback to non-streaming
       console.warn(`[routing] stream failed, fallback non-stream: ${result.error.message}`);
       clearTimeout(timeout);
       const fbController = new AbortController();
       const fbTimeout = setTimeout(() => fbController.abort(), 55000);
       try {
-        const fbResult = await openaiAdapter({ ...adapterReq, model: route.model }, fbController.signal);
+        // Fall back to non-streaming with fallback provider
+        const fbAdapter = ADAPTERS[route.fallbackProvider];
+        const fbResult = await fbAdapter({ ...adapterReq, model: route.fallbackModel }, fbController.signal);
         fbResult.fallbackUsed = true;
         return fbResult;
       } finally { clearTimeout(fbTimeout); }
@@ -371,7 +368,7 @@ async function callStreaming(
 }
 
 // ═══════════════════════════════════════════════════════════
-// WORKFLOW TOOL SCHEMAS (unchanged from before)
+// WORKFLOW TOOL SCHEMAS
 // ═══════════════════════════════════════════════════════════
 const WORKFLOW_TOOLS: Record<string, any> = {
   deep_research: {
@@ -448,7 +445,7 @@ const ROLLUP_TOOL = {
 };
 
 // ═══════════════════════════════════════════════════════════
-// RETRIEVAL LAYER (unchanged)
+// RETRIEVAL LAYER
 // ═══════════════════════════════════════════════════════════
 const MAX_CONTEXT_CHARS = 14000;
 const CAPS = { memories: 15, uploads: 5, outputs: 5, messages: 15 };
@@ -602,7 +599,6 @@ async function buildContextPack(
 
   pack.sourceCount = (pack.account ? 1 : 0) + (pack.opportunity ? 1 : 0) + pack.memories.length + pack.uploads.length + pack.outputs.length;
 
-  // Update last_used_at for retrieved memories
   const memoryIds = pack.memories.map((m: any) => m.id);
   if (memoryIds.length > 0) {
     const now = new Date().toISOString();
@@ -781,7 +777,7 @@ serve(async (req) => {
   }
 });
 
-// ── Chat Handler (streaming via OpenAI/Lovable gateway) ───
+// ── Chat Handler (streaming via OpenAI direct) ────────────
 async function handleChat(
   supabase: any, threadId: string, userId: string,
   content: string, depth: string, contextSection: string, pack: ContextPack,
@@ -820,7 +816,7 @@ ${contextSection}`;
   }
 
   if (!result.rawStream) {
-    // Non-streaming fallback — save and return
+    // Non-streaming fallback
     await supabase.from("strategy_messages").insert({
       thread_id: threadId, user_id: userId, role: "assistant",
       message_type: "chat",
@@ -947,7 +943,6 @@ You MUST call the provided tool function with your structured result.`;
   let structuredData = result.structured;
   let renderedText = "";
 
-  // For Perplexity (deep_research), parse text into structured format
   if (!structuredData && workflowType === "deep_research" && result.text) {
     structuredData = {
       summary: result.text.slice(0, 500),
@@ -1077,10 +1072,4 @@ async function handleRollup(supabase: any, threadId: string, userId: string, pac
 
 function triggerRollupAsync(supabase: any, threadId: string, userId: string) {
   handleRollup(supabase, threadId, userId).catch((e) => console.error("[auto-rollup] failed:", e));
-}
-
-function handleAIError(status: number) {
-  if (status === 429) return new Response(JSON.stringify({ error: "Rate limited, try again shortly." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  if (status === 402) return new Response(JSON.stringify({ error: "Credits exhausted. Add funds in Settings." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  return new Response(JSON.stringify({ error: `AI gateway error: ${status}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }

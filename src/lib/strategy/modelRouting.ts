@@ -1,10 +1,19 @@
 /**
  * Strategy Model Routing Config — Production Multi-LLM Architecture
  * 
+ * All providers called DIRECTLY with their own API keys.
+ * No Lovable gateway in the request path.
+ * 
  * MODEL ROLES (NON-NEGOTIABLE):
  * - OpenAI (ChatGPT) = DEFAULT ENGINE — all chat, workflows, reasoning
+ *   → Direct: api.openai.com with OPENAI_API_KEY
+ *   → Fallback: Anthropic
  * - Perplexity = EXTERNAL RESEARCH ONLY — fresh web data
+ *   → Direct: api.perplexity.ai with PERPLEXITY_API_KEY
+ *   → Fallback: OpenAI
  * - Anthropic (Claude) = ARTIFACT ENGINE — transform, regenerate, refine
+ *   → Direct: api.anthropic.com with ANTHROPIC_API_KEY
+ *   → Fallback: OpenAI
  */
 
 export type StrategyTaskType =
@@ -33,19 +42,19 @@ export interface StrategyModelRoute {
 }
 
 export const STRATEGY_MODEL_ROUTES: Record<StrategyTaskType, StrategyModelRoute> = {
-  // ChatGPT = DEFAULT ENGINE — Claude NEVER used as fallback here
-  chat_general:         { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.7, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'openai/gpt-5' },
-  email_evaluation:     { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.4, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'openai/gpt-5' },
-  territory_tiering:    { provider: 'openai', model: 'openai/gpt-5',      temperature: 0.2, maxTokens: 8192, reasoning: { effort: 'medium' }, fallbackProvider: 'openai', fallbackModel: 'openai/gpt-5-mini' },
-  account_plan:         { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.5, maxTokens: 8192, fallbackProvider: 'openai', fallbackModel: 'openai/gpt-5' },
-  opportunity_strategy: { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.5, maxTokens: 8192, fallbackProvider: 'openai', fallbackModel: 'openai/gpt-5' },
-  brainstorm:           { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.9, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'openai/gpt-5' },
-  rollup:               { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.3, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'openai/gpt-5' },
+  // OpenAI = DEFAULT ENGINE — direct api.openai.com — fallback: Anthropic
+  chat_general:         { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.7, maxTokens: 4096, fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
+  email_evaluation:     { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.4, maxTokens: 4096, fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
+  territory_tiering:    { provider: 'openai', model: 'openai/gpt-5',      temperature: 0.2, maxTokens: 8192, reasoning: { effort: 'medium' }, fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
+  account_plan:         { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.5, maxTokens: 8192, fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
+  opportunity_strategy: { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.5, maxTokens: 8192, fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
+  brainstorm:           { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.9, maxTokens: 4096, fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
+  rollup:               { provider: 'openai', model: 'openai/gpt-5-mini', temperature: 0.3, maxTokens: 4096, fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
 
-  // Perplexity = EXTERNAL RESEARCH ONLY
+  // Perplexity = EXTERNAL RESEARCH ONLY — direct api.perplexity.ai
   deep_research:        { provider: 'perplexity', model: 'sonar-pro', temperature: 0.3, maxTokens: 8192, fallbackProvider: 'openai', fallbackModel: 'openai/gpt-5-mini' },
 
-  // Claude = ARTIFACT ENGINE ONLY (used in strategy-transform-output, NOT in strategy-chat)
+  // Claude = ARTIFACT ENGINE ONLY — direct api.anthropic.com
   transform_output:     { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.5, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'openai/gpt-5-mini' },
   regenerate_artifact:  { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.5, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'openai/gpt-5-mini' },
   refine_artifact:      { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.5, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'openai/gpt-5-mini' },
@@ -60,6 +69,7 @@ export function getModelDisplayName(model: string): string {
   const names: Record<string, string> = {
     'openai/gpt-5': 'GPT-5',
     'openai/gpt-5-mini': 'GPT-5 Mini',
+    'gpt-4o-mini': 'GPT-4o Mini',
     'claude-sonnet-4-20250514': 'Claude Sonnet 4',
     'sonar-pro': 'Sonar Pro',
   };

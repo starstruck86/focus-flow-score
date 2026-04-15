@@ -1,11 +1,13 @@
 /**
  * Strategy Provider Abstraction Layer
  * 
- * Defines the shape for multi-provider orchestration.
- * Architecture ready for ChatGPT, Claude, Perplexity, etc.
+ * All providers use DIRECT API calls. No Lovable gateway in the request path.
+ * - OpenAI: api.openai.com with OPENAI_API_KEY
+ * - Anthropic: api.anthropic.com with ANTHROPIC_API_KEY
+ * - Perplexity: api.perplexity.ai with PERPLEXITY_API_KEY
  */
 
-export type ProviderKey = 'lovable_ai' | 'openai' | 'anthropic' | 'perplexity';
+export type ProviderKey = 'openai' | 'anthropic' | 'perplexity';
 
 export interface ProviderCapabilities {
   streaming: boolean;
@@ -25,20 +27,6 @@ export interface ProviderConfig {
 }
 
 export const PROVIDERS: Record<ProviderKey, ProviderConfig> = {
-  lovable_ai: {
-    key: 'lovable_ai',
-    label: 'Lovable AI',
-    gateway: 'https://ai.gateway.lovable.dev/v1/chat/completions',
-    authHeader: 'Authorization',
-    capabilities: {
-      streaming: true,
-      toolCalling: true,
-      vision: true,
-      reasoning: true,
-      maxContextTokens: 128000,
-    },
-    isAvailable: true,
-  },
   openai: {
     key: 'openai',
     label: 'ChatGPT',
@@ -51,7 +39,7 @@ export const PROVIDERS: Record<ProviderKey, ProviderConfig> = {
       reasoning: true,
       maxContextTokens: 128000,
     },
-    isAvailable: false,
+    isAvailable: true,
   },
   anthropic: {
     key: 'anthropic',
@@ -65,7 +53,7 @@ export const PROVIDERS: Record<ProviderKey, ProviderConfig> = {
       reasoning: true,
       maxContextTokens: 200000,
     },
-    isAvailable: false,
+    isAvailable: true,
   },
   perplexity: {
     key: 'perplexity',
@@ -79,7 +67,7 @@ export const PROVIDERS: Record<ProviderKey, ProviderConfig> = {
       reasoning: false,
       maxContextTokens: 128000,
     },
-    isAvailable: false,
+    isAvailable: true,
   },
 };
 
@@ -93,7 +81,7 @@ export interface ResolvedRoute {
 
 /**
  * Resolve a task type to a concrete provider + model route.
- * Falls back to lovable_ai if preferred provider is unavailable.
+ * All providers are direct — no gateway intermediaries.
  */
 export function resolveRoute(
   taskType: string,
@@ -101,12 +89,6 @@ export function resolveRoute(
 ): ResolvedRoute {
   const route = routes[taskType] || routes['chat_general'];
   const provider = PROVIDERS[route.provider];
-  
-  if (!provider.isAvailable) {
-    const fallback = PROVIDERS.lovable_ai;
-    console.log(`[routing] ${route.provider} unavailable for ${taskType}, falling back to lovable_ai`);
-    return { provider: fallback, model: route.model, temperature: route.temperature, maxTokens: route.maxTokens, reasoning: route.reasoning };
-  }
 
   return { provider, model: route.model, temperature: route.temperature, maxTokens: route.maxTokens, reasoning: route.reasoning };
 }

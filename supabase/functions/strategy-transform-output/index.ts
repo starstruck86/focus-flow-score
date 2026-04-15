@@ -7,16 +7,16 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ── Provider Health Check ──────────────────────────────────
+// ── Provider Health Check (direct API keys only) ──────────
 const PROVIDER_HEALTH = {
-  anthropic: !!Deno.env.get("ANTHROPIC_API_KEY"),
-  lovableGateway: !!Deno.env.get("LOVABLE_API_KEY"),
+  anthropicDirect: !!Deno.env.get("ANTHROPIC_API_KEY"),
+  openaiDirect: !!Deno.env.get("OPENAI_API_KEY"),
 };
-console.log(`[provider-health:artifact] Anthropic: ${PROVIDER_HEALTH.anthropic ? "ENABLED" : "DISABLED"} | Lovable Gateway (OpenAI fallback): ${PROVIDER_HEALTH.lovableGateway ? "ENABLED" : "DISABLED"}`);
+console.log(`[provider-health:artifact] Anthropic direct: ${PROVIDER_HEALTH.anthropicDirect ? "ENABLED" : "DISABLED"} | OpenAI direct: ${PROVIDER_HEALTH.openaiDirect ? "ENABLED" : "DISABLED"}`);
 
 // ── Provider Adapters (artifact-specific) ──────────────────
-// Primary: Claude (Anthropic) — the artifact engine
-// Fallback: OpenAI (ChatGPT via Lovable gateway)
+// Primary: Claude (Anthropic direct) — the artifact engine
+// Fallback: OpenAI (direct api.openai.com)
 
 interface ArtifactResult {
   data: any;
@@ -67,7 +67,7 @@ async function callClaude(
 
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "");
-      console.error(`[artifact] Claude error ${resp.status}: ${errText}`);
+      console.error(`[artifact] Claude direct error ${resp.status}: ${errText.slice(0, 200)}`);
       return null;
     }
 
@@ -78,7 +78,6 @@ async function callClaude(
     }
 
     if (!structured) {
-      // Try text fallback
       let text = "";
       for (const block of (data.content || [])) {
         if (block.type === "text") text += block.text;
@@ -90,7 +89,7 @@ async function callClaude(
     return { data: structured, provider: "anthropic", model, fallbackUsed: false, latencyMs: Date.now() - start };
   } catch (e: any) {
     if (e.name === "AbortError") throw e;
-    console.error("[artifact] Claude call failed:", e);
+    console.error("[artifact] Claude direct call failed:", e);
     return null;
   }
 }
@@ -101,13 +100,16 @@ async function callOpenAI(
   tool: any,
   signal: AbortSignal,
 ): Promise<ArtifactResult | null> {
-  const key = Deno.env.get("LOVABLE_API_KEY");
-  if (!key) throw new Error("LOVABLE_API_KEY not configured");
+  const key = Deno.env.get("OPENAI_API_KEY");
+  if (!key) {
+    console.error("[artifact] OPENAI_API_KEY not configured — cannot fallback");
+    return null;
+  }
 
   const start = Date.now();
-  const model = "openai/gpt-5-mini";
+  const model = "gpt-4o-mini";
 
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     signal,
@@ -125,7 +127,8 @@ async function callOpenAI(
   });
 
   if (!resp.ok) {
-    console.error(`[artifact] OpenAI fallback error: ${resp.status}`);
+    const errText = await resp.text().catch(() => "");
+    console.error(`[artifact] OpenAI direct fallback error: ${resp.status}: ${errText.slice(0, 200)}`);
     return null;
   }
 
@@ -294,25 +297,24 @@ serve(async (req) => {
 
     console.log(`[artifact] type=${targetArtifactType} source=${sourceOutputId || parentArtifactId} refine=${!!refineInstructions}`);
 
-    // ── CALL CLAUDE (PRIMARY) → OPENAI (FALLBACK) ─────────
+    // ── CALL CLAUDE (PRIMARY) → OPENAI DIRECT (FALLBACK) ──
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 55000);
 
     let artifactResult: ArtifactResult | null = null;
     try {
-      // Primary: Claude
+      // Primary: Claude direct
       artifactResult = await callClaude(systemPrompt, userPrompt, tool, controller.signal);
 
-      // Fallback: OpenAI
+      // Fallback: OpenAI direct
       if (!artifactResult) {
-        console.log("[artifact] Claude unavailable or failed, falling back to OpenAI");
+        console.log("[artifact] Claude unavailable or failed, falling back to OpenAI direct");
         artifactResult = await callOpenAI(systemPrompt, userPrompt, tool, controller.signal);
       }
     } catch (e: any) {
       if (e.name === "AbortError") {
         clearTimeout(timeout);
-        // Try fallback on timeout
-        console.warn("[artifact] Primary timed out, trying OpenAI fallback");
+        console.warn("[artifact] Primary timed out, trying OpenAI direct fallback");
         const fbController = new AbortController();
         const fbTimeout = setTimeout(() => fbController.abort(), 55000);
         try {
