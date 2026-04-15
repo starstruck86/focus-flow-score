@@ -6,7 +6,7 @@ import { bostonNow } from '@/lib/timeFormat';
  * Live-updating Boston time clock using the canonical time pipeline.
  * Updates every 15 seconds for minimal overhead.
  */
-export function BostonClock() {
+export function BostonClock({ className }: { className?: string }) {
   const [now, setNow] = useState(bostonNow);
 
   useEffect(() => {
@@ -17,7 +17,7 @@ export function BostonClock() {
   const display = format(now, "EEE, MMM d • h:mm a");
 
   return (
-    <span className="text-[10px] text-muted-foreground whitespace-nowrap" title="Boston time (ET)">
+    <span className={`text-[10px] text-muted-foreground whitespace-nowrap ${className || ''}`} title="Boston time (ET)">
       {display} Boston
     </span>
   );
