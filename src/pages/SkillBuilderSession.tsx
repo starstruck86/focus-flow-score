@@ -72,16 +72,17 @@ export default function SkillBuilderSession() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [repScores, setRepScores] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>(
-    state?.mode === 'audio' ? 'audio' : 'visual'
+  const [deliveryMode, setDeliveryMode] = useState<AudioDeliveryMode>(
+    state?.mode === 'audio' ? 'full' : 'text'
   );
+  const [audioFailures, setAudioFailures] = useState(0);
   const { data: skillLevels } = useSkillLevels();
 
   // Dave unified controller for audio resilience
   const dave = useDaveVoiceController({
     surface: 'skill_builder',
     sessionKey: `sb-${state?.skill ?? 'unknown'}-${Date.now()}`,
-    mode: deliveryMode === 'audio' ? 'audio' : 'text',
+    mode: deliveryMode !== 'text' ? 'audio' : 'text',
   });
 
   // Lifecycle monitoring for backgrounding
