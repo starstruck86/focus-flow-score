@@ -339,35 +339,19 @@ function resolveLLMRoute(taskType: string): LLMRoute {
 
   // ── PERPLEXITY GUARDRAIL — only deep_research may use Perplexity ──
   if (route.primaryProvider === "perplexity" && taskType !== "deep_research") {
-    console.error(`[routing] GUARDRAIL: task=${taskType} tried to use Perplexity — forcing OpenAI`);
-    route.primaryProvider = "openai";
-    route.model = "openai/gpt-5-mini";
+    console.error(`[routing] GUARDRAIL: task=${taskType} tried to use Perplexity — forcing Lovable`);
+    route.primaryProvider = "lovable";
+    route.model = "google/gemini-3-flash-preview";
   }
 
   // ── RUNTIME KEY GUARDS ──
-  if (route.primaryProvider === "openai" && !PROVIDER_HEALTH.openaiDirect) {
-    console.error(`[routing] OPENAI_API_KEY missing — cannot serve task=${taskType}`);
-    if (PROVIDER_HEALTH.anthropicDirect) {
-      console.warn(`[routing] Downgrading ${taskType} to Anthropic`);
-      route.primaryProvider = "anthropic";
-      route.model = "claude-sonnet-4-20250514";
-    }
-  }
   if (route.primaryProvider === "perplexity" && !PROVIDER_HEALTH.perplexityDirect) {
-    console.warn(`[routing] PERPLEXITY_API_KEY missing — downgrading deep_research to OpenAI`);
-    route.primaryProvider = "openai";
-    route.model = "openai/gpt-5-mini";
+    console.warn(`[routing] PERPLEXITY_API_KEY missing — downgrading deep_research to Lovable`);
+    route.primaryProvider = "lovable";
+    route.model = "google/gemini-3-flash-preview";
   }
-  if (route.fallbackProvider === "anthropic" && !PROVIDER_HEALTH.anthropicDirect) {
-    console.warn(`[routing] ANTHROPIC_API_KEY missing — fallback downgraded to OpenAI for ${taskType}`);
-    route.fallbackProvider = "openai";
-    route.fallbackModel = "openai/gpt-5";
-  }
-  if (route.fallbackProvider === "openai" && !PROVIDER_HEALTH.openaiDirect) {
-    if (PROVIDER_HEALTH.anthropicDirect) {
-      route.fallbackProvider = "anthropic";
-      route.fallbackModel = "claude-sonnet-4-20250514";
-    }
+  if (route.primaryProvider === "lovable" && !PROVIDER_HEALTH.lovableGateway) {
+    console.error(`[routing] LOVABLE_API_KEY missing — cannot serve task=${taskType}`);
   }
 
   return route;
