@@ -309,6 +309,22 @@ export default function SkillBuilderSession() {
     });
   }, [currentBlockIndex, deliveryMode, sessionState]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Browser visibility guard: pause audio when page hidden ──
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (deliveryMode !== 'text') {
+          dave.stopSpeaking();
+          emitStepTelemetry('audio_interrupt', 'visibility', { reason: 'page_hidden' });
+        }
+      } else {
+        emitStepTelemetry('step_rendered', 'visibility', { reason: 'page_visible', mode: deliveryMode });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [deliveryMode, dave]);
+
   const toggleMode = useCallback(async () => {
     if (deliveryMode === 'text') {
       const unlocked = await unlockAudio();
