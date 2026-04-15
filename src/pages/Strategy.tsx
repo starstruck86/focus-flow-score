@@ -3,6 +3,26 @@
  * Three-column layout: thread sidebar (drawer on mobile), main working area, right rail.
  */
 import { useState, useCallback } from 'react';
+import { Layout } from '@/components/Layout';
+import { StrategyThreadSidebar } from '@/components/strategy/StrategyThreadSidebar';
+import { StrategyMainPanel } from '@/components/strategy/StrategyMainPanel';
+import { StrategyRightRail } from '@/components/strategy/StrategyRightRail';
+import { CreateThreadDialog } from '@/components/strategy/CreateThreadDialog';
+import type { CreateThreadOpts } from '@/components/strategy/CreateThreadDialog';
+import { useStrategyThreads } from '@/hooks/strategy/useStrategyThreads';
+import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
+import { useStrategyMemory } from '@/hooks/strategy/useStrategyMemory';
+import { useStrategyOutputs } from '@/hooks/strategy/useStrategyOutputs';
+import { useStrategyArtifacts } from '@/hooks/strategy/useStrategyArtifacts';
+import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
+import { useStrategyRollups } from '@/hooks/strategy/useStrategyRollups';
+import { useIsMobile } from '@/hooks/use-mobile';
+import {
+  Drawer, DrawerContent, DrawerTrigger, DrawerTitle,
+} from '@/components/ui/drawer';
+import { Button } from '@/components/ui/button';
+import { PanelLeftOpen } from 'lucide-react';
+import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 
 export default function Strategy() {
   const isMobile = useIsMobile();
@@ -93,7 +113,10 @@ export default function Strategy() {
 
   return (
     <Layout>
-      <StrategyShell>
+      <div
+        className="flex overflow-hidden"
+        style={{ height: 'calc(100dvh - var(--shell-nav-height, 101) * 1px - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px) - 190px)' }}
+      >
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
 
@@ -153,7 +176,7 @@ export default function Strategy() {
           onOpenChange={setCreateDialogOpen}
           onCreateThread={handleCreateThreadWithOpts}
         />
-      </StrategyShell>
+      </div>
     </Layout>
   );
 }
