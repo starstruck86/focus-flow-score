@@ -827,7 +827,11 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { action, threadId, content, workflowType, depth } = body;
+    const { action, threadId, content, workflowType, depth, force_primary_failure } = body;
+
+    // Smoke test mode: allow forced fallback only when SMOKE_TEST_MODE env is set
+    const smokeTestMode = Deno.env.get("SMOKE_TEST_MODE") === "true";
+    const forceFallback = smokeTestMode && force_primary_failure === true;
 
     if (!threadId) {
       return new Response(JSON.stringify({ error: "threadId required" }), {
