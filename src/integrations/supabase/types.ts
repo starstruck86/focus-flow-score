@@ -5849,7 +5849,9 @@ export type Database = {
           last_used_at: string | null
           linked_account_id: string | null
           linked_opportunity_id: string | null
+          model_used: string | null
           parent_artifact_id: string | null
+          provider_used: string | null
           rendered_text: string | null
           source_chain: string[] | null
           source_output_id: string | null
@@ -5868,7 +5870,9 @@ export type Database = {
           last_used_at?: string | null
           linked_account_id?: string | null
           linked_opportunity_id?: string | null
+          model_used?: string | null
           parent_artifact_id?: string | null
+          provider_used?: string | null
           rendered_text?: string | null
           source_chain?: string[] | null
           source_output_id?: string | null
@@ -5887,7 +5891,9 @@ export type Database = {
           last_used_at?: string | null
           linked_account_id?: string | null
           linked_opportunity_id?: string | null
+          model_used?: string | null
           parent_artifact_id?: string | null
+          provider_used?: string | null
           rendered_text?: string | null
           source_chain?: string[] | null
           source_output_id?: string | null
@@ -5948,8 +5954,12 @@ export type Database = {
           citations_json: Json | null
           content_json: Json
           created_at: string
+          fallback_used: boolean | null
           id: string
+          latency_ms: number | null
           message_type: string
+          model_used: string | null
+          provider_used: string | null
           role: string
           thread_id: string
           user_id: string
@@ -5958,8 +5968,12 @@ export type Database = {
           citations_json?: Json | null
           content_json?: Json
           created_at?: string
+          fallback_used?: boolean | null
           id?: string
+          latency_ms?: number | null
           message_type?: string
+          model_used?: string | null
+          provider_used?: string | null
           role?: string
           thread_id: string
           user_id: string
@@ -5968,8 +5982,12 @@ export type Database = {
           citations_json?: Json | null
           content_json?: Json
           created_at?: string
+          fallback_used?: boolean | null
           id?: string
+          latency_ms?: number | null
           message_type?: string
+          model_used?: string | null
+          provider_used?: string | null
           role?: string
           thread_id?: string
           user_id?: string
@@ -6039,12 +6057,16 @@ export type Database = {
         Row: {
           content_json: Json
           created_at: string
+          fallback_used: boolean | null
           id: string
           is_pinned: boolean
+          latency_ms: number | null
           linked_account_id: string | null
           linked_opportunity_id: string | null
           linked_territory_id: string | null
+          model_used: string | null
           output_type: string
+          provider_used: string | null
           rendered_text: string | null
           thread_id: string | null
           title: string
@@ -6055,12 +6077,16 @@ export type Database = {
         Insert: {
           content_json?: Json
           created_at?: string
+          fallback_used?: boolean | null
           id?: string
           is_pinned?: boolean
+          latency_ms?: number | null
           linked_account_id?: string | null
           linked_opportunity_id?: string | null
           linked_territory_id?: string | null
+          model_used?: string | null
           output_type?: string
+          provider_used?: string | null
           rendered_text?: string | null
           thread_id?: string | null
           title?: string
@@ -6071,12 +6097,16 @@ export type Database = {
         Update: {
           content_json?: Json
           created_at?: string
+          fallback_used?: boolean | null
           id?: string
           is_pinned?: boolean
+          latency_ms?: number | null
           linked_account_id?: string | null
           linked_opportunity_id?: string | null
           linked_territory_id?: string | null
+          model_used?: string | null
           output_type?: string
+          provider_used?: string | null
           rendered_text?: string | null
           thread_id?: string | null
           title?: string

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Copy, Save, ChevronDown, ChevronUp, Database, FileText, Sparkles,
-  Brain, Upload as UploadIcon, MessageSquare, Eye, GitBranch,
+  Brain, Upload as UploadIcon, MessageSquare, Eye, GitBranch, Cpu,
   Mail, Target, Map, Zap, ArrowRight, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,6 +30,8 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
   const sourcesUsed = contentJson?.sources_used;
   const retrievalMeta = contentJson?.retrieval_meta;
   const modelUsed = contentJson?.model_used;
+  const providerUsed = contentJson?.provider_used;
+  const fallbackUsed = contentJson?.fallback_used;
 
   if (message.message_type === 'workflow_update') {
     return (
@@ -61,6 +63,8 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         sourcesUsed={sourcesUsed}
         retrievalMeta={retrievalMeta}
         modelUsed={modelUsed}
+        providerUsed={providerUsed}
+        fallbackUsed={fallbackUsed}
         contentJson={contentJson}
         onSaveAsMemory={onSaveAsMemory}
         onTransformOutput={onTransformOutput}
@@ -85,11 +89,28 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         <div className="whitespace-pre-wrap">{text || JSON.stringify(message.content_json)}</div>
         {!isUser && !isSystem && (
           <div className="mt-2 space-y-1.5">
+            {/* Provider + model pill */}
+            {providerUsed && (
+              <div className="flex items-center gap-1 flex-wrap">
+                <Badge variant="outline" className="text-[8px] px-1.5 py-0 gap-1 font-normal">
+                  <Cpu className="h-2 w-2" />
+                  {providerUsed === 'openai' ? 'ChatGPT' : providerUsed === 'anthropic' ? 'Claude' : providerUsed === 'perplexity' ? 'Perplexity' : providerUsed}
+                  {modelUsed ? ` · ${modelUsed.split('/').pop()}` : ''}
+                </Badge>
+                {fallbackUsed && (
+                  <Badge variant="destructive" className="text-[7px] px-1 py-0 font-normal">
+                    fallback
+                  </Badge>
+                )}
+              </div>
+            )}
             {(sourcesUsed != null && sourcesUsed > 0) || retrievalMeta || modelUsed ? (
               <SourceInspectorPanel
                 sourcesUsed={sourcesUsed ?? 0}
                 retrievalMeta={retrievalMeta}
                 modelUsed={modelUsed}
+                providerUsed={providerUsed}
+                fallbackUsed={fallbackUsed}
               />
             ) : null}
             {onSaveAsMemory && text && (
@@ -263,7 +284,7 @@ const OUTPUT_ACTIONS = [
 // ── Structured Result Card ────────────────────────────────
 function StructuredResultCard({
   text, structured, workflowType, sourcesUsed, retrievalMeta, modelUsed,
-  contentJson, onSaveAsMemory, onTransformOutput, onBranchThread, isTransforming,
+  providerUsed, fallbackUsed, contentJson, onSaveAsMemory, onTransformOutput, onBranchThread, isTransforming,
 }: {
   text: string;
   structured?: any;
@@ -271,6 +292,8 @@ function StructuredResultCard({
   sourcesUsed?: number;
   retrievalMeta?: any;
   modelUsed?: string;
+  providerUsed?: string;
+  fallbackUsed?: boolean;
   contentJson?: any;
   onSaveAsMemory?: (content: string, type: string) => void;
   onTransformOutput?: (sourceOutputId: string, targetArtifactType: string) => void;
@@ -338,6 +361,8 @@ function StructuredResultCard({
               sourcesUsed={sourcesUsed ?? 0}
               retrievalMeta={retrievalMeta}
               modelUsed={modelUsed}
+              providerUsed={providerUsed}
+              fallbackUsed={fallbackUsed}
               workflowType={workflowType}
             />
           </div>
