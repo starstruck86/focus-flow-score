@@ -173,7 +173,7 @@ export default function Strategy() {
           onOpenChange={setCreateDialogOpen}
           onCreateThread={handleCreateThreadWithOpts}
         />
-      </div>
+      </StrategyShell>
     </Layout>
   );
 }
