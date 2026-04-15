@@ -251,6 +251,7 @@ interface LLMRoute {
   maxTokens: number;
   useTools: boolean;
   reasoning?: { effort: string };
+  _smokeTestForceFail?: boolean;
 }
 
 // PROVIDER POLICY:
