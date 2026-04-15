@@ -23,6 +23,7 @@ import type { StrategyMemoryEntry } from '@/hooks/strategy/useStrategyMemory';
 import type { StrategyUpload } from '@/hooks/strategy/useStrategyUploads';
 import { getParseStatus } from '@/hooks/strategy/useStrategyUploads';
 import type { StrategyRollup, MemorySuggestion } from '@/lib/strategy/workflowSchemas';
+import { ArtifactDetailModal } from './ArtifactDetailModal';
 
 interface Props {
   thread: StrategyThread;
@@ -38,6 +39,7 @@ interface Props {
   isRollupLoading: boolean;
   onTriggerRollup: () => void;
   onRegenerateArtifact?: (artifactId: string, artifactType: string) => Promise<StrategyArtifact | null>;
+  isTransforming?: boolean;
 }
 
 const MEMORY_TYPES = [
@@ -91,12 +93,14 @@ function RailSection({ title, icon: Icon, children, empty, count, action }: {
 
 export function StrategyRightRail({
   thread, onCollapse, linkedContext, memories, uploads, outputs, artifacts,
-  onSaveMemory, rollup, memorySuggestions, isRollupLoading, onTriggerRollup, onRegenerateArtifact,
+  onSaveMemory, rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
+  onRegenerateArtifact, isTransforming,
 }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
   const [memContent, setMemContent] = useState('');
   const [savedSuggestions, setSavedSuggestions] = useState<Set<number>>(new Set());
+  const [selectedArtifact, setSelectedArtifact] = useState<StrategyArtifact | null>(null);
 
   const pinnedMemories = useMemo(() => memories.filter(m => m.is_pinned), [memories]);
   const risks = useMemo(() => memories.filter(m => m.memory_type === 'risk').slice(0, 5), [memories]);
@@ -149,7 +153,6 @@ export function StrategyRightRail({
                     </p>
                   </div>
                 </div>
-                {/* Extended account detail */}
                 <div className="space-y-0.5 pl-0.5">
                   {linkedContext.account.website && (
                     <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
@@ -382,12 +385,16 @@ export function StrategyRightRail({
 
         <Divider />
 
-        {/* Artifacts */}
+        {/* Artifacts — clickable to open modal */}
         <RailSection title="Artifacts" icon={Sparkles} count={artifacts.length} empty="Transform outputs into reusable assets">
           {artifacts.length > 0 && (
             <div className="space-y-1.5">
-              {artifacts.slice(0, 5).map(a => (
-                <ArtifactRailCard key={a.id} artifact={a} onRegenerate={onRegenerateArtifact} />
+              {artifacts.slice(0, 8).map(a => (
+                <ArtifactRailCard
+                  key={a.id}
+                  artifact={a}
+                  onClick={() => setSelectedArtifact(a)}
+                />
               ))}
             </div>
           )}
@@ -429,6 +436,16 @@ export function StrategyRightRail({
           </Button>
         </div>
       </ScrollArea>
+
+      {/* Artifact Detail Modal */}
+      <ArtifactDetailModal
+        artifact={selectedArtifact}
+        allArtifacts={artifacts}
+        open={!!selectedArtifact}
+        onOpenChange={(open) => { if (!open) setSelectedArtifact(null); }}
+        onRegenerate={onRegenerateArtifact}
+        isTransforming={isTransforming}
+      />
     </div>
   );
 }
@@ -490,51 +507,24 @@ const ARTIFACT_TYPE_ICONS: Record<string, typeof FileText> = {
   next_steps: ArrowRight,
 };
 
-function ArtifactRailCard({ artifact, onRegenerate }: {
+function ArtifactRailCard({ artifact, onClick }: {
   artifact: StrategyArtifact;
-  onRegenerate?: (id: string, type: string) => Promise<StrategyArtifact | null>;
+  onClick: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const TypeIcon = ARTIFACT_TYPE_ICONS[artifact.artifact_type] || FileText;
   const typeLabel = artifact.artifact_type.replace(/_/g, ' ');
 
-  const copyContent = () => {
-    navigator.clipboard.writeText(artifact.rendered_text || JSON.stringify(artifact.content_json, null, 2));
-    toast.success('Copied');
-  };
-
   return (
-    <div className="bg-muted/20 rounded-lg border border-border/20 overflow-hidden">
-      <button
-        className="w-full px-2.5 py-2 flex items-center gap-1.5 text-left hover:bg-muted/30 transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <TypeIcon className="h-3 w-3 text-primary/70 shrink-0" />
-        <span className="text-[11px] font-medium truncate flex-1">{artifact.title}</span>
-        <Badge variant="outline" className="text-[8px] px-1 py-0 capitalize shrink-0">{typeLabel}</Badge>
-        {artifact.version > 1 && (
-          <Badge variant="secondary" className="text-[7px] px-1 py-0">v{artifact.version}</Badge>
-        )}
-      </button>
-      {expanded && (
-        <div className="border-t border-border/20 px-2.5 py-2 space-y-1.5">
-          <p className="text-[9px] text-foreground/70 line-clamp-4 leading-relaxed whitespace-pre-wrap">
-            {(artifact.rendered_text || '').slice(0, 300)}
-          </p>
-          <div className="flex gap-1">
-            <Button size="sm" variant="ghost" className="h-5 text-[9px] px-1.5 gap-0.5" onClick={copyContent}>
-              <Copy className="h-2 w-2" /> Copy
-            </Button>
-            {onRegenerate && (
-              <Button size="sm" variant="ghost" className="h-5 text-[9px] px-1.5 gap-0.5"
-                onClick={() => onRegenerate(artifact.id, artifact.artifact_type)}
-              >
-                <RefreshCw className="h-2 w-2" /> New Version
-              </Button>
-            )}
-          </div>
-        </div>
+    <button
+      className="w-full bg-muted/20 rounded-lg border border-border/20 overflow-hidden px-2.5 py-2 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors"
+      onClick={onClick}
+    >
+      <TypeIcon className="h-3 w-3 text-primary/70 shrink-0" />
+      <span className="text-[11px] font-medium truncate flex-1">{artifact.title}</span>
+      <Badge variant="outline" className="text-[8px] px-1 py-0 capitalize shrink-0">{typeLabel}</Badge>
+      {artifact.version > 1 && (
+        <Badge variant="secondary" className="text-[7px] px-1 py-0">v{artifact.version}</Badge>
       )}
-    </div>
+    </button>
   );
 }

@@ -15,6 +15,7 @@ import { useStrategyOutputs } from '@/hooks/strategy/useStrategyOutputs';
 import { useStrategyArtifacts } from '@/hooks/strategy/useStrategyArtifacts';
 import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
 import { useStrategyRollups } from '@/hooks/strategy/useStrategyRollups';
+import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { SHELL } from '@/lib/layout';
 
 export default function Strategy() {
@@ -44,6 +45,9 @@ export default function Strategy() {
   const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
   const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
 
+  // Get sendMessage for branch seeding
+  const { sendMessage: sendBranchMessage } = useStrategyMessages(null);
+
   const handleWorkflowComplete = useCallback(() => {
     refetchOutputs();
     refetchRollup();
@@ -54,14 +58,35 @@ export default function Strategy() {
     createThreadWithOpts(opts);
   }, [createThreadWithOpts]);
 
-  const handleBranchThread = useCallback((title: string, content: string) => {
-    createThread(title, 'strategy', 'freeform');
+  const handleBranchThread = useCallback(async (title: string, content: string) => {
+    // Create a new thread with context carried forward
+    const newThread = await createThread(title, 'strategy', 'freeform');
+    // The thread is created and auto-selected via setActiveThreadId in createThread
+    // We'll insert a seed message via the edge function after thread creation
+    if (newThread && content) {
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await (supabase as any).from('strategy_messages').insert({
+            thread_id: newThread,
+            user_id: user.id,
+            role: 'system',
+            message_type: 'system',
+            content_json: {
+              text: `This thread continues from a previous analysis.\n\n---\n\n${content}`,
+            },
+          });
+        }
+      } catch (e) {
+        console.error('Failed to seed branch thread:', e);
+      }
+    }
   }, [createThread]);
 
   const handleTransformOutput = useCallback(async (sourceOutputId: string, targetArtifactType: string) => {
     const artifact = await transformOutput(sourceOutputId, targetArtifactType);
     if (artifact) {
-      // Refresh messages to show the artifact card in thread
       handleWorkflowComplete();
     }
   }, [transformOutput, handleWorkflowComplete]);
@@ -114,6 +139,7 @@ export default function Strategy() {
           isRollupLoading={isRollupLoading}
           onTriggerRollup={triggerRollup}
           onRegenerateArtifact={regenerateArtifact}
+          isTransforming={isTransforming}
         />
       )}
 
