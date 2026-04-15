@@ -11,7 +11,7 @@ const corsHeaders = {
 // LAYER 1 — DIRECT PROVIDER ADAPTERS
 // No Lovable gateway — all providers called directly.
 // ═══════════════════════════════════════════════════════════
-type ProviderKey = "openai" | "anthropic" | "perplexity";
+type ProviderKey = "openai" | "anthropic" | "perplexity" | "lovable";
 
 interface NormalizedResponse {
   text: string;
@@ -229,12 +229,65 @@ async function perplexityAdapter(req: AdapterRequest, signal: AbortSignal): Prom
   return { text, citations, provider: "perplexity", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
 }
 
+// ── Lovable AI Gateway Adapter ────────────────────────────
+async function lovableAdapter(req: AdapterRequest, signal: AbortSignal): Promise<NormalizedResponse> {
+  const start = Date.now();
+  const key = Deno.env.get("LOVABLE_API_KEY");
+  if (!key) {
+    return { text: "", provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+      error: { type: "config", message: "LOVABLE_API_KEY not configured" } };
+  }
+
+  const body: any = {
+    model: req.model,
+    messages: req.messages,
+    temperature: req.temperature ?? 0.7,
+  };
+  if (req.maxTokens) body.max_tokens = req.maxTokens;
+  if (req.tools?.length) {
+    body.tools = req.tools;
+    if (req.toolChoice) body.tool_choice = req.toolChoice;
+  }
+  if (req.reasoning) body.reasoning = req.reasoning;
+
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => "");
+    console.error(`[lovable-gateway] error ${resp.status}: ${errText.slice(0, 200)}`);
+    return { text: "", provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+      error: { type: `http_${resp.status}`, message: `Lovable gateway error: ${resp.status}` } };
+  }
+
+  const data = await resp.json();
+  const choice = data.choices?.[0];
+  if (!choice) {
+    return { text: "", provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+      error: { type: "empty_response", message: "Lovable gateway returned no choices" } };
+  }
+
+  let text = choice.message?.content || "";
+  let structured: any = undefined;
+  const toolCall = choice.message?.tool_calls?.[0];
+  if (toolCall?.function?.arguments) {
+    try { structured = JSON.parse(toolCall.function.arguments); } catch { /* ignore */ }
+  }
+
+  return { text, structured, provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
+}
+
 type AdapterFn = (req: AdapterRequest, signal: AbortSignal) => Promise<NormalizedResponse>;
 
 const ADAPTERS: Record<ProviderKey, AdapterFn> = {
   openai: openaiAdapter,
   anthropic: anthropicAdapter,
   perplexity: perplexityAdapter,
+  lovable: lovableAdapter,
 };
 
 // ═══════════════════════════════════════════════════════════
