@@ -229,6 +229,7 @@ export default function SkillBuilderSession() {
     clearIdempotencyRecords();
     clearAudioTelemetry();
     clearActivePlayback();
+    clearLifecycles();
 
     if (!sessionId) return;
 
