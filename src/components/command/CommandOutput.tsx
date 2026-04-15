@@ -324,18 +324,18 @@ export function CommandOutput({
               )}
 
               {hasBlocks ? (
-                <div className="space-y-10">
+                <div className="divide-y divide-border/6">
                   {blocks.map((block, i) => {
                     const semantic = classifySectionHeading(block.heading);
                     const accent = SEMANTIC_ACCENT[semantic];
 
                     return (
-                      <section key={i} className="group relative">
+                      <section key={i} className={cn('group relative', i > 0 ? 'pt-8' : '', 'pb-6')}>
                         {block.heading && (
-                          <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center justify-between mb-5">
                             <div className="flex items-center gap-2">
                               <accent.Icon className={cn('h-3.5 w-3.5 shrink-0', accent.color)} />
-                              <h3 className="text-[14px] font-semibold text-foreground/75 tracking-tight uppercase">
+                              <h3 className="text-[13px] font-semibold text-foreground/60 tracking-[0.06em] uppercase">
                                 {block.heading}
                               </h3>
                             </div>
