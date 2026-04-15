@@ -16,35 +16,53 @@ import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
 import type { OutputBlock } from '@/lib/commandTypes';
 
-/* ── Post-process markdown for mobile scanability ── */
+/* ── Post-process markdown for premium document scanability ── */
 
 function enhanceReadability(md: string): string {
-  return md
-    .split('\n\n')
-    .flatMap(para => {
-      // Don't split headings, lists, blockquotes, code
-      if (/^[#\-\*\d+\.\>```]/.test(para.trim())) return [para];
-      // Split long paragraphs (>280 chars) at sentence boundaries
-      if (para.length > 280) {
-        const sentences = para.match(/[^.!?]+[.!?]+\s*/g);
-        if (sentences && sentences.length > 2) {
-          const chunks: string[] = [];
-          let current = '';
-          for (const s of sentences) {
-            if ((current + s).length > 200 && current.length > 0) {
-              chunks.push(current.trim());
-              current = s;
-            } else {
-              current += s;
-            }
+  const blocks = md.split('\n\n');
+  const enhanced: string[] = [];
+
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+
+    // Don't touch headings, lists, blockquotes, code blocks, or HR
+    if (/^[#\-\*\d+\.\>```\|---]/.test(trimmed)) {
+      enhanced.push(trimmed);
+      continue;
+    }
+
+    // Detect inline labeled patterns like "**Why it works:** ..." and promote to mini-blocks
+    const labelMatch = trimmed.match(/^\*\*([^*]+):\*\*\s*(.+)/);
+    if (labelMatch) {
+      enhanced.push(`**${labelMatch[1]}**\n\n${labelMatch[2]}`);
+      continue;
+    }
+
+    // Split long paragraphs (>220 chars) at sentence boundaries → 1-3 sentence chunks
+    if (trimmed.length > 220) {
+      const sentences = trimmed.match(/[^.!?]+[.!?]+\s*/g);
+      if (sentences && sentences.length > 2) {
+        const chunks: string[] = [];
+        let current = '';
+        for (const s of sentences) {
+          if ((current + s).length > 180 && current.length > 0) {
+            chunks.push(current.trim());
+            current = s;
+          } else {
+            current += s;
           }
-          if (current.trim()) chunks.push(current.trim());
-          return chunks;
         }
+        if (current.trim()) chunks.push(current.trim());
+        enhanced.push(...chunks);
+        continue;
       }
-      return [para];
-    })
-    .join('\n\n');
+    }
+
+    enhanced.push(trimmed);
+  }
+
+  return enhanced.join('\n\n');
 }
 
 /* ── Section semantics ── */
