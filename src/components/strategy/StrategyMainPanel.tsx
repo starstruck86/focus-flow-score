@@ -321,7 +321,7 @@ export function StrategyMainPanel({
 
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="px-3 py-2">
+        <div className="px-3 py-1.5">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -463,42 +463,40 @@ export function StrategyMainPanel({
 
       {/* ── Workflow overflow sheet (mobile) ── */}
       <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[50vh]">
-          <SheetHeader className="pb-3">
-            <SheetTitle className="text-sm">All Workflows</SheetTitle>
-            <SheetDescription className="text-xs text-foreground/60">
-              Choose a workflow to run on this thread
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[45vh]">
+          <SheetHeader className="pb-2">
+            <SheetTitle className="text-sm">Workflows</SheetTitle>
+            <SheetDescription className="text-[11px] text-foreground/50">
+              Run a workflow on this thread
             </SheetDescription>
           </SheetHeader>
-          <div className="grid grid-cols-2 gap-2 pb-4">
+          <div className="grid grid-cols-2 gap-1.5 pb-3">
             {WORKFLOWS.map(w => {
               const isRunning = activeWorkflow === w.key;
               const isRecommended = recommendedWorkflows.includes(w.key);
               return (
-                <Button
+                <button
                   key={w.key}
-                  variant="outline"
                   className={cn(
-                    'h-auto py-3 px-3 flex flex-col items-start gap-1 text-left',
+                    'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left transition-colors',
+                    'border-border/60 hover:bg-muted/40',
                     isRecommended && 'border-primary/20',
-                    isRunning && 'border-primary/40 bg-primary/5'
+                    isRunning && 'border-primary/40 bg-primary/5',
+                    (isSending || !!activeWorkflow) && 'opacity-50 pointer-events-none'
                   )}
-                  disabled={isSending || !!activeWorkflow}
                   onClick={() => handleWorkflow(w.key)}
+                  disabled={isSending || !!activeWorkflow}
                 >
-                  <div className="flex items-center gap-1.5">
-                    {isRunning ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                    ) : (
-                      <w.icon className={cn('h-3.5 w-3.5', isRecommended ? 'text-primary' : 'text-foreground/60')} />
-                    )}
-                    <span className="text-xs font-medium">{w.label}</span>
-                    {isRecommended && (
-                      <Badge variant="secondary" className="text-[8px] px-1 py-0 h-3.5 ml-auto">rec</Badge>
-                    )}
+                  {isRunning ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                  ) : (
+                    <w.icon className={cn('h-3.5 w-3.5 shrink-0', isRecommended ? 'text-primary' : 'text-foreground/50')} />
+                  )}
+                  <div className="min-w-0">
+                    <span className="text-xs font-medium block">{w.label}</span>
+                    <span className="text-[10px] text-foreground/40 leading-tight block truncate">{w.description}</span>
                   </div>
-                  <span className="text-[10px] text-foreground/50 leading-tight">{w.description}</span>
-                </Button>
+                </button>
               );
             })}
           </div>
