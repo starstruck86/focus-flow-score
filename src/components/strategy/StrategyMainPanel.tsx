@@ -222,7 +222,7 @@ export function StrategyMainPanel({
       {/* ── HEADER REGION ── */}
       <div className="shrink-0 border-b border-border/60">
         {/* Title + workflows in one tight block */}
-        <div className="px-3 py-1.5 flex items-center gap-2">
+        <div className="px-3 py-1 flex items-center gap-2">
           {sidebarCollapsed && (
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExpandSidebar}>
               <PanelLeftOpen className="h-4 w-4" />
@@ -243,7 +243,7 @@ export function StrategyMainPanel({
         </div>
 
         {/* Workflow row — tight, with running state and overflow */}
-        <div className="px-3 pb-1.5 flex items-center gap-1">
+        <div className="px-3 pb-1 flex items-center gap-1">
           {/* Context badges — desktop only */}
           {!isMobile && (
             <>
@@ -298,23 +298,23 @@ export function StrategyMainPanel({
               );
             })}
 
-            {/* Overflow — styled chip control */}
+            {/* Overflow — explicit workflows control */}
             {overflowWorkflows.length > 0 && (
               <button
-                className="h-6 px-2.5 text-[10px] font-medium text-foreground/50 hover:text-foreground border border-border/50 hover:border-border rounded-md transition-colors shrink-0 flex items-center gap-1"
+                className="h-6 px-2 text-[10px] font-medium text-foreground/50 hover:text-foreground border border-border/50 hover:border-border rounded-md transition-colors shrink-0 flex items-center gap-1"
                 onClick={() => setWorkflowSheetOpen(true)}
               >
                 <Zap className="h-2.5 w-2.5" />
-                +{overflowWorkflows.length}
+                +{overflowWorkflows.length} workflows
               </button>
             )}
 
-            {/* Running status — inline with workflows, not in title */}
+            {/* Running status — inline, tied to workflow row */}
             {activeWorkflow && (
-              <Badge variant="secondary" className="text-[10px] gap-1 shrink-0 animate-pulse font-medium ml-auto">
-                <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                {activeWorkflowLabel}
-              </Badge>
+              <span className="text-[10px] text-primary/70 font-medium shrink-0 flex items-center gap-1 ml-auto">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {activeWorkflowLabel}…
+              </span>
             )}
           </div>
         </div>
@@ -322,14 +322,14 @@ export function StrategyMainPanel({
 
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="px-3 py-1">
+        <div className="px-3 py-0.5">
           {isLoading ? (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex items-center justify-center py-6">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 gap-3">
-              <div className="h-10 w-10 rounded-xl bg-muted/50 flex items-center justify-center">
+            <div className="flex flex-col items-center justify-center py-6 gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-muted/50 flex items-center justify-center">
                 <ThreadIcon className="h-5 w-5 text-foreground/40" />
               </div>
               <div className="text-center space-y-1">
@@ -356,7 +356,7 @@ export function StrategyMainPanel({
               </div>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {messages.map((m, i) => {
                 const prevRole = i > 0 ? messages[i - 1].role : null;
                 const roleSwitch = prevRole && prevRole !== m.role && prevRole !== 'system' && m.role !== 'system';
@@ -412,9 +412,9 @@ export function StrategyMainPanel({
             placeholder={isSending ? 'Waiting…' : hasLinkedObject ? `Message about ${linkedContext?.account?.name || linkedContext?.opportunity?.name || 'this'}…` : 'Message…'}
             className={cn(
               'w-full border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none text-sm resize-none bg-transparent',
-              isMobile ? 'min-h-[48px]' : 'min-h-[40px]'
+              isMobile ? 'min-h-[40px]' : 'min-h-[36px]'
             )}
-            rows={isMobile ? 2 : 1}
+            rows={1}
             disabled={isSending}
           />
           {/* Controls bar */}
