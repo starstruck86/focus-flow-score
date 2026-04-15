@@ -31,9 +31,9 @@ export default function Strategy() {
   useEffect(() => {
     const main = document.querySelector('main[data-testid="main-content"]');
     if (!main) return;
-    main.classList.add('!overflow-hidden', '!flex', '!flex-col', '!p-0', '!pb-0');
+    main.classList.add('!overflow-hidden', '!flex', '!flex-col');
     return () => {
-      main.classList.remove('!overflow-hidden', '!flex', '!flex-col', '!p-0', '!pb-0');
+      main.classList.remove('!overflow-hidden', '!flex', '!flex-col');
     };
   }, []);
   const {
@@ -123,7 +123,7 @@ export default function Strategy() {
 
   return (
     <Layout>
-      <div className="flex flex-1 min-h-0 overflow-hidden pb-[calc(var(--shell-nav-height,101)*1px+env(safe-area-inset-bottom,0px))]">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
 
