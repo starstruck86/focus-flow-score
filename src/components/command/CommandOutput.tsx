@@ -16,35 +16,53 @@ import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
 import type { OutputBlock } from '@/lib/commandTypes';
 
-/* ── Post-process markdown for mobile scanability ── */
+/* ── Post-process markdown for premium document scanability ── */
 
 function enhanceReadability(md: string): string {
-  return md
-    .split('\n\n')
-    .flatMap(para => {
-      // Don't split headings, lists, blockquotes, code
-      if (/^[#\-\*\d+\.\>```]/.test(para.trim())) return [para];
-      // Split long paragraphs (>280 chars) at sentence boundaries
-      if (para.length > 280) {
-        const sentences = para.match(/[^.!?]+[.!?]+\s*/g);
-        if (sentences && sentences.length > 2) {
-          const chunks: string[] = [];
-          let current = '';
-          for (const s of sentences) {
-            if ((current + s).length > 200 && current.length > 0) {
-              chunks.push(current.trim());
-              current = s;
-            } else {
-              current += s;
-            }
+  const blocks = md.split('\n\n');
+  const enhanced: string[] = [];
+
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+
+    // Don't touch headings, lists, blockquotes, code blocks, or HR
+    if (/^[#\-*\d>|`]/.test(trimmed) || trimmed.startsWith('---')) {
+      enhanced.push(trimmed);
+      continue;
+    }
+
+    // Detect inline labeled patterns like "**Why it works:** ..." and promote to mini-blocks
+    const labelMatch = trimmed.match(/^\*\*([^*]+):\*\*\s*(.+)/);
+    if (labelMatch) {
+      enhanced.push(`**${labelMatch[1]}**\n\n${labelMatch[2]}`);
+      continue;
+    }
+
+    // Split long paragraphs (>220 chars) at sentence boundaries → 1-3 sentence chunks
+    if (trimmed.length > 220) {
+      const sentences = trimmed.match(/[^.!?]+[.!?]+\s*/g);
+      if (sentences && sentences.length > 2) {
+        const chunks: string[] = [];
+        let current = '';
+        for (const s of sentences) {
+          if ((current + s).length > 180 && current.length > 0) {
+            chunks.push(current.trim());
+            current = s;
+          } else {
+            current += s;
           }
-          if (current.trim()) chunks.push(current.trim());
-          return chunks;
         }
+        if (current.trim()) chunks.push(current.trim());
+        enhanced.push(...chunks);
+        continue;
       }
-      return [para];
-    })
-    .join('\n\n');
+    }
+
+    enhanced.push(trimmed);
+  }
+
+  return enhanced.join('\n\n');
 }
 
 /* ── Section semantics ── */
@@ -93,30 +111,32 @@ const OUTPUT_TITLES: Record<string, string> = {
   'Brainstorm': 'Strategic Brainstorm',
 };
 
-/* ── Prose classes — mobile-first scannable document ── */
+/* ── Prose classes — premium document rendering ── */
 
 const proseClasses = cn(
   'prose prose-sm sm:prose-base dark:prose-invert max-w-none',
-  // Headings — clear hierarchy, breathing room
+  // Headings — strong hierarchy with generous spacing
   'prose-headings:text-foreground/80 prose-headings:font-semibold prose-headings:tracking-tight',
-  'prose-h1:text-lg prose-h1:leading-snug prose-h1:mb-4 prose-h1:mt-0',
-  'prose-h2:text-base prose-h2:leading-snug prose-h2:mb-3 prose-h2:mt-8',
-  'prose-h3:text-[15px] prose-h3:leading-snug prose-h3:mb-2 prose-h3:mt-6',
-  'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-4 prose-h4:text-foreground/60',
-  // Body — generous line-height, clear paragraph breaks
-  'prose-p:text-[14.5px] prose-p:text-foreground/60 prose-p:leading-[1.85] prose-p:mb-4',
-  // Lists — well-spaced, easy to scan
-  'prose-li:text-[14.5px] prose-li:text-foreground/60 prose-li:leading-[1.75] prose-li:mb-2',
-  'prose-ul:my-4 prose-ol:my-4',
-  '[&_ul]:space-y-1.5 [&_ol]:space-y-1.5',
-  'prose-ul:pl-0 prose-ol:pl-0',
-  // Emphasis
-  'prose-strong:text-foreground/75 prose-strong:font-semibold',
-  'prose-em:text-foreground/55 prose-em:text-[13px]',
-  // Quotes — subtle
-  'prose-blockquote:border-l-2 prose-blockquote:border-primary/12 prose-blockquote:text-foreground/50 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-4 prose-blockquote:my-5',
+  'prose-h1:text-lg prose-h1:leading-snug prose-h1:mb-5 prose-h1:mt-0',
+  'prose-h2:text-base prose-h2:leading-snug prose-h2:mb-4 prose-h2:mt-10',
+  'prose-h3:text-[15px] prose-h3:leading-snug prose-h3:mb-3 prose-h3:mt-7',
+  'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-5 prose-h4:text-foreground/60',
+  // Body — lighter, roomier, scannable
+  'prose-p:text-[14.5px] prose-p:text-foreground/55 prose-p:leading-[1.9] prose-p:mb-5',
+  // Lists — generous spacing, clear visual hierarchy
+  'prose-li:text-[14.5px] prose-li:text-foreground/55 prose-li:leading-[1.8] prose-li:mb-2.5',
+  'prose-ul:my-5 prose-ol:my-5',
+  '[&_ul]:space-y-2 [&_ol]:space-y-2',
+  'prose-ul:pl-1 prose-ol:pl-1',
+  // Strong labels — act as inline sub-headings for scanability
+  'prose-strong:text-foreground/70 prose-strong:font-semibold',
+  'prose-em:text-foreground/45 prose-em:text-[13px]',
+  // Quotes — calm callouts
+  'prose-blockquote:border-l-2 prose-blockquote:border-primary/10 prose-blockquote:text-foreground/45 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-4 prose-blockquote:my-6',
   // Code
   'prose-code:text-primary/60 prose-code:bg-primary/[0.04] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
+  // HR — section dividers
+  'prose-hr:border-border/8 prose-hr:my-8',
 );
 
 /* ── Props ── */
@@ -304,18 +324,18 @@ export function CommandOutput({
               )}
 
               {hasBlocks ? (
-                <div className="space-y-10">
+                <div className="divide-y divide-border/6">
                   {blocks.map((block, i) => {
                     const semantic = classifySectionHeading(block.heading);
                     const accent = SEMANTIC_ACCENT[semantic];
 
                     return (
-                      <section key={i} className="group relative">
+                      <section key={i} className={cn('group relative', i > 0 ? 'pt-8' : '', 'pb-6')}>
                         {block.heading && (
-                          <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center justify-between mb-5">
                             <div className="flex items-center gap-2">
                               <accent.Icon className={cn('h-3.5 w-3.5 shrink-0', accent.color)} />
-                              <h3 className="text-[14px] font-semibold text-foreground/75 tracking-tight uppercase">
+                              <h3 className="text-[13px] font-semibold text-foreground/60 tracking-[0.06em] uppercase">
                                 {block.heading}
                               </h3>
                             </div>

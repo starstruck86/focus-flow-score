@@ -1,8 +1,10 @@
 /**
  * Strategy Workspace — durable strategic operating system.
  * Three-column layout: thread sidebar, main working area, right rail.
+ * Mounted inside the standard app shell via <Layout>.
  */
 import { useState, useCallback } from 'react';
+import { Layout } from '@/components/Layout';
 import { StrategyThreadSidebar } from '@/components/strategy/StrategyThreadSidebar';
 import { StrategyMainPanel } from '@/components/strategy/StrategyMainPanel';
 import { StrategyRightRail } from '@/components/strategy/StrategyRightRail';
@@ -15,8 +17,6 @@ import { useStrategyOutputs } from '@/hooks/strategy/useStrategyOutputs';
 import { useStrategyArtifacts } from '@/hooks/strategy/useStrategyArtifacts';
 import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
 import { useStrategyRollups } from '@/hooks/strategy/useStrategyRollups';
-import { SHELL, PX } from '@/lib/layout';
-import { BottomNav } from '@/components/layout/BottomNav';
 
 export default function Strategy() {
   const {
@@ -86,74 +86,67 @@ export default function Strategy() {
   }, [transformOutput, handleWorkflowComplete]);
 
   return (
-    <>
-    <div
-      className="flex bg-background overflow-hidden"
-      style={{
-        paddingTop: 'env(safe-area-inset-top)',
-        height: `calc(100dvh - ${PX.BOTTOM_NAV}px - env(safe-area-inset-bottom))`,
-      }}
-    >
-      {!sidebarCollapsed && (
-        <StrategyThreadSidebar
-          threads={threads}
-          activeThreadId={activeThread?.id ?? null}
-          onSelectThread={setActiveThreadId}
-          onOpenCreateDialog={() => setCreateDialogOpen(true)}
-          laneFilter={laneFilter}
-          onLaneFilterChange={setLaneFilter}
-          onCollapse={() => setSidebarCollapsed(true)}
-          isLoading={isLoading}
-        />
-      )}
+    <Layout>
+      {/* Strategy uses a flex column that fills Layout's <main> which is flex-1 overflow-y-auto */}
+      <div className="flex h-full overflow-hidden">
+        {!sidebarCollapsed && (
+          <StrategyThreadSidebar
+            threads={threads}
+            activeThreadId={activeThread?.id ?? null}
+            onSelectThread={setActiveThreadId}
+            onOpenCreateDialog={() => setCreateDialogOpen(true)}
+            laneFilter={laneFilter}
+            onLaneFilterChange={setLaneFilter}
+            onCollapse={() => setSidebarCollapsed(true)}
+            isLoading={isLoading}
+          />
+        )}
 
-      <StrategyMainPanel
-        thread={activeThread}
-        onUpdateThread={updateThread}
-        sidebarCollapsed={sidebarCollapsed}
-        onExpandSidebar={() => setSidebarCollapsed(false)}
-        rightRailCollapsed={rightRailCollapsed}
-        onToggleRightRail={() => setRightRailCollapsed(r => !r)}
-        linkedContext={linkedContext}
-        onSaveMemory={memoryObjectType ? (type, content) => saveMemory(type, content) : undefined}
-        onWorkflowComplete={handleWorkflowComplete}
-        onBranchThread={handleBranchThread}
-        onTransformOutput={handleTransformOutput}
-        isTransforming={isTransforming}
-      />
-
-      {!rightRailCollapsed && activeThread && (
-        <StrategyRightRail
+        <StrategyMainPanel
           thread={activeThread}
-          onCollapse={() => setRightRailCollapsed(true)}
+          onUpdateThread={updateThread}
+          sidebarCollapsed={sidebarCollapsed}
+          onExpandSidebar={() => setSidebarCollapsed(false)}
+          rightRailCollapsed={rightRailCollapsed}
+          onToggleRightRail={() => setRightRailCollapsed(r => !r)}
           linkedContext={linkedContext}
-          memories={memories}
-          uploads={uploads}
-          outputs={outputs}
-          artifacts={artifacts}
-          onSaveMemory={saveMemory}
-          onDeleteMemory={deleteMemory}
-          onTogglePin={togglePin}
-          onSetConfidence={setConfidence}
-          onMarkIrrelevant={markIrrelevant}
-          rollup={rollup}
-          memorySuggestions={memorySuggestions}
-          isRollupLoading={isRollupLoading}
-          onTriggerRollup={triggerRollup}
-          onRegenerateArtifact={regenerateArtifact}
+          onSaveMemory={memoryObjectType ? (type, content) => saveMemory(type, content) : undefined}
+          onWorkflowComplete={handleWorkflowComplete}
+          onBranchThread={handleBranchThread}
+          onTransformOutput={handleTransformOutput}
           isTransforming={isTransforming}
-          onReprocessUpload={summarizeUpload}
         />
-      )}
 
-      <CreateThreadDialog
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
-        onCreateThread={handleCreateThreadWithOpts}
-      />
-    </div>
+        {!rightRailCollapsed && activeThread && (
+          <StrategyRightRail
+            thread={activeThread}
+            onCollapse={() => setRightRailCollapsed(true)}
+            linkedContext={linkedContext}
+            memories={memories}
+            uploads={uploads}
+            outputs={outputs}
+            artifacts={artifacts}
+            onSaveMemory={saveMemory}
+            onDeleteMemory={deleteMemory}
+            onTogglePin={togglePin}
+            onSetConfidence={setConfidence}
+            onMarkIrrelevant={markIrrelevant}
+            rollup={rollup}
+            memorySuggestions={memorySuggestions}
+            isRollupLoading={isRollupLoading}
+            onTriggerRollup={triggerRollup}
+            onRegenerateArtifact={regenerateArtifact}
+            isTransforming={isTransforming}
+            onReprocessUpload={summarizeUpload}
+          />
+        )}
 
-    <BottomNav />
-    </>
+        <CreateThreadDialog
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          onCreateThread={handleCreateThreadWithOpts}
+        />
+      </div>
+    </Layout>
   );
 }

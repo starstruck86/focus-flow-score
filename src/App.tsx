@@ -120,11 +120,11 @@ const App = () => (
                   <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><PrepHub /></ProtectedPage>} />
                   <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />
                   <Route path="/strategy" element={
-                    <ProtectedRoute>
+                    <ProtectedPage routeName="Strategy">
                       <Suspense fallback={<LazyFallback />}>
                         <Strategy />
                       </Suspense>
-                    </ProtectedRoute>
+                    </ProtectedPage>
                   } />
                   <Route path="/ops" element={
                     <ProtectedRoute>
