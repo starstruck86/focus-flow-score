@@ -19,6 +19,7 @@ import { StrategyMessageBubble } from './StrategyMessageBubble';
 import type { StrategyThread, StrategyLane } from '@/types/strategy';
 import { LANES } from '@/types/strategy';
 import { toast } from 'sonner';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const WORKFLOWS = [
   { key: 'deep_research', label: 'Research', icon: Search, description: 'Deep account & market research' },
@@ -95,6 +96,7 @@ export function StrategyMainPanel({
   onSaveMemory, onWorkflowComplete, onBranchThread,
   onTransformOutput, isTransforming,
 }: Props) {
+  const isMobile = useIsMobile();
   const { messages, sendMessage, runWorkflow, isLoading, isSending } = useStrategyMessages(thread?.id ?? null);
   const { uploads, uploadFiles, isUploading } = useStrategyUploads(thread?.id ?? null);
   const [input, setInput] = useState('');
@@ -193,7 +195,7 @@ export function StrategyMainPanel({
 
   return (
     <div
-      className={cn('flex-1 flex flex-col min-w-0 bg-background relative', isDragOver && 'ring-2 ring-primary/30 ring-inset')}
+      className={cn('flex-1 flex flex-col min-w-0 min-h-0 bg-background relative', isDragOver && 'ring-2 ring-primary/30 ring-inset')}
       onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
       onDragLeave={() => setIsDragOver(false)}
       onDrop={handleDrop}
@@ -201,132 +203,129 @@ export function StrategyMainPanel({
       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect}
         accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.json,.xml,.html" />
 
-      {/* Top Bar */}
-      <div className="border-b border-border px-4 py-2.5 flex items-center gap-2 shrink-0">
-        {sidebarCollapsed && (
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExpandSidebar}>
-            <PanelLeftOpen className="h-4 w-4" />
+      {/* ── HEADER REGION (auto height, shrink-0) ── */}
+      <div className="shrink-0">
+        {/* Top Bar — compact */}
+        <div className="border-b border-border px-3 py-1.5 flex items-center gap-2">
+          {sidebarCollapsed && (
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExpandSidebar}>
+              <PanelLeftOpen className="h-4 w-4" />
+            </Button>
+          )}
+          <ThreadIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <h1 className="text-sm font-semibold text-foreground truncate flex-1">{thread.title}</h1>
+          {isUploading && (
+            <Badge variant="secondary" className="text-[10px] gap-1 animate-pulse">
+              <Loader2 className="h-3 w-3 animate-spin" /> Uploading
+            </Badge>
+          )}
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onToggleRightRail}>
+            <PanelRightOpen className="h-4 w-4" />
           </Button>
-        )}
-        <ThreadIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <h1 className="text-sm font-semibold text-foreground truncate flex-1">{thread.title}</h1>
-        {isUploading && (
-          <Badge variant="secondary" className="text-[10px] gap-1 animate-pulse">
-            <Loader2 className="h-3 w-3 animate-spin" /> Uploading
-          </Badge>
-        )}
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onToggleRightRail}>
-          <PanelRightOpen className="h-4 w-4" />
-        </Button>
-      </div>
+        </div>
 
-      {/* Scope Card */}
-      <div className="px-4 pt-3 shrink-0">
-        <Card className="border-border">
-          <CardContent className="p-3 space-y-2.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="outline" className="text-[10px] font-medium">
-                {thread.thread_type.replace(/_/g, ' ')}
+        {/* Scope + Workflows — compressed on mobile */}
+        <div className="px-3 pt-2">
+          {/* Context badges — inline row instead of card on mobile */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+            <Badge variant="outline" className="text-[10px] font-medium">
+              {thread.thread_type.replace(/_/g, ' ')}
+            </Badge>
+            <Badge variant="outline" className={cn('text-[10px]', getLaneColor(thread.lane))}>
+              {thread.lane}
+            </Badge>
+            {linkedContext?.account && (
+              <Badge variant="secondary" className="text-[10px] gap-1">
+                <Building2 className="h-2.5 w-2.5" />
+                {linkedContext.account.name}
               </Badge>
-              <Badge variant="outline" className={cn('text-[10px]', getLaneColor(thread.lane))}>
-                {thread.lane}
-              </Badge>
-              {linkedContext?.account && (
-                <Badge variant="secondary" className="text-[10px] gap-1">
-                  <Building2 className="h-2.5 w-2.5" />
-                  {linkedContext.account.name}
-                  {linkedContext.account.tier && <span className="text-muted-foreground">· {linkedContext.account.tier}</span>}
-                </Badge>
-              )}
-              {linkedContext?.opportunity && (
-                <Badge variant="secondary" className="text-[10px] gap-1">
-                  <Target className="h-2.5 w-2.5" />
-                  {linkedContext.opportunity.name}
-                  {linkedContext.opportunity.stage && <span className="text-muted-foreground">· {linkedContext.opportunity.stage}</span>}
-                </Badge>
-              )}
-            </div>
-            {thread.summary && (
-              <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{thread.summary}</p>
             )}
-            <div className="flex flex-wrap gap-1.5">
-              {WORKFLOWS.map(w => {
-                const isRunning = activeWorkflow === w.key;
-                const isRecommended = recommendedWorkflows.includes(w.key);
-                return (
-                  <Button
-                    key={w.key}
-                    size="sm"
-                    variant="outline"
-                    className={cn(
-                      'h-7 text-[10px] px-2.5 gap-1.5 transition-all',
-                      isRunning && 'border-primary/40 bg-primary/5',
-                      isRecommended && !isRunning && 'border-primary/20'
-                    )}
-                    disabled={isSending || !!activeWorkflow}
-                    onClick={() => handleWorkflow(w.key)}
-                    title={w.description}
-                  >
-                    {isRunning ? (
-                      <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                    ) : (
-                      <w.icon className={cn('h-3 w-3', isRecommended && 'text-primary/70')} />
-                    )}
-                    {w.label}
-                  </Button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            {linkedContext?.opportunity && (
+              <Badge variant="secondary" className="text-[10px] gap-1">
+                <Target className="h-2.5 w-2.5" />
+                {linkedContext.opportunity.name}
+              </Badge>
+            )}
+          </div>
 
-      {/* Active Workflow Banner */}
-      {activeWorkflow && (
-        <div className="px-4 pt-2">
-          <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-2 flex items-center gap-3">
-            <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-            </div>
-            <div>
-              <span className="text-xs font-medium text-primary">
-                Running {activeWorkflow.replace(/_/g, ' ')}
-              </span>
-              <p className="text-[10px] text-muted-foreground">Retrieving context and generating structured output…</p>
-            </div>
+          {/* Summary — only show on desktop or if short */}
+          {thread.summary && !isMobile && (
+            <p className="text-xs text-foreground/60 line-clamp-1 leading-relaxed mb-1.5">{thread.summary}</p>
+          )}
+
+          {/* Workflow buttons — scrollable row on mobile */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1.5 -mx-1 px-1 scrollbar-none">
+            {WORKFLOWS.map(w => {
+              const isRunning = activeWorkflow === w.key;
+              const isRecommended = recommendedWorkflows.includes(w.key);
+              return (
+                <Button
+                  key={w.key}
+                  size="sm"
+                  variant="outline"
+                  className={cn(
+                    'h-7 text-[10px] px-2 gap-1 shrink-0 transition-all',
+                    isRunning && 'border-primary/40 bg-primary/5',
+                    isRecommended && !isRunning && 'border-primary/20'
+                  )}
+                  disabled={isSending || !!activeWorkflow}
+                  onClick={() => handleWorkflow(w.key)}
+                  title={w.description}
+                >
+                  {isRunning ? (
+                    <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                  ) : (
+                    <w.icon className={cn('h-3 w-3', isRecommended && 'text-primary/70')} />
+                  )}
+                  {w.label}
+                </Button>
+              );
+            })}
           </div>
         </div>
-      )}
 
-      {/* Lane Tabs */}
-      <div className="px-4 pt-2.5 shrink-0">
-        <Tabs value={activeLane} onValueChange={setActiveLane}>
-          <TabsList className="h-8">
-            {LANES.map(l => (
-              <TabsTrigger key={l.value} value={l.value} className="text-xs px-3 h-6 data-[state=active]:bg-background">
-                {l.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        {/* Active Workflow Banner */}
+        {activeWorkflow && (
+          <div className="px-3 pt-1.5">
+            <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5 flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+              <span className="text-xs font-medium text-primary">
+                Running {activeWorkflow.replace(/_/g, ' ')}…
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Lane Tabs — compact */}
+        <div className="px-3 pt-1.5 pb-0.5">
+          <Tabs value={activeLane} onValueChange={setActiveLane}>
+            <TabsList className="h-7">
+              {LANES.map(l => (
+                <TabsTrigger key={l.value} value={l.value} className="text-[11px] px-2.5 h-5 data-[state=active]:bg-background">
+                  {l.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
 
-      {/* Conversation Area */}
-      <ScrollArea className="flex-1 px-4 py-3" ref={scrollRef}>
+      {/* ── SCROLLABLE CONVERSATION (flex-1, min-h-0) ── */}
+      <ScrollArea className="flex-1 min-h-0 px-3 py-2" ref={scrollRef}>
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-6">
-            <div className="h-14 w-14 rounded-2xl bg-muted/60 flex items-center justify-center">
-              <ThreadIcon className="h-7 w-7 text-foreground/40" />
+          <div className="flex flex-col items-center justify-center py-10 gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-muted/60 flex items-center justify-center">
+              <ThreadIcon className="h-6 w-6 text-foreground/40" />
             </div>
-            <div className="text-center space-y-2">
-              <p className="text-base font-semibold text-foreground">
+            <div className="text-center space-y-1.5">
+              <p className="text-sm font-semibold text-foreground">
                 {hasLinkedObject ? `Ready to strategize on ${linkedContext?.account?.name || linkedContext?.opportunity?.name}` : 'Ready to strategize'}
               </p>
-              <p className="text-sm text-foreground/60 max-w-[320px] leading-relaxed">
+              <p className="text-sm text-foreground/55 max-w-[300px] leading-relaxed">
                 Start a conversation, run a workflow above, or drop files to add context.
               </p>
             </div>
@@ -336,11 +335,11 @@ export function StrategyMainPanel({
                   key={i}
                   size="sm"
                   variant="outline"
-                  className="h-9 text-xs gap-2 border-border hover:border-primary/30 hover:bg-primary/5 transition-all"
+                  className="h-8 text-xs gap-1.5 border-border hover:border-primary/30 hover:bg-primary/5 transition-all"
                   onClick={() => handleSuggestedPrompt(sp.text)}
                 >
-                  <sp.icon className="h-3.5 w-3.5 text-primary/70" />
-                  <span className="text-foreground/90">{sp.text}</span>
+                  <sp.icon className="h-3 w-3 text-primary/70" />
+                  <span className="text-foreground/80">{sp.text}</span>
                 </Button>
               ))}
             </div>
@@ -365,7 +364,7 @@ export function StrategyMainPanel({
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:150ms]" />
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:300ms]" />
                   </div>
-                  <span className="text-xs text-muted-foreground">Thinking…</span>
+                  <span className="text-xs text-foreground/50">Thinking…</span>
                 </div>
               </div>
             )}
@@ -379,27 +378,27 @@ export function StrategyMainPanel({
           <div className="bg-card border-2 border-dashed border-primary/30 rounded-2xl px-10 py-8 text-center shadow-lg">
             <Upload className="h-10 w-10 text-primary/60 mx-auto mb-3" />
             <p className="text-sm font-medium text-foreground">Drop files to add context</p>
-            <p className="text-[10px] text-muted-foreground mt-1">PDF, DOCX, CSV, text files supported</p>
+            <p className="text-[10px] text-foreground/50 mt-1">PDF, DOCX, CSV, text files supported</p>
           </div>
         </div>
       )}
 
-      {/* Composer */}
-      <div className="border-t border-border p-3 pr-[4.5rem] sm:pr-3 shrink-0 bg-card/50">
+      {/* ── COMPOSER (shrink-0, anchored at bottom, clears bottom nav) ── */}
+      <div className="border-t border-border p-2.5 shrink-0 bg-card/50">
         <div className="flex items-end gap-2">
           <div className="flex-1 relative">
             <Textarea
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isSending ? 'Waiting for response…' : hasLinkedObject ? `Ask about ${linkedContext?.account?.name || linkedContext?.opportunity?.name || 'this object'}…` : 'Type your message or paste content to analyze…'}
-              className="min-h-[44px] max-h-[120px] pr-10 text-sm resize-none border-border focus-visible:ring-primary/20"
+              placeholder={isSending ? 'Waiting for response…' : hasLinkedObject ? `Ask about ${linkedContext?.account?.name || linkedContext?.opportunity?.name || 'this object'}…` : 'Type your message or paste content…'}
+              className="min-h-[40px] max-h-[100px] pr-10 text-sm resize-none border-border focus-visible:ring-primary/20"
               rows={1}
               disabled={isSending}
             />
             <div className="absolute right-2 bottom-2">
               <Button
-                size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                size="icon" variant="ghost" className="h-6 w-6 text-foreground/50 hover:text-foreground"
                 title="Attach file"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isSending}
@@ -408,7 +407,7 @@ export function StrategyMainPanel({
               </Button>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-1.5">
+          <div className="flex flex-col items-end gap-1">
             <div className="flex gap-0.5">
               {DEPTH_OPTIONS.map(d => (
                 <Badge
@@ -416,7 +415,7 @@ export function StrategyMainPanel({
                   variant={depth === d ? 'default' : 'outline'}
                   className={cn(
                     'cursor-pointer text-[9px] px-1.5 py-0 transition-colors',
-                    depth === d ? '' : 'text-muted-foreground hover:text-foreground'
+                    depth === d ? '' : 'text-foreground/50 hover:text-foreground'
                   )}
                   onClick={() => setDepth(d)}
                 >
