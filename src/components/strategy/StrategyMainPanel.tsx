@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   PanelLeftOpen, PanelRightOpen, Search, Mail, Target, Map,
   FileText, Send, Paperclip, Upload, Loader2, Zap, Database,
-  Building2, MessageSquare, MoreHorizontal,
+  Building2, MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
