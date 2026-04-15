@@ -135,6 +135,17 @@ async function anthropicAdapter(req: AdapterRequest, signal: AbortSignal): Promi
     else { anthropicMessages.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }); }
   }
 
+  // Anthropic requires at least one non-system message
+  if (anthropicMessages.length === 0) {
+    if (systemPrompt) {
+      anthropicMessages.push({ role: "user", content: systemPrompt });
+      systemPrompt = "";
+    } else {
+      return { text: "", provider: "anthropic", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+        error: { type: "empty_messages", message: "No messages provided for Anthropic" } };
+    }
+  }
+
   const body: any = {
     model: req.model,
     max_tokens: req.maxTokens ?? 4096,
