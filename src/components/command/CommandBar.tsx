@@ -26,6 +26,8 @@ interface Props {
   onCreateOpportunity?: (name: string) => Promise<{ id: string; name: string } | null>;
   isLoading?: boolean;
   placeholder?: string;
+  prefill?: string;
+  onPrefillConsumed?: () => void;
 }
 
 const TRIGGER_CHARS: Record<string, 'account' | 'opportunity' | 'template'> = {
@@ -49,7 +51,7 @@ const TRIGGER_COLORS: Record<string, string> = {
 export function CommandBar({
   accounts, opportunities, templates, onExecute,
   onCreateAccount, onCreateOpportunity,
-  isLoading, placeholder,
+  isLoading, placeholder, prefill, onPrefillConsumed,
 }: Props) {
   const [value, setValue] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
