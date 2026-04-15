@@ -1,5 +1,6 @@
 /**
- * CommandOutput — clean structured output with copy, regenerate, save-as-template.
+ * CommandOutput — structured block-based output with copy, regenerate, save-as-template.
+ * Renders output in distinct sections, not as one blob.
  */
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
@@ -9,9 +10,11 @@ import { Copy, RotateCcw, BookmarkPlus, Check, ChevronDown, ChevronUp } from 'lu
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
+import type { OutputBlock } from '@/lib/commandTypes';
 
 interface Props {
   output: string;
+  blocks: OutputBlock[];
   subjectLine?: string;
   sources: string[];
   kiCount: number;
@@ -22,17 +25,17 @@ interface Props {
 }
 
 export function CommandOutput({
-  output, subjectLine, sources, kiCount, templateName,
+  output, blocks, subjectLine, sources, kiCount, templateName,
   isGenerating, onRegenerate, onSaveAsTemplate,
 }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedOutput, setEditedOutput] = useState(output);
   const [copied, setCopied] = useState(false);
+  const [copiedBlock, setCopiedBlock] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [showSources, setShowSources] = useState(false);
 
-  // Sync when new output arrives
   if (output !== editedOutput && !isEditing) {
     setEditedOutput(output);
   }
@@ -47,6 +50,12 @@ export function CommandOutput({
     setTimeout(() => setCopied(false), 2000);
   }, [displayOutput, subjectLine]);
 
+  const handleCopyBlock = useCallback((heading: string, content: string) => {
+    navigator.clipboard.writeText(`## ${heading}\n${content}`);
+    setCopiedBlock(heading);
+    setTimeout(() => setCopiedBlock(null), 2000);
+  }, []);
+
   const handleSave = useCallback(() => {
     if (!saveName.trim()) return;
     onSaveAsTemplate(saveName.trim());
@@ -55,6 +64,8 @@ export function CommandOutput({
   }, [saveName, onSaveAsTemplate]);
 
   if (!output && !isGenerating) return null;
+
+  const hasBlocks = blocks.length > 1;
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
@@ -71,39 +82,18 @@ export function CommandOutput({
           )}
         </div>
         <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs"
-            onClick={() => setIsEditing(!isEditing)}
-          >
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setIsEditing(!isEditing)}>
             {isEditing ? 'Preview' : 'Edit'}
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs"
-            onClick={handleCopy}
-          >
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={handleCopy}>
             {copied ? <Check className="h-3.5 w-3.5 mr-1" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? 'Copied' : 'Copy All'}
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs"
-            onClick={onRegenerate}
-            disabled={isGenerating}
-          >
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onRegenerate} disabled={isGenerating}>
             <RotateCcw className={cn('h-3.5 w-3.5 mr-1', isGenerating && 'animate-spin')} />
             Regenerate
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => setShowSaveDialog(true)}
-          >
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowSaveDialog(true)}>
             <BookmarkPlus className="h-3.5 w-3.5 mr-1" />
             Save as Template
           </Button>
@@ -118,29 +108,58 @@ export function CommandOutput({
         </div>
       )}
 
-      {/* Output body */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        {isEditing ? (
+      {/* Output body — structured blocks or single blob */}
+      {isGenerating ? (
+        <div className="rounded-xl border border-border bg-card p-8">
+          <div className="flex items-center gap-2 text-muted-foreground justify-center">
+            <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+            <div className="h-2 w-2 rounded-full bg-primary animate-pulse [animation-delay:150ms]" />
+            <div className="h-2 w-2 rounded-full bg-primary animate-pulse [animation-delay:300ms]" />
+            <span className="text-sm ml-2">Generating...</span>
+          </div>
+        </div>
+      ) : isEditing ? (
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
           <Textarea
             value={editedOutput}
             onChange={e => setEditedOutput(e.target.value)}
             className="min-h-[400px] border-0 rounded-none text-sm font-mono resize-y focus-visible:ring-0"
           />
-        ) : (
-          <div className="p-5 prose prose-sm dark:prose-invert max-w-none">
-            {isGenerating ? (
-              <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
-                <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                <div className="h-2 w-2 rounded-full bg-primary animate-pulse [animation-delay:150ms]" />
-                <div className="h-2 w-2 rounded-full bg-primary animate-pulse [animation-delay:300ms]" />
-                <span className="text-sm ml-2">Generating...</span>
+        </div>
+      ) : hasBlocks ? (
+        <div className="space-y-2">
+          {blocks.map((block, i) => (
+            <div key={i} className="rounded-xl border border-border bg-card overflow-hidden group">
+              {block.heading && (
+                <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+                  <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                    {block.heading}
+                  </h3>
+                  <button
+                    onClick={() => handleCopyBlock(block.heading, block.content)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    {copiedBlock === block.heading ? (
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                    )}
+                  </button>
+                </div>
+              )}
+              <div className="p-4 prose prose-sm dark:prose-invert max-w-none">
+                <ReactMarkdown>{block.content}</ReactMarkdown>
               </div>
-            ) : (
-              <ReactMarkdown>{displayOutput}</ReactMarkdown>
-            )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="p-5 prose prose-sm dark:prose-invert max-w-none">
+            <ReactMarkdown>{displayOutput}</ReactMarkdown>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Sources */}
       {sources.length > 0 && (
@@ -171,12 +190,8 @@ export function CommandOutput({
             autoFocus
             onKeyDown={e => e.key === 'Enter' && handleSave()}
           />
-          <Button size="sm" onClick={handleSave} disabled={!saveName.trim()} className="h-8">
-            Save
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setShowSaveDialog(false)} className="h-8">
-            Cancel
-          </Button>
+          <Button size="sm" onClick={handleSave} disabled={!saveName.trim()} className="h-8">Save</Button>
+          <Button size="sm" variant="ghost" onClick={() => setShowSaveDialog(false)} className="h-8">Cancel</Button>
         </div>
       )}
     </div>
