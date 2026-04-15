@@ -226,7 +226,7 @@ export function StrategyRightRail({
               </CardContent>
             </Card>
           ) : (
-            <p className="text-[10px] text-muted-foreground italic pl-5">Freeform thread — no linked object</p>
+            <p className="text-[10px] text-foreground/50 italic pl-5">Freeform thread — no linked object</p>
           )}
         </RailSection>
 
@@ -261,7 +261,7 @@ export function StrategyRightRail({
               <span className="text-[10px] text-muted-foreground">Generating rollup…</span>
             </div>
           ) : (
-            <p className="text-[10px] text-muted-foreground italic pl-5">
+            <p className="text-[10px] text-foreground/50 italic pl-5">
               Send messages or run a workflow to generate.
             </p>
           )}
