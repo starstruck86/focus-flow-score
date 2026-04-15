@@ -529,6 +529,29 @@ export default function SkillBuilderSession() {
           micStatus={audioUnavailable ? 'unavailable' : deliveryMode === 'full' ? 'ready' : 'off'}
           lastAudioError={lastAudioError}
           lastMicError={lastMicError}
+          lastInterruptSource={lastInterruptSource}
+          lastStaleSuppression={lastStaleSuppression}
+          downgradeReason={downgradeReason}
+          dedupeBlocked={dedupeBlocked}
+          voiceDiagnostics={dave.getDiagnostics?.() ?? null}
+        />
+
+        {/* Stress harness — only visible with ?debug=audio */}
+        <AudioStressHarness
+          currentMode={deliveryMode}
+          failureCount={audioFailures}
+          onForceInterrupt={() => {
+            dave.stopSpeaking();
+            setLastInterruptSource('stress-harness');
+          }}
+          onForceFailure={() => {
+            setAudioFailures(prev => prev + 1);
+            setLastAudioError('Forced failure (stress test)');
+          }}
+          onForceDowngrade={(mode) => {
+            setDeliveryMode(mode);
+            setDowngradeReason('Forced via stress harness');
+          }}
         />
       </div>
     </Layout>
