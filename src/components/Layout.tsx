@@ -289,39 +289,32 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
       <header
         data-testid="app-header"
         className={cn(
-          "flex flex-col gap-1 px-3 border-b sticky top-[env(safe-area-inset-top)] z-40 bg-background/95 backdrop-blur-md",
-          location.pathname === '/strategy' ? 'py-1.5' : 'py-2'
+          "flex items-center gap-2 px-3 border-b sticky top-[env(safe-area-inset-top)] z-40 bg-background/95 backdrop-blur-md",
+          location.pathname === '/strategy' ? 'py-1' : 'py-2'
         )}
         style={headerAccentStyle}
       >
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 shrink-0">
-            <Compass className="h-5 w-5" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
-            <span className="font-display text-sm font-bold hidden lg:inline">Quota CoPilot</span>
-            <SaveIndicator />
-          </div>
-          <GlobalSearch className="flex-1 min-w-0 max-w-xs sm:max-w-sm lg:max-w-md" />
-          <div className="flex items-center gap-1.5 shrink-0">
-            <BostonClock className="hidden sm:inline" />
-            <GlobalRefreshButton />
-            <TerritoryCopilot />
-            {!isReviewMode && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={signOut}>
-                    <LogOut className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Sign Out</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <Compass className={cn("shrink-0", location.pathname === '/strategy' ? 'h-4 w-4' : 'h-5 w-5')} style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
+          <span className="font-display text-sm font-bold hidden lg:inline">Quota CoPilot</span>
+          {location.pathname !== '/strategy' && <SaveIndicator />}
         </div>
-        {location.pathname !== '/strategy' && (
-          <div className="sm:hidden">
-            <BostonClock />
-          </div>
-        )}
+        <GlobalSearch className={cn("flex-1 min-w-0", location.pathname === '/strategy' ? 'max-w-[180px]' : 'max-w-xs sm:max-w-sm lg:max-w-md')} />
+        <div className="flex items-center gap-1 shrink-0">
+          <BostonClock className="hidden sm:inline" />
+          {location.pathname !== '/strategy' && <GlobalRefreshButton />}
+          {location.pathname !== '/strategy' && <TerritoryCopilot />}
+          {!isReviewMode && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className={cn("text-muted-foreground", location.pathname === '/strategy' ? 'h-6 w-6' : 'h-8 w-8')} onClick={signOut}>
+                  <LogOut className={location.pathname === '/strategy' ? 'h-3 w-3' : 'h-4 w-4'} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Sign Out</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </header>
 
       {/*

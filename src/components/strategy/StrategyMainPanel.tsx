@@ -219,145 +219,109 @@ export function StrategyMainPanel({
       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect}
         accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.json,.xml,.html" />
 
-      {/* ── HEADER — single unified control surface ── */}
-      <div className="shrink-0 bg-card/40 px-3 py-1.5 space-y-1">
-        {/* Title row */}
-        <div className="flex items-center gap-2">
-          {sidebarCollapsed && (
-            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExpandSidebar}>
-              <PanelLeftOpen className="h-4 w-4" />
-            </Button>
-          )}
-          <ThreadIcon className="h-3.5 w-3.5 text-primary/50 shrink-0" />
-          <h1 className="text-sm font-semibold text-foreground truncate flex-1">{thread.title}</h1>
-          {isUploading && (
-            <Badge variant="secondary" className="text-[10px] gap-1 animate-pulse shrink-0">
-              <Loader2 className="h-3 w-3 animate-spin" /> Uploading
-            </Badge>
-          )}
-          {activeWorkflow && (
-            <span className="text-[10px] text-primary/50 font-medium shrink-0 flex items-center gap-1">
-              <Loader2 className="h-2.5 w-2.5 animate-spin" />
-              {activeWorkflowLabel}
-            </span>
-          )}
-          {!isMobile && !rightRailCollapsed && (
-            <Button size="icon" variant="ghost" className="h-6 w-6 text-foreground/25" onClick={onToggleRightRail}>
-              <PanelRightOpen className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
+      {/* ── HEADER — seamless control surface ── */}
+      <div className="shrink-0 px-3 py-1 flex items-center gap-2 flex-wrap">
+        {sidebarCollapsed && (
+          <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={onExpandSidebar}>
+            <PanelLeftOpen className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        <ThreadIcon className="h-3 w-3 text-primary/40 shrink-0" />
+        <h1 className="text-xs font-semibold text-foreground truncate flex-1 min-w-0">{thread.title}</h1>
 
-        {/* Workflow strip — same surface, no divider */}
-        <div className="flex items-center gap-1">
-          {!isMobile && (
-            <>
-              <span className="text-[10px] text-muted-foreground/50 font-medium shrink-0">
-                {thread.lane}
-              </span>
-              {linkedContext?.account && (
-                <span className="text-[10px] text-foreground/40 flex items-center gap-0.5 shrink-0">
-                  <Building2 className="h-2.5 w-2.5" />
-                  {linkedContext.account.name}
-                </span>
-              )}
-              {linkedContext?.opportunity && (
-                <span className="text-[10px] text-foreground/40 flex items-center gap-0.5 shrink-0">
-                  <Target className="h-2.5 w-2.5" />
-                  {linkedContext.opportunity.name}
-                </span>
-              )}
-              <span className="text-foreground/10 mx-0.5 shrink-0">·</span>
-            </>
-          )}
+        {activeWorkflow && (
+          <span className="text-[9px] text-primary/60 font-medium shrink-0 flex items-center gap-1">
+            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            {activeWorkflowLabel}
+          </span>
+        )}
+        {isUploading && (
+          <span className="text-[9px] text-muted-foreground font-medium shrink-0 flex items-center gap-1 animate-pulse">
+            <Loader2 className="h-2.5 w-2.5 animate-spin" /> Uploading
+          </span>
+        )}
 
-          <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
-            {visibleWorkflows.map(w => {
-              const isRunning = activeWorkflow === w.key;
-              const isRecommended = recommendedWorkflows.includes(w.key);
-              return (
-                <button
-                  key={w.key}
-                  className={cn(
-                    'h-6 text-[10px] px-2 gap-1 shrink-0 rounded-md font-medium transition-all flex items-center',
-                    'border border-transparent hover:border-border/40 hover:bg-muted/30',
-                    isRunning && 'border-primary/30 bg-primary/5 text-primary',
-                    isRecommended && !isRunning && 'text-foreground/60',
-                    !isRecommended && !isRunning && 'text-foreground/40',
-                    (isSending || !!activeWorkflow) && 'opacity-50 pointer-events-none'
-                  )}
-                  onClick={() => handleWorkflow(w.key)}
-                  title={w.description}
-                  disabled={isSending || !!activeWorkflow}
-                >
-                  {isRunning ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <w.icon className="h-3 w-3" />
-                  )}
-                  {w.label}
-                </button>
-              );
-            })}
-
-            {overflowWorkflows.length > 0 && (
+        {/* Inline workflow actions */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          {visibleWorkflows.map(w => {
+            const isRunning = activeWorkflow === w.key;
+            return (
               <button
-                className="h-6 px-2.5 text-[10px] font-medium rounded-md transition-all shrink-0 flex items-center gap-1.5 bg-muted/30 hover:bg-muted/50 text-foreground/50 hover:text-foreground/70"
-                onClick={() => setWorkflowSheetOpen(true)}
+                key={w.key}
+                className={cn(
+                  'h-5 text-[9px] px-1.5 shrink-0 rounded font-medium transition-all flex items-center gap-0.5',
+                  'hover:bg-muted/40',
+                  isRunning ? 'text-primary bg-primary/5' : 'text-foreground/30 hover:text-foreground/50',
+                  (isSending || !!activeWorkflow) && !isRunning && 'opacity-40 pointer-events-none'
+                )}
+                onClick={() => handleWorkflow(w.key)}
+                title={w.description}
+                disabled={isSending || !!activeWorkflow}
               >
-                <Zap className="h-2.5 w-2.5" />
-                Workflows
-                <span className="bg-foreground/10 rounded px-1 py-px text-[9px]">{overflowWorkflows.length}</span>
+                {isRunning ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <w.icon className="h-2.5 w-2.5" />}
+                <span className="hidden sm:inline">{w.label}</span>
               </button>
-            )}
-          </div>
+            );
+          })}
+          {overflowWorkflows.length > 0 && (
+            <button
+              className="h-5 px-1.5 text-[9px] font-medium rounded transition-all shrink-0 flex items-center gap-1 text-foreground/30 hover:text-foreground/50 hover:bg-muted/40"
+              onClick={() => setWorkflowSheetOpen(true)}
+            >
+              <Zap className="h-2.5 w-2.5" />
+              <span className="bg-foreground/8 rounded px-1 py-px text-[8px]">+{overflowWorkflows.length}</span>
+            </button>
+          )}
         </div>
+
+        {!isMobile && !rightRailCollapsed && (
+          <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/20 shrink-0" onClick={onToggleRightRail}>
+            <PanelRightOpen className="h-3 w-3" />
+          </Button>
+        )}
       </div>
-      <div className="h-px bg-gradient-to-r from-transparent via-border/40 to-transparent" />
 
       {/* ── HEADER — unified control surface ── — ends above */}
 
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="px-3 py-1">
+        <div className="px-3 py-0.5">
           {isLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center py-3">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-4 gap-2">
-              <div className="h-8 w-8 rounded-lg bg-muted/40 flex items-center justify-center">
-                <ThreadIcon className="h-4 w-4 text-foreground/30" />
+            <div className="flex flex-col items-center justify-center py-3 gap-1.5">
+              <div className="h-7 w-7 rounded-lg bg-muted/30 flex items-center justify-center">
+                <ThreadIcon className="h-3.5 w-3.5 text-foreground/25" />
               </div>
-              <div className="text-center space-y-1">
-                <p className="text-xs font-medium text-foreground/80">
-                  {hasLinkedObject ? `Ready to strategize on ${linkedContext?.account?.name || linkedContext?.opportunity?.name}` : 'Ready to strategize'}
-                </p>
-                <p className="text-[11px] text-foreground/40 max-w-[260px] leading-relaxed">
-                  Start a conversation, run a workflow, or drop files
-                </p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-1 max-w-xs">
+              <p className="text-[11px] font-medium text-foreground/70">
+                {hasLinkedObject ? `Ready to strategize on ${linkedContext?.account?.name || linkedContext?.opportunity?.name}` : 'Ready to strategize'}
+              </p>
+              <p className="text-[10px] text-foreground/30 max-w-[240px] text-center leading-relaxed">
+                Start a conversation, run a workflow, or drop files
+              </p>
+              <div className="flex flex-wrap justify-center gap-1 max-w-xs mt-0.5">
                 {suggestedPrompts.map((sp, i) => (
                   <button
                     key={i}
-                    className="h-6 text-[10px] px-2 gap-1 border border-border/30 hover:border-primary/20 hover:bg-primary/5 rounded-md transition-all flex items-center text-foreground/50 hover:text-foreground/70"
+                    className="h-5 text-[9px] px-1.5 gap-1 border border-border/20 hover:border-primary/20 hover:bg-primary/5 rounded transition-all flex items-center text-foreground/40 hover:text-foreground/60"
                     onClick={() => handleSuggestedPrompt(sp.text)}
                   >
-                    <sp.icon className="h-2.5 w-2.5 text-primary/50" />
+                    <sp.icon className="h-2 w-2 text-primary/40" />
                     {sp.text}
                   </button>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               {messages.map((m, i) => {
                 const prevRole = i > 0 ? messages[i - 1].role : null;
                 const roleSwitch = prevRole && prevRole !== m.role && prevRole !== 'system' && m.role !== 'system';
                 return (
                   <div key={m.id}>
-                    {roleSwitch && <div className="border-t border-border/15 my-1" />}
+                    {roleSwitch && <div className="h-px bg-border/10 my-0.5" />}
                     <StrategyMessageBubble
                       message={m}
                       onSaveAsMemory={onSaveMemory ? handleSaveFromMessage : undefined}
@@ -370,13 +334,13 @@ export function StrategyMainPanel({
               })}
               {isSending && !activeWorkflow && (
                 <div className="flex justify-start">
-                  <div className="bg-muted/40 rounded-lg px-3 py-2 flex items-center gap-2">
+                  <div className="rounded-lg px-3 py-1.5 flex items-center gap-1.5">
                     <div className="flex gap-0.5">
-                      <span className="h-1 w-1 rounded-full bg-primary/40 animate-bounce [animation-delay:0ms]" />
-                      <span className="h-1 w-1 rounded-full bg-primary/40 animate-bounce [animation-delay:150ms]" />
-                      <span className="h-1 w-1 rounded-full bg-primary/40 animate-bounce [animation-delay:300ms]" />
+                      <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:0ms]" />
+                      <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:150ms]" />
+                      <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:300ms]" />
                     </div>
-                    <span className="text-[11px] text-foreground/40">Thinking…</span>
+                    <span className="text-[10px] text-foreground/30">Thinking…</span>
                   </div>
                 </div>
               )}
@@ -396,9 +360,9 @@ export function StrategyMainPanel({
         </div>
       )}
 
-      {/* ── COMPOSER ── */}
-      <div className="shrink-0 bg-card/50 px-3 pt-1.5 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))]">
-        <div className="rounded-xl border border-border/50 bg-background shadow-sm overflow-hidden">
+      {/* ── COMPOSER — native to canvas ── */}
+      <div className="shrink-0 px-3 pt-0.5 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))]">
+        <div className="rounded-lg border border-border/30 bg-card/60 overflow-hidden">
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -406,23 +370,23 @@ export function StrategyMainPanel({
             placeholder={isSending ? 'Waiting…' : hasLinkedObject ? `Message about ${linkedContext?.account?.name || linkedContext?.opportunity?.name || 'this'}…` : 'Message…'}
             className={cn(
               'w-full border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none text-sm resize-none bg-transparent',
-              isMobile ? 'min-h-[36px]' : 'min-h-[34px]'
+              isMobile ? 'min-h-[34px]' : 'min-h-[32px]'
             )}
             rows={1}
             disabled={isSending}
           />
-          <div className="flex items-center justify-between px-2 py-1">
-            <div className="flex items-center gap-2">
-              <div className="flex rounded-lg overflow-hidden bg-muted/30">
+          <div className="flex items-center justify-between px-1.5 py-0.5">
+            <div className="flex items-center gap-1.5">
+              <div className="flex rounded overflow-hidden">
                 {DEPTH_OPTIONS.map(d => (
                   <button
                     key={d}
                     type="button"
                     className={cn(
-                      'px-2.5 py-0.5 text-[10px] font-medium transition-all rounded-md',
+                      'px-2 py-0.5 text-[9px] font-medium transition-all rounded',
                       depth === d
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-foreground/30 hover:text-foreground/50'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-foreground/25 hover:text-foreground/40'
                     )}
                     onClick={() => setDepth(d)}
                   >
@@ -431,21 +395,21 @@ export function StrategyMainPanel({
                 ))}
               </div>
               <button
-                className="h-6 w-6 flex items-center justify-center text-foreground/25 hover:text-foreground/50 transition-colors rounded-md hover:bg-muted/30"
+                className="h-5 w-5 flex items-center justify-center text-foreground/20 hover:text-foreground/40 transition-colors rounded"
                 title="Attach file"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isSending}
               >
-                <Paperclip className="h-3.5 w-3.5" />
+                <Paperclip className="h-3 w-3" />
               </button>
             </div>
             <Button
               size="sm"
-              className="h-7 gap-1.5 px-4 shrink-0 font-semibold rounded-lg shadow-sm"
+              className="h-6 gap-1 px-3 shrink-0 font-semibold rounded-md text-xs"
               onClick={handleSend}
               disabled={!input.trim() || isSending}
             >
-              {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              {isSending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
               Send
             </Button>
           </div>
