@@ -48,6 +48,11 @@ import { AudioDebugPanel } from '@/components/debug/AudioDebugPanel';
 
 type SessionState = 'generating' | 'active' | 'completed' | 'error';
 
+/** Canonical step ID: stable across rerenders, unique per session+block */
+function makeStepId(sessionId: string | null, blockIndex: number, blockType: string): string {
+  return `${sessionId ?? 'pending'}-${blockIndex}-${blockType}`;
+}
+
 export default function SkillBuilderSession() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -64,7 +69,6 @@ export default function SkillBuilderSession() {
     remediationContext?: { concept: string; weakDimensions: string[]; attemptCount: number };
   } | null;
 
-  // Resolve skill from SkillSession or legacy state
   const effectiveSkill: SkillFocus | undefined = resolvedSession?.session.skillId ?? state?.skill;
   const trainingContent = effectiveSkill ? getTrainingContent(effectiveSkill) : null;
   const [showTrainingFirst, setShowTrainingFirst] = useState(true);
@@ -80,15 +84,16 @@ export default function SkillBuilderSession() {
   );
   const [audioFailures, setAudioFailures] = useState(0);
   const [audioUnavailable, setAudioUnavailable] = useState(false);
+  const [lastAudioError, setLastAudioError] = useState<string | null>(null);
+  const [lastMicError, setLastMicError] = useState<string | null>(null);
   const { data: skillLevels } = useSkillLevels();
 
   // Stable session key — generated once, persists for entire lifecycle
   const stableSessionKey = useRef(`sb-${state?.skill ?? 'unknown'}-${Date.now()}`);
 
-  // Track which steps have had their transcript recorded (prevent doubles)
-  const recordedStepsRef = useRef<Set<number>>(new Set());
+  // Track which canonical step IDs have had their transcript recorded
+  const recordedStepsRef = useRef<Set<string>>(new Set());
 
-  // Dave unified controller for audio resilience
   const dave = useDaveVoiceController({
     surface: 'skill_builder',
     sessionKey: stableSessionKey.current,
@@ -161,7 +166,6 @@ export default function SkillBuilderSession() {
         setSessionId((data as any)?.id ?? null);
         setSessionState('active');
 
-        // Try restoring position from buffer
         if (dave.buffer && dave.buffer.position > 0) {
           setCurrentBlockIndex(dave.buffer.position);
           toast.success('Resuming from where you left off');
@@ -212,6 +216,9 @@ export default function SkillBuilderSession() {
 
   const completeSession = useCallback(async () => {
     setSessionState('completed');
+
+    // Full cleanup: stop any playing audio, clear tokens, buffers, telemetry
+    dave.stopSpeaking();
     dave.clearBuffer();
     clearIdempotencyRecords();
     clearAudioTelemetry();
@@ -257,19 +264,22 @@ export default function SkillBuilderSession() {
 
     if (!text) return;
 
-    const stepId = `block-${currentBlockIndex}`;
-    emitStepTelemetry('step_rendered', stepId, { blockType: block.type });
+    // Canonical step ID: sessionId + blockIndex + blockType
+    const stepId = makeStepId(sessionId, currentBlockIndex, block.type);
+    emitStepTelemetry('step_rendered', stepId, { blockType: block.type, blockIndex: currentBlockIndex });
 
-    // Prevent double transcript entries
-    if (!recordedStepsRef.current.has(currentBlockIndex)) {
+    // Prevent double transcript entries using canonical step ID
+    if (!recordedStepsRef.current.has(stepId)) {
       dave.recordTranscript('dave', text);
-      recordedStepsRef.current.add(currentBlockIndex);
+      recordedStepsRef.current.add(stepId);
     }
 
     // Fire-and-forget: audio plays alongside visible text, never blocks flow
     dave.speak(text).then(() => {
       emitStepTelemetry('audio_ended', stepId, {});
-    }).catch(() => {
+    }).catch((err) => {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setLastAudioError(errMsg);
       setAudioUnavailable(true);
       setAudioFailures(prev => {
         const next = prev + 1;
@@ -284,7 +294,7 @@ export default function SkillBuilderSession() {
         }
         return next;
       });
-      emitStepTelemetry('audio_failed', stepId, {});
+      emitStepTelemetry('audio_failed', stepId, { error: errMsg });
     });
   }, [currentBlockIndex, deliveryMode, sessionState]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -298,12 +308,15 @@ export default function SkillBuilderSession() {
       setDeliveryMode('full');
       setAudioFailures(0);
       setAudioUnavailable(false);
+      setLastAudioError(null);
+      setLastMicError(null);
       toast.info('Audio mode enabled');
     } else {
       setDeliveryMode('text');
+      dave.stopSpeaking();
       toast.info('Switched to text mode');
     }
-  }, [deliveryMode]);
+  }, [deliveryMode, dave]);
 
   // Show deep training content first when SkillSession is present and content exists
   if (showTrainingFirst && trainingContent && resolvedSession && !state?.fromClosedLoop) {
@@ -395,7 +408,6 @@ export default function SkillBuilderSession() {
               Skill Builder — {track.skillLabel}
             </p>
             <div className="flex items-center gap-1.5">
-              {/* Mode indicator */}
               <span className="text-[10px] text-muted-foreground">{modeInfo.icon}</span>
               <Button
                 variant="ghost"
@@ -415,7 +427,6 @@ export default function SkillBuilderSession() {
               </Badge>
             </div>
           </div>
-          {/* Progress bar */}
           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
             <div
               className="h-full rounded-full bg-primary transition-all duration-500"
@@ -444,7 +455,6 @@ export default function SkillBuilderSession() {
                 </p>
               </div>
             )}
-            {/* Closed-loop hand-back */}
             {state?.fromClosedLoop && state?.taughtConcept && (
               <div className="space-y-2 border-t border-border pt-3">
                 <p className="text-xs text-muted-foreground">
@@ -509,6 +519,8 @@ export default function SkillBuilderSession() {
           mode={deliveryMode}
           failureCount={audioFailures}
           micStatus={audioUnavailable ? 'unavailable' : deliveryMode === 'full' ? 'ready' : 'off'}
+          lastAudioError={lastAudioError}
+          lastMicError={lastMicError}
         />
       </div>
     </Layout>
@@ -558,17 +570,16 @@ function PlayAudioButton({ text, dave }: { text: string; dave?: DaveController }
     if (locked) return;
     setLocked(true);
 
-    // If currently playing, stop first
     if (playing) {
       dave.stopSpeaking();
       setPlaying(false);
-      // Short lock to prevent rapid toggling
       setTimeout(() => setLocked(false), 300);
       return;
     }
 
     setPlaying(true);
     try {
+      // speak() will interrupt any existing playback via token system
       await dave.speak(text);
     } catch {
       // ignore

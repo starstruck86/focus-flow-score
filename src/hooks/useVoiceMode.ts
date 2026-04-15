@@ -1,6 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
+import {
+  nextPlaybackId,
+  isActivePlayback,
+  emitStepTelemetry,
+} from '@/lib/daveAudioResilience';
 
 // ElevenLabs TTS has a 5000 char limit per request
 const TTS_CHUNK_LIMIT = 4500;
@@ -37,6 +42,7 @@ export interface VoiceModeDiagnostics {
   isRecording: boolean;
   isTranscribing: boolean;
   mounted: boolean;
+  activePlaybackId: string | null;
 }
 
 export function useVoiceMode() {
@@ -49,6 +55,9 @@ export function useVoiceMode() {
   const streamRef = useRef<MediaStream | null>(null);
   const playbackAbortRef = useRef(false);
   const mountedRef = useRef(true);
+
+  // Token-guarded playback: only the latest playbackId can mutate state
+  const activePlaybackIdRef = useRef<string | null>(null);
 
   // Separate tracking for TTS vs STT abort controllers to prevent cross-contamination
   const ttsAbortControllersRef = useRef<Set<AbortController>>(new Set());
@@ -76,6 +85,8 @@ export function useVoiceMode() {
       }
       // Stop media stream
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      // Clear playback token
+      activePlaybackIdRef.current = null;
     };
   }, []);
 
@@ -231,7 +242,7 @@ export function useVoiceMode() {
   };
 
   /** Play a single audio element with settle handlers for ended/error/stalled/timeout */
-  const playAudioWithTimeout = (audio: HTMLAudioElement): Promise<void> => {
+  const playAudioWithTimeout = (audio: HTMLAudioElement, playbackId: string): Promise<void> => {
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       let stallTimer: ReturnType<typeof setTimeout> | undefined;
@@ -282,12 +293,17 @@ export function useVoiceMode() {
         clearTimeout(stallTimer);
       };
 
-      // Detect external pause (from stopPlayback)
+      // Detect external pause (from stopPlayback or token invalidation)
       audio.onpause = () => {
         if (!audio.ended) {
           settle(() => {
             revokeUrl(audio.src);
-            resolve();
+            // If paused because token became stale, resolve silently
+            if (!isActivePlayback(playbackId)) {
+              resolve();
+            } else {
+              resolve();
+            }
           });
         }
       };
@@ -299,10 +315,39 @@ export function useVoiceMode() {
     });
   };
 
-  /** Play TTS with sequential chunk delivery — no skip bugs */
+  /**
+   * Stop any currently active playback — cleanly cancels previous clip,
+   * fires interrupt telemetry, and ensures stale callbacks are ignored.
+   */
+  const interruptCurrentPlayback = useCallback(() => {
+    const prevId = activePlaybackIdRef.current;
+
+    // Abort only TTS fetches — do NOT touch STT
+    ttsAbortControllersRef.current.forEach((ac) => ac.abort());
+    ttsAbortControllersRef.current.clear();
+    playbackAbortRef.current = true;
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      if (audioRef.current.src) revokeUrl(audioRef.current.src);
+      audioRef.current = null;
+    }
+
+    if (prevId) {
+      emitStepTelemetry('audio_interrupt', 'playback', { interruptedId: prevId });
+    }
+
+    safeSetIsPlaying(false);
+  }, [safeSetIsPlaying]);
+
+  /** Play TTS with sequential chunk delivery, token-guarded — stale clips cannot mutate state */
   const playTTS = useCallback(async (text: string, voiceId?: string): Promise<void> => {
-    // Stop any currently playing audio (TTS only — does not touch STT)
-    stopPlayback();
+    // Interrupt any existing playback cleanly
+    interruptCurrentPlayback();
+
+    // Mint a new playback token — only this token can control state
+    const playbackId = nextPlaybackId();
+    activePlaybackIdRef.current = playbackId;
     playbackAbortRef.current = false;
 
     const ac = new AbortController();
@@ -313,40 +358,40 @@ export function useVoiceMode() {
 
     try {
       for (let i = 0; i < chunks.length; i++) {
-        if (playbackAbortRef.current || ac.signal.aborted) break;
+        // Token guard: if we're no longer the active playback, bail silently
+        if (!isActivePlayback(playbackId) || playbackAbortRef.current || ac.signal.aborted) break;
 
         // Fetch current chunk
         const audio = await fetchTTSChunk(chunks[i], voiceId, ac.signal);
-        if (playbackAbortRef.current) {
+
+        // Re-check token after async fetch
+        if (!isActivePlayback(playbackId) || playbackAbortRef.current) {
           revokeUrl(audio.src);
           break;
         }
 
         audioRef.current = audio;
-        await playAudioWithTimeout(audio);
+        await playAudioWithTimeout(audio, playbackId);
       }
     } catch (err) {
-      if (!playbackAbortRef.current && !(err instanceof DOMException && err.name === 'AbortError')) {
+      // Only throw if this is still the active playback (not interrupted)
+      if (isActivePlayback(playbackId) && !playbackAbortRef.current && !(err instanceof DOMException && err.name === 'AbortError')) {
         throw err;
       }
     } finally {
       ttsAbortControllersRef.current.delete(ac);
-      safeSetIsPlaying(false);
+      // Only clear playing state if we're still the active playback
+      if (isActivePlayback(playbackId)) {
+        safeSetIsPlaying(false);
+      }
     }
-  }, [safeSetIsPlaying]);
+  }, [safeSetIsPlaying, interruptCurrentPlayback]);
 
   const stopPlayback = useCallback(() => {
-    playbackAbortRef.current = true;
-    // Abort only TTS fetches — do NOT touch STT
-    ttsAbortControllersRef.current.forEach((ac) => ac.abort());
-    ttsAbortControllersRef.current.clear();
-    if (audioRef.current) {
-      audioRef.current.pause();
-      if (audioRef.current.src) revokeUrl(audioRef.current.src);
-      audioRef.current = null;
-    }
-    safeSetIsPlaying(false);
-  }, [safeSetIsPlaying]);
+    interruptCurrentPlayback();
+    // Invalidate the token so no stale callbacks can fire
+    activePlaybackIdRef.current = null;
+  }, [interruptCurrentPlayback]);
 
   /** Diagnostics snapshot for debug/QA surfaces */
   const getDiagnostics = useCallback((): VoiceModeDiagnostics => ({
@@ -357,6 +402,7 @@ export function useVoiceMode() {
     isRecording,
     isTranscribing,
     mounted: mountedRef.current,
+    activePlaybackId: activePlaybackIdRef.current,
   }), [isPlaying, isRecording, isTranscribing]);
 
   return {

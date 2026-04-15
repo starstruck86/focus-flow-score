@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { Bug, X } from 'lucide-react';
 import {
   getAudioDebugState,
+  getRecentAudioTelemetry,
   describeMode,
   type AudioDeliveryMode,
   type AudioTelemetryEntry,
@@ -17,6 +18,8 @@ interface Props {
   mode: AudioDeliveryMode;
   failureCount: number;
   micStatus: string;
+  lastAudioError?: string | null;
+  lastMicError?: string | null;
 }
 
 function formatTime(ts: number): string {
@@ -37,12 +40,13 @@ const EVENT_COLORS: Record<string, string> = {
   retry_attempted: 'text-amber-400',
   mic_granted: 'text-green-500',
   mic_denied: 'text-destructive',
+  mic_requested: 'text-blue-400',
   mode_downgraded: 'text-orange-500',
   fallback_activated: 'text-amber-400',
   audio_unlock: 'text-green-600',
 };
 
-export function AudioDebugPanel({ mode, failureCount, micStatus }: Props) {
+export function AudioDebugPanel({ mode, failureCount, micStatus, lastAudioError, lastMicError }: Props) {
   const [visible, setVisible] = useState(false);
   const [state, setState] = useState<ReturnType<typeof getAudioDebugState> | null>(null);
 
@@ -81,16 +85,28 @@ export function AudioDebugPanel({ mode, failureCount, micStatus }: Props) {
 
       <div className="px-2.5 space-y-0.5 text-muted-foreground">
         <Row label="Mode" value={`${modeInfo.icon} ${modeInfo.label}`} />
-        <Row label="Audio unlocked" value={state.audioUnlocked ? '✓' : '✗'} highlight={!state.audioUnlocked} />
+        <Row label="Audio unlocked" value={state.audioUnlocked ? '✓ yes' : '✗ no'} highlight={!state.audioUnlocked} />
         <Row label="Playback ID" value={state.activePlaybackId?.slice(-12) ?? '—'} />
         <Row label="Failures" value={String(state.failureCount)} highlight={state.failureCount > 0} />
         <Row label="Mic" value={state.micStatus} />
       </div>
 
+      {/* Error section */}
+      {(lastAudioError || lastMicError) && (
+        <div className="mx-2.5 mt-1.5 pt-1.5 border-t border-border/50 space-y-0.5">
+          {lastAudioError && (
+            <Row label="Last audio err" value={lastAudioError} highlight />
+          )}
+          {lastMicError && (
+            <Row label="Last mic err" value={lastMicError} highlight />
+          )}
+        </div>
+      )}
+
       {state.recentEvents.length > 0 && (
         <div className="mt-1.5 mx-2.5 pt-1.5 border-t border-border/50">
           <div className="text-[9px] text-muted-foreground/50 mb-0.5">Recent Events</div>
-          <div className="space-y-px">
+          <div className="space-y-px max-h-28 overflow-y-auto">
             {state.recentEvents.slice().reverse().map((ev, i) => (
               <div key={`${ev.ts}-${i}`} className="flex gap-1 text-[10px] leading-tight">
                 <span className="text-muted-foreground/40 shrink-0">{formatTime(ev.ts)}</span>
@@ -115,7 +131,7 @@ function Row({ label, value, highlight }: { label: string; value: string; highli
   return (
     <div className={cn('flex justify-between gap-2', highlight && 'text-destructive')}>
       <span className="text-muted-foreground/60 shrink-0">{label}</span>
-      <span className="truncate text-right">{value}</span>
+      <span className="truncate text-right max-w-[160px]">{value}</span>
     </div>
   );
 }
