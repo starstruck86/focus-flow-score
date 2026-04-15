@@ -270,7 +270,6 @@ export default function SkillBuilderSession() {
 
     // Canonical step ID: sessionId + blockIndex + blockType
     const stepId = makeStepId(sessionId, currentBlockIndex, block.type);
-    emitStepTelemetry('step_rendered', stepId, { blockType: block.type, blockIndex: currentBlockIndex });
 
     // Prevent double transcript entries using canonical step ID
     if (!recordedStepsRef.current.has(stepId)) {
