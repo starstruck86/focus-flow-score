@@ -2,7 +2,8 @@ import { useState, useMemo, useCallback } from 'react';
 import {
   ChevronRight, Link2, Lightbulb, HelpCircle, FileText,
   Pin, Copy, Save, Plus, RefreshCw, Loader2, Sparkles,
-  Upload, BarChart3, Building2, Target,
+  Upload, BarChart3, Building2, Target, Globe, Cpu, Tag,
+  AlertTriangle, CheckCircle2, Clock, Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -19,6 +20,7 @@ import { toast } from 'sonner';
 import type { StrategyThread, StrategyOutput } from '@/types/strategy';
 import type { StrategyMemoryEntry } from '@/hooks/strategy/useStrategyMemory';
 import type { StrategyUpload } from '@/hooks/strategy/useStrategyUploads';
+import { getParseStatus } from '@/hooks/strategy/useStrategyUploads';
 import type { StrategyRollup, MemorySuggestion } from '@/lib/strategy/workflowSchemas';
 
 interface Props {
@@ -55,6 +57,14 @@ const MEMORY_TYPE_COLORS: Record<string, string> = {
   next_step: 'bg-orange-500/15 text-orange-300 border-orange-500/20',
 };
 
+const PARSE_STATUS_CONFIG: Record<string, { label: string; icon: typeof CheckCircle2; color: string }> = {
+  summarized: { label: 'Analyzed', icon: CheckCircle2, color: 'text-green-400' },
+  parsed: { label: 'Parsed', icon: Eye, color: 'text-blue-400' },
+  partial: { label: 'Partial', icon: Clock, color: 'text-amber-400' },
+  unsupported: { label: 'Binary', icon: AlertTriangle, color: 'text-muted-foreground/50' },
+  pending: { label: 'Pending', icon: Clock, color: 'text-muted-foreground' },
+};
+
 function RailSection({ title, icon: Icon, children, empty, count, action }: {
   title: string; icon: React.ElementType; children?: React.ReactNode;
   empty?: string; count?: number; action?: React.ReactNode;
@@ -86,9 +96,8 @@ export function StrategyRightRail({
   const [savedSuggestions, setSavedSuggestions] = useState<Set<number>>(new Set());
 
   const pinnedMemories = useMemo(() => memories.filter(m => m.is_pinned), [memories]);
-  const hypotheses = useMemo(() => memories.filter(m => m.memory_type === 'hypothesis'), [memories]);
-  const decisions = useMemo(() => memories.filter(m => m.memory_type === 'priority' || m.memory_type === 'next_step').slice(0, 5), [memories]);
   const risks = useMemo(() => memories.filter(m => m.memory_type === 'risk').slice(0, 5), [memories]);
+  const nextSteps = useMemo(() => memories.filter(m => m.memory_type === 'next_step' || m.memory_type === 'priority').slice(0, 5), [memories]);
 
   const handleSave = () => {
     if (!memContent.trim()) return;
@@ -121,32 +130,65 @@ export function StrategyRightRail({
       </div>
 
       <ScrollArea className="flex-1">
-        {/* Linked Objects */}
+        {/* Linked Object — Enhanced */}
         <RailSection title="Context" icon={Link2}>
           {linkedContext?.account ? (
             <Card className="bg-muted/20 border-border/30">
-              <CardContent className="p-2.5 flex items-start gap-2">
-                <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                  <Building2 className="h-3.5 w-3.5 text-primary/70" />
+              <CardContent className="p-2.5 space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                    <Building2 className="h-3.5 w-3.5 text-primary/70" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium truncate">{linkedContext.account.name}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {[linkedContext.account.industry, linkedContext.account.tier].filter(Boolean).join(' · ') || 'Account'}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium truncate">{linkedContext.account.name}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    {[linkedContext.account.industry, linkedContext.account.tier].filter(Boolean).join(' · ') || 'Account'}
-                  </p>
+                {/* Extended account detail */}
+                <div className="space-y-0.5 pl-0.5">
+                  {linkedContext.account.website && (
+                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                      <Globe className="h-2.5 w-2.5 shrink-0" />
+                      <span className="truncate">{linkedContext.account.website}</span>
+                    </div>
+                  )}
+                  {linkedContext.account.tech_stack?.length > 0 && (
+                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                      <Cpu className="h-2.5 w-2.5 shrink-0" />
+                      <span className="truncate">{linkedContext.account.tech_stack.slice(0, 3).join(', ')}</span>
+                    </div>
+                  )}
+                  {linkedContext.account.outreach_status && (
+                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                      <Tag className="h-2.5 w-2.5 shrink-0" />
+                      <span>{linkedContext.account.outreach_status}</span>
+                    </div>
+                  )}
+                  {linkedContext.account.notes && (
+                    <p className="text-[9px] text-muted-foreground/60 line-clamp-2 mt-1">{linkedContext.account.notes}</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
           ) : linkedContext?.opportunity ? (
             <Card className="bg-muted/20 border-border/30">
-              <CardContent className="p-2.5 flex items-start gap-2">
-                <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                  <Target className="h-3.5 w-3.5 text-primary/70" />
+              <CardContent className="p-2.5 space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                    <Target className="h-3.5 w-3.5 text-primary/70" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium truncate">{linkedContext.opportunity.name}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {[linkedContext.opportunity.stage, linkedContext.opportunity.close_date].filter(Boolean).join(' · ') || 'Opportunity'}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium truncate">{linkedContext.opportunity.name}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">{linkedContext.opportunity.stage || 'Opportunity'}</p>
-                </div>
+                {linkedContext.opportunity.notes && (
+                  <p className="text-[9px] text-muted-foreground/60 line-clamp-2">{linkedContext.opportunity.notes}</p>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -175,9 +217,9 @@ export function StrategyRightRail({
               <p className="text-[11px] text-foreground/80 leading-relaxed">{rollup.summary}</p>
               <RollupList label="Key Facts" items={rollup.key_facts} />
               <RollupList label="Hypotheses" items={rollup.hypotheses} />
-              <RollupList label="Risks" items={rollup.risks} />
+              <RollupList label="Risks" items={rollup.risks} icon={AlertTriangle} color="text-red-400/70" />
               <RollupList label="Open Questions" items={rollup.open_questions} />
-              <RollupList label="Next Steps" items={rollup.next_steps} />
+              <RollupList label="Next Steps" items={rollup.next_steps} icon={CheckCircle2} color="text-green-400/70" />
             </div>
           ) : isRollupLoading ? (
             <div className="flex items-center gap-2 py-2">
@@ -186,7 +228,7 @@ export function StrategyRightRail({
             </div>
           ) : (
             <p className="text-[10px] text-muted-foreground/40 italic pl-5">
-              Send messages or run a workflow to generate a rollup.
+              Send messages or run a workflow to generate.
             </p>
           )}
         </RailSection>
@@ -231,6 +273,38 @@ export function StrategyRightRail({
           </>
         )}
 
+        {/* Risks — Highlighted */}
+        {risks.length > 0 && (
+          <>
+            <RailSection title="Active Risks" icon={AlertTriangle} count={risks.length}>
+              <div className="space-y-1">
+                {risks.map(m => (
+                  <div key={m.id} className="bg-red-500/5 border border-red-500/10 rounded-lg px-2.5 py-1.5">
+                    <p className="text-[10px] text-foreground/70 leading-relaxed">{m.content}</p>
+                  </div>
+                ))}
+              </div>
+            </RailSection>
+            <Divider />
+          </>
+        )}
+
+        {/* Next Steps */}
+        {nextSteps.length > 0 && (
+          <>
+            <RailSection title="Next Steps" icon={CheckCircle2} count={nextSteps.length}>
+              <div className="space-y-1">
+                {nextSteps.map(m => (
+                  <div key={m.id} className="bg-green-500/5 border border-green-500/10 rounded-lg px-2.5 py-1.5">
+                    <p className="text-[10px] text-foreground/70 leading-relaxed">{m.content}</p>
+                  </div>
+                ))}
+              </div>
+            </RailSection>
+            <Divider />
+          </>
+        )}
+
         {/* Pinned Insights */}
         <RailSection title="Pinned" icon={Pin} count={pinnedMemories.length} empty="Pin insights from conversations">
           {pinnedMemories.length > 0 && (
@@ -244,64 +318,40 @@ export function StrategyRightRail({
 
         <Divider />
 
-        {/* Hypotheses */}
-        <RailSection title="Hypotheses" icon={Lightbulb} count={hypotheses.length} empty="No hypotheses recorded">
-          {hypotheses.length > 0 && (
-            <div className="space-y-1">
-              {hypotheses.slice(0, 5).map(m => (
-                <MemoryCard key={m.id} memory={m} />
-              ))}
-            </div>
-          )}
-        </RailSection>
-
-        <Divider />
-
-        {/* Decisions & Next Steps */}
-        <RailSection title="Decisions & Next Steps" icon={FileText} count={decisions.length} empty="No decisions yet">
-          {decisions.length > 0 && (
-            <div className="space-y-1">
-              {decisions.map(m => (
-                <MemoryCard key={m.id} memory={m} />
-              ))}
-            </div>
-          )}
-        </RailSection>
-
-        <Divider />
-
-        {/* Risks */}
-        <RailSection title="Risks & Questions" icon={HelpCircle} count={risks.length} empty="No risks identified">
-          {risks.length > 0 && (
-            <div className="space-y-1">
-              {risks.map(m => (
-                <MemoryCard key={m.id} memory={m} />
-              ))}
-            </div>
-          )}
-        </RailSection>
-
-        <Divider />
-
-        {/* Uploads */}
+        {/* Uploads — Enhanced */}
         <RailSection title="Uploads" icon={Upload} count={uploads.length} empty="Drag files into the composer">
           {uploads.length > 0 && (
-            <div className="space-y-1">
-              {uploads.slice(0, 8).map(u => (
-                <div key={u.id} className="bg-muted/20 rounded-lg px-2.5 py-1.5 border border-border/20">
-                  <div className="flex items-center gap-1.5">
-                    <FileTypeIcon fileType={u.file_type} />
-                    <span className="text-[11px] font-medium truncate flex-1">{u.file_name}</span>
+            <div className="space-y-1.5">
+              {uploads.slice(0, 8).map(u => {
+                const status = getParseStatus(u);
+                const statusConfig = PARSE_STATUS_CONFIG[status];
+                const StatusIcon = statusConfig.icon;
+                const meta = u.metadata_json as any;
+                return (
+                  <div key={u.id} className="bg-muted/20 rounded-lg px-2.5 py-2 border border-border/20">
+                    <div className="flex items-center gap-1.5">
+                      <FileTypeIcon fileType={u.file_type} fileName={u.file_name} />
+                      <span className="text-[11px] font-medium truncate flex-1">{u.file_name}</span>
+                      <div className={`flex items-center gap-0.5 ${statusConfig.color}`}>
+                        <StatusIcon className="h-2.5 w-2.5" />
+                        <span className="text-[8px]">{statusConfig.label}</span>
+                      </div>
+                    </div>
+                    {u.summary && (
+                      <p className="text-[9px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{u.summary}</p>
+                    )}
+                    {meta?.entities?.length > 0 && (
+                      <div className="flex flex-wrap gap-0.5 mt-1">
+                        {meta.entities.slice(0, 4).map((e: any, i: number) => (
+                          <Badge key={i} variant="outline" className="text-[7px] px-1 py-0 font-normal">
+                            {e.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {u.summary && <p className="text-[9px] text-muted-foreground mt-0.5 line-clamp-1 pl-5">{u.summary}</p>}
-                  {!u.summary && u.parsed_text && (
-                    <Badge variant="secondary" className="text-[8px] px-1 py-0 mt-0.5 ml-5">Parsed</Badge>
-                  )}
-                  {!u.summary && !u.parsed_text && (
-                    <Badge variant="outline" className="text-[8px] px-1 py-0 mt-0.5 ml-5 text-muted-foreground/50">Binary</Badge>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </RailSection>
@@ -318,6 +368,9 @@ export function StrategyRightRail({
                     <Badge variant="outline" className="text-[8px] px-1 py-0 shrink-0">{(o.output_type || '').replace(/_/g, ' ')}</Badge>
                     <span className="text-[11px] truncate">{o.title}</span>
                   </div>
+                  {o.rendered_text && (
+                    <p className="text-[9px] text-muted-foreground mt-0.5 line-clamp-1">{o.rendered_text.slice(0, 80)}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -376,26 +429,37 @@ function MemoryCard({ memory }: { memory: StrategyMemoryEntry }) {
           {memory.memory_type.replace(/_/g, ' ')}
         </Badge>
         {memory.is_pinned && <Pin className="h-2 w-2 text-amber-400 shrink-0" />}
+        {memory.confidence != null && (
+          <span className="text-[8px] text-muted-foreground/50 ml-auto">{Math.round(memory.confidence * 100)}%</span>
+        )}
       </div>
       <p className="text-[10px] text-foreground/70 mt-0.5 line-clamp-2 leading-relaxed">{memory.content}</p>
     </div>
   );
 }
 
-function FileTypeIcon({ fileType }: { fileType: string | null }) {
-  const ext = fileType?.split('/')[1] || '';
-  const label = ext === 'pdf' ? '📄' : ext === 'csv' ? '📊' : fileType?.startsWith('text/') ? '📝' : '📎';
-  return <span className="text-[11px]">{label}</span>;
+function FileTypeIcon({ fileType, fileName }: { fileType: string | null; fileName: string }) {
+  const ext = fileName?.split('.').pop()?.toLowerCase() || '';
+  if (ext === 'pdf') return <span className="text-[11px]">📄</span>;
+  if (['docx', 'doc'].includes(ext)) return <span className="text-[11px]">📝</span>;
+  if (['pptx', 'ppt'].includes(ext)) return <span className="text-[11px]">📊</span>;
+  if (['xlsx', 'xls', 'csv'].includes(ext)) return <span className="text-[11px]">📈</span>;
+  if (fileType?.startsWith('text/') || ['md', 'txt', 'json'].includes(ext)) return <span className="text-[11px]">📝</span>;
+  return <span className="text-[11px]">📎</span>;
 }
 
-function RollupList({ label, items }: { label: string; items?: string[] }) {
+function RollupList({ label, items, icon, color }: { label: string; items?: string[]; icon?: React.ElementType; color?: string }) {
   if (!items?.length) return null;
+  const Icon = icon;
   return (
     <div>
       <p className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-0.5">{label}</p>
       <ul className="space-y-0.5">
         {items.slice(0, 5).map((item, i) => (
-          <li key={i} className="text-[10px] text-foreground/65 pl-2 border-l-2 border-primary/15 leading-relaxed">{item}</li>
+          <li key={i} className="text-[10px] text-foreground/65 pl-2 border-l-2 border-primary/15 leading-relaxed flex items-start gap-1">
+            {Icon && <Icon className={`h-2.5 w-2.5 mt-0.5 shrink-0 ${color || ''}`} />}
+            <span>{item}</span>
+          </li>
         ))}
       </ul>
     </div>
