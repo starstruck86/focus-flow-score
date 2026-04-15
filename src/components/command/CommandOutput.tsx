@@ -1,6 +1,6 @@
 /**
  * CommandOutput — premium strategy document renderer.
- * Designed for true document-quality readability: light, spacious, professional.
+ * Mobile-first readability: scannable, chunked, professional.
  */
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,37 @@ import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
 import type { OutputBlock } from '@/lib/commandTypes';
+
+/* ── Post-process markdown for mobile scanability ── */
+
+function enhanceReadability(md: string): string {
+  return md
+    .split('\n\n')
+    .flatMap(para => {
+      // Don't split headings, lists, blockquotes, code
+      if (/^[#\-\*\d+\.\>```]/.test(para.trim())) return [para];
+      // Split long paragraphs (>280 chars) at sentence boundaries
+      if (para.length > 280) {
+        const sentences = para.match(/[^.!?]+[.!?]+\s*/g);
+        if (sentences && sentences.length > 2) {
+          const chunks: string[] = [];
+          let current = '';
+          for (const s of sentences) {
+            if ((current + s).length > 200 && current.length > 0) {
+              chunks.push(current.trim());
+              current = s;
+            } else {
+              current += s;
+            }
+          }
+          if (current.trim()) chunks.push(current.trim());
+          return chunks;
+        }
+      }
+      return [para];
+    })
+    .join('\n\n');
+}
 
 /* ── Section semantics ── */
 
@@ -43,16 +74,16 @@ function classifySectionHeading(heading: string): SectionSemantic {
 }
 
 const SEMANTIC_ACCENT: Record<SectionSemantic, { color: string; Icon: React.ElementType }> = {
-  risk: { color: 'text-amber-500/60', Icon: AlertTriangle },
-  action: { color: 'text-primary/60', Icon: Target },
-  takeaway: { color: 'text-emerald-500/60', Icon: Lightbulb },
-  question: { color: 'text-blue-400/60', Icon: HelpCircle },
-  stakeholder: { color: 'text-violet-400/60', Icon: Users },
-  next_step: { color: 'text-primary/60', Icon: ArrowRight },
-  email_body: { color: 'text-foreground/50', Icon: Mail },
-  summary: { color: 'text-foreground/50', Icon: FileText },
-  idea: { color: 'text-amber-400/60', Icon: Lightbulb },
-  default: { color: 'text-foreground/40', Icon: FileText },
+  risk: { color: 'text-amber-500/50', Icon: AlertTriangle },
+  action: { color: 'text-primary/50', Icon: Target },
+  takeaway: { color: 'text-emerald-500/50', Icon: Lightbulb },
+  question: { color: 'text-blue-400/50', Icon: HelpCircle },
+  stakeholder: { color: 'text-violet-400/50', Icon: Users },
+  next_step: { color: 'text-primary/50', Icon: ArrowRight },
+  email_body: { color: 'text-foreground/40', Icon: Mail },
+  summary: { color: 'text-foreground/40', Icon: FileText },
+  idea: { color: 'text-amber-400/50', Icon: Lightbulb },
+  default: { color: 'text-foreground/30', Icon: FileText },
 };
 
 const OUTPUT_TITLES: Record<string, string> = {
@@ -61,6 +92,32 @@ const OUTPUT_TITLES: Record<string, string> = {
   'Follow-Up Email': 'Follow-Up Email',
   'Brainstorm': 'Strategic Brainstorm',
 };
+
+/* ── Prose classes — mobile-first scannable document ── */
+
+const proseClasses = cn(
+  'prose prose-sm sm:prose-base dark:prose-invert max-w-none',
+  // Headings — clear hierarchy, breathing room
+  'prose-headings:text-foreground/80 prose-headings:font-semibold prose-headings:tracking-tight',
+  'prose-h1:text-lg prose-h1:leading-snug prose-h1:mb-4 prose-h1:mt-0',
+  'prose-h2:text-base prose-h2:leading-snug prose-h2:mb-3 prose-h2:mt-8',
+  'prose-h3:text-[15px] prose-h3:leading-snug prose-h3:mb-2 prose-h3:mt-6',
+  'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-4 prose-h4:text-foreground/60',
+  // Body — generous line-height, clear paragraph breaks
+  'prose-p:text-[14.5px] prose-p:text-foreground/60 prose-p:leading-[1.85] prose-p:mb-4',
+  // Lists — well-spaced, easy to scan
+  'prose-li:text-[14.5px] prose-li:text-foreground/60 prose-li:leading-[1.75] prose-li:mb-2',
+  'prose-ul:my-4 prose-ol:my-4',
+  '[&_ul]:space-y-1.5 [&_ol]:space-y-1.5',
+  'prose-ul:pl-0 prose-ol:pl-0',
+  // Emphasis
+  'prose-strong:text-foreground/75 prose-strong:font-semibold',
+  'prose-em:text-foreground/55 prose-em:text-[13px]',
+  // Quotes — subtle
+  'prose-blockquote:border-l-2 prose-blockquote:border-primary/12 prose-blockquote:text-foreground/50 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-4 prose-blockquote:my-5',
+  // Code
+  'prose-code:text-primary/60 prose-code:bg-primary/[0.04] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
+);
 
 /* ── Props ── */
 
@@ -138,40 +195,13 @@ export function CommandOutput({
 
   const hasBlocks = blocks.length > 1;
 
-  /* Prose: optimized for reading comfort — lighter text, generous spacing */
-  const proseClasses = cn(
-    'prose prose-base dark:prose-invert max-w-none',
-    // Headings
-    'prose-headings:text-foreground/85 prose-headings:font-semibold prose-headings:tracking-tight',
-    'prose-h1:text-[20px] prose-h1:leading-[1.3] prose-h1:mb-4 prose-h1:mt-0',
-    'prose-h2:text-[17px] prose-h2:leading-[1.3] prose-h2:mb-3 prose-h2:mt-8',
-    'prose-h3:text-[15px] prose-h3:leading-[1.4] prose-h3:mb-2 prose-h3:mt-5',
-    'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-4 prose-h4:text-foreground/70',
-    // Body text — light, readable
-    'prose-p:text-[15px] prose-p:text-foreground/65 prose-p:leading-[1.8] prose-p:my-3.5',
-    // Lists — clean and well-spaced
-    'prose-li:text-[15px] prose-li:text-foreground/65 prose-li:leading-[1.75] prose-li:my-1.5',
-    'prose-ul:my-4 prose-ol:my-4',
-    '[&_ul]:space-y-2 [&_ol]:space-y-2',
-    '[&_ul_ul]:mt-1.5 [&_ol_ol]:mt-1.5',
-    'prose-ul:pl-0 prose-ol:pl-0',
-    '[&_ul>li]:pl-0 [&_ol>li]:pl-0',
-    // Emphasis
-    'prose-strong:text-foreground/80 prose-strong:font-semibold',
-    'prose-em:text-foreground/70 prose-em:not-italic prose-em:text-[14px] prose-em:text-muted-foreground/50',
-    // Quotes
-    'prose-blockquote:border-l-2 prose-blockquote:border-primary/15 prose-blockquote:text-foreground/55 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-5 prose-blockquote:my-5',
-    // Code
-    'prose-code:text-primary/70 prose-code:bg-primary/[0.04] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
-  );
-
   return (
     <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
       {/* Document canvas — minimal chrome, maximum readability */}
       <div className="rounded-xl border border-border/10 bg-card/40 overflow-hidden">
 
         {/* Document header — quiet and informational */}
-        <div className="px-8 pt-6 pb-4">
+        <div className="px-5 sm:px-8 pt-5 pb-3 sm:pt-6 sm:pb-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h2 className="text-[18px] font-semibold text-foreground/85 tracking-tight leading-tight">{docTitle}</h2>
@@ -241,7 +271,7 @@ export function CommandOutput({
         </div>
 
         {/* Divider */}
-        <div className="mx-8 border-t border-border/8" />
+        <div className="mx-5 sm:mx-8 border-t border-border/8" />
 
         {/* Document body */}
         {isGenerating ? (
@@ -264,17 +294,17 @@ export function CommandOutput({
             />
           </div>
         ) : (
-          <div className="px-8 py-8">
-            <div className="max-w-[620px]">
+          <div className="px-5 sm:px-8 py-6 sm:py-8">
+            <div className="max-w-[580px]">
               {subjectLine && (
-                <div className="mb-8 pb-5 border-b border-border/8">
+                <div className="mb-6 pb-4 border-b border-border/8">
                   <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/25 font-medium">Subject</span>
-                  <p className="text-[16px] font-semibold text-foreground/80 mt-1.5 leading-snug">{subjectLine}</p>
+                  <p className="text-[15px] font-semibold text-foreground/75 mt-1.5 leading-snug">{subjectLine}</p>
                 </div>
               )}
 
               {hasBlocks ? (
-                <div className="space-y-8">
+                <div className="space-y-10">
                   {blocks.map((block, i) => {
                     const semantic = classifySectionHeading(block.heading);
                     const accent = SEMANTIC_ACCENT[semantic];
@@ -282,10 +312,10 @@ export function CommandOutput({
                     return (
                       <section key={i} className="group relative">
                         {block.heading && (
-                          <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-2">
                               <accent.Icon className={cn('h-3.5 w-3.5 shrink-0', accent.color)} />
-                              <h3 className="text-[15px] font-semibold text-foreground/80 tracking-tight">
+                              <h3 className="text-[14px] font-semibold text-foreground/75 tracking-tight uppercase">
                                 {block.heading}
                               </h3>
                             </div>
@@ -303,7 +333,7 @@ export function CommandOutput({
                           </div>
                         )}
                         <div className={proseClasses}>
-                          <ReactMarkdown>{block.content}</ReactMarkdown>
+                          <ReactMarkdown>{enhanceReadability(block.content)}</ReactMarkdown>
                         </div>
                       </section>
                     );
@@ -311,7 +341,7 @@ export function CommandOutput({
                 </div>
               ) : (
                 <div className={proseClasses}>
-                  <ReactMarkdown>{displayOutput}</ReactMarkdown>
+                  <ReactMarkdown>{enhanceReadability(displayOutput)}</ReactMarkdown>
                 </div>
               )}
             </div>
@@ -320,7 +350,7 @@ export function CommandOutput({
 
         {/* Utility bar — very quiet */}
         {!isGenerating && (
-          <div className="flex items-center justify-between px-8 py-2.5 border-t border-border/6">
+          <div className="flex items-center justify-between px-5 sm:px-8 py-2.5 border-t border-border/6">
             <div className="flex items-center gap-1">
               {[
                 { onClick: handleCopy, icon: copied ? Check : Copy, label: copied ? 'Copied' : 'Copy all', accent: copied },
