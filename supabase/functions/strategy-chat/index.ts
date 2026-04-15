@@ -979,8 +979,10 @@ ${contextSection}`;
 async function handleWorkflow(
   supabase: any, threadId: string, userId: string,
   workflowType: string, content: string, contextSection: string, pack: ContextPack,
+  forceFallback?: boolean,
 ) {
   const route = resolveLLMRoute(workflowType);
+  if (forceFallback) route._smokeTestForceFail = true;
   const tool = WORKFLOW_TOOLS[workflowType];
 
   const { data: run, error: runErr } = await supabase.from("strategy_workflow_runs")
