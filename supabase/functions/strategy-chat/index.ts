@@ -241,6 +241,9 @@ const ROLLUP_TOOL = {
 // ── Improved Retrieval Layer ──────────────────────────────
 const MAX_CONTEXT_CHARS = 14000;
 
+// Hard caps per category
+const CAPS = { memories: 15, uploads: 5, outputs: 5, messages: 15 };
+
 interface ContextPack {
   account?: any;
   opportunity?: any;
@@ -254,6 +257,9 @@ interface ContextPack {
     uploadsIncluded: number;
     outputsIncluded: number;
     messagesIncluded: number;
+    pinnedMemories: number;
+    uploadNames: string[];
+    outputTitles: string[];
   };
 }
 
@@ -266,7 +272,7 @@ async function buildContextPack(
 ): Promise<ContextPack> {
   const pack: ContextPack = {
     memories: [], uploads: [], outputs: [], recentMessages: [], sourceCount: 0,
-    retrievalMeta: { memoriesScored: 0, uploadsIncluded: 0, outputsIncluded: 0, messagesIncluded: 0 },
+    retrievalMeta: { memoriesScored: 0, uploadsIncluded: 0, outputsIncluded: 0, messagesIncluded: 0, pinnedMemories: 0, uploadNames: [], outputTitles: [] },
   };
 
   // 1. Get thread metadata
@@ -391,27 +397,54 @@ async function buildContextPack(
 
   await Promise.all(promises);
 
-  // 6. Improved scoring and ranking
+  // 6. Improved scoring, dedup, and ranking with hard caps
   pack.memories = scoreAndRankMemories(pack.memories, queryTerms, boostTerms);
   pack.outputs = scoreAndRankOutputs(pack.outputs, queryTerms);
+  
+  // Apply hard caps
+  pack.uploads = pack.uploads.slice(0, CAPS.uploads);
+  pack.recentMessages = pack.recentMessages.slice(-CAPS.messages);
+  
+  // Truncate upload text to prevent token budget domination
+  pack.uploads = pack.uploads.map((u: any) => ({
+    ...u,
+    parsed_text: u.parsed_text ? u.parsed_text.slice(0, 2000) : null,
+    summary: u.summary ? u.summary.slice(0, 500) : null,
+  }));
+
+  const pinnedCount = pack.memories.filter((m: any) => m.is_pinned).length;
   
   pack.retrievalMeta = {
     memoriesScored: pack.memories.length,
     uploadsIncluded: pack.uploads.length,
     outputsIncluded: pack.outputs.length,
     messagesIncluded: pack.recentMessages.length,
+    pinnedMemories: pinnedCount,
+    uploadNames: pack.uploads.map((u: any) => u.file_name).filter(Boolean),
+    outputTitles: pack.outputs.map((o: any) => o.title).filter(Boolean).slice(0, 5),
   };
   
   pack.sourceCount = (pack.account ? 1 : 0) + (pack.opportunity ? 1 : 0)
     + pack.memories.length + pack.uploads.length + pack.outputs.length;
 
-  console.log(`[retrieval] sources=${pack.sourceCount} memories=${pack.memories.length} uploads=${pack.uploads.length} outputs=${pack.outputs.length} messages=${pack.recentMessages.length}`);
+  console.log(`[retrieval] sources=${pack.sourceCount} memories=${pack.memories.length}(${pinnedCount} pinned) uploads=${pack.uploads.length} outputs=${pack.outputs.length} messages=${pack.recentMessages.length}`);
 
   return pack;
 }
 
 function scoreAndRankMemories(memories: any[], queryTerms: string[], boostTerms: string[]): any[] {
-  return memories
+  // Deduplicate by content (substring match)
+  const seen = new Set<string>();
+  const deduped = memories.filter((m) => {
+    const norm = m.content.toLowerCase().trim().slice(0, 200);
+    for (const s of seen) {
+      if (s.includes(norm) || norm.includes(s)) return false;
+    }
+    seen.add(norm);
+    return true;
+  });
+
+  return deduped
     .map((m) => {
       let score = 1;
       
@@ -422,12 +455,13 @@ function scoreAndRankMemories(memories: any[], queryTerms: string[], boostTerms:
       if (m.confidence && m.confidence > 0.7) score += 2;
       else if (m.confidence && m.confidence > 0.5) score += 1;
       
-      // Recency boost (stronger gradient)
-      const age = Date.now() - new Date(m.created_at).getTime();
-      if (age < 24 * 3600000) score += 4;      // today
-      else if (age < 3 * 86400000) score += 3;  // 3 days
-      else if (age < 7 * 86400000) score += 2;  // week
-      else if (age < 30 * 86400000) score += 1;  // month
+      // Recency boost (stronger gradient) + staleness penalty
+      const ageDays = (Date.now() - new Date(m.created_at).getTime()) / 86400000;
+      if (ageDays < 1) score += 4;
+      else if (ageDays < 3) score += 3;
+      else if (ageDays < 7) score += 2;
+      else if (ageDays < 30) score += 1;
+      else if (!m.is_pinned) score -= 1; // Staleness penalty for unpinned >30 days
       
       // Query keyword overlap
       const content = m.content.toLowerCase();
@@ -449,7 +483,7 @@ function scoreAndRankMemories(memories: any[], queryTerms: string[], boostTerms:
       return { ...m, score };
     })
     .sort((a: any, b: any) => b.score - a.score)
-    .slice(0, 20);
+    .slice(0, CAPS.memories);
 }
 
 function scoreAndRankOutputs(outputs: any[], queryTerms: string[]): any[] {
