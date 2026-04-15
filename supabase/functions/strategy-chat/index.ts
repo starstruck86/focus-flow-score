@@ -459,6 +459,14 @@ function scoreAndRankMemories(memories: any[], queryTerms: string[], boostTerms:
       // Confidence boost
       if (m.confidence && m.confidence > 0.7) score += 2;
       else if (m.confidence && m.confidence > 0.5) score += 1;
+      else if (m.confidence !== null && m.confidence < 0.3) score -= 1; // Low-confidence penalty
+      
+      // last_used_at boost — recently used memories are more relevant
+      if (m.last_used_at) {
+        const usedAgeDays = (Date.now() - new Date(m.last_used_at).getTime()) / 86400000;
+        if (usedAgeDays < 3) score += 2;
+        else if (usedAgeDays < 7) score += 1;
+      }
       
       // Recency boost (stronger gradient) + staleness penalty
       const ageDays = (Date.now() - new Date(m.created_at).getTime()) / 86400000;
