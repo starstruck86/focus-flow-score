@@ -119,8 +119,8 @@ export default function Strategy() {
 
   return (
     <Layout hideFloatingFab>
-      {/* Outer flex row fills whatever Layout gives us — no calc, no overflow-hidden on wrapper */}
-      <div className="flex flex-1 min-h-0">
+      {/* Strategy manages its own scroll regions — fill the main area absolutely */}
+      <div className="absolute inset-0 flex">
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
 
