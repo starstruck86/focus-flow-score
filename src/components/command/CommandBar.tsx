@@ -1,9 +1,12 @@
 /**
- * Command Bar — single input with @, $, + autocomplete.
- * Entities are tracked as structured tokens with stable IDs.
- * Supports inline creation of missing accounts/opportunities.
+ * Command Bar — structured token-first composer.
+ *
+ * Tokens (+ template, @ account, $ opportunity) render as inline chips
+ * INSIDE the input area. Free text is typed around them.
+ * Backspace at chip boundary removes the token naturally.
+ * Preserves fast keyboard flow: trigger → type → arrow/tab/enter → continue.
  */
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Zap, Building2, DollarSign, Plus, Loader2, X, PlusCircle } from 'lucide-react';
 import type { ParsedCommand, CommandToken, TemplateMetadata } from '@/lib/commandTypes';
@@ -28,8 +31,9 @@ interface Props {
   placeholder?: string;
   prefill?: string;
   onPrefillConsumed?: () => void;
-  /** Keep input populated after execute instead of clearing */
   preserveAfterExecute?: boolean;
+  /** Expose current tokens for pre-run context strip */
+  onTokensChange?: (tokens: CommandToken[]) => void;
 }
 
 const TRIGGER_CHARS: Record<string, 'account' | 'opportunity' | 'template'> = {
@@ -45,6 +49,12 @@ const TRIGGER_ICONS: Record<string, React.ElementType> = {
 };
 
 const TRIGGER_COLORS: Record<string, string> = {
+  account: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+  opportunity: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+  template: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+};
+
+const TRIGGER_CHIP_TEXT: Record<string, string> = {
   account: 'text-blue-400',
   opportunity: 'text-emerald-400',
   template: 'text-amber-400',
@@ -54,85 +64,89 @@ export function CommandBar({
   accounts, opportunities, templates, onExecute,
   onCreateAccount, onCreateOpportunity,
   isLoading, placeholder, prefill, onPrefillConsumed,
-  preserveAfterExecute,
+  preserveAfterExecute, onTokensChange,
 }: Props) {
-  const [value, setValue] = useState('');
+  const [freeText, setFreeText] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [activeTrigger, setActiveTrigger] = useState<string | null>(null);
-  const [triggerStart, setTriggerStart] = useState<number>(-1);
+  const [filterText, setFilterText] = useState('');
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [tokens, setTokens] = useState<CommandToken[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  // Guard against prefill clobbering active typing
   const isTypingRef = useRef(false);
 
-  const updateSuggestions = useCallback((text: string, cursor: number) => {
-    let trigger: string | null = null;
-    let start = -1;
+  // Notify parent of token changes
+  useEffect(() => {
+    onTokensChange?.(tokens);
+  }, [tokens, onTokensChange]);
 
-    for (let i = cursor - 1; i >= 0; i--) {
-      if (text[i] === ' ' || text[i] === '\n') break;
-      if (TRIGGER_CHARS[text[i]]) {
-        if (i === 0 || text[i - 1] === ' ') {
-          trigger = text[i];
-          start = i;
-          break;
-        }
-      }
-    }
-
-    if (!trigger) {
-      setSuggestions([]);
-      setActiveTrigger(null);
-      setTriggerStart(-1);
-      return;
-    }
-
-    const filterText = text.slice(start + 1, cursor).toLowerCase();
-    const type = TRIGGER_CHARS[trigger];
+  const openSuggestions = useCallback((triggerChar: string, filter: string) => {
+    const type = TRIGGER_CHARS[triggerChar];
     let items: Suggestion[] = [];
+    const lowerFilter = filter.toLowerCase();
 
     if (type === 'account') {
       items = accounts
-        .filter(a => a.name.toLowerCase().includes(filterText))
+        .filter(a => a.name.toLowerCase().includes(lowerFilter))
         .slice(0, 7)
         .map(a => ({ type: 'account', id: a.id, name: a.name }));
-      if (filterText.length > 1 && !items.some(i => i.name.toLowerCase() === filterText)) {
-        items.push({ type: 'account', id: '__create__', name: filterText, is_create: true });
+      if (lowerFilter.length > 1 && !items.some(i => i.name.toLowerCase() === lowerFilter)) {
+        items.push({ type: 'account', id: '__create__', name: filter, is_create: true });
       }
     } else if (type === 'opportunity') {
       items = opportunities
-        .filter(o => o.name.toLowerCase().includes(filterText))
+        .filter(o => o.name.toLowerCase().includes(lowerFilter))
         .slice(0, 7)
         .map(o => ({ type: 'opportunity', id: o.id, name: o.name, subtitle: o.account_name }));
-      if (filterText.length > 1 && !items.some(i => i.name.toLowerCase() === filterText)) {
-        items.push({ type: 'opportunity', id: '__create__', name: filterText, is_create: true });
+      if (lowerFilter.length > 1 && !items.some(i => i.name.toLowerCase() === lowerFilter)) {
+        items.push({ type: 'opportunity', id: '__create__', name: filter, is_create: true });
       }
     } else if (type === 'template') {
       items = templates
-        .filter(t => t.name.toLowerCase().includes(filterText))
+        .filter(t => t.name.toLowerCase().includes(lowerFilter))
         .slice(0, 8)
         .map(t => ({ type: 'template', id: t.id, name: t.name, subtitle: t.description, is_pinned: t.is_pinned }));
     }
 
     setSuggestions(items);
-    setActiveTrigger(trigger);
-    setTriggerStart(start);
+    setActiveTrigger(triggerChar);
+    setFilterText(filter);
     setSelectedIdx(0);
   }, [accounts, opportunities, templates]);
 
+  const closeSuggestions = useCallback(() => {
+    setSuggestions([]);
+    setActiveTrigger(null);
+    setFilterText('');
+  }, []);
+
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     isTypingRef.current = true;
-    const newVal = e.target.value;
-    setValue(newVal);
-    const cursor = e.target.selectionStart ?? newVal.length;
-    updateSuggestions(newVal, cursor);
-    // Reset after a brief window
+    const val = e.target.value;
+    setFreeText(val);
+
+    // Check if user just typed a trigger character
+    const cursor = e.target.selectionStart ?? val.length;
+    // Look backwards from cursor for a trigger
+    let foundTrigger = false;
+    for (let i = cursor - 1; i >= 0; i--) {
+      const ch = val[i];
+      if (ch === ' ' || ch === '\n') break;
+      if (TRIGGER_CHARS[ch] && (i === 0 || val[i - 1] === ' ')) {
+        const filter = val.slice(i + 1, cursor);
+        openSuggestions(ch, filter);
+        foundTrigger = true;
+        break;
+      }
+    }
+    if (!foundTrigger) closeSuggestions();
+
     setTimeout(() => { isTypingRef.current = false; }, 300);
-  }, [updateSuggestions]);
+  }, [openSuggestions, closeSuggestions]);
 
   const selectSuggestion = useCallback(async (suggestion: Suggestion) => {
+    // Handle "Create new" flow
     if (suggestion.is_create) {
       let created: { id: string; name: string } | null = null;
       if (suggestion.type === 'account' && onCreateAccount) {
@@ -140,207 +154,226 @@ export function CommandBar({
       } else if (suggestion.type === 'opportunity' && onCreateOpportunity) {
         created = await onCreateOpportunity(suggestion.name);
       }
-      if (!created) {
-        setSuggestions([]);
-        return;
-      }
+      if (!created) { closeSuggestions(); return; }
       suggestion = { ...suggestion, id: created.id, name: created.name, is_create: false };
     }
 
-    const before = value.slice(0, triggerStart);
-    const after = value.slice(inputRef.current?.selectionStart ?? value.length);
-    const triggerChar = activeTrigger || '';
-    const token = `${triggerChar}${suggestion.name} `;
-    const newVal = before + token + after.trimStart();
-
-    setValue(newVal);
-    setSuggestions([]);
-    setActiveTrigger(null);
-
+    // Add token
     setTokens(prev => {
       const filtered = prev.filter(t => t.type !== suggestion.type);
       return [...filtered, { type: suggestion.type, id: suggestion.id, name: suggestion.name }];
     });
 
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-        const pos = before.length + token.length;
-        inputRef.current.setSelectionRange(pos, pos);
-      }
-    }, 0);
-  }, [value, triggerStart, activeTrigger, onCreateAccount, onCreateOpportunity]);
+    // Remove the trigger + filter text from freeText
+    if (activeTrigger) {
+      setFreeText(prev => {
+        // Find the trigger char + filter text and remove it
+        const cursor = inputRef.current?.selectionStart ?? prev.length;
+        for (let i = cursor - 1; i >= 0; i--) {
+          if (prev[i] === activeTrigger && (i === 0 || prev[i - 1] === ' ')) {
+            return (prev.slice(0, i) + prev.slice(cursor)).trim();
+          }
+        }
+        return prev;
+      });
+    }
+
+    closeSuggestions();
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, [activeTrigger, onCreateAccount, onCreateOpportunity, closeSuggestions]);
 
   const removeToken = useCallback((type: CommandToken['type']) => {
-    const token = tokens.find(t => t.type === type);
-    if (token) {
-      const triggerChar = type === 'account' ? '@' : type === 'opportunity' ? '$' : '+';
-      setValue(prev => prev.replace(`${triggerChar}${token.name} `, '').replace(`${triggerChar}${token.name}`, '').trim());
-      setTokens(prev => prev.filter(t => t.type !== type));
-    }
-  }, [tokens]);
+    setTokens(prev => prev.filter(t => t.type !== type));
+  }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Suggestion navigation
     if (suggestions.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIdx(i => Math.min(i + 1, suggestions.length - 1));
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIdx(i => Math.max(i - 1, 0));
-        return;
-      }
-      if (e.key === 'Tab' || e.key === 'Enter') {
-        e.preventDefault();
-        selectSuggestion(suggestions[selectedIdx]);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setSuggestions([]);
-        return;
-      }
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIdx(i => Math.min(i + 1, suggestions.length - 1)); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIdx(i => Math.max(i - 1, 0)); return; }
+      if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); selectSuggestion(suggestions[selectedIdx]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); closeSuggestions(); return; }
     }
 
+    // Backspace at start of empty input → remove last token
+    if (e.key === 'Backspace' && freeText === '' && tokens.length > 0) {
+      e.preventDefault();
+      setTokens(prev => prev.slice(0, -1));
+      return;
+    }
+
+    // Enter to execute
     if (e.key === 'Enter' && suggestions.length === 0) {
       e.preventDefault();
       handleExecute();
     }
-  }, [suggestions, selectedIdx, selectSuggestion]);
+  }, [suggestions, selectedIdx, selectSuggestion, closeSuggestions, freeText, tokens]);
 
   const handleExecute = useCallback(() => {
-    if (!value.trim() || isLoading) return;
+    if ((!freeText.trim() && tokens.length === 0) || isLoading) return;
 
     const account = tokens.find(t => t.type === 'account') || null;
     const opportunity = tokens.find(t => t.type === 'opportunity') || null;
     const template = tokens.find(t => t.type === 'template') || null;
 
-    let freeText = value;
-    for (const token of tokens) {
-      const triggerChar = token.type === 'account' ? '@' : token.type === 'opportunity' ? '$' : '+';
-      freeText = freeText.replace(`${triggerChar}${token.name}`, '').trim();
-    }
+    // Build rawText for display/history
+    const rawParts: string[] = [];
+    if (template) rawParts.push(`+${template.name}`);
+    if (account) rawParts.push(`@${account.name}`);
+    if (opportunity) rawParts.push(`$${opportunity.name}`);
+    if (freeText.trim()) rawParts.push(freeText.trim());
+    const rawText = rawParts.join(' ');
 
-    onExecute({ rawText: value, account, opportunity, template, freeText });
+    onExecute({ rawText, account, opportunity, template, freeText: freeText.trim() });
 
-    // If preserveAfterExecute, keep input populated; otherwise clear
     if (!preserveAfterExecute) {
-      setValue('');
+      setFreeText('');
       setTokens([]);
     }
-  }, [value, tokens, onExecute, isLoading, preserveAfterExecute]);
+  }, [freeText, tokens, onExecute, isLoading, preserveAfterExecute]);
 
-  // Prefill from starter commands — skip if user is actively typing
+  // Prefill from starter commands
   useEffect(() => {
     if (prefill && !isTypingRef.current) {
-      setValue(prefill);
-      setTokens([]); // Reset tokens for new prefill
+      // Parse prefill into tokens + remaining text
+      const newTokens: CommandToken[] = [];
+      let remaining = prefill;
+
+      // Extract +Template
+      const templateMatch = remaining.match(/\+([^@$]+?)(?=\s[@$]|\s*$)/);
+      if (templateMatch) {
+        const name = templateMatch[1].trim();
+        const t = templates.find(t => t.name.toLowerCase() === name.toLowerCase());
+        if (t) {
+          newTokens.push({ type: 'template', id: t.id, name: t.name });
+        } else {
+          newTokens.push({ type: 'template', id: name, name });
+        }
+        remaining = remaining.replace(templateMatch[0], '').trim();
+      }
+
+      // If remaining has just @ or $, open suggestions
+      setTokens(newTokens);
+      setFreeText(remaining);
       onPrefillConsumed?.();
+
       requestAnimationFrame(() => {
         const el = inputRef.current;
         if (el) {
           el.focus();
-          el.setSelectionRange(prefill.length, prefill.length);
-          updateSuggestions(prefill, prefill.length);
+          // Check if remaining ends with trigger char to open dropdown
+          const trimmed = remaining.trim();
+          if (trimmed === '@' || trimmed === '$' || trimmed === '+') {
+            openSuggestions(trimmed, '');
+          }
         }
       });
     }
   }, [prefill]);
 
+  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setSuggestions([]);
+        closeSuggestions();
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  }, [closeSuggestions]);
+
+  const hasContent = tokens.length > 0 || freeText.trim().length > 0;
 
   return (
     <div className="relative w-full">
-      {/* Main input */}
-      <div className="relative group">
-        <div className="absolute left-4 top-1/2 -translate-y-1/2">
+      {/* Composer container */}
+      <div
+        className={cn(
+          'flex items-center gap-1.5 flex-wrap min-h-[56px] px-3 py-2 rounded-xl',
+          'bg-card border-2 border-border',
+          'focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/30',
+          'transition-all duration-200',
+          isLoading && 'opacity-60'
+        )}
+        onClick={() => inputRef.current?.focus()}
+      >
+        {/* Leading icon */}
+        <div className="shrink-0 ml-0.5">
           {isLoading ? (
-            <Loader2 className="h-5 w-5 text-primary animate-spin" />
+            <Loader2 className="h-4.5 w-4.5 text-primary animate-spin" />
           ) : (
-            <Zap className="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+            <Zap className="h-4.5 w-4.5 text-muted-foreground" />
           )}
         </div>
+
+        {/* Inline token chips */}
+        {tokens.map(token => {
+          const Icon = TRIGGER_ICONS[token.type];
+          const colors = TRIGGER_COLORS[token.type];
+          const textColor = TRIGGER_CHIP_TEXT[token.type];
+          return (
+            <span
+              key={token.type}
+              className={cn(
+                'inline-flex items-center gap-1 text-xs font-medium pl-1.5 pr-1 py-0.5 rounded-md border shrink-0',
+                colors
+              )}
+            >
+              <Icon className={cn('h-3 w-3', textColor)} />
+              <span className={textColor}>{token.name}</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); removeToken(token.type); }}
+                className={cn('ml-0.5 rounded-sm hover:bg-foreground/10 p-0.5 transition-colors', textColor)}
+                tabIndex={-1}
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
+          );
+        })}
+
+        {/* Text input */}
         <input
           ref={inputRef}
           type="text"
-          value={value}
+          value={freeText}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           disabled={isLoading}
-          placeholder={placeholder || '+Discovery Prep @HubSpot $Q3 Renewal'}
+          placeholder={tokens.length > 0 ? 'Add context or press ↵ to run…' : (placeholder || '+Template @Account $Opportunity')}
           className={cn(
-            'w-full h-14 pl-12 pr-4 rounded-xl text-base',
-            'bg-card border-2 border-border',
-            'text-foreground placeholder:text-muted-foreground/60',
-            'focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30',
-            'transition-all duration-200',
-            'disabled:opacity-50',
-            'font-medium'
+            'flex-1 min-w-[120px] bg-transparent border-none outline-none',
+            'text-sm font-medium text-foreground placeholder:text-muted-foreground/50',
+            'disabled:cursor-not-allowed'
           )}
           autoFocus
         />
-        {value.trim() && !isLoading && (
+
+        {/* Run button */}
+        {hasContent && !isLoading && (
           <button
             onClick={handleExecute}
-            className="absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
           >
             Run
           </button>
         )}
       </div>
 
-      {/* Structured token chips */}
-      {tokens.length > 0 && (
-        <div className="flex items-center gap-2 mt-2 px-1 flex-wrap">
-          {tokens.map(token => {
-            const Icon = TRIGGER_ICONS[token.type];
-            const color = TRIGGER_COLORS[token.type];
-            return (
-              <span
-                key={token.type}
-                className={cn(
-                  'inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-muted/80',
-                  color
-                )}
-              >
-                <Icon className="h-3 w-3" />
-                {token.name}
-                <button
-                  onClick={() => removeToken(token.type)}
-                  className="ml-0.5 hover:text-foreground transition-colors"
-                >
-                  <X className="h-2.5 w-2.5" />
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Hint text */}
-      {!value && tokens.length === 0 && (
-        <div className="flex items-center gap-4 mt-2.5 px-1">
-          <span className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">+</kbd> template
+      {/* Keyboard hints — only when completely empty */}
+      {!hasContent && (
+        <div className="flex items-center gap-4 mt-2 px-1">
+          <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
+            <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">+</kbd> template
           </span>
-          <span className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">@</kbd> account
+          <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
+            <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">@</kbd> account
           </span>
-          <span className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">$</kbd> opportunity
+          <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
+            <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">$</kbd> opportunity
           </span>
-          <span className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">↵</kbd> run
+          <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
+            <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">⌫</kbd> remove
           </span>
         </div>
       )}
@@ -353,7 +386,7 @@ export function CommandBar({
         >
           {suggestions.map((s, i) => {
             const Icon = s.is_create ? PlusCircle : TRIGGER_ICONS[s.type];
-            const color = TRIGGER_COLORS[s.type];
+            const color = TRIGGER_CHIP_TEXT[s.type];
             return (
               <button
                 key={`${s.type}-${s.id}`}
