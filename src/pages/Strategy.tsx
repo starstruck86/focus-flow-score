@@ -7,7 +7,7 @@
  *   content = flex-1 min-h-0 overflow-y-auto
  *   composer = shrink-0 anchored at bottom
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { StrategyThreadSidebar } from '@/components/strategy/StrategyThreadSidebar';
 import { StrategyMainPanel } from '@/components/strategy/StrategyMainPanel';
@@ -31,6 +31,17 @@ import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 
 export default function Strategy() {
   const isMobile = useIsMobile();
+
+  // Make Layout's <main> a flex container so Strategy fills it properly
+  useEffect(() => {
+    const main = document.querySelector('main[data-testid="main-content"]');
+    if (!main) return;
+    // Override main's scroll behavior — Strategy manages its own scrolling
+    main.classList.add('!overflow-hidden', '!flex', '!flex-col');
+    return () => {
+      main.classList.remove('!overflow-hidden', '!flex', '!flex-col');
+    };
+  }, []);
 
   const {
     threads, activeThread, setActiveThreadId, createThread, createThreadWithOpts, updateThread, isLoading,
@@ -119,8 +130,8 @@ export default function Strategy() {
 
   return (
     <Layout hideFloatingFab>
-      {/* Strategy manages its own scroll — fills main as flex child */}
-      <div className="flex flex-1 min-h-0 -mb-[calc(var(--shell-nav-height)*1px+env(safe-area-inset-bottom))]" style={{ height: '100%' }}>
+      {/* Strategy fills the flex main — no calc, no absolute */}
+      <div className="flex flex-1 min-h-0">
 
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
