@@ -384,7 +384,7 @@ export function StrategyMainPanel({
       )}
 
       {/* ── COMPOSER (shrink-0, anchored at bottom, clears bottom nav) ── */}
-      <div className="border-t border-border p-2.5 shrink-0 bg-card/50">
+      <div className="border-t border-border p-2.5 pb-[calc(0.625rem+var(--shell-nav-height,101)*1px+env(safe-area-inset-bottom))] shrink-0 bg-card/50">
         <div className="flex items-end gap-2">
           <div className="flex-1 relative">
             <Textarea
