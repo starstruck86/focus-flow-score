@@ -138,16 +138,16 @@ export function CommandOutput({
   );
 
   return (
-    <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
-      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
+    <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-150">
+      <div className="rounded-xl border border-border/20 bg-card/60 overflow-hidden">
 
         {/* Document header */}
-        <div className="px-5 pt-4 pb-3 border-b border-border/20">
-          <div className="flex items-start justify-between gap-3 mb-2.5">
+        <div className="px-5 pt-3.5 pb-2.5 border-b border-border/15">
+          <div className="flex items-start justify-between gap-3 mb-2">
             <div className="min-w-0">
-              <h2 className="text-[15px] font-semibold text-foreground/90 tracking-tight">{docTitle}</h2>
+              <h2 className="text-[14px] font-semibold text-foreground/85 tracking-tight">{docTitle}</h2>
               {accountName && (
-                <p className="text-[11px] text-muted-foreground/40 mt-0.5">
+                <p className="text-[10px] text-muted-foreground/35 mt-0.5">
                   {accountName}{opportunityName ? ` · ${opportunityName}` : ''}
                 </p>
               )}
@@ -252,7 +252,7 @@ export function CommandOutput({
               )}
 
               {hasBlocks ? (
-                <div className="space-y-6">
+                <div className="space-y-5">
                   {blocks.map((block, i) => {
                     const semantic = classifySectionHeading(block.heading);
                     const style = SEMANTIC_STYLES[semantic];
@@ -308,7 +308,7 @@ export function CommandOutput({
 
         {/* Utility bar */}
         {!isGenerating && (
-          <div className="flex items-center justify-between px-5 py-2.5 border-t border-border/15">
+          <div className="flex items-center justify-between px-5 py-2 border-t border-border/10">
             <div className="flex items-center gap-1">
               {[
                 { onClick: handleCopy, icon: copied ? Check : Copy, label: copied ? 'Copied' : 'Copy', accent: copied },

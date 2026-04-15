@@ -29,9 +29,9 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
   const ex = lastKIExplainability;
 
   return (
-    <div className="mt-2 px-1 space-y-1.5">
+    <div className="mt-1.5 px-0.5 space-y-1">
       {/* Context strip */}
-      <div className="flex items-center gap-3 flex-wrap text-[11px]">
+      <div className="flex items-center gap-2.5 flex-wrap text-[11px]">
         {template && (
           <span className="inline-flex items-center gap-1 text-amber-400/80 font-medium">
             <FileText className="h-3 w-3 opacity-70" />
@@ -92,7 +92,7 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
 
       {/* KI explainability panel */}
       {showKIDetail && ex && (
-        <div className="rounded-lg border border-border/30 bg-card/50 px-3.5 py-2.5 space-y-2 animate-in fade-in-0 slide-in-from-top-1 duration-150">
+        <div className="rounded-lg border border-border/20 bg-card/30 px-3 py-2 space-y-1.5 animate-in fade-in-0 slide-in-from-top-1 duration-100">
           {/* Retrieval reasoning */}
           <div className="flex items-start gap-2">
             <Sparkles className="h-3 w-3 text-primary/60 mt-0.5 shrink-0" />
