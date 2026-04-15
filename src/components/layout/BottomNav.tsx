@@ -15,7 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'cockpit' | 'dojo' | 'learn';
+export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'strategy' | 'dojo' | 'learn';
 
 export interface NavItemDef {
   to: string;
@@ -34,13 +34,13 @@ export const COLOR_VAR: Record<NavColor, string> = {
   trends: 'var(--nav-trends)',
   quota: 'var(--nav-quota)',
   settings: 'var(--nav-settings)',
-  cockpit: 'var(--nav-today)',
+  strategy: 'var(--nav-today)',
   dojo: 'var(--nav-coach)',
   learn: 'var(--nav-prep)',
 };
 
 export const navRow1: NavItemDef[] = [
-  { to: '/cockpit', label: 'Cockpit', icon: Crosshair, color: 'cockpit' },
+  { to: '/strategy', label: 'Strategy', icon: Crosshair, color: 'strategy' },
   { to: '/', label: 'Today', icon: LayoutDashboard, color: 'today' },
   { to: '/tasks', label: 'Tasks', icon: CheckSquare, color: 'tasks' },
   { to: '/outreach', label: 'New Logo', icon: Users, color: 'outreach' },

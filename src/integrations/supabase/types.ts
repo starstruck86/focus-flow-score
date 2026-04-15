@@ -69,6 +69,77 @@ export type Database = {
           },
         ]
       }
+      account_strategy_memory: {
+        Row: {
+          account_id: string
+          confidence: number | null
+          content: string
+          created_at: string
+          id: string
+          is_pinned: boolean
+          memory_type: string
+          source_message_id: string | null
+          source_thread_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          confidence?: number | null
+          content: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          memory_type?: string
+          source_message_id?: string | null
+          source_thread_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          confidence?: number | null
+          content?: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          memory_type?: string
+          source_message_id?: string | null
+          source_thread_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_strategy_memory_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_strategy_memory_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_strategy_memory_source_message_id_fkey"
+            columns: ["source_message_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_strategy_memory_source_thread_id_fkey"
+            columns: ["source_thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       accounts: {
         Row: {
           account_status: string | null
@@ -3624,6 +3695,70 @@ export type Database = {
         }
         Relationships: []
       }
+      opportunity_strategy_memory: {
+        Row: {
+          confidence: number | null
+          content: string
+          created_at: string
+          id: string
+          is_pinned: boolean
+          memory_type: string
+          opportunity_id: string
+          source_message_id: string | null
+          source_thread_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          confidence?: number | null
+          content: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          memory_type?: string
+          opportunity_id: string
+          source_message_id?: string | null
+          source_thread_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          confidence?: number | null
+          content?: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          memory_type?: string
+          opportunity_id?: string
+          source_message_id?: string | null
+          source_thread_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opportunity_strategy_memory_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunity_strategy_memory_source_message_id_fkey"
+            columns: ["source_message_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunity_strategy_memory_source_thread_id_fkey"
+            columns: ["source_thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pipeline_diagnoses: {
         Row: {
           assets_created: Json
@@ -5658,6 +5793,47 @@ export type Database = {
         }
         Relationships: []
       }
+      strategy_messages: {
+        Row: {
+          citations_json: Json | null
+          content_json: Json
+          created_at: string
+          id: string
+          message_type: string
+          role: string
+          thread_id: string
+          user_id: string
+        }
+        Insert: {
+          citations_json?: Json | null
+          content_json?: Json
+          created_at?: string
+          id?: string
+          message_type?: string
+          role?: string
+          thread_id: string
+          user_id: string
+        }
+        Update: {
+          citations_json?: Json | null
+          content_json?: Json
+          created_at?: string
+          id?: string
+          message_type?: string
+          role?: string
+          thread_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       strategy_outcomes: {
         Row: {
           account_type: string | null
@@ -5708,6 +5884,340 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      strategy_outputs: {
+        Row: {
+          content_json: Json
+          created_at: string
+          id: string
+          is_pinned: boolean
+          linked_account_id: string | null
+          linked_opportunity_id: string | null
+          linked_territory_id: string | null
+          output_type: string
+          rendered_text: string | null
+          thread_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+          workflow_run_id: string | null
+        }
+        Insert: {
+          content_json?: Json
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          linked_account_id?: string | null
+          linked_opportunity_id?: string | null
+          linked_territory_id?: string | null
+          output_type?: string
+          rendered_text?: string | null
+          thread_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+          workflow_run_id?: string | null
+        }
+        Update: {
+          content_json?: Json
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          linked_account_id?: string | null
+          linked_opportunity_id?: string | null
+          linked_territory_id?: string | null
+          output_type?: string
+          rendered_text?: string | null
+          thread_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          workflow_run_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_outputs_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_outputs_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_outputs_linked_opportunity_id_fkey"
+            columns: ["linked_opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_outputs_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_outputs_workflow_run_fk"
+            columns: ["workflow_run_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_workflow_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      strategy_rollups: {
+        Row: {
+          content_json: Json
+          created_at: string
+          generated_from_thread_ids: string[]
+          id: string
+          object_id: string
+          object_type: string
+          rollup_type: string
+          user_id: string
+        }
+        Insert: {
+          content_json?: Json
+          created_at?: string
+          generated_from_thread_ids?: string[]
+          id?: string
+          object_id: string
+          object_type: string
+          rollup_type?: string
+          user_id: string
+        }
+        Update: {
+          content_json?: Json
+          created_at?: string
+          generated_from_thread_ids?: string[]
+          id?: string
+          object_id?: string
+          object_type?: string
+          rollup_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      strategy_thread_resources: {
+        Row: {
+          created_at: string
+          id: string
+          is_pinned: boolean
+          relevance_score: number | null
+          resource_id: string | null
+          source_type: string
+          thread_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          relevance_score?: number | null
+          resource_id?: string | null
+          source_type?: string
+          thread_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          relevance_score?: number | null
+          resource_id?: string | null
+          source_type?: string
+          thread_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_thread_resources_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      strategy_threads: {
+        Row: {
+          created_at: string
+          id: string
+          is_pinned: boolean
+          lane: string
+          latest_rollup: Json | null
+          linked_account_id: string | null
+          linked_artifact_id: string | null
+          linked_opportunity_id: string | null
+          linked_territory_id: string | null
+          status: string
+          summary: string | null
+          thread_type: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          lane?: string
+          latest_rollup?: Json | null
+          linked_account_id?: string | null
+          linked_artifact_id?: string | null
+          linked_opportunity_id?: string | null
+          linked_territory_id?: string | null
+          status?: string
+          summary?: string | null
+          thread_type?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          lane?: string
+          latest_rollup?: Json | null
+          linked_account_id?: string | null
+          linked_artifact_id?: string | null
+          linked_opportunity_id?: string | null
+          linked_territory_id?: string | null
+          status?: string
+          summary?: string | null
+          thread_type?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_threads_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_threads_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_threads_linked_opportunity_id_fkey"
+            columns: ["linked_opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      strategy_uploaded_resources: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_type: string | null
+          id: string
+          parsed_text: string | null
+          storage_path: string
+          suggested_object_id: string | null
+          suggested_object_type: string | null
+          summary: string | null
+          thread_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_type?: string | null
+          id?: string
+          parsed_text?: string | null
+          storage_path: string
+          suggested_object_id?: string | null
+          suggested_object_type?: string | null
+          summary?: string | null
+          thread_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_type?: string | null
+          id?: string
+          parsed_text?: string | null
+          storage_path?: string
+          suggested_object_id?: string | null
+          suggested_object_type?: string | null
+          summary?: string | null
+          thread_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_uploaded_resources_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      strategy_workflow_runs: {
+        Row: {
+          created_at: string
+          error_json: Json | null
+          id: string
+          input_json: Json | null
+          result_json: Json | null
+          status: string
+          thread_id: string
+          updated_at: string
+          user_id: string
+          workflow_type: string
+        }
+        Insert: {
+          created_at?: string
+          error_json?: Json | null
+          id?: string
+          input_json?: Json | null
+          result_json?: Json | null
+          status?: string
+          thread_id: string
+          updated_at?: string
+          user_id: string
+          workflow_type: string
+        }
+        Update: {
+          created_at?: string
+          error_json?: Json | null
+          id?: string
+          input_json?: Json | null
+          result_json?: Json | null
+          status?: string
+          thread_id?: string
+          updated_at?: string
+          user_id?: string
+          workflow_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_workflow_runs_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       streak_events: {
         Row: {
@@ -5936,6 +6446,63 @@ export type Database = {
             columns: ["source_resource_id"]
             isOneToOne: false
             referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      territory_strategy_memory: {
+        Row: {
+          confidence: number | null
+          content: string
+          created_at: string
+          id: string
+          is_pinned: boolean
+          memory_type: string
+          source_message_id: string | null
+          source_thread_id: string | null
+          territory_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          confidence?: number | null
+          content: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          memory_type?: string
+          source_message_id?: string | null
+          source_thread_id?: string | null
+          territory_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          confidence?: number | null
+          content?: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          memory_type?: string
+          source_message_id?: string | null
+          source_thread_id?: string | null
+          territory_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "territory_strategy_memory_source_message_id_fkey"
+            columns: ["source_message_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "territory_strategy_memory_source_thread_id_fkey"
+            columns: ["source_thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
             referencedColumns: ["id"]
           },
         ]
