@@ -90,11 +90,35 @@ async function openaiAdapter(req: AdapterRequest, signal: AbortSignal): Promise<
   }
 
   const data = await resp.json();
-  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  const choice = data.choices?.[0];
+  if (!choice) {
+    console.error("[openai-direct] no choices in response");
+    return { text: "", provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+      error: { type: "empty_response", message: "OpenAI returned no choices" } };
+  }
+
+  const toolCall = choice.message?.tool_calls?.[0];
   let structured: any = undefined;
-  let text = data.choices?.[0]?.message?.content || "";
+  let text = choice.message?.content || "";
+
   if (toolCall?.function?.arguments) {
-    try { structured = JSON.parse(toolCall.function.arguments); } catch {}
+    try {
+      structured = JSON.parse(toolCall.function.arguments);
+    } catch (parseErr) {
+      console.error(`[openai-direct] tool call JSON parse failed: ${String(parseErr)}`);
+      // If tools were requested but parse failed, treat as error to trigger fallback
+      if (req.tools?.length) {
+        return { text, provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+          error: { type: "tool_parse_error", message: "Tool call returned invalid JSON" } };
+      }
+    }
+  } else if (req.tools?.length && req.toolChoice) {
+    // Tools requested with forced choice but no tool_calls returned
+    console.warn("[openai-direct] tool_choice forced but no tool_calls in response — falling back to text");
+    if (!text) {
+      return { text: "", provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+        error: { type: "missing_tool_call", message: "No tool call returned despite tool_choice" } };
+    }
   }
 
   return { text, structured, provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
@@ -833,31 +857,44 @@ ${contextSection}`;
     });
   }
 
-  // Stream the response
+  // Stream the response with read timeout protection
   const reader = result.rawStream.body!.getReader();
   const decoder = new TextDecoder();
   let fullResponse = "";
+  let chunkCount = 0;
 
   const stream = new ReadableStream({
     async start(controller) {
+      const streamDeadline = Date.now() + 120000; // 2min max stream duration
       try {
         while (true) {
+          if (Date.now() > streamDeadline) {
+            console.warn(`[streaming] read deadline exceeded after ${chunkCount} chunks, closing`);
+            break;
+          }
           const { done, value } = await reader.read();
           if (done) break;
+          chunkCount++;
           const chunk = decoder.decode(value, { stream: true });
           controller.enqueue(new TextEncoder().encode(chunk));
           for (const line of chunk.split("\n")) {
-            if (!line.startsWith("data: ") || line.includes("[DONE]")) continue;
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data: ") || trimmed === "data: [DONE]") continue;
             try {
-              const parsed = JSON.parse(line.slice(6));
+              const parsed = JSON.parse(trimmed.slice(6));
               const delta = parsed.choices?.[0]?.delta?.content;
               if (delta) fullResponse += delta;
-            } catch {}
+            } catch {
+              // Non-JSON SSE line — skip silently
+            }
           }
         }
         controller.close();
 
         const latency = Date.now() - startTime;
+        if (!fullResponse.trim()) {
+          console.warn(`[streaming] empty response after ${chunkCount} chunks, ${latency}ms`);
+        }
         await supabase.from("strategy_messages").insert({
           thread_id: threadId, user_id: userId, role: "assistant",
           message_type: "chat",
