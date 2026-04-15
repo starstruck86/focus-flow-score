@@ -969,20 +969,36 @@ async function handleRollup(
 
   const { route, provider } = resolveRoute("chat_general");
 
-  const aiResp = await fetch(provider.gateway, {
-    method: "POST",
-    headers: { [provider.authHeaderName]: provider.getAuthValue(), "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: route.model,
-      messages: [
-        { role: "system", content: `You are analyzing a strategy conversation thread. Summarize the key points, identify hypotheses, risks, open questions, and next steps. Also suggest memory entries that should be saved. Only suggest memories with confidence >= 0.6. Do NOT suggest memories that duplicate existing ones.${memoryContext}` },
-        { role: "user", content: conversationText },
-      ],
-      tools: [ROLLUP_TOOL],
-      tool_choice: { type: "function", function: { name: "generate_rollup" } },
-      temperature: 0.3,
-    }),
-  });
+  const rollupController = new AbortController();
+  const rollupTimeout = setTimeout(() => rollupController.abort(), 55000);
+
+  let aiResp: Response;
+  try {
+    aiResp = await fetch(provider.gateway, {
+      method: "POST",
+      headers: { [provider.authHeaderName]: provider.getAuthValue(), "Content-Type": "application/json" },
+      signal: rollupController.signal,
+      body: JSON.stringify({
+        model: route.model,
+        messages: [
+          { role: "system", content: `You are analyzing a strategy conversation thread. Summarize the key points, identify hypotheses, risks, open questions, and next steps. Also suggest memory entries that should be saved. Only suggest memories with confidence >= 0.6. Do NOT suggest memories that duplicate existing ones.${memoryContext}` },
+          { role: "user", content: conversationText },
+        ],
+        tools: [ROLLUP_TOOL],
+        tool_choice: { type: "function", function: { name: "generate_rollup" } },
+        temperature: 0.3,
+      }),
+    });
+  } catch (e: any) {
+    clearTimeout(rollupTimeout);
+    if (e.name === "AbortError") {
+      return new Response(JSON.stringify({ error: "Rollup timed out — please try again" }), {
+        status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    throw e;
+  }
+  clearTimeout(rollupTimeout);
 
   if (!aiResp.ok) return handleAIError(aiResp.status);
 

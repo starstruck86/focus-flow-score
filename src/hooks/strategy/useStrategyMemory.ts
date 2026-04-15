@@ -78,8 +78,21 @@ export function useStrategyMemory(
       return;
     }
 
-    // ── Dedup check against local state ──
-    const duplicate = memories.find(m => isNearDuplicate(m.content, content));
+    // ── Dedup check — fetch fresh from DB to avoid stale-state misses ──
+    let freshMemories: { content: string }[] | null = null;
+    if (objectType === 'account') {
+      const { data } = await supabase.from('account_strategy_memory').select('content').eq('account_id', objectId).eq('user_id', user.id).order('created_at', { ascending: false }).limit(50);
+      freshMemories = data;
+    } else if (objectType === 'opportunity') {
+      const { data } = await supabase.from('opportunity_strategy_memory').select('content').eq('opportunity_id', objectId).eq('user_id', user.id).order('created_at', { ascending: false }).limit(50);
+      freshMemories = data;
+    } else if (objectType === 'territory') {
+      const { data } = await supabase.from('territory_strategy_memory').select('content').eq('territory_id', objectId).eq('user_id', user.id).order('created_at', { ascending: false }).limit(50);
+      freshMemories = data;
+    }
+
+    const checkList = freshMemories ?? memories;
+    const duplicate = checkList.find(m => isNearDuplicate(m.content, content));
     if (duplicate) {
       toast('Similar insight already exists', {
         description: duplicate.content.slice(0, 80) + (duplicate.content.length > 80 ? '…' : ''),
