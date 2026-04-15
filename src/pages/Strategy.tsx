@@ -59,17 +59,14 @@ export default function Strategy() {
   }, [createThreadWithOpts]);
 
   const handleBranchThread = useCallback(async (title: string, content: string) => {
-    // Create a new thread with context carried forward
-    const newThread = await createThread(title, 'strategy', 'freeform');
-    // The thread is created and auto-selected via setActiveThreadId in createThread
-    // We'll insert a seed message via the edge function after thread creation
-    if (newThread && content) {
+    const newThreadId = await createThread(title, 'strategy', 'freeform');
+    if (newThreadId && content) {
       try {
         const { supabase } = await import('@/integrations/supabase/client');
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           await (supabase as any).from('strategy_messages').insert({
-            thread_id: newThread,
+            thread_id: newThreadId,
             user_id: user.id,
             role: 'system',
             message_type: 'system',
