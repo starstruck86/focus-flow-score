@@ -294,17 +294,17 @@ export function CommandOutput({
             />
           </div>
         ) : (
-          <div className="px-8 py-8">
-            <div className="max-w-[620px]">
+          <div className="px-5 sm:px-8 py-6 sm:py-8">
+            <div className="max-w-[580px]">
               {subjectLine && (
-                <div className="mb-8 pb-5 border-b border-border/8">
+                <div className="mb-6 pb-4 border-b border-border/8">
                   <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/25 font-medium">Subject</span>
-                  <p className="text-[16px] font-semibold text-foreground/80 mt-1.5 leading-snug">{subjectLine}</p>
+                  <p className="text-[15px] font-semibold text-foreground/75 mt-1.5 leading-snug">{subjectLine}</p>
                 </div>
               )}
 
               {hasBlocks ? (
-                <div className="space-y-8">
+                <div className="space-y-10">
                   {blocks.map((block, i) => {
                     const semantic = classifySectionHeading(block.heading);
                     const accent = SEMANTIC_ACCENT[semantic];
@@ -312,10 +312,10 @@ export function CommandOutput({
                     return (
                       <section key={i} className="group relative">
                         {block.heading && (
-                          <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-2">
                               <accent.Icon className={cn('h-3.5 w-3.5 shrink-0', accent.color)} />
-                              <h3 className="text-[15px] font-semibold text-foreground/80 tracking-tight">
+                              <h3 className="text-[14px] font-semibold text-foreground/75 tracking-tight uppercase">
                                 {block.heading}
                               </h3>
                             </div>
@@ -333,7 +333,7 @@ export function CommandOutput({
                           </div>
                         )}
                         <div className={proseClasses}>
-                          <ReactMarkdown>{block.content}</ReactMarkdown>
+                          <ReactMarkdown>{enhanceReadability(block.content)}</ReactMarkdown>
                         </div>
                       </section>
                     );
@@ -341,7 +341,7 @@ export function CommandOutput({
                 </div>
               ) : (
                 <div className={proseClasses}>
-                  <ReactMarkdown>{displayOutput}</ReactMarkdown>
+                  <ReactMarkdown>{enhanceReadability(displayOutput)}</ReactMarkdown>
                 </div>
               )}
             </div>
