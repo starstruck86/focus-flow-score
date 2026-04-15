@@ -560,7 +560,7 @@ function PlayAudioButton({ text, dave }: { text: string; dave?: DaveController }
 
     // If currently playing, stop first
     if (playing) {
-      dave.stopPlayback?.();
+      dave.stopSpeaking();
       setPlaying(false);
       // Short lock to prevent rapid toggling
       setTimeout(() => setLocked(false), 300);
