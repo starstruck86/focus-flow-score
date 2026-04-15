@@ -223,36 +223,38 @@ export function StrategyMainPanel({
         </div>
 
         {/* Scope + Workflows — compressed on mobile */}
-        <div className="px-3 pt-2">
-          {/* Context badges — inline row instead of card on mobile */}
-          <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-            <Badge variant="outline" className="text-[10px] font-medium">
-              {thread.thread_type.replace(/_/g, ' ')}
-            </Badge>
-            <Badge variant="outline" className={cn('text-[10px]', getLaneColor(thread.lane))}>
-              {thread.lane}
-            </Badge>
-            {linkedContext?.account && (
-              <Badge variant="secondary" className="text-[10px] gap-1">
-                <Building2 className="h-2.5 w-2.5" />
-                {linkedContext.account.name}
+        <div className="px-3 pt-1.5 pb-1">
+          {/* Context badges — hidden on mobile to save space */}
+          {!isMobile && (
+            <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+              <Badge variant="outline" className="text-[10px] font-medium">
+                {thread.thread_type.replace(/_/g, ' ')}
               </Badge>
-            )}
-            {linkedContext?.opportunity && (
-              <Badge variant="secondary" className="text-[10px] gap-1">
-                <Target className="h-2.5 w-2.5" />
-                {linkedContext.opportunity.name}
+              <Badge variant="outline" className={cn('text-[10px]', getLaneColor(thread.lane))}>
+                {thread.lane}
               </Badge>
-            )}
-          </div>
+              {linkedContext?.account && (
+                <Badge variant="secondary" className="text-[10px] gap-1">
+                  <Building2 className="h-2.5 w-2.5" />
+                  {linkedContext.account.name}
+                </Badge>
+              )}
+              {linkedContext?.opportunity && (
+                <Badge variant="secondary" className="text-[10px] gap-1">
+                  <Target className="h-2.5 w-2.5" />
+                  {linkedContext.opportunity.name}
+                </Badge>
+              )}
+            </div>
+          )}
 
-          {/* Summary — only show on desktop or if short */}
+          {/* Summary — only show on desktop */}
           {thread.summary && !isMobile && (
             <p className="text-xs text-foreground/60 line-clamp-1 leading-relaxed mb-1.5">{thread.summary}</p>
           )}
 
-          {/* Workflow buttons — scrollable row on mobile */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1.5 -mx-1 px-1 scrollbar-none">
+          {/* Workflow buttons — scrollable row */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
             {WORKFLOWS.map(w => {
               const isRunning = activeWorkflow === w.key;
               const isRecommended = recommendedWorkflows.includes(w.key);
