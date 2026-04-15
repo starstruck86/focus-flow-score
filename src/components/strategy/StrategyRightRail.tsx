@@ -38,7 +38,7 @@ interface Props {
   memorySuggestions: MemorySuggestion[];
   isRollupLoading: boolean;
   onTriggerRollup: () => void;
-  onRegenerateArtifact?: (artifactId: string, artifactType: string) => Promise<StrategyArtifact | null>;
+  onRegenerateArtifact?: (artifactId: string, artifactType: string, refineInstructions?: string) => Promise<StrategyArtifact | null>;
   isTransforming?: boolean;
 }
 
