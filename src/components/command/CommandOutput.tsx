@@ -27,7 +27,7 @@ function enhanceReadability(md: string): string {
     if (!trimmed) continue;
 
     // Don't touch headings, lists, blockquotes, code blocks, or HR
-    if (/^[#\-\*\d+\.\>```\|---]/.test(trimmed)) {
+    if (/^[#\-*\d>|`]/.test(trimmed) || trimmed.startsWith('---')) {
       enhanced.push(trimmed);
       continue;
     }
