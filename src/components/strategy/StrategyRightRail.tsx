@@ -4,7 +4,7 @@ import {
   Pin, Copy, Save, Plus, RefreshCw, Loader2, Sparkles,
   Upload, BarChart3, Building2, Target, Globe, Cpu, Tag,
   AlertTriangle, CheckCircle2, Clock, Eye, Mail, ArrowRight,
-  Trash2, X,
+  Trash2, X, PinOff, ThumbsDown, ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,6 +16,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import type { StrategyThread, StrategyOutput } from '@/types/strategy';
@@ -36,6 +39,9 @@ interface Props {
   artifacts: StrategyArtifact[];
   onSaveMemory: (type: string, content: string) => void;
   onDeleteMemory?: (memoryId: string) => void;
+  onTogglePin?: (memoryId: string) => void;
+  onSetConfidence?: (memoryId: string, confidence: number) => void;
+  onMarkIrrelevant?: (memoryId: string) => void;
   rollup: StrategyRollup | null;
   memorySuggestions: MemorySuggestion[];
   isRollupLoading: boolean;
@@ -43,6 +49,8 @@ interface Props {
   onRegenerateArtifact?: (artifactId: string, artifactType: string, refineInstructions?: string) => Promise<StrategyArtifact | null>;
   isTransforming?: boolean;
   onReprocessUpload?: (uploadId: string) => void;
+  onUseArtifactAsInput?: (artifact: StrategyArtifact) => void;
+  onDuplicateArtifact?: (artifact: StrategyArtifact) => void;
 }
 
 const MEMORY_TYPES = [
@@ -73,6 +81,12 @@ const PARSE_STATUS_CONFIG: Record<string, { label: string; icon: typeof CheckCir
   pending: { label: 'Pending', icon: Clock, color: 'text-muted-foreground' },
 };
 
+const CONFIDENCE_LEVELS = [
+  { value: 0.9, label: 'High', color: 'text-green-400' },
+  { value: 0.6, label: 'Medium', color: 'text-amber-400' },
+  { value: 0.3, label: 'Low', color: 'text-red-400' },
+];
+
 function RailSection({ title, icon: Icon, children, empty, count, action }: {
   title: string; icon: React.ElementType; children?: React.ReactNode;
   empty?: string; count?: number; action?: React.ReactNode;
@@ -96,8 +110,10 @@ function RailSection({ title, icon: Icon, children, empty, count, action }: {
 
 export function StrategyRightRail({
   thread, onCollapse, linkedContext, memories, uploads, outputs, artifacts,
-  onSaveMemory, onDeleteMemory, rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
+  onSaveMemory, onDeleteMemory, onTogglePin, onSetConfidence, onMarkIrrelevant,
+  rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
   onRegenerateArtifact, isTransforming, onReprocessUpload,
+  onUseArtifactAsInput, onDuplicateArtifact,
 }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
@@ -129,7 +145,6 @@ export function StrategyRightRail({
     toast.success('Copied');
   };
 
-  // Update selectedArtifact to newest version after regenerate/refine
   const handleRegenerate = useCallback(async (artifactId: string, artifactType: string, refineInstructions?: string) => {
     if (!onRegenerateArtifact) return null;
     const result = await onRegenerateArtifact(artifactId, artifactType, refineInstructions);
@@ -150,7 +165,7 @@ export function StrategyRightRail({
       </div>
 
       <ScrollArea className="flex-1">
-        {/* Linked Object — Enhanced */}
+        {/* Linked Object */}
         <RailSection title="Context" icon={Link2}>
           {linkedContext?.account ? (
             <Card className="bg-muted/20 border-border/30">
@@ -292,13 +307,13 @@ export function StrategyRightRail({
           </>
         )}
 
-        {/* Risks — Highlighted */}
+        {/* Risks */}
         {risks.length > 0 && (
           <>
             <RailSection title="Active Risks" icon={AlertTriangle} count={risks.length}>
               <div className="space-y-1">
                 {risks.map(m => (
-                  <MemoryCard key={m.id} memory={m} onDelete={onDeleteMemory} />
+                  <MemoryCard key={m.id} memory={m} onDelete={onDeleteMemory} onTogglePin={onTogglePin} onSetConfidence={onSetConfidence} onMarkIrrelevant={onMarkIrrelevant} />
                 ))}
               </div>
             </RailSection>
@@ -312,7 +327,7 @@ export function StrategyRightRail({
             <RailSection title="Next Steps" icon={CheckCircle2} count={nextSteps.length}>
               <div className="space-y-1">
                 {nextSteps.map(m => (
-                  <MemoryCard key={m.id} memory={m} onDelete={onDeleteMemory} />
+                  <MemoryCard key={m.id} memory={m} onDelete={onDeleteMemory} onTogglePin={onTogglePin} onSetConfidence={onSetConfidence} onMarkIrrelevant={onMarkIrrelevant} />
                 ))}
               </div>
             </RailSection>
@@ -325,7 +340,7 @@ export function StrategyRightRail({
           {pinnedMemories.length > 0 && (
             <div className="space-y-1">
               {pinnedMemories.slice(0, 5).map(m => (
-                <MemoryCard key={m.id} memory={m} onDelete={onDeleteMemory} />
+                <MemoryCard key={m.id} memory={m} onDelete={onDeleteMemory} onTogglePin={onTogglePin} onSetConfidence={onSetConfidence} onMarkIrrelevant={onMarkIrrelevant} />
               ))}
             </div>
           )}
@@ -333,7 +348,7 @@ export function StrategyRightRail({
 
         <Divider />
 
-        {/* Uploads — Enhanced with view text + reprocess */}
+        {/* Uploads */}
         <RailSection title="Uploads" icon={Upload} count={uploads.length} empty="Drag files into the composer">
           {uploads.length > 0 && (
             <div className="space-y-1.5">
@@ -366,7 +381,6 @@ export function StrategyRightRail({
                           ))}
                         </div>
                       )}
-                      {/* Upload action buttons */}
                       <div className="flex items-center gap-1 mt-1.5">
                         {u.parsed_text && (
                           <Button
@@ -388,7 +402,6 @@ export function StrategyRightRail({
                         )}
                       </div>
                     </div>
-                    {/* Expanded extracted text */}
                     {isExpanded && u.parsed_text && (
                       <div className="border-t border-border/20 px-2.5 py-2 bg-muted/10">
                         <div className="flex items-center justify-between mb-1">
@@ -440,7 +453,7 @@ export function StrategyRightRail({
 
         <Divider />
 
-        {/* Artifacts — clickable to open modal */}
+        {/* Artifacts */}
         <RailSection title="Artifacts" icon={Sparkles} count={artifacts.length} empty="Transform outputs into reusable assets">
           {artifacts.length > 0 && (
             <div className="space-y-1.5">
@@ -509,14 +522,20 @@ function Divider() {
   return <div className="border-t border-border/50 mx-3" />;
 }
 
-function MemoryCard({ memory, onDelete }: { memory: StrategyMemoryEntry; onDelete?: (id: string) => void }) {
-  const [showDelete, setShowDelete] = useState(false);
+function MemoryCard({ memory, onDelete, onTogglePin, onSetConfidence, onMarkIrrelevant }: {
+  memory: StrategyMemoryEntry;
+  onDelete?: (id: string) => void;
+  onTogglePin?: (id: string) => void;
+  onSetConfidence?: (id: string, c: number) => void;
+  onMarkIrrelevant?: (id: string) => void;
+}) {
+  const [showActions, setShowActions] = useState(false);
 
   return (
     <div
       className="bg-muted/20 rounded-lg px-2.5 py-1.5 border border-border/20 group relative"
-      onMouseEnter={() => setShowDelete(true)}
-      onMouseLeave={() => setShowDelete(false)}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
     >
       <div className="flex items-center gap-1.5">
         <Badge variant="outline" className={`text-[8px] px-1 py-0 border shrink-0 ${MEMORY_TYPE_COLORS[memory.memory_type] || ''}`}>
@@ -524,16 +543,47 @@ function MemoryCard({ memory, onDelete }: { memory: StrategyMemoryEntry; onDelet
         </Badge>
         {memory.is_pinned && <Pin className="h-2 w-2 text-amber-400 shrink-0" />}
         {memory.confidence != null && (
-          <span className="text-[8px] text-muted-foreground/50 ml-auto">{Math.round(memory.confidence * 100)}%</span>
+          <span className={`text-[8px] ml-auto shrink-0 ${
+            memory.confidence >= 0.7 ? 'text-green-400/70' : memory.confidence >= 0.4 ? 'text-amber-400/70' : 'text-red-400/70'
+          }`}>
+            {memory.confidence >= 0.7 ? 'High' : memory.confidence >= 0.4 ? 'Med' : 'Low'}
+          </span>
         )}
-        {showDelete && onDelete && (
-          <Button
-            size="icon" variant="ghost"
-            className="h-4 w-4 ml-auto shrink-0 text-muted-foreground/40 hover:text-red-400"
-            onClick={(e) => { e.stopPropagation(); onDelete(memory.id); }}
-          >
-            <Trash2 className="h-2.5 w-2.5" />
-          </Button>
+        {showActions && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" variant="ghost" className="h-4 w-4 ml-auto shrink-0 text-muted-foreground/40 hover:text-foreground">
+                <ChevronDown className="h-2.5 w-2.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36">
+              {onTogglePin && (
+                <DropdownMenuItem onClick={() => onTogglePin(memory.id)} className="text-[11px] gap-1.5">
+                  {memory.is_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                  {memory.is_pinned ? 'Unpin' : 'Pin'}
+                </DropdownMenuItem>
+              )}
+              {onSetConfidence && (
+                <>
+                  {CONFIDENCE_LEVELS.map(c => (
+                    <DropdownMenuItem key={c.value} onClick={() => onSetConfidence(memory.id, c.value)} className={`text-[11px] gap-1.5 ${c.color}`}>
+                      Set {c.label}
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              )}
+              {onMarkIrrelevant && (
+                <DropdownMenuItem onClick={() => onMarkIrrelevant(memory.id)} className="text-[11px] gap-1.5 text-amber-400">
+                  <ThumbsDown className="h-3 w-3" /> Mark irrelevant
+                </DropdownMenuItem>
+              )}
+              {onDelete && (
+                <DropdownMenuItem onClick={() => onDelete(memory.id)} className="text-[11px] gap-1.5 text-red-400">
+                  <Trash2 className="h-3 w-3" /> Delete
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
       <p className="text-[10px] text-foreground/70 mt-0.5 line-clamp-2 leading-relaxed">{memory.content}</p>
