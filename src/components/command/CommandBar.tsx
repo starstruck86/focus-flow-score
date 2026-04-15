@@ -14,7 +14,7 @@ interface Suggestion {
   name: string;
   subtitle?: string;
   is_pinned?: boolean;
-  is_create?: boolean; // "Create new" option
+  is_create?: boolean;
 }
 
 interface Props {
@@ -28,6 +28,8 @@ interface Props {
   placeholder?: string;
   prefill?: string;
   onPrefillConsumed?: () => void;
+  /** Keep input populated after execute instead of clearing */
+  preserveAfterExecute?: boolean;
 }
 
 const TRIGGER_CHARS: Record<string, 'account' | 'opportunity' | 'template'> = {
@@ -52,17 +54,18 @@ export function CommandBar({
   accounts, opportunities, templates, onExecute,
   onCreateAccount, onCreateOpportunity,
   isLoading, placeholder, prefill, onPrefillConsumed,
+  preserveAfterExecute,
 }: Props) {
   const [value, setValue] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [activeTrigger, setActiveTrigger] = useState<string | null>(null);
   const [triggerStart, setTriggerStart] = useState<number>(-1);
   const [selectedIdx, setSelectedIdx] = useState(0);
-  // Structured tokens — stable IDs, not just text
   const [tokens, setTokens] = useState<CommandToken[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  
+  // Guard against prefill clobbering active typing
+  const isTypingRef = useRef(false);
 
   const updateSuggestions = useCallback((text: string, cursor: number) => {
     let trigger: string | null = null;
@@ -95,7 +98,6 @@ export function CommandBar({
         .filter(a => a.name.toLowerCase().includes(filterText))
         .slice(0, 7)
         .map(a => ({ type: 'account', id: a.id, name: a.name }));
-      // Add "Create new" option if filter text and no exact match
       if (filterText.length > 1 && !items.some(i => i.name.toLowerCase() === filterText)) {
         items.push({ type: 'account', id: '__create__', name: filterText, is_create: true });
       }
@@ -121,14 +123,16 @@ export function CommandBar({
   }, [accounts, opportunities, templates]);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    isTypingRef.current = true;
     const newVal = e.target.value;
     setValue(newVal);
     const cursor = e.target.selectionStart ?? newVal.length;
     updateSuggestions(newVal, cursor);
+    // Reset after a brief window
+    setTimeout(() => { isTypingRef.current = false; }, 300);
   }, [updateSuggestions]);
 
   const selectSuggestion = useCallback(async (suggestion: Suggestion) => {
-    // Handle "Create new" flow
     if (suggestion.is_create) {
       let created: { id: string; name: string } | null = null;
       if (suggestion.type === 'account' && onCreateAccount) {
@@ -143,7 +147,6 @@ export function CommandBar({
       suggestion = { ...suggestion, id: created.id, name: created.name, is_create: false };
     }
 
-    // Replace trigger+filter text with entity token in visible text
     const before = value.slice(0, triggerStart);
     const after = value.slice(inputRef.current?.selectionStart ?? value.length);
     const triggerChar = activeTrigger || '';
@@ -154,7 +157,6 @@ export function CommandBar({
     setSuggestions([]);
     setActiveTrigger(null);
 
-    // Store structured token with stable ID
     setTokens(prev => {
       const filtered = prev.filter(t => t.type !== suggestion.type);
       return [...filtered, { type: suggestion.type, id: suggestion.id, name: suggestion.name }];
@@ -215,7 +217,6 @@ export function CommandBar({
     const opportunity = tokens.find(t => t.type === 'opportunity') || null;
     const template = tokens.find(t => t.type === 'template') || null;
 
-    // Extract free text by removing all token references
     let freeText = value;
     for (const token of tokens) {
       const triggerChar = token.type === 'account' ? '@' : token.type === 'opportunity' ? '$' : '+';
@@ -223,12 +224,19 @@ export function CommandBar({
     }
 
     onExecute({ rawText: value, account, opportunity, template, freeText });
-  }, [value, tokens, onExecute, isLoading]);
 
-  // Prefill from starter commands
+    // If preserveAfterExecute, keep input populated; otherwise clear
+    if (!preserveAfterExecute) {
+      setValue('');
+      setTokens([]);
+    }
+  }, [value, tokens, onExecute, isLoading, preserveAfterExecute]);
+
+  // Prefill from starter commands — skip if user is actively typing
   useEffect(() => {
-    if (prefill) {
+    if (prefill && !isTypingRef.current) {
       setValue(prefill);
+      setTokens([]); // Reset tokens for new prefill
       onPrefillConsumed?.();
       requestAnimationFrame(() => {
         const el = inputRef.current;
@@ -291,7 +299,7 @@ export function CommandBar({
         )}
       </div>
 
-      {/* Structured token chips — show linked entities with remove */}
+      {/* Structured token chips */}
       {tokens.length > 0 && (
         <div className="flex items-center gap-2 mt-2 px-1 flex-wrap">
           {tokens.map(token => {
