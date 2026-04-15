@@ -334,17 +334,20 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
         Test at 320px, 402px, zoomed, and with large KPI numbers.
         ═══════════════════════════════════════════════════════════
       */}
-      <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2 overflow-hidden">
-        <div className="flex items-center gap-2 sm:gap-4">
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <GlobalWeekStrip />
+      {/* Hide shell chrome on /strategy — reclaim vertical space */}
+      {location.pathname !== '/strategy' && (
+        <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2 overflow-hidden">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <GlobalWeekStrip />
+            </div>
+            <div className="shrink-0">
+              <ActivityRings />
+            </div>
           </div>
-          <div className="shrink-0">
-            <ActivityRings />
-          </div>
+          <DayTimeline />
         </div>
-        <DayTimeline />
-      </div>
+      )}
 
       <Breadcrumbs />
       <main data-testid="main-content" className={`flex-1 overflow-x-hidden overflow-y-auto ${SHELL.main.bottomPad}`}>

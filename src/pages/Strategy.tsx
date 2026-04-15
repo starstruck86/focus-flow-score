@@ -163,7 +163,7 @@ export default function Strategy() {
           isTransforming={isTransforming}
         />
 
-        {!isMobile && !rightRailCollapsed && activeThread && (
+        {!isMobile && !rightRailCollapsed && activeThread && hasRailContent && (
           <StrategyRightRail
             thread={activeThread}
             onCollapse={() => setRightRailCollapsed(true)}

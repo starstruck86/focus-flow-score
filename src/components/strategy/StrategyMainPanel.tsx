@@ -296,18 +296,6 @@ export function StrategyMainPanel({
           </div>
         )}
 
-        {/* Lane Tabs — compact */}
-        <div className="px-3 pt-1.5 pb-0.5">
-          <Tabs value={activeLane} onValueChange={setActiveLane}>
-            <TabsList className="h-7">
-              {LANES.map(l => (
-                <TabsTrigger key={l.value} value={l.value} className="text-[11px] px-2.5 h-5 data-[state=active]:bg-background">
-                  {l.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
       </div>
 
       {/* ── SCROLLABLE CONVERSATION (flex-1, min-h-0) ── */}
@@ -408,19 +396,21 @@ export function StrategyMainPanel({
             </div>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <div className="flex gap-0.5">
+            <div className="flex rounded-md border border-border overflow-hidden">
               {DEPTH_OPTIONS.map(d => (
-                <Badge
+                <button
                   key={d}
-                  variant={depth === d ? 'default' : 'outline'}
+                  type="button"
                   className={cn(
-                    'cursor-pointer text-[9px] px-1.5 py-0 transition-colors',
-                    depth === d ? '' : 'text-foreground/50 hover:text-foreground'
+                    'px-2.5 py-1 text-[10px] font-medium transition-colors',
+                    depth === d
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card text-foreground/60 hover:bg-muted hover:text-foreground'
                   )}
                   onClick={() => setDepth(d)}
                 >
                   {d}
-                </Badge>
+                </button>
               ))}
             </div>
             <Button
