@@ -119,8 +119,9 @@ export default function Strategy() {
 
   return (
     <Layout hideFloatingFab>
-      {/* Strategy manages its own scroll regions — fill the main area absolutely */}
+      {/* Strategy takes over scroll management — fills the main area */}
       <div className="absolute inset-0 flex">
+
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
 

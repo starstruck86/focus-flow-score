@@ -347,7 +347,7 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
       </div>
 
       <Breadcrumbs />
-      <main data-testid="main-content" className={`flex-1 overflow-x-hidden overflow-y-auto ${SHELL.main.bottomPad}`}>
+      <main data-testid="main-content" className={`flex-1 overflow-x-hidden overflow-y-auto relative ${SHELL.main.bottomPad}`}>
         {children}
       </main>
 
