@@ -41,7 +41,7 @@ const LazyFallback = ({ text = "Loading…" }: { text?: string }) => (
 );
 
 const Diagnostics = lazy(() => import("./pages/Diagnostics"));
-const Cockpit = lazy(() => import("./pages/Cockpit"));
+const Strategy = lazy(() => import("./pages/Strategy"));
 const EnrichmentVerification = lazy(() => import("./pages/EnrichmentVerification"));
 const ExecuteWorkspace = lazy(() => import("./pages/ExecuteWorkspace"));
 const BulkExtractRunner = lazy(() => import("./pages/BulkExtractRunner"));
@@ -115,10 +115,10 @@ const App = () => (
                   {/* Coach is no longer a nav destination — accessible via /coach for transcript grading */}
                   <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><PrepHub /></ProtectedPage>} />
                   <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />
-                  <Route path="/cockpit" element={
+                  <Route path="/strategy" element={
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>
-                        <Cockpit />
+                        <Strategy />
                       </Suspense>
                     </ProtectedRoute>
                   } />

@@ -48,9 +48,11 @@ export function useStrategyThreads() {
   }, [user]);
 
   const updateThread = useCallback(async (id: string, updates: Partial<StrategyThread>) => {
+    // Strip to DB-safe fields
+    const dbUpdates: Record<string, unknown> = { ...updates };
     const { error } = await supabase
       .from('strategy_threads')
-      .update(updates)
+      .update(dbUpdates as any)
       .eq('id', id);
     if (!error) {
       setThreads(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
