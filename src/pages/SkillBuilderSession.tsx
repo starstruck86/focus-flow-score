@@ -39,9 +39,12 @@ import {
   unlockAudio,
   emitStepTelemetry,
   clearAudioTelemetry,
+  clearActivePlayback,
   evaluateModeDowngrade,
+  describeMode,
   type AudioDeliveryMode,
 } from '@/lib/daveAudioResilience';
+import { AudioDebugPanel } from '@/components/debug/AudioDebugPanel';
 
 type SessionState = 'generating' | 'active' | 'completed' | 'error';
 
@@ -76,12 +79,19 @@ export default function SkillBuilderSession() {
     state?.mode === 'audio' ? 'full' : 'text'
   );
   const [audioFailures, setAudioFailures] = useState(0);
+  const [audioUnavailable, setAudioUnavailable] = useState(false);
   const { data: skillLevels } = useSkillLevels();
+
+  // Stable session key — generated once, persists for entire lifecycle
+  const stableSessionKey = useRef(`sb-${state?.skill ?? 'unknown'}-${Date.now()}`);
+
+  // Track which steps have had their transcript recorded (prevent doubles)
+  const recordedStepsRef = useRef<Set<number>>(new Set());
 
   // Dave unified controller for audio resilience
   const dave = useDaveVoiceController({
     surface: 'skill_builder',
-    sessionKey: `sb-${state?.skill ?? 'unknown'}-${Date.now()}`,
+    sessionKey: stableSessionKey.current,
     mode: deliveryMode !== 'text' ? 'audio' : 'text',
   });
 
@@ -205,6 +215,7 @@ export default function SkillBuilderSession() {
     dave.clearBuffer();
     clearIdempotencyRecords();
     clearAudioTelemetry();
+    clearActivePlayback();
 
     if (!sessionId) return;
 
@@ -228,7 +239,6 @@ export default function SkillBuilderSession() {
   }, [sessionId, repScores]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Audio: narrate current block (non-blocking — text always shown first)
-  const [audioUnavailable, setAudioUnavailable] = useState(false);
   useEffect(() => {
     if (deliveryMode === 'text' || sessionState !== 'active' || !currentBlock) return;
 
@@ -249,7 +259,13 @@ export default function SkillBuilderSession() {
 
     const stepId = `block-${currentBlockIndex}`;
     emitStepTelemetry('step_rendered', stepId, { blockType: block.type });
-    dave.recordTranscript('dave', text);
+
+    // Prevent double transcript entries
+    if (!recordedStepsRef.current.has(currentBlockIndex)) {
+      dave.recordTranscript('dave', text);
+      recordedStepsRef.current.add(currentBlockIndex);
+    }
+
     // Fire-and-forget: audio plays alongside visible text, never blocks flow
     dave.speak(text).then(() => {
       emitStepTelemetry('audio_ended', stepId, {});
@@ -260,7 +276,11 @@ export default function SkillBuilderSession() {
         const downgraded = evaluateModeDowngrade(deliveryMode, next);
         if (downgraded !== deliveryMode) {
           setDeliveryMode(downgraded);
-          toast.info(downgraded === 'text' ? 'Audio unavailable — text mode' : 'Switched to quiet mode');
+          toast.info(
+            downgraded === 'text'
+              ? 'Audio unavailable — switched to text mode'
+              : 'Switched to quiet mode'
+          );
         }
         return next;
       });
@@ -270,7 +290,6 @@ export default function SkillBuilderSession() {
 
   const toggleMode = useCallback(async () => {
     if (deliveryMode === 'text') {
-      // Unlock audio on user gesture before switching to audio mode
       const unlocked = await unlockAudio();
       if (!unlocked) {
         toast.error('Could not enable audio');
@@ -331,6 +350,8 @@ export default function SkillBuilderSession() {
     );
   }
 
+  const modeInfo = describeMode(deliveryMode);
+
   return (
     <Layout>
       <div className={cn('px-4 pt-4 space-y-4', SHELL.main.bottomPad)}>
@@ -374,12 +395,14 @@ export default function SkillBuilderSession() {
               Skill Builder — {track.skillLabel}
             </p>
             <div className="flex items-center gap-1.5">
+              {/* Mode indicator */}
+              <span className="text-[10px] text-muted-foreground">{modeInfo.icon}</span>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0"
                 onClick={toggleMode}
-                title={deliveryMode !== 'text' ? 'Switch to text' : 'Switch to audio'}
+                title={`Current: ${modeInfo.label}. Click to switch.`}
               >
                 {deliveryMode !== 'text' ? (
                   <Volume2 className="h-3.5 w-3.5 text-primary" />
@@ -480,6 +503,13 @@ export default function SkillBuilderSession() {
             isFromTraining={!!trainingContent && !!resolvedSession}
           />
         )}
+
+        {/* Audio debug panel — only visible with ?debug=audio */}
+        <AudioDebugPanel
+          mode={deliveryMode}
+          failureCount={audioFailures}
+          micStatus={audioUnavailable ? 'unavailable' : deliveryMode === 'full' ? 'ready' : 'off'}
+        />
       </div>
     </Layout>
   );
@@ -515,24 +545,46 @@ function BlockRenderer({
       return null;
   }
 }
-// ── Optional audio play button ─────────────────────────────────────
+
+// ── PlayAudioButton with overlap prevention ────────────────────────
 type DaveController = ReturnType<typeof useDaveVoiceController>;
 
 function PlayAudioButton({ text, dave }: { text: string; dave?: DaveController }) {
   const [playing, setPlaying] = useState(false);
+  const [locked, setLocked] = useState(false);
   if (!dave) return null;
+
+  const handleClick = async () => {
+    if (locked) return;
+    setLocked(true);
+
+    // If currently playing, stop first
+    if (playing) {
+      dave.stopPlayback?.();
+      setPlaying(false);
+      // Short lock to prevent rapid toggling
+      setTimeout(() => setLocked(false), 300);
+      return;
+    }
+
+    setPlaying(true);
+    try {
+      await dave.speak(text);
+    } catch {
+      // ignore
+    }
+    setPlaying(false);
+    setLocked(false);
+  };
+
   return (
     <button
-      onClick={async () => {
-        setPlaying(true);
-        try { await dave.speak(text); } catch { /* ignore */ }
-        setPlaying(false);
-      }}
+      onClick={handleClick}
       className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
-      disabled={playing}
+      disabled={locked && !playing}
     >
       <Volume2 className="h-3 w-3" />
-      {playing ? 'Playing…' : 'Play Audio'}
+      {playing ? 'Stop' : 'Play Audio'}
     </button>
   );
 }

@@ -2,7 +2,7 @@
  * Dave Audio Resilience Layer
  *
  * Text-first coaching step model, audio unlock, playback resilience,
- * mic fallback, and per-step telemetry.
+ * mic fallback, playback token system, and per-step telemetry.
  *
  * Architecture: text is the source of truth. Audio is an enhancement.
  * No coaching content is ever skipped because of audio/mic failure.
@@ -16,11 +16,11 @@ const logger = createLogger('DaveAudioResilience');
 
 export type AudioDeliveryMode = 'full' | 'quiet' | 'text';
 
-export function describeMode(mode: AudioDeliveryMode): string {
+export function describeMode(mode: AudioDeliveryMode): { label: string; icon: string } {
   switch (mode) {
-    case 'full': return 'Audio + mic';
-    case 'quiet': return 'Audio only — typed input';
-    case 'text': return 'Text only';
+    case 'full': return { label: 'Audio + mic', icon: '🔊' };
+    case 'quiet': return { label: 'Audio — typed input', icon: '🔈' };
+    case 'text': return { label: 'Text only', icon: '📝' };
   }
 }
 
@@ -59,6 +59,34 @@ export function createCoachingStep(id: string, text: string): CoachingStep {
   };
 }
 
+// ── Playback Token System ──────────────────────────────────────────
+
+let _activePlaybackId: string | null = null;
+let _playbackCounter = 0;
+
+/** Generate a new playback token. Invalidates any previous token. */
+export function nextPlaybackId(): string {
+  _playbackCounter++;
+  const id = `pb-${_playbackCounter}-${Date.now()}`;
+  _activePlaybackId = id;
+  return id;
+}
+
+/** Check if a playback token is still the active one. */
+export function isActivePlayback(id: string): boolean {
+  return _activePlaybackId === id;
+}
+
+/** Get the current active playback ID (for debug). */
+export function getActivePlaybackId(): string | null {
+  return _activePlaybackId;
+}
+
+/** Clear the active playback (e.g. on session end). */
+export function clearActivePlayback(): void {
+  _activePlaybackId = null;
+}
+
 // ── Audio Unlock (Mobile/Safari) ───────────────────────────────────
 
 let _audioUnlocked = false;
@@ -71,13 +99,11 @@ export function isAudioUnlocked(): boolean {
 /**
  * Unlock audio playback via user gesture.
  * Must be called from a click/tap handler to satisfy Safari autoplay policy.
- * Creates an AudioContext and plays a silent buffer to prime the audio path.
  */
 export async function unlockAudio(): Promise<boolean> {
   if (_audioUnlocked) return true;
 
   try {
-    // Create or resume AudioContext
     if (!_audioContext || _audioContext.state === 'closed') {
       _audioContext = new AudioContext();
     }
@@ -85,14 +111,12 @@ export async function unlockAudio(): Promise<boolean> {
       await _audioContext.resume();
     }
 
-    // Play a silent buffer to prime playback
     const buffer = _audioContext.createBuffer(1, 1, 22050);
     const source = _audioContext.createBufferSource();
     source.buffer = buffer;
     source.connect(_audioContext.destination);
     source.start(0);
 
-    // Also prime an Audio element
     const audio = new Audio();
     audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
     audio.volume = 0;
@@ -111,39 +135,49 @@ export async function unlockAudio(): Promise<boolean> {
   }
 }
 
-// ── Playback with Retry & Settle ───────────────────────────────────
+// ── Playback with Retry, Settle & Token Guard ──────────────────────
 
 const PLAYBACK_SETTLE_TIMEOUT_MS = 60_000;
 const STALL_TIMEOUT_MS = 10_000;
 const MIC_HANDOFF_DELAY_MS = 300;
+const MAX_TOTAL_ATTEMPTS = 2;
 
 export interface PlaybackResult {
   success: boolean;
   retried: boolean;
   error?: string;
+  tokenStale?: boolean;
 }
 
 /**
- * Play an audio blob with full settle handling:
+ * Play an audio blob with full settle handling + token guard.
  * - Fresh Audio element per clip
- * - Explicit handlers for ended/error/stalled/timeout
- * - One retry on failure
- * - Cleanup of object URLs and listeners
+ * - One retry on failure (max 2 total attempts)
+ * - Token check: stale clips resolve silently
+ * - Hard 60s cap, stall detection
  */
 export async function playWithResilience(
   blob: Blob,
   stepId: string,
+  playbackId: string,
 ): Promise<PlaybackResult> {
-  const result = await attemptPlayback(blob, stepId);
-  if (result.success) return result;
+  if (!isActivePlayback(playbackId)) {
+    return { success: false, retried: false, tokenStale: true };
+  }
+
+  const result = await attemptPlayback(blob, stepId, playbackId);
+  if (result.success || result.tokenStale) return result;
 
   // One retry with fresh state
-  emitStepTelemetry('retry_attempted', stepId, {});
-  const retryResult = await attemptPlayback(blob, stepId);
+  if (!isActivePlayback(playbackId)) {
+    return { success: false, retried: false, tokenStale: true };
+  }
+  emitStepTelemetry('retry_attempted', stepId, { playbackId });
+  const retryResult = await attemptPlayback(blob, stepId, playbackId);
   return { ...retryResult, retried: true };
 }
 
-async function attemptPlayback(blob: Blob, stepId: string): Promise<PlaybackResult> {
+async function attemptPlayback(blob: Blob, stepId: string, playbackId: string): Promise<PlaybackResult> {
   const objectUrl = URL.createObjectURL(blob);
   const audio = new Audio();
 
@@ -157,7 +191,6 @@ async function attemptPlayback(blob: Blob, stepId: string): Promise<PlaybackResu
       clearTimeout(overallTimer);
       clearTimeout(stallTimer);
 
-      // Cleanup
       audio.onended = null;
       audio.onerror = null;
       audio.onstalled = null;
@@ -165,49 +198,51 @@ async function attemptPlayback(blob: Blob, stepId: string): Promise<PlaybackResu
       audio.onplaying = null;
       audio.pause();
       audio.removeAttribute('src');
-      audio.load(); // force release
+      audio.load();
       URL.revokeObjectURL(objectUrl);
 
-      resolve({ success, retried: false, error });
+      const stale = !isActivePlayback(playbackId);
+      if (stale) {
+        resolve({ success: false, retried: false, tokenStale: true });
+      } else {
+        resolve({ success, retried: false, error });
+      }
     };
 
-    // Overall timeout
     const overallTimer = setTimeout(() => {
-      emitStepTelemetry('audio_timeout', stepId, {});
+      emitStepTelemetry('audio_timeout', stepId, { playbackId });
       settle(false, 'Playback timed out');
     }, PLAYBACK_SETTLE_TIMEOUT_MS);
 
     audio.onended = () => {
-      emitStepTelemetry('audio_ended', stepId, {});
+      emitStepTelemetry('audio_ended', stepId, { playbackId });
       settle(true);
     };
 
     audio.onerror = () => {
       const msg = audio.error?.message ?? 'Audio playback error';
-      emitStepTelemetry('audio_failed', stepId, { error: msg });
+      emitStepTelemetry('audio_failed', stepId, { error: msg, playbackId });
       settle(false, msg);
     };
 
     audio.onstalled = () => {
-      // Give it a chance to recover
       stallTimer = setTimeout(() => {
-        emitStepTelemetry('audio_stalled', stepId, {});
+        emitStepTelemetry('audio_stalled', stepId, { playbackId });
         settle(false, 'Audio stalled');
       }, STALL_TIMEOUT_MS);
     };
 
     audio.onplaying = () => {
-      // Clear stall timer if playback resumes
       clearTimeout(stallTimer);
-      emitStepTelemetry('audio_started', stepId, {});
+      emitStepTelemetry('audio_started', stepId, { playbackId });
     };
 
     audio.src = objectUrl;
-    emitStepTelemetry('audio_requested', stepId, {});
+    emitStepTelemetry('audio_requested', stepId, { playbackId });
 
     audio.play().catch((err) => {
       const msg = err instanceof Error ? err.message : 'play() rejected';
-      emitStepTelemetry('audio_failed', stepId, { error: msg });
+      emitStepTelemetry('audio_failed', stepId, { error: msg, playbackId });
       settle(false, msg);
     });
   });
@@ -222,13 +257,7 @@ export interface MicHandoffResult {
   error?: string;
 }
 
-/**
- * Attempt mic acquisition after playback ends.
- * Waits a short handoff delay, then requests mic.
- * Falls back to typed input if mic is unavailable.
- */
 export async function attemptMicHandoff(stepId: string): Promise<MicHandoffResult> {
-  // Handoff delay for audio pipeline to settle
   await new Promise(r => setTimeout(r, MIC_HANDOFF_DELAY_MS));
 
   emitStepTelemetry('mic_requested', stepId, {});
@@ -256,6 +285,7 @@ type TelemetryEvent =
   | 'audio_failed'
   | 'audio_timeout'
   | 'audio_stalled'
+  | 'audio_interrupt'
   | 'retry_attempted'
   | 'mic_requested'
   | 'mic_granted'
@@ -264,21 +294,37 @@ type TelemetryEvent =
   | 'audio_unlock'
   | 'mode_downgraded';
 
-const _telemetryLog: Array<{ event: TelemetryEvent; stepId: string; ts: number; data?: Record<string, unknown> }> = [];
+export interface AudioTelemetryEntry {
+  event: TelemetryEvent;
+  stepId: string;
+  ts: number;
+  data?: Record<string, unknown>;
+}
+
+const _telemetryLog: AudioTelemetryEntry[] = [];
+const MAX_TELEMETRY = 200;
 
 export function emitStepTelemetry(
   event: TelemetryEvent,
   stepId: string,
   data?: Record<string, unknown>,
 ): void {
-  const entry = { event, stepId, ts: Date.now(), data };
+  const entry: AudioTelemetryEntry = { event, stepId, ts: Date.now(), data };
   _telemetryLog.push(entry);
+  if (_telemetryLog.length > MAX_TELEMETRY) {
+    _telemetryLog.splice(0, _telemetryLog.length - MAX_TELEMETRY);
+  }
   logger.info(`[telemetry] ${event}`, { stepId, ...data });
 }
 
 /** Get telemetry log for debugging */
-export function getAudioTelemetryLog() {
+export function getAudioTelemetryLog(): readonly AudioTelemetryEntry[] {
   return [..._telemetryLog];
+}
+
+/** Get last N telemetry entries */
+export function getRecentAudioTelemetry(count = 10): AudioTelemetryEntry[] {
+  return _telemetryLog.slice(-count);
 }
 
 /** Clear telemetry (on session end) */
@@ -288,10 +334,6 @@ export function clearAudioTelemetry() {
 
 // ── Mode Downgrade Logic ───────────────────────────────────────────
 
-/**
- * Determine if mode should downgrade based on failures.
- * Returns the recommended mode after evaluating recent events.
- */
 export function evaluateModeDowngrade(
   currentMode: AudioDeliveryMode,
   recentFailures: number,
@@ -307,4 +349,30 @@ export function evaluateModeDowngrade(
     return 'quiet';
   }
   return currentMode;
+}
+
+// ── Debug State Snapshot ───────────────────────────────────────────
+
+export interface AudioDebugState {
+  activePlaybackId: string | null;
+  audioUnlocked: boolean;
+  failureCount: number;
+  mode: AudioDeliveryMode;
+  micStatus: string;
+  recentEvents: AudioTelemetryEntry[];
+}
+
+export function getAudioDebugState(
+  mode: AudioDeliveryMode,
+  failureCount: number,
+  micStatus: string,
+): AudioDebugState {
+  return {
+    activePlaybackId: getActivePlaybackId(),
+    audioUnlocked: isAudioUnlocked(),
+    failureCount,
+    mode,
+    micStatus,
+    recentEvents: getRecentAudioTelemetry(5),
+  };
 }
