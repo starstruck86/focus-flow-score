@@ -163,7 +163,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
             <PanelLeftOpen className="h-3 w-3 mr-1" /> Threads
           </Button>
         )}
-        <span className="text-[10px] font-medium text-muted-foreground/40 tracking-wider uppercase">Strategy</span>
+        <span className="text-[10px] font-medium text-muted-foreground/55 tracking-wider uppercase">Strategy</span>
       </div>
 
       <ScrollArea className="flex-1">
@@ -175,9 +175,9 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
           {/* Header — only on empty */}
           {showEmpty && (
             <div className="text-center mb-6 animate-in fade-in-0 duration-200">
-              <h1 className="text-base font-semibold text-foreground/80 tracking-tight">What do you need?</h1>
+              <h1 className="text-base font-semibold text-foreground/85 tracking-tight">What do you need?</h1>
               {kiCount > 0 && (
-                <p className="text-[11px] text-muted-foreground/40 mt-1">
+                <p className="text-[11px] text-muted-foreground/55 mt-1">
                   {kiCount.toLocaleString()} KIs ready
                 </p>
               )}
@@ -229,7 +229,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               {/* Pinned — go-to plays */}
               {pinnedShortcuts.length > 0 && (
                 <div className="mb-5">
-                  <p className="text-[10px] font-medium text-muted-foreground/40 uppercase tracking-[0.1em] mb-2 px-0.5 flex items-center gap-1">
+                  <p className="text-[10px] font-medium text-muted-foreground/55 uppercase tracking-[0.1em] mb-2 px-0.5 flex items-center gap-1">
                     <Pin className="h-2.5 w-2.5" /> Go-to plays
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -254,7 +254,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               )}
 
               {/* Quick start */}
-              <p className="text-[10px] font-medium text-muted-foreground/40 uppercase tracking-[0.1em] mb-2 px-0.5">
+              <p className="text-[10px] font-medium text-muted-foreground/55 uppercase tracking-[0.1em] mb-2 px-0.5">
                 Quick start
               </p>
               <div className={cn('grid gap-1.5', isMobile ? 'grid-cols-1' : 'grid-cols-2')}>
@@ -269,8 +269,8 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                       'transition-all duration-100'
                     )}
                   >
-                    <s.icon className="h-3.5 w-3.5 text-muted-foreground/35 group-hover:text-primary/70 shrink-0 transition-colors duration-100" />
-                    <span className="text-[12px] text-foreground/55 group-hover:text-foreground/80 transition-colors duration-100">{s.label}</span>
+                    <s.icon className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-primary/70 shrink-0 transition-colors duration-100" />
+                    <span className="text-[12px] text-foreground/65 group-hover:text-foreground/85 transition-colors duration-100">{s.label}</span>
                   </button>
                 ))}
               </div>
@@ -278,7 +278,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               {/* Saved workflows */}
               {savedNonPinned.length > 0 && (
                 <div className="mt-5">
-                  <p className="text-[10px] font-medium text-muted-foreground/35 uppercase tracking-[0.1em] mb-1.5 px-0.5 flex items-center gap-1">
+                  <p className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-[0.1em] mb-1.5 px-0.5 flex items-center gap-1">
                     <Bookmark className="h-2.5 w-2.5" /> Saved
                   </p>
                   <div className="flex flex-wrap gap-1">
@@ -288,12 +288,12 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                         onClick={() => handleShortcut(s)}
                         className={cn(
                           'inline-flex items-center gap-1 text-[11px]',
-                          'text-muted-foreground/45 hover:text-foreground/70',
+                          'text-muted-foreground/55 hover:text-foreground/75',
                           'px-2 py-1 rounded-md hover:bg-muted/30',
                           'transition-all duration-100 truncate max-w-[180px]'
                         )}
                       >
-                        <Bookmark className="h-2.5 w-2.5 shrink-0 opacity-35" />
+                        <Bookmark className="h-2.5 w-2.5 shrink-0 opacity-50" />
                         {s.label}
                       </button>
                     ))}
@@ -304,7 +304,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               {/* Session recents */}
               {recents.length > 0 && (
                 <div className="mt-4">
-                  <p className="text-[10px] font-medium text-muted-foreground/35 uppercase tracking-[0.1em] mb-1.5 px-0.5 flex items-center gap-1">
+                  <p className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-[0.1em] mb-1.5 px-0.5 flex items-center gap-1">
                     <Clock className="h-2.5 w-2.5" /> Recent
                   </p>
                   <div className="flex flex-wrap gap-1">
@@ -312,7 +312,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                       <button
                         key={i}
                         onClick={() => setPrefill(r.command)}
-                        className="inline-flex items-center text-[11px] text-muted-foreground/40 hover:text-foreground/60 px-2 py-1 rounded hover:bg-muted/25 transition-all duration-100 truncate max-w-[180px]"
+                        className="inline-flex items-center text-[11px] text-muted-foreground/50 hover:text-foreground/70 px-2 py-1 rounded hover:bg-muted/25 transition-all duration-100 truncate max-w-[180px]"
                       >
                         {r.label}
                       </button>
@@ -330,7 +330,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                 <div className="flex items-center justify-end mb-2">
                   <button
                     onClick={handleSaveShortcut}
-                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/25 hover:text-muted-foreground/50 transition-colors duration-100"
+                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground/70 transition-colors duration-100"
                   >
                     <PlusCircle className="h-3 w-3" /> Save as shortcut
                   </button>

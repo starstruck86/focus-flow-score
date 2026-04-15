@@ -53,14 +53,14 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
         )}
 
         {attachmentCount > 0 && (
-          <span className="inline-flex items-center gap-1 text-muted-foreground/45 font-medium">
+          <span className="inline-flex items-center gap-1 text-muted-foreground/55 font-medium">
             <Paperclip className="h-3 w-3 opacity-50" />
             {attachmentCount} file{attachmentCount !== 1 ? 's' : ''}
           </span>
         )}
 
         {(template || account || opportunity || attachmentCount > 0) && kiCount > 0 && (
-          <span className="text-border/20">·</span>
+          <span className="text-border/30">·</span>
         )}
 
         {/* KI toggle */}
@@ -68,7 +68,7 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
           onClick={() => onToggleKIs(!useKIs)}
           className={cn(
             'inline-flex items-center gap-1 transition-colors duration-100',
-            useKIs ? 'text-primary/50 font-medium' : 'text-muted-foreground/25'
+            useKIs ? 'text-primary/60 font-medium' : 'text-muted-foreground/40'
           )}
         >
           <Brain className="h-3 w-3" />
@@ -87,7 +87,7 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
 
         {/* Playbook indicator */}
         {useKIs && ex?.playbookUsed && (
-          <span className="inline-flex items-center gap-1 text-primary/35 text-[10px] font-medium">
+          <span className="inline-flex items-center gap-1 text-primary/50 text-[10px] font-medium">
             <BookOpen className="h-2.5 w-2.5" />
             {ex.playbookUsed}
           </span>
@@ -97,7 +97,7 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
         {useKIs && ex && ex.topThemes.length > 0 && (
           <button
             onClick={() => setShowKIDetail(!showKIDetail)}
-            className="inline-flex items-center gap-0.5 text-muted-foreground/20 hover:text-muted-foreground/45 transition-colors duration-100"
+            className="inline-flex items-center gap-0.5 text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors duration-100"
           >
             {showKIDetail ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             <span className="text-[10px]">detail</span>
@@ -110,16 +110,16 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
         <div className="rounded-lg border border-border/12 bg-card/25 px-4 py-3 space-y-2 animate-in fade-in-0 slide-in-from-top-1 duration-100">
           {/* Retrieval reasoning */}
           <div className="flex items-start gap-2">
-            <Sparkles className="h-3 w-3 text-primary/40 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-muted-foreground/50 leading-relaxed">{ex.retrievalReasoning}</p>
+            <Sparkles className="h-3 w-3 text-primary/50 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{ex.retrievalReasoning}</p>
           </div>
 
           {/* Retrieval layers */}
           {ex.retrievalLayers && ex.retrievalLayers.length > 0 && (
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground/35">
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground/50">
               {ex.retrievalLayers.map((layer, i) => (
                 <span key={layer} className="flex items-center gap-1">
-                  {i > 0 && <span className="text-border/25">→</span>}
+                  {i > 0 && <span className="text-border/40">→</span>}
                   {layer}
                 </span>
               ))}
@@ -128,21 +128,21 @@ export function PreRunContext({ tokens, useKIs, onToggleKIs, kiCount, lastKIExpl
 
           {/* Relevance breakdown */}
           <div className="flex items-center gap-4 text-[10px]">
-            <span className="text-foreground/45 font-medium">{ex.relevanceBreakdown.high} strategic</span>
-            <span className="text-muted-foreground/35">{ex.relevanceBreakdown.medium} tactical</span>
-            <span className="text-muted-foreground/20">{ex.relevanceBreakdown.low} supporting</span>
+            <span className="text-foreground/60 font-medium">{ex.relevanceBreakdown.high} strategic</span>
+            <span className="text-muted-foreground/50">{ex.relevanceBreakdown.medium} tactical</span>
+            <span className="text-muted-foreground/40">{ex.relevanceBreakdown.low} supporting</span>
           </div>
 
           {/* Themes + Frameworks */}
           {(ex.topThemes.length > 0 || ex.topFrameworks.length > 0) && (
             <div className="flex items-center gap-1.5 flex-wrap">
               {ex.topThemes.map(theme => (
-                <span key={theme} className="text-[10px] px-2 py-0.5 rounded-md bg-primary/[0.04] text-primary/45 font-medium">
+                <span key={theme} className="text-[10px] px-2 py-0.5 rounded-md bg-primary/[0.06] text-primary/55 font-medium">
                   {theme}
                 </span>
               ))}
               {ex.topFrameworks.map(fw => (
-                <span key={fw} className="text-[10px] px-2 py-0.5 rounded-md bg-muted/20 text-muted-foreground/35 font-medium">
+                <span key={fw} className="text-[10px] px-2 py-0.5 rounded-md bg-muted/20 text-muted-foreground/50 font-medium">
                   {fw}
                 </span>
               ))}

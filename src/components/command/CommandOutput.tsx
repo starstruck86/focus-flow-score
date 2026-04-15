@@ -226,7 +226,7 @@ export function CommandOutput({
             <div className="min-w-0">
               <h2 className="text-[18px] font-semibold text-foreground/85 tracking-tight leading-tight">{docTitle}</h2>
               {(accountName || opportunityName) && (
-                <p className="text-[12px] text-muted-foreground/35 mt-1.5 font-medium">
+                <p className="text-[12px] text-muted-foreground/50 mt-1.5 font-medium">
                   {accountName}{opportunityName ? ` · ${opportunityName}` : ''}
                 </p>
               )}
@@ -237,7 +237,7 @@ export function CommandOutput({
                   onClick={() => setViewMode('clean')}
                   className={cn(
                     'flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-100',
-                    viewMode === 'clean' ? 'bg-background text-foreground/70 shadow-sm' : 'text-muted-foreground/25 hover:text-foreground/50'
+                    viewMode === 'clean' ? 'bg-background text-foreground/70 shadow-sm' : 'text-muted-foreground/45 hover:text-foreground/60'
                   )}
                 >
                   <Eye className="h-3 w-3" /> Read
@@ -246,7 +246,7 @@ export function CommandOutput({
                   onClick={() => setViewMode('edit')}
                   className={cn(
                     'flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-100',
-                    viewMode === 'edit' ? 'bg-background text-foreground/70 shadow-sm' : 'text-muted-foreground/25 hover:text-foreground/50'
+                    viewMode === 'edit' ? 'bg-background text-foreground/70 shadow-sm' : 'text-muted-foreground/45 hover:text-foreground/60'
                   )}
                 >
                   <Pencil className="h-3 w-3" /> Edit
@@ -256,9 +256,9 @@ export function CommandOutput({
           </div>
 
           {/* Quiet metadata line */}
-          <div className="flex items-center gap-3 flex-wrap text-[10px] text-muted-foreground/25 mt-3">
+          <div className="flex items-center gap-3 flex-wrap text-[10px] text-muted-foreground/50 mt-3">
             {playbookUsed && (
-              <span className="inline-flex items-center gap-1 text-primary/40">
+              <span className="inline-flex items-center gap-1 text-primary/60">
                 <BookOpen className="h-2.5 w-2.5" /> {playbookUsed}
               </span>
             )}
@@ -270,13 +270,13 @@ export function CommandOutput({
             {sources.length > 0 && (
               <button
                 onClick={() => setShowSources(!showSources)}
-                className="inline-flex items-center gap-0.5 hover:text-foreground/40 transition-colors duration-100"
+                className="inline-flex items-center gap-0.5 hover:text-foreground/60 transition-colors duration-100"
               >
                 {showSources ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
                 {sources.length} source{sources.length !== 1 ? 's' : ''}
               </button>
             )}
-            <span className="inline-flex items-center gap-1 ml-auto text-muted-foreground/18">
+            <span className="inline-flex items-center gap-1 ml-auto text-muted-foreground/40">
               <Clock className="h-2.5 w-2.5" /> {generatedAt}
             </span>
           </div>
@@ -284,7 +284,7 @@ export function CommandOutput({
           {showSources && sources.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-2.5">
               {sources.map((s, i) => (
-                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-muted/15 text-muted-foreground/30">{s}</span>
+                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-muted/15 text-muted-foreground/50">{s}</span>
               ))}
             </div>
           )}
@@ -318,7 +318,7 @@ export function CommandOutput({
             <div className="max-w-[580px]">
               {subjectLine && (
                 <div className="mb-6 pb-4 border-b border-border/8">
-                  <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/25 font-medium">Subject</span>
+                  <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/50 font-medium">Subject</span>
                   <p className="text-[15px] font-semibold text-foreground/75 mt-1.5 leading-snug">{subjectLine}</p>
                 </div>
               )}
@@ -347,7 +347,7 @@ export function CommandOutput({
                               {copiedBlock === block.heading ? (
                                 <Check className="h-3 w-3 text-emerald-500/50" />
                               ) : (
-                                <Copy className="h-3 w-3 text-muted-foreground/15" />
+                                <Copy className="h-3 w-3 text-muted-foreground/40" />
                               )}
                             </button>
                           </div>
@@ -384,8 +384,8 @@ export function CommandOutput({
                   className={cn(
                     'inline-flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-md transition-all duration-100',
                     action.accent
-                      ? 'text-emerald-500/60'
-                      : 'text-muted-foreground/20 hover:text-muted-foreground/50 hover:bg-muted/15'
+                      ? 'text-emerald-500/70'
+                      : 'text-muted-foreground/50 hover:text-muted-foreground/70 hover:bg-muted/15'
                   )}
                 >
                   <action.icon className="h-3 w-3" /> {action.label}
