@@ -480,13 +480,38 @@ function BlockRenderer({
       return null;
   }
 }
+// ── Optional audio play button ─────────────────────────────────────
+type DaveController = ReturnType<typeof useDaveVoiceController>;
 
-function MentalModelBlock({ block, onAdvance }: { block: SkillBlock & { type: 'mental_model' }; onAdvance: () => void }) {
+function PlayAudioButton({ text, dave }: { text: string; dave?: DaveController }) {
+  const [playing, setPlaying] = useState(false);
+  if (!dave) return null;
+  return (
+    <button
+      onClick={async () => {
+        setPlaying(true);
+        try { await dave.speak(text); } catch { /* ignore */ }
+        setPlaying(false);
+      }}
+      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+      disabled={playing}
+    >
+      <Volume2 className="h-3 w-3" />
+      {playing ? 'Playing…' : 'Play Audio'}
+    </button>
+  );
+}
+
+function MentalModelBlock({ block, onAdvance, dave }: { block: SkillBlock & { type: 'mental_model' }; onAdvance: () => void; dave?: DaveController }) {
+  const narration = `Mental model. ${block.levelName}. ${block.levelDescription}`;
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Brain className="h-4 w-4 text-primary" />
-        <p className="text-sm font-medium">Mental Model</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-primary" />
+          <p className="text-sm font-medium">Mental Model</p>
+        </div>
+        <PlayAudioButton text={narration} dave={dave} />
       </div>
       <div className="space-y-2">
         <p className="text-sm font-semibold text-foreground">{block.levelName}</p>
@@ -509,12 +534,16 @@ function MentalModelBlock({ block, onAdvance }: { block: SkillBlock & { type: 'm
   );
 }
 
-function KIIntroBlock({ block, onAdvance }: { block: SkillBlock & { type: 'ki_intro' }; onAdvance: () => void }) {
+function KIIntroBlock({ block, onAdvance, dave }: { block: SkillBlock & { type: 'ki_intro' }; onAdvance: () => void; dave?: DaveController }) {
+  const narration = `Key insight. ${block.kiTitle}. Pattern: ${FOCUS_PATTERN_LABELS[block.focusPattern] ?? block.focusPattern}.`;
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <BookOpen className="h-4 w-4 text-primary" />
-        <p className="text-sm font-medium">Knowledge Focus</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BookOpen className="h-4 w-4 text-primary" />
+          <p className="text-sm font-medium">Knowledge Focus</p>
+        </div>
+        <PlayAudioButton text={narration} dave={dave} />
       </div>
       <div className="space-y-2">
         <p className="text-sm font-semibold text-foreground">{block.kiTitle}</p>
@@ -532,22 +561,33 @@ function KIIntroBlock({ block, onAdvance }: { block: SkillBlock & { type: 'ki_in
   );
 }
 
-function RepBlock({ block, onStartRep }: { block: SkillBlock & { type: 'rep' }; onStartRep: (block: SkillBlock) => void }) {
+function RepBlock({ block, onStartRep, isFromTraining, dave }: { block: SkillBlock & { type: 'rep' }; onStartRep: (block: SkillBlock) => void; isFromTraining?: boolean; dave?: DaveController }) {
+  const narration = `Practice rep. ${block.scenarioContext}. The buyer says: "${block.scenarioObjection}"`;
   return (
     <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Dumbbell className="h-4 w-4 text-primary" />
-        <p className="text-sm font-medium">Practice Rep</p>
-      </div>
-      <div className="space-y-2">
-        <p className="text-sm text-foreground">{block.scenarioContext}</p>
-        <div className="rounded-md bg-muted/50 p-3">
-          <p className="text-xs text-muted-foreground italic">"{block.scenarioObjection}"</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Dumbbell className="h-4 w-4 text-primary" />
+          <p className="text-sm font-medium">Practice Rep</p>
         </div>
-        <Badge variant="outline" className="text-[10px]">
-          {block.difficulty}
-        </Badge>
+        <PlayAudioButton text={narration} dave={dave} />
       </div>
+      {isFromTraining ? (
+        <div className="space-y-1.5">
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground italic">"{block.scenarioObjection}"</p>
+          </div>
+          <Badge variant="outline" className="text-[10px]">{block.difficulty}</Badge>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm text-foreground">{block.scenarioContext}</p>
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground italic">"{block.scenarioObjection}"</p>
+          </div>
+          <Badge variant="outline" className="text-[10px]">{block.difficulty}</Badge>
+        </div>
+      )}
       <button
         onClick={() => onStartRep(block)}
         className="w-full h-10 rounded-md bg-primary text-primary-foreground text-sm font-semibold flex items-center justify-center gap-1"
@@ -558,14 +598,18 @@ function RepBlock({ block, onStartRep }: { block: SkillBlock & { type: 'rep' }; 
   );
 }
 
-function ReflectionBlock({ block, onAdvance }: { block: SkillBlock & { type: 'reflection' }; onAdvance: () => void }) {
+function ReflectionBlock({ block, onAdvance, dave }: { block: SkillBlock & { type: 'reflection' }; onAdvance: () => void; dave?: DaveController }) {
   const [reflection, setReflection] = useState('');
+  const narration = `Time to reflect. ${block.prompt}`;
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Brain className="h-4 w-4 text-amber-500" />
-        <p className="text-sm font-medium">Reflect</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-accent-foreground" />
+          <p className="text-sm font-medium">Reflect</p>
+        </div>
+        <PlayAudioButton text={narration} dave={dave} />
       </div>
       <p className="text-sm text-muted-foreground leading-relaxed">{block.prompt}</p>
       <textarea
