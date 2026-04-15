@@ -2,7 +2,7 @@
  * ComposerAttachments — drag-drop, paste, upload attachment rail for the command composer.
  * Supports files (PDF, images, text) and URLs. Renders as compact chips with remove.
  */
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import {
   Paperclip, X, FileText, Image as ImageIcon, Link2, Upload,
@@ -178,7 +178,7 @@ export function ComposerAttachments({ attachments, onAdd, onRemove, disabled }: 
   }, [processFiles, processUrl]);
 
   // Install paste listener on the document
-  useState(() => {
+  useEffect(() => {
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
   });
