@@ -201,19 +201,45 @@ interface LLMRoute {
   reasoning?: { effort: string };
 }
 
+// PROVIDER POLICY:
+// - OpenAI = default engine (chat, workflows, rollup)
+// - Perplexity = external research ONLY
+// - Anthropic/Claude = artifact engine ONLY (handled in strategy-transform-output)
+// Claude must NEVER appear as primary or fallback for non-artifact tasks.
 const ROUTES: Record<TaskType, LLMRoute> = {
-  chat_general:         { primaryProvider: "openai", model: "openai/gpt-5-mini",            fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.7, maxTokens: 4096, useTools: false },
-  deep_research:        { primaryProvider: "perplexity", model: "sonar-pro",                 fallbackProvider: "openai",    fallbackModel: "openai/gpt-5-mini",       temperature: 0.3, maxTokens: 8192, useTools: false },
-  email_evaluation:     { primaryProvider: "openai", model: "openai/gpt-5-mini",            fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.4, maxTokens: 4096, useTools: true },
-  territory_tiering:    { primaryProvider: "openai", model: "openai/gpt-5",                 fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.2, maxTokens: 8192, useTools: true, reasoning: { effort: "medium" } },
-  account_plan:         { primaryProvider: "openai", model: "openai/gpt-5-mini",            fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
-  opportunity_strategy: { primaryProvider: "openai", model: "openai/gpt-5-mini",            fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
-  brainstorm:           { primaryProvider: "openai", model: "openai/gpt-5-mini",            fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.9, maxTokens: 4096, useTools: true },
-  rollup:               { primaryProvider: "openai", model: "openai/gpt-5-mini",            fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.3, maxTokens: 4096, useTools: true },
+  chat_general:         { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.7, maxTokens: 4096, useTools: false },
+  deep_research:        { primaryProvider: "perplexity", model: "sonar-pro",     fallbackProvider: "openai", fallbackModel: "openai/gpt-5-mini", temperature: 0.3, maxTokens: 8192, useTools: false },
+  email_evaluation:     { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.4, maxTokens: 4096, useTools: true },
+  territory_tiering:    { primaryProvider: "openai", model: "openai/gpt-5",      fallbackProvider: "openai", fallbackModel: "openai/gpt-5-mini", temperature: 0.2, maxTokens: 8192, useTools: true, reasoning: { effort: "medium" } },
+  account_plan:         { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.5, maxTokens: 8192, useTools: true },
+  opportunity_strategy: { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.5, maxTokens: 8192, useTools: true },
+  brainstorm:           { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.9, maxTokens: 4096, useTools: true },
+  rollup:               { primaryProvider: "openai", model: "openai/gpt-5-mini", fallbackProvider: "openai", fallbackModel: "openai/gpt-5", temperature: 0.3, maxTokens: 4096, useTools: true },
 };
 
 function resolveLLMRoute(taskType: string): LLMRoute {
-  return ROUTES[taskType as TaskType] || ROUTES.chat_general;
+  const route = ROUTES[taskType as TaskType] || ROUTES.chat_general;
+
+  // ── PROVIDER POLICY GUARDRAIL ──
+  const ARTIFACT_TASKS = new Set(["transform_output", "regenerate_artifact", "refine_artifact"]);
+  const RESEARCH_TASKS = new Set(["deep_research"]);
+
+  if (!ARTIFACT_TASKS.has(taskType) && (route.primaryProvider === "anthropic" || route.fallbackProvider === "anthropic")) {
+    console.error(`[POLICY VIOLATION] task=${taskType} resolved to anthropic — Claude is artifact-only. Overriding to openai.`);
+    route.primaryProvider = "openai";
+    route.fallbackProvider = "openai";
+    route.model = "openai/gpt-5-mini";
+    route.fallbackModel = "openai/gpt-5";
+  }
+  if (!RESEARCH_TASKS.has(taskType) && (route.primaryProvider === "perplexity" || route.fallbackProvider === "perplexity")) {
+    console.error(`[POLICY VIOLATION] task=${taskType} resolved to perplexity — Perplexity is research-only. Overriding to openai.`);
+    route.primaryProvider = "openai";
+    route.fallbackProvider = "openai";
+    route.model = "openai/gpt-5-mini";
+    route.fallbackModel = "openai/gpt-5";
+  }
+
+  return route;
 }
 
 // ═══════════════════════════════════════════════════════════
