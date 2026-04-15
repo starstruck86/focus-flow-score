@@ -3,6 +3,7 @@
  * Three-column layout: thread sidebar (drawer on mobile), main working area, right rail.
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { Layout } from '@/components/Layout';
 import { StrategyThreadSidebar } from '@/components/strategy/StrategyThreadSidebar';
 import { StrategyMainPanel } from '@/components/strategy/StrategyMainPanel';
@@ -23,6 +24,34 @@ import {
 import { Button } from '@/components/ui/button';
 import { PanelLeftOpen } from 'lucide-react';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
+
+/** Shell that measures available height and constrains the Strategy layout */
+function StrategyShell({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const measure = () => {
+      if (!ref.current) return;
+      const rect = ref.current.getBoundingClientRect();
+      const navHeight = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--shell-nav-height') || '101');
+      const safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab') || '0');
+      const available = window.innerHeight - rect.top - navHeight - safeBottom;
+      setHeight(Math.max(available, 300));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    const observer = new ResizeObserver(measure);
+    if (ref.current?.parentElement) observer.observe(ref.current.parentElement);
+    return () => { window.removeEventListener('resize', measure); observer.disconnect(); };
+  }, []);
+
+  return (
+    <div ref={ref} className="flex overflow-hidden" style={height ? { height } : { height: '60vh' }}>
+      {children}
+    </div>
+  );
+}
 
 export default function Strategy() {
   const isMobile = useIsMobile();
