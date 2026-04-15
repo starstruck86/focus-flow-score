@@ -38,13 +38,11 @@ export default function Strategy() {
     || activeThread?.linked_territory_id
     || null;
 
-  const { memories, saveMemory, deleteMemory } = useStrategyMemory(memoryObjectType, memoryObjectId);
+  const { memories, saveMemory, deleteMemory, togglePin, setConfidence, markIrrelevant } = useStrategyMemory(memoryObjectType, memoryObjectId);
   const { uploads, summarizeUpload } = useStrategyUploads(activeThread?.id ?? null);
   const { outputs, refetch: refetchOutputs } = useStrategyOutputs(activeThread?.id ?? null);
   const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
   const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
-
-
 
   const handleWorkflowComplete = useCallback(() => {
     refetchOutputs();
@@ -130,6 +128,9 @@ export default function Strategy() {
           artifacts={artifacts}
           onSaveMemory={saveMemory}
           onDeleteMemory={deleteMemory}
+          onTogglePin={togglePin}
+          onSetConfidence={setConfidence}
+          onMarkIrrelevant={markIrrelevant}
           rollup={rollup}
           memorySuggestions={memorySuggestions}
           isRollupLoading={isRollupLoading}

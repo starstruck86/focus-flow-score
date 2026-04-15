@@ -9,9 +9,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Copy, RefreshCw, Loader2, Mail, FileText, Target, ArrowRight,
   History, Pencil, CheckCircle2, Clock, Eye, Link2, Info,
+  ThumbsUp, ThumbsDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { StrategyArtifact } from '@/hooks/strategy/useStrategyArtifacts';
+import { useArtifactFeedback } from '@/hooks/strategy/useArtifactFeedback';
 
 interface Props {
   artifact: StrategyArtifact | null;
@@ -32,7 +34,6 @@ const TYPE_ICONS: Record<string, typeof FileText> = {
 
 /** Walk full ancestry tree from any artifact to build the complete version chain */
 function buildFullVersionChain(artifact: StrategyArtifact, allArtifacts: StrategyArtifact[]): StrategyArtifact[] {
-  // Walk up to find root
   let rootId = artifact.id;
   const byId = new Map(allArtifacts.map(a => [a.id, a]));
   let current: StrategyArtifact | undefined = artifact;
@@ -43,7 +44,6 @@ function buildFullVersionChain(artifact: StrategyArtifact, allArtifacts: Strateg
     current = parent;
   }
 
-  // BFS down from root to collect all descendants
   const chain: StrategyArtifact[] = [];
   const queue = [rootId];
   const visited = new Set<string>();
@@ -54,7 +54,6 @@ function buildFullVersionChain(artifact: StrategyArtifact, allArtifacts: Strateg
     const node = byId.get(id);
     if (node) {
       chain.push(node);
-      // Find children
       for (const a of allArtifacts) {
         if (a.parent_artifact_id === id && !visited.has(a.id)) {
           queue.push(a.id);
@@ -72,6 +71,8 @@ export function ArtifactDetailModal({
   const [view, setView] = useState<'detail' | 'history' | 'refine'>('detail');
   const [refineInstructions, setRefineInstructions] = useState('');
   const [viewingArtifact, setViewingArtifact] = useState<StrategyArtifact | null>(null);
+  const [feedbackGiven, setFeedbackGiven] = useState<Record<string, number>>({});
+  const { submitFeedback } = useArtifactFeedback();
 
   const displayArtifact = viewingArtifact || artifact;
 
@@ -81,7 +82,6 @@ export function ArtifactDetailModal({
     setRefineInstructions('');
   }, [artifact?.id]);
 
-  // Build full version chain using ancestry walk
   const versionChain = useMemo(() => {
     if (!artifact) return [];
     return buildFullVersionChain(artifact, allArtifacts);
@@ -92,7 +92,6 @@ export function ArtifactDetailModal({
     return versionChain[versionChain.length - 1];
   }, [versionChain, artifact]);
 
-  // Keep viewingArtifact in sync with updated allArtifacts (fixes stale data)
   useEffect(() => {
     if (viewingArtifact) {
       const fresh = allArtifacts.find(a => a.id === viewingArtifact.id);
@@ -138,7 +137,13 @@ export function ArtifactDetailModal({
     setView('detail');
   };
 
+  const handleFeedback = (rating: number) => {
+    submitFeedback(displayArtifact.id, rating);
+    setFeedbackGiven(prev => ({ ...prev, [displayArtifact.id]: rating }));
+  };
+
   const isViewingLatest = !viewingArtifact || viewingArtifact.id === latestVersion?.id;
+  const currentFeedback = feedbackGiven[displayArtifact.id];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -260,6 +265,27 @@ export function ArtifactDetailModal({
             {isTransforming ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
             Regenerate
           </Button>
+
+          {/* Feedback buttons */}
+          <div className="flex items-center gap-1 ml-1">
+            <Button
+              size="icon" variant={currentFeedback === 1 ? 'secondary' : 'ghost'}
+              className="h-7 w-7"
+              onClick={() => handleFeedback(1)}
+              title="Good output"
+            >
+              <ThumbsUp className={`h-3 w-3 ${currentFeedback === 1 ? 'text-green-400' : ''}`} />
+            </Button>
+            <Button
+              size="icon" variant={currentFeedback === -1 ? 'secondary' : 'ghost'}
+              className="h-7 w-7"
+              onClick={() => handleFeedback(-1)}
+              title="Poor output"
+            >
+              <ThumbsDown className={`h-3 w-3 ${currentFeedback === -1 ? 'text-red-400' : ''}`} />
+            </Button>
+          </div>
+
           {!isViewingLatest && latestVersion && (
             <Button
               size="sm" variant="ghost" className="gap-1 text-xs text-primary"
@@ -414,9 +440,9 @@ function ListBlock({ label, items, numbered, variant }: {
       <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{label}</p>
       <div className="space-y-1">
         {items.map((item, i) => (
-          <div key={i} className={`flex items-start gap-2 pl-2.5 border-l-2 ${borderColor} py-0.5`}>
-            {numbered && <span className="text-[10px] font-mono text-muted-foreground/50 mt-0.5 shrink-0">{i + 1}.</span>}
-            <p className="text-sm text-foreground/80 leading-relaxed">{item}</p>
+          <div key={i} className={`flex items-start gap-2 text-sm text-foreground/80 pl-2.5 border-l-2 ${borderColor} leading-relaxed`}>
+            {numbered && <span className="text-[10px] text-muted-foreground/50 font-mono mt-0.5 shrink-0">{i + 1}.</span>}
+            <span>{item}</span>
           </div>
         ))}
       </div>
@@ -424,52 +450,60 @@ function ListBlock({ label, items, numbered, variant }: {
   );
 }
 
-// ── Version History ───────────────────────────────────────
+// ── Version History View ──────────────────────────────────
 function VersionHistoryView({ versions, latestId, viewingId, onViewVersion }: {
-  versions: StrategyArtifact[]; latestId: string | null; viewingId: string;
+  versions: StrategyArtifact[];
+  latestId: string | null;
+  viewingId: string;
   onViewVersion: (v: StrategyArtifact) => void;
 }) {
   if (versions.length === 0) {
-    return <p className="text-xs text-muted-foreground py-8 text-center">No version history yet</p>;
+    return <p className="text-xs text-muted-foreground/50 italic">No version history available.</p>;
   }
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">{versions.length} version{versions.length !== 1 ? 's' : ''} — click to view</p>
-      {[...versions].reverse().map((v) => {
-        const isLatest = v.id === latestId;
+      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+        Version History ({versions.length} version{versions.length !== 1 ? 's' : ''})
+      </p>
+      {versions.map((v) => {
         const isViewing = v.id === viewingId;
+        const isLatest = v.id === latestId;
         const vContent = v.content_json as any;
-        const vRefine = vContent?._refine_instructions;
+        const hasRefine = !!vContent?._refine_instructions;
 
         return (
           <button
             key={v.id}
             onClick={() => onViewVersion(v)}
-            className={`w-full text-left rounded-lg border px-3 py-2 transition-all ${
-              isViewing ? 'border-primary/40 bg-primary/5' : 'border-border/30 hover:border-border/60 hover:bg-muted/20'
+            className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
+              isViewing
+                ? 'border-primary/40 bg-primary/5'
+                : 'border-border/30 bg-muted/10 hover:bg-muted/30'
             }`}
           >
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium">v{v.version}</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0">v{v.version}</Badge>
               {isLatest && (
-                <Badge variant="secondary" className="text-[8px] px-1 py-0">Latest</Badge>
+                <Badge className="text-[8px] px-1.5 py-0 bg-green-500/20 text-green-400 border-green-500/20">
+                  <CheckCircle2 className="h-2 w-2 mr-0.5" /> Latest
+                </Badge>
               )}
               {isViewing && (
-                <Badge variant="outline" className="text-[8px] px-1 py-0 text-primary border-primary/30">Viewing</Badge>
+                <Badge className="text-[8px] px-1.5 py-0 bg-primary/20 text-primary border-primary/20">
+                  <Eye className="h-2 w-2 mr-0.5" /> Viewing
+                </Badge>
               )}
-              <span className="text-[9px] text-muted-foreground ml-auto">
+              {hasRefine && (
+                <Badge variant="outline" className="text-[8px] px-1 py-0 text-muted-foreground/50">
+                  <Pencil className="h-2 w-2 mr-0.5" /> Refined
+                </Badge>
+              )}
+              <span className="text-[9px] text-muted-foreground/50 ml-auto">
                 {new Date(v.created_at).toLocaleString()}
               </span>
             </div>
-            {v.parent_artifact_id && (
-              <p className="text-[9px] text-muted-foreground/60 mt-0.5">
-                Refined from v{versions.find(p => p.id === v.parent_artifact_id)?.version ?? '?'}
-              </p>
-            )}
-            {vRefine && (
-              <p className="text-[9px] text-foreground/40 italic mt-0.5 truncate">"{vRefine}"</p>
-            )}
+            <p className="text-[10px] text-foreground/60 mt-1 line-clamp-1 leading-relaxed">{v.title}</p>
           </button>
         );
       })}
