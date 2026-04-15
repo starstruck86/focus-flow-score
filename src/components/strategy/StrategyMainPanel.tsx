@@ -203,28 +203,30 @@ export function StrategyMainPanel({
 
       {/* ── HEADER REGION (auto height, shrink-0) ── */}
       <div className="shrink-0">
-        {/* Top Bar — compact */}
-        <div className="border-b border-border px-3 py-1.5 flex items-center gap-2">
+        {/* Top Bar — thread title is the clear anchor */}
+        <div className="border-b border-border px-3 py-2 flex items-center gap-2">
           {sidebarCollapsed && (
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExpandSidebar}>
               <PanelLeftOpen className="h-4 w-4" />
             </Button>
           )}
-          <ThreadIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <ThreadIcon className="h-4 w-4 text-primary/70 shrink-0" />
           <h1 className="text-sm font-semibold text-foreground truncate flex-1">{thread.title}</h1>
           {isUploading && (
             <Badge variant="secondary" className="text-[10px] gap-1 animate-pulse">
               <Loader2 className="h-3 w-3 animate-spin" /> Uploading
             </Badge>
           )}
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onToggleRightRail}>
-            <PanelRightOpen className="h-4 w-4" />
-          </Button>
+          {!isMobile && (
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onToggleRightRail}>
+              <PanelRightOpen className="h-4 w-4" />
+            </Button>
+          )}
         </div>
 
-        {/* Scope + Workflows — compressed on mobile */}
+        {/* Scope + Workflows */}
         <div className="px-3 pt-1.5 pb-1">
-          {/* Context badges — hidden on mobile to save space */}
+          {/* Context badges — hidden on mobile */}
           {!isMobile && (
             <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
               <Badge variant="outline" className="text-[10px] font-medium">
@@ -253,9 +255,12 @@ export function StrategyMainPanel({
             <p className="text-xs text-foreground/60 line-clamp-1 leading-relaxed mb-1.5">{thread.summary}</p>
           )}
 
-          {/* Workflow buttons — scrollable row */}
+          {/* Workflow buttons — mobile: only recommended (max 3), desktop: all */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-            {WORKFLOWS.map(w => {
+            {(isMobile
+              ? WORKFLOWS.filter(w => recommendedWorkflows.includes(w.key)).slice(0, 3)
+              : WORKFLOWS
+            ).map(w => {
               const isRunning = activeWorkflow === w.key;
               const isRecommended = recommendedWorkflows.includes(w.key);
               return (
@@ -281,12 +286,28 @@ export function StrategyMainPanel({
                 </Button>
               );
             })}
+            {/* Mobile: show "More" button if there are hidden workflows */}
+            {isMobile && WORKFLOWS.length > recommendedWorkflows.filter(k => WORKFLOWS.some(w => w.key === k)).length && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-[10px] px-2 shrink-0 text-foreground/50"
+                onClick={() => {
+                  toast.info('All workflows', {
+                    description: WORKFLOWS.filter(w => !recommendedWorkflows.includes(w.key)).map(w => w.label).join(', '),
+                    duration: 4000,
+                  });
+                }}
+              >
+                More…
+              </Button>
+            )}
           </div>
         </div>
 
-        {/* Active Workflow Banner */}
+        {/* Active Workflow Banner — inside header region, above scroll */}
         {activeWorkflow && (
-          <div className="px-3 pt-1.5">
+          <div className="px-3 pb-1.5">
             <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5 flex items-center gap-2">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
               <span className="text-xs font-medium text-primary">
