@@ -1,6 +1,12 @@
 /**
  * CommandOutput — premium strategy document renderer.
  * Mobile-first readability: scannable, chunked, professional.
+ *
+ * CONTRAST HIERARCHY (enforced):
+ *   Primary:     text-foreground          (doc title, section headings)
+ *   Secondary:   text-foreground/80       (body text, interactive actions)
+ *   Tertiary:    text-muted-foreground    (metadata, timestamps)
+ *   Disabled:    text-muted-foreground/50 (only for truly disabled states)
  */
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
@@ -92,16 +98,16 @@ function classifySectionHeading(heading: string): SectionSemantic {
 }
 
 const SEMANTIC_ACCENT: Record<SectionSemantic, { color: string; Icon: React.ElementType }> = {
-  risk: { color: 'text-amber-500/50', Icon: AlertTriangle },
-  action: { color: 'text-primary/50', Icon: Target },
-  takeaway: { color: 'text-emerald-500/50', Icon: Lightbulb },
-  question: { color: 'text-blue-400/50', Icon: HelpCircle },
-  stakeholder: { color: 'text-violet-400/50', Icon: Users },
-  next_step: { color: 'text-primary/50', Icon: ArrowRight },
-  email_body: { color: 'text-foreground/40', Icon: Mail },
-  summary: { color: 'text-foreground/40', Icon: FileText },
-  idea: { color: 'text-amber-400/50', Icon: Lightbulb },
-  default: { color: 'text-foreground/30', Icon: FileText },
+  risk: { color: 'text-amber-500/70', Icon: AlertTriangle },
+  action: { color: 'text-primary/70', Icon: Target },
+  takeaway: { color: 'text-emerald-500/70', Icon: Lightbulb },
+  question: { color: 'text-blue-400/70', Icon: HelpCircle },
+  stakeholder: { color: 'text-violet-400/70', Icon: Users },
+  next_step: { color: 'text-primary/70', Icon: ArrowRight },
+  email_body: { color: 'text-foreground/60', Icon: Mail },
+  summary: { color: 'text-foreground/60', Icon: FileText },
+  idea: { color: 'text-amber-400/70', Icon: Lightbulb },
+  default: { color: 'text-foreground/50', Icon: FileText },
 };
 
 const OUTPUT_TITLES: Record<string, string> = {
@@ -115,28 +121,28 @@ const OUTPUT_TITLES: Record<string, string> = {
 
 const proseClasses = cn(
   'prose prose-sm sm:prose-base dark:prose-invert max-w-none',
-  // Headings — strong hierarchy with generous spacing
-  'prose-headings:text-foreground/80 prose-headings:font-semibold prose-headings:tracking-tight',
+  // Headings — strong, clear hierarchy
+  'prose-headings:text-foreground prose-headings:font-semibold prose-headings:tracking-tight',
   'prose-h1:text-lg prose-h1:leading-snug prose-h1:mb-5 prose-h1:mt-0',
   'prose-h2:text-base prose-h2:leading-snug prose-h2:mb-4 prose-h2:mt-10',
   'prose-h3:text-[15px] prose-h3:leading-snug prose-h3:mb-3 prose-h3:mt-7',
-  'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-5 prose-h4:text-foreground/60',
-  // Body — lighter, roomier, scannable
-  'prose-p:text-[14.5px] prose-p:text-foreground/55 prose-p:leading-[1.9] prose-p:mb-5',
-  // Lists — generous spacing, clear visual hierarchy
-  'prose-li:text-[14.5px] prose-li:text-foreground/55 prose-li:leading-[1.8] prose-li:mb-2.5',
+  'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-5 prose-h4:text-foreground/80',
+  // Body — readable, not dim
+  'prose-p:text-[14.5px] prose-p:text-foreground/75 prose-p:leading-[1.85] prose-p:mb-5',
+  // Lists — generous spacing
+  'prose-li:text-[14.5px] prose-li:text-foreground/75 prose-li:leading-[1.75] prose-li:mb-2.5',
   'prose-ul:my-5 prose-ol:my-5',
   '[&_ul]:space-y-2 [&_ol]:space-y-2',
   'prose-ul:pl-1 prose-ol:pl-1',
-  // Strong labels — act as inline sub-headings for scanability
-  'prose-strong:text-foreground/70 prose-strong:font-semibold',
-  'prose-em:text-foreground/45 prose-em:text-[13px]',
-  // Quotes — calm callouts
-  'prose-blockquote:border-l-2 prose-blockquote:border-primary/10 prose-blockquote:text-foreground/45 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-4 prose-blockquote:my-6',
+  // Strong labels — clearly visible inline sub-headings
+  'prose-strong:text-foreground/90 prose-strong:font-semibold',
+  'prose-em:text-foreground/60 prose-em:text-[13px]',
+  // Quotes
+  'prose-blockquote:border-l-2 prose-blockquote:border-primary/20 prose-blockquote:text-foreground/60 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-4 prose-blockquote:my-6',
   // Code
-  'prose-code:text-primary/60 prose-code:bg-primary/[0.04] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
+  'prose-code:text-primary/70 prose-code:bg-primary/[0.06] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
   // HR — section dividers
-  'prose-hr:border-border/8 prose-hr:my-8',
+  'prose-hr:border-border/15 prose-hr:my-8',
 );
 
 /* ── Props ── */
@@ -217,27 +223,27 @@ export function CommandOutput({
 
   return (
     <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
-      {/* Document canvas — minimal chrome, maximum readability */}
-      <div className="rounded-xl border border-border/10 bg-card/40 overflow-hidden">
+      {/* Document canvas */}
+      <div className="rounded-xl border border-border/20 bg-card/60 overflow-hidden">
 
-        {/* Document header — quiet and informational */}
-        <div className="px-5 sm:px-8 pt-5 pb-3 sm:pt-6 sm:pb-4">
+        {/* Document header */}
+        <div className="px-6 sm:px-8 pt-6 pb-4 sm:pt-7 sm:pb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h2 className="text-[18px] font-semibold text-foreground/85 tracking-tight leading-tight">{docTitle}</h2>
+              <h2 className="text-lg font-semibold text-foreground tracking-tight leading-tight">{docTitle}</h2>
               {(accountName || opportunityName) && (
-                <p className="text-[12px] text-muted-foreground/50 mt-1.5 font-medium">
+                <p className="text-[13px] text-muted-foreground mt-1.5 font-medium">
                   {accountName}{opportunityName ? ` · ${opportunityName}` : ''}
                 </p>
               )}
             </div>
             {!isGenerating && (
-              <div className="flex items-center gap-px rounded-lg bg-muted/15 p-0.5 shrink-0">
+              <div className="flex items-center gap-px rounded-lg bg-muted/25 p-0.5 shrink-0">
                 <button
                   onClick={() => setViewMode('clean')}
                   className={cn(
                     'flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-100',
-                    viewMode === 'clean' ? 'bg-background text-foreground/70 shadow-sm' : 'text-muted-foreground/45 hover:text-foreground/60'
+                    viewMode === 'clean' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground/80'
                   )}
                 >
                   <Eye className="h-3 w-3" /> Read
@@ -246,7 +252,7 @@ export function CommandOutput({
                   onClick={() => setViewMode('edit')}
                   className={cn(
                     'flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-100',
-                    viewMode === 'edit' ? 'bg-background text-foreground/70 shadow-sm' : 'text-muted-foreground/45 hover:text-foreground/60'
+                    viewMode === 'edit' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground/80'
                   )}
                 >
                   <Pencil className="h-3 w-3" /> Edit
@@ -255,58 +261,58 @@ export function CommandOutput({
             )}
           </div>
 
-          {/* Quiet metadata line */}
-          <div className="flex items-center gap-3 flex-wrap text-[10px] text-muted-foreground/50 mt-3">
+          {/* Metadata line */}
+          <div className="flex items-center gap-3 flex-wrap text-[11px] text-muted-foreground mt-3">
             {playbookUsed && (
-              <span className="inline-flex items-center gap-1 text-primary/60">
-                <BookOpen className="h-2.5 w-2.5" /> {playbookUsed}
+              <span className="inline-flex items-center gap-1 text-primary/80">
+                <BookOpen className="h-3 w-3" /> {playbookUsed}
               </span>
             )}
             {kiCount > 0 && (
               <span className="inline-flex items-center gap-1">
-                <Brain className="h-2.5 w-2.5" /> {kiCount} KIs
+                <Brain className="h-3 w-3" /> {kiCount} KIs
               </span>
             )}
             {sources.length > 0 && (
               <button
                 onClick={() => setShowSources(!showSources)}
-                className="inline-flex items-center gap-0.5 hover:text-foreground/60 transition-colors duration-100"
+                className="inline-flex items-center gap-0.5 hover:text-foreground/80 transition-colors duration-100"
               >
-                {showSources ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
+                {showSources ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                 {sources.length} source{sources.length !== 1 ? 's' : ''}
               </button>
             )}
-            <span className="inline-flex items-center gap-1 ml-auto text-muted-foreground/40">
-              <Clock className="h-2.5 w-2.5" /> {generatedAt}
+            <span className="inline-flex items-center gap-1 ml-auto text-muted-foreground/70">
+              <Clock className="h-3 w-3" /> {generatedAt}
             </span>
           </div>
 
           {showSources && sources.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-2.5">
+            <div className="flex flex-wrap gap-1.5 mt-3">
               {sources.map((s, i) => (
-                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-muted/15 text-muted-foreground/50">{s}</span>
+                <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-muted/25 text-muted-foreground">{s}</span>
               ))}
             </div>
           )}
         </div>
 
         {/* Divider */}
-        <div className="mx-5 sm:mx-8 border-t border-border/8" />
+        <div className="mx-6 sm:mx-8 border-t border-border/15" />
 
         {/* Document body */}
         {isGenerating ? (
           <div className="px-8 py-24">
-            <div className="flex flex-col items-center gap-3 text-muted-foreground/25">
+            <div className="flex flex-col items-center gap-3 text-muted-foreground">
               <div className="flex items-center gap-2">
-                <div className="h-1 w-1 rounded-full bg-primary/30 animate-pulse" />
-                <div className="h-1 w-1 rounded-full bg-primary/30 animate-pulse [animation-delay:150ms]" />
-                <div className="h-1 w-1 rounded-full bg-primary/30 animate-pulse [animation-delay:300ms]" />
+                <div className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" />
+                <div className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse [animation-delay:150ms]" />
+                <div className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse [animation-delay:300ms]" />
               </div>
-              <span className="text-xs">Generating…</span>
+              <span className="text-sm">Generating…</span>
             </div>
           </div>
         ) : viewMode === 'edit' ? (
-          <div className="p-8">
+          <div className="p-6 sm:p-8">
             <Textarea
               value={editedOutput}
               onChange={e => setEditedOutput(e.target.value)}
@@ -314,40 +320,40 @@ export function CommandOutput({
             />
           </div>
         ) : (
-          <div className="px-5 sm:px-8 py-6 sm:py-8">
-            <div className="max-w-[580px]">
+          <div className="px-6 sm:px-8 py-6 sm:py-8">
+            <div className="max-w-[640px]">
               {subjectLine && (
-                <div className="mb-6 pb-4 border-b border-border/8">
-                  <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/50 font-medium">Subject</span>
-                  <p className="text-[15px] font-semibold text-foreground/75 mt-1.5 leading-snug">{subjectLine}</p>
+                <div className="mb-7 pb-5 border-b border-border/15">
+                  <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-semibold">Subject</span>
+                  <p className="text-[15px] font-semibold text-foreground mt-1.5 leading-snug">{subjectLine}</p>
                 </div>
               )}
 
               {hasBlocks ? (
-                <div className="divide-y divide-border/6">
+                <div className="divide-y divide-border/10">
                   {blocks.map((block, i) => {
                     const semantic = classifySectionHeading(block.heading);
                     const accent = SEMANTIC_ACCENT[semantic];
 
                     return (
-                      <section key={i} className={cn('group relative', i > 0 ? 'pt-8' : '', 'pb-6')}>
+                      <section key={i} className={cn('group relative', i > 0 ? 'pt-8' : '', 'pb-7')}>
                         {block.heading && (
                           <div className="flex items-center justify-between mb-5">
                             <div className="flex items-center gap-2">
                               <accent.Icon className={cn('h-3.5 w-3.5 shrink-0', accent.color)} />
-                              <h3 className="text-[13px] font-semibold text-foreground/60 tracking-[0.06em] uppercase">
+                              <h3 className="text-[13px] font-semibold text-foreground/80 tracking-[0.04em] uppercase">
                                 {block.heading}
                               </h3>
                             </div>
                             <button
                               onClick={() => handleCopyBlock(block.heading, block.content)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 p-1.5 rounded-md hover:bg-muted/20"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 p-1.5 rounded-md hover:bg-muted/30"
                               title={`Copy "${block.heading}"`}
                             >
                               {copiedBlock === block.heading ? (
-                                <Check className="h-3 w-3 text-emerald-500/50" />
+                                <Check className="h-3.5 w-3.5 text-emerald-500" />
                               ) : (
-                                <Copy className="h-3 w-3 text-muted-foreground/40" />
+                                <Copy className="h-3.5 w-3.5 text-muted-foreground" />
                               )}
                             </button>
                           </div>
@@ -368,9 +374,9 @@ export function CommandOutput({
           </div>
         )}
 
-        {/* Utility bar — very quiet */}
+        {/* Utility bar */}
         {!isGenerating && (
-          <div className="flex items-center justify-between px-5 sm:px-8 py-2.5 border-t border-border/6">
+          <div className="flex items-center justify-between px-6 sm:px-8 py-3 border-t border-border/15">
             <div className="flex items-center gap-1">
               {[
                 { onClick: handleCopy, icon: copied ? Check : Copy, label: copied ? 'Copied' : 'Copy all', accent: copied },
@@ -382,13 +388,13 @@ export function CommandOutput({
                   key={action.label}
                   onClick={action.onClick}
                   className={cn(
-                    'inline-flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-md transition-all duration-100',
+                    'inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-md transition-all duration-100',
                     action.accent
-                      ? 'text-emerald-500/70'
-                      : 'text-muted-foreground/50 hover:text-muted-foreground/70 hover:bg-muted/15'
+                      ? 'text-emerald-500'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/25'
                   )}
                 >
-                  <action.icon className="h-3 w-3" /> {action.label}
+                  <action.icon className="h-3.5 w-3.5" /> {action.label}
                 </button>
               ))}
             </div>
@@ -398,12 +404,12 @@ export function CommandOutput({
 
       {/* Save template dialog */}
       {showSaveDialog && (
-        <div className="flex items-center gap-2 p-3 mt-2 rounded-lg border border-border/10 bg-card/30">
+        <div className="flex items-center gap-2 p-3 mt-2 rounded-lg border border-border/20 bg-card/50">
           <Input
             value={saveName}
             onChange={e => setSaveName(e.target.value)}
             placeholder="Template name…"
-            className="h-8 text-sm flex-1 border-border/20"
+            className="h-8 text-sm flex-1 border-border/30"
             autoFocus
             onKeyDown={e => e.key === 'Enter' && handleSave()}
           />
@@ -414,11 +420,11 @@ export function CommandOutput({
 
       {/* Promote to framework dialog */}
       {showPromoteDialog && (
-        <div className="mt-2 rounded-lg border border-primary/10 bg-primary/[0.02] p-4 space-y-3">
+        <div className="mt-2 rounded-lg border border-primary/15 bg-primary/[0.04] p-4 space-y-3">
           <div>
-            <p className="text-[13px] font-medium text-foreground/70">Use as framework</p>
-            <p className="text-[11px] text-muted-foreground/40 mt-0.5">
-              Save this output's structure as a reusable template. Access it anytime from <kbd className="px-1 py-px rounded bg-muted/30 text-[10px] font-mono">+</kbd> in the composer.
+            <p className="text-[13px] font-medium text-foreground">Use as framework</p>
+            <p className="text-[12px] text-muted-foreground mt-0.5">
+              Save this output's structure as a reusable template. Access it anytime from <kbd className="px-1 py-px rounded bg-muted/40 text-[10px] font-mono">+</kbd> in the composer.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -426,7 +432,7 @@ export function CommandOutput({
               value={promoteName}
               onChange={e => setPromoteName(e.target.value)}
               placeholder="e.g. Mid Market Discovery Prep Sheet"
-              className="h-8 text-sm flex-1 border-border/20"
+              className="h-8 text-sm flex-1 border-border/30"
               autoFocus
               onKeyDown={e => e.key === 'Enter' && handlePromote()}
             />
