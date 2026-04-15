@@ -151,5 +151,7 @@ export default function Strategy() {
         onCreateThread={handleCreateThreadWithOpts}
       />
     </div>
+
+    <BottomNav />
   );
 }
