@@ -1,6 +1,6 @@
 /**
  * CommandOutput — premium strategy document renderer.
- * Designed for true document-quality readability: light, spacious, professional.
+ * Mobile-first readability: scannable, chunked, professional.
  */
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,37 @@ import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
 import type { OutputBlock } from '@/lib/commandTypes';
+
+/* ── Post-process markdown for mobile scanability ── */
+
+function enhanceReadability(md: string): string {
+  return md
+    .split('\n\n')
+    .flatMap(para => {
+      // Don't split headings, lists, blockquotes, code
+      if (/^[#\-\*\d+\.\>```]/.test(para.trim())) return [para];
+      // Split long paragraphs (>280 chars) at sentence boundaries
+      if (para.length > 280) {
+        const sentences = para.match(/[^.!?]+[.!?]+\s*/g);
+        if (sentences && sentences.length > 2) {
+          const chunks: string[] = [];
+          let current = '';
+          for (const s of sentences) {
+            if ((current + s).length > 200 && current.length > 0) {
+              chunks.push(current.trim());
+              current = s;
+            } else {
+              current += s;
+            }
+          }
+          if (current.trim()) chunks.push(current.trim());
+          return chunks;
+        }
+      }
+      return [para];
+    })
+    .join('\n\n');
+}
 
 /* ── Section semantics ── */
 
@@ -43,16 +74,16 @@ function classifySectionHeading(heading: string): SectionSemantic {
 }
 
 const SEMANTIC_ACCENT: Record<SectionSemantic, { color: string; Icon: React.ElementType }> = {
-  risk: { color: 'text-amber-500/60', Icon: AlertTriangle },
-  action: { color: 'text-primary/60', Icon: Target },
-  takeaway: { color: 'text-emerald-500/60', Icon: Lightbulb },
-  question: { color: 'text-blue-400/60', Icon: HelpCircle },
-  stakeholder: { color: 'text-violet-400/60', Icon: Users },
-  next_step: { color: 'text-primary/60', Icon: ArrowRight },
-  email_body: { color: 'text-foreground/50', Icon: Mail },
-  summary: { color: 'text-foreground/50', Icon: FileText },
-  idea: { color: 'text-amber-400/60', Icon: Lightbulb },
-  default: { color: 'text-foreground/40', Icon: FileText },
+  risk: { color: 'text-amber-500/50', Icon: AlertTriangle },
+  action: { color: 'text-primary/50', Icon: Target },
+  takeaway: { color: 'text-emerald-500/50', Icon: Lightbulb },
+  question: { color: 'text-blue-400/50', Icon: HelpCircle },
+  stakeholder: { color: 'text-violet-400/50', Icon: Users },
+  next_step: { color: 'text-primary/50', Icon: ArrowRight },
+  email_body: { color: 'text-foreground/40', Icon: Mail },
+  summary: { color: 'text-foreground/40', Icon: FileText },
+  idea: { color: 'text-amber-400/50', Icon: Lightbulb },
+  default: { color: 'text-foreground/30', Icon: FileText },
 };
 
 const OUTPUT_TITLES: Record<string, string> = {
@@ -62,108 +93,31 @@ const OUTPUT_TITLES: Record<string, string> = {
   'Brainstorm': 'Strategic Brainstorm',
 };
 
-/* ── Props ── */
+/* ── Prose classes — mobile-first scannable document ── */
 
-interface Props {
-  output: string;
-  blocks: OutputBlock[];
-  subjectLine?: string;
-  sources: string[];
-  kiCount: number;
-  templateName?: string;
-  accountName?: string;
-  opportunityName?: string;
-  outputType?: string;
-  playbookUsed?: string;
-  isGenerating: boolean;
-  onRegenerate: () => void;
-  onSaveAsTemplate: (name: string) => void;
-  onPromoteToTemplate?: () => void;
-}
-
-export function CommandOutput({
-  output, blocks, subjectLine, sources, kiCount, templateName,
-  accountName, opportunityName, playbookUsed,
-  isGenerating, onRegenerate, onSaveAsTemplate, onPromoteToTemplate,
-}: Props) {
-  const [viewMode, setViewMode] = useState<'clean' | 'edit'>('clean');
-  const [editedOutput, setEditedOutput] = useState(output);
-  const [copied, setCopied] = useState(false);
-  const [copiedBlock, setCopiedBlock] = useState<string | null>(null);
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [showPromoteDialog, setShowPromoteDialog] = useState(false);
-  const [saveName, setSaveName] = useState('');
-  const [promoteName, setPromoteName] = useState('');
-  const [showSources, setShowSources] = useState(false);
-
-  if (output !== editedOutput && viewMode !== 'edit') {
-    setEditedOutput(output);
-  }
-
-  const displayOutput = viewMode === 'edit' ? editedOutput : output;
-  const docTitle = templateName ? (OUTPUT_TITLES[templateName] || templateName) : 'Strategy Output';
-  const generatedAt = useMemo(() => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), [output]);
-
-  const handleCopy = useCallback(() => {
-    const text = subjectLine ? `Subject: ${subjectLine}\n\n${displayOutput}` : displayOutput;
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    toast.success('Copied to clipboard');
-    setTimeout(() => setCopied(false), 2000);
-  }, [displayOutput, subjectLine]);
-
-  const handleCopyBlock = useCallback((heading: string, content: string) => {
-    navigator.clipboard.writeText(heading ? `${heading}\n\n${content}` : content);
-    setCopiedBlock(heading);
-    toast.success(`Copied "${heading}"`);
-    setTimeout(() => setCopiedBlock(null), 2000);
-  }, []);
-
-  const handleSave = useCallback(() => {
-    if (!saveName.trim()) return;
-    onSaveAsTemplate(saveName.trim());
-    setShowSaveDialog(false);
-    setSaveName('');
-  }, [saveName, onSaveAsTemplate]);
-
-  const handlePromote = useCallback(() => {
-    if (!promoteName.trim()) return;
-    onSaveAsTemplate(promoteName.trim());
-    setShowPromoteDialog(false);
-    setPromoteName('');
-    toast.success(`Framework "${promoteName.trim()}" saved — use it from +template`);
-  }, [promoteName, onSaveAsTemplate]);
-
-  if (!output && !isGenerating) return null;
-
-  const hasBlocks = blocks.length > 1;
-
-  /* Prose: optimized for reading comfort — lighter text, generous spacing */
-  const proseClasses = cn(
-    'prose prose-base dark:prose-invert max-w-none',
-    // Headings
-    'prose-headings:text-foreground/85 prose-headings:font-semibold prose-headings:tracking-tight',
-    'prose-h1:text-[20px] prose-h1:leading-[1.3] prose-h1:mb-4 prose-h1:mt-0',
-    'prose-h2:text-[17px] prose-h2:leading-[1.3] prose-h2:mb-3 prose-h2:mt-8',
-    'prose-h3:text-[15px] prose-h3:leading-[1.4] prose-h3:mb-2 prose-h3:mt-5',
-    'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-4 prose-h4:text-foreground/70',
-    // Body text — light, readable
-    'prose-p:text-[15px] prose-p:text-foreground/65 prose-p:leading-[1.8] prose-p:my-3.5',
-    // Lists — clean and well-spaced
-    'prose-li:text-[15px] prose-li:text-foreground/65 prose-li:leading-[1.75] prose-li:my-1.5',
-    'prose-ul:my-4 prose-ol:my-4',
-    '[&_ul]:space-y-2 [&_ol]:space-y-2',
-    '[&_ul_ul]:mt-1.5 [&_ol_ol]:mt-1.5',
-    'prose-ul:pl-0 prose-ol:pl-0',
-    '[&_ul>li]:pl-0 [&_ol>li]:pl-0',
-    // Emphasis
-    'prose-strong:text-foreground/80 prose-strong:font-semibold',
-    'prose-em:text-foreground/70 prose-em:not-italic prose-em:text-[14px] prose-em:text-muted-foreground/50',
-    // Quotes
-    'prose-blockquote:border-l-2 prose-blockquote:border-primary/15 prose-blockquote:text-foreground/55 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-5 prose-blockquote:my-5',
-    // Code
-    'prose-code:text-primary/70 prose-code:bg-primary/[0.04] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
-  );
+const proseClasses = cn(
+  'prose prose-sm sm:prose-base dark:prose-invert max-w-none',
+  // Headings — clear hierarchy, breathing room
+  'prose-headings:text-foreground/80 prose-headings:font-semibold prose-headings:tracking-tight',
+  'prose-h1:text-lg prose-h1:leading-snug prose-h1:mb-4 prose-h1:mt-0',
+  'prose-h2:text-base prose-h2:leading-snug prose-h2:mb-3 prose-h2:mt-8',
+  'prose-h3:text-[15px] prose-h3:leading-snug prose-h3:mb-2 prose-h3:mt-6',
+  'prose-h4:text-[13px] prose-h4:font-semibold prose-h4:mb-2 prose-h4:mt-4 prose-h4:text-foreground/60',
+  // Body — generous line-height, clear paragraph breaks
+  'prose-p:text-[14.5px] prose-p:text-foreground/60 prose-p:leading-[1.85] prose-p:mb-4',
+  // Lists — well-spaced, easy to scan
+  'prose-li:text-[14.5px] prose-li:text-foreground/60 prose-li:leading-[1.75] prose-li:mb-2',
+  'prose-ul:my-4 prose-ol:my-4',
+  '[&_ul]:space-y-1.5 [&_ol]:space-y-1.5',
+  'prose-ul:pl-0 prose-ol:pl-0',
+  // Emphasis
+  'prose-strong:text-foreground/75 prose-strong:font-semibold',
+  'prose-em:text-foreground/55 prose-em:text-[13px]',
+  // Quotes — subtle
+  'prose-blockquote:border-l-2 prose-blockquote:border-primary/12 prose-blockquote:text-foreground/50 prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:pl-4 prose-blockquote:my-5',
+  // Code
+  'prose-code:text-primary/60 prose-code:bg-primary/[0.04] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
+);
 
   return (
     <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
