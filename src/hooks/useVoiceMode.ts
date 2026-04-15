@@ -7,6 +7,7 @@ import {
   clearActivePlayback,
   emitStepTelemetry,
 } from '@/lib/daveAudioResilience';
+import { startLifecycle, recordLifecycleEvent } from '@/lib/playbackLifecycle';
 
 // ElevenLabs TTS has a 5000 char limit per request
 const TTS_CHUNK_LIMIT = 4500;
