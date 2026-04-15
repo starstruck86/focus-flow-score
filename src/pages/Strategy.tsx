@@ -16,7 +16,6 @@ import { useStrategyArtifacts } from '@/hooks/strategy/useStrategyArtifacts';
 import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
 import { useStrategyRollups } from '@/hooks/strategy/useStrategyRollups';
 import { SHELL } from '@/lib/layout';
-import { SHELL } from '@/lib/layout';
 
 export default function Strategy() {
   const {
@@ -45,8 +44,7 @@ export default function Strategy() {
   const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
   const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
 
-  // Get sendMessage for branch seeding
-  const { sendMessage: sendBranchMessage } = useStrategyMessages(null);
+
 
   const handleWorkflowComplete = useCallback(() => {
     refetchOutputs();
