@@ -9,6 +9,8 @@ export interface StrategyMemoryEntry {
   content: string;
   confidence: number | null;
   is_pinned: boolean;
+  is_irrelevant?: boolean;
+  last_used_at?: string | null;
   source_thread_id: string | null;
   created_at: string;
 }
@@ -25,7 +27,6 @@ function isNearDuplicate(a: string, b: string): boolean {
   const na = normalize(a);
   const nb = normalize(b);
   if (na === nb) return true;
-  // Substring containment (one fully contains the other)
   if (na.length > 20 && nb.length > 20) {
     if (na.includes(nb) || nb.includes(na)) return true;
   }
@@ -54,13 +55,13 @@ export function useStrategyMemory(
     
     let data: any[] | null = null;
     if (objectType === 'account') {
-      const res = await supabase.from('account_strategy_memory').select('*').eq('account_id', objectId).order('created_at', { ascending: false });
+      const res = await supabase.from('account_strategy_memory').select('*').eq('account_id', objectId).eq('is_irrelevant', false).order('created_at', { ascending: false });
       data = res.data;
     } else if (objectType === 'opportunity') {
-      const res = await supabase.from('opportunity_strategy_memory').select('*').eq('opportunity_id', objectId).order('created_at', { ascending: false });
+      const res = await supabase.from('opportunity_strategy_memory').select('*').eq('opportunity_id', objectId).eq('is_irrelevant', false).order('created_at', { ascending: false });
       data = res.data;
     } else if (objectType === 'territory') {
-      const res = await supabase.from('territory_strategy_memory').select('*').eq('territory_id', objectId).order('created_at', { ascending: false });
+      const res = await supabase.from('territory_strategy_memory').select('*').eq('territory_id', objectId).eq('is_irrelevant', false).order('created_at', { ascending: false });
       data = res.data;
     }
     if (data) setMemories(data as StrategyMemoryEntry[]);
@@ -78,7 +79,7 @@ export function useStrategyMemory(
       return;
     }
 
-    // ── Dedup check — fetch fresh from DB to avoid stale-state misses ──
+    // ── Dedup check — fetch fresh from DB ──
     let freshMemories: { content: string }[] | null = null;
     if (objectType === 'account') {
       const { data } = await supabase.from('account_strategy_memory').select('content').eq('account_id', objectId).eq('user_id', user.id).order('created_at', { ascending: false }).limit(50);
@@ -100,7 +101,6 @@ export function useStrategyMemory(
       return;
     }
 
-    // Use specific table inserts to satisfy type checker
     let result: any;
     if (objectType === 'account') {
       const { data, error } = await supabase.from('account_strategy_memory').insert({
@@ -161,5 +161,61 @@ export function useStrategyMemory(
     toast.success('Memory removed');
   }, [objectType, user]);
 
-  return { memories, saveMemory, deleteMemory, refetch: fetchMemories };
+  /** Toggle pin state */
+  const togglePin = useCallback(async (memoryId: string) => {
+    if (!objectType || !user) return;
+    const mem = memories.find(m => m.id === memoryId);
+    if (!mem) return;
+    const newPinned = !mem.is_pinned;
+
+    let error: any = null;
+    if (objectType === 'account') {
+      ({ error } = await supabase.from('account_strategy_memory').update({ is_pinned: newPinned }).eq('id', memoryId).eq('user_id', user.id));
+    } else if (objectType === 'opportunity') {
+      ({ error } = await supabase.from('opportunity_strategy_memory').update({ is_pinned: newPinned }).eq('id', memoryId).eq('user_id', user.id));
+    } else if (objectType === 'territory') {
+      ({ error } = await supabase.from('territory_strategy_memory').update({ is_pinned: newPinned }).eq('id', memoryId).eq('user_id', user.id));
+    }
+
+    if (error) { toast.error('Failed to update pin'); return; }
+    setMemories(prev => prev.map(m => m.id === memoryId ? { ...m, is_pinned: newPinned } : m));
+    toast.success(newPinned ? 'Pinned' : 'Unpinned');
+  }, [objectType, user, memories]);
+
+  /** Adjust confidence level */
+  const setConfidence = useCallback(async (memoryId: string, confidence: number) => {
+    if (!objectType || !user) return;
+
+    let error: any = null;
+    if (objectType === 'account') {
+      ({ error } = await supabase.from('account_strategy_memory').update({ confidence }).eq('id', memoryId).eq('user_id', user.id));
+    } else if (objectType === 'opportunity') {
+      ({ error } = await supabase.from('opportunity_strategy_memory').update({ confidence }).eq('id', memoryId).eq('user_id', user.id));
+    } else if (objectType === 'territory') {
+      ({ error } = await supabase.from('territory_strategy_memory').update({ confidence }).eq('id', memoryId).eq('user_id', user.id));
+    }
+
+    if (error) { toast.error('Failed to update confidence'); return; }
+    setMemories(prev => prev.map(m => m.id === memoryId ? { ...m, confidence } : m));
+  }, [objectType, user]);
+
+  /** Mark as irrelevant (soft exclude from retrieval) */
+  const markIrrelevant = useCallback(async (memoryId: string) => {
+    if (!objectType || !user) return;
+
+    let error: any = null;
+    if (objectType === 'account') {
+      ({ error } = await supabase.from('account_strategy_memory').update({ is_irrelevant: true }).eq('id', memoryId).eq('user_id', user.id));
+    } else if (objectType === 'opportunity') {
+      ({ error } = await supabase.from('opportunity_strategy_memory').update({ is_irrelevant: true }).eq('id', memoryId).eq('user_id', user.id));
+    } else if (objectType === 'territory') {
+      ({ error } = await supabase.from('territory_strategy_memory').update({ is_irrelevant: true }).eq('id', memoryId).eq('user_id', user.id));
+    }
+
+    if (error) { toast.error('Failed to update'); return; }
+    setMemories(prev => prev.filter(m => m.id !== memoryId));
+    toast.success('Marked irrelevant — excluded from retrieval');
+  }, [objectType, user]);
+
+  return { memories, saveMemory, deleteMemory, togglePin, setConfidence, markIrrelevant, refetch: fetchMemories };
 }
