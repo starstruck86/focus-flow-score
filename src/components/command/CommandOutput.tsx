@@ -350,7 +350,7 @@ export function CommandOutput({
 
         {/* Utility bar — very quiet */}
         {!isGenerating && (
-          <div className="flex items-center justify-between px-8 py-2.5 border-t border-border/6">
+          <div className="flex items-center justify-between px-5 sm:px-8 py-2.5 border-t border-border/6">
             <div className="flex items-center gap-1">
               {[
                 { onClick: handleCopy, icon: copied ? Check : Copy, label: copied ? 'Copied' : 'Copy all', accent: copied },
