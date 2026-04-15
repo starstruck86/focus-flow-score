@@ -314,8 +314,12 @@ serve(async (req) => {
 
     let artifactResult: ArtifactResult | null = null;
     try {
-      // Primary: Claude direct
-      artifactResult = await callClaude(systemPrompt, userPrompt, tool, controller.signal);
+      // Primary: Claude direct (skip if smoke test force fallback)
+      if (!forceFallback) {
+        artifactResult = await callClaude(systemPrompt, userPrompt, tool, controller.signal);
+      } else {
+        console.log("[artifact] SMOKE_TEST_MODE: skipping Claude primary, forcing OpenAI fallback");
+      }
 
       // Fallback: OpenAI direct
       if (!artifactResult) {
