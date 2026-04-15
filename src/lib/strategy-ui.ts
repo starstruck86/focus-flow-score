@@ -1,33 +1,62 @@
+/**
+ * Strategy Workspace — unified visual contract.
+ *
+ * Rules:
+ * 1. No opacity below /70 on any interactive or readable text
+ * 2. Surfaces use solid or near-solid backgrounds — no stacking translucent layers
+ * 3. The composer is the center of gravity — largest, most prominent surface
+ * 4. Document content uses a constrained reading width inside a wider workspace
+ * 5. Sidebar is narrow and subordinate — never competes with center canvas
+ */
 export const STRATEGY_UI = {
   layout: {
-    frame: 'w-full max-w-[86rem] mx-auto',
-    launchpad: 'w-full max-w-[68rem] mx-auto',
-    output: 'w-full max-w-[74rem] mx-auto',
-    document: 'w-full max-w-[50rem]',
-    sidebar: 'w-56 xl:w-[14.5rem]',
+    /** Outer frame — generous workspace */
+    frame: 'w-full max-w-[90rem] mx-auto',
+    /** Empty state / launchpad — centered, prominent */
+    launchpad: 'w-full max-w-[52rem] mx-auto',
+    /** Output workspace — wider than reading column */
+    output: 'w-full max-w-[56rem] mx-auto',
+    /** Document reading column — optimized line length */
+    document: 'w-full max-w-[48rem]',
+    /** Left sidebar */
+    sidebar: 'w-[13rem]',
   },
   spacing: {
-    canvas: 'px-4 sm:px-6 lg:px-8 pt-10 sm:pt-12 lg:pt-14 pb-24 sm:pb-28 lg:pb-32',
-    section: 'space-y-5 sm:space-y-6',
+    /** Main canvas padding */
+    canvas: 'px-6 sm:px-8 lg:px-10 pt-8 sm:pt-10 lg:pt-12 pb-28 sm:pb-32',
+    /** Vertical rhythm between sections */
+    section: 'space-y-6 sm:space-y-8',
   },
   surface: {
-    launchpad: 'rounded-[1.75rem] border border-border/35 bg-card/60 shadow-[0_18px_60px_hsl(var(--foreground)/0.08)] backdrop-blur-sm',
-    composer: 'rounded-[1.25rem] border border-border/35 bg-card/75 shadow-[0_12px_36px_hsl(var(--foreground)/0.07)]',
-    context: 'rounded-xl border border-border/25 bg-background/40',
-    document: 'rounded-[1.5rem] border border-border/30 bg-card/70 shadow-[0_18px_60px_hsl(var(--foreground)/0.07)]',
-    subBlock: 'rounded-xl border border-border/20 bg-background/35',
-    sidebar: 'bg-background/85 backdrop-blur-sm',
+    /** Composer — the primary interactive surface */
+    composer: 'rounded-2xl border border-border bg-card shadow-sm',
+    /** Context strip below composer */
+    context: 'rounded-xl border border-border/60 bg-muted/30',
+    /** Document card — the output container */
+    document: 'rounded-2xl border border-border bg-card shadow-sm',
+    /** Sub-blocks inside documents (mini-blocks, callouts) */
+    subBlock: 'rounded-lg border border-border/50 bg-muted/20',
+    /** Sidebar surface */
+    sidebar: 'bg-card',
   },
   text: {
+    /** Primary — headings, titles, active controls */
     primary: 'text-foreground',
-    secondary: 'text-foreground/85',
+    /** Secondary — body text, descriptions, interactive labels */
+    secondary: 'text-foreground/90',
+    /** Tertiary — metadata, timestamps, supporting info */
     tertiary: 'text-muted-foreground',
-    quiet: 'text-muted-foreground/85',
-    interactive: 'text-foreground/80 hover:text-foreground',
-    disabled: 'text-muted-foreground/50',
+    /** Quiet — supplementary hints */
+    quiet: 'text-muted-foreground/70',
+    /** Interactive — buttons, links, actions (must be clearly clickable) */
+    interactive: 'text-foreground/90 hover:text-foreground',
+    /** Disabled — only for truly disabled controls */
+    disabled: 'text-muted-foreground/40',
   },
   labels: {
-    section: 'text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground',
-    micro: 'text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground',
+    /** Section labels */
+    section: 'text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground',
+    /** Micro labels */
+    micro: 'text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground',
   },
 } as const;

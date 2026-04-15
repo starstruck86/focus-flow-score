@@ -3,8 +3,6 @@
  *
  * Tokens (+ template, @ account, $ opportunity) render as inline chips
  * INSIDE the input area. Free text is typed around them.
- * Backspace at chip boundary removes the token naturally.
- * Preserves fast keyboard flow: trigger → type → arrow/tab/enter → continue.
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
@@ -49,19 +47,19 @@ const TRIGGER_ICONS: Record<string, React.ElementType> = {
 
 const TOKEN_STYLES: Record<string, { chip: string; text: string; icon: string }> = {
   account: {
-    chip: 'bg-blue-500/8 border-blue-500/15 hover:border-blue-500/30',
-    text: 'text-blue-400/90',
-    icon: 'text-blue-400/70',
+    chip: 'bg-blue-500/10 border-blue-500/25',
+    text: 'text-blue-600 dark:text-blue-400',
+    icon: 'text-blue-500 dark:text-blue-400',
   },
   opportunity: {
-    chip: 'bg-emerald-500/8 border-emerald-500/15 hover:border-emerald-500/30',
-    text: 'text-emerald-400/90',
-    icon: 'text-emerald-400/70',
+    chip: 'bg-emerald-500/10 border-emerald-500/25',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    icon: 'text-emerald-500 dark:text-emerald-400',
   },
   template: {
-    chip: 'bg-amber-500/8 border-amber-500/15 hover:border-amber-500/30',
-    text: 'text-amber-400/90',
-    icon: 'text-amber-400/70',
+    chip: 'bg-amber-500/10 border-amber-500/25',
+    text: 'text-amber-600 dark:text-amber-400',
+    icon: 'text-amber-500 dark:text-amber-400',
   },
 };
 
@@ -82,7 +80,6 @@ export function CommandBar({
   const isTypingRef = useRef(false);
   const prefillConsumedRef = useRef<string | null>(null);
 
-  // Notify parent of token changes
   useEffect(() => {
     onTokensChange?.(tokens);
   }, [tokens, onTokensChange]);
@@ -161,13 +158,11 @@ export function CommandBar({
       suggestion = { ...suggestion, id: created.id, name: created.name, is_create: false };
     }
 
-    // Replace existing token of same type
     setTokens(prev => {
       const filtered = prev.filter(t => t.type !== suggestion.type);
       return [...filtered, { type: suggestion.type, id: suggestion.id, name: suggestion.name }];
     });
 
-    // Remove trigger + filter text from freeText cleanly
     if (activeTrigger) {
       setFreeText(prev => {
         const cursor = inputRef.current?.selectionStart ?? prev.length;
@@ -232,14 +227,12 @@ export function CommandBar({
     }
   }, [freeText, tokens, onExecute, isLoading, preserveAfterExecute]);
 
-  // Stable prefill — only consume each unique prefill once
   useEffect(() => {
     if (prefill && prefill !== prefillConsumedRef.current && !isTypingRef.current) {
       prefillConsumedRef.current = prefill;
       const newTokens: CommandToken[] = [];
       let remaining = prefill;
 
-      // Extract +Template
       const templateMatch = remaining.match(/\+([^@$]+?)(?=\s[@$]|\s*$)/);
       if (templateMatch) {
         const name = templateMatch[1].trim();
@@ -266,7 +259,6 @@ export function CommandBar({
     }
   }, [prefill, templates, openSuggestions, onPrefillConsumed]);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -281,14 +273,13 @@ export function CommandBar({
 
   return (
     <div className="relative w-full">
-      {/* Composer container */}
+      {/* Composer input */}
       <div
         className={cn(
-          'flex items-center gap-2 flex-wrap min-h-[56px] px-4 py-3 rounded-[1.1rem]',
-          'bg-background/70 border border-border/40',
-          'focus-within:border-primary/30 focus-within:bg-background/85',
-          'focus-within:shadow-[0_0_0_2px_hsl(var(--primary)/0.08)]',
-          'transition-all duration-200 ease-out',
+          'flex items-center gap-2 flex-wrap min-h-[52px] px-4 py-3 rounded-xl',
+          'bg-background border border-border',
+          'focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10',
+          'transition-all duration-150',
           isLoading && 'opacity-50 pointer-events-none'
         )}
         onClick={() => inputRef.current?.focus()}
@@ -296,9 +287,9 @@ export function CommandBar({
         {/* Leading icon */}
         <div className="shrink-0">
           {isLoading ? (
-            <Loader2 className="h-3.5 w-3.5 text-primary/70 animate-spin" />
+            <Loader2 className="h-4 w-4 text-primary animate-spin" />
           ) : (
-            <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+            <Zap className="h-4 w-4 text-muted-foreground" />
           )}
         </div>
 
@@ -307,22 +298,22 @@ export function CommandBar({
           const Icon = TRIGGER_ICONS[token.type];
           const style = TOKEN_STYLES[token.type];
           return (
-              <span
+            <span
               key={token.type}
               className={cn(
-                'inline-flex items-center gap-1 text-[11px] font-medium pl-1.5 pr-0.5 py-[2px] rounded-md border shrink-0',
-                'transition-all duration-100 ease-out animate-in fade-in-0 zoom-in-95 duration-100',
+                'inline-flex items-center gap-1 text-xs font-medium pl-2 pr-1 py-0.5 rounded-md border shrink-0',
+                'animate-in fade-in-0 zoom-in-95 duration-100',
                 style.chip
               )}
             >
-              <Icon className={cn('h-2.5 w-2.5', style.icon)} />
-              <span className={cn(style.text, 'truncate max-w-[130px]')}>{token.name}</span>
+              <Icon className={cn('h-3 w-3', style.icon)} />
+              <span className={cn(style.text, 'truncate max-w-[140px]')}>{token.name}</span>
               <button
                 onClick={(e) => { e.stopPropagation(); removeToken(token.type); }}
-                className="rounded-sm hover:bg-foreground/8 p-0.5 transition-colors"
+                className="rounded-sm hover:bg-foreground/10 p-0.5 transition-colors"
                 tabIndex={-1}
               >
-                <X className={cn('h-2 w-2 opacity-40 hover:opacity-80', style.icon)} />
+                <X className={cn('h-2.5 w-2.5 opacity-50 hover:opacity-100', style.icon)} />
               </button>
             </span>
           );
@@ -350,28 +341,28 @@ export function CommandBar({
           <button
             onClick={handleExecute}
             className={cn(
-              'shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg',
-              'bg-primary/90 text-primary-foreground text-[11px] font-medium',
-              'hover:bg-primary active:scale-[0.97]',
-              'transition-all duration-100 ease-out',
+              'shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg',
+              'bg-primary text-primary-foreground text-xs font-medium',
+              'hover:bg-primary/90 active:scale-[0.97]',
+              'transition-all duration-100',
               'animate-in fade-in-0 duration-150'
             )}
           >
-            <ArrowRight className="h-3 w-3" />
+            <ArrowRight className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
 
-      {/* Keyboard hints — only when completely empty */}
+      {/* Keyboard hints */}
       {!hasContent && (
-        <div className="flex items-center gap-3 mt-2 px-1">
+        <div className="flex items-center gap-3 mt-2.5 px-1">
           {[
             { key: '+', label: 'template' },
             { key: '@', label: 'account' },
             { key: '$', label: 'opportunity' },
           ].map(h => (
-            <span key={h.key} className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <kbd className="px-1 py-px rounded bg-muted/40 text-[10px] font-mono leading-none text-muted-foreground">{h.key}</kbd>
+            <span key={h.key} className="text-[11px] text-muted-foreground flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 rounded bg-muted text-[11px] font-mono leading-none text-muted-foreground">{h.key}</kbd>
               {h.label}
             </span>
           ))}
@@ -383,12 +374,12 @@ export function CommandBar({
         <div
           ref={dropdownRef}
           className={cn(
-            'absolute z-50 w-full mt-1 rounded-xl border border-border/30 bg-popover/95 backdrop-blur-xl',
-            'shadow-xl shadow-black/8 overflow-hidden',
+            'absolute z-50 w-full mt-1.5 rounded-xl border border-border bg-popover',
+            'shadow-lg overflow-hidden',
             'animate-in fade-in-0 slide-in-from-top-1 duration-100'
           )}
         >
-          <div className="py-0.5">
+          <div className="py-1">
             {suggestions.map((s, i) => {
               const Icon = s.is_create ? PlusCircle : TRIGGER_ICONS[s.type];
               const style = TOKEN_STYLES[s.type];
@@ -397,21 +388,21 @@ export function CommandBar({
                   key={`${s.type}-${s.id}`}
                   onClick={() => selectSuggestion(s)}
                   className={cn(
-                    'w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors duration-50',
-                    i === selectedIdx ? 'bg-accent/60' : 'hover:bg-accent/30'
+                    'w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors',
+                    i === selectedIdx ? 'bg-accent' : 'hover:bg-muted'
                   )}
                 >
-                  <Icon className={cn('h-3 w-3 shrink-0', style.icon)} />
+                  <Icon className={cn('h-3.5 w-3.5 shrink-0', style.icon)} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13px] text-foreground/90 truncate">
+                    <p className="text-sm text-foreground truncate">
                       {s.is_create ? `Create "${s.name}"` : s.name}
                     </p>
                     {s.subtitle && !s.is_create && (
-                      <p className="text-[10px] text-muted-foreground truncate">{s.subtitle}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{s.subtitle}</p>
                     )}
                   </div>
                   {s.is_pinned && (
-                    <span className="text-[9px] text-primary/70">pinned</span>
+                    <span className="text-[10px] text-primary font-medium">pinned</span>
                   )}
                 </button>
               );

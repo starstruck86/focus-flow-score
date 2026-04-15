@@ -1,6 +1,6 @@
 /**
- * StrategyCommandCenter — command-driven workspace with attachments,
- * playbook-aware KI retrieval, and promote-to-template flow.
+ * StrategyCommandCenter — unified workspace empty state.
+ * Composer-dominant layout. No nested cards. Flat, confident, wide.
  */
 import { useState, useCallback } from 'react';
 import { CommandBar } from '@/components/command/CommandBar';
@@ -153,7 +153,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
   const savedNonPinned = (savedShortcuts as any[]).filter((s: any) => !s.is_pinned).slice(0, 5);
 
   const composer = (
-    <div className={cn(STRATEGY_UI.surface.composer, 'p-3 sm:p-4 lg:p-5')}>
+    <div className={cn(STRATEGY_UI.surface.composer, 'p-4 sm:p-5')}>
       <CommandBar
         accounts={accounts}
         opportunities={opportunities.map(o => ({ id: o.id, name: o.name, account_name: (o as any).account_name }))}
@@ -186,45 +186,51 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background">
-      <div className="flex items-center gap-2 px-4 h-9 border-b border-border/40 shrink-0 bg-background/90">
+      {/* Minimal top bar */}
+      <div className="flex items-center gap-2 px-4 h-10 border-b border-border shrink-0">
         {sidebarCollapsed && (
-          <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-foreground" onClick={onExpandSidebar}>
-            <PanelLeftOpen className="h-3 w-3 mr-1" /> Threads
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" onClick={onExpandSidebar}>
+            <PanelLeftOpen className="h-3.5 w-3.5 mr-1" /> Threads
           </Button>
         )}
-        <span className={STRATEGY_UI.labels.micro}>Strategy</span>
+        <span className={STRATEGY_UI.labels.section}>Strategy</span>
       </div>
 
       <ScrollArea className="flex-1">
-        <div className={cn(STRATEGY_UI.layout.frame, STRATEGY_UI.spacing.canvas)}>
+        <div className={cn(STRATEGY_UI.spacing.canvas)}>
           {showEmpty ? (
-            <div className={cn(STRATEGY_UI.layout.launchpad, STRATEGY_UI.surface.launchpad, 'p-5 sm:p-6 lg:p-7 animate-in fade-in-0 duration-200')}>
-              <div className="text-center mb-6 sm:mb-7">
-                <h1 className="text-2xl sm:text-[2rem] font-semibold text-foreground tracking-tight">What do you need?</h1>
-                <p className="mt-2 text-sm sm:text-[15px] text-foreground/75">
-                  {kiCount > 0 ? `${kiCount.toLocaleString()} KIs ready to ground your next strategy run` : 'Command-first workspace for briefs, angles, and prep'}
+            /* ── EMPTY STATE: Composer is the hero ── */
+            <div className={cn(STRATEGY_UI.layout.launchpad)}>
+              {/* Heading */}
+              <div className="text-center mb-8">
+                <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight">
+                  What do you need?
+                </h1>
+                <p className="mt-2.5 text-sm text-muted-foreground">
+                  {kiCount > 0
+                    ? `${kiCount.toLocaleString()} knowledge items ready to ground your next run`
+                    : 'Briefs, research, angles, and prep — powered by your knowledge base'}
                 </p>
               </div>
 
+              {/* Composer — the primary surface */}
               {composer}
 
-              <div className="mt-5 sm:mt-6">
+              {/* Quick starts — directly below composer, no wrapper card */}
+              <div className="mt-8 space-y-6">
                 {pinnedShortcuts.length > 0 && (
-                  <div className="mb-6">
-                    <p className={cn(STRATEGY_UI.labels.micro, 'mb-2.5 px-0.5 flex items-center gap-1')}>
-                      <Pin className="h-2.5 w-2.5" /> Go-to plays
+                  <div>
+                    <p className={cn(STRATEGY_UI.labels.section, 'mb-3 flex items-center gap-1.5')}>
+                      <Pin className="h-3 w-3" /> Go-to plays
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {pinnedShortcuts.map((s: any) => (
                         <button
                           key={s.id}
                           onClick={() => handleShortcut(s)}
-                          className={cn(
-                            'inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-2 rounded-lg border transition-all duration-100',
-                            'text-foreground/85 hover:text-foreground border-primary/20 bg-primary/[0.07] hover:bg-primary/[0.12] hover:border-primary/35'
-                          )}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-primary/25 bg-primary/5 text-foreground hover:bg-primary/10 hover:border-primary/40 transition-colors"
                         >
-                          <Pin className="h-2.5 w-2.5 text-primary/70 shrink-0" />
+                          <Pin className="h-3 w-3 text-primary shrink-0" />
                           {s.label}
                         </button>
                       ))}
@@ -232,33 +238,35 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                   </div>
                 )}
 
-                <p className={cn(STRATEGY_UI.labels.micro, 'mb-2.5 px-0.5')}>Quick start</p>
-                <div className={cn('grid gap-2.5', isMobile ? 'grid-cols-1' : 'grid-cols-2')}>
-                  {STARTERS.map(s => (
-                    <button
-                      key={s.label}
-                      onClick={() => handleStarter(s.command)}
-                      className="group flex items-center gap-3 px-4 py-3.5 rounded-xl text-left border border-border/35 hover:border-border/55 bg-background/45 hover:bg-background/70 transition-all duration-100"
-                    >
-                      <s.icon className="h-4 w-4 text-muted-foreground group-hover:text-primary shrink-0 transition-colors duration-100" />
-                      <span className="text-[13px] text-foreground/85 group-hover:text-foreground transition-colors duration-100">{s.label}</span>
-                    </button>
-                  ))}
+                <div>
+                  <p className={cn(STRATEGY_UI.labels.section, 'mb-3')}>Quick start</p>
+                  <div className={cn('grid gap-2.5', isMobile ? 'grid-cols-1' : 'grid-cols-2')}>
+                    {STARTERS.map(s => (
+                      <button
+                        key={s.label}
+                        onClick={() => handleStarter(s.command)}
+                        className="group flex items-center gap-3 px-4 py-3.5 rounded-xl text-left border border-border bg-card hover:border-border/80 hover:shadow-sm transition-all"
+                      >
+                        <s.icon className="h-4 w-4 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
+                        <span className="text-sm text-foreground/90 group-hover:text-foreground transition-colors">{s.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {savedNonPinned.length > 0 && (
-                  <div className="mt-6">
-                    <p className={cn(STRATEGY_UI.labels.micro, 'mb-2 px-0.5 flex items-center gap-1')}>
-                      <Bookmark className="h-2.5 w-2.5" /> Saved
+                  <div>
+                    <p className={cn(STRATEGY_UI.labels.section, 'mb-2.5 flex items-center gap-1.5')}>
+                      <Bookmark className="h-3 w-3" /> Saved
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {savedNonPinned.map((s: any) => (
                         <button
                           key={s.id}
                           onClick={() => handleShortcut(s)}
-                          className="inline-flex items-center gap-1.5 text-[11px] text-foreground/85 hover:text-foreground px-2.5 py-1.5 rounded-md hover:bg-muted/45 transition-all duration-100 truncate max-w-[220px]"
+                          className="inline-flex items-center gap-1.5 text-xs text-foreground/80 hover:text-foreground px-2.5 py-1.5 rounded-md hover:bg-muted/50 transition-colors truncate max-w-[220px]"
                         >
-                          <Bookmark className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
+                          <Bookmark className="h-3 w-3 shrink-0 text-muted-foreground" />
                           {s.label}
                         </button>
                       ))}
@@ -267,16 +275,16 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                 )}
 
                 {recents.length > 0 && (
-                  <div className="mt-5">
-                    <p className={cn(STRATEGY_UI.labels.micro, 'mb-2 px-0.5 flex items-center gap-1')}>
-                      <Clock className="h-2.5 w-2.5" /> Recent
+                  <div>
+                    <p className={cn(STRATEGY_UI.labels.section, 'mb-2.5 flex items-center gap-1.5')}>
+                      <Clock className="h-3 w-3" /> Recent
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {recents.map((r, i) => (
                         <button
                           key={i}
                           onClick={() => setPrefill(r.command)}
-                          className="inline-flex items-center text-[11px] text-foreground/80 hover:text-foreground px-2.5 py-1.5 rounded-md hover:bg-muted/35 transition-all duration-100 truncate max-w-[220px]"
+                          className="inline-flex items-center text-xs text-foreground/80 hover:text-foreground px-2.5 py-1.5 rounded-md hover:bg-muted/40 transition-colors truncate max-w-[220px]"
                         >
                           {r.label}
                         </button>
@@ -287,36 +295,37 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               </div>
             </div>
           ) : (
+            /* ── OUTPUT STATE: Composer + document ── */
             <div className={cn(STRATEGY_UI.layout.output, STRATEGY_UI.spacing.section)}>
               {composer}
-              <div className="w-full">
-                {result && lastCommand && (
-                  <div className="flex items-center justify-end mb-2">
-                    <button
-                      onClick={handleSaveShortcut}
-                      className="inline-flex items-center gap-1 text-[11px] text-foreground/80 hover:text-foreground transition-colors duration-100"
-                    >
-                      <PlusCircle className="h-3 w-3" /> Save as shortcut
-                    </button>
-                  </div>
-                )}
-                <CommandOutput
-                  output={result?.output || ''}
-                  blocks={result?.blocks || []}
-                  subjectLine={result?.subjectLine}
-                  sources={result?.sources || []}
-                  kiCount={result?.kiCount || 0}
-                  templateName={lastCommand?.template?.name}
-                  accountName={lastCommand?.account?.name}
-                  opportunityName={lastCommand?.opportunity?.name}
-                  outputType={lastCommand?.template?.id}
-                  playbookUsed={result?.playbookUsed}
-                  isGenerating={isGenerating}
-                  onRegenerate={handleRegenerate}
-                  onSaveAsTemplate={handleSaveAsTemplate}
-                  onPromoteToTemplate={handlePromoteToTemplate}
-                />
-              </div>
+
+              {result && lastCommand && (
+                <div className="flex items-center justify-end">
+                  <button
+                    onClick={handleSaveShortcut}
+                    className="inline-flex items-center gap-1.5 text-xs text-foreground/80 hover:text-foreground transition-colors"
+                  >
+                    <PlusCircle className="h-3.5 w-3.5" /> Save as shortcut
+                  </button>
+                </div>
+              )}
+
+              <CommandOutput
+                output={result?.output || ''}
+                blocks={result?.blocks || []}
+                subjectLine={result?.subjectLine}
+                sources={result?.sources || []}
+                kiCount={result?.kiCount || 0}
+                templateName={lastCommand?.template?.name}
+                accountName={lastCommand?.account?.name}
+                opportunityName={lastCommand?.opportunity?.name}
+                outputType={lastCommand?.template?.id}
+                playbookUsed={result?.playbookUsed}
+                isGenerating={isGenerating}
+                onRegenerate={handleRegenerate}
+                onSaveAsTemplate={handleSaveAsTemplate}
+                onPromoteToTemplate={handlePromoteToTemplate}
+              />
             </div>
           )}
         </div>

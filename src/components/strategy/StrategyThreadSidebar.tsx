@@ -18,11 +18,11 @@ const THREAD_TYPE_ICONS: Record<string, React.ElementType> = {
 };
 
 const LANE_COLORS: Record<string, string> = {
-  research: 'bg-blue-500/20 text-blue-400',
-  evaluate: 'bg-amber-500/20 text-amber-400',
-  build: 'bg-green-500/20 text-green-400',
-  strategy: 'bg-purple-500/20 text-purple-400',
-  brainstorm: 'bg-pink-500/20 text-pink-400',
+  research: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
+  evaluate: 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
+  build: 'bg-green-500/20 text-green-600 dark:text-green-400',
+  strategy: 'bg-purple-500/20 text-purple-600 dark:text-purple-400',
+  brainstorm: 'bg-pink-500/20 text-pink-600 dark:text-pink-400',
 };
 
 interface Props {
@@ -67,32 +67,36 @@ export function StrategyThreadSidebar({
   }, [recent]);
 
   return (
-    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/50 flex flex-col shrink-0')}>
-      <div className="p-3.5 border-b border-border/50 flex items-center gap-2 bg-card/35">
-        <h2 className="text-sm font-semibold text-foreground flex-1">Strategy</h2>
+    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border flex flex-col shrink-0')}>
+      {/* Header */}
+      <div className="p-3 border-b border-border flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-foreground flex-1">Threads</h2>
         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onCollapse}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
       </div>
 
-      <div className="p-2.5 border-b border-border/20">
+      {/* New Thread */}
+      <div className="p-2.5 border-b border-border">
         <Button size="sm" className="w-full gap-1.5" onClick={onOpenCreateDialog}>
           <Plus className="h-3.5 w-3.5" /> New Thread
         </Button>
       </div>
 
+      {/* Search */}
       <div className="px-2.5 pb-2 pt-2">
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Search threads…"
+            placeholder="Search…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="h-8 pl-7 text-xs bg-background/70 border-border/50"
+            className="h-8 pl-7 text-xs border-border"
           />
         </div>
       </div>
 
+      {/* Lane Filters */}
       <div className="px-2.5 pb-2 flex flex-wrap gap-1">
         {LANE_FILTERS.map(f => (
           <Badge
@@ -106,6 +110,7 @@ export function StrategyThreadSidebar({
         ))}
       </div>
 
+      {/* Thread List */}
       <ScrollArea className="flex-1">
         {isLoading ? (
           <p className="text-xs text-muted-foreground p-3">Loading…</p>
@@ -113,15 +118,17 @@ export function StrategyThreadSidebar({
           <div className="text-center p-4 space-y-2">
             <p className="text-xs text-muted-foreground">No threads yet.</p>
             <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={onOpenCreateDialog}>
-              <Plus className="h-3 w-3" /> Create your first thread
+              <Plus className="h-3 w-3" /> Create first thread
             </Button>
           </div>
         ) : (
           <div className="pb-4">
             {pinned.length > 0 && (
               <div className="px-2 pt-2">
-                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 px-1">Pinned</p>
-                {pinned.map(t => <ThreadRow key={t.id} thread={t} isActive={t.id === activeThreadId} onClick={() => onSelectThread(t.id)} />)}
+                <p className={cn(STRATEGY_UI.labels.micro, 'mb-1 px-1')}>Pinned</p>
+                {pinned.map(t => (
+                  <ThreadRow key={t.id} thread={t} isActive={t.id === activeThreadId} onClick={() => onSelectThread(t.id)} />
+                ))}
               </div>
             )}
 
@@ -136,8 +143,10 @@ export function StrategyThreadSidebar({
               };
               return (
                 <div key={type} className="px-2 pt-3">
-                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 px-1">{labels[type]}</p>
-                  {items.map(t => <ThreadRow key={t.id} thread={t} isActive={t.id === activeThreadId} onClick={() => onSelectThread(t.id)} />)}
+                  <p className={cn(STRATEGY_UI.labels.micro, 'mb-1 px-1')}>{labels[type]}</p>
+                  {items.map(t => (
+                    <ThreadRow key={t.id} thread={t} isActive={t.id === activeThreadId} onClick={() => onSelectThread(t.id)} />
+                  ))}
                 </div>
               );
             })}
@@ -157,14 +166,16 @@ function ThreadRow({ thread, isActive, onClick }: { thread: StrategyThread; isAc
       onClick={onClick}
       className={cn(
         'w-full text-left px-2 py-1.5 rounded-md text-xs flex items-start gap-2 transition-colors',
-        isActive ? 'bg-accent/70 text-accent-foreground shadow-sm' : 'hover:bg-muted/45 text-foreground/80',
+        isActive
+          ? 'bg-accent text-accent-foreground'
+          : 'hover:bg-muted text-foreground/80 hover:text-foreground',
       )}
     >
       <Icon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1">
           <span className="truncate font-medium">{thread.title}</span>
-          {thread.is_pinned && <Pin className="h-2.5 w-2.5 text-amber-400 shrink-0" />}
+          {thread.is_pinned && <Pin className="h-2.5 w-2.5 text-amber-500 shrink-0" />}
         </div>
         <div className="flex items-center gap-1 mt-0.5">
           <Badge variant="outline" className={cn('text-[9px] px-1 py-0 leading-tight', LANE_COLORS[thread.lane])}>
