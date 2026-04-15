@@ -62,7 +62,7 @@ export function CommandBar({
   const [tokens, setTokens] = useState<CommandToken[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const updateSuggestionsRef = useRef<((text: string, cursor: number) => void) | null>(null);
+  
 
   const updateSuggestions = useCallback((text: string, cursor: number) => {
     let trigger: string | null = null;
