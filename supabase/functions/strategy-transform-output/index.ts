@@ -164,6 +164,7 @@ serve(async (req) => {
       });
     }
 
+    const body = await req.json();
     const { sourceOutputId, targetArtifactType, threadId, parentArtifactId, refineInstructions } = body;
 
     if (!targetArtifactType || !ARTIFACT_TOOLS[targetArtifactType]) {
@@ -209,7 +210,7 @@ serve(async (req) => {
     }
 
     if (!sourceData) {
-      return new Response(JSON.stringify({ error: "Source output not found" }), {
+      return new Response(JSON.stringify({ error: "Source output not found. Please run a workflow first." }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -237,6 +238,8 @@ serve(async (req) => {
       ? `\n\nThe user has requested specific refinements:\n"${refineInstructions}"\n\nApply these instructions while preserving the overall structure and quality.`
       : "";
 
+    console.log(`[artifact] type=${targetArtifactType} source=${sourceOutputId || parentArtifactId} refine=${!!refineInstructions}`);
+
     const aiResp = await fetch(gateway, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -261,7 +264,7 @@ serve(async (req) => {
 
     if (!aiResp.ok) {
       const status = aiResp.status;
-      if (status === 429) return new Response(JSON.stringify({ error: "Rate limited" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (status === 429) return new Response(JSON.stringify({ error: "Rate limited — try again shortly" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       if (status === 402) return new Response(JSON.stringify({ error: "Credits exhausted" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       return new Response(JSON.stringify({ error: `AI error: ${status}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -279,19 +282,32 @@ serve(async (req) => {
       artifactData = { text: fallbackText };
     }
 
+    // Store refine instructions in artifact metadata for provenance
+    if (refineInstructions) {
+      artifactData._refine_instructions = refineInstructions;
+    }
+
     const renderedText = renderArtifact(targetArtifactType, artifactData);
     const artifactTitle = artifactData.title || `${targetArtifactType.replace(/_/g, " ")} — ${sourceTitle}`.slice(0, 200);
 
     // Determine version
     let version = 1;
     if (parentArtifactId) {
+      const { data: parent } = await supabase
+        .from("strategy_artifacts")
+        .select("version")
+        .eq("id", parentArtifactId)
+        .single();
+      const parentVersion = parent?.version || 0;
+
       const { data: siblings } = await supabase
         .from("strategy_artifacts")
         .select("version")
         .eq("parent_artifact_id", parentArtifactId)
         .order("version", { ascending: false })
         .limit(1);
-      if (siblings?.[0]) version = siblings[0].version + 1;
+      const maxSiblingVersion = siblings?.[0]?.version || 0;
+      version = Math.max(parentVersion, maxSiblingVersion) + 1;
     }
 
     // Insert artifact
@@ -332,7 +348,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[transform] ${targetArtifactType} created artifact=${artifact.id} from output=${sourceOutputId}`);
+    console.log(`[artifact] created=${artifact.id} type=${targetArtifactType} version=${version} from=${sourceOutputId || parentArtifactId}`);
 
     return new Response(JSON.stringify({ artifact }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

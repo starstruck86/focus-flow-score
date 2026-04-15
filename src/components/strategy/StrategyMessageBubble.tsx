@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { StrategyMessage } from '@/types/strategy';
+import { SourceInspectorPanel } from './SourceInspectorPanel';
 
 interface Props {
   message: StrategyMessage;
@@ -84,9 +85,13 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         <div className="whitespace-pre-wrap">{text || JSON.stringify(message.content_json)}</div>
         {!isUser && !isSystem && (
           <div className="mt-2 space-y-1.5">
-            {sourcesUsed != null && sourcesUsed > 0 && (
-              <SourceInspector sourcesUsed={sourcesUsed} retrievalMeta={retrievalMeta} />
-            )}
+            {(sourcesUsed != null && sourcesUsed > 0) || retrievalMeta || modelUsed ? (
+              <SourceInspectorPanel
+                sourcesUsed={sourcesUsed ?? 0}
+                retrievalMeta={retrievalMeta}
+                modelUsed={modelUsed}
+              />
+            ) : null}
             {onSaveAsMemory && text && (
               <Button
                 size="sm" variant="ghost"
@@ -246,63 +251,6 @@ function ArtifactStructuredView({ type, data }: { type: string; data: any }) {
   }
 }
 
-// ── Source Inspector (collapsible) ────────────────────────
-function SourceInspector({ sourcesUsed, retrievalMeta }: { sourcesUsed: number; retrievalMeta?: any }) {
-  const [expanded, setExpanded] = useState(false);
-
-  if (!retrievalMeta) {
-    return (
-      <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-1 font-normal">
-        <Database className="h-2 w-2" />
-        {sourcesUsed} sources
-      </Badge>
-    );
-  }
-
-  const memCount = retrievalMeta.memoriesScored ?? 0;
-  const upCount = retrievalMeta.uploadsIncluded ?? 0;
-  const outCount = retrievalMeta.outputsIncluded ?? 0;
-  const msgCount = retrievalMeta.messagesIncluded ?? 0;
-  const total = memCount + upCount + outCount + msgCount;
-
-  return (
-    <div>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-[9px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-      >
-        <Eye className="h-2.5 w-2.5" />
-        <span>{total} sources used</span>
-        {expanded ? <ChevronUp className="h-2 w-2" /> : <ChevronDown className="h-2 w-2" />}
-      </button>
-      {expanded && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {memCount > 0 && (
-            <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
-              <Brain className="h-2 w-2" /> {memCount} memory
-            </Badge>
-          )}
-          {upCount > 0 && (
-            <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
-              <UploadIcon className="h-2 w-2" /> {upCount} uploads
-            </Badge>
-          )}
-          {outCount > 0 && (
-            <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
-              <FileText className="h-2 w-2" /> {outCount} outputs
-            </Badge>
-          )}
-          {msgCount > 0 && (
-            <Badge variant="secondary" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal">
-              <MessageSquare className="h-2 w-2" /> {msgCount} history
-            </Badge>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Output Action Buttons ─────────────────────────────────
 const OUTPUT_ACTIONS = [
   { key: 'account_plan', label: 'Account Plan', icon: FileText },
@@ -332,7 +280,6 @@ function StructuredResultCard({
   const [expanded, setExpanded] = useState(true);
   const [showActions, setShowActions] = useState(false);
 
-  // Get the output ID that was saved alongside this workflow result
   const outputId = contentJson?.outputId;
 
   const copyToClipboard = () => {
@@ -353,9 +300,6 @@ function StructuredResultCard({
             <WorkflowIcon className="h-3 w-3 text-primary" />
           </div>
           <span className="text-xs font-semibold capitalize flex-1">{workflowLabel}</span>
-          {sourcesUsed != null && sourcesUsed > 0 && (
-            <SourceInspector sourcesUsed={sourcesUsed} retrievalMeta={retrievalMeta} />
-          )}
           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setExpanded(!expanded)}>
             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </Button>
@@ -384,6 +328,18 @@ function StructuredResultCard({
             <div className="text-xs whitespace-pre-wrap text-foreground/75 max-h-96 overflow-y-auto leading-relaxed">
               {text}
             </div>
+          </div>
+        )}
+
+        {/* Provenance panel */}
+        {((sourcesUsed != null && sourcesUsed > 0) || retrievalMeta || modelUsed) && (
+          <div className="px-3.5 pb-2">
+            <SourceInspectorPanel
+              sourcesUsed={sourcesUsed ?? 0}
+              retrievalMeta={retrievalMeta}
+              modelUsed={modelUsed}
+              workflowType={workflowType}
+            />
           </div>
         )}
 
@@ -421,9 +377,6 @@ function StructuredResultCard({
               >
                 <GitBranch className="h-2.5 w-2.5" /> Branch
               </Button>
-            )}
-            {modelUsed && (
-              <span className="ml-auto text-[8px] text-muted-foreground/40 font-mono">{modelUsed.split('/').pop()}</span>
             )}
           </div>
           {/* Artifact transform actions */}

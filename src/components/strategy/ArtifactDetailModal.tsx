@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Copy, RefreshCw, Loader2, Mail, FileText, Target, ArrowRight,
-  History, Pencil, CheckCircle2, Clock, Eye,
+  History, Pencil, CheckCircle2, Clock, Eye, Link2, Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { StrategyArtifact } from '@/hooks/strategy/useStrategyArtifacts';
@@ -37,10 +37,8 @@ export function ArtifactDetailModal({
   const [refineInstructions, setRefineInstructions] = useState('');
   const [viewingArtifact, setViewingArtifact] = useState<StrategyArtifact | null>(null);
 
-  // The artifact currently being displayed
   const displayArtifact = viewingArtifact || artifact;
 
-  // Reset state when modal artifact changes
   useEffect(() => {
     setViewingArtifact(null);
     setView('detail');
@@ -65,18 +63,18 @@ export function ArtifactDetailModal({
 
   const TypeIcon = TYPE_ICONS[displayArtifact.artifact_type] || FileText;
   const typeLabel = displayArtifact.artifact_type.replace(/_/g, ' ');
+  const contentJson = displayArtifact.content_json as any;
+  const refineUsed = contentJson?._refine_instructions;
 
   const copyContent = () => {
     navigator.clipboard.writeText(displayArtifact.rendered_text || JSON.stringify(displayArtifact.content_json, null, 2));
     toast.success('Copied to clipboard');
   };
 
-  // Regenerate/refine always operates on the currently displayed artifact
   const handleRegenerate = async () => {
     if (!onRegenerate || !displayArtifact) return;
     const result = await onRegenerate(displayArtifact.id, displayArtifact.artifact_type);
     if (result) {
-      // Auto-switch to the new version
       setViewingArtifact(result);
       setView('detail');
     }
@@ -109,7 +107,7 @@ export function ArtifactDetailModal({
             </div>
             <div className="flex-1 min-w-0">
               <DialogTitle className="text-sm font-semibold truncate">{displayArtifact.title}</DialogTitle>
-              <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <Badge variant="secondary" className="text-[9px] px-1.5 py-0 capitalize">{typeLabel}</Badge>
                 <Badge variant="outline" className="text-[9px] px-1.5 py-0">v{displayArtifact.version}</Badge>
                 <span className="text-[9px] text-muted-foreground">
@@ -123,6 +121,32 @@ export function ArtifactDetailModal({
               </div>
             </div>
           </div>
+
+          {/* Lineage info */}
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {displayArtifact.source_output_id && (
+              <Badge variant="outline" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal text-muted-foreground">
+                <Link2 className="h-2 w-2" /> From output
+              </Badge>
+            )}
+            {displayArtifact.parent_artifact_id && (
+              <Badge variant="outline" className="text-[8px] px-1.5 py-0 gap-0.5 font-normal text-muted-foreground">
+                <History className="h-2 w-2" /> Refined from v{versionChain.find(v => v.id === displayArtifact.parent_artifact_id)?.version ?? '?'}
+              </Badge>
+            )}
+          </div>
+
+          {/* Refine instructions used */}
+          {refineUsed && (
+            <div className="mt-2 bg-muted/20 rounded-md px-2.5 py-1.5 border border-border/30">
+              <div className="flex items-center gap-1 mb-0.5">
+                <Info className="h-2.5 w-2.5 text-muted-foreground/50" />
+                <span className="text-[9px] font-medium text-muted-foreground/70">Refinement instructions</span>
+              </div>
+              <p className="text-[10px] text-foreground/60 italic leading-relaxed">{refineUsed}</p>
+            </div>
+          )}
+
           {/* Tab bar */}
           <div className="flex gap-1 mt-3">
             {(['detail', 'history', 'refine'] as const).map(tab => (
@@ -213,74 +237,77 @@ export function ArtifactDetailModal({
 
 // ── Full Content Renderer ─────────────────────────────────
 function ArtifactFullContent({ type, data, renderedText }: { type: string; data: any; renderedText: string | null }) {
+  // Filter out internal metadata keys
+  const cleanData = data ? Object.fromEntries(Object.entries(data).filter(([k]) => !k.startsWith('_'))) : data;
+
   switch (type) {
     case 'email':
       return (
         <div className="space-y-4">
           <div className="bg-muted/30 rounded-lg p-4 border border-border/50">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Subject Line</p>
-            <p className="text-sm font-medium text-foreground">{data.subject_line}</p>
+            <p className="text-sm font-medium text-foreground">{cleanData.subject_line}</p>
           </div>
           <div className="space-y-2">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Body</p>
             <div className="text-sm text-foreground/85 leading-relaxed whitespace-pre-wrap bg-background border border-border/50 rounded-lg p-4">
-              {data.body}
+              {cleanData.body}
             </div>
           </div>
-          {data.cta && (
+          {cleanData.cta && (
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
               <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-1">Call to Action</p>
-              <p className="text-sm text-foreground/85">{data.cta}</p>
+              <p className="text-sm text-foreground/85">{cleanData.cta}</p>
             </div>
           )}
-          {data.tone && (
-            <Badge variant="outline" className="text-[9px]">Tone: {data.tone}</Badge>
+          {cleanData.tone && (
+            <Badge variant="outline" className="text-[9px]">Tone: {cleanData.tone}</Badge>
           )}
         </div>
       );
     case 'account_plan':
       return (
         <div className="space-y-5">
-          <SectionBlock label="Executive Summary" content={data.executive_summary} highlight />
-          <SectionBlock label="Account Overview" content={data.account_overview} />
-          <ListBlock label="Objectives" items={data.objectives} numbered />
-          <ListBlock label="Stakeholders" items={data.stakeholders} />
-          <ListBlock label="Action Plan" items={data.action_plan} numbered />
-          <SectionBlock label="Timeline" content={data.timeline} />
-          <ListBlock label="Risks" items={data.risks} variant="risk" />
-          <ListBlock label="Success Metrics" items={data.success_metrics} variant="success" />
+          <SectionBlock label="Executive Summary" content={cleanData.executive_summary} highlight />
+          <SectionBlock label="Account Overview" content={cleanData.account_overview} />
+          <ListBlock label="Objectives" items={cleanData.objectives} numbered />
+          <ListBlock label="Stakeholders" items={cleanData.stakeholders} />
+          <ListBlock label="Action Plan" items={cleanData.action_plan} numbered />
+          <SectionBlock label="Timeline" content={cleanData.timeline} />
+          <ListBlock label="Risks" items={cleanData.risks} variant="risk" />
+          <ListBlock label="Success Metrics" items={cleanData.success_metrics} variant="success" />
         </div>
       );
     case 'call_prep':
       return (
         <div className="space-y-5">
-          <ListBlock label="Objectives" items={data.objectives} numbered variant="primary" />
-          <ListBlock label="Talking Points" items={data.talking_points} numbered />
-          <ListBlock label="Questions to Ask" items={data.questions} />
-          <ListBlock label="Anticipated Objections" items={data.objections} variant="risk" />
-          <ListBlock label="Risks" items={data.risks} variant="risk" />
-          <SectionBlock label="Desired Outcome" content={data.desired_outcome} highlight />
+          <ListBlock label="Objectives" items={cleanData.objectives} numbered variant="primary" />
+          <ListBlock label="Talking Points" items={cleanData.talking_points} numbered />
+          <ListBlock label="Questions to Ask" items={cleanData.questions} />
+          <ListBlock label="Anticipated Objections" items={cleanData.objections} variant="risk" />
+          <ListBlock label="Risks" items={cleanData.risks} variant="risk" />
+          <SectionBlock label="Desired Outcome" content={cleanData.desired_outcome} highlight />
         </div>
       );
     case 'memo':
       return (
         <div className="space-y-5">
-          {data.title && <h3 className="text-base font-semibold text-foreground">{data.title}</h3>}
-          <SectionBlock label="Summary" content={data.summary} highlight />
-          <ListBlock label="Key Points" items={data.key_points} numbered />
-          <ListBlock label="Recommendations" items={data.recommendations} variant="primary" />
-          <ListBlock label="Next Steps" items={data.next_steps} variant="success" />
+          {cleanData.title && <h3 className="text-base font-semibold text-foreground">{cleanData.title}</h3>}
+          <SectionBlock label="Summary" content={cleanData.summary} highlight />
+          <ListBlock label="Key Points" items={cleanData.key_points} numbered />
+          <ListBlock label="Recommendations" items={cleanData.recommendations} variant="primary" />
+          <ListBlock label="Next Steps" items={cleanData.next_steps} variant="success" />
         </div>
       );
     case 'next_steps':
       return (
         <div className="space-y-4">
-          <SectionBlock label="Context" content={data.context_summary} />
-          {data.steps?.length > 0 && (
+          <SectionBlock label="Context" content={cleanData.context_summary} />
+          {cleanData.steps?.length > 0 && (
             <div>
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Actions</p>
               <div className="space-y-1.5">
-                {data.steps.map((step: any, i: number) => (
+                {cleanData.steps.map((step: any, i: number) => (
                   <div key={i} className="flex items-start gap-2.5 rounded-lg border border-border/50 px-3 py-2">
                     <PriorityDot priority={step.priority} />
                     <div className="flex-1 min-w-0">
@@ -310,7 +337,7 @@ function ArtifactFullContent({ type, data, renderedText }: { type: string; data:
     default:
       return (
         <pre className="text-xs text-foreground/70 whitespace-pre-wrap font-mono bg-muted/20 rounded-lg p-4">
-          {renderedText || JSON.stringify(data, null, 2)}
+          {renderedText || JSON.stringify(cleanData, null, 2)}
         </pre>
       );
   }
@@ -370,6 +397,8 @@ function VersionHistoryView({ versions, latestId, viewingId, onViewVersion }: {
       {[...versions].reverse().map((v) => {
         const isLatest = v.id === latestId;
         const isViewing = v.id === viewingId;
+        const vContent = v.content_json as any;
+        const vRefine = vContent?._refine_instructions;
         return (
           <button
             key={v.id}
@@ -401,9 +430,14 @@ function VersionHistoryView({ versions, latestId, viewingId, onViewVersion }: {
                 <Clock className="h-2.5 w-2.5" />
                 {new Date(v.created_at).toLocaleString()}
               </div>
-              {v.rendered_text && (
-                <p className="text-[11px] text-muted-foreground mt-1.5 line-clamp-3 whitespace-pre-wrap leading-relaxed">
-                  {v.rendered_text.slice(0, 250)}
+              {vRefine && (
+                <p className="text-[9px] text-muted-foreground/50 mt-1 italic truncate">
+                  Refined: "{vRefine}"
+                </p>
+              )}
+              {v.rendered_text && !vRefine && (
+                <p className="text-[11px] text-muted-foreground mt-1.5 line-clamp-2 whitespace-pre-wrap leading-relaxed">
+                  {v.rendered_text.slice(0, 200)}
                 </p>
               )}
             </div>
