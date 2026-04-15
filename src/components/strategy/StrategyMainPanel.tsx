@@ -318,29 +318,29 @@ export function StrategyMainPanel({
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-5">
-            <div className="h-14 w-14 rounded-2xl bg-muted flex items-center justify-center">
-              <ThreadIcon className="h-7 w-7 text-muted-foreground" />
+          <div className="flex flex-col items-center justify-center py-16 gap-6">
+            <div className="h-14 w-14 rounded-2xl bg-muted/60 flex items-center justify-center">
+              <ThreadIcon className="h-7 w-7 text-foreground/40" />
             </div>
-            <div className="text-center space-y-1.5">
-              <p className="text-sm font-medium text-foreground">
+            <div className="text-center space-y-2">
+              <p className="text-base font-semibold text-foreground">
                 {hasLinkedObject ? `Ready to strategize on ${linkedContext?.account?.name || linkedContext?.opportunity?.name}` : 'Ready to strategize'}
               </p>
-              <p className="text-xs text-muted-foreground max-w-[280px]">
+              <p className="text-sm text-foreground/60 max-w-[320px] leading-relaxed">
                 Start a conversation, run a workflow above, or drop files to add context.
               </p>
             </div>
-            <div className="flex flex-wrap justify-center gap-2 max-w-sm">
+            <div className="flex flex-wrap justify-center gap-2 max-w-md">
               {suggestedPrompts.map((sp, i) => (
                 <Button
                   key={i}
                   size="sm"
                   variant="outline"
-                  className="h-8 text-xs gap-1.5"
+                  className="h-9 text-xs gap-2 border-border hover:border-primary/30 hover:bg-primary/5 transition-all"
                   onClick={() => handleSuggestedPrompt(sp.text)}
                 >
-                  <sp.icon className="h-3 w-3" />
-                  {sp.text}
+                  <sp.icon className="h-3.5 w-3.5 text-primary/70" />
+                  <span className="text-foreground/90">{sp.text}</span>
                 </Button>
               ))}
             </div>

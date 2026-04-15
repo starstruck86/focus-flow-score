@@ -94,15 +94,15 @@ function RailSection({ title, icon: Icon, children, empty, count, action }: {
   return (
     <div className="px-3 py-2.5">
       <div className="flex items-center gap-1.5 mb-2">
-        <Icon className="h-3.5 w-3.5 text-muted-foreground/70" />
-        <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex-1">{title}</h3>
+        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+        <h3 className="text-[11px] font-semibold text-foreground/70 uppercase tracking-wider flex-1">{title}</h3>
         {count !== undefined && count > 0 && (
           <Badge variant="secondary" className="text-[8px] px-1 py-0 h-4 font-normal">{count}</Badge>
         )}
         {action}
       </div>
       {children ?? (
-        <p className="text-[10px] text-muted-foreground/40 italic pl-5">{empty || 'None yet'}</p>
+        <p className="text-[10px] text-muted-foreground italic pl-5">{empty || 'None yet'}</p>
       )}
     </div>
   );
@@ -226,7 +226,7 @@ export function StrategyRightRail({
               </CardContent>
             </Card>
           ) : (
-            <p className="text-[10px] text-muted-foreground/40 italic pl-5">Freeform thread — no linked object</p>
+            <p className="text-[10px] text-muted-foreground italic pl-5">Freeform thread — no linked object</p>
           )}
         </RailSection>
 
@@ -261,7 +261,7 @@ export function StrategyRightRail({
               <span className="text-[10px] text-muted-foreground">Generating rollup…</span>
             </div>
           ) : (
-            <p className="text-[10px] text-muted-foreground/40 italic pl-5">
+            <p className="text-[10px] text-muted-foreground italic pl-5">
               Send messages or run a workflow to generate.
             </p>
           )}

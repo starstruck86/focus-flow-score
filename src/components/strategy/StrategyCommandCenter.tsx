@@ -2,7 +2,7 @@
  * StrategyCommandCenter — unified workspace empty state.
  * Composer-dominant layout. No nested cards. Flat, confident, wide.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { CommandBar } from '@/components/command/CommandBar';
 import { CommandOutput } from '@/components/command/CommandOutput';
 import { PreRunContext } from '@/components/command/PreRunContext';
@@ -22,6 +22,50 @@ import {
 } from 'lucide-react';
 import type { ParsedCommand, CommandToken } from '@/lib/commandTypes';
 import { cn } from '@/lib/utils';
+
+const DEMO_OUTPUT = `## Executive Summary
+
+Franklin Park Conservatory is evaluating Acoustic's marketing automation platform as a replacement for their current Tessitura-native email tooling. This represents a mid-market arts & culture opportunity with strong product-market fit.
+
+## Strategic Context
+
+The Conservatory operates a complex multi-channel engagement model spanning memberships, events, education programs, and seasonal exhibitions. Their current stack relies heavily on Tessitura for CRM and ticketing, with limited marketing automation capabilities.
+
+**Key Insight:** Their recent website redesign signals investment in digital experience — making this an ideal time to propose integrated lifecycle marketing.
+
+## Stakeholder Hypotheses
+
+- **Director of Marketing** — Primary champion. Frustrated with Tessitura's email limitations. Needs segmentation and automation.
+- **IT Director** — Technical evaluator. Will care about Tessitura API integration and data security.
+- **CFO** — Economic buyer. Will need ROI justification against current spend.
+
+## Recommended Approach
+
+1. **Lead with integration story** — Show how Acoustic connects to Tessitura without replacing it
+2. **Quantify the gap** — Help them measure what they're losing with current tooling (open rates, conversion, time spent)
+3. **Reference similar wins** — Use performing arts case studies from similar-sized organizations
+
+## Key Risks
+
+- Tessitura has a strong ecosystem lock-in; switching costs may be perceived as high
+- Budget cycle timing — arts organizations often plan 12-18 months ahead
+- Champion may not have direct budget authority
+
+## Next Steps
+
+1. Schedule technical discovery with IT Director to map Tessitura integration requirements
+2. Prepare ROI calculator based on their current email volume and conversion rates
+3. Identify 2-3 peer organizations using Acoustic for social proof
+4. Draft a mutual action plan targeting their Q3 budget planning window`;
+
+const DEMO_BLOCKS = [
+  { heading: 'Executive Summary', content: 'Franklin Park Conservatory is evaluating Acoustic\'s marketing automation platform as a replacement for their current Tessitura-native email tooling. This represents a mid-market arts & culture opportunity with strong product-market fit.' },
+  { heading: 'Strategic Context', content: 'The Conservatory operates a complex multi-channel engagement model spanning memberships, events, education programs, and seasonal exhibitions. Their current stack relies heavily on Tessitura for CRM and ticketing, with limited marketing automation capabilities.\n\n**Key Insight:** Their recent website redesign signals investment in digital experience — making this an ideal time to propose integrated lifecycle marketing.' },
+  { heading: 'Stakeholder Hypotheses', content: '- **Director of Marketing** — Primary champion. Frustrated with Tessitura\'s email limitations. Needs segmentation and automation.\n- **IT Director** — Technical evaluator. Will care about Tessitura API integration and data security.\n- **CFO** — Economic buyer. Will need ROI justification against current spend.' },
+  { heading: 'Recommended Approach', content: '1. **Lead with integration story** — Show how Acoustic connects to Tessitura without replacing it\n2. **Quantify the gap** — Help them measure what they\'re losing with current tooling\n3. **Reference similar wins** — Use performing arts case studies from similar-sized organizations' },
+  { heading: 'Key Risks', content: '- Tessitura has a strong ecosystem lock-in; switching costs may be perceived as high\n- Budget cycle timing — arts organizations often plan 12-18 months ahead\n- Champion may not have direct budget authority' },
+  { heading: 'Next Steps', content: '1. Schedule technical discovery with IT Director to map Tessitura integration requirements\n2. Prepare ROI calculator based on their current email volume and conversion rates\n3. Identify 2-3 peer organizations using Acoustic for social proof\n4. Draft a mutual action plan targeting their Q3 budget planning window' },
+];
 
 interface Props {
   sidebarCollapsed: boolean;
@@ -148,7 +192,11 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
     setPrefill(shortcut.raw_command);
   }, [capture]);
 
-  const showEmpty = !result && !isGenerating;
+  const isDemoMode = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).has('demo_output');
+  }, []);
+  const showEmpty = !result && !isGenerating && !isDemoMode;
   const pinnedShortcuts = (savedShortcuts as any[]).filter((s: any) => s.is_pinned);
   const savedNonPinned = (savedShortcuts as any[]).filter((s: any) => !s.is_pinned).slice(0, 5);
 
@@ -193,7 +241,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
             <PanelLeftOpen className="h-3.5 w-3.5 mr-1.5" /> Threads
           </Button>
         )}
-        <span className={cn(STRATEGY_UI.labels.section, 'ml-1')}>Strategy</span>
+        <span className={cn(STRATEGY_UI.labels.section, 'ml-1 text-foreground/50')}>Strategy</span>
       </div>
 
       <ScrollArea className="flex-1">
@@ -206,7 +254,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                 <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight">
                   What do you need?
                 </h1>
-                <p className="mt-2.5 text-sm text-foreground/70">
+                <p className="mt-2.5 text-sm text-foreground/60">
                   {kiCount > 0
                     ? `${kiCount.toLocaleString()} knowledge items ready to ground your next run`
                     : 'Briefs, research, angles, and prep — powered by your knowledge base'}
@@ -301,7 +349,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
             <div className={cn(STRATEGY_UI.layout.output, STRATEGY_UI.spacing.section)}>
               {composer}
 
-              {result && lastCommand && (
+              {(result && lastCommand) && (
                 <div className="flex items-center justify-end">
                   <button
                     onClick={handleSaveShortcut}
@@ -313,16 +361,16 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               )}
 
               <CommandOutput
-                output={result?.output || ''}
-                blocks={result?.blocks || []}
-                subjectLine={result?.subjectLine}
-                sources={result?.sources || []}
-                kiCount={result?.kiCount || 0}
-                templateName={lastCommand?.template?.name}
-                accountName={lastCommand?.account?.name}
-                opportunityName={lastCommand?.opportunity?.name}
-                outputType={lastCommand?.template?.id}
-                playbookUsed={result?.playbookUsed}
+                output={isDemoMode ? DEMO_OUTPUT : (result?.output || '')}
+                blocks={isDemoMode ? DEMO_BLOCKS : (result?.blocks || [])}
+                subjectLine={isDemoMode ? undefined : result?.subjectLine}
+                sources={isDemoMode ? ['Enrichment Data', 'Account Intel', 'CRM History'] : (result?.sources || [])}
+                kiCount={isDemoMode ? 847 : (result?.kiCount || 0)}
+                templateName={isDemoMode ? 'Opportunity Strategy' : lastCommand?.template?.name}
+                accountName={isDemoMode ? 'Franklin Park Conservatory' : lastCommand?.account?.name}
+                opportunityName={isDemoMode ? 'Tessitura Replacement' : lastCommand?.opportunity?.name}
+                outputType={isDemoMode ? 'opportunity_strategy' : lastCommand?.template?.id}
+                playbookUsed={isDemoMode ? 'Enterprise Discovery' : result?.playbookUsed}
                 isGenerating={isGenerating}
                 onRegenerate={handleRegenerate}
                 onSaveAsTemplate={handleSaveAsTemplate}
