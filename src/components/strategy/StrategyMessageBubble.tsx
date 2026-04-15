@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Copy, Save, ChevronDown, ChevronUp, Database, FileText, Sparkles,
-  Brain, Upload as UploadIcon, MessageSquare, Eye, GitBranch,
+  Brain, Upload as UploadIcon, MessageSquare, Eye, GitBranch, Cpu,
   Mail, Target, Map, Zap, ArrowRight, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';

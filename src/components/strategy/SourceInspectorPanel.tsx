@@ -25,10 +25,12 @@ interface Props {
   sourcesUsed: number;
   retrievalMeta?: RetrievalMeta;
   modelUsed?: string;
+  providerUsed?: string;
+  fallbackUsed?: boolean;
   workflowType?: string;
 }
 
-export function SourceInspectorPanel({ sourcesUsed, retrievalMeta, modelUsed, workflowType }: Props) {
+export function SourceInspectorPanel({ sourcesUsed, retrievalMeta, modelUsed, providerUsed, fallbackUsed, workflowType }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   if (!retrievalMeta && !modelUsed) {
