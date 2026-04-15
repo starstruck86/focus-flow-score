@@ -249,6 +249,18 @@ function resolveLLMRoute(taskType: string): LLMRoute {
     route.fallbackModel = "openai/gpt-5";
   }
 
+  // ── RUNTIME KEY GUARD: disable providers whose keys are missing ──
+  if (route.primaryProvider === "perplexity" && !PROVIDER_HEALTH.perplexity) {
+    console.warn(`[routing] Perplexity key missing — downgrading deep_research to OpenAI`);
+    route.primaryProvider = "openai";
+    route.model = "openai/gpt-5-mini";
+  }
+  if (route.primaryProvider === "anthropic" && !PROVIDER_HEALTH.anthropic) {
+    console.warn(`[routing] Anthropic key missing — downgrading to OpenAI`);
+    route.primaryProvider = "openai";
+    route.model = "openai/gpt-5-mini";
+  }
+
   return route;
 }
 
