@@ -219,42 +219,31 @@ export default function SkillBuilderSession() {
     toast.success('Skill Builder session complete!');
   }, [sessionId, repScores]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Audio: auto-narrate current block
+  // Audio: narrate current block (non-blocking — text always shown first)
+  const [audioUnavailable, setAudioUnavailable] = useState(false);
   useEffect(() => {
     if (deliveryMode !== 'audio' || sessionState !== 'active' || !currentBlock) return;
 
-    const narrateBlock = async () => {
-      const block = currentBlock;
-      let text = '';
+    const block = currentBlock;
+    let text = '';
 
-      if (block.type === 'mental_model') {
-        text = `Mental model. ${block.levelName}. ${block.levelDescription}`;
-      } else if (block.type === 'ki_intro') {
-        text = `Key insight. ${block.kiTitle}. Pattern: ${FOCUS_PATTERN_LABELS[block.focusPattern] ?? block.focusPattern}.`;
-      } else if (block.type === 'reflection') {
-        text = `Time to reflect. ${block.prompt}`;
-      } else if (block.type === 'rep') {
-        text = `Practice rep. ${block.scenarioContext}. The buyer says: "${block.scenarioObjection}"`;
-      }
+    if (block.type === 'mental_model') {
+      text = `Mental model. ${block.levelName}. ${block.levelDescription}`;
+    } else if (block.type === 'ki_intro') {
+      text = `Key insight. ${block.kiTitle}. Pattern: ${FOCUS_PATTERN_LABELS[block.focusPattern] ?? block.focusPattern}.`;
+    } else if (block.type === 'reflection') {
+      text = `Time to reflect. ${block.prompt}`;
+    } else if (block.type === 'rep') {
+      text = `Practice rep. ${block.scenarioContext}. The buyer says: "${block.scenarioObjection}"`;
+    }
 
-      if (!text) return;
+    if (!text) return;
 
-      dave.recordTranscript('dave', text);
-      try {
-        await dave.speak(text);
-      } catch {
-        // TTS failed — continue in visual
-      }
-
-      // Auto-advance narration blocks
-      if (block.type === 'mental_model' || block.type === 'ki_intro') {
-        // Small pause then advance
-        await new Promise(r => setTimeout(r, 1500));
-        advanceBlock();
-      }
-    };
-
-    narrateBlock();
+    dave.recordTranscript('dave', text);
+    // Fire-and-forget: audio plays alongside visible text, never blocks flow
+    dave.speak(text).catch(() => {
+      setAudioUnavailable(true);
+    });
   }, [currentBlockIndex, deliveryMode, sessionState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleMode = useCallback(() => {

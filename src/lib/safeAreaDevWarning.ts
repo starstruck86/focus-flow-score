@@ -11,7 +11,8 @@
 export function runSafeAreaDevAudit() {
   if (import.meta.env.PROD) return;
 
-  requestIdleCallback?.(() => {
+  const schedule = typeof requestIdleCallback === 'function' ? requestIdleCallback : (cb: () => void) => setTimeout(cb, 200);
+  schedule(() => {
     // 1. min-h-screen without safe-area
     document.querySelectorAll('[class*="min-h-screen"]').forEach((el) => {
       const cls = el.className;
