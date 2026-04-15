@@ -2,7 +2,7 @@
  * Strategy Workspace — durable strategic operating system.
  * Three-column layout: thread sidebar (drawer on mobile), main working area, right rail.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { StrategyThreadSidebar } from '@/components/strategy/StrategyThreadSidebar';
 import { StrategyMainPanel } from '@/components/strategy/StrategyMainPanel';
@@ -113,7 +113,7 @@ export default function Strategy() {
 
   return (
     <Layout>
-      <div className="flex flex-1 min-h-0 overflow-hidden" style={{ height: 'calc(100dvh - var(--shell-nav-height, 101) * 1px - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px) - 190px)' }}>
+      <StrategyShell>
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
 
