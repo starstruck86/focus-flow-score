@@ -106,7 +106,14 @@ const App = () => (
               <BrowserRouter>
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
-                  <Route path="/" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
+                  <Route path="/" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback />}>
+                        <Command />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/dashboard" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
                   <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><WeeklyOutreach /></ProtectedPage>} />
                   <Route path="/accounts/:id" element={<ProtectedPage routeName="Account Detail"><AccountDetail /></ProtectedPage>} />
                   <Route path="/opportunities/:id" element={<ProtectedPage routeName="Opportunity Detail"><OpportunityDetail /></ProtectedPage>} />
