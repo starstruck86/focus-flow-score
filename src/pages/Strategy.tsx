@@ -113,7 +113,7 @@ export default function Strategy() {
 
   return (
     <Layout>
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex h-[calc(100dvh-var(--shell-header-h,56px)-var(--shell-nav-h,56px)-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] min-h-0 overflow-hidden">
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
 
