@@ -301,11 +301,19 @@ export default function SkillBuilderSession() {
       <div className={cn('px-4 pt-4 space-y-4', SHELL.main.bottomPad)}>
         {/* Signal banner for audio mode */}
         {deliveryMode === 'audio' && (
-          <DaveSignalBanner
-            message={dave.signalMessage}
-            isOffline={dave.isOffline}
-            pendingOpsCount={dave.pendingOpsCount}
-          />
+          <>
+            <DaveSignalBanner
+              message={dave.signalMessage}
+              isOffline={dave.isOffline}
+              pendingOpsCount={dave.pendingOpsCount}
+            />
+            {audioUnavailable && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted border border-border">
+                <VolumeX className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <p className="text-[11px] text-muted-foreground">Audio unavailable — showing text instead</p>
+              </div>
+            )}
+          </>
         )}
 
         {/* Remediation context from closed-loop */}
