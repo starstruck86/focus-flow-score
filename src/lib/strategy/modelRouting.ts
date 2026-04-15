@@ -1,5 +1,5 @@
 /**
- * Strategy Model Routing Config
+ * Strategy Model Routing Config — extended with provider abstraction
  * 
  * Central config for routing strategy tasks to the right model/provider.
  * Ready for multi-model orchestration — swap providers per task type.
@@ -14,12 +14,16 @@ export type StrategyTaskType =
   | 'opportunity_strategy'
   | 'brainstorm';
 
+export type ProviderKey = 'lovable_ai' | 'openai' | 'anthropic' | 'perplexity';
+
 export interface StrategyModelRoute {
-  provider: 'lovable_ai' | 'openai' | 'anthropic' | 'perplexity';
+  provider: ProviderKey;
   model: string;
   temperature?: number;
   maxTokens?: number;
   reasoning?: { effort: string };
+  /** Future: fallback provider if primary is unavailable */
+  fallbackProvider?: ProviderKey;
 }
 
 /**
@@ -38,6 +42,7 @@ export const STRATEGY_MODEL_ROUTES: Record<StrategyTaskType, StrategyModelRoute>
     model: 'google/gemini-2.5-pro',
     temperature: 0.3,
     maxTokens: 8192,
+    fallbackProvider: 'perplexity',
   },
   email_evaluation: {
     provider: 'lovable_ai',
@@ -75,3 +80,11 @@ export const STRATEGY_MODEL_ROUTES: Record<StrategyTaskType, StrategyModelRoute>
 export function getModelRoute(taskType: StrategyTaskType): StrategyModelRoute {
   return STRATEGY_MODEL_ROUTES[taskType] ?? STRATEGY_MODEL_ROUTES.chat_general;
 }
+
+/** Provider gateway URLs for future multi-provider support */
+export const PROVIDER_GATEWAYS: Record<ProviderKey, string> = {
+  lovable_ai: 'https://ai.gateway.lovable.dev/v1/chat/completions',
+  openai: 'https://api.openai.com/v1/chat/completions',
+  anthropic: 'https://api.anthropic.com/v1/messages',
+  perplexity: 'https://api.perplexity.ai/chat/completions',
+};
