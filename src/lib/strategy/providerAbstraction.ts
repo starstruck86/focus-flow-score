@@ -1,10 +1,11 @@
 /**
  * Strategy Provider Abstraction Layer
  * 
- * All providers use DIRECT API calls. No Lovable gateway in the request path.
+ * All providers use DIRECT API calls with dedicated API keys.
  * - OpenAI: api.openai.com with OPENAI_API_KEY
  * - Anthropic: api.anthropic.com with ANTHROPIC_API_KEY
  * - Perplexity: api.perplexity.ai with PERPLEXITY_API_KEY
+ * No Lovable gateway in the request path.
  */
 
 export type ProviderKey = 'openai' | 'anthropic' | 'perplexity';

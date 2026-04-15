@@ -107,7 +107,7 @@ async function callOpenAI(
   }
 
   const start = Date.now();
-  const model = "gpt-4o-mini";
+  const model = "gpt-5-mini";
 
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -133,14 +133,21 @@ async function callOpenAI(
   }
 
   const data = await resp.json();
-  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  const choice = data.choices?.[0];
+  if (!choice) {
+    console.error("[artifact] OpenAI returned no choices");
+    return null;
+  }
+  const toolCall = choice.message?.tool_calls?.[0];
   let structured: any = null;
 
   if (toolCall?.function?.arguments) {
-    try { structured = JSON.parse(toolCall.function.arguments); } catch {}
+    try { structured = JSON.parse(toolCall.function.arguments); } catch (e) {
+      console.error(`[artifact] OpenAI tool call JSON parse failed: ${String(e)}`);
+    }
   }
   if (!structured) {
-    const text = data.choices?.[0]?.message?.content || "";
+    const text = choice.message?.content || "";
     if (text) structured = { text };
     else return null;
   }
