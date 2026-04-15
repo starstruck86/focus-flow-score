@@ -201,17 +201,17 @@ export function StrategyMainPanel({
         accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.json,.xml,.html" />
 
       {/* Top Bar */}
-      <div className="border-b border-border px-4 py-2.5 flex items-center gap-2 shrink-0 bg-card/50">
+      <div className="border-b border-border px-4 py-2.5 flex items-center gap-2 shrink-0">
         {sidebarCollapsed && (
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExpandSidebar}>
             <PanelLeftOpen className="h-4 w-4" />
           </Button>
         )}
         <ThreadIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <h1 className="text-sm font-semibold truncate flex-1">{thread.title}</h1>
+        <h1 className="text-sm font-semibold text-foreground truncate flex-1">{thread.title}</h1>
         {isUploading && (
-          <Badge variant="secondary" className="text-[9px] gap-1 animate-pulse">
-            <Loader2 className="h-2.5 w-2.5 animate-spin" /> Uploading
+          <Badge variant="secondary" className="text-[10px] gap-1 animate-pulse">
+            <Loader2 className="h-3 w-3 animate-spin" /> Uploading
           </Badge>
         )}
         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onToggleRightRail}>
@@ -221,7 +221,7 @@ export function StrategyMainPanel({
 
       {/* Scope Card */}
       <div className="px-4 pt-3 shrink-0">
-        <Card className="bg-muted/20 border-border/50">
+        <Card className="border-border">
           <CardContent className="p-3 space-y-2.5">
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="text-[10px] font-medium">
@@ -234,19 +234,19 @@ export function StrategyMainPanel({
                 <Badge variant="secondary" className="text-[10px] gap-1">
                   <Building2 className="h-2.5 w-2.5" />
                   {linkedContext.account.name}
-                  {linkedContext.account.tier && <span className="opacity-60">· {linkedContext.account.tier}</span>}
+                  {linkedContext.account.tier && <span className="text-muted-foreground">· {linkedContext.account.tier}</span>}
                 </Badge>
               )}
               {linkedContext?.opportunity && (
                 <Badge variant="secondary" className="text-[10px] gap-1">
                   <Target className="h-2.5 w-2.5" />
                   {linkedContext.opportunity.name}
-                  {linkedContext.opportunity.stage && <span className="opacity-60">· {linkedContext.opportunity.stage}</span>}
+                  {linkedContext.opportunity.stage && <span className="text-muted-foreground">· {linkedContext.opportunity.stage}</span>}
                 </Badge>
               )}
             </div>
             {thread.summary && (
-              <p className="text-xs text-foreground/70 line-clamp-2 leading-relaxed">{thread.summary}</p>
+              <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{thread.summary}</p>
             )}
             <div className="flex flex-wrap gap-1.5">
               {WORKFLOWS.map(w => {
