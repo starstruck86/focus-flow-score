@@ -1,27 +1,32 @@
 /**
- * useCommandExecution — orchestrates template execution with KI integration.
+ * useCommandExecution — orchestrates template execution with context-aware KI retrieval.
  */
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { ParsedCommand } from '@/components/command/CommandBar';
+import type { ParsedCommand, TemplateMetadata, ExecutionResult } from '@/lib/commandTypes';
+import { parseOutputBlocks } from '@/lib/commandTypes';
+import { retrieveContextualKIs } from '@/lib/contextAwareKIRetrieval';
 
-// Built-in templates
-export interface BuiltInTemplate {
-  id: string;
-  name: string;
-  description: string;
-  systemPrompt: string;
-}
+// ─── Built-in templates with full metadata ───
 
-export const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
+export const BUILT_IN_TEMPLATES: TemplateMetadata[] = [
   {
     id: 'discovery-prep',
     name: 'Discovery Prep',
     description: 'Structured plan with objectives, questions, risks, and stakeholder hypotheses',
-    systemPrompt: `Create a comprehensive discovery call preparation. Output these exact sections:
+    output_type: 'discovery_prep',
+    recommended_context_types: ['account', 'opportunity', 'persona'],
+    preferred_ki_depth: 'deep',
+    is_pinned: false,
+    is_favorite: false,
+    times_used: 0,
+    last_used_at: null,
+    source: 'built_in',
+    output_sections: ['Objectives', 'Key Questions', 'Risks', 'Stakeholder Hypotheses', 'Recommended Angle'],
+    systemPrompt: `Create a comprehensive discovery call preparation. Output these exact sections with ## headings:
 
 ## Objectives
 What must we learn or confirm by the end of this call.
@@ -35,17 +40,23 @@ Red flags to watch for. Signals the deal may stall.
 ## Stakeholder Hypotheses
 Who's involved, what they care about, and how to approach each.
 
-## Competitive Landmines
-If a competitor is in play: questions that expose weaknesses without bashing.
-
-## Desired Outcome
-What success looks like at the end of this call.`,
+## Recommended Angle
+The strategic approach for this specific call based on context.`,
   },
   {
     id: 'exec-brief',
     name: 'Executive Brief',
     description: 'Concise executive summary with strategic context and recommendations',
-    systemPrompt: `Create a concise executive briefing document. Output these exact sections:
+    output_type: 'exec_brief',
+    recommended_context_types: ['account', 'opportunity', 'competitor'],
+    preferred_ki_depth: 'standard',
+    is_pinned: false,
+    is_favorite: false,
+    times_used: 0,
+    last_used_at: null,
+    source: 'built_in',
+    output_sections: ['Situation Summary', 'Strategic Context', 'Our Position', 'Key Risks', 'Recommendations', 'Talking Points'],
+    systemPrompt: `Create a concise executive briefing document. Output these exact sections with ## headings:
 
 ## Situation Summary
 2-3 sentences on where things stand.
@@ -69,30 +80,49 @@ Specific actions to take, ordered by priority.
     id: 'follow-up-email',
     name: 'Follow-Up Email',
     description: 'Professional follow-up email with clear next steps',
-    systemPrompt: `Write a professional follow-up email. Start with "Subject: <subject line>" on the first line.
+    output_type: 'follow_up_email',
+    recommended_context_types: ['account'],
+    preferred_ki_depth: 'shallow',
+    is_pinned: false,
+    is_favorite: false,
+    times_used: 0,
+    last_used_at: null,
+    source: 'built_in',
+    output_sections: ['Subject', 'Body', 'CTA'],
+    systemPrompt: `Write a professional follow-up email. 
 
-Structure:
-1. Brief, genuine opener (1 sentence)
-2. Key takeaways from the conversation (3-5 bullets, framed in THEIR priorities)
-3. Agreed next steps (numbered, with owners and dates)
-4. Clear closing with specific call to action
+Start with "Subject: <subject line>" on the first line, then a blank line.
 
-Tone: Executive-level, concise. Every sentence earns its place. Under 200 words for the body.`,
+Then output these sections with ## headings:
+
+## Body
+Brief, genuine opener (1 sentence). Key takeaways from the conversation (3-5 bullets, framed in THEIR priorities). Under 200 words.
+
+## CTA
+Clear closing with specific call to action and agreed next steps with owners and dates.
+
+Tone: Executive-level, concise. Every sentence earns its place.`,
   },
   {
     id: 'brainstorm',
     name: 'Brainstorm',
     description: 'Strategic brainstorm with creative angles and action items',
-    systemPrompt: `Run a strategic brainstorm session. Output these sections:
+    output_type: 'brainstorm',
+    recommended_context_types: ['account', 'opportunity'],
+    preferred_ki_depth: 'deep',
+    is_pinned: false,
+    is_favorite: false,
+    times_used: 0,
+    last_used_at: null,
+    source: 'built_in',
+    output_sections: ['Problem Statement', 'Key Angles', 'Quick Wins', 'Bold Moves', 'Recommended Next Steps'],
+    systemPrompt: `Run a strategic brainstorm session. Output these sections with ## headings:
 
 ## Problem Statement
 Restate the challenge in one clear sentence.
 
 ## Key Angles
-5-7 distinct strategic approaches or ideas, each with:
-- The idea (1 sentence)
-- Why it could work
-- Key risk or assumption
+5-7 distinct strategic approaches or ideas, each with the idea, why it could work, and key risk.
 
 ## Quick Wins
 2-3 things that can be done immediately.
@@ -105,15 +135,9 @@ Prioritized actions to pursue.`,
   },
 ];
 
-interface ExecutionResult {
-  output: string;
-  subjectLine: string;
-  sources: string[];
-  kiCount: number;
-}
-
 export function useCommandExecution() {
   const { user } = useAuth();
+  const qc = useQueryClient();
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<ExecutionResult | null>(null);
 
@@ -142,7 +166,6 @@ export function useCommandExecution() {
         .select('id, name, account_id')
         .eq('user_id', user!.id)
         .order('name');
-      // Join account names
       const accountMap = new Map(accounts.map(a => [a.id, a.name]));
       return (data || []).map(o => ({
         ...o,
@@ -151,68 +174,46 @@ export function useCommandExecution() {
     },
   });
 
-  // Load user-saved templates from execution_templates
+  // Load user-saved templates with metadata
   const { data: savedTemplates = [] } = useQuery({
     queryKey: ['cmd-saved-templates', user?.id],
     enabled: !!user,
     queryFn: async () => {
       const { data } = await supabase
         .from('execution_templates' as any)
-        .select('id, title, body, output_type')
+        .select('id, title, body, output_type, is_pinned, is_favorite, times_used, last_used_at')
         .eq('user_id', user!.id)
         .eq('status', 'active')
+        .order('is_pinned', { ascending: false })
         .order('times_used', { ascending: false })
         .limit(50);
-      return (data || []).map((t: any) => ({
+      return (data || []).map((t: any): TemplateMetadata => ({
         id: t.id,
         name: t.title,
-        description: t.output_type,
-        body: t.body,
+        description: t.output_type?.replace(/_/g, ' ') || 'Custom',
+        output_type: t.output_type || 'custom',
+        recommended_context_types: [],
+        preferred_ki_depth: 'standard',
+        is_pinned: t.is_pinned ?? false,
+        is_favorite: t.is_favorite ?? false,
+        times_used: t.times_used ?? 0,
+        last_used_at: t.last_used_at,
+        source: 'saved',
+        output_sections: [],
+        systemPrompt: t.body || '',
       }));
     },
   });
 
-  // Merge built-in + saved templates for autocomplete
-  const allTemplates = [
-    ...BUILT_IN_TEMPLATES.map(t => ({ id: t.id, name: t.name, description: t.description })),
-    ...savedTemplates.map((t: any) => ({ id: t.id, name: t.name, description: t.description })),
-  ];
-
-  // Fetch relevant KIs for the context
-  const fetchKIs = useCallback(async (
-    accountName?: string,
-    templateId?: string,
-  ): Promise<{ text: string; count: number }> => {
-    if (!user) return { text: '', count: 0 };
-
-    try {
-      let q = supabase
-        .from('knowledge_items' as any)
-        .select('title, tactic_summary, chapter, competitor_name, framework, how_to_execute, when_to_use, example_usage')
-        .eq('user_id', user.id)
-        .eq('active', true)
-        .order('confidence_score', { ascending: false })
-        .limit(30);
-
-      const { data, error } = await q;
-      if (error || !data?.length) return { text: '', count: 0 };
-
-      const items = data as any[];
-      const kiText = items.map((ki: any) => {
-        let line = `• ${ki.title}`;
-        if (ki.tactic_summary) line += `: ${ki.tactic_summary}`;
-        if (ki.how_to_execute) line += `\n  How: ${ki.how_to_execute}`;
-        if (ki.when_to_use) line += `\n  When: ${ki.when_to_use}`;
-        if (ki.competitor_name) line += ` [vs ${ki.competitor_name}]`;
-        if (ki.framework) line += ` [${ki.framework}]`;
-        return line;
-      }).join('\n');
-
-      return { text: kiText, count: items.length };
-    } catch {
-      return { text: '', count: 0 };
-    }
-  }, [user]);
+  // Merge built-in + saved, pinned first
+  const allTemplates: TemplateMetadata[] = [
+    ...BUILT_IN_TEMPLATES,
+    ...savedTemplates,
+  ].sort((a, b) => {
+    if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+    if (a.is_favorite !== b.is_favorite) return a.is_favorite ? -1 : 1;
+    return (b.times_used || 0) - (a.times_used || 0);
+  });
 
   const execute = useCallback(async (command: ParsedCommand, useKIs: boolean) => {
     if (!user) return;
@@ -221,25 +222,33 @@ export function useCommandExecution() {
     setResult(null);
 
     try {
-      // Resolve template
-      const builtIn = BUILT_IN_TEMPLATES.find(t => t.id === command.template?.id || t.name === command.template?.name);
-      const saved = savedTemplates.find((t: any) => t.id === command.template?.id || t.name === command.template?.name);
+      // Resolve template with full metadata
+      const template = allTemplates.find(
+        t => t.id === command.template?.id || t.name === command.template?.name
+      );
 
-      const actionPrompt = builtIn?.systemPrompt || (saved as any)?.body || '';
-      const templateLabel = builtIn?.name || (saved as any)?.name || command.template?.name || 'Custom';
+      const actionPrompt = template?.systemPrompt || '';
+      const templateLabel = template?.name || command.template?.name || 'Custom';
+      const depth = template?.preferred_ki_depth || 'standard';
 
-      // Fetch KIs if enabled
+      // Context-aware KI retrieval
       let kiContext = '';
       let kiCount = 0;
       if (useKIs) {
-        const kis = await fetchKIs(command.account?.name, command.template?.id);
+        const kis = await retrieveContextualKIs({
+          userId: user.id,
+          templateOutputType: template?.output_type,
+          accountId: command.account?.id,
+          accountName: command.account?.name,
+          freeText: command.freeText,
+          depth,
+        });
         kiContext = kis.text;
         kiCount = kis.count;
       }
 
-      // Build resource context from KIs
       const resourceContext = kiContext
-        ? `\n--- ACTIVE KNOWLEDGE (${kiCount} items from user's library) ---\n${kiContext}\n--- END KNOWLEDGE ---\nUse this knowledge to ground your output. Reference specific tactics, frameworks, and strategies where relevant.`
+        ? `\n--- ACTIVE KNOWLEDGE (${kiCount} items, context-matched) ---\n${kiContext}\n--- END KNOWLEDGE ---\nUse this knowledge to ground your output. Reference specific tactics, frameworks, and strategies where relevant.`
         : '';
 
       const { data, error } = await supabase.functions.invoke('generate-execution-draft', {
@@ -255,18 +264,32 @@ export function useCommandExecution() {
 
       if (error) throw error;
 
+      const rawOutput = data?.content || '';
+      const blocks = parseOutputBlocks(rawOutput);
+
       const sources: string[] = [];
-      if (kiCount > 0) sources.push(`${kiCount} Knowledge Items`);
+      if (kiCount > 0) sources.push(`${kiCount} KIs (context-matched)`);
       if (command.account) sources.push(`Account: ${command.account.name}`);
       if (command.opportunity) sources.push(`Opportunity: ${command.opportunity.name}`);
       sources.push('AI Generation');
 
       setResult({
-        output: data?.content || '',
+        output: rawOutput,
+        blocks,
         subjectLine: data?.subject_line || '',
         sources,
         kiCount,
+        templateId: command.template?.id || null,
       });
+
+      // Track template usage
+      if (template?.source === 'saved' && template.id) {
+        supabase
+          .from('execution_templates' as any)
+          .update({ times_used: (template.times_used || 0) + 1, last_used_at: new Date().toISOString() } as any)
+          .eq('id', template.id)
+          .then(() => qc.invalidateQueries({ queryKey: ['cmd-saved-templates'] }));
+      }
 
       toast.success('Output generated');
     } catch (err) {
@@ -275,7 +298,41 @@ export function useCommandExecution() {
     } finally {
       setIsGenerating(false);
     }
-  }, [user, savedTemplates, fetchKIs]);
+  }, [user, allTemplates, qc]);
+
+  // Create a new account inline
+  const createAccount = useCallback(async (name: string): Promise<{ id: string; name: string } | null> => {
+    if (!user) return null;
+    const { data, error } = await supabase
+      .from('accounts')
+      .insert({ name, user_id: user.id })
+      .select('id, name')
+      .single();
+    if (error) {
+      toast.error('Failed to create account');
+      return null;
+    }
+    qc.invalidateQueries({ queryKey: ['cmd-accounts'] });
+    toast.success(`Account "${name}" created`);
+    return data;
+  }, [user, qc]);
+
+  // Create a new opportunity inline
+  const createOpportunity = useCallback(async (name: string, accountId?: string): Promise<{ id: string; name: string } | null> => {
+    if (!user) return null;
+    const { data, error } = await supabase
+      .from('opportunities')
+      .insert({ name, user_id: user.id, account_id: accountId || null } as any)
+      .select('id, name')
+      .single();
+    if (error) {
+      toast.error('Failed to create opportunity');
+      return null;
+    }
+    qc.invalidateQueries({ queryKey: ['cmd-opportunities'] });
+    toast.success(`Opportunity "${name}" created`);
+    return data;
+  }, [user, qc]);
 
   const saveAsTemplate = useCallback(async (name: string, content: string) => {
     if (!user) return;
@@ -285,15 +342,17 @@ export function useCommandExecution() {
         title: name,
         body: content,
         output_type: 'custom',
-        template_origin: 'user_saved',
+        template_origin: 'promoted_from_output',
         created_by_user: true,
         status: 'active',
+        times_used: 0,
       } as any);
+      qc.invalidateQueries({ queryKey: ['cmd-saved-templates'] });
       toast.success(`Template "${name}" saved`);
     } catch {
       toast.error('Failed to save template');
     }
-  }, [user]);
+  }, [user, qc]);
 
   return {
     accounts,
@@ -302,6 +361,8 @@ export function useCommandExecution() {
     isGenerating,
     result,
     execute,
+    createAccount,
+    createOpportunity,
     saveAsTemplate,
   };
 }

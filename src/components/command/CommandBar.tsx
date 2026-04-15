@@ -1,37 +1,29 @@
 /**
  * Command Bar — single input with @, $, + autocomplete.
- * Feels like a command palette, not a form.
+ * Entities are tracked as structured tokens with stable IDs.
+ * Supports inline creation of missing accounts/opportunities.
  */
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { Zap, Building2, DollarSign, Plus, Loader2 } from 'lucide-react';
-
-export interface CommandEntity {
-  type: 'account' | 'opportunity' | 'template';
-  id: string;
-  name: string;
-}
-
-export interface ParsedCommand {
-  rawText: string;
-  account: CommandEntity | null;
-  opportunity: CommandEntity | null;
-  template: CommandEntity | null;
-  freeText: string;
-}
+import { Zap, Building2, DollarSign, Plus, Loader2, X, PlusCircle } from 'lucide-react';
+import type { ParsedCommand, CommandToken, TemplateMetadata } from '@/lib/commandTypes';
 
 interface Suggestion {
   type: 'account' | 'opportunity' | 'template';
   id: string;
   name: string;
   subtitle?: string;
+  is_pinned?: boolean;
+  is_create?: boolean; // "Create new" option
 }
 
 interface Props {
   accounts: { id: string; name: string }[];
   opportunities: { id: string; name: string; account_name?: string }[];
-  templates: { id: string; name: string; description?: string }[];
+  templates: TemplateMetadata[];
   onExecute: (command: ParsedCommand) => void;
+  onCreateAccount?: (name: string) => Promise<{ id: string; name: string } | null>;
+  onCreateOpportunity?: (name: string) => Promise<{ id: string; name: string } | null>;
   isLoading?: boolean;
   placeholder?: string;
 }
@@ -54,26 +46,28 @@ const TRIGGER_COLORS: Record<string, string> = {
   template: 'text-amber-400',
 };
 
-export function CommandBar({ accounts, opportunities, templates, onExecute, isLoading, placeholder }: Props) {
+export function CommandBar({
+  accounts, opportunities, templates, onExecute,
+  onCreateAccount, onCreateOpportunity,
+  isLoading, placeholder,
+}: Props) {
   const [value, setValue] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [activeTrigger, setActiveTrigger] = useState<string | null>(null);
   const [triggerStart, setTriggerStart] = useState<number>(-1);
   const [selectedIdx, setSelectedIdx] = useState(0);
-  const [selectedEntities, setSelectedEntities] = useState<CommandEntity[]>([]);
+  // Structured tokens — stable IDs, not just text
+  const [tokens, setTokens] = useState<CommandToken[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Build suggestions based on trigger character and filter text
   const updateSuggestions = useCallback((text: string, cursor: number) => {
-    // Find the active trigger by scanning backward from cursor
     let trigger: string | null = null;
     let start = -1;
 
     for (let i = cursor - 1; i >= 0; i--) {
       if (text[i] === ' ' || text[i] === '\n') break;
       if (TRIGGER_CHARS[text[i]]) {
-        // Make sure it's at start of word (beginning of string or after space)
         if (i === 0 || text[i - 1] === ' ') {
           trigger = text[i];
           start = i;
@@ -96,18 +90,25 @@ export function CommandBar({ accounts, opportunities, templates, onExecute, isLo
     if (type === 'account') {
       items = accounts
         .filter(a => a.name.toLowerCase().includes(filterText))
-        .slice(0, 8)
+        .slice(0, 7)
         .map(a => ({ type: 'account', id: a.id, name: a.name }));
+      // Add "Create new" option if filter text and no exact match
+      if (filterText.length > 1 && !items.some(i => i.name.toLowerCase() === filterText)) {
+        items.push({ type: 'account', id: '__create__', name: filterText, is_create: true });
+      }
     } else if (type === 'opportunity') {
       items = opportunities
         .filter(o => o.name.toLowerCase().includes(filterText))
-        .slice(0, 8)
+        .slice(0, 7)
         .map(o => ({ type: 'opportunity', id: o.id, name: o.name, subtitle: o.account_name }));
+      if (filterText.length > 1 && !items.some(i => i.name.toLowerCase() === filterText)) {
+        items.push({ type: 'opportunity', id: '__create__', name: filterText, is_create: true });
+      }
     } else if (type === 'template') {
       items = templates
         .filter(t => t.name.toLowerCase().includes(filterText))
         .slice(0, 8)
-        .map(t => ({ type: 'template', id: t.id, name: t.name, subtitle: t.description }));
+        .map(t => ({ type: 'template', id: t.id, name: t.name, subtitle: t.description, is_pinned: t.is_pinned }));
     }
 
     setSuggestions(items);
@@ -123,8 +124,23 @@ export function CommandBar({ accounts, opportunities, templates, onExecute, isLo
     updateSuggestions(newVal, cursor);
   }, [updateSuggestions]);
 
-  const selectSuggestion = useCallback((suggestion: Suggestion) => {
-    // Replace the trigger+filter text with the entity token
+  const selectSuggestion = useCallback(async (suggestion: Suggestion) => {
+    // Handle "Create new" flow
+    if (suggestion.is_create) {
+      let created: { id: string; name: string } | null = null;
+      if (suggestion.type === 'account' && onCreateAccount) {
+        created = await onCreateAccount(suggestion.name);
+      } else if (suggestion.type === 'opportunity' && onCreateOpportunity) {
+        created = await onCreateOpportunity(suggestion.name);
+      }
+      if (!created) {
+        setSuggestions([]);
+        return;
+      }
+      suggestion = { ...suggestion, id: created.id, name: created.name, is_create: false };
+    }
+
+    // Replace trigger+filter text with entity token in visible text
     const before = value.slice(0, triggerStart);
     const after = value.slice(inputRef.current?.selectionStart ?? value.length);
     const triggerChar = activeTrigger || '';
@@ -135,13 +151,12 @@ export function CommandBar({ accounts, opportunities, templates, onExecute, isLo
     setSuggestions([]);
     setActiveTrigger(null);
 
-    // Track selected entity
-    setSelectedEntities(prev => {
-      const filtered = prev.filter(e => e.type !== suggestion.type);
+    // Store structured token with stable ID
+    setTokens(prev => {
+      const filtered = prev.filter(t => t.type !== suggestion.type);
       return [...filtered, { type: suggestion.type, id: suggestion.id, name: suggestion.name }];
     });
 
-    // Focus back
     setTimeout(() => {
       if (inputRef.current) {
         inputRef.current.focus();
@@ -149,7 +164,16 @@ export function CommandBar({ accounts, opportunities, templates, onExecute, isLo
         inputRef.current.setSelectionRange(pos, pos);
       }
     }, 0);
-  }, [value, triggerStart, activeTrigger]);
+  }, [value, triggerStart, activeTrigger, onCreateAccount, onCreateOpportunity]);
+
+  const removeToken = useCallback((type: CommandToken['type']) => {
+    const token = tokens.find(t => t.type === type);
+    if (token) {
+      const triggerChar = type === 'account' ? '@' : type === 'opportunity' ? '$' : '+';
+      setValue(prev => prev.replace(`${triggerChar}${token.name} `, '').replace(`${triggerChar}${token.name}`, '').trim());
+      setTokens(prev => prev.filter(t => t.type !== type));
+    }
+  }, [tokens]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (suggestions.length > 0) {
@@ -184,21 +208,20 @@ export function CommandBar({ accounts, opportunities, templates, onExecute, isLo
   const handleExecute = useCallback(() => {
     if (!value.trim() || isLoading) return;
 
-    const account = selectedEntities.find(e => e.type === 'account') || null;
-    const opportunity = selectedEntities.find(e => e.type === 'opportunity') || null;
-    const template = selectedEntities.find(e => e.type === 'template') || null;
+    const account = tokens.find(t => t.type === 'account') || null;
+    const opportunity = tokens.find(t => t.type === 'opportunity') || null;
+    const template = tokens.find(t => t.type === 'template') || null;
 
-    // Extract free text (remove entity tokens)
+    // Extract free text by removing all token references
     let freeText = value;
-    for (const entity of selectedEntities) {
-      const triggerChar = entity.type === 'account' ? '@' : entity.type === 'opportunity' ? '$' : '+';
-      freeText = freeText.replace(`${triggerChar}${entity.name}`, '').trim();
+    for (const token of tokens) {
+      const triggerChar = token.type === 'account' ? '@' : token.type === 'opportunity' ? '$' : '+';
+      freeText = freeText.replace(`${triggerChar}${token.name}`, '').trim();
     }
 
     onExecute({ rawText: value, account, opportunity, template, freeText });
-  }, [value, selectedEntities, onExecute, isLoading]);
+  }, [value, tokens, onExecute, isLoading]);
 
-  // Close dropdown on click outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -208,18 +231,6 @@ export function CommandBar({ accounts, opportunities, templates, onExecute, isLo
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
-
-  // Entity chips display
-  const entityChips = useMemo(() => selectedEntities.map(e => {
-    const Icon = TRIGGER_ICONS[e.type];
-    const color = TRIGGER_COLORS[e.type];
-    return (
-      <span key={e.type} className={cn('inline-flex items-center gap-1 text-xs font-medium', color)}>
-        <Icon className="h-3 w-3" />
-        {e.name}
-      </span>
-    );
-  }), [selectedEntities]);
 
   return (
     <div className="relative w-full">
@@ -261,15 +272,36 @@ export function CommandBar({ accounts, opportunities, templates, onExecute, isLo
         )}
       </div>
 
-      {/* Entity chips */}
-      {entityChips.length > 0 && (
-        <div className="flex items-center gap-3 mt-2 px-1">
-          {entityChips}
+      {/* Structured token chips — show linked entities with remove */}
+      {tokens.length > 0 && (
+        <div className="flex items-center gap-2 mt-2 px-1 flex-wrap">
+          {tokens.map(token => {
+            const Icon = TRIGGER_ICONS[token.type];
+            const color = TRIGGER_COLORS[token.type];
+            return (
+              <span
+                key={token.type}
+                className={cn(
+                  'inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-muted/80',
+                  color
+                )}
+              >
+                <Icon className="h-3 w-3" />
+                {token.name}
+                <button
+                  onClick={() => removeToken(token.type)}
+                  className="ml-0.5 hover:text-foreground transition-colors"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
 
       {/* Hint text */}
-      {!value && (
+      {!value && tokens.length === 0 && (
         <div className="flex items-center gap-4 mt-2.5 px-1">
           <span className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
             <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">+</kbd> template
@@ -293,7 +325,7 @@ export function CommandBar({ accounts, opportunities, templates, onExecute, isLo
           className="absolute z-50 w-full mt-1 rounded-xl border border-border bg-popover shadow-lg overflow-hidden"
         >
           {suggestions.map((s, i) => {
-            const Icon = TRIGGER_ICONS[s.type];
+            const Icon = s.is_create ? PlusCircle : TRIGGER_ICONS[s.type];
             const color = TRIGGER_COLORS[s.type];
             return (
               <button
@@ -306,11 +338,16 @@ export function CommandBar({ accounts, opportunities, templates, onExecute, isLo
               >
                 <Icon className={cn('h-4 w-4 shrink-0', color)} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">{s.name}</p>
-                  {s.subtitle && (
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {s.is_create ? `Create "${s.name}"` : s.name}
+                  </p>
+                  {s.subtitle && !s.is_create && (
                     <p className="text-xs text-muted-foreground truncate">{s.subtitle}</p>
                   )}
                 </div>
+                {s.is_pinned && (
+                  <span className="text-[10px] text-muted-foreground">📌</span>
+                )}
               </button>
             );
           })}
