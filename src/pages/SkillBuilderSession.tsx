@@ -45,6 +45,8 @@ import {
   type AudioDeliveryMode,
 } from '@/lib/daveAudioResilience';
 import { AudioDebugPanel } from '@/components/debug/AudioDebugPanel';
+import { AudioStressHarness } from '@/components/debug/AudioStressHarness';
+import { clearLifecycles } from '@/lib/playbackLifecycle';
 
 type SessionState = 'generating' | 'active' | 'completed' | 'error';
 
