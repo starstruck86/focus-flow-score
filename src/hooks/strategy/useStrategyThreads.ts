@@ -29,9 +29,9 @@ export function useStrategyThreads() {
 
   useEffect(() => { fetchThreads(); }, [fetchThreads]);
 
-  /** Legacy simple creation */
-  const createThread = useCallback(async (title?: string, lane?: string, threadType?: string) => {
-    if (!user) return;
+  /** Legacy simple creation — returns thread id or null */
+  const createThread = useCallback(async (title?: string, lane?: string, threadType?: string): Promise<string | null> => {
+    if (!user) return null;
     const { data, error } = await supabase
       .from('strategy_threads')
       .insert({
@@ -46,7 +46,9 @@ export function useStrategyThreads() {
       const thread = data as StrategyThread;
       setThreads(prev => [thread, ...prev]);
       setActiveThreadId(thread.id);
+      return thread.id;
     }
+    return null;
   }, [user]);
 
   /** Object-native thread creation */
