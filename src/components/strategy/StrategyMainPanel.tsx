@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { StrategyCommandCenter } from './StrategyCommandCenter';
 import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
 import { StrategyMessageBubble } from './StrategyMessageBubble';
@@ -176,24 +177,10 @@ export function StrategyMainPanel({
 
   if (!thread) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-background">
-        <div className="text-center max-w-xs space-y-4">
-          {sidebarCollapsed && (
-            <Button size="sm" variant="ghost" className="mb-2" onClick={onExpandSidebar}>
-              <PanelLeftOpen className="h-4 w-4 mr-1" /> Show Threads
-            </Button>
-          )}
-          <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-            <Sparkles className="h-7 w-7 text-primary" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-foreground">Strategy Command Center</p>
-            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-              Research accounts, evaluate messaging, build plans, and brainstorm strategy — all with intelligent context retrieval.
-            </p>
-          </div>
-        </div>
-      </div>
+      <StrategyCommandCenter
+        sidebarCollapsed={sidebarCollapsed}
+        onExpandSidebar={onExpandSidebar}
+      />
     );
   }
 
