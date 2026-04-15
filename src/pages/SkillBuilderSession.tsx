@@ -87,6 +87,10 @@ export default function SkillBuilderSession() {
   const [lastAudioError, setLastAudioError] = useState<string | null>(null);
   const [lastMicError, setLastMicError] = useState<string | null>(null);
   const { data: skillLevels } = useSkillLevels();
+  const [lastInterruptSource, setLastInterruptSource] = useState<string | null>(null);
+  const [lastStaleSuppression, setLastStaleSuppression] = useState<string | null>(null);
+  const [downgradeReason, setDowngradeReason] = useState<string | null>(null);
+  const [dedupeBlocked, setDedupeBlocked] = useState(0);
 
   // Stable session key — generated once, persists for entire lifecycle
   const stableSessionKey = useRef(`sb-${state?.skill ?? 'unknown'}-${Date.now()}`);
@@ -272,6 +276,10 @@ export default function SkillBuilderSession() {
     if (!recordedStepsRef.current.has(stepId)) {
       dave.recordTranscript('dave', text);
       recordedStepsRef.current.add(stepId);
+      emitStepTelemetry('step_rendered', stepId, { blockType: block.type, blockIndex: currentBlockIndex, transcript: 'recorded' });
+    } else {
+      setDedupeBlocked(prev => prev + 1);
+      emitStepTelemetry('step_rendered', stepId, { blockType: block.type, blockIndex: currentBlockIndex, transcript: 'dedupe_blocked' });
     }
 
     // Fire-and-forget: audio plays alongside visible text, never blocks flow
