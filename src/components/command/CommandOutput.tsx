@@ -201,7 +201,7 @@ export function CommandOutput({
       <div className="rounded-xl border border-border/10 bg-card/40 overflow-hidden">
 
         {/* Document header — quiet and informational */}
-        <div className="px-8 pt-6 pb-4">
+        <div className="px-5 sm:px-8 pt-5 pb-3 sm:pt-6 sm:pb-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h2 className="text-[18px] font-semibold text-foreground/85 tracking-tight leading-tight">{docTitle}</h2>
@@ -271,7 +271,7 @@ export function CommandOutput({
         </div>
 
         {/* Divider */}
-        <div className="mx-8 border-t border-border/8" />
+        <div className="mx-5 sm:mx-8 border-t border-border/8" />
 
         {/* Document body */}
         {isGenerating ? (
