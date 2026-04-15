@@ -516,13 +516,32 @@ serve(async (req) => {
       console.log(`[smoke-test] ${r.category}/${r.test}: ${r.passed ? "✅" : "❌"} provider=${r.provider || "n/a"} fallback=${r.fallback ?? "n/a"} latency=${r.latency_ms ?? "n/a"}ms`);
     }
 
-    return new Response(JSON.stringify({
+    const failedTests = results.filter(r => !r.passed).map(r => ({ test: r.test, error: r.error }));
+    const fullResult = {
       status, total_ms: totalMs,
       provider_health: HEALTH,
       infra_tests: infraResults,
       e2e_tests: e2eResults,
       summary: { infra_passed: infraPassed, infra_failed: infraFailed, e2e_passed: e2ePassed, e2e_failed: e2eFailed },
-    }, null, 2), {
+    };
+
+    // Persist to smoke_test_results
+    const { error: insertErr } = await supabase.from("smoke_test_results").insert({
+      user_id: userId,
+      status,
+      total_ms: totalMs,
+      provider_health: HEALTH,
+      infra_passed: infraPassed,
+      infra_failed: infraFailed,
+      e2e_passed: e2ePassed,
+      e2e_failed: e2eFailed,
+      failed_tests: failedTests,
+      full_result: fullResult,
+    });
+    if (insertErr) console.error("[smoke-test] failed to persist result:", insertErr.message);
+    else console.log("[smoke-test] result persisted to smoke_test_results");
+
+    return new Response(JSON.stringify(fullResult, null, 2), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
