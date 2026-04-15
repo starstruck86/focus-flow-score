@@ -66,7 +66,7 @@ export function StrategyThreadSidebar({
   }, [recent]);
 
   return (
-    <div className="w-72 border-r border-border flex flex-col bg-card shrink-0">
+    <div className="w-60 border-r border-border flex flex-col bg-card shrink-0">
       {/* Header */}
       <div className="p-3 border-b border-border flex items-center gap-2">
         <h2 className="text-sm font-semibold text-foreground flex-1">Strategy</h2>
