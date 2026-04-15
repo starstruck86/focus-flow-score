@@ -35,9 +35,15 @@ import { SkillTrainingModule } from '@/components/learn/SkillTrainingModule';
 import { SkillSessionDebugPanel } from '@/components/learn/SkillSessionDebugPanel';
 import { makeOpKey, runIdempotent, clearIdempotencyRecords } from '@/lib/daveIdempotency';
 import { monitorLifecycle, getResumeMessage } from '@/lib/daveLifecycleRecovery';
+import {
+  unlockAudio,
+  emitStepTelemetry,
+  clearAudioTelemetry,
+  evaluateModeDowngrade,
+  type AudioDeliveryMode,
+} from '@/lib/daveAudioResilience';
 
 type SessionState = 'generating' | 'active' | 'completed' | 'error';
-type DeliveryMode = 'visual' | 'audio';
 
 export default function SkillBuilderSession() {
   const navigate = useNavigate();
