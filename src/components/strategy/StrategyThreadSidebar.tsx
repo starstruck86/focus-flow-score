@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { STRATEGY_UI } from '@/lib/strategy-ui';
 import { cn } from '@/lib/utils';
 import type { StrategyThread } from '@/types/strategy';
 import { LANE_FILTERS } from '@/types/strategy';
@@ -66,37 +67,33 @@ export function StrategyThreadSidebar({
   }, [recent]);
 
   return (
-    <div className="w-60 border-r border-border flex flex-col bg-card shrink-0">
-      {/* Header */}
-      <div className="p-3 border-b border-border flex items-center gap-2">
+    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/50 flex flex-col shrink-0')}>
+      <div className="p-3.5 border-b border-border/50 flex items-center gap-2 bg-card/35">
         <h2 className="text-sm font-semibold text-foreground flex-1">Strategy</h2>
         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onCollapse}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
       </div>
 
-      {/* New Thread */}
-      <div className="p-2">
+      <div className="p-2.5 border-b border-border/20">
         <Button size="sm" className="w-full gap-1.5" onClick={onOpenCreateDialog}>
           <Plus className="h-3.5 w-3.5" /> New Thread
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="px-2 pb-2">
+      <div className="px-2.5 pb-2 pt-2">
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             placeholder="Search threads…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="h-8 pl-7 text-xs"
+            className="h-8 pl-7 text-xs bg-background/70 border-border/50"
           />
         </div>
       </div>
 
-      {/* Lane Filters */}
-      <div className="px-2 pb-2 flex flex-wrap gap-1">
+      <div className="px-2.5 pb-2 flex flex-wrap gap-1">
         {LANE_FILTERS.map(f => (
           <Badge
             key={f}
@@ -109,7 +106,6 @@ export function StrategyThreadSidebar({
         ))}
       </div>
 
-      {/* Thread Lists */}
       <ScrollArea className="flex-1">
         {isLoading ? (
           <p className="text-xs text-muted-foreground p-3">Loading…</p>
@@ -122,7 +118,6 @@ export function StrategyThreadSidebar({
           </div>
         ) : (
           <div className="pb-4">
-            {/* Pinned */}
             {pinned.length > 0 && (
               <div className="px-2 pt-2">
                 <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 px-1">Pinned</p>
@@ -130,7 +125,6 @@ export function StrategyThreadSidebar({
               </div>
             )}
 
-            {/* Grouped */}
             {(['account_linked', 'opportunity_linked', 'territory_linked', 'freeform'] as const).map(type => {
               const items = grouped[type];
               if (!items || items.length === 0) return null;
@@ -163,7 +157,7 @@ function ThreadRow({ thread, isActive, onClick }: { thread: StrategyThread; isAc
       onClick={onClick}
       className={cn(
         'w-full text-left px-2 py-1.5 rounded-md text-xs flex items-start gap-2 transition-colors',
-        isActive ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50 text-foreground',
+        isActive ? 'bg-accent/70 text-accent-foreground shadow-sm' : 'hover:bg-muted/45 text-foreground/80',
       )}
     >
       <Icon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
