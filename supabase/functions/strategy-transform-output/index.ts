@@ -7,6 +7,13 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Provider Health Check ──────────────────────────────────
+const PROVIDER_HEALTH = {
+  anthropic: !!Deno.env.get("ANTHROPIC_API_KEY"),
+  lovableGateway: !!Deno.env.get("LOVABLE_API_KEY"),
+};
+console.log(`[provider-health:artifact] Anthropic: ${PROVIDER_HEALTH.anthropic ? "ENABLED" : "DISABLED"} | Lovable Gateway (OpenAI fallback): ${PROVIDER_HEALTH.lovableGateway ? "ENABLED" : "DISABLED"}`);
+
 // ── Provider Adapters (artifact-specific) ──────────────────
 // Primary: Claude (Anthropic) — the artifact engine
 // Fallback: OpenAI (ChatGPT via Lovable gateway)

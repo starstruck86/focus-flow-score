@@ -186,6 +186,16 @@ const ADAPTERS: Record<ProviderKey, AdapterFn> = {
 };
 
 // ═══════════════════════════════════════════════════════════
+// PROVIDER HEALTH CHECK — logged on every cold start
+// ═══════════════════════════════════════════════════════════
+const PROVIDER_HEALTH = {
+  anthropic: !!Deno.env.get("ANTHROPIC_API_KEY"),
+  lovableGateway: !!Deno.env.get("LOVABLE_API_KEY"),
+  perplexity: !!Deno.env.get("PERPLEXITY_API_KEY"),
+};
+console.log(`[provider-health] Anthropic: ${PROVIDER_HEALTH.anthropic ? "ENABLED" : "DISABLED"} | Lovable Gateway (OpenAI): ${PROVIDER_HEALTH.lovableGateway ? "ENABLED" : "DISABLED"} | Perplexity: ${PROVIDER_HEALTH.perplexity ? "ENABLED" : "DISABLED"}`);
+
+// ═══════════════════════════════════════════════════════════
 // LAYER 2 — ROUTER
 // ═══════════════════════════════════════════════════════════
 type TaskType = "chat_general" | "deep_research" | "email_evaluation" | "territory_tiering" | "account_plan" | "opportunity_strategy" | "brainstorm" | "rollup";
@@ -237,6 +247,18 @@ function resolveLLMRoute(taskType: string): LLMRoute {
     route.fallbackProvider = "openai";
     route.model = "openai/gpt-5-mini";
     route.fallbackModel = "openai/gpt-5";
+  }
+
+  // ── RUNTIME KEY GUARD: disable providers whose keys are missing ──
+  if (route.primaryProvider === "perplexity" && !PROVIDER_HEALTH.perplexity) {
+    console.warn(`[routing] Perplexity key missing — downgrading deep_research to OpenAI`);
+    route.primaryProvider = "openai";
+    route.model = "openai/gpt-5-mini";
+  }
+  if (route.primaryProvider === "anthropic" && !PROVIDER_HEALTH.anthropic) {
+    console.warn(`[routing] Anthropic key missing — downgrading to OpenAI`);
+    route.primaryProvider = "openai";
+    route.model = "openai/gpt-5-mini";
   }
 
   return route;
