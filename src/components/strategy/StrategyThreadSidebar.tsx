@@ -69,10 +69,10 @@ export function StrategyThreadSidebar({
   return (
     <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/50 flex flex-col shrink-0 h-full')}>
       {/* Header */}
-      <div className="px-3 py-2 border-b border-border/40 flex items-center gap-2">
-        <h2 className="text-xs font-semibold text-foreground/80 uppercase tracking-wider flex-1">Threads</h2>
-        <Button size="icon" variant="ghost" className="h-6 w-6 text-foreground/40" onClick={onCollapse}>
-          <ChevronLeft className="h-3.5 w-3.5" />
+      <div className="px-3 py-1.5 border-b border-border/30 flex items-center gap-2">
+        <h2 className="text-[11px] font-medium text-foreground/50 tracking-wide flex-1">Threads</h2>
+        <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/30" onClick={onCollapse}>
+          <ChevronLeft className="h-3 w-3" />
         </Button>
       </div>
 
@@ -97,16 +97,20 @@ export function StrategyThreadSidebar({
       </div>
 
       {/* Lane Filters */}
-      <div className="px-2.5 pb-2 flex flex-wrap gap-1">
+      <div className="px-2.5 pb-1.5 flex flex-wrap gap-0.5">
         {LANE_FILTERS.map(f => (
-          <Badge
+          <button
             key={f}
-            variant={laneFilter === f ? 'default' : 'outline'}
-            className="cursor-pointer text-[10px] px-1.5 py-0"
+            className={cn(
+              'text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors capitalize',
+              laneFilter === f
+                ? 'bg-primary/10 text-primary'
+                : 'text-foreground/30 hover:text-foreground/50 hover:bg-muted/30'
+            )}
             onClick={() => onLaneFilterChange(f)}
           >
             {f === 'all' ? 'All' : f.replace('_', ' ')}
-          </Badge>
+          </button>
         ))}
       </div>
 

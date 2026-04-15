@@ -219,69 +219,69 @@ export function StrategyMainPanel({
       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect}
         accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.json,.xml,.html" />
 
-      {/* ── HEADER — seamless control surface ── */}
-      <div className="shrink-0 px-3 py-1 flex items-center gap-2 flex-wrap">
+      {/* ── UNIFIED HEADER ── */}
+      <div className="shrink-0 px-3 py-1 flex items-center gap-1.5">
         {sidebarCollapsed && (
-          <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={onExpandSidebar}>
-            <PanelLeftOpen className="h-3.5 w-3.5" />
+          <Button size="icon" variant="ghost" className="h-5 w-5 shrink-0 text-foreground/30" onClick={onExpandSidebar}>
+            <PanelLeftOpen className="h-3 w-3" />
           </Button>
         )}
-        <ThreadIcon className="h-3 w-3 text-primary/40 shrink-0" />
-        <h1 className="text-xs font-semibold text-foreground truncate flex-1 min-w-0">{thread.title}</h1>
+        <ThreadIcon className="h-2.5 w-2.5 text-primary/30 shrink-0" />
+        <h1 className="text-[11px] font-semibold text-foreground/80 truncate min-w-0">{thread.title}</h1>
 
+        {/* Running status — inline with title */}
         {activeWorkflow && (
-          <span className="text-[9px] text-primary/60 font-medium shrink-0 flex items-center gap-1">
-            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+          <span className="text-[8px] text-primary/50 font-medium shrink-0 flex items-center gap-0.5 ml-0.5">
+            <Loader2 className="h-2 w-2 animate-spin" />
             {activeWorkflowLabel}
           </span>
         )}
         {isUploading && (
-          <span className="text-[9px] text-muted-foreground font-medium shrink-0 flex items-center gap-1 animate-pulse">
-            <Loader2 className="h-2.5 w-2.5 animate-spin" /> Uploading
+          <span className="text-[8px] text-muted-foreground/50 shrink-0 flex items-center gap-0.5 animate-pulse">
+            <Loader2 className="h-2 w-2 animate-spin" /> Uploading
           </span>
         )}
 
-        {/* Inline workflow actions */}
-        <div className="flex items-center gap-0.5 shrink-0">
+        <div className="flex-1" />
+
+        {/* Workflow actions — part of header, not separate row */}
+        <div className="flex items-center gap-px shrink-0">
           {visibleWorkflows.map(w => {
             const isRunning = activeWorkflow === w.key;
             return (
               <button
                 key={w.key}
                 className={cn(
-                  'h-5 text-[9px] px-1.5 shrink-0 rounded font-medium transition-all flex items-center gap-0.5',
-                  'hover:bg-muted/40',
-                  isRunning ? 'text-primary bg-primary/5' : 'text-foreground/30 hover:text-foreground/50',
-                  (isSending || !!activeWorkflow) && !isRunning && 'opacity-40 pointer-events-none'
+                  'h-5 px-1 shrink-0 rounded transition-all flex items-center gap-0.5',
+                  'hover:bg-muted/30',
+                  isRunning ? 'text-primary' : 'text-foreground/20 hover:text-foreground/40',
+                  (isSending || !!activeWorkflow) && !isRunning && 'opacity-30 pointer-events-none'
                 )}
                 onClick={() => handleWorkflow(w.key)}
                 title={w.description}
                 disabled={isSending || !!activeWorkflow}
               >
                 {isRunning ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <w.icon className="h-2.5 w-2.5" />}
-                <span className="hidden sm:inline">{w.label}</span>
               </button>
             );
           })}
           {overflowWorkflows.length > 0 && (
             <button
-              className="h-5 px-1.5 text-[9px] font-medium rounded transition-all shrink-0 flex items-center gap-1 text-foreground/30 hover:text-foreground/50 hover:bg-muted/40"
+              className="h-5 px-1.5 text-[9px] font-medium rounded transition-all shrink-0 flex items-center gap-1 text-foreground/25 hover:text-foreground/40 hover:bg-muted/30"
               onClick={() => setWorkflowSheetOpen(true)}
             >
               <Zap className="h-2.5 w-2.5" />
-              <span className="bg-foreground/8 rounded px-1 py-px text-[8px]">+{overflowWorkflows.length}</span>
+              <span className="text-[8px] opacity-60">+{overflowWorkflows.length}</span>
             </button>
           )}
         </div>
 
         {!isMobile && !rightRailCollapsed && (
-          <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/20 shrink-0" onClick={onToggleRightRail}>
-            <PanelRightOpen className="h-3 w-3" />
+          <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/15 shrink-0" onClick={onToggleRightRail}>
+            <PanelRightOpen className="h-2.5 w-2.5" />
           </Button>
         )}
       </div>
-
-      {/* ── HEADER — unified control surface ── — ends above */}
 
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
@@ -360,9 +360,9 @@ export function StrategyMainPanel({
         </div>
       )}
 
-      {/* ── COMPOSER — native to canvas ── */}
-      <div className="shrink-0 px-3 pt-0.5 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))]">
-        <div className="rounded-lg border border-border/30 bg-card/60 overflow-hidden">
+      {/* ── COMPOSER — continuous with canvas ── */}
+      <div className="shrink-0 px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))]">
+        <div className="rounded-lg border border-border/20 bg-muted/20 overflow-hidden">
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
