@@ -12,6 +12,7 @@ import { useStrategyThreads } from '@/hooks/strategy/useStrategyThreads';
 import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
 import { useStrategyMemory } from '@/hooks/strategy/useStrategyMemory';
 import { useStrategyOutputs } from '@/hooks/strategy/useStrategyOutputs';
+import { useStrategyArtifacts } from '@/hooks/strategy/useStrategyArtifacts';
 import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
 import { useStrategyRollups } from '@/hooks/strategy/useStrategyRollups';
 import { SHELL } from '@/lib/layout';
@@ -40,12 +41,14 @@ export default function Strategy() {
   const { memories, saveMemory } = useStrategyMemory(memoryObjectType, memoryObjectId);
   const { uploads } = useStrategyUploads(activeThread?.id ?? null);
   const { outputs, refetch: refetchOutputs } = useStrategyOutputs(activeThread?.id ?? null);
+  const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
   const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
 
   const handleWorkflowComplete = useCallback(() => {
     refetchOutputs();
     refetchRollup();
-  }, [refetchOutputs, refetchRollup]);
+    refetchArtifacts();
+  }, [refetchOutputs, refetchRollup, refetchArtifacts]);
 
   const handleCreateThreadWithOpts = useCallback((opts: CreateThreadOpts) => {
     createThreadWithOpts(opts);
@@ -54,6 +57,14 @@ export default function Strategy() {
   const handleBranchThread = useCallback((title: string, content: string) => {
     createThread(title, 'strategy', 'freeform');
   }, [createThread]);
+
+  const handleTransformOutput = useCallback(async (sourceOutputId: string, targetArtifactType: string) => {
+    const artifact = await transformOutput(sourceOutputId, targetArtifactType);
+    if (artifact) {
+      // Refresh messages to show the artifact card in thread
+      handleWorkflowComplete();
+    }
+  }, [transformOutput, handleWorkflowComplete]);
 
   return (
     <div
@@ -84,6 +95,8 @@ export default function Strategy() {
         onSaveMemory={memoryObjectType ? (type, content) => saveMemory(type, content) : undefined}
         onWorkflowComplete={handleWorkflowComplete}
         onBranchThread={handleBranchThread}
+        onTransformOutput={handleTransformOutput}
+        isTransforming={isTransforming}
       />
 
       {!rightRailCollapsed && activeThread && (
@@ -94,11 +107,13 @@ export default function Strategy() {
           memories={memories}
           uploads={uploads}
           outputs={outputs}
+          artifacts={artifacts}
           onSaveMemory={saveMemory}
           rollup={rollup}
           memorySuggestions={memorySuggestions}
           isRollupLoading={isRollupLoading}
           onTriggerRollup={triggerRollup}
+          onRegenerateArtifact={regenerateArtifact}
         />
       )}
 

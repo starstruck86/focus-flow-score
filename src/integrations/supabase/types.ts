@@ -5793,6 +5793,100 @@ export type Database = {
         }
         Relationships: []
       }
+      strategy_artifacts: {
+        Row: {
+          artifact_type: string
+          content_json: Json
+          created_at: string
+          id: string
+          linked_account_id: string | null
+          linked_opportunity_id: string | null
+          parent_artifact_id: string | null
+          rendered_text: string | null
+          source_output_id: string | null
+          thread_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          artifact_type?: string
+          content_json?: Json
+          created_at?: string
+          id?: string
+          linked_account_id?: string | null
+          linked_opportunity_id?: string | null
+          parent_artifact_id?: string | null
+          rendered_text?: string | null
+          source_output_id?: string | null
+          thread_id?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          artifact_type?: string
+          content_json?: Json
+          created_at?: string
+          id?: string
+          linked_account_id?: string | null
+          linked_opportunity_id?: string | null
+          parent_artifact_id?: string | null
+          rendered_text?: string | null
+          source_output_id?: string | null
+          thread_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_artifacts_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_artifacts_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_artifacts_linked_opportunity_id_fkey"
+            columns: ["linked_opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_artifacts_parent_artifact_id_fkey"
+            columns: ["parent_artifact_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_artifacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_artifacts_source_output_id_fkey"
+            columns: ["source_output_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_outputs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_artifacts_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       strategy_messages: {
         Row: {
           citations_json: Json | null

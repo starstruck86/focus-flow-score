@@ -821,22 +821,7 @@ You MUST call the provided tool function with your structured result.`;
   else if (pack.opportunity) outputTitle = `${pack.opportunity.name} — ${outputTitle}`;
   outputTitle += ` — ${new Date().toLocaleDateString()}`;
 
-  // Save result message with structured data
-  const { data: resultMsg } = await supabase.from("strategy_messages").insert({
-    thread_id: threadId, user_id: userId, role: "assistant",
-    message_type: "workflow_result",
-    content_json: {
-      text: renderedText,
-      structured: structuredData,
-      workflowType,
-      runId: run.id,
-      sources_used: pack.sourceCount,
-      retrieval_meta: pack.retrievalMeta,
-      model_used: route.model,
-    },
-  }).select().single();
-
-  // Create durable output
+  // Create durable output first so we have its ID
   const { data: output } = await supabase.from("strategy_outputs").insert({
     user_id: userId, thread_id: threadId, workflow_run_id: run.id,
     output_type: workflowTypeToOutputType(workflowType),
@@ -846,6 +831,24 @@ You MUST call the provided tool function with your structured result.`;
     linked_account_id: pack.account?.id || null,
     linked_opportunity_id: pack.opportunity?.id || null,
   }).select().single();
+
+  // Save result message with structured data + outputId for artifact linking
+  const { data: resultMsg } = await supabase.from("strategy_messages").insert({
+    thread_id: threadId, user_id: userId, role: "assistant",
+    message_type: "workflow_result",
+    content_json: {
+      text: renderedText,
+      structured: structuredData,
+      workflowType,
+      runId: run.id,
+      outputId: output?.id || null,
+      sources_used: pack.sourceCount,
+      retrieval_meta: pack.retrievalMeta,
+      model_used: route.model,
+    },
+  }).select().single();
+
+  // (output already created above)
 
   // Update thread summary
   await supabase.from("strategy_threads").update({

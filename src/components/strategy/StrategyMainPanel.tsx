@@ -40,6 +40,8 @@ interface Props {
   onSaveMemory?: (type: string, content: string) => void;
   onWorkflowComplete?: () => void;
   onBranchThread?: (title: string, content: string) => void;
+  onTransformOutput?: (sourceOutputId: string, targetArtifactType: string) => void;
+  isTransforming?: boolean;
 }
 
 function getSuggestedPrompts(thread: StrategyThread | null, linkedContext?: any) {
@@ -89,6 +91,7 @@ export function StrategyMainPanel({
   thread, onUpdateThread, sidebarCollapsed, onExpandSidebar,
   rightRailCollapsed, onToggleRightRail, linkedContext,
   onSaveMemory, onWorkflowComplete, onBranchThread,
+  onTransformOutput, isTransforming,
 }: Props) {
   const { messages, sendMessage, runWorkflow, isLoading, isSending } = useStrategyMessages(thread?.id ?? null);
   const { uploads, uploadFiles, isUploading } = useStrategyUploads(thread?.id ?? null);
@@ -156,13 +159,9 @@ export function StrategyMainPanel({
     onSaveMemory?.(type, content);
   }, [onSaveMemory]);
 
-  const handleTransformOutput = useCallback((workflowType: string, structured: any, action: string) => {
-    toast.success(`Transforming to ${action.replace(/_/g, ' ')}…`);
-    const summary = structured?.summary || structured?.executive_summary || structured?.deal_summary || '';
-    if (onBranchThread) {
-      onBranchThread(`${action.replace(/_/g, ' ')} — from ${workflowType.replace(/_/g, ' ')}`, summary);
-    }
-  }, [onBranchThread]);
+  const handleTransformOutput = useCallback((sourceOutputId: string, targetArtifactType: string) => {
+    onTransformOutput?.(sourceOutputId, targetArtifactType);
+  }, [onTransformOutput]);
 
   const handleBranchThread = useCallback((workflowType: string, structured: any) => {
     const summary = structured?.summary || structured?.executive_summary || '';
@@ -367,6 +366,7 @@ export function StrategyMainPanel({
                 onSaveAsMemory={onSaveMemory ? handleSaveFromMessage : undefined}
                 onTransformOutput={handleTransformOutput}
                 onBranchThread={handleBranchThread}
+                isTransforming={isTransforming}
               />
             ))}
             {isSending && !activeWorkflow && (
