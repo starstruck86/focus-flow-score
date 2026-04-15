@@ -76,7 +76,9 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          is_irrelevant: boolean
           is_pinned: boolean
+          last_used_at: string | null
           memory_type: string
           source_message_id: string | null
           source_thread_id: string | null
@@ -89,7 +91,9 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          is_irrelevant?: boolean
           is_pinned?: boolean
+          last_used_at?: string | null
           memory_type?: string
           source_message_id?: string | null
           source_thread_id?: string | null
@@ -102,7 +106,9 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          is_irrelevant?: boolean
           is_pinned?: boolean
+          last_used_at?: string | null
           memory_type?: string
           source_message_id?: string | null
           source_thread_id?: string | null
@@ -3701,7 +3707,9 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          is_irrelevant: boolean
           is_pinned: boolean
+          last_used_at: string | null
           memory_type: string
           opportunity_id: string
           source_message_id: string | null
@@ -3714,7 +3722,9 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          is_irrelevant?: boolean
           is_pinned?: boolean
+          last_used_at?: string | null
           memory_type?: string
           opportunity_id: string
           source_message_id?: string | null
@@ -3727,7 +3737,9 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          is_irrelevant?: boolean
           is_pinned?: boolean
+          last_used_at?: string | null
           memory_type?: string
           opportunity_id?: string
           source_message_id?: string | null
@@ -5793,20 +5805,58 @@ export type Database = {
         }
         Relationships: []
       }
+      strategy_artifact_feedback: {
+        Row: {
+          artifact_id: string
+          created_at: string
+          feedback_text: string | null
+          id: string
+          rating: number
+          user_id: string
+        }
+        Insert: {
+          artifact_id: string
+          created_at?: string
+          feedback_text?: string | null
+          id?: string
+          rating: number
+          user_id: string
+        }
+        Update: {
+          artifact_id?: string
+          created_at?: string
+          feedback_text?: string | null
+          id?: string
+          rating?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_artifact_feedback_artifact_id_fkey"
+            columns: ["artifact_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_artifacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       strategy_artifacts: {
         Row: {
           artifact_type: string
           content_json: Json
           created_at: string
           id: string
+          last_used_at: string | null
           linked_account_id: string | null
           linked_opportunity_id: string | null
           parent_artifact_id: string | null
           rendered_text: string | null
+          source_chain: string[] | null
           source_output_id: string | null
           thread_id: string | null
           title: string
           updated_at: string
+          usage_count: number
           user_id: string
           version: number
         }
@@ -5815,14 +5865,17 @@ export type Database = {
           content_json?: Json
           created_at?: string
           id?: string
+          last_used_at?: string | null
           linked_account_id?: string | null
           linked_opportunity_id?: string | null
           parent_artifact_id?: string | null
           rendered_text?: string | null
+          source_chain?: string[] | null
           source_output_id?: string | null
           thread_id?: string | null
           title: string
           updated_at?: string
+          usage_count?: number
           user_id: string
           version?: number
         }
@@ -5831,14 +5884,17 @@ export type Database = {
           content_json?: Json
           created_at?: string
           id?: string
+          last_used_at?: string | null
           linked_account_id?: string | null
           linked_opportunity_id?: string | null
           parent_artifact_id?: string | null
           rendered_text?: string | null
+          source_chain?: string[] | null
           source_output_id?: string | null
           thread_id?: string | null
           title?: string
           updated_at?: string
+          usage_count?: number
           user_id?: string
           version?: number
         }
@@ -6553,7 +6609,9 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          is_irrelevant: boolean
           is_pinned: boolean
+          last_used_at: string | null
           memory_type: string
           source_message_id: string | null
           source_thread_id: string | null
@@ -6566,7 +6624,9 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          is_irrelevant?: boolean
           is_pinned?: boolean
+          last_used_at?: string | null
           memory_type?: string
           source_message_id?: string | null
           source_thread_id?: string | null
@@ -6579,7 +6639,9 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          is_irrelevant?: boolean
           is_pinned?: boolean
+          last_used_at?: string | null
           memory_type?: string
           source_message_id?: string | null
           source_thread_id?: string | null
