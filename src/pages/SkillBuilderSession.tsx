@@ -45,6 +45,8 @@ import {
   type AudioDeliveryMode,
 } from '@/lib/daveAudioResilience';
 import { AudioDebugPanel } from '@/components/debug/AudioDebugPanel';
+import { AudioStressHarness } from '@/components/debug/AudioStressHarness';
+import { clearLifecycles } from '@/lib/playbackLifecycle';
 
 type SessionState = 'generating' | 'active' | 'completed' | 'error';
 
@@ -87,6 +89,10 @@ export default function SkillBuilderSession() {
   const [lastAudioError, setLastAudioError] = useState<string | null>(null);
   const [lastMicError, setLastMicError] = useState<string | null>(null);
   const { data: skillLevels } = useSkillLevels();
+  const [lastInterruptSource, setLastInterruptSource] = useState<string | null>(null);
+  const [lastStaleSuppression, setLastStaleSuppression] = useState<string | null>(null);
+  const [downgradeReason, setDowngradeReason] = useState<string | null>(null);
+  const [dedupeBlocked, setDedupeBlocked] = useState(0);
 
   // Stable session key — generated once, persists for entire lifecycle
   const stableSessionKey = useRef(`sb-${state?.skill ?? 'unknown'}-${Date.now()}`);
@@ -223,6 +229,7 @@ export default function SkillBuilderSession() {
     clearIdempotencyRecords();
     clearAudioTelemetry();
     clearActivePlayback();
+    clearLifecycles();
 
     if (!sessionId) return;
 
@@ -266,12 +273,15 @@ export default function SkillBuilderSession() {
 
     // Canonical step ID: sessionId + blockIndex + blockType
     const stepId = makeStepId(sessionId, currentBlockIndex, block.type);
-    emitStepTelemetry('step_rendered', stepId, { blockType: block.type, blockIndex: currentBlockIndex });
 
     // Prevent double transcript entries using canonical step ID
     if (!recordedStepsRef.current.has(stepId)) {
       dave.recordTranscript('dave', text);
       recordedStepsRef.current.add(stepId);
+      emitStepTelemetry('step_rendered', stepId, { blockType: block.type, blockIndex: currentBlockIndex, transcript: 'recorded' });
+    } else {
+      setDedupeBlocked(prev => prev + 1);
+      emitStepTelemetry('step_rendered', stepId, { blockType: block.type, blockIndex: currentBlockIndex, transcript: 'dedupe_blocked' });
     }
 
     // Fire-and-forget: audio plays alongside visible text, never blocks flow
@@ -286,6 +296,7 @@ export default function SkillBuilderSession() {
         const downgraded = evaluateModeDowngrade(deliveryMode, next);
         if (downgraded !== deliveryMode) {
           setDeliveryMode(downgraded);
+          setDowngradeReason(`${next} failures: ${deliveryMode} → ${downgraded}`);
           toast.info(
             downgraded === 'text'
               ? 'Audio unavailable — switched to text mode'
@@ -297,6 +308,22 @@ export default function SkillBuilderSession() {
       emitStepTelemetry('audio_failed', stepId, { error: errMsg });
     });
   }, [currentBlockIndex, deliveryMode, sessionState]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Browser visibility guard: pause audio when page hidden ──
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (deliveryMode !== 'text') {
+          dave.stopSpeaking();
+          emitStepTelemetry('audio_interrupt', 'visibility', { reason: 'page_hidden' });
+        }
+      } else {
+        emitStepTelemetry('step_rendered', 'visibility', { reason: 'page_visible', mode: deliveryMode });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [deliveryMode, dave]);
 
   const toggleMode = useCallback(async () => {
     if (deliveryMode === 'text') {
@@ -521,6 +548,29 @@ export default function SkillBuilderSession() {
           micStatus={audioUnavailable ? 'unavailable' : deliveryMode === 'full' ? 'ready' : 'off'}
           lastAudioError={lastAudioError}
           lastMicError={lastMicError}
+          lastInterruptSource={lastInterruptSource}
+          lastStaleSuppression={lastStaleSuppression}
+          downgradeReason={downgradeReason}
+          dedupeBlocked={dedupeBlocked}
+          voiceDiagnostics={dave.getDiagnostics?.() ?? null}
+        />
+
+        {/* Stress harness — only visible with ?debug=audio */}
+        <AudioStressHarness
+          currentMode={deliveryMode}
+          failureCount={audioFailures}
+          onForceInterrupt={() => {
+            dave.stopSpeaking();
+            setLastInterruptSource('stress-harness');
+          }}
+          onForceFailure={() => {
+            setAudioFailures(prev => prev + 1);
+            setLastAudioError('Forced failure (stress test)');
+          }}
+          onForceDowngrade={(mode) => {
+            setDeliveryMode(mode);
+            setDowngradeReason('Forced via stress harness');
+          }}
         />
       </div>
     </Layout>

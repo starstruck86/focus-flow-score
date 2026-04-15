@@ -110,6 +110,9 @@ export interface UseDaveVoiceController {
   // ── Lifecycle ──────────────────────────────────────
   wasBackgrounded: boolean;
   resumeMessage: string | null;
+
+  // ── Diagnostics ───────────────────────────────────
+  getDiagnostics: (() => import('@/hooks/useVoiceMode').VoiceModeDiagnostics) | null;
 }
 
 // ── Hook ────────────────────────────────────────────────────
@@ -309,5 +312,8 @@ export function useDaveVoiceController(config: DaveVoiceControllerConfig): UseDa
     // Lifecycle
     wasBackgrounded,
     resumeMessage,
+
+    // Diagnostics
+    getDiagnostics: voice.getDiagnostics,
   };
 }
