@@ -119,6 +119,82 @@ const proseClasses = cn(
   'prose-code:text-primary/60 prose-code:bg-primary/[0.04] prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
 );
 
+/* ── Props ── */
+
+interface Props {
+  output: string;
+  blocks: OutputBlock[];
+  subjectLine?: string;
+  sources: string[];
+  kiCount: number;
+  templateName?: string;
+  accountName?: string;
+  opportunityName?: string;
+  outputType?: string;
+  playbookUsed?: string;
+  isGenerating: boolean;
+  onRegenerate: () => void;
+  onSaveAsTemplate: (name: string) => void;
+  onPromoteToTemplate?: () => void;
+}
+
+export function CommandOutput({
+  output, blocks, subjectLine, sources, kiCount, templateName,
+  accountName, opportunityName, playbookUsed,
+  isGenerating, onRegenerate, onSaveAsTemplate, onPromoteToTemplate,
+}: Props) {
+  const [viewMode, setViewMode] = useState<'clean' | 'edit'>('clean');
+  const [editedOutput, setEditedOutput] = useState(output);
+  const [copied, setCopied] = useState(false);
+  const [copiedBlock, setCopiedBlock] = useState<string | null>(null);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showPromoteDialog, setShowPromoteDialog] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [promoteName, setPromoteName] = useState('');
+  const [showSources, setShowSources] = useState(false);
+
+  if (output !== editedOutput && viewMode !== 'edit') {
+    setEditedOutput(output);
+  }
+
+  const displayOutput = viewMode === 'edit' ? editedOutput : output;
+  const docTitle = templateName ? (OUTPUT_TITLES[templateName] || templateName) : 'Strategy Output';
+  const generatedAt = useMemo(() => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), [output]);
+
+  const handleCopy = useCallback(() => {
+    const text = subjectLine ? `Subject: ${subjectLine}\n\n${displayOutput}` : displayOutput;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    toast.success('Copied to clipboard');
+    setTimeout(() => setCopied(false), 2000);
+  }, [displayOutput, subjectLine]);
+
+  const handleCopyBlock = useCallback((heading: string, content: string) => {
+    navigator.clipboard.writeText(heading ? `${heading}\n\n${content}` : content);
+    setCopiedBlock(heading);
+    toast.success(`Copied "${heading}"`);
+    setTimeout(() => setCopiedBlock(null), 2000);
+  }, []);
+
+  const handleSave = useCallback(() => {
+    if (!saveName.trim()) return;
+    onSaveAsTemplate(saveName.trim());
+    setShowSaveDialog(false);
+    setSaveName('');
+  }, [saveName, onSaveAsTemplate]);
+
+  const handlePromote = useCallback(() => {
+    if (!promoteName.trim()) return;
+    onSaveAsTemplate(promoteName.trim());
+    setShowPromoteDialog(false);
+    setPromoteName('');
+    toast.success(`Framework "${promoteName.trim()}" saved — use it from +template`);
+  }, [promoteName, onSaveAsTemplate]);
+
+  if (!output && !isGenerating) return null;
+
+  const hasBlocks = blocks.length > 1;
+
   return (
     <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
       {/* Document canvas — minimal chrome, maximum readability */}
