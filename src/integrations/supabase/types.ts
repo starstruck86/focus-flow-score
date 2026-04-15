@@ -5682,6 +5682,51 @@ export type Database = {
         }
         Relationships: []
       }
+      smoke_test_results: {
+        Row: {
+          created_at: string
+          e2e_failed: number | null
+          e2e_passed: number | null
+          failed_tests: Json | null
+          full_result: Json | null
+          id: string
+          infra_failed: number | null
+          infra_passed: number | null
+          provider_health: Json | null
+          status: string
+          total_ms: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          e2e_failed?: number | null
+          e2e_passed?: number | null
+          failed_tests?: Json | null
+          full_result?: Json | null
+          id?: string
+          infra_failed?: number | null
+          infra_passed?: number | null
+          provider_health?: Json | null
+          status?: string
+          total_ms?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          e2e_failed?: number | null
+          e2e_passed?: number | null
+          failed_tests?: Json | null
+          full_result?: Json | null
+          id?: string
+          infra_failed?: number | null
+          infra_passed?: number | null
+          provider_health?: Json | null
+          status?: string
+          total_ms?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       source_registry: {
         Row: {
           created_at: string
