@@ -15,6 +15,23 @@ export interface StrategyMemoryEntry {
 
 type MemoryTable = 'account_strategy_memory' | 'opportunity_strategy_memory' | 'territory_strategy_memory';
 
+/** Normalize text for dedup comparison */
+function normalize(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Check if two strings are near-duplicates via substring containment */
+function isNearDuplicate(a: string, b: string): boolean {
+  const na = normalize(a);
+  const nb = normalize(b);
+  if (na === nb) return true;
+  // Substring containment (one fully contains the other)
+  if (na.length > 20 && nb.length > 20) {
+    if (na.includes(nb) || nb.includes(na)) return true;
+  }
+  return false;
+}
+
 export function useStrategyMemory(
   objectType: 'account' | 'opportunity' | 'territory' | null,
   objectId: string | null,
@@ -61,6 +78,15 @@ export function useStrategyMemory(
       return;
     }
 
+    // ── Dedup check against local state ──
+    const duplicate = memories.find(m => isNearDuplicate(m.content, content));
+    if (duplicate) {
+      toast('Similar insight already exists', {
+        description: duplicate.content.slice(0, 80) + (duplicate.content.length > 80 ? '…' : ''),
+      });
+      return;
+    }
+
     // Use specific table inserts to satisfy type checker
     let result: any;
     if (objectType === 'account') {
@@ -99,7 +125,28 @@ export function useStrategyMemory(
       setMemories(prev => [result as StrategyMemoryEntry, ...prev]);
       toast.success('Insight saved');
     }
-  }, [objectType, objectId, user]);
+  }, [objectType, objectId, user, memories]);
 
-  return { memories, saveMemory, refetch: fetchMemories };
+  const deleteMemory = useCallback(async (memoryId: string) => {
+    if (!objectType || !user) return;
+
+    let error: any = null;
+    if (objectType === 'account') {
+      ({ error } = await supabase.from('account_strategy_memory').delete().eq('id', memoryId).eq('user_id', user.id));
+    } else if (objectType === 'opportunity') {
+      ({ error } = await supabase.from('opportunity_strategy_memory').delete().eq('id', memoryId).eq('user_id', user.id));
+    } else if (objectType === 'territory') {
+      ({ error } = await supabase.from('territory_strategy_memory').delete().eq('id', memoryId).eq('user_id', user.id));
+    }
+
+    if (error) {
+      toast.error('Failed to remove memory');
+      return;
+    }
+
+    setMemories(prev => prev.filter(m => m.id !== memoryId));
+    toast.success('Memory removed');
+  }, [objectType, user]);
+
+  return { memories, saveMemory, deleteMemory, refetch: fetchMemories };
 }

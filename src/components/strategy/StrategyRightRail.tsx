@@ -4,6 +4,7 @@ import {
   Pin, Copy, Save, Plus, RefreshCw, Loader2, Sparkles,
   Upload, BarChart3, Building2, Target, Globe, Cpu, Tag,
   AlertTriangle, CheckCircle2, Clock, Eye, Mail, ArrowRight,
+  Trash2, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -34,12 +35,14 @@ interface Props {
   outputs: StrategyOutput[];
   artifacts: StrategyArtifact[];
   onSaveMemory: (type: string, content: string) => void;
+  onDeleteMemory?: (memoryId: string) => void;
   rollup: StrategyRollup | null;
   memorySuggestions: MemorySuggestion[];
   isRollupLoading: boolean;
   onTriggerRollup: () => void;
   onRegenerateArtifact?: (artifactId: string, artifactType: string, refineInstructions?: string) => Promise<StrategyArtifact | null>;
   isTransforming?: boolean;
+  onReprocessUpload?: (uploadId: string) => void;
 }
 
 const MEMORY_TYPES = [
@@ -93,14 +96,15 @@ function RailSection({ title, icon: Icon, children, empty, count, action }: {
 
 export function StrategyRightRail({
   thread, onCollapse, linkedContext, memories, uploads, outputs, artifacts,
-  onSaveMemory, rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
-  onRegenerateArtifact, isTransforming,
+  onSaveMemory, onDeleteMemory, rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
+  onRegenerateArtifact, isTransforming, onReprocessUpload,
 }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
   const [memContent, setMemContent] = useState('');
   const [savedSuggestions, setSavedSuggestions] = useState<Set<number>>(new Set());
   const [selectedArtifact, setSelectedArtifact] = useState<StrategyArtifact | null>(null);
+  const [expandedUploadId, setExpandedUploadId] = useState<string | null>(null);
 
   const pinnedMemories = useMemo(() => memories.filter(m => m.is_pinned), [memories]);
   const risks = useMemo(() => memories.filter(m => m.memory_type === 'risk').slice(0, 5), [memories]);
@@ -111,7 +115,6 @@ export function StrategyRightRail({
     onSaveMemory(memType, memContent.trim());
     setMemContent('');
     setSaveOpen(false);
-    toast.success('Insight saved');
   };
 
   const handleSuggestionSave = useCallback((suggestion: MemorySuggestion, index: number) => {
@@ -125,6 +128,16 @@ export function StrategyRightRail({
     navigator.clipboard.writeText(text);
     toast.success('Copied');
   };
+
+  // Update selectedArtifact to newest version after regenerate/refine
+  const handleRegenerate = useCallback(async (artifactId: string, artifactType: string, refineInstructions?: string) => {
+    if (!onRegenerateArtifact) return null;
+    const result = await onRegenerateArtifact(artifactId, artifactType, refineInstructions);
+    if (result) {
+      setSelectedArtifact(result);
+    }
+    return result;
+  }, [onRegenerateArtifact]);
 
   return (
     <div className="w-64 border-l border-border flex flex-col bg-card shrink-0">
@@ -285,9 +298,7 @@ export function StrategyRightRail({
             <RailSection title="Active Risks" icon={AlertTriangle} count={risks.length}>
               <div className="space-y-1">
                 {risks.map(m => (
-                  <div key={m.id} className="bg-red-500/5 border border-red-500/10 rounded-lg px-2.5 py-1.5">
-                    <p className="text-[10px] text-foreground/70 leading-relaxed">{m.content}</p>
-                  </div>
+                  <MemoryCard key={m.id} memory={m} onDelete={onDeleteMemory} />
                 ))}
               </div>
             </RailSection>
@@ -301,9 +312,7 @@ export function StrategyRightRail({
             <RailSection title="Next Steps" icon={CheckCircle2} count={nextSteps.length}>
               <div className="space-y-1">
                 {nextSteps.map(m => (
-                  <div key={m.id} className="bg-green-500/5 border border-green-500/10 rounded-lg px-2.5 py-1.5">
-                    <p className="text-[10px] text-foreground/70 leading-relaxed">{m.content}</p>
-                  </div>
+                  <MemoryCard key={m.id} memory={m} onDelete={onDeleteMemory} />
                 ))}
               </div>
             </RailSection>
@@ -316,7 +325,7 @@ export function StrategyRightRail({
           {pinnedMemories.length > 0 && (
             <div className="space-y-1">
               {pinnedMemories.slice(0, 5).map(m => (
-                <MemoryCard key={m.id} memory={m} />
+                <MemoryCard key={m.id} memory={m} onDelete={onDeleteMemory} />
               ))}
             </div>
           )}
@@ -324,7 +333,7 @@ export function StrategyRightRail({
 
         <Divider />
 
-        {/* Uploads — Enhanced */}
+        {/* Uploads — Enhanced with view text + reprocess */}
         <RailSection title="Uploads" icon={Upload} count={uploads.length} empty="Drag files into the composer">
           {uploads.length > 0 && (
             <div className="space-y-1.5">
@@ -333,26 +342,72 @@ export function StrategyRightRail({
                 const statusConfig = PARSE_STATUS_CONFIG[status];
                 const StatusIcon = statusConfig.icon;
                 const meta = u.metadata_json as any;
+                const isExpanded = expandedUploadId === u.id;
                 return (
-                  <div key={u.id} className="bg-muted/20 rounded-lg px-2.5 py-2 border border-border/20">
-                    <div className="flex items-center gap-1.5">
-                      <FileTypeIcon fileType={u.file_type} fileName={u.file_name} />
-                      <span className="text-[11px] font-medium truncate flex-1">{u.file_name}</span>
-                      <div className={`flex items-center gap-0.5 ${statusConfig.color}`}>
-                        <StatusIcon className="h-2.5 w-2.5" />
-                        <span className="text-[8px]">{statusConfig.label}</span>
+                  <div key={u.id} className="bg-muted/20 rounded-lg border border-border/20 overflow-hidden">
+                    <div className="px-2.5 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <FileTypeIcon fileType={u.file_type} fileName={u.file_name} />
+                        <span className="text-[11px] font-medium truncate flex-1">{u.file_name}</span>
+                        <div className={`flex items-center gap-0.5 ${statusConfig.color}`}>
+                          <StatusIcon className="h-2.5 w-2.5" />
+                          <span className="text-[8px]">{statusConfig.label}</span>
+                        </div>
+                      </div>
+                      {u.summary && (
+                        <p className="text-[9px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{u.summary}</p>
+                      )}
+                      {meta?.entities?.length > 0 && (
+                        <div className="flex flex-wrap gap-0.5 mt-1">
+                          {meta.entities.slice(0, 4).map((e: any, i: number) => (
+                            <Badge key={i} variant="outline" className="text-[7px] px-1 py-0 font-normal">
+                              {e.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      {/* Upload action buttons */}
+                      <div className="flex items-center gap-1 mt-1.5">
+                        {u.parsed_text && (
+                          <Button
+                            size="sm" variant="ghost"
+                            className="h-5 text-[9px] px-1.5 gap-0.5 text-muted-foreground hover:text-foreground"
+                            onClick={() => setExpandedUploadId(isExpanded ? null : u.id)}
+                          >
+                            <Eye className="h-2 w-2" /> {isExpanded ? 'Hide' : 'View text'}
+                          </Button>
+                        )}
+                        {onReprocessUpload && (
+                          <Button
+                            size="sm" variant="ghost"
+                            className="h-5 text-[9px] px-1.5 gap-0.5 text-muted-foreground hover:text-foreground"
+                            onClick={() => onReprocessUpload(u.id)}
+                          >
+                            <RefreshCw className="h-2 w-2" /> Reprocess
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    {u.summary && (
-                      <p className="text-[9px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{u.summary}</p>
-                    )}
-                    {meta?.entities?.length > 0 && (
-                      <div className="flex flex-wrap gap-0.5 mt-1">
-                        {meta.entities.slice(0, 4).map((e: any, i: number) => (
-                          <Badge key={i} variant="outline" className="text-[7px] px-1 py-0 font-normal">
-                            {e.name}
-                          </Badge>
-                        ))}
+                    {/* Expanded extracted text */}
+                    {isExpanded && u.parsed_text && (
+                      <div className="border-t border-border/20 px-2.5 py-2 bg-muted/10">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Extracted Text</span>
+                          <Button
+                            size="icon" variant="ghost" className="h-4 w-4"
+                            onClick={() => setExpandedUploadId(null)}
+                          >
+                            <X className="h-2.5 w-2.5" />
+                          </Button>
+                        </div>
+                        <pre className="text-[9px] text-foreground/60 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto leading-relaxed">
+                          {u.parsed_text.slice(0, 3000)}
+                          {u.parsed_text.length > 3000 && (
+                            <span className="text-muted-foreground/40 block mt-1">
+                              … truncated ({u.parsed_text.length.toLocaleString()} chars total)
+                            </span>
+                          )}
+                        </pre>
                       </div>
                     )}
                   </div>
@@ -443,7 +498,7 @@ export function StrategyRightRail({
         allArtifacts={artifacts}
         open={!!selectedArtifact}
         onOpenChange={(open) => { if (!open) setSelectedArtifact(null); }}
-        onRegenerate={onRegenerateArtifact}
+        onRegenerate={handleRegenerate}
         isTransforming={isTransforming}
       />
     </div>
@@ -454,9 +509,15 @@ function Divider() {
   return <div className="border-t border-border/50 mx-3" />;
 }
 
-function MemoryCard({ memory }: { memory: StrategyMemoryEntry }) {
+function MemoryCard({ memory, onDelete }: { memory: StrategyMemoryEntry; onDelete?: (id: string) => void }) {
+  const [showDelete, setShowDelete] = useState(false);
+
   return (
-    <div className="bg-muted/20 rounded-lg px-2.5 py-1.5 border border-border/20">
+    <div
+      className="bg-muted/20 rounded-lg px-2.5 py-1.5 border border-border/20 group relative"
+      onMouseEnter={() => setShowDelete(true)}
+      onMouseLeave={() => setShowDelete(false)}
+    >
       <div className="flex items-center gap-1.5">
         <Badge variant="outline" className={`text-[8px] px-1 py-0 border shrink-0 ${MEMORY_TYPE_COLORS[memory.memory_type] || ''}`}>
           {memory.memory_type.replace(/_/g, ' ')}
@@ -464,6 +525,15 @@ function MemoryCard({ memory }: { memory: StrategyMemoryEntry }) {
         {memory.is_pinned && <Pin className="h-2 w-2 text-amber-400 shrink-0" />}
         {memory.confidence != null && (
           <span className="text-[8px] text-muted-foreground/50 ml-auto">{Math.round(memory.confidence * 100)}%</span>
+        )}
+        {showDelete && onDelete && (
+          <Button
+            size="icon" variant="ghost"
+            className="h-4 w-4 ml-auto shrink-0 text-muted-foreground/40 hover:text-red-400"
+            onClick={(e) => { e.stopPropagation(); onDelete(memory.id); }}
+          >
+            <Trash2 className="h-2.5 w-2.5" />
+          </Button>
         )}
       </div>
       <p className="text-[10px] text-foreground/70 mt-0.5 line-clamp-2 leading-relaxed">{memory.content}</p>

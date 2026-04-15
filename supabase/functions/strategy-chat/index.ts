@@ -680,17 +680,33 @@ ${contextSection}`;
     })),
   ];
 
-  const aiResp = await fetch(provider.gateway, {
-    method: "POST",
-    headers: { [provider.authHeaderName]: provider.getAuthValue(), "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: route.model,
-      messages,
-      stream: true,
-      temperature: route.temperature,
-      max_tokens: route.maxTokens,
-    }),
-  });
+  const chatController = new AbortController();
+  const chatTimeout = setTimeout(() => chatController.abort(), 55000);
+
+  let aiResp: Response;
+  try {
+    aiResp = await fetch(provider.gateway, {
+      method: "POST",
+      headers: { [provider.authHeaderName]: provider.getAuthValue(), "Content-Type": "application/json" },
+      signal: chatController.signal,
+      body: JSON.stringify({
+        model: route.model,
+        messages,
+        stream: true,
+        temperature: route.temperature,
+        max_tokens: route.maxTokens,
+      }),
+    });
+  } catch (e: any) {
+    clearTimeout(chatTimeout);
+    if (e.name === "AbortError") {
+      return new Response(JSON.stringify({ error: "Request timed out — please try again" }), {
+        status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    throw e;
+  }
+  clearTimeout(chatTimeout);
 
   if (!aiResp.ok) return handleAIError(aiResp.status);
 
@@ -811,11 +827,28 @@ You MUST call the provided tool function with your structured result.`;
 
   console.log(`[workflow] ${workflowType} provider=${route.provider} model=${route.model}`);
 
-  const aiResp = await fetch(provider.gateway, {
-    method: "POST",
-    headers: { [provider.authHeaderName]: provider.getAuthValue(), "Content-Type": "application/json" },
-    body: JSON.stringify(reqBody),
-  });
+  const wfController = new AbortController();
+  const wfTimeout = setTimeout(() => wfController.abort(), 55000);
+
+  let aiResp: Response;
+  try {
+    aiResp = await fetch(provider.gateway, {
+      method: "POST",
+      headers: { [provider.authHeaderName]: provider.getAuthValue(), "Content-Type": "application/json" },
+      signal: wfController.signal,
+      body: JSON.stringify(reqBody),
+    });
+  } catch (e: any) {
+    clearTimeout(wfTimeout);
+    if (e.name === "AbortError") {
+      await supabase.from("strategy_workflow_runs").update({ status: "failed", error_json: { error: "timeout" } }).eq("id", run.id);
+      return new Response(JSON.stringify({ error: "Workflow timed out — please try again" }), {
+        status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    throw e;
+  }
+  clearTimeout(wfTimeout);
 
   if (!aiResp.ok) {
     await supabase.from("strategy_workflow_runs").update({ status: "failed", error_json: { status: aiResp.status } }).eq("id", run.id);

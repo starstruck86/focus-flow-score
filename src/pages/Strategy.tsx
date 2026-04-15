@@ -38,8 +38,8 @@ export default function Strategy() {
     || activeThread?.linked_territory_id
     || null;
 
-  const { memories, saveMemory } = useStrategyMemory(memoryObjectType, memoryObjectId);
-  const { uploads } = useStrategyUploads(activeThread?.id ?? null);
+  const { memories, saveMemory, deleteMemory } = useStrategyMemory(memoryObjectType, memoryObjectId);
+  const { uploads, summarizeUpload } = useStrategyUploads(activeThread?.id ?? null);
   const { outputs, refetch: refetchOutputs } = useStrategyOutputs(activeThread?.id ?? null);
   const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
   const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
@@ -129,12 +129,14 @@ export default function Strategy() {
           outputs={outputs}
           artifacts={artifacts}
           onSaveMemory={saveMemory}
+          onDeleteMemory={deleteMemory}
           rollup={rollup}
           memorySuggestions={memorySuggestions}
           isRollupLoading={isRollupLoading}
           onTriggerRollup={triggerRollup}
           onRegenerateArtifact={regenerateArtifact}
           isTransforming={isTransforming}
+          onReprocessUpload={summarizeUpload}
         />
       )}
 

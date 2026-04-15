@@ -357,7 +357,7 @@ function StructuredResultCard({
                 <Save className="h-2.5 w-2.5" /> Save
               </Button>
             )}
-            {onTransformOutput && structured && (
+            {onTransformOutput && structured && outputId && (
               <Button
                 size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
                 onClick={() => setShowActions(!showActions)}

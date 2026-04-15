@@ -240,27 +240,43 @@ serve(async (req) => {
 
     console.log(`[artifact] type=${targetArtifactType} source=${sourceOutputId || parentArtifactId} refine=${!!refineInstructions}`);
 
-    const aiResp = await fetch(gateway, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are a strategic sales writing assistant. ${prompt}${accountContext}${refineClause}\n\nYou MUST call the provided tool function with your structured result.`,
-          },
-          {
-            role: "user",
-            content: `Source analysis:\n${JSON.stringify(sourceData, null, 2)}`,
-          },
-        ],
-        tools: [tool],
-        tool_choice: { type: "function", function: { name: tool.function.name } },
-        temperature: 0.5,
-        max_tokens: 4096,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55000);
+
+    let aiResp: Response;
+    try {
+      aiResp = await fetch(gateway, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [
+            {
+              role: "system",
+              content: `You are a strategic sales writing assistant. ${prompt}${accountContext}${refineClause}\n\nYou MUST call the provided tool function with your structured result.`,
+            },
+            {
+              role: "user",
+              content: `Source analysis:\n${JSON.stringify(sourceData, null, 2)}`,
+            },
+          ],
+          tools: [tool],
+          tool_choice: { type: "function", function: { name: tool.function.name } },
+          temperature: 0.5,
+          max_tokens: 4096,
+        }),
+      });
+    } catch (e: any) {
+      if (e.name === "AbortError") {
+        return new Response(JSON.stringify({ error: "Request timed out — please try again" }), {
+          status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      throw e;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!aiResp.ok) {
       const status = aiResp.status;
