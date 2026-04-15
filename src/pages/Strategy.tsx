@@ -113,7 +113,7 @@ export default function Strategy() {
 
   return (
     <Layout>
-      <div className="flex overflow-hidden" style={{ height: 'calc(100vh - var(--shell-nav-height, 101) * 1px - env(safe-area-inset-bottom, 0px) - 48px)' }}>
+      <div className="flex flex-1 min-h-0 overflow-hidden" style={{ height: 'calc(100dvh - var(--shell-nav-height, 101) * 1px - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px) - 140px)' }}>
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
 
