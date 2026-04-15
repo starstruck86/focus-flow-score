@@ -225,6 +225,22 @@ export function CommandBar({
     onExecute({ rawText: value, account, opportunity, template, freeText });
   }, [value, tokens, onExecute, isLoading]);
 
+  // Prefill from starter commands
+  useEffect(() => {
+    if (prefill) {
+      setValue(prefill);
+      onPrefillConsumed?.();
+      requestAnimationFrame(() => {
+        const el = inputRef.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(prefill.length, prefill.length);
+          updateSuggestions(prefill, prefill.length);
+        }
+      });
+    }
+  }, [prefill]);
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
