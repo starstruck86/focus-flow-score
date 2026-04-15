@@ -18,8 +18,8 @@ export function Breadcrumbs() {
   const location = useLocation();
   const pathname = location.pathname;
 
-  // Don't show breadcrumbs on dashboard
-  if (pathname === '/') return null;
+  // Don't show breadcrumbs on dashboard or strategy (strategy owns its own header)
+  if (pathname === '/' || pathname === '/strategy') return null;
 
   const label = ROUTE_LABELS[pathname] || pathname.slice(1).replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase());
 

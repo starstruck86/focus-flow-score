@@ -220,9 +220,9 @@ export function StrategyMainPanel({
         accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.json,.xml,.html" />
 
       {/* ── HEADER REGION ── */}
-      <div className="shrink-0 border-b border-border">
-        {/* Title bar */}
-        <div className="px-3 py-2 flex items-center gap-2">
+      <div className="shrink-0 border-b border-border/60">
+        {/* Title + workflows in one tight block */}
+        <div className="px-3 py-1.5 flex items-center gap-2">
           {sidebarCollapsed && (
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExpandSidebar}>
               <PanelLeftOpen className="h-4 w-4" />
@@ -230,16 +230,8 @@ export function StrategyMainPanel({
           )}
           <ThreadIcon className="h-4 w-4 text-primary/70 shrink-0" />
           <h1 className="text-sm font-semibold text-foreground truncate flex-1">{thread.title}</h1>
-
-          {/* Running status — lightweight inline pill next to title */}
-          {activeWorkflow && (
-            <Badge variant="secondary" className="text-[10px] gap-1 shrink-0 animate-pulse font-medium">
-              <Loader2 className="h-3 w-3 animate-spin text-primary" />
-              {activeWorkflowLabel}
-            </Badge>
-          )}
           {isUploading && (
-            <Badge variant="secondary" className="text-[10px] gap-1 animate-pulse">
+            <Badge variant="secondary" className="text-[10px] gap-1 animate-pulse shrink-0">
               <Loader2 className="h-3 w-3 animate-spin" /> Uploading
             </Badge>
           )}
@@ -250,9 +242,9 @@ export function StrategyMainPanel({
           )}
         </div>
 
-        {/* Workflow row — single tight row with overflow affordance */}
-        <div className="px-3 pb-2 flex items-center gap-1.5">
-          {/* Context badges — desktop only, inline with workflows */}
+        {/* Workflow row — tight, with running state and overflow */}
+        <div className="px-3 pb-1.5 flex items-center gap-1">
+          {/* Context badges — desktop only */}
           {!isMobile && (
             <>
               <Badge variant="outline" className="text-[10px] font-medium shrink-0">
@@ -273,7 +265,7 @@ export function StrategyMainPanel({
                   {linkedContext.opportunity.name}
                 </Badge>
               )}
-              <div className="w-px h-4 bg-border mx-0.5 shrink-0" />
+              <div className="w-px h-3.5 bg-border mx-0.5 shrink-0" />
             </>
           )}
 
@@ -288,7 +280,7 @@ export function StrategyMainPanel({
                   size="sm"
                   variant="outline"
                   className={cn(
-                    'h-7 text-[10px] px-2 gap-1 shrink-0 transition-all',
+                    'h-6 text-[10px] px-2 gap-1 shrink-0 transition-all',
                     isRunning && 'border-primary/40 bg-primary/5',
                     isRecommended && !isRunning && 'border-primary/20'
                   )}
@@ -306,17 +298,22 @@ export function StrategyMainPanel({
               );
             })}
 
-            {/* Overflow trigger — visually attached to workflow row */}
+            {/* Overflow — readable chip, not cryptic dots */}
             {overflowWorkflows.length > 0 && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 shrink-0 text-foreground/40 hover:text-foreground"
+              <button
+                className="h-6 px-2 text-[10px] font-medium text-foreground/50 hover:text-foreground hover:bg-muted rounded-md transition-colors shrink-0"
                 onClick={() => setWorkflowSheetOpen(true)}
-                title="More workflows"
               >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
+                +{overflowWorkflows.length} more
+              </button>
+            )}
+
+            {/* Running status — inline with workflows, not in title */}
+            {activeWorkflow && (
+              <Badge variant="secondary" className="text-[10px] gap-1 shrink-0 animate-pulse font-medium ml-auto">
+                <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                {activeWorkflowLabel}
+              </Badge>
             )}
           </div>
         </div>
@@ -324,31 +321,31 @@ export function StrategyMainPanel({
 
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="px-3 py-3">
+        <div className="px-3 py-2">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 gap-4">
-              <div className="h-12 w-12 rounded-2xl bg-muted/60 flex items-center justify-center">
-                <ThreadIcon className="h-6 w-6 text-foreground/40" />
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
+              <div className="h-10 w-10 rounded-xl bg-muted/50 flex items-center justify-center">
+                <ThreadIcon className="h-5 w-5 text-foreground/40" />
               </div>
-              <div className="text-center space-y-1.5">
+              <div className="text-center space-y-1">
                 <p className="text-sm font-semibold text-foreground">
                   {hasLinkedObject ? `Ready to strategize on ${linkedContext?.account?.name || linkedContext?.opportunity?.name}` : 'Ready to strategize'}
                 </p>
-                <p className="text-sm text-foreground/55 max-w-[300px] leading-relaxed">
-                  Start a conversation, run a workflow, or drop files to add context.
+                <p className="text-xs text-foreground/55 max-w-[280px] leading-relaxed">
+                  Start a conversation, run a workflow, or drop files.
                 </p>
               </div>
-              <div className="flex flex-wrap justify-center gap-2 max-w-md">
+              <div className="flex flex-wrap justify-center gap-1.5 max-w-sm">
                 {suggestedPrompts.map((sp, i) => (
                   <Button
                     key={i}
                     size="sm"
                     variant="outline"
-                    className="h-8 text-xs gap-1.5 border-border hover:border-primary/30 hover:bg-primary/5 transition-all"
+                    className="h-7 text-[11px] gap-1.5 border-border hover:border-primary/30 hover:bg-primary/5 transition-all"
                     onClick={() => handleSuggestedPrompt(sp.text)}
                   >
                     <sp.icon className="h-3 w-3 text-primary/70" />
@@ -358,14 +355,13 @@ export function StrategyMainPanel({
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {messages.map((m, i) => {
-                // Add subtle visual separator between role switches for rhythm
                 const prevRole = i > 0 ? messages[i - 1].role : null;
                 const roleSwitch = prevRole && prevRole !== m.role && prevRole !== 'system' && m.role !== 'system';
                 return (
                   <div key={m.id}>
-                    {roleSwitch && <div className="border-t border-border/30 my-2" />}
+                    {roleSwitch && <div className="border-t border-border/20 my-1.5" />}
                     <StrategyMessageBubble
                       message={m}
                       onSaveAsMemory={onSaveMemory ? handleSaveFromMessage : undefined}
@@ -405,8 +401,8 @@ export function StrategyMainPanel({
       )}
 
       {/* ── COMPOSER — unified card surface ── */}
-      <div className="shrink-0 border-t border-border bg-card px-3 pt-2 pb-[calc(0.5rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))]">
-        <div className="rounded-lg border border-border bg-background overflow-hidden">
+      <div className="shrink-0 border-t border-border/60 bg-card/80 backdrop-blur-sm px-3 pt-1.5 pb-[calc(0.375rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))]">
+        <div className="rounded-lg border border-border/80 bg-background shadow-sm overflow-hidden">
           {/* Textarea */}
           <Textarea
             value={input}
@@ -420,11 +416,11 @@ export function StrategyMainPanel({
             rows={isMobile ? 2 : 1}
             disabled={isSending}
           />
-          {/* Controls row — depth, attach, send — all in one bar */}
-          <div className="flex items-center justify-between px-2 py-1.5 border-t border-border/50 bg-muted/30">
-            <div className="flex items-center gap-1.5">
+          {/* Controls bar */}
+          <div className="flex items-center justify-between px-2 py-1 border-t border-border/40 bg-muted/20">
+            <div className="flex items-center gap-1">
               {/* Depth selector */}
-              <div className="flex rounded-md border border-border overflow-hidden">
+              <div className="flex rounded-md border border-border/60 overflow-hidden">
                 {DEPTH_OPTIONS.map(d => (
                   <button
                     key={d}
@@ -433,7 +429,7 @@ export function StrategyMainPanel({
                       'px-2 py-0.5 text-[10px] font-medium transition-colors',
                       depth === d
                         ? 'bg-primary text-primary-foreground'
-                        : 'bg-transparent text-foreground/50 hover:bg-muted hover:text-foreground'
+                        : 'bg-transparent text-foreground/40 hover:bg-muted hover:text-foreground/70'
                     )}
                     onClick={() => setDepth(d)}
                   >
@@ -441,9 +437,9 @@ export function StrategyMainPanel({
                   </button>
                 ))}
               </div>
-              {/* Attach */}
+              {/* Attach — subtle but visible */}
               <Button
-                size="icon" variant="ghost" className="h-7 w-7 text-foreground/40 hover:text-foreground"
+                size="icon" variant="ghost" className="h-6 w-6 text-foreground/35 hover:text-foreground/70"
                 title="Attach file"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isSending}
@@ -451,10 +447,10 @@ export function StrategyMainPanel({
                 <Paperclip className="h-3.5 w-3.5" />
               </Button>
             </div>
-            {/* Send */}
+            {/* Send — clearly primary */}
             <Button
               size="sm"
-              className="h-8 gap-1.5 px-3 shrink-0"
+              className="h-7 gap-1.5 px-3.5 shrink-0 font-semibold shadow-sm"
               onClick={handleSend}
               disabled={!input.trim() || isSending}
             >
