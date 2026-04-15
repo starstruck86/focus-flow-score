@@ -204,6 +204,7 @@ export default function SkillBuilderSession() {
     setSessionState('completed');
     dave.clearBuffer();
     clearIdempotencyRecords();
+    clearAudioTelemetry();
 
     if (!sessionId) return;
 
