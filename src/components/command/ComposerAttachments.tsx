@@ -204,9 +204,9 @@ export function ComposerAttachments({ attachments, onAdd, onRemove, disabled }: 
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled}
             className={cn(
-              'inline-flex items-center gap-1 text-[11px] text-muted-foreground',
+              'inline-flex items-center gap-1.5 text-[11px] text-foreground/50',
               'hover:text-foreground/80 px-1.5 py-1 rounded-md transition-colors duration-100',
-              'hover:bg-muted/15',
+              'hover:bg-muted/30',
               disabled && 'opacity-50 pointer-events-none'
             )}
           >
