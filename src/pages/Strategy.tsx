@@ -119,8 +119,8 @@ export default function Strategy() {
 
   return (
     <Layout hideFloatingFab>
-      {/* Strategy takes over scroll management — fills the main area */}
-      <div className="absolute inset-0 flex">
+      {/* Strategy manages its own scroll — fills main as flex child */}
+      <div className="flex flex-1 min-h-0 -mb-[calc(var(--shell-nav-height)*1px+env(safe-area-inset-bottom))]" style={{ height: '100%' }}>
 
         {/* Desktop sidebar */}
         {!isMobile && !sidebarCollapsed && sidebarContent}
