@@ -451,7 +451,6 @@ export function StrategyMainPanel({
           </div>
         </div>
       </div>
-      </div>
 
       {/* ── Workflow overflow sheet (mobile) ── */}
       <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
