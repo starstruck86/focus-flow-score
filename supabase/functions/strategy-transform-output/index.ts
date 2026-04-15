@@ -164,8 +164,7 @@ serve(async (req) => {
       });
     }
 
-    const body = await req.json();
-    const { sourceOutputId, targetArtifactType, threadId, parentArtifactId } = body;
+    const { sourceOutputId, targetArtifactType, threadId, parentArtifactId, refineInstructions } = body;
 
     if (!targetArtifactType || !ARTIFACT_TOOLS[targetArtifactType]) {
       return new Response(JSON.stringify({ error: "Invalid targetArtifactType" }), {
@@ -234,6 +233,10 @@ serve(async (req) => {
     const gateway = "https://ai.gateway.lovable.dev/v1/chat/completions";
     const apiKey = Deno.env.get("LOVABLE_API_KEY")!;
 
+    const refineClause = refineInstructions
+      ? `\n\nThe user has requested specific refinements:\n"${refineInstructions}"\n\nApply these instructions while preserving the overall structure and quality.`
+      : "";
+
     const aiResp = await fetch(gateway, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -242,7 +245,7 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are a strategic sales writing assistant. ${prompt}${accountContext}\n\nYou MUST call the provided tool function with your structured result.`,
+            content: `You are a strategic sales writing assistant. ${prompt}${accountContext}${refineClause}\n\nYou MUST call the provided tool function with your structured result.`,
           },
           {
             role: "user",
