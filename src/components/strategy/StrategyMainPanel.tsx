@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   PanelLeftOpen, PanelRightOpen, Search, Mail, Target, Map,
   FileText, Send, Paperclip, Upload, Loader2, Zap, Database,
-  Sparkles, Building2, MessageSquare,
+  Building2, MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
