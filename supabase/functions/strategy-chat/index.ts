@@ -49,7 +49,7 @@ interface ModelRoute {
 
 const MODEL_ROUTES: Record<TaskType, ModelRoute> = {
   chat_general:        { provider: "lovable_ai", model: "google/gemini-3-flash-preview", temperature: 0.7, maxTokens: 4096 },
-  deep_research:       { provider: "lovable_ai", model: "google/gemini-2.5-pro",         temperature: 0.3, maxTokens: 8192 },
+  deep_research:       { provider: "perplexity", model: "sonar-pro",                     temperature: 0.3, maxTokens: 8192 },
   email_evaluation:    { provider: "lovable_ai", model: "google/gemini-3-flash-preview", temperature: 0.4, maxTokens: 4096 },
   territory_tiering:   { provider: "lovable_ai", model: "google/gemini-2.5-pro",         temperature: 0.2, maxTokens: 8192 },
   account_plan:        { provider: "lovable_ai", model: "google/gemini-2.5-flash",       temperature: 0.5, maxTokens: 8192 },
