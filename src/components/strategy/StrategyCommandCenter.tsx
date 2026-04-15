@@ -1,10 +1,13 @@
 /**
- * StrategyCommandCenter — command-driven workspace embedded in the Strategy page.
+ * StrategyCommandCenter — command-driven workspace with attachments,
+ * playbook-aware KI retrieval, and promote-to-template flow.
  */
 import { useState, useCallback } from 'react';
 import { CommandBar } from '@/components/command/CommandBar';
 import { CommandOutput } from '@/components/command/CommandOutput';
 import { PreRunContext } from '@/components/command/PreRunContext';
+import { ComposerAttachments } from '@/components/command/ComposerAttachments';
+import type { Attachment } from '@/components/command/ComposerAttachments';
 import { useCommandExecution } from '@/hooks/useCommandExecution';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -51,6 +54,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
   const [prefill, setPrefill] = useState('');
   const [recents, setRecents] = useState<RecentItem[]>([]);
   const [activeTokens, setActiveTokens] = useState<CommandToken[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
 
   const { data: kiCount = 0 } = useQuery({
     queryKey: ['ki-count', user?.id],
@@ -64,6 +68,18 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
       return count || 0;
     },
   });
+
+  const handleAddAttachments = useCallback((newAttachments: Attachment[]) => {
+    setAttachments(prev => {
+      const existingIds = new Set(prev.map(a => a.id));
+      const unique = newAttachments.filter(a => !existingIds.has(a.id));
+      return [...prev, ...unique];
+    });
+  }, []);
+
+  const handleRemoveAttachment = useCallback((id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  }, []);
 
   const addRecent = useCallback((command: ParsedCommand) => {
     const label = [
@@ -79,10 +95,22 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
   }, []);
 
   const handleExecute = useCallback((command: ParsedCommand) => {
-    setLastCommand(command);
-    addRecent(command);
-    execute(command, useKIs);
-  }, [execute, useKIs, addRecent]);
+    // Enrich command with attachments
+    const enrichedCommand: ParsedCommand = {
+      ...command,
+      attachments: attachments.map(att => ({
+        id: att.id,
+        type: att.type,
+        name: att.name,
+        url: att.url,
+        mimeType: att.mimeType,
+        size: att.size,
+      })),
+    };
+    setLastCommand(enrichedCommand);
+    addRecent(enrichedCommand);
+    execute(enrichedCommand, useKIs);
+  }, [execute, useKIs, addRecent, attachments]);
 
   const handleRegenerate = useCallback(() => {
     if (lastCommand) {
@@ -94,6 +122,16 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
   const handleSaveAsTemplate = useCallback((name: string) => {
     if (result?.output) saveAsTemplate(name, result.output);
   }, [result, saveAsTemplate]);
+
+  const handlePromoteToTemplate = useCallback(() => {
+    if (result?.output) {
+      const name = lastCommand?.template?.name
+        ? `${lastCommand.template.name} (custom)`
+        : 'Custom Framework';
+      saveAsTemplate(name, result.output);
+      capture('saved_template', { templateName: name });
+    }
+  }, [result, lastCommand, saveAsTemplate, capture]);
 
   const handleSaveShortcut = useCallback(() => {
     if (lastCommand) saveShortcut(lastCommand);
@@ -146,7 +184,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
             </div>
           )}
 
-          {/* Command bar + context strip */}
+          {/* Command bar + attachments + context strip */}
           <div className={cn('w-full max-w-2xl', (result || isGenerating) && 'mb-5')}>
             <CommandBar
               accounts={accounts}
@@ -161,12 +199,22 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               preserveAfterExecute
               onTokensChange={setActiveTokens}
             />
+
+            {/* Attachments rail */}
+            <ComposerAttachments
+              attachments={attachments}
+              onAdd={handleAddAttachments}
+              onRemove={handleRemoveAttachment}
+              disabled={isGenerating}
+            />
+
             <PreRunContext
               tokens={activeTokens}
               useKIs={useKIs}
               onToggleKIs={setUseKIs}
               kiCount={kiCount}
               lastKIExplainability={lastKIExplainability}
+              attachmentCount={attachments.length}
             />
           </div>
 
@@ -277,7 +325,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                 <div className="flex items-center justify-end mb-2">
                   <button
                     onClick={handleSaveShortcut}
-                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/35 hover:text-muted-foreground/60 transition-colors duration-150"
+                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/25 hover:text-muted-foreground/50 transition-colors duration-100"
                   >
                     <PlusCircle className="h-3 w-3" /> Save as shortcut
                   </button>
@@ -293,9 +341,11 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                 accountName={lastCommand?.account?.name}
                 opportunityName={lastCommand?.opportunity?.name}
                 outputType={lastCommand?.template?.id}
+                playbookUsed={result?.playbookUsed}
                 isGenerating={isGenerating}
                 onRegenerate={handleRegenerate}
                 onSaveAsTemplate={handleSaveAsTemplate}
+                onPromoteToTemplate={handlePromoteToTemplate}
               />
             </div>
           )}
