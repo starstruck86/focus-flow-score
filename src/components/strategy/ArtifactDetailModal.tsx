@@ -336,25 +336,30 @@ function ListBlock({ label, items, numbered, variant }: {
 }
 
 // ── Version History ───────────────────────────────────────
-function VersionHistoryView({ versions, currentId }: { versions: StrategyArtifact[]; currentId: string }) {
+function VersionHistoryView({ versions, currentId, viewingId, onViewVersion }: {
+  versions: StrategyArtifact[]; currentId: string; viewingId?: string;
+  onViewVersion: (v: StrategyArtifact) => void;
+}) {
   if (versions.length === 0) {
     return <p className="text-xs text-muted-foreground py-8 text-center">No version history yet</p>;
   }
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">{versions.length} version{versions.length !== 1 ? 's' : ''}</p>
+      <p className="text-xs text-muted-foreground">{versions.length} version{versions.length !== 1 ? 's' : ''} — click to view</p>
       {versions.map((v) => {
         const isCurrent = v.id === currentId;
+        const isViewing = v.id === (viewingId || currentId);
         return (
-          <div
+          <button
             key={v.id}
-            className={`group flex items-start gap-3 p-3 rounded-lg border transition-colors ${
-              isCurrent ? 'border-primary/30 bg-primary/5' : 'border-border/50 bg-card/50 hover:bg-card'
+            className={`w-full text-left group flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+              isViewing ? 'border-primary/30 bg-primary/5' : 'border-border/50 bg-card/50 hover:bg-card cursor-pointer'
             }`}
+            onClick={() => onViewVersion(v)}
           >
             <div className="flex flex-col items-center gap-1 pt-0.5">
-              <Badge variant={isCurrent ? 'default' : 'outline'} className="text-[10px] w-8 justify-center">
+              <Badge variant={isViewing ? 'default' : 'outline'} className="text-[10px] w-8 justify-center">
                 v{v.version}
               </Badge>
             </div>
@@ -363,7 +368,7 @@ function VersionHistoryView({ versions, currentId }: { versions: StrategyArtifac
                 <p className="text-sm font-medium text-foreground truncate">{v.title}</p>
                 {isCurrent && (
                   <Badge variant="secondary" className="text-[8px] px-1 py-0 gap-0.5 shrink-0">
-                    <CheckCircle2 className="h-2 w-2" /> Current
+                    <CheckCircle2 className="h-2 w-2" /> Latest
                   </Badge>
                 )}
               </div>
@@ -377,7 +382,7 @@ function VersionHistoryView({ versions, currentId }: { versions: StrategyArtifac
                 </p>
               )}
             </div>
-          </div>
+          </button>
         );
       })}
     </div>
