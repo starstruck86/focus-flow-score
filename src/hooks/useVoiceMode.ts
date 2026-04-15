@@ -4,6 +4,7 @@ import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import {
   nextPlaybackId,
   isActivePlayback,
+  clearActivePlayback,
   emitStepTelemetry,
 } from '@/lib/daveAudioResilience';
 
@@ -81,11 +82,16 @@ export function useVoiceMode() {
       // Stop any playing audio
       if (audioRef.current) {
         audioRef.current.pause();
+        if (audioRef.current.src) {
+          URL.revokeObjectURL(audioRef.current.src);
+          activeObjectUrlsRef.current.delete(audioRef.current.src);
+        }
         audioRef.current = null;
       }
       // Stop media stream
       streamRef.current?.getTracks().forEach((t) => t.stop());
-      // Clear playback token
+      // Clear playback token (global + local)
+      clearActivePlayback();
       activePlaybackIdRef.current = null;
     };
   }, []);
