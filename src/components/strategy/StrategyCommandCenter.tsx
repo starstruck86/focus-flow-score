@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { PanelLeftOpen, Search, FileText, Mail, Zap } from 'lucide-react';
+import { PanelLeftOpen, Search, FileText, Mail, Zap, Clock } from 'lucide-react';
 import type { ParsedCommand } from '@/lib/commandTypes';
 
 interface Props {
@@ -22,11 +22,17 @@ interface Props {
 }
 
 const STARTERS = [
-  { label: 'Discovery Prep', command: '+Discovery Prep @', icon: Search },
-  { label: 'Executive Brief', command: '+Executive Brief @', icon: FileText },
-  { label: 'Follow-Up Email', command: '+Follow-Up Email @', icon: Mail },
-  { label: 'Brainstorm', command: '+Brainstorm @', icon: Zap },
+  { label: 'Build prep doc', command: '+Discovery Prep @', icon: Search },
+  { label: 'Draft exec summary', command: '+Executive Brief @', icon: FileText },
+  { label: 'Write follow-up', command: '+Follow-Up Email @', icon: Mail },
+  { label: 'Explore angles', command: '+Brainstorm @', icon: Zap },
 ] as const;
+
+interface RecentItem {
+  label: string;
+  command: string;
+  type: 'template' | 'account' | 'command';
+}
 
 export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Props) {
   const { user } = useAuth();
@@ -46,6 +52,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
   const [useKIs, setUseKIs] = useState(true);
   const [lastCommand, setLastCommand] = useState<ParsedCommand | null>(null);
   const [prefill, setPrefill] = useState('');
+  const [recents, setRecents] = useState<RecentItem[]>([]);
 
   const { data: kiCount = 0 } = useQuery({
     queryKey: ['ki-count', user?.id],
@@ -60,10 +67,24 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
     },
   });
 
+  const addRecent = useCallback((command: ParsedCommand) => {
+    const label = [
+      command.template?.name,
+      command.account?.name ? `@${command.account.name}` : null,
+      command.opportunity?.name ? `$${command.opportunity.name}` : null,
+    ].filter(Boolean).join(' ') || command.rawText.slice(0, 30);
+
+    setRecents(prev => {
+      const filtered = prev.filter(r => r.command !== command.rawText);
+      return [{ label, command: command.rawText, type: 'command' as const }, ...filtered].slice(0, 5);
+    });
+  }, []);
+
   const handleExecute = useCallback((command: ParsedCommand) => {
     setLastCommand(command);
+    addRecent(command);
     execute(command, useKIs);
-  }, [execute, useKIs]);
+  }, [execute, useKIs, addRecent]);
 
   const handleRegenerate = useCallback(() => {
     if (lastCommand) execute(lastCommand, useKIs);
@@ -77,7 +98,17 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
     setPrefill(command);
   }, []);
 
+  const handleRecent = useCallback((command: string) => {
+    setPrefill(command);
+  }, []);
+
   const showEmpty = !result && !isGenerating;
+
+  // Build intelligence stack line
+  const stackParts: string[] = [];
+  if (allTemplates.length > 0) stackParts.push('templates');
+  if (lastCommand?.account || lastCommand?.opportunity) stackParts.push('linked context');
+  if (useKIs && kiCount > 0) stackParts.push(`${kiCount.toLocaleString()} KIs`);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background">
@@ -117,6 +148,7 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               isLoading={isGenerating}
               prefill={prefill}
               onPrefillConsumed={() => setPrefill('')}
+              preserveAfterExecute
             />
 
             <ContextPreview
@@ -127,6 +159,13 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
               onToggleKIs={setUseKIs}
               kiCount={kiCount}
             />
+
+            {/* Intelligence stack line */}
+            {stackParts.length > 0 && (
+              <p className="text-[10px] text-muted-foreground/50 px-1 mt-1">
+                Using {stackParts.join(', ')}
+              </p>
+            )}
           </div>
 
           {/* Starter commands — only when idle */}
@@ -145,11 +184,31 @@ export function StrategyCommandCenter({ sidebarCollapsed, onExpandSidebar }: Pro
                     <s.icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
                     <div className="min-w-0">
                       <span className="text-xs font-medium text-foreground/90 group-hover:text-foreground">{s.label}</span>
-                      <span className="text-[10px] text-muted-foreground/50 ml-1.5">@Account</span>
                     </div>
                   </button>
                 ))}
               </div>
+
+              {/* Lightweight recents */}
+              {recents.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider mb-1.5 px-0.5">
+                    Recent
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {recents.map((r, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handleRecent(r.command)}
+                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-md bg-muted/60 hover:bg-muted transition-colors truncate max-w-[200px]"
+                      >
+                        <Clock className="h-2.5 w-2.5 shrink-0" />
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
