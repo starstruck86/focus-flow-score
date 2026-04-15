@@ -40,6 +40,8 @@ interface Props {
   onSaveMemory?: (type: string, content: string) => void;
   onWorkflowComplete?: () => void;
   onBranchThread?: (title: string, content: string) => void;
+  onTransformOutput?: (sourceOutputId: string, targetArtifactType: string) => void;
+  isTransforming?: boolean;
 }
 
 function getSuggestedPrompts(thread: StrategyThread | null, linkedContext?: any) {
