@@ -1,5 +1,5 @@
 /**
- * Command system types — structured tokens, template metadata, output blocks.
+ * Command system types — structured tokens, template metadata, output blocks, attachments.
  */
 
 export interface CommandToken {
@@ -8,12 +8,26 @@ export interface CommandToken {
   name: string;
 }
 
+export interface CommandAttachment {
+  id: string;
+  type: 'file' | 'image' | 'url';
+  name: string;
+  file?: File;
+  url?: string;
+  preview?: string;
+  mimeType?: string;
+  size?: number;
+  /** Extracted text content for context injection */
+  extractedText?: string;
+}
+
 export interface ParsedCommand {
   rawText: string;
   account: CommandToken | null;
   opportunity: CommandToken | null;
   template: CommandToken | null;
   freeText: string;
+  attachments?: CommandAttachment[];
 }
 
 export interface TemplateMetadata {
@@ -30,7 +44,9 @@ export interface TemplateMetadata {
   systemPrompt: string;
   /** Sections the AI should produce */
   output_sections: string[];
-  source: 'built_in' | 'saved';
+  source: 'built_in' | 'saved' | 'promoted';
+  /** Original source content for promoted templates */
+  sourceContent?: string;
 }
 
 export interface OutputBlock {
@@ -45,6 +61,8 @@ export interface ExecutionResult {
   sources: string[];
   kiCount: number;
   templateId: string | null;
+  /** Strategic playbook name if one was used */
+  playbookUsed?: string;
 }
 
 /**
