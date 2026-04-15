@@ -848,16 +848,7 @@ You MUST call the provided tool function with your structured result.`;
     },
   }).select().single();
 
-  // Create durable output
-  const { data: output } = await supabase.from("strategy_outputs").insert({
-    user_id: userId, thread_id: threadId, workflow_run_id: run.id,
-    output_type: workflowTypeToOutputType(workflowType),
-    title: outputTitle,
-    content_json: structuredData,
-    rendered_text: renderedText,
-    linked_account_id: pack.account?.id || null,
-    linked_opportunity_id: pack.opportunity?.id || null,
-  }).select().single();
+  // (output already created above)
 
   // Update thread summary
   await supabase.from("strategy_threads").update({
