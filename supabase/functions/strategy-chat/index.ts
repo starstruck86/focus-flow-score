@@ -251,6 +251,7 @@ interface LLMRoute {
   maxTokens: number;
   useTools: boolean;
   reasoning?: { effort: string };
+  _smokeTestForceFail?: boolean;
 }
 
 // PROVIDER POLICY:
@@ -315,18 +316,30 @@ async function callWithFallback(
   adapterReq: Omit<AdapterRequest, "model">,
   route: LLMRoute,
 ): Promise<NormalizedResponse> {
+  // ── SMOKE TEST MODE: force primary failure for fallback testing ──
+  const smokeTestForceFail = route._smokeTestForceFail === true;
+  if (smokeTestForceFail) {
+    console.log(`[routing] SMOKE_TEST_MODE: forcing primary failure for task=${taskType}`);
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 55000);
 
   try {
-    const primaryAdapter = ADAPTERS[route.primaryProvider];
-    console.log(`[routing] task=${taskType} primary=${route.primaryProvider} model=${route.model}`);
+    let result: NormalizedResponse | null = null;
 
-    const result = await primaryAdapter({ ...adapterReq, model: route.model }, controller.signal);
+    if (!smokeTestForceFail) {
+      const primaryAdapter = ADAPTERS[route.primaryProvider];
+      console.log(`[routing] task=${taskType} primary=${route.primaryProvider} model=${route.model}`);
+      result = await primaryAdapter({ ...adapterReq, model: route.model }, controller.signal);
 
-    if (!result.error) {
-      console.log(`[routing] task=${taskType} provider=${result.provider} model=${result.model} latency=${result.latencyMs}ms`);
-      return result;
+      if (!result.error) {
+        console.log(`[routing] task=${taskType} provider=${result.provider} model=${result.model} latency=${result.latencyMs}ms`);
+        return result;
+      }
+    } else {
+      result = { text: "", provider: route.primaryProvider, model: route.model, latencyMs: 0, fallbackUsed: false,
+        error: { type: "smoke_test_forced", message: "SMOKE_TEST_MODE: forced primary failure" } };
     }
 
     console.warn(`[routing] primary failed: ${result.error.message}. Trying fallback=${route.fallbackProvider} model=${route.fallbackModel}`);
@@ -384,6 +397,22 @@ async function callStreaming(
   const timeout = setTimeout(() => controller.abort(), 55000);
 
   try {
+    // SMOKE TEST MODE: skip primary if forced fail
+    if (route._smokeTestForceFail) {
+      console.log(`[routing] SMOKE_TEST_MODE: forcing stream primary failure for task=${taskType}`);
+      console.warn(`[routing] stream primary failed: SMOKE_TEST_MODE forced. Falling back to ${route.fallbackProvider} (non-stream)`);
+      clearTimeout(timeout);
+      const fbController = new AbortController();
+      const fbTimeout = setTimeout(() => fbController.abort(), 55000);
+      try {
+        const fbAdapter = ADAPTERS[route.fallbackProvider];
+        const fbResult = await fbAdapter({ ...adapterReq, model: route.fallbackModel }, fbController.signal);
+        fbResult.fallbackUsed = true;
+        console.log(`[routing] stream fallback task=${taskType} provider=${fbResult.provider} model=${fbResult.model} latency=${fbResult.latencyMs}ms`);
+        return fbResult;
+      } finally { clearTimeout(fbTimeout); }
+    }
+
     console.log(`[routing] stream task=${taskType} provider=${route.primaryProvider} model=${route.model}`);
     const result = await openaiAdapter({ ...adapterReq, model: route.model, stream: true }, controller.signal);
     if (result.error) {
@@ -814,7 +843,11 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { action, threadId, content, workflowType, depth } = body;
+    const { action, threadId, content, workflowType, depth, force_primary_failure } = body;
+
+    // Smoke test mode: allow forced fallback only when SMOKE_TEST_MODE env is set
+    const smokeTestMode = Deno.env.get("SMOKE_TEST_MODE") === "true";
+    const forceFallback = smokeTestMode && force_primary_failure === true;
 
     if (!threadId) {
       return new Response(JSON.stringify({ error: "threadId required" }), {
@@ -826,8 +859,8 @@ serve(async (req) => {
     const contextSection = packToPromptSection(contextPack);
 
     if (action === "rollup") return await handleRollup(supabase, threadId, userId, contextPack);
-    if (action === "workflow") return await handleWorkflow(supabase, threadId, userId, workflowType, content, contextSection, contextPack);
-    return await handleChat(supabase, threadId, userId, content, depth, contextSection, contextPack);
+    if (action === "workflow") return await handleWorkflow(supabase, threadId, userId, workflowType, content, contextSection, contextPack, forceFallback);
+    return await handleChat(supabase, threadId, userId, content, depth, contextSection, contextPack, forceFallback);
   } catch (e) {
     console.error("strategy-chat error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
@@ -840,6 +873,7 @@ serve(async (req) => {
 async function handleChat(
   supabase: any, threadId: string, userId: string,
   content: string, depth: string, contextSection: string, pack: ContextPack,
+  forceFallback?: boolean,
 ) {
   await supabase.from("strategy_messages").insert({
     thread_id: threadId, user_id: userId, role: "user",
@@ -847,6 +881,7 @@ async function handleChat(
   });
 
   const route = resolveLLMRoute("chat_general");
+  if (forceFallback) route._smokeTestForceFail = true;
   const systemPrompt = `You are a strategic sales advisor embedded in a Strategy workspace. You help with deep account research, email evaluation, opportunity strategy, territory planning, and brainstorming.
 
 Be specific, actionable, and grounded. Reference concrete details from the context provided. When citing information from strategic memory or uploaded resources, note the source.
@@ -960,8 +995,10 @@ ${contextSection}`;
 async function handleWorkflow(
   supabase: any, threadId: string, userId: string,
   workflowType: string, content: string, contextSection: string, pack: ContextPack,
+  forceFallback?: boolean,
 ) {
   const route = resolveLLMRoute(workflowType);
+  if (forceFallback) route._smokeTestForceFail = true;
   const tool = WORKFLOW_TOOLS[workflowType];
 
   const { data: run, error: runErr } = await supabase.from("strategy_workflow_runs")
