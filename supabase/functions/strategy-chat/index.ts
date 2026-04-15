@@ -7,12 +7,40 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+// ── Provider Abstraction ──────────────────────────────────
+type ProviderKey = "lovable_ai" | "openai" | "anthropic" | "perplexity";
+
+interface ProviderConfig {
+  gateway: string;
+  authHeaderName: string;
+  getAuthValue: () => string;
+}
+
+function getProvider(key: ProviderKey): ProviderConfig {
+  switch (key) {
+    case "lovable_ai":
+      return {
+        gateway: "https://ai.gateway.lovable.dev/v1/chat/completions",
+        authHeaderName: "Authorization",
+        getAuthValue: () => `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
+      };
+    case "perplexity":
+      return {
+        gateway: "https://api.perplexity.ai/chat/completions",
+        authHeaderName: "Authorization",
+        getAuthValue: () => `Bearer ${Deno.env.get("PERPLEXITY_API_KEY")}`,
+      };
+    default:
+      // Fallback to lovable_ai
+      return getProvider("lovable_ai");
+  }
+}
 
 // ── Model Routing ──────────────────────────────────────────
 type TaskType = "chat_general" | "deep_research" | "email_evaluation" | "territory_tiering" | "account_plan" | "opportunity_strategy" | "brainstorm";
 
 interface ModelRoute {
+  provider: ProviderKey;
   model: string;
   temperature: number;
   maxTokens: number;
@@ -20,14 +48,21 @@ interface ModelRoute {
 }
 
 const MODEL_ROUTES: Record<TaskType, ModelRoute> = {
-  chat_general:        { model: "google/gemini-3-flash-preview", temperature: 0.7, maxTokens: 4096 },
-  deep_research:       { model: "google/gemini-2.5-pro",         temperature: 0.3, maxTokens: 8192 },
-  email_evaluation:    { model: "google/gemini-3-flash-preview", temperature: 0.4, maxTokens: 4096 },
-  territory_tiering:   { model: "google/gemini-2.5-pro",         temperature: 0.2, maxTokens: 8192 },
-  account_plan:        { model: "google/gemini-2.5-flash",       temperature: 0.5, maxTokens: 8192 },
-  opportunity_strategy:{ model: "google/gemini-2.5-flash",       temperature: 0.5, maxTokens: 8192 },
-  brainstorm:          { model: "google/gemini-3-flash-preview", temperature: 0.9, maxTokens: 4096 },
+  chat_general:        { provider: "lovable_ai", model: "google/gemini-3-flash-preview", temperature: 0.7, maxTokens: 4096 },
+  deep_research:       { provider: "lovable_ai", model: "google/gemini-2.5-pro",         temperature: 0.3, maxTokens: 8192 },
+  email_evaluation:    { provider: "lovable_ai", model: "google/gemini-3-flash-preview", temperature: 0.4, maxTokens: 4096 },
+  territory_tiering:   { provider: "lovable_ai", model: "google/gemini-2.5-pro",         temperature: 0.2, maxTokens: 8192 },
+  account_plan:        { provider: "lovable_ai", model: "google/gemini-2.5-flash",       temperature: 0.5, maxTokens: 8192 },
+  opportunity_strategy:{ provider: "lovable_ai", model: "google/gemini-2.5-flash",       temperature: 0.5, maxTokens: 8192 },
+  brainstorm:          { provider: "lovable_ai", model: "google/gemini-3-flash-preview", temperature: 0.9, maxTokens: 4096 },
 };
+
+function resolveRoute(taskType: string): { route: ModelRoute; provider: ProviderConfig } {
+  const route = MODEL_ROUTES[taskType as TaskType] || MODEL_ROUTES.chat_general;
+  const provider = getProvider(route.provider);
+  console.log(`[routing] task=${taskType} provider=${route.provider} model=${route.model} temp=${route.temperature}`);
+  return { route, provider };
+}
 
 // ── Workflow Tool Schemas ──────────────────────────────────
 const WORKFLOW_TOOLS: Record<string, any> = {
@@ -203,8 +238,8 @@ const ROLLUP_TOOL = {
   },
 };
 
-// ── Retrieval Layer ────────────────────────────────────────
-const MAX_CONTEXT_CHARS = 12000;
+// ── Improved Retrieval Layer ──────────────────────────────
+const MAX_CONTEXT_CHARS = 14000;
 
 interface ContextPack {
   account?: any;
@@ -214,6 +249,12 @@ interface ContextPack {
   outputs: any[];
   recentMessages: any[];
   sourceCount: number;
+  retrievalMeta: {
+    memoriesScored: number;
+    uploadsIncluded: number;
+    outputsIncluded: number;
+    messagesIncluded: number;
+  };
 }
 
 async function buildContextPack(
@@ -221,18 +262,35 @@ async function buildContextPack(
   threadId: string,
   userId: string,
   userQuery?: string,
+  workflowType?: string,
 ): Promise<ContextPack> {
-  const pack: ContextPack = { memories: [], uploads: [], outputs: [], recentMessages: [], sourceCount: 0 };
+  const pack: ContextPack = {
+    memories: [], uploads: [], outputs: [], recentMessages: [], sourceCount: 0,
+    retrievalMeta: { memoriesScored: 0, uploadsIncluded: 0, outputsIncluded: 0, messagesIncluded: 0 },
+  };
 
   // 1. Get thread metadata
   const { data: thread } = await supabase
     .from("strategy_threads")
-    .select("linked_account_id, linked_opportunity_id, linked_territory_id")
+    .select("linked_account_id, linked_opportunity_id, linked_territory_id, title")
     .eq("id", threadId)
     .single();
   if (!thread) return pack;
 
-  const queryTerms = (userQuery || "").toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+  // Build query terms from user message + thread title
+  const rawQuery = `${userQuery || ""} ${thread.title || ""}`;
+  const queryTerms = rawQuery.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+  
+  // Workflow-specific boost terms
+  const workflowBoostTerms: Record<string, string[]> = {
+    deep_research: ["research", "competitor", "industry", "market", "technology", "stakeholder"],
+    account_plan: ["plan", "strategy", "objective", "stakeholder", "timeline", "metric"],
+    territory_tiering: ["tier", "priority", "segment", "icp", "revenue", "potential"],
+    email_evaluation: ["email", "message", "outreach", "subject", "tone", "cta"],
+    opportunity_strategy: ["deal", "champion", "decision", "close", "risk", "competitor"],
+    brainstorm: ["idea", "approach", "creative", "angle", "hypothesis"],
+  };
+  const boostTerms = workflowBoostTerms[workflowType || ""] || [];
 
   // 2. Load linked object + memories (parallel)
   const promises: Promise<void>[] = [];
@@ -241,18 +299,18 @@ async function buildContextPack(
     promises.push((async () => {
       const { data: acct } = await supabase
         .from("accounts")
-        .select("id, name, industry, tier, website, notes, outreach_status")
+        .select("id, name, industry, tier, website, notes, outreach_status, tech_stack, tags")
         .eq("id", thread.linked_account_id)
         .single();
       pack.account = acct;
 
       const { data: mem } = await supabase
         .from("account_strategy_memory")
-        .select("id, memory_type, content, is_pinned, created_at")
+        .select("id, memory_type, content, is_pinned, confidence, created_at")
         .eq("account_id", thread.linked_account_id)
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
-        .limit(30);
+        .limit(40);
       if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "account" })));
     })());
   }
@@ -268,11 +326,11 @@ async function buildContextPack(
 
       const { data: mem } = await supabase
         .from("opportunity_strategy_memory")
-        .select("id, memory_type, content, is_pinned, created_at")
+        .select("id, memory_type, content, is_pinned, confidence, created_at")
         .eq("opportunity_id", thread.linked_opportunity_id)
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
-        .limit(30);
+        .limit(40);
       if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "opportunity" })));
     })());
   }
@@ -281,11 +339,11 @@ async function buildContextPack(
     promises.push((async () => {
       const { data: mem } = await supabase
         .from("territory_strategy_memory")
-        .select("id, memory_type, content, is_pinned, created_at")
+        .select("id, memory_type, content, is_pinned, confidence, created_at")
         .eq("territory_id", thread.linked_territory_id)
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
-        .limit(30);
+        .limit(40);
       if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "territory" })));
     })());
   }
@@ -294,7 +352,7 @@ async function buildContextPack(
   promises.push((async () => {
     const { data: ups } = await supabase
       .from("strategy_uploaded_resources")
-      .select("id, file_name, parsed_text, summary")
+      .select("id, file_name, parsed_text, summary, file_type")
       .eq("thread_id", threadId)
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
@@ -306,10 +364,10 @@ async function buildContextPack(
   promises.push((async () => {
     const { data: outs } = await supabase
       .from("strategy_outputs")
-      .select("id, output_type, title, rendered_text")
+      .select("id, output_type, title, rendered_text, is_pinned, created_at")
       .eq("thread_id", threadId)
       .order("created_at", { ascending: false })
-      .limit(5);
+      .limit(8);
     if (outs) pack.outputs = outs;
   })());
 
@@ -317,48 +375,103 @@ async function buildContextPack(
   promises.push((async () => {
     const { data: msgs } = await supabase
       .from("strategy_messages")
-      .select("id, role, content_json")
+      .select("id, role, content_json, message_type")
       .eq("thread_id", threadId)
+      .neq("message_type", "workflow_update")
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(25);
     if (msgs) {
       pack.recentMessages = msgs.reverse().map((m: any) => ({
         id: m.id,
         role: m.role,
-        text: (m.content_json?.text || "").slice(0, 500),
+        text: (m.content_json?.text || "").slice(0, 600),
       }));
     }
   })());
 
   await Promise.all(promises);
 
-  // 6. Score and rank memories
-  pack.memories = scoreAndRank(pack.memories, queryTerms);
+  // 6. Improved scoring and ranking
+  pack.memories = scoreAndRankMemories(pack.memories, queryTerms, boostTerms);
+  pack.outputs = scoreAndRankOutputs(pack.outputs, queryTerms);
+  
+  pack.retrievalMeta = {
+    memoriesScored: pack.memories.length,
+    uploadsIncluded: pack.uploads.length,
+    outputsIncluded: pack.outputs.length,
+    messagesIncluded: pack.recentMessages.length,
+  };
+  
   pack.sourceCount = (pack.account ? 1 : 0) + (pack.opportunity ? 1 : 0)
     + pack.memories.length + pack.uploads.length + pack.outputs.length;
 
-  console.log(`[retrieval] sources: ${pack.sourceCount} (memories: ${pack.memories.length}, uploads: ${pack.uploads.length}, outputs: ${pack.outputs.length}, messages: ${pack.recentMessages.length})`);
+  console.log(`[retrieval] sources=${pack.sourceCount} memories=${pack.memories.length} uploads=${pack.uploads.length} outputs=${pack.outputs.length} messages=${pack.recentMessages.length}`);
 
   return pack;
 }
 
-function scoreAndRank(memories: any[], queryTerms: string[]): any[] {
+function scoreAndRankMemories(memories: any[], queryTerms: string[], boostTerms: string[]): any[] {
   return memories
     .map((m) => {
       let score = 1;
-      if (m.is_pinned) score += 3;
+      
+      // Pinned items always rank high
+      if (m.is_pinned) score += 5;
+      
+      // Confidence boost
+      if (m.confidence && m.confidence > 0.7) score += 2;
+      else if (m.confidence && m.confidence > 0.5) score += 1;
+      
+      // Recency boost (stronger gradient)
       const age = Date.now() - new Date(m.created_at).getTime();
-      if (age < 7 * 86400000) score += 2; // recent week
-      else if (age < 30 * 86400000) score += 1;
+      if (age < 24 * 3600000) score += 4;      // today
+      else if (age < 3 * 86400000) score += 3;  // 3 days
+      else if (age < 7 * 86400000) score += 2;  // week
+      else if (age < 30 * 86400000) score += 1;  // month
+      
+      // Query keyword overlap
+      const content = m.content.toLowerCase();
       if (queryTerms.length > 0) {
-        const content = m.content.toLowerCase();
         const overlap = queryTerms.filter((t: string) => content.includes(t)).length;
         score += overlap * 2;
       }
+      
+      // Workflow-specific boost terms
+      if (boostTerms.length > 0) {
+        const boostOverlap = boostTerms.filter(t => content.includes(t)).length;
+        score += boostOverlap * 1.5;
+      }
+      
+      // Memory type relevance boost
+      const highPriorityTypes = ["risk", "priority", "next_step", "stakeholder_note"];
+      if (highPriorityTypes.includes(m.memory_type)) score += 1;
+      
       return { ...m, score };
     })
     .sort((a: any, b: any) => b.score - a.score)
-    .slice(0, 15);
+    .slice(0, 20);
+}
+
+function scoreAndRankOutputs(outputs: any[], queryTerms: string[]): any[] {
+  return outputs
+    .map((o) => {
+      let score = 1;
+      if (o.is_pinned) score += 4;
+      
+      const age = Date.now() - new Date(o.created_at).getTime();
+      if (age < 24 * 3600000) score += 3;
+      else if (age < 7 * 86400000) score += 2;
+      
+      const text = `${o.title} ${o.rendered_text || ""}`.toLowerCase();
+      if (queryTerms.length > 0) {
+        const overlap = queryTerms.filter((t: string) => text.includes(t)).length;
+        score += overlap * 1.5;
+      }
+      
+      return { ...o, score };
+    })
+    .sort((a: any, b: any) => b.score - a.score)
+    .slice(0, 5);
 }
 
 function packToPromptSection(pack: ContextPack): string {
@@ -366,13 +479,15 @@ function packToPromptSection(pack: ContextPack): string {
   let charBudget = MAX_CONTEXT_CHARS;
 
   if (pack.account) {
-    const s = `\n### Linked Account: ${pack.account.name}\nIndustry: ${pack.account.industry || "Unknown"} | Tier: ${pack.account.tier || "Unset"} | Status: ${pack.account.outreach_status || "None"}${pack.account.notes ? `\nNotes: ${pack.account.notes.slice(0, 300)}` : ""}`;
+    const tags = pack.account.tags?.length ? ` | Tags: ${pack.account.tags.join(", ")}` : "";
+    const tech = pack.account.tech_stack?.length ? ` | Tech: ${pack.account.tech_stack.join(", ")}` : "";
+    const s = `\n### Linked Account: ${pack.account.name}\nIndustry: ${pack.account.industry || "Unknown"} | Tier: ${pack.account.tier || "Unset"} | Status: ${pack.account.outreach_status || "None"}${tags}${tech}${pack.account.notes ? `\nNotes: ${pack.account.notes.slice(0, 400)}` : ""}`;
     sections.push(s);
     charBudget -= s.length;
   }
 
   if (pack.opportunity) {
-    const s = `\n### Linked Opportunity: ${pack.opportunity.name}\nStage: ${pack.opportunity.stage || "Unknown"}${pack.opportunity.close_date ? ` | Close: ${pack.opportunity.close_date}` : ""}${pack.opportunity.notes ? `\nNotes: ${pack.opportunity.notes.slice(0, 300)}` : ""}`;
+    const s = `\n### Linked Opportunity: ${pack.opportunity.name}\nStage: ${pack.opportunity.stage || "Unknown"}${pack.opportunity.close_date ? ` | Close: ${pack.opportunity.close_date}` : ""}${pack.opportunity.notes ? `\nNotes: ${pack.opportunity.notes.slice(0, 400)}` : ""}`;
     sections.push(s);
     charBudget -= s.length;
   }
@@ -380,7 +495,9 @@ function packToPromptSection(pack: ContextPack): string {
   if (pack.memories.length > 0) {
     let memSection = "\n### Strategic Memory:";
     for (const m of pack.memories) {
-      const line = `\n- [${m.memory_type}${m.is_pinned ? " 📌" : ""}] ${m.content.slice(0, 200)}`;
+      const pin = m.is_pinned ? " 📌" : "";
+      const conf = m.confidence ? ` (${Math.round(m.confidence * 100)}%)` : "";
+      const line = `\n- [${m.memory_type}${pin}${conf}] ${m.content.slice(0, 250)}`;
       if (charBudget - line.length < 0) break;
       memSection += line;
       charBudget -= line.length;
@@ -391,7 +508,7 @@ function packToPromptSection(pack: ContextPack): string {
   if (pack.uploads.length > 0) {
     let upSection = "\n### Uploaded Resources:";
     for (const u of pack.uploads) {
-      const text = u.summary || (u.parsed_text || "").slice(0, 500);
+      const text = u.summary || (u.parsed_text || "").slice(0, 800);
       const line = `\n- ${u.file_name}: ${text}`;
       if (charBudget - line.length < 0) break;
       upSection += line;
@@ -403,8 +520,9 @@ function packToPromptSection(pack: ContextPack): string {
   if (pack.outputs.length > 0) {
     let outSection = "\n### Prior Outputs:";
     for (const o of pack.outputs) {
-      const text = (o.rendered_text || "").slice(0, 300);
-      const line = `\n- [${o.output_type}] ${o.title}: ${text}`;
+      const text = (o.rendered_text || "").slice(0, 400);
+      const pin = o.is_pinned ? " 📌" : "";
+      const line = `\n- [${o.output_type}${pin}] ${o.title}: ${text}`;
       if (charBudget - line.length < 0) break;
       outSection += line;
       charBudget -= line.length;
@@ -417,21 +535,25 @@ function packToPromptSection(pack: ContextPack): string {
 
 // ── Rendered text from structured output ───────────────────
 function renderStructuredOutput(workflowType: string, data: any): string {
-  switch (workflowType) {
-    case "deep_research":
-      return `# Deep Research\n\n## Summary\n${data.summary}\n\n## Company Overview\n${data.company_overview}\n\n## Key Findings\n${(data.key_findings || []).map((f: string) => `- ${f}`).join("\n")}\n\n## Strategic Implications\n${(data.strategic_implications || []).map((s: string) => `- ${s}`).join("\n")}\n\n## Risks\n${(data.risks || []).map((r: string) => `- ${r}`).join("\n")}\n\n## Opportunities\n${(data.opportunities || []).map((o: string) => `- ${o}`).join("\n")}\n\n## Recommended Actions\n${(data.recommended_actions || []).map((a: string) => `- ${a}`).join("\n")}\n\n## Sources\n${(data.cited_sources || []).map((s: string) => `- ${s}`).join("\n")}`;
-    case "email_evaluation":
-      return `# Email Evaluation\n\n**Score: ${data.overall_score}/10**\n\n## Strengths\n${(data.strengths || []).map((s: string) => `- ${s}`).join("\n")}\n\n## Weaknesses\n${(data.weaknesses || []).map((w: string) => `- ${w}`).join("\n")}\n\n## Subject Line\n${data.subject_line_feedback}\n\n## Opening\n${data.opening_feedback}\n\n## Value Proposition\n${data.value_prop_feedback}\n\n## CTA\n${data.cta_feedback}\n\n## Suggested Rewrite\n${data.rewrite}`;
-    case "territory_tiering":
-      return `# Territory Tiering\n\n## Methodology\n${data.methodology}\n\n## Results\n${(data.tiers || []).map((t: any) => `### ${t.account_name} — ${t.tier}\n${t.rationale}\n**Next:** ${t.next_action}`).join("\n\n")}\n\n## Summary\n${data.summary}`;
-    case "account_plan":
-      return `# Account Plan\n\n## Executive Summary\n${data.executive_summary}\n\n## Overview\n${data.account_overview}\n\n## Stakeholders\n${(data.stakeholder_map || []).map((s: string) => `- ${s}`).join("\n")}\n\n## Strategic Objectives\n${(data.strategic_objectives || []).map((o: string) => `- ${o}`).join("\n")}\n\n## Action Plan\n${(data.action_plan || []).map((a: string) => `- ${a}`).join("\n")}\n\n## Risk Factors\n${(data.risk_factors || []).map((r: string) => `- ${r}`).join("\n")}\n\n## Success Metrics\n${(data.success_metrics || []).map((m: string) => `- ${m}`).join("\n")}`;
-    case "opportunity_strategy":
-      return `# Opportunity Strategy\n\n## Deal Summary\n${data.deal_summary}\n\n## Decision Process\n${data.decision_process}\n\n## Champion Status\n${data.champion_status}\n\n## Competition\n${data.competition_analysis}\n\n## Value Alignment\n${data.value_alignment}\n\n## Risks\n${(data.risks || []).map((r: string) => `- ${r}`).join("\n")}\n\n## Next Actions\n${(data.next_actions || []).map((a: string) => `- ${a}`).join("\n")}\n\n## Close Plan\n${data.close_plan}`;
-    case "brainstorm":
-      return `# Brainstorm\n\n## Key Insights\n${(data.key_insights || []).map((i: string) => `- ${i}`).join("\n")}\n\n## Bold Ideas\n${(data.bold_ideas || []).map((i: string) => `- ${i}`).join("\n")}\n\n## Quick Wins\n${(data.quick_wins || []).map((w: string) => `- ${w}`).join("\n")}\n\n## Strategic Bets\n${(data.strategic_bets || []).map((b: string) => `- ${b}`).join("\n")}\n\n## Summary\n${data.summary}`;
-    default:
-      return JSON.stringify(data, null, 2);
+  try {
+    switch (workflowType) {
+      case "deep_research":
+        return `# Deep Research\n\n## Summary\n${data.summary || ""}\n\n## Company Overview\n${data.company_overview || ""}\n\n## Key Findings\n${(data.key_findings || []).map((f: string) => `- ${f}`).join("\n")}\n\n## Strategic Implications\n${(data.strategic_implications || []).map((s: string) => `- ${s}`).join("\n")}\n\n## Risks\n${(data.risks || []).map((r: string) => `- ${r}`).join("\n")}\n\n## Opportunities\n${(data.opportunities || []).map((o: string) => `- ${o}`).join("\n")}\n\n## Recommended Actions\n${(data.recommended_actions || []).map((a: string) => `- ${a}`).join("\n")}\n\n## Sources\n${(data.cited_sources || []).map((s: string) => `- ${s}`).join("\n")}`;
+      case "email_evaluation":
+        return `# Email Evaluation\n\n**Score: ${data.overall_score ?? "N/A"}/10**\n\n## Strengths\n${(data.strengths || []).map((s: string) => `- ${s}`).join("\n")}\n\n## Weaknesses\n${(data.weaknesses || []).map((w: string) => `- ${w}`).join("\n")}\n\n## Subject Line\n${data.subject_line_feedback || ""}\n\n## Opening\n${data.opening_feedback || ""}\n\n## Value Proposition\n${data.value_prop_feedback || ""}\n\n## CTA\n${data.cta_feedback || ""}\n\n## Suggested Rewrite\n${data.rewrite || ""}`;
+      case "territory_tiering":
+        return `# Territory Tiering\n\n## Methodology\n${data.methodology || ""}\n\n## Results\n${(data.tiers || []).map((t: any) => `### ${t.account_name || "?"} — ${t.tier || "?"}\n${t.rationale || ""}\n**Next:** ${t.next_action || ""}`).join("\n\n")}\n\n## Summary\n${data.summary || ""}`;
+      case "account_plan":
+        return `# Account Plan\n\n## Executive Summary\n${data.executive_summary || ""}\n\n## Overview\n${data.account_overview || ""}\n\n## Stakeholders\n${(data.stakeholder_map || []).map((s: string) => `- ${s}`).join("\n")}\n\n## Strategic Objectives\n${(data.strategic_objectives || []).map((o: string) => `- ${o}`).join("\n")}\n\n## Action Plan\n${(data.action_plan || []).map((a: string) => `- ${a}`).join("\n")}\n\n## Risk Factors\n${(data.risk_factors || []).map((r: string) => `- ${r}`).join("\n")}\n\n## Success Metrics\n${(data.success_metrics || []).map((m: string) => `- ${m}`).join("\n")}`;
+      case "opportunity_strategy":
+        return `# Opportunity Strategy\n\n## Deal Summary\n${data.deal_summary || ""}\n\n## Decision Process\n${data.decision_process || ""}\n\n## Champion Status\n${data.champion_status || ""}\n\n## Competition\n${data.competition_analysis || ""}\n\n## Value Alignment\n${data.value_alignment || ""}\n\n## Risks\n${(data.risks || []).map((r: string) => `- ${r}`).join("\n")}\n\n## Next Actions\n${(data.next_actions || []).map((a: string) => `- ${a}`).join("\n")}\n\n## Close Plan\n${data.close_plan || ""}`;
+      case "brainstorm":
+        return `# Brainstorm\n\n## Key Insights\n${(data.key_insights || []).map((i: string) => `- ${i}`).join("\n")}\n\n## Bold Ideas\n${(data.bold_ideas || []).map((i: string) => `- ${i}`).join("\n")}\n\n## Quick Wins\n${(data.quick_wins || []).map((w: string) => `- ${w}`).join("\n")}\n\n## Strategic Bets\n${(data.strategic_bets || []).map((b: string) => `- ${b}`).join("\n")}\n\n## Summary\n${data.summary || ""}`;
+      default:
+        return JSON.stringify(data, null, 2);
+    }
+  } catch {
+    return JSON.stringify(data, null, 2);
   }
 }
 
@@ -448,9 +570,6 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -470,22 +589,28 @@ serve(async (req) => {
     const body = await req.json();
     const { action, threadId, content, workflowType, depth } = body;
 
+    if (!threadId) {
+      return new Response(JSON.stringify({ error: "threadId required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── Build retrieval context pack ──────────────────────
-    const contextPack = await buildContextPack(supabase, threadId, userId, content);
+    const contextPack = await buildContextPack(supabase, threadId, userId, content, workflowType);
     const contextSection = packToPromptSection(contextPack);
 
     // ── ROLLUP action ─────────────────────────────────────
     if (action === "rollup") {
-      return await handleRollup(supabase, LOVABLE_API_KEY, threadId, userId, contextPack);
+      return await handleRollup(supabase, threadId, userId, contextPack);
     }
 
     // ── WORKFLOW action ───────────────────────────────────
     if (action === "workflow") {
-      return await handleWorkflow(supabase, LOVABLE_API_KEY, threadId, userId, workflowType, content, contextSection, contextPack);
+      return await handleWorkflow(supabase, threadId, userId, workflowType, content, contextSection, contextPack);
     }
 
     // ── CHAT action ───────────────────────────────────────
-    return await handleChat(supabase, LOVABLE_API_KEY, threadId, userId, content, depth, contextSection, contextPack);
+    return await handleChat(supabase, threadId, userId, content, depth, contextSection, contextPack);
   } catch (e) {
     console.error("strategy-chat error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
@@ -496,7 +621,7 @@ serve(async (req) => {
 
 // ── Chat Handler ──────────────────────────────────────────
 async function handleChat(
-  supabase: any, apiKey: string, threadId: string, userId: string,
+  supabase: any, threadId: string, userId: string,
   content: string, depth: string, contextSection: string, pack: ContextPack,
 ) {
   // Save user message
@@ -505,7 +630,7 @@ async function handleChat(
     message_type: "chat", content_json: { text: content },
   });
 
-  const route = MODEL_ROUTES.chat_general;
+  const { route, provider } = resolveRoute("chat_general");
   const systemPrompt = `You are a strategic sales advisor embedded in a Strategy workspace. You help with deep account research, email evaluation, opportunity strategy, territory planning, and brainstorming.
 
 Be specific, actionable, and grounded. Reference concrete details from the context provided. When citing information from strategic memory or uploaded resources, note the source.
@@ -521,9 +646,9 @@ ${contextSection}`;
     })),
   ];
 
-  const aiResp = await fetch(GATEWAY, {
+  const aiResp = await fetch(provider.gateway, {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    headers: { [provider.authHeaderName]: provider.getAuthValue(), "Content-Type": "application/json" },
     body: JSON.stringify({
       model: route.model,
       messages,
@@ -562,7 +687,12 @@ ${contextSection}`;
         await supabase.from("strategy_messages").insert({
           thread_id: threadId, user_id: userId, role: "assistant",
           message_type: "chat",
-          content_json: { text: fullResponse, sources_used: pack.sourceCount },
+          content_json: {
+            text: fullResponse,
+            sources_used: pack.sourceCount,
+            retrieval_meta: pack.retrievalMeta,
+            model_used: route.model,
+          },
         });
         await supabase.from("strategy_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
 
@@ -573,7 +703,7 @@ ${contextSection}`;
           .eq("thread_id", threadId);
         if (count && count % 8 === 0) {
           console.log(`[auto-rollup] triggering for thread ${threadId} at ${count} messages`);
-          triggerRollupAsync(supabase, Deno.env.get("LOVABLE_API_KEY")!, threadId, userId);
+          triggerRollupAsync(supabase, threadId, userId);
         }
       } catch (e) {
         controller.error(e);
@@ -588,10 +718,10 @@ ${contextSection}`;
 
 // ── Workflow Handler ──────────────────────────────────────
 async function handleWorkflow(
-  supabase: any, apiKey: string, threadId: string, userId: string,
+  supabase: any, threadId: string, userId: string,
   workflowType: string, content: string, contextSection: string, pack: ContextPack,
 ) {
-  const route = MODEL_ROUTES[workflowType as TaskType] || MODEL_ROUTES.chat_general;
+  const { route, provider } = resolveRoute(workflowType);
   const tool = WORKFLOW_TOOLS[workflowType];
 
   // Create workflow run
@@ -609,12 +739,12 @@ async function handleWorkflow(
   });
 
   const workflowPrompts: Record<string, string> = {
-    deep_research: "Conduct deep research on the linked account or topic. Analyze business, industry trends, competitive landscape, technology stack, key stakeholders, and potential pain points.",
-    account_plan: "Create a comprehensive account plan including executive summary, stakeholder map, strategic objectives, action plan, risks, and success metrics.",
-    territory_tiering: "Analyze and tier accounts in the territory by ICP fit, revenue potential, engagement level, competitive position, and timing signals.",
-    email_evaluation: "Evaluate the provided email or messaging for subject line, opening, value prop, CTA strength, tone, and personalization. Provide scored assessment and rewrite.",
-    opportunity_strategy: "Build an opportunity strategy covering deal summary, decision process, champion status, competition, value alignment, risks, next actions, and close plan.",
-    brainstorm: "Facilitate a strategic brainstorm. Generate creative ideas, challenge assumptions, identify non-obvious angles, and propose unconventional approaches.",
+    deep_research: "Conduct deep research on the linked account or topic. Analyze business, industry trends, competitive landscape, technology stack, key stakeholders, and potential pain points. Use all available context including account memory and uploaded resources.",
+    account_plan: "Create a comprehensive account plan including executive summary, stakeholder map, strategic objectives, action plan, risks, and success metrics. Ground your analysis in available account data and memory.",
+    territory_tiering: "Analyze and tier accounts in the territory by ICP fit, revenue potential, engagement level, competitive position, and timing signals. Use available account data and territory memory.",
+    email_evaluation: "Evaluate the provided email or messaging for subject line, opening, value prop, CTA strength, tone, and personalization. Provide scored assessment and rewrite. Consider the recipient's context if available.",
+    opportunity_strategy: "Build an opportunity strategy covering deal summary, decision process, champion status, competition, value alignment, risks, next actions, and close plan. Use all available opportunity context and memory.",
+    brainstorm: "Facilitate a strategic brainstorm. Generate creative ideas, challenge assumptions, identify non-obvious angles, and propose unconventional approaches. Draw from all available context for grounded creativity.",
   };
 
   const systemPrompt = `You are a strategic sales advisor. Use the context below to produce a thorough, grounded analysis.
@@ -624,7 +754,7 @@ ${workflowPrompts[workflowType] || workflowPrompts.brainstorm}
 
 You MUST call the provided tool function with your structured result.`;
 
-  const userPrompt = content || `Execute ${workflowType.replace(/_/g, " ")} workflow.`;
+  const userPrompt = content || `Execute ${workflowType.replace(/_/g, " ")} workflow based on available context.`;
 
   const reqBody: any = {
     model: route.model,
@@ -645,11 +775,11 @@ You MUST call the provided tool function with your structured result.`;
     reqBody.reasoning = route.reasoning;
   }
 
-  console.log(`[workflow] ${workflowType} using model=${route.model}`);
+  console.log(`[workflow] ${workflowType} provider=${route.provider} model=${route.model}`);
 
-  const aiResp = await fetch(GATEWAY, {
+  const aiResp = await fetch(provider.gateway, {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    headers: { [provider.authHeaderName]: provider.getAuthValue(), "Content-Type": "application/json" },
     body: JSON.stringify(reqBody),
   });
 
@@ -685,6 +815,12 @@ You MUST call the provided tool function with your structured result.`;
     .update({ status: "completed", result_json: structuredData })
     .eq("id", run.id);
 
+  // Build output title from context
+  let outputTitle = `${workflowType.replace(/_/g, " ")}`;
+  if (pack.account) outputTitle = `${pack.account.name} — ${outputTitle}`;
+  else if (pack.opportunity) outputTitle = `${pack.opportunity.name} — ${outputTitle}`;
+  outputTitle += ` — ${new Date().toLocaleDateString()}`;
+
   // Save result message with structured data
   const { data: resultMsg } = await supabase.from("strategy_messages").insert({
     thread_id: threadId, user_id: userId, role: "assistant",
@@ -695,6 +831,8 @@ You MUST call the provided tool function with your structured result.`;
       workflowType,
       runId: run.id,
       sources_used: pack.sourceCount,
+      retrieval_meta: pack.retrievalMeta,
+      model_used: route.model,
     },
   }).select().single();
 
@@ -702,23 +840,23 @@ You MUST call the provided tool function with your structured result.`;
   const { data: output } = await supabase.from("strategy_outputs").insert({
     user_id: userId, thread_id: threadId, workflow_run_id: run.id,
     output_type: workflowTypeToOutputType(workflowType),
-    title: `${workflowType.replace(/_/g, " ")} — ${new Date().toLocaleDateString()}`,
+    title: outputTitle,
     content_json: structuredData,
     rendered_text: renderedText,
     linked_account_id: pack.account?.id || null,
     linked_opportunity_id: pack.opportunity?.id || null,
   }).select().single();
 
-  // Update thread
+  // Update thread summary
   await supabase.from("strategy_threads").update({
     updated_at: new Date().toISOString(),
     summary: (structuredData.summary || structuredData.executive_summary || renderedText || "").slice(0, 200),
   }).eq("id", threadId);
 
-  console.log(`[workflow] ${workflowType} completed. output=${output?.id}`);
+  console.log(`[workflow] ${workflowType} completed. output=${output?.id} sources=${pack.sourceCount}`);
 
   // Trigger auto-rollup after workflow
-  triggerRollupAsync(supabase, Deno.env.get("LOVABLE_API_KEY")!, threadId, userId);
+  triggerRollupAsync(supabase, threadId, userId);
 
   return new Response(JSON.stringify({
     resultMessage: resultMsg,
@@ -726,6 +864,8 @@ You MUST call the provided tool function with your structured result.`;
     workflowRun: run,
     structured: structuredData,
     sourceCount: pack.sourceCount,
+    retrievalMeta: pack.retrievalMeta,
+    modelUsed: route.model,
   }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
@@ -733,7 +873,7 @@ You MUST call the provided tool function with your structured result.`;
 
 // ── Rollup Handler ────────────────────────────────────────
 async function handleRollup(
-  supabase: any, apiKey: string, threadId: string, userId: string, pack?: ContextPack,
+  supabase: any, threadId: string, userId: string, pack?: ContextPack,
 ) {
   if (!pack) {
     pack = await buildContextPack(supabase, threadId, userId);
@@ -750,15 +890,22 @@ async function handleRollup(
     .join("\n")
     .slice(0, 8000);
 
-  const route = MODEL_ROUTES.chat_general;
+  // Include memory context for richer rollups
+  let memoryContext = "";
+  if (pack.memories.length > 0) {
+    memoryContext = "\n\nExisting memory (avoid duplicating these):\n" + 
+      pack.memories.slice(0, 10).map(m => `- [${m.memory_type}] ${m.content.slice(0, 100)}`).join("\n");
+  }
 
-  const aiResp = await fetch(GATEWAY, {
+  const { route, provider } = resolveRoute("chat_general");
+
+  const aiResp = await fetch(provider.gateway, {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    headers: { [provider.authHeaderName]: provider.getAuthValue(), "Content-Type": "application/json" },
     body: JSON.stringify({
       model: route.model,
       messages: [
-        { role: "system", content: "You are analyzing a strategy conversation thread. Summarize the key points, identify hypotheses, risks, open questions, and next steps. Also suggest memory entries that should be saved." },
+        { role: "system", content: `You are analyzing a strategy conversation thread. Summarize the key points, identify hypotheses, risks, open questions, and next steps. Also suggest memory entries that should be saved. Only suggest memories with confidence >= 0.6. Do NOT suggest memories that duplicate existing ones.${memoryContext}` },
         { role: "user", content: conversationText },
       ],
       tools: [ROLLUP_TOOL],
@@ -777,19 +924,32 @@ async function handleRollup(
     try {
       rollup = JSON.parse(toolCall.function.arguments);
       rollup.updated_at = new Date().toISOString();
+      
+      // Filter out low-confidence suggestions and deduplicate against existing memories
+      if (rollup.memory_suggestions) {
+        const existingContents = new Set(pack.memories.map((m: any) => m.content.toLowerCase().trim()));
+        rollup.memory_suggestions = rollup.memory_suggestions
+          .filter((s: any) => (s.confidence ?? 0) >= 0.6)
+          .filter((s: any) => {
+            const normalized = s.content.toLowerCase().trim();
+            // Check for near-duplicate (substring match)
+            for (const existing of existingContents) {
+              if (existing.includes(normalized) || normalized.includes(existing)) return false;
+            }
+            return true;
+          });
+      }
     } catch (e) {
       console.error("[rollup] parse error:", e);
     }
   }
 
   if (rollup) {
-    // Save to thread
     await supabase.from("strategy_threads").update({
       latest_rollup: rollup,
       updated_at: new Date().toISOString(),
     }).eq("id", threadId);
 
-    // Save to strategy_rollups
     await supabase.from("strategy_rollups").insert({
       object_type: "thread",
       object_id: threadId,
@@ -799,7 +959,7 @@ async function handleRollup(
       user_id: userId,
     });
 
-    console.log(`[rollup] saved for thread ${threadId}`);
+    console.log(`[rollup] saved for thread ${threadId}, suggestions=${rollup.memory_suggestions?.length || 0}`);
   }
 
   return new Response(JSON.stringify({ rollup }), {
@@ -808,8 +968,8 @@ async function handleRollup(
 }
 
 // Fire-and-forget rollup (doesn't block the response)
-function triggerRollupAsync(supabase: any, apiKey: string, threadId: string, userId: string) {
-  handleRollup(supabase, apiKey, threadId, userId).catch((e) =>
+function triggerRollupAsync(supabase: any, threadId: string, userId: string) {
+  handleRollup(supabase, threadId, userId).catch((e) =>
     console.error("[auto-rollup] failed:", e)
   );
 }
