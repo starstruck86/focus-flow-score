@@ -314,9 +314,10 @@ async function buildContextPack(
 
       const { data: mem } = await supabase
         .from("account_strategy_memory")
-        .select("id, memory_type, content, is_pinned, confidence, created_at")
+        .select("id, memory_type, content, is_pinned, confidence, last_used_at, created_at")
         .eq("account_id", thread.linked_account_id)
         .eq("user_id", userId)
+        .eq("is_irrelevant", false)
         .order("created_at", { ascending: false })
         .limit(40);
       if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "account" })));
@@ -334,9 +335,10 @@ async function buildContextPack(
 
       const { data: mem } = await supabase
         .from("opportunity_strategy_memory")
-        .select("id, memory_type, content, is_pinned, confidence, created_at")
+        .select("id, memory_type, content, is_pinned, confidence, last_used_at, created_at")
         .eq("opportunity_id", thread.linked_opportunity_id)
         .eq("user_id", userId)
+        .eq("is_irrelevant", false)
         .order("created_at", { ascending: false })
         .limit(40);
       if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "opportunity" })));
@@ -347,9 +349,10 @@ async function buildContextPack(
     promises.push((async () => {
       const { data: mem } = await supabase
         .from("territory_strategy_memory")
-        .select("id, memory_type, content, is_pinned, confidence, created_at")
+        .select("id, memory_type, content, is_pinned, confidence, last_used_at, created_at")
         .eq("territory_id", thread.linked_territory_id)
         .eq("user_id", userId)
+        .eq("is_irrelevant", false)
         .order("created_at", { ascending: false })
         .limit(40);
       if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "territory" })));
@@ -416,6 +419,28 @@ async function buildContextPack(
 
   const pinnedCount = pack.memories.filter((m: any) => m.is_pinned).length;
   
+  // Compute context type and top sources
+  const memWeight = pack.memories.length * 2;
+  const upWeight = pack.uploads.length * 3;
+  const outWeight = pack.outputs.length * 2;
+  const totalWeight = memWeight + upWeight + outWeight;
+  let contextType = "minimal";
+  if (totalWeight > 0) {
+    if (memWeight > upWeight && memWeight > outWeight) contextType = "memory-driven";
+    else if (upWeight > memWeight && upWeight > outWeight) contextType = "upload-driven";
+    else contextType = "mixed";
+  }
+
+  // Top 3 most influential sources
+  const topSources: string[] = [];
+  const scoredMemories = pack.memories.slice(0, 2);
+  for (const m of scoredMemories) {
+    topSources.push(`Memory: ${m.content.slice(0, 60)}`);
+  }
+  for (const u of pack.uploads.slice(0, 1)) {
+    topSources.push(`Upload: ${u.file_name}`);
+  }
+
   pack.retrievalMeta = {
     memoriesScored: pack.memories.length,
     uploadsIncluded: pack.uploads.length,
@@ -424,12 +449,30 @@ async function buildContextPack(
     pinnedMemories: pinnedCount,
     uploadNames: pack.uploads.map((u: any) => u.file_name).filter(Boolean),
     outputTitles: pack.outputs.map((o: any) => o.title).filter(Boolean).slice(0, 5),
+    contextType,
+    topSources: topSources.slice(0, 3),
   };
   
   pack.sourceCount = (pack.account ? 1 : 0) + (pack.opportunity ? 1 : 0)
     + pack.memories.length + pack.uploads.length + pack.outputs.length;
 
-  console.log(`[retrieval] sources=${pack.sourceCount} memories=${pack.memories.length}(${pinnedCount} pinned) uploads=${pack.uploads.length} outputs=${pack.outputs.length} messages=${pack.recentMessages.length}`);
+  // Update last_used_at for memories used in this retrieval
+  const memoryIds = pack.memories.map((m: any) => m.id);
+  if (memoryIds.length > 0) {
+    const memTables = ["account_strategy_memory", "opportunity_strategy_memory", "territory_strategy_memory"];
+    for (const table of memTables) {
+      const idsForTable = pack.memories.filter((m: any) => {
+        if (table === "account_strategy_memory") return m.source === "account";
+        if (table === "opportunity_strategy_memory") return m.source === "opportunity";
+        return m.source === "territory";
+      }).map((m: any) => m.id);
+      if (idsForTable.length > 0) {
+        await supabase.from(table).update({ last_used_at: new Date().toISOString() }).in("id", idsForTable);
+      }
+    }
+  }
+
+  console.log(`[retrieval] sources=${pack.sourceCount} memories=${pack.memories.length}(${pinnedCount} pinned) uploads=${pack.uploads.length} outputs=${pack.outputs.length} messages=${pack.recentMessages.length} contextType=${contextType}`);
 
   return pack;
 }
@@ -456,6 +499,14 @@ function scoreAndRankMemories(memories: any[], queryTerms: string[], boostTerms:
       // Confidence boost
       if (m.confidence && m.confidence > 0.7) score += 2;
       else if (m.confidence && m.confidence > 0.5) score += 1;
+      else if (m.confidence !== null && m.confidence < 0.3) score -= 1; // Low-confidence penalty
+      
+      // last_used_at boost — recently used memories are more relevant
+      if (m.last_used_at) {
+        const usedAgeDays = (Date.now() - new Date(m.last_used_at).getTime()) / 86400000;
+        if (usedAgeDays < 3) score += 2;
+        else if (usedAgeDays < 7) score += 1;
+      }
       
       // Recency boost (stronger gradient) + staleness penalty
       const ageDays = (Date.now() - new Date(m.created_at).getTime()) / 86400000;

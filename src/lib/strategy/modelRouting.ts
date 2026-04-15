@@ -38,11 +38,11 @@ export const STRATEGY_MODEL_ROUTES: Record<StrategyTaskType, StrategyModelRoute>
     maxTokens: 4096,
   },
   deep_research: {
-    provider: 'lovable_ai',
-    model: 'google/gemini-2.5-pro',
+    provider: 'perplexity',
+    model: 'sonar-pro',
     temperature: 0.3,
     maxTokens: 8192,
-    fallbackProvider: 'perplexity',
+    fallbackProvider: 'lovable_ai',
   },
   email_evaluation: {
     provider: 'lovable_ai',
