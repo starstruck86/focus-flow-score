@@ -15,8 +15,7 @@ import { StrategyCommandCenter } from './StrategyCommandCenter';
 import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
 import { StrategyMessageBubble } from './StrategyMessageBubble';
-import type { StrategyThread, StrategyLane } from '@/types/strategy';
-import { LANES } from '@/types/strategy';
+import type { StrategyThread } from '@/types/strategy';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 
