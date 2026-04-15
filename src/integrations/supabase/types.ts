@@ -1052,6 +1052,99 @@ export type Database = {
         }
         Relationships: []
       }
+      command_feedback: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          id: string
+          metadata: Json | null
+          section_heading: string | null
+          signal_type: string
+          template_id: string | null
+          template_name: string | null
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          section_heading?: string | null
+          signal_type: string
+          template_id?: string | null
+          template_name?: string | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          section_heading?: string | null
+          signal_type?: string
+          template_id?: string | null
+          template_name?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      command_shortcuts: {
+        Row: {
+          account_id: string | null
+          account_name: string | null
+          created_at: string
+          free_text: string | null
+          id: string
+          is_pinned: boolean
+          label: string
+          last_used_at: string | null
+          opportunity_id: string | null
+          opportunity_name: string | null
+          raw_command: string
+          template_id: string | null
+          template_name: string | null
+          times_used: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          account_name?: string | null
+          created_at?: string
+          free_text?: string | null
+          id?: string
+          is_pinned?: boolean
+          label: string
+          last_used_at?: string | null
+          opportunity_id?: string | null
+          opportunity_name?: string | null
+          raw_command: string
+          template_id?: string | null
+          template_name?: string | null
+          times_used?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          account_name?: string | null
+          created_at?: string
+          free_text?: string | null
+          id?: string
+          is_pinned?: boolean
+          label?: string
+          last_used_at?: string | null
+          opportunity_id?: string | null
+          opportunity_name?: string | null
+          raw_command?: string
+          template_id?: string | null
+          template_name?: string | null
+          times_used?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           account_id: string | null
