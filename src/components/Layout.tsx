@@ -330,7 +330,7 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
               )}
             </div>
           </>
-        )
+        )}
       </header>
 
       {/*
