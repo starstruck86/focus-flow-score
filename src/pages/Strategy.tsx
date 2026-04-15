@@ -86,6 +86,7 @@ export default function Strategy() {
   }, [transformOutput, handleWorkflowComplete]);
 
   return (
+    <>
     <div
       className="flex bg-background overflow-hidden"
       style={{
