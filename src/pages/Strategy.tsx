@@ -154,5 +154,6 @@ export default function Strategy() {
     </div>
 
     <BottomNav />
+    </>
   );
 }
