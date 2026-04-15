@@ -791,9 +791,8 @@ export default function AudioSessionMode({
         )}
       </div>
 
-      {/* Scenario context — only show in Dave panel when NOT duplicating the scenario card above.
-          During intro/prompt phases, the main scenario card is already visible. */}
-      {phase !== 'intro' && phase !== 'prompt' && (
+      {/* Scenario context — only in post-response phases where the top scenario card may be scrolled away */}
+      {(isFeedbackPhase(phase) || phase === 'complete' || phase === 'retry_prompt') && (
         <div className="text-xs text-muted-foreground px-1">
           <p>{scenario.context}</p>
           <p className="mt-2 font-medium italic text-foreground">"{scenario.objection}"</p>
