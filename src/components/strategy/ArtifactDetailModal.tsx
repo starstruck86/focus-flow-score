@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Copy, RefreshCw, Loader2, Mail, FileText, Target, ArrowRight,
-  History, Pencil, CheckCircle2, Clock,
+  History, Pencil, CheckCircle2, Clock, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { StrategyArtifact } from '@/hooks/strategy/useStrategyArtifacts';
@@ -37,11 +37,15 @@ export function ArtifactDetailModal({
   const [refineInstructions, setRefineInstructions] = useState('');
   const [viewingArtifact, setViewingArtifact] = useState<StrategyArtifact | null>(null);
 
-  // The artifact currently being displayed (either selected or a version from history)
+  // The artifact currently being displayed
   const displayArtifact = viewingArtifact || artifact;
 
-  // Reset viewing artifact when modal artifact changes
-  const resetOnChange = artifact?.id;
+  // Reset state when modal artifact changes
+  useEffect(() => {
+    setViewingArtifact(null);
+    setView('detail');
+    setRefineInstructions('');
+  }, [artifact?.id]);
 
   // Build version chain
   const versionChain = useMemo(() => {
@@ -52,32 +56,39 @@ export function ArtifactDetailModal({
       .sort((a, b) => a.version - b.version);
   }, [artifact, allArtifacts]);
 
+  const latestVersion = useMemo(() => {
+    if (versionChain.length === 0) return artifact;
+    return versionChain[versionChain.length - 1];
+  }, [versionChain, artifact]);
+
   if (!artifact || !displayArtifact) return null;
 
   const TypeIcon = TYPE_ICONS[displayArtifact.artifact_type] || FileText;
   const typeLabel = displayArtifact.artifact_type.replace(/_/g, ' ');
-  const structured = displayArtifact.content_json as any;
 
   const copyContent = () => {
     navigator.clipboard.writeText(displayArtifact.rendered_text || JSON.stringify(displayArtifact.content_json, null, 2));
     toast.success('Copied to clipboard');
   };
 
+  // Regenerate/refine always operates on the currently displayed artifact
   const handleRegenerate = async () => {
-    if (!onRegenerate) return;
-    const result = await onRegenerate(artifact.id, artifact.artifact_type);
+    if (!onRegenerate || !displayArtifact) return;
+    const result = await onRegenerate(displayArtifact.id, displayArtifact.artifact_type);
     if (result) {
-      toast.success('New version created');
+      // Auto-switch to the new version
+      setViewingArtifact(result);
+      setView('detail');
     }
   };
 
   const handleRefine = async () => {
-    if (!onRegenerate || !refineInstructions.trim()) return;
-    const result = await onRegenerate(artifact.id, artifact.artifact_type, refineInstructions.trim());
+    if (!onRegenerate || !refineInstructions.trim() || !displayArtifact) return;
+    const result = await onRegenerate(displayArtifact.id, displayArtifact.artifact_type, refineInstructions.trim());
     if (result) {
       setRefineInstructions('');
+      setViewingArtifact(result);
       setView('detail');
-      setViewingArtifact(null);
     }
   };
 
@@ -85,6 +96,8 @@ export function ArtifactDetailModal({
     setViewingArtifact(v);
     setView('detail');
   };
+
+  const isViewingLatest = !viewingArtifact || viewingArtifact.id === latestVersion?.id;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -102,8 +115,10 @@ export function ArtifactDetailModal({
                 <span className="text-[9px] text-muted-foreground">
                   {new Date(displayArtifact.created_at).toLocaleDateString()}
                 </span>
-                {viewingArtifact && viewingArtifact.id !== artifact.id && (
-                  <Badge variant="outline" className="text-[8px] px-1 py-0 text-amber-400 border-amber-400/30">Viewing older version</Badge>
+                {!isViewingLatest && (
+                  <Badge variant="outline" className="text-[8px] px-1 py-0 text-amber-400 border-amber-400/30">
+                    Older version
+                  </Badge>
                 )}
               </div>
             </div>
@@ -135,15 +150,15 @@ export function ArtifactDetailModal({
             {view === 'history' && (
               <VersionHistoryView
                 versions={versionChain}
-                currentId={artifact.id}
-                viewingId={viewingArtifact?.id}
+                latestId={latestVersion?.id ?? null}
+                viewingId={displayArtifact.id}
                 onViewVersion={handleViewVersion}
               />
             )}
             {view === 'refine' && (
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Describe how you'd like to refine this artifact. A new version will be generated.
+                  Refining <strong>v{displayArtifact.version}</strong>. A new version will be generated with your instructions.
                 </p>
                 <Textarea
                   value={refineInstructions}
@@ -178,6 +193,14 @@ export function ArtifactDetailModal({
             {isTransforming ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
             Regenerate
           </Button>
+          {!isViewingLatest && latestVersion && (
+            <Button
+              size="sm" variant="ghost" className="gap-1 text-xs text-primary"
+              onClick={() => handleViewVersion(latestVersion)}
+            >
+              <ArrowRight className="h-3 w-3" /> View Latest
+            </Button>
+          )}
           <div className="flex-1" />
           <Button size="sm" variant="ghost" className="text-xs" onClick={() => onOpenChange(false)}>
             Close
@@ -258,10 +281,7 @@ function ArtifactFullContent({ type, data, renderedText }: { type: string; data:
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Actions</p>
               <div className="space-y-1.5">
                 {data.steps.map((step: any, i: number) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-2.5 rounded-lg border border-border/50 px-3 py-2"
-                  >
+                  <div key={i} className="flex items-start gap-2.5 rounded-lg border border-border/50 px-3 py-2">
                     <PriorityDot priority={step.priority} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground/85">{step.action}</p>
@@ -336,8 +356,8 @@ function ListBlock({ label, items, numbered, variant }: {
 }
 
 // ── Version History ───────────────────────────────────────
-function VersionHistoryView({ versions, currentId, viewingId, onViewVersion }: {
-  versions: StrategyArtifact[]; currentId: string; viewingId?: string;
+function VersionHistoryView({ versions, latestId, viewingId, onViewVersion }: {
+  versions: StrategyArtifact[]; latestId: string | null; viewingId: string;
   onViewVersion: (v: StrategyArtifact) => void;
 }) {
   if (versions.length === 0) {
@@ -347,9 +367,9 @@ function VersionHistoryView({ versions, currentId, viewingId, onViewVersion }: {
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">{versions.length} version{versions.length !== 1 ? 's' : ''} — click to view</p>
-      {versions.map((v) => {
-        const isCurrent = v.id === currentId;
-        const isViewing = v.id === (viewingId || currentId);
+      {[...versions].reverse().map((v) => {
+        const isLatest = v.id === latestId;
+        const isViewing = v.id === viewingId;
         return (
           <button
             key={v.id}
@@ -366,9 +386,14 @@ function VersionHistoryView({ versions, currentId, viewingId, onViewVersion }: {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <p className="text-sm font-medium text-foreground truncate">{v.title}</p>
-                {isCurrent && (
+                {isLatest && (
                   <Badge variant="secondary" className="text-[8px] px-1 py-0 gap-0.5 shrink-0">
                     <CheckCircle2 className="h-2 w-2" /> Latest
+                  </Badge>
+                )}
+                {isViewing && !isLatest && (
+                  <Badge variant="outline" className="text-[8px] px-1 py-0 gap-0.5 shrink-0 text-primary border-primary/30">
+                    <Eye className="h-2 w-2" /> Viewing
                   </Badge>
                 )}
               </div>
