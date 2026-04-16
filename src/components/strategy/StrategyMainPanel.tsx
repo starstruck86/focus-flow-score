@@ -265,10 +265,10 @@ export function StrategyMainPanel({
           })}
           {overflowWorkflows.length > 0 && (
             <button
-              className="h-6 px-2 text-xs font-medium rounded-md transition-all shrink-0 flex items-center gap-1 text-muted-foreground/50 hover:text-foreground/60 hover:bg-muted/40 border border-border/20"
+              className="text-[10px] text-muted-foreground/40 hover:text-foreground/50 transition-colors shrink-0 px-1"
               onClick={() => setWorkflowSheetOpen(true)}
             >
-              +{overflowWorkflows.length} workflows
+              +{overflowWorkflows.length} more
             </button>
           )}
         </div>
@@ -357,9 +357,8 @@ export function StrategyMainPanel({
         </div>
       )}
 
-      {/* ── COMPOSER — continuous with canvas ── */}
-      <div className="shrink-0 px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))]">
-        <div className="rounded-lg border border-border/10 bg-card/40 overflow-hidden">
+      {/* ── COMPOSER — docked to canvas ── */}
+      <div className="shrink-0 border-t border-border/15 bg-background/60 px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))] pt-1.5">
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -372,7 +371,7 @@ export function StrategyMainPanel({
             rows={1}
             disabled={isSending}
           />
-          <div className="flex items-center justify-between px-1.5 py-0.5">
+          <div className="flex items-center justify-between px-0.5 pt-0.5">
             <div className="flex items-center gap-1.5">
               <div className="flex rounded overflow-hidden">
                 {DEPTH_OPTIONS.map(d => (
@@ -410,7 +409,6 @@ export function StrategyMainPanel({
               Send
             </Button>
           </div>
-        </div>
       </div>
 
       {/* ── Workflow overflow sheet (mobile) ── */}

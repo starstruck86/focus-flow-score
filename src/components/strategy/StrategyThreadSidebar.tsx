@@ -67,17 +67,17 @@ export function StrategyThreadSidebar({
   }, [recent]);
 
   return (
-    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/50 flex flex-col shrink-0 h-full')}>
+    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/30 flex flex-col shrink-0 h-full')}>
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-border/20 flex items-center gap-2">
-        <h2 className="text-[11px] font-medium text-foreground/40 tracking-wide flex-1">Threads</h2>
-        <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/30" onClick={onCollapse}>
+      <div className="px-3 py-1.5 border-b border-border/15 flex items-center gap-2">
+        <h2 className="text-[11px] font-medium text-foreground/35 tracking-wide flex-1">Threads</h2>
+        <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/25" onClick={onCollapse}>
           <ChevronLeft className="h-3 w-3" />
         </Button>
       </div>
 
       {/* New Thread */}
-      <div className="p-2.5 border-b border-border/20">
+      <div className="p-2.5 border-b border-border/15">
         <Button size="sm" className="w-full gap-1.5 font-medium" onClick={onOpenCreateDialog}>
           <Plus className="h-3.5 w-3.5" /> New Thread
         </Button>
@@ -176,8 +176,8 @@ function ThreadRow({ thread, isActive, onClick }: { thread: StrategyThread; isAc
       className={cn(
         'w-full text-left px-2 py-[3px] rounded-md text-xs flex items-start gap-1.5 transition-colors',
         isActive
-          ? 'bg-primary/8 text-foreground border-l-2 border-primary/40 pl-1.5'
-          : 'hover:bg-muted/40 text-foreground/70 hover:text-foreground',
+          ? 'bg-primary/6 text-foreground border-l-2 border-primary/30 pl-1.5'
+          : 'hover:bg-muted/30 text-foreground/60 hover:text-foreground',
       )}
     >
       <Icon className={cn('h-3 w-3 mt-0.5 shrink-0', isActive ? 'text-primary/60' : 'text-muted-foreground/50')} />
