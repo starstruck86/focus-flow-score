@@ -131,14 +131,14 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         {!isUser && !isSystem && text && (
           <div className="mt-2 pt-1.5 border-t border-border/20 flex items-center gap-1.5 flex-wrap">
             {providerUsed && (
-              <span className="text-[9px] text-muted-foreground/55 flex items-center gap-0.5">
+              <span className="text-[9px] text-muted-foreground/70 flex items-center gap-0.5">
                 <Cpu className="h-2 w-2" />
                 {providerUsed === 'openai' ? 'ChatGPT' : providerUsed === 'anthropic' ? 'Claude' : providerUsed === 'perplexity' ? 'Perplexity' : providerUsed}
                 {modelUsed ? ` · ${modelUsed.split('/').pop()}` : ''}
               </span>
             )}
             {(sourcesUsed != null && sourcesUsed > 0) && (
-              <span className="text-[9px] text-muted-foreground/55">{sourcesUsed} sources</span>
+              <span className="text-[9px] text-muted-foreground/70">{sourcesUsed} sources</span>
             )}
             {onSaveAsMemory && (
               <Button

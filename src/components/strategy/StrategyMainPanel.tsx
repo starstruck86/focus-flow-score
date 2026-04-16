@@ -101,7 +101,7 @@ export function StrategyMainPanel({
   const { uploads, uploadFiles, isUploading } = useStrategyUploads(thread?.id ?? null);
   const [input, setInput] = useState('');
   const [depth, setDepth] = useState<typeof DEPTH_OPTIONS[number]>('Standard');
-  const [activeLane, setActiveLane] = useState<string>(thread?.lane ?? 'research');
+  
   const [isDragOver, setIsDragOver] = useState(false);
   const [activeWorkflow, setActiveWorkflow] = useState<string | null>(null);
   const [workflowSheetOpen, setWorkflowSheetOpen] = useState(false);
@@ -113,17 +113,14 @@ export function StrategyMainPanel({
 
   // Split workflows into visible (recommended) and overflow (rest)
   const visibleWorkflows = useMemo(() =>
-    isMobile ? WORKFLOWS.filter(w => recommendedWorkflows.includes(w.key)).slice(0, 3) : WORKFLOWS,
-    [isMobile, recommendedWorkflows]
+    WORKFLOWS.filter(w => recommendedWorkflows.includes(w.key)).slice(0, 3),
+    [recommendedWorkflows]
   );
   const overflowWorkflows = useMemo(() =>
-    isMobile ? WORKFLOWS.filter(w => !recommendedWorkflows.includes(w.key)) : [],
-    [isMobile, recommendedWorkflows]
+    WORKFLOWS.filter(w => !recommendedWorkflows.includes(w.key)),
+    [recommendedWorkflows]
   );
 
-  useEffect(() => {
-    if (thread?.lane) setActiveLane(thread.lane);
-  }, [thread?.id]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -461,13 +458,3 @@ export function StrategyMainPanel({
   );
 }
 
-function getLaneColor(lane: string): string {
-  const colors: Record<string, string> = {
-    research: 'text-blue-400 border-blue-400/30',
-    evaluate: 'text-amber-400 border-amber-400/30',
-    build: 'text-green-400 border-green-400/30',
-    strategy: 'text-purple-400 border-purple-400/30',
-    brainstorm: 'text-pink-400 border-pink-400/30',
-  };
-  return colors[lane] || '';
-}
