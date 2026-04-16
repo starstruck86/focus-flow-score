@@ -174,7 +174,7 @@ function ThreadRow({ thread, isActive, onClick }: { thread: StrategyThread; isAc
     <button
       onClick={onClick}
       className={cn(
-        'w-full text-left px-2 py-1 rounded-md text-xs flex items-start gap-1.5 transition-colors',
+        'w-full text-left px-2 py-[3px] rounded-md text-xs flex items-start gap-1.5 transition-colors',
         isActive
           ? 'bg-primary/8 text-foreground border-l-2 border-primary/40 pl-1.5'
           : 'hover:bg-muted/40 text-foreground/70 hover:text-foreground',
