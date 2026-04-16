@@ -268,7 +268,7 @@ export function StrategyMainPanel({
           })}
           {overflowWorkflows.length > 0 && (
             <button
-              className="h-6 px-2 text-xs font-medium rounded-md transition-all shrink-0 flex items-center gap-1 text-foreground/35 hover:text-foreground/50 hover:bg-muted/40 bg-muted/30"
+              className="h-6 px-2.5 text-[10px] font-medium rounded-md transition-all shrink-0 flex items-center gap-1 text-foreground/40 hover:text-foreground/60 hover:bg-muted/40 border border-border/30"
               onClick={() => setWorkflowSheetOpen(true)}
             >
               +{overflowWorkflows.length} workflows
@@ -362,7 +362,7 @@ export function StrategyMainPanel({
 
       {/* ── COMPOSER — continuous with canvas ── */}
       <div className="shrink-0 px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))]">
-        <div className="rounded-lg border border-border/20 bg-muted/20 overflow-hidden">
+        <div className="rounded-lg border border-border/10 bg-card/40 overflow-hidden">
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
