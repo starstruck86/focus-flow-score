@@ -274,13 +274,13 @@ export function StrategyMainPanel({
       {(activeWorkflow || isUploading) && (
         <div className="shrink-0 px-3 py-px">
           {activeWorkflow && (
-            <span className="text-[10px] text-muted-foreground/50 flex items-center gap-1">
-              <Loader2 className="h-2 w-2 animate-spin text-primary/30" />
+            <span className="text-[10px] text-muted-foreground/35 flex items-center gap-1">
+              <Loader2 className="h-2 w-2 animate-spin text-primary/25" />
               Running {activeWorkflowLabel}…
             </span>
           )}
           {isUploading && (
-            <span className="text-[10px] text-muted-foreground/40 flex items-center gap-1 animate-pulse">
+            <span className="text-[10px] text-muted-foreground/30 flex items-center gap-1 animate-pulse">
               <Loader2 className="h-2 w-2 animate-spin" /> Uploading…
             </span>
           )}
