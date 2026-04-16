@@ -67,17 +67,17 @@ export function StrategyThreadSidebar({
   }, [recent]);
 
   return (
-    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/20 flex flex-col shrink-0 h-full')}>
+    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/12 flex flex-col shrink-0 h-full')}>
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-border/10 flex items-center gap-2">
-        <h2 className="text-[11px] font-medium text-foreground/30 tracking-wide flex-1">Threads</h2>
-        <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/25" onClick={onCollapse}>
+      <div className="px-3 py-1.5 border-b border-border/8 flex items-center gap-2">
+        <h2 className="text-[11px] font-medium text-foreground/25 tracking-wide flex-1">Threads</h2>
+        <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/20" onClick={onCollapse}>
           <ChevronLeft className="h-3 w-3" />
         </Button>
       </div>
 
       {/* New Thread */}
-      <div className="p-2.5 border-b border-border/10">
+      <div className="p-2.5 border-b border-border/8">
         <Button size="sm" className="w-full gap-1.5 font-medium" onClick={onOpenCreateDialog}>
           <Plus className="h-3.5 w-3.5" /> New Thread
         </Button>
@@ -176,8 +176,8 @@ function ThreadRow({ thread, isActive, onClick }: { thread: StrategyThread; isAc
       className={cn(
         'w-full text-left px-2 py-[3px] rounded-md text-xs flex items-start gap-1.5 transition-colors',
         isActive
-          ? 'bg-primary/5 text-foreground border-l-2 border-primary/25 pl-1.5'
-          : 'hover:bg-muted/20 text-foreground/50 hover:text-foreground/70',
+          ? 'bg-primary/6 text-foreground border-l-2 border-primary/20 pl-1.5'
+          : 'hover:bg-muted/15 text-foreground/45 hover:text-foreground/65',
       )}
     >
       <Icon className={cn('h-3 w-3 mt-0.5 shrink-0', isActive ? 'text-primary/60' : 'text-muted-foreground/50')} />
