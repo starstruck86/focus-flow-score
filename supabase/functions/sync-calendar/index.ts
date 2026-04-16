@@ -604,9 +604,42 @@ Deno.serve(async (req) => {
 
     console.log('Fetching ICS for user:', userId);
 
-    const icsResponse = await fetch(icsUrl);
-    if (!icsResponse.ok) {
-      throw new Error(`Failed to fetch ICS: ${icsResponse.status} ${icsResponse.statusText}`);
+    // Outlook's ICS endpoint is flaky and frequently returns transient 5xx.
+    // Retry up to 3x with backoff, then return a clear (non-500) response so
+    // the client surfaces a meaningful message instead of a generic crash.
+    let icsResponse: Response | null = null;
+    let lastStatus = 0;
+    let lastStatusText = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const r = await fetch(icsUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CalendarSync/1.0)' },
+        });
+        if (r.ok) {
+          icsResponse = r;
+          break;
+        }
+        lastStatus = r.status;
+        lastStatusText = r.statusText;
+        // Don't retry on 4xx (auth/URL issue)
+        if (r.status >= 400 && r.status < 500) break;
+      } catch (e) {
+        lastStatusText = (e as Error).message;
+      }
+      if (attempt < 3) await new Promise((res) => setTimeout(res, 800 * attempt));
+    }
+
+    if (!icsResponse) {
+      console.warn(`ICS upstream unavailable after retries: ${lastStatus} ${lastStatusText}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Calendar provider is temporarily unavailable. Please try again in a moment.',
+          upstream_status: lastStatus,
+          retryable: true,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const icsContent = await icsResponse.text();
