@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   PanelLeftOpen, PanelRightOpen, Search, Mail, Target, Map,
   FileText, Send, Paperclip, Upload, Loader2, Zap, Database,
-  Building2, MessageSquare,
+  Building2, MessageSquare, ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,6 +18,9 @@ import { StrategyCommandCenter } from './StrategyCommandCenter';
 import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
 import { StrategyMessageBubble } from './StrategyMessageBubble';
+import { DiscoveryPrepPrompter } from './tasks/DiscoveryPrepPrompter';
+import { TaskOutputViewer } from './tasks/TaskOutputViewer';
+import { useTaskExecution } from '@/hooks/strategy/useTaskExecution';
 import type { StrategyThread } from '@/types/strategy';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -99,12 +102,14 @@ export function StrategyMainPanel({
   const isMobile = useIsMobile();
   const { messages, sendMessage, runWorkflow, isLoading, isSending } = useStrategyMessages(thread?.id ?? null);
   const { uploads, uploadFiles, isUploading } = useStrategyUploads(thread?.id ?? null);
+  const { isRunning: isTaskRunning, result: taskResult, runDiscoveryPrep, applyRedline, rejectRedline, reset: resetTask } = useTaskExecution();
   const [input, setInput] = useState('');
   const [depth, setDepth] = useState<typeof DEPTH_OPTIONS[number]>('Standard');
   
   const [isDragOver, setIsDragOver] = useState(false);
   const [activeWorkflow, setActiveWorkflow] = useState<string | null>(null);
   const [workflowSheetOpen, setWorkflowSheetOpen] = useState(false);
+  const [taskPrompterOpen, setTaskPrompterOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -192,6 +197,18 @@ export function StrategyMainPanel({
       <StrategyCommandCenter
         sidebarCollapsed={sidebarCollapsed}
         onExpandSidebar={onExpandSidebar}
+      />
+    );
+  }
+
+  // If a task result is showing, render the output viewer as a full overlay
+  if (taskResult) {
+    return (
+      <TaskOutputViewer
+        result={taskResult}
+        onBack={resetTask}
+        onApplyRedline={applyRedline}
+        onRejectRedline={rejectRedline}
       />
     );
   }
@@ -364,6 +381,27 @@ export function StrategyMainPanel({
         </div>
       )}
 
+      {/* ── TASK SHORTCUT ROW ── */}
+      <div className="shrink-0 px-3 py-1 border-t border-border/8">
+        <button
+          className={cn(
+            'flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[10px] font-medium transition-all',
+            'border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary',
+            'active:scale-[0.98]',
+            (isSending || isTaskRunning) && 'opacity-50 pointer-events-none'
+          )}
+          onClick={() => setTaskPrompterOpen(true)}
+          disabled={isSending || isTaskRunning}
+        >
+          {isTaskRunning ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Zap className="h-3 w-3" />
+          )}
+          {isTaskRunning ? 'Generating Prep Doc…' : 'Discovery Prep'}
+        </button>
+      </div>
+
       {/* ── COMPOSER — docked ── */}
       <div className="shrink-0 border-t border-border/15 bg-background/65 backdrop-blur-md px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))] pt-1">
           <Textarea
@@ -459,6 +497,18 @@ export function StrategyMainPanel({
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* ── Discovery Prep Prompter ── */}
+      <DiscoveryPrepPrompter
+        open={taskPrompterOpen}
+        onOpenChange={setTaskPrompterOpen}
+        onSubmit={async (inputs) => {
+          setTaskPrompterOpen(false);
+          await runDiscoveryPrep({ ...inputs, thread_id: thread?.id });
+        }}
+        isRunning={isTaskRunning}
+        linkedContext={linkedContext}
+      />
     </div>
   );
 }
