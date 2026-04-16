@@ -217,14 +217,14 @@ export function StrategyMainPanel({
         accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.json,.xml,.html" />
 
       {/* ── HEADER — single row ── */}
-      <div className="shrink-0 px-3 py-1 border-b border-border/12 flex items-center gap-1.5">
+      <div className="shrink-0 px-3 py-0.5 border-b border-border/8 flex items-center gap-1.5">
         {sidebarCollapsed && (
           <Button size="icon" variant="ghost" className="h-5 w-5 shrink-0 text-foreground/30" onClick={onExpandSidebar}>
             <PanelLeftOpen className="h-3 w-3" />
           </Button>
         )}
         <ThreadIcon className="h-2.5 w-2.5 text-primary/30 shrink-0" />
-        <h1 className="text-[11px] font-semibold text-foreground/80 truncate min-w-0">{thread.title}</h1>
+        <h1 className="text-[11px] font-semibold text-foreground/70 truncate min-w-0">{thread.title}</h1>
 
         <div className="flex-1" />
 
@@ -272,15 +272,15 @@ export function StrategyMainPanel({
 
       {/* Running indicator — subtle line below header */}
       {(activeWorkflow || isUploading) && (
-        <div className="shrink-0 px-3 py-0.5">
+        <div className="shrink-0 px-3 py-px">
           {activeWorkflow && (
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Loader2 className="h-2 w-2 animate-spin text-primary/40" />
+            <span className="text-[10px] text-muted-foreground/50 flex items-center gap-1">
+              <Loader2 className="h-2 w-2 animate-spin text-primary/30" />
               Running {activeWorkflowLabel}…
             </span>
           )}
           {isUploading && (
-            <span className="text-xs text-muted-foreground/50 flex items-center gap-1 animate-pulse">
+            <span className="text-[10px] text-muted-foreground/40 flex items-center gap-1 animate-pulse">
               <Loader2 className="h-2 w-2 animate-spin" /> Uploading…
             </span>
           )}
@@ -365,7 +365,7 @@ export function StrategyMainPanel({
       )}
 
       {/* ── COMPOSER — docked ── */}
-      <div className="shrink-0 border-t border-border/25 bg-background/72 backdrop-blur-md px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))] pt-1.5">
+      <div className="shrink-0 border-t border-border/15 bg-background/65 backdrop-blur-md px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))] pt-1">
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -420,14 +420,14 @@ export function StrategyMainPanel({
 
       {/* ── Workflow overflow sheet (mobile) ── */}
       <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
-      <SheetContent side="bottom" className="rounded-t-3xl max-h-[58vh] pt-5 pb-4">
-          <SheetHeader className="pb-2">
-            <SheetTitle className="text-xs font-semibold text-foreground/75">Workflows</SheetTitle>
-            <SheetDescription className="text-[10px] text-foreground/35 -mt-0.5">
+      <SheetContent side="bottom" className="rounded-t-3xl max-h-[52vh] pt-4 pb-3">
+          <SheetHeader className="pb-1">
+            <SheetTitle className="text-[11px] font-semibold text-foreground/70">Workflows</SheetTitle>
+            <SheetDescription className="text-[9px] text-foreground/30 -mt-1">
               Run a workflow on this thread
             </SheetDescription>
           </SheetHeader>
-          <div className="grid grid-cols-2 gap-1 pb-2">
+          <div className="grid grid-cols-2 gap-1 pb-1">
             {WORKFLOWS.map(w => {
               const isRunning = activeWorkflow === w.key;
               const isRecommended = recommendedWorkflows.includes(w.key);
@@ -435,7 +435,7 @@ export function StrategyMainPanel({
                 <button
                   key={w.key}
                   className={cn(
-                    'flex items-center gap-2 px-2.5 py-2 rounded-lg border text-left transition-colors active:scale-[0.98]',
+                    'flex items-center gap-2 px-2 py-1.5 rounded-lg border text-left transition-colors active:scale-[0.98]',
                     'border-border/25 bg-card/35 hover:bg-card/50 active:bg-card/60',
                     isRecommended && 'border-primary/15',
                     isRunning && 'border-primary/25 bg-primary/5',
