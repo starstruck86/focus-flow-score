@@ -497,6 +497,18 @@ export function StrategyMainPanel({
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* ── Discovery Prep Prompter ── */}
+      <DiscoveryPrepPrompter
+        open={taskPrompterOpen}
+        onOpenChange={setTaskPrompterOpen}
+        onSubmit={async (inputs) => {
+          setTaskPrompterOpen(false);
+          await runDiscoveryPrep({ ...inputs, thread_id: thread?.id });
+        }}
+        isRunning={isTaskRunning}
+        linkedContext={linkedContext}
+      />
     </div>
   );
 }
