@@ -105,15 +105,18 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
   }
 
   return (
-    <div className={cn('flex w-full', isUser ? 'justify-end' : 'justify-start')}>
+    <div className={cn(
+      'flex',
+      isUser ? 'justify-end' : 'justify-start',
+    )}>
       <div
         className={cn(
-          'max-w-[78%] w-fit inline-block text-sm leading-relaxed break-words [overflow-wrap:anywhere]',
+          'max-w-[78%] w-fit text-sm leading-relaxed break-words [overflow-wrap:anywhere]',
           isUser
-            ? 'bg-primary text-primary-foreground rounded-xl rounded-br-sm px-3.5 py-2.5'
+            ? 'bg-primary text-primary-foreground rounded-xl rounded-br-sm px-3.5 py-2'
             : isSystem
               ? 'bg-transparent text-muted-foreground/60 italic text-xs px-1 py-1'
-              : 'rounded-xl rounded-bl-sm px-3.5 py-2.5 bg-card border border-border/30 text-foreground shadow-sm',
+              : 'self-start rounded-xl rounded-bl-sm px-3.5 py-2.5 bg-card/60 border border-border/30 text-foreground',
         )}
       >
         {isSafeToRender(text) ? (
@@ -121,24 +124,24 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         ) : (
           <div className="flex items-center gap-1.5 py-0.5">
             <div className="flex gap-0.5">
-              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:0ms]" />
-              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:150ms]" />
-              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:300ms]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-primary/30 animate-bounce [animation-delay:0ms]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-primary/30 animate-bounce [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-primary/30 animate-bounce [animation-delay:300ms]" />
             </div>
             <span className="text-[10px] text-muted-foreground/50">Generating…</span>
           </div>
         )}
         {!isUser && !isSystem && text && (
-          <div className="mt-2 pt-1.5 border-t border-border/20 flex items-center gap-1.5 flex-wrap">
+          <div className="mt-2 pt-1.5 border-t border-border/15 flex items-center gap-1.5 flex-wrap">
             {providerUsed && (
-              <span className="text-[9px] text-muted-foreground/70 flex items-center gap-0.5">
+              <span className="text-[9px] text-muted-foreground/65 flex items-center gap-0.5">
                 <Cpu className="h-2 w-2" />
                 {providerUsed === 'openai' ? 'ChatGPT' : providerUsed === 'anthropic' ? 'Claude' : providerUsed === 'perplexity' ? 'Perplexity' : providerUsed}
                 {modelUsed ? ` · ${modelUsed.split('/').pop()}` : ''}
               </span>
             )}
             {(sourcesUsed != null && sourcesUsed > 0) && (
-              <span className="text-[9px] text-muted-foreground/70">{sourcesUsed} sources</span>
+              <span className="text-[9px] text-muted-foreground/65">{sourcesUsed} sources</span>
             )}
             {onSaveAsMemory && (
               <Button
