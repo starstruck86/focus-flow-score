@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -9,7 +9,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, Plus, X, FileText, Zap } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { TaskInputs } from '@/hooks/strategy/useTaskExecution';
 
 interface Participant {
@@ -28,21 +27,18 @@ interface Props {
 }
 
 const TEMPLATE_SECTIONS = [
-  'Cover & Key Info',
-  'Participants',
-  'CX Audit Check',
-  'Value Selling Observations Framework',
-  'Discovery-1 Questions',
-  'Customer Examples',
-  'Pivot Statements',
-  'Objection Handling',
-  'Marketing Team Members',
-  'Exit Criteria & MEDDPICC',
+  'Page-1 Cockpit', 'Cover & Key Info', 'Participants', 'Executive Snapshot',
+  'Value Selling Framework', 'Discovery-1 Questions', 'Customer Examples',
+  'Pivot Statements', 'Objection Handling', 'Exit Criteria & MEDDPICC',
+  'Revenue Pathway & Sensitivity', 'Metrics Intelligence', 'Loyalty Analysis',
+  'Tech Stack & Consolidation', 'Competitive War Game', 'Hypotheses & Risks',
+  'APPENDIX: Deep Research',
 ];
 
 export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning, linkedContext }: Props) {
   const [companyName, setCompanyName] = useState('');
-  const [repName, setRepName] = useState('');
+  const [repName, setRepName] = useState('Corey');
+  const [website, setWebsite] = useState('');
   const [opportunity, setOpportunity] = useState('');
   const [stage, setStage] = useState('');
   const [priorNotes, setPriorNotes] = useState('');
@@ -52,14 +48,10 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
     { name: '', title: '', role: '', side: 'prospect' },
   ]);
 
-  // Pre-fill from linked context
   useEffect(() => {
-    if (open && linkedContext?.account?.name) {
-      setCompanyName(linkedContext.account.name);
-    }
-    if (open && linkedContext?.opportunity?.name) {
-      setOpportunity(linkedContext.opportunity.name);
-    }
+    if (open && linkedContext?.account?.name) setCompanyName(linkedContext.account.name);
+    if (open && linkedContext?.opportunity?.name) setOpportunity(linkedContext.opportunity.name);
+    if (open && linkedContext?.account?.website) setWebsite(linkedContext.account.website);
   }, [open, linkedContext]);
 
   const addParticipant = (side: 'internal' | 'prospect') => {
@@ -81,6 +73,7 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
     onSubmit({
       company_name: companyName.trim(),
       rep_name: repName.trim() || undefined,
+      website: website.trim() || undefined,
       participants: participants.filter(p => p.name.trim()),
       opportunity: opportunity.trim() || undefined,
       stage: stage.trim() || undefined,
@@ -104,7 +97,7 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
             <div>
               <DialogTitle className="text-base">Discovery Prep</DialogTitle>
               <DialogDescription className="text-xs mt-0.5">
-                Generate a meeting-ready prep document
+                Full research → synthesis → meeting-ready .docx &amp; PDF
               </DialogDescription>
             </div>
           </div>
@@ -114,25 +107,22 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
           <div className="px-5 py-4 space-y-4">
             {/* Required */}
             <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">
-                  Company Name <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  value={companyName}
-                  onChange={e => setCompanyName(e.target.value)}
-                  placeholder="e.g. Acme Corp"
-                  autoFocus
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">
+                    Company Name <span className="text-destructive">*</span>
+                  </Label>
+                  <Input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="e.g. Acme Corp" autoFocus />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">Website URL</Label>
+                  <Input value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://..." />
+                </div>
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Rep Name</Label>
-                <Input
-                  value={repName}
-                  onChange={e => setRepName(e.target.value)}
-                  placeholder="Your name"
-                />
+                <Input value={repName} onChange={e => setRepName(e.target.value)} placeholder="Your name" />
               </div>
 
               {/* Prospect Participants */}
@@ -141,42 +131,19 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
                   <Label className="text-xs font-semibold">
                     Meeting Participants (Prospect) <span className="text-destructive">*</span>
                   </Label>
-                  <Button
-                    size="sm" variant="ghost"
-                    className="h-6 text-[10px] gap-1 text-primary"
-                    onClick={() => addParticipant('prospect')}
-                  >
+                  <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-primary" onClick={() => addParticipant('prospect')}>
                     <Plus className="h-3 w-3" /> Add
                   </Button>
                 </div>
-                {prospectParticipants.map((p, i) => {
+                {prospectParticipants.map((p) => {
                   const realIdx = participants.indexOf(p);
                   return (
                     <div key={realIdx} className="flex gap-1.5 items-start">
-                      <Input
-                        className="flex-1 text-xs h-8"
-                        placeholder="Name"
-                        value={p.name}
-                        onChange={e => updateParticipant(realIdx, 'name', e.target.value)}
-                      />
-                      <Input
-                        className="flex-1 text-xs h-8"
-                        placeholder="Title"
-                        value={p.title}
-                        onChange={e => updateParticipant(realIdx, 'title', e.target.value)}
-                      />
-                      <Input
-                        className="w-24 text-xs h-8"
-                        placeholder="EB/Champ/Coach"
-                        value={p.role}
-                        onChange={e => updateParticipant(realIdx, 'role', e.target.value)}
-                      />
+                      <Input className="flex-1 text-xs h-8" placeholder="Name" value={p.name} onChange={e => updateParticipant(realIdx, 'name', e.target.value)} />
+                      <Input className="flex-1 text-xs h-8" placeholder="Title" value={p.title} onChange={e => updateParticipant(realIdx, 'title', e.target.value)} />
+                      <Input className="w-24 text-xs h-8" placeholder="EB/Champ/Coach" value={p.role} onChange={e => updateParticipant(realIdx, 'role', e.target.value)} />
                       {prospectParticipants.length > 1 && (
-                        <Button
-                          size="icon" variant="ghost"
-                          className="h-8 w-8 shrink-0 text-muted-foreground"
-                          onClick={() => removeParticipant(realIdx)}
-                        >
+                        <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-muted-foreground" onClick={() => removeParticipant(realIdx)}>
                           <X className="h-3 w-3" />
                         </Button>
                       )}
@@ -185,41 +152,21 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
                 })}
               </div>
 
-              {/* Internal Participants */}
+              {/* Internal */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs font-semibold text-muted-foreground">
-                    Internal Team
-                  </Label>
-                  <Button
-                    size="sm" variant="ghost"
-                    className="h-6 text-[10px] gap-1 text-muted-foreground"
-                    onClick={() => addParticipant('internal')}
-                  >
+                  <Label className="text-xs font-semibold text-muted-foreground">Internal Team</Label>
+                  <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-muted-foreground" onClick={() => addParticipant('internal')}>
                     <Plus className="h-3 w-3" /> Add
                   </Button>
                 </div>
-                {internalParticipants.map((p, i) => {
+                {internalParticipants.map((p) => {
                   const realIdx = participants.indexOf(p);
                   return (
                     <div key={realIdx} className="flex gap-1.5 items-start">
-                      <Input
-                        className="flex-1 text-xs h-8"
-                        placeholder="Name"
-                        value={p.name}
-                        onChange={e => updateParticipant(realIdx, 'name', e.target.value)}
-                      />
-                      <Input
-                        className="flex-1 text-xs h-8"
-                        placeholder="Role in meeting"
-                        value={p.role}
-                        onChange={e => updateParticipant(realIdx, 'role', e.target.value)}
-                      />
-                      <Button
-                        size="icon" variant="ghost"
-                        className="h-8 w-8 shrink-0 text-muted-foreground"
-                        onClick={() => removeParticipant(realIdx)}
-                      >
+                      <Input className="flex-1 text-xs h-8" placeholder="Name" value={p.name} onChange={e => updateParticipant(realIdx, 'name', e.target.value)} />
+                      <Input className="flex-1 text-xs h-8" placeholder="Role in meeting" value={p.role} onChange={e => updateParticipant(realIdx, 'role', e.target.value)} />
+                      <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-muted-foreground" onClick={() => removeParticipant(realIdx)}>
                         <X className="h-3 w-3" />
                       </Button>
                     </div>
@@ -273,20 +220,12 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
         </ScrollArea>
 
         <DialogFooter className="px-5 py-3 border-t border-border/10">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isRunning}>
-            Cancel
-          </Button>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isRunning}>Cancel</Button>
           <Button size="sm" onClick={handleSubmit} disabled={!canSubmit || isRunning} className="gap-1.5">
             {isRunning ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Generating…
-              </>
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" />Researching & generating…</>
             ) : (
-              <>
-                <Zap className="h-3.5 w-3.5" />
-                Generate Prep Doc
-              </>
+              <><Zap className="h-3.5 w-3.5" />Generate Prep Doc</>
             )}
           </Button>
         </DialogFooter>

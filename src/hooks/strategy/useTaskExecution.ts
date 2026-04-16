@@ -12,6 +12,7 @@ export interface TaskInputs {
   prior_notes?: string;
   scale?: string;
   desired_next_step?: string;
+  website?: string;
   thread_id?: string;
   account_id?: string;
   opportunity_id?: string;
@@ -27,11 +28,16 @@ export interface Redline {
   status?: 'pending' | 'accepted' | 'rejected';
 }
 
+export interface DiscoverySection {
+  id: string;
+  name: string;
+  content: any;
+}
+
 export interface TaskRunResult {
   run_id: string;
-  draft: { sections: any[] };
+  draft: { sections: DiscoverySection[] };
   review: { strengths: string[]; redlines: Redline[] };
-  template: any[];
 }
 
 export function useTaskExecution() {
@@ -77,6 +83,7 @@ export function useTaskExecution() {
         }));
       }
       setResult(data);
+      toast.success('Discovery Prep document generated');
       return data;
     } catch (e: any) {
       const msg = e.message || 'Failed to generate prep doc';
