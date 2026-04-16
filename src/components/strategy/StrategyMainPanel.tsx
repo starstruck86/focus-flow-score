@@ -217,7 +217,7 @@ export function StrategyMainPanel({
         accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.json,.xml,.html" />
 
       {/* ── HEADER — single row ── */}
-      <div className="shrink-0 px-3 py-1.5 border-b border-border/15 flex items-center gap-1.5">
+      <div className="shrink-0 px-3 py-1 border-b border-border/12 flex items-center gap-1.5">
         {sidebarCollapsed && (
           <Button size="icon" variant="ghost" className="h-5 w-5 shrink-0 text-foreground/30" onClick={onExpandSidebar}>
             <PanelLeftOpen className="h-3 w-3" />
@@ -251,15 +251,15 @@ export function StrategyMainPanel({
             );
           })}
           {overflowWorkflows.length > 0 && (
-            <button
-              className={cn(
-                'h-7 px-2.5 shrink-0 rounded-full transition-all flex items-center text-xs font-medium border',
-                'border-border/30 hover:bg-muted/30 text-muted-foreground hover:text-foreground'
-              )}
-              onClick={() => setWorkflowSheetOpen(true)}
-            >
-              +{overflowWorkflows.length} more
-            </button>
+              <button
+               className={cn(
+                 'h-6 px-2 shrink-0 rounded-full transition-all flex items-center text-[10px] font-medium border',
+                 'border-border/25 hover:bg-muted/25 text-muted-foreground/60 hover:text-foreground hover:border-border/45'
+               )}
+               onClick={() => setWorkflowSheetOpen(true)}
+             >
+               +{overflowWorkflows.length} more
+             </button>
           )}
         </div>
 
@@ -272,15 +272,15 @@ export function StrategyMainPanel({
 
       {/* Running indicator — subtle line below header */}
       {(activeWorkflow || isUploading) && (
-        <div className="shrink-0 px-3 py-0.5 border-b border-border/8">
+        <div className="shrink-0 px-3 py-0.5">
           {activeWorkflow && (
-            <span className="text-[9px] text-primary/40 font-medium flex items-center gap-1">
-              <Loader2 className="h-2 w-2 animate-spin" />
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Loader2 className="h-2 w-2 animate-spin text-primary/40" />
               Running {activeWorkflowLabel}…
             </span>
           )}
           {isUploading && (
-            <span className="text-[9px] text-muted-foreground/40 flex items-center gap-1 animate-pulse">
+            <span className="text-xs text-muted-foreground/50 flex items-center gap-1 animate-pulse">
               <Loader2 className="h-2 w-2 animate-spin" /> Uploading…
             </span>
           )}
@@ -289,7 +289,7 @@ export function StrategyMainPanel({
 
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="px-3 py-0.5">
+        <div className="px-3 py-1">
           {isLoading ? (
             <div className="flex items-center justify-center py-3">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
@@ -319,7 +319,7 @@ export function StrategyMainPanel({
               </div>
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {messages.map((m, i) => {
                 const prevRole = i > 0 ? messages[i - 1].role : null;
                 const roleSwitch = prevRole && prevRole !== m.role && prevRole !== 'system' && m.role !== 'system';
@@ -337,8 +337,8 @@ export function StrategyMainPanel({
                 );
               })}
               {isSending && !activeWorkflow && (
-                <div className="flex justify-start">
-                  <div className="max-w-[78%] w-fit self-start rounded-xl rounded-bl-sm px-3.5 py-2 bg-card/60 border border-border/30 flex items-center gap-1.5">
+                <div className="flex justify-start mt-0.5">
+                  <div className="max-w-[78%] w-fit self-start rounded-xl rounded-bl-sm px-3.5 py-2 bg-card/55 border border-border/25 flex items-center gap-1.5">
                     <div className="flex gap-0.5">
                       <span className="h-1.5 w-1.5 rounded-full bg-primary/30 animate-bounce [animation-delay:0ms]" />
                       <span className="h-1.5 w-1.5 rounded-full bg-primary/30 animate-bounce [animation-delay:150ms]" />
@@ -365,7 +365,7 @@ export function StrategyMainPanel({
       )}
 
       {/* ── COMPOSER — docked ── */}
-      <div className="shrink-0 border-t border-border/30 bg-background/80 backdrop-blur-md px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))] pt-1.5">
+      <div className="shrink-0 border-t border-border/25 bg-background/72 backdrop-blur-md px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))] pt-1.5">
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -420,14 +420,14 @@ export function StrategyMainPanel({
 
       {/* ── Workflow overflow sheet (mobile) ── */}
       <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[65vh]">
-          <SheetHeader className="pb-1">
-            <SheetTitle className="text-sm text-foreground/80">Workflows</SheetTitle>
-            <SheetDescription className="text-[11px] text-foreground/40">
+      <SheetContent side="bottom" className="rounded-t-3xl max-h-[58vh] pt-5 pb-4">
+          <SheetHeader className="pb-2">
+            <SheetTitle className="text-xs font-semibold text-foreground/75">Workflows</SheetTitle>
+            <SheetDescription className="text-[10px] text-foreground/35 -mt-0.5">
               Run a workflow on this thread
             </SheetDescription>
           </SheetHeader>
-          <div className="grid grid-cols-2 gap-1.5 pb-3">
+          <div className="grid grid-cols-2 gap-1 pb-2">
             {WORKFLOWS.map(w => {
               const isRunning = activeWorkflow === w.key;
               const isRecommended = recommendedWorkflows.includes(w.key);
@@ -435,23 +435,23 @@ export function StrategyMainPanel({
                 <button
                   key={w.key}
                   className={cn(
-                    'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-colors active:scale-[0.98]',
-                    'border-border/30 hover:bg-muted/25 active:bg-muted/40',
-                    isRecommended && 'border-primary/20',
-                    isRunning && 'border-primary/30 bg-primary/5',
+                    'flex items-center gap-2 px-2.5 py-2 rounded-lg border text-left transition-colors active:scale-[0.98]',
+                    'border-border/25 bg-card/35 hover:bg-card/50 active:bg-card/60',
+                    isRecommended && 'border-primary/15',
+                    isRunning && 'border-primary/25 bg-primary/5',
                     (isSending || !!activeWorkflow) && 'opacity-50 pointer-events-none'
                   )}
                   onClick={() => handleWorkflow(w.key)}
                   disabled={isSending || !!activeWorkflow}
                 >
                   {isRunning ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
                   ) : (
-                    <w.icon className={cn('h-4 w-4 shrink-0', isRecommended ? 'text-primary/70' : 'text-foreground/35')} />
+                    <w.icon className={cn('h-3.5 w-3.5 shrink-0', isRecommended ? 'text-primary/60' : 'text-foreground/30')} />
                   )}
                   <div className="min-w-0">
-                    <span className="text-xs font-medium text-foreground/80 block">{w.label}</span>
-                    <span className="text-[10px] text-foreground/30 leading-tight block">{w.description}</span>
+                    <span className="text-[11px] font-medium text-foreground/75 block">{w.label}</span>
+                    <span className="text-[9px] text-foreground/25 leading-tight block">{w.description}</span>
                   </div>
                 </button>
               );

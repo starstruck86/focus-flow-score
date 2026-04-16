@@ -146,7 +146,7 @@ export default function Strategy() {
         {/* Mobile sidebar drawer */}
         {isMobile && (
           <Drawer open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen} direction="left">
-            <DrawerContent className="h-full w-[280px] rounded-none border-r border-border fixed inset-y-0 left-0 right-auto">
+            <DrawerContent className="h-full w-[260px] rounded-none border-r border-border/20 fixed inset-y-0 left-0 right-auto">
               <VisuallyHidden.Root>
                 <DrawerTitle>Thread Navigation</DrawerTitle>
               </VisuallyHidden.Root>

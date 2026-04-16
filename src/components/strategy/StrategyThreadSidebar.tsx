@@ -69,15 +69,15 @@ export function StrategyThreadSidebar({
   return (
     <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/12 flex flex-col shrink-0 h-full')}>
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-border/8 flex items-center gap-2">
-        <h2 className="text-[11px] font-medium text-foreground/25 tracking-wide flex-1">Threads</h2>
-        <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/20" onClick={onCollapse}>
+      <div className="px-3 py-1 border-b border-border/6 flex items-center gap-2">
+        <h2 className="text-[10px] font-medium text-foreground/20 tracking-wide flex-1">Threads</h2>
+        <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/15" onClick={onCollapse}>
           <ChevronLeft className="h-3 w-3" />
         </Button>
       </div>
 
       {/* New Thread */}
-      <div className="p-2.5 border-b border-border/8">
+      <div className="p-2.5 border-b border-border/6">
         <Button size="sm" className="w-full gap-1.5 font-medium" onClick={onOpenCreateDialog}>
           <Plus className="h-3.5 w-3.5" /> New Thread
         </Button>
@@ -91,21 +91,21 @@ export function StrategyThreadSidebar({
             placeholder="Search…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="h-8 pl-7 text-xs border-border"
+            className="h-7 pl-7 text-xs border-border/25 bg-background/20 placeholder:text-muted-foreground/30"
           />
         </div>
       </div>
 
       {/* Lane Filters */}
-      <div className="px-2.5 pb-1.5 flex flex-wrap gap-0.5">
+      <div className="px-2.5 pb-1 flex flex-wrap gap-0.5">
         {LANE_FILTERS.map(f => (
           <button
             key={f}
             className={cn(
-              'text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors capitalize',
+              'text-[8px] px-1.5 py-px rounded font-medium transition-colors capitalize',
               laneFilter === f
-                ? 'bg-primary/10 text-primary'
-                : 'text-foreground/30 hover:text-foreground/50 hover:bg-muted/30'
+                ? 'bg-primary/8 text-primary/80'
+                : 'text-foreground/25 hover:text-foreground/40 hover:bg-muted/20'
             )}
             onClick={() => onLaneFilterChange(f)}
           >
