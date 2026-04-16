@@ -201,6 +201,18 @@ export function StrategyMainPanel({
     );
   }
 
+  // If a task result is showing, render the output viewer as a full overlay
+  if (taskResult) {
+    return (
+      <TaskOutputViewer
+        result={taskResult}
+        onBack={resetTask}
+        onApplyRedline={applyRedline}
+        onRejectRedline={rejectRedline}
+      />
+    );
+  }
+
   const hasLinkedObject = linkedContext?.account || linkedContext?.opportunity;
   const ThreadIcon = thread.thread_type === 'account_linked' ? Building2
     : thread.thread_type === 'opportunity_linked' ? Target
