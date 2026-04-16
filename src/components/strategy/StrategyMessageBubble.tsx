@@ -108,7 +108,7 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
-          'max-w-[85%] text-sm leading-relaxed',
+          'max-w-[80%] w-fit text-sm leading-relaxed',
           isUser
             ? 'bg-primary text-primary-foreground rounded-xl rounded-br-sm px-3.5 py-2.5'
             : isSystem
@@ -121,11 +121,11 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         ) : (
           <div className="flex items-center gap-1.5 py-0.5">
             <div className="flex gap-0.5">
-              <span className="h-0.5 w-0.5 rounded-full bg-primary/30 animate-bounce [animation-delay:0ms]" />
-              <span className="h-0.5 w-0.5 rounded-full bg-primary/30 animate-bounce [animation-delay:150ms]" />
-              <span className="h-0.5 w-0.5 rounded-full bg-primary/30 animate-bounce [animation-delay:300ms]" />
+              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:0ms]" />
+              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:150ms]" />
+              <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:300ms]" />
             </div>
-            <span className="text-[10px] text-foreground/30">Generating…</span>
+            <span className="text-[10px] text-muted-foreground/50">Generating…</span>
           </div>
         )}
         {!isUser && !isSystem && text && (

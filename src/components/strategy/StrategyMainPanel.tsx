@@ -265,7 +265,7 @@ export function StrategyMainPanel({
           })}
           {overflowWorkflows.length > 0 && (
             <button
-              className="h-6 px-2.5 text-[10px] font-medium rounded-md transition-all shrink-0 flex items-center gap-1 text-foreground/40 hover:text-foreground/60 hover:bg-muted/40 border border-border/30"
+              className="h-6 px-2 text-xs font-medium rounded-md transition-all shrink-0 flex items-center gap-1 text-muted-foreground/50 hover:text-foreground/60 hover:bg-muted/40 border border-border/20"
               onClick={() => setWorkflowSheetOpen(true)}
             >
               +{overflowWorkflows.length} workflows
