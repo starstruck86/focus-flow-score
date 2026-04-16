@@ -116,7 +116,7 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
             ? 'bg-primary text-primary-foreground rounded-xl rounded-br-sm px-3.5 py-2'
             : isSystem
               ? 'bg-transparent text-muted-foreground/60 italic text-xs px-1 py-1'
-              : 'self-start rounded-xl rounded-bl-sm px-3.5 py-2.5 bg-card/55 border border-border/25 text-foreground',
+              : 'self-start rounded-xl rounded-bl-sm px-3.5 py-2 bg-card/55 border border-border/25 text-foreground',
         )}
       >
         {isSafeToRender(text) ? (

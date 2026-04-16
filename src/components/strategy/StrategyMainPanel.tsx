@@ -274,13 +274,13 @@ export function StrategyMainPanel({
       {(activeWorkflow || isUploading) && (
         <div className="shrink-0 px-3 py-px">
           {activeWorkflow && (
-            <span className="text-[10px] text-muted-foreground/50 flex items-center gap-1">
-              <Loader2 className="h-2 w-2 animate-spin text-primary/30" />
+            <span className="text-[10px] text-muted-foreground/35 flex items-center gap-1">
+              <Loader2 className="h-2 w-2 animate-spin text-primary/25" />
               Running {activeWorkflowLabel}…
             </span>
           )}
           {isUploading && (
-            <span className="text-[10px] text-muted-foreground/40 flex items-center gap-1 animate-pulse">
+            <span className="text-[10px] text-muted-foreground/30 flex items-center gap-1 animate-pulse">
               <Loader2 className="h-2 w-2 animate-spin" /> Uploading…
             </span>
           )}
@@ -289,7 +289,7 @@ export function StrategyMainPanel({
 
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="px-3 py-1">
+        <div className="px-3 pt-1 pb-0">
           {isLoading ? (
             <div className="flex items-center justify-center py-3">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
@@ -420,7 +420,7 @@ export function StrategyMainPanel({
 
       {/* ── Workflow overflow sheet (mobile) ── */}
       <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
-      <SheetContent side="bottom" className="rounded-t-3xl max-h-[52vh] pt-4 pb-3">
+      <SheetContent side="bottom" className="rounded-t-3xl max-h-[52vh] pt-3.5 pb-3">
           <SheetHeader className="pb-1">
             <SheetTitle className="text-[11px] font-semibold text-foreground/70">Workflows</SheetTitle>
             <SheetDescription className="text-[9px] text-foreground/30 -mt-1">
@@ -435,7 +435,7 @@ export function StrategyMainPanel({
                 <button
                   key={w.key}
                   className={cn(
-                    'flex items-center gap-2 px-2 py-1.5 rounded-lg border text-left transition-colors active:scale-[0.98]',
+                    'flex items-center gap-2 px-2 py-1 rounded-lg border text-left transition-colors active:scale-[0.98]',
                     'border-border/25 bg-card/35 hover:bg-card/50 active:bg-card/60',
                     isRecommended && 'border-primary/15',
                     isRunning && 'border-primary/25 bg-primary/5',

@@ -123,10 +123,10 @@ export function StrategyThreadSidebar({
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center p-6 space-y-3">
+          <div className="text-center p-4 space-y-2">
             <p className="text-sm text-foreground/70">No threads yet</p>
             <p className="text-xs text-muted-foreground">Create your first thread to get started</p>
-            <Button size="sm" className="text-xs gap-1.5 mt-2" onClick={onOpenCreateDialog}>
+            <Button size="sm" className="text-xs gap-1.5 mt-1" onClick={onOpenCreateDialog}>
               <Plus className="h-3 w-3" /> Create thread
             </Button>
           </div>
