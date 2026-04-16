@@ -6,163 +6,197 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-trace-id",
 };
 
-// ── Firecrawl research helpers ──
+// ═══════════════════════════════════════════════════════════
+// MULTI-LLM ORCHESTRATION — Same adapter pattern as strategy-chat
+//
+// Perplexity  = external research & signal gathering
+// OpenAI      = deep reasoning, synthesis, POV, hypotheses
+// Claude      = final structured Discovery Prep document author
+// ═══════════════════════════════════════════════════════════
 
-const FIRECRAWL_API = "https://api.firecrawl.dev/v2";
+// ── Provider Adapters ──
 
-async function searchWeb(query: string, apiKey: string, limit = 5): Promise<string> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
-    const resp = await fetch(`${FIRECRAWL_API}/search`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ query, limit, scrapeOptions: { formats: ["markdown"] } }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!resp.ok) return "";
-    const data = await resp.json();
-    return (data.data || [])
-      .map((r: any) => `## ${r.title || "Untitled"}\n${(r.markdown || r.description || "").slice(0, 2500)}`)
-      .join("\n\n---\n\n")
-      .slice(0, 8000);
-  } catch (e) {
-    console.error("Firecrawl search error:", e);
-    return "";
-  }
+function getPerplexityHeaders(): Record<string, string> {
+  const key = Deno.env.get("PERPLEXITY_API_KEY");
+  if (!key) throw new Error("PERPLEXITY_API_KEY not configured");
+  return { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
 }
 
-async function scrapeUrl(url: string, apiKey: string): Promise<string> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const resp = await fetch(`${FIRECRAWL_API}/scrape`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!resp.ok) return "";
-    const data = await resp.json();
-    return (data.data?.markdown || "").slice(0, 10000);
-  } catch (e) {
-    console.error("Firecrawl scrape error:", e);
-    return "";
-  }
+function getOpenAIHeaders(): Record<string, string> {
+  const key = Deno.env.get("OPENAI_API_KEY");
+  if (!key) throw new Error("OPENAI_API_KEY not configured");
+  return { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
 }
 
-async function gatherResearch(companyName: string, website?: string) {
-  const apiKey = Deno.env.get("FIRECRAWL_API_KEY");
-  if (!apiKey) {
-    console.log("No FIRECRAWL_API_KEY, skipping web research");
-    return { website: "", business: "", casestudies: "", techstack: "", subscription: "" };
-  }
-
-  console.log(`Starting Firecrawl research for ${companyName}...`);
-
-  const [websiteContent, business, casestudies, techstack, subscription] = await Promise.all([
-    website ? scrapeUrl(website, apiKey) : searchWeb(`${companyName} official website about`, apiKey, 3),
-    searchWeb(`${companyName} business model revenue products annual report investors`, apiKey),
-    searchWeb(`${companyName} case study marketing lifecycle email personalization`, apiKey),
-    searchWeb(`${companyName} marketing technology stack platform ESP CDP analytics`, apiKey),
-    searchWeb(`${companyName} subscription subscribe save auto replenish ecommerce`, apiKey, 3),
-  ]);
-
-  console.log(`Research complete: website=${websiteContent.length}ch, business=${business.length}ch, cases=${casestudies.length}ch, tech=${techstack.length}ch, sub=${subscription.length}ch`);
-
-  return { website: websiteContent, business, casestudies, techstack, subscription };
+function getAnthropicHeaders(): Record<string, string> {
+  const key = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
+  return {
+    "x-api-key": key,
+    "anthropic-version": "2023-06-01",
+    "Content-Type": "application/json",
+  };
 }
 
-// ── AI helper ──
-
-async function callAI(
-  messages: { role: string; content: string }[],
-  opts: { model?: string; temperature?: number; maxTokens?: number } = {}
-): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+async function callPerplexity(messages: { role: string; content: string }[], opts: { model?: string; maxTokens?: number } = {}): Promise<{ text: string; citations: string[] }> {
+  const resp = await fetch("https://api.perplexity.ai/chat/completions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    headers: getPerplexityHeaders(),
     body: JSON.stringify({
-      model: opts.model || "google/gemini-2.5-pro",
+      model: opts.model || "sonar-pro",
       messages,
-      temperature: opts.temperature ?? 0.3,
-      max_tokens: opts.maxTokens ?? 12000,
+      temperature: 0.3,
+      max_tokens: opts.maxTokens || 8192,
     }),
   });
-
   if (!resp.ok) {
-    const status = resp.status;
-    const text = await resp.text();
-    console.error(`AI error ${status}:`, text);
-    if (status === 429) throw { status: 429, message: "Rate limited — please try again in a moment." };
-    if (status === 402) throw { status: 402, message: "AI credits exhausted." };
-    throw new Error(`AI generation failed: ${status}`);
+    const errText = await resp.text().catch(() => "");
+    console.error(`[perplexity] error ${resp.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`Perplexity error: ${resp.status}`);
   }
-
   const data = await resp.json();
-  let content = data.choices?.[0]?.message?.content || "";
-  return content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  return {
+    text: data.choices?.[0]?.message?.content || "",
+    citations: data.citations || [],
+  };
 }
 
-// ── Prompts ──
+async function callOpenAI(messages: { role: string; content: string }[], opts: { model?: string; temperature?: number; maxTokens?: number } = {}): Promise<string> {
+  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: getOpenAIHeaders(),
+    body: JSON.stringify({
+      model: opts.model || "gpt-4o",
+      messages,
+      temperature: opts.temperature ?? 0.4,
+      max_tokens: opts.maxTokens || 8192,
+    }),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => "");
+    console.error(`[openai] error ${resp.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`OpenAI error: ${resp.status}`);
+  }
+  const data = await resp.json();
+  return data.choices?.[0]?.message?.content || "";
+}
 
-const SYSTEM_PROMPT = `You are a senior sales strategist embedded in a sales execution system. You produce comprehensive, meeting-ready Discovery Prep documents.
+async function callClaude(messages: { role: string; content: string }[], opts: { model?: string; maxTokens?: number; temperature?: number } = {}): Promise<string> {
+  let systemPrompt = "";
+  const anthropicMessages: { role: string; content: string }[] = [];
+  for (const m of messages) {
+    if (m.role === "system") { systemPrompt += (systemPrompt ? "\n" : "") + m.content; }
+    else { anthropicMessages.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }); }
+  }
+  if (anthropicMessages.length === 0 && systemPrompt) {
+    anthropicMessages.push({ role: "user", content: systemPrompt });
+    systemPrompt = "";
+  }
 
-METHODOLOGY:
-1. Research the company using ALL provided context (web research, inputs, prior notes)
-2. Synthesize findings into actionable sales intelligence
-3. Build a working hypothesis connecting business pain → executive initiative → solution value
-4. Fill every section with specific, evidence-based content
-5. Convert every unknown into a precise discovery question
+  const body: any = {
+    model: opts.model || "claude-sonnet-4-20250514",
+    max_tokens: opts.maxTokens || 12000,
+    messages: anthropicMessages,
+    temperature: opts.temperature ?? 0.3,
+  };
+  if (systemPrompt) body.system = systemPrompt;
 
-RULES — NON-NEGOTIABLE:
-- Use ONLY the provided inputs and research context. No hallucinated facts.
-- If information is unverifiable: label it "Unknown" and generate an exact discovery question
-- No generic filler. Every bullet must be specific to THIS company.
-- Max 3 bullets per card/cell. Overflow belongs in the appendix.
-- Every metric needs date + source, or labeled "Unknown"
-- POV must be exactly 3-5 sentences, specific and grounded
-- Discovery questions must sound prepared, not generic
-- All content must be scannable: bullets, tables, cards. NO long paragraphs.
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: getAnthropicHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => "");
+    console.error(`[claude] error ${resp.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`Claude error: ${resp.status}`);
+  }
+  const data = await resp.json();
+  let text = "";
+  for (const block of (data.content || [])) {
+    if (block.type === "text") text += block.text;
+  }
+  return text;
+}
 
-SUBSCRIPTION CHECK — MANDATORY:
-- Look for subscribe & save, auto-delivery, replenishment, subscription programs
-- Check for vendors: Ordergroove, Recharge, Skio, Shopify Subscriptions
-- If found: capture model type, discount structure, frequency options, cancel controls
-- Surface in cockpit, loyalty analysis, tech stack, and appendix
+// ═══════════════════════════════════════════════════════════
+// STAGE 1 — PERPLEXITY RESEARCH
+// Parallel research queries for comprehensive evidence gathering
+// ═══════════════════════════════════════════════════════════
 
-LIFECYCLE CASE STUDIES — MANDATORY:
-- Search for public proof points from vendor case study libraries
-- Extract: program/use case, result + timeframe, maturity implication
-- Surface top 1-2 in cockpit, full list in appendix
+async function gatherResearch(companyName: string, website?: string): Promise<Record<string, { text: string; citations: string[] }>> {
+  console.log(`[stage-1] Perplexity research for ${companyName}...`);
 
-ROI PROTOCOL:
-- Use defensible logic: Incremental Orders × AOV × Margin% − variable costs − discount leakage
-- Include sensitivity model: +5-10% AOV, +5% frequency, -3% churn
-- Use M.A.T.H.: Metric, Actual, Target, Holding back`;
+  const queries = [
+    {
+      key: "business",
+      prompt: `Research ${companyName}: revenue model, channel mix, key products/lines, pricing position, stated exec priorities, recent earnings/investor info, press releases, product launches, M&A activity, and competitive set (direct + substitutes). ${website ? `Their website is ${website}.` : ""} Be specific with numbers, dates, and sources.`,
+    },
+    {
+      key: "cx_lifecycle",
+      prompt: `Research ${companyName}'s customer experience and lifecycle marketing: signup/capture flows, browse/cart/checkout experience, post-purchase communications, cross-sell programs, reviews/UGC strategy, education content, replenishment signals, winback triggers, loyalty moments, subscription programs. ${website ? `Website: ${website}` : ""} Focus on observable evidence.`,
+    },
+    {
+      key: "tech_stack",
+      prompt: `Research ${companyName}'s marketing technology stack. Look for evidence of: Commerce platform, ESP/email, SMS, Push notifications, CMS, CDP, Analytics, Experimentation/testing, Reviews, Loyalty program platform, Support tools, Attribution, AI tools, Subscription/auto-replenish vendors. Check job posts, partner pages, help center, app store integrations. ${website ? `Website: ${website}` : ""}`,
+    },
+    {
+      key: "case_studies",
+      prompt: `Find public case studies, proof points, or vendor announcements involving ${companyName} related to: marketing automation, lifecycle marketing, email/SMS personalization, customer engagement platforms, CDP, loyalty programs, subscription commerce. Search vendor case study libraries (e.g., Iterable, Braze, Klaviyo, Salesforce, Adobe). Extract: program/use case, result + timeframe, what it implies about maturity.`,
+    },
+    {
+      key: "subscription",
+      prompt: `Does ${companyName} have a subscription or auto-replenish program? Look for: subscribe & save, auto-delivery, replenishment, subscription programs on their site. Check for vendors: Ordergroove, Recharge, Skio, Shopify Subscriptions, Bold Subscriptions. ${website ? `Website: ${website}` : ""} If found, capture: model type, discount structure, frequency options, cancel controls.`,
+    },
+  ];
 
-function buildDraftPrompt(inputs: any, research: any): string {
+  const results: Record<string, { text: string; citations: string[] }> = {};
+
+  const settled = await Promise.allSettled(
+    queries.map(async (q) => {
+      try {
+        const result = await callPerplexity([
+          { role: "system", content: "You are a sales research analyst. Provide specific, sourced facts. Include dates and numbers when available. If information is not found, say so explicitly." },
+          { role: "user", content: q.prompt },
+        ]);
+        return { key: q.key, result };
+      } catch (e) {
+        console.error(`[stage-1] ${q.key} research failed:`, e);
+        return { key: q.key, result: { text: "", citations: [] } };
+      }
+    })
+  );
+
+  for (const s of settled) {
+    if (s.status === "fulfilled") {
+      results[s.value.key] = s.value.result;
+    }
+  }
+
+  const totalChars = Object.values(results).reduce((sum, r) => sum + r.text.length, 0);
+  console.log(`[stage-1] Research complete: ${totalChars} chars across ${Object.keys(results).length} queries`);
+  return results;
+}
+
+// ═══════════════════════════════════════════════════════════
+// STAGE 2 — OPENAI SYNTHESIS
+// Deep reasoning: hypothesis, POV, strategy, prioritization
+// ═══════════════════════════════════════════════════════════
+
+function buildSynthesisPrompt(inputs: any, research: Record<string, { text: string; citations: string[] }>, playbookContext: string): string {
   const participantsText = (inputs.participants || [])
     .map((p: any) => `- ${p.name}${p.title ? ` (${p.title})` : ""}${p.role ? ` — ${p.role}` : ""} [${p.side || "prospect"}]`)
     .join("\n");
 
-  const researchBlock = [
-    research.website && `=== COMPANY WEBSITE ===\n${research.website}`,
-    research.business && `=== BUSINESS INTELLIGENCE ===\n${research.business}`,
-    research.casestudies && `=== CASE STUDIES & PROOF POINTS ===\n${research.casestudies}`,
-    research.techstack && `=== TECHNOLOGY STACK EVIDENCE ===\n${research.techstack}`,
-    research.subscription && `=== SUBSCRIPTION / AUTO-REPLENISH SIGNALS ===\n${research.subscription}`,
-  ].filter(Boolean).join("\n\n");
+  const researchText = Object.entries(research)
+    .filter(([_, v]) => v.text)
+    .map(([key, v]) => `=== ${key.toUpperCase()} RESEARCH ===\n${v.text}\n\nSources: ${v.citations.join(", ") || "inline"}`)
+    .join("\n\n---\n\n");
 
-  return `Generate a complete Discovery Prep document for:
+  return `You are a senior sales strategist synthesizing research into actionable discovery strategy.
 
 COMPANY: ${inputs.company_name}
-REP: ${inputs.rep_name || "Unknown"}
+REP: ${inputs.rep_name || "Corey"}
 OPPORTUNITY: ${inputs.opportunity || "Unknown"}
 STAGE: ${inputs.stage || "Unknown"}
 PLATFORM SCALE: ${inputs.scale || "Unknown"}
@@ -172,10 +206,96 @@ PRIOR NOTES: ${inputs.prior_notes || "None"}
 MEETING PARTICIPANTS:
 ${participantsText || "Unknown"}
 
-${researchBlock ? `\n--- WEB RESEARCH CONTEXT ---\n${researchBlock}\n--- END RESEARCH ---\n` : "No web research available. Use your knowledge of this company."}
+--- PERPLEXITY RESEARCH ---
+${researchText || "No research available."}
+--- END RESEARCH ---
 
-Return a JSON object with this EXACT structure. Fill EVERY field with specific, researched content:
+${playbookContext ? `\n--- PLAYBOOK CONTEXT ---\n${playbookContext}\n--- END PLAYBOOKS ---\n` : ""}
 
+YOUR TASK:
+Synthesize ALL research into a comprehensive strategic analysis. Do NOT just summarize — connect evidence into actionable intelligence.
+
+You must produce:
+
+1. WORKING HYPOTHESIS: Connect business pain → executive initiative → solution value. Be specific to this company.
+2. WHY NOW: Timing triggers, catalysts, urgency drivers based on evidence
+3. POV: 3-5 sentences, specific and grounded — not generic
+4. DISCOVERY STRATEGY: What we need to validate, confirm, or uncover
+5. PAIN MAPPING: Marketing team problems → how they translate to C-Suite/business pains
+6. SUBSCRIPTION ANALYSIS: Yes/No + full mechanics if found
+7. LIFECYCLE MATURITY ASSESSMENT: Based on case studies and observable evidence
+8. TECH STACK EVIDENCE MAP: Layer-by-layer with evidence quality
+9. ROI FRAMEWORK: Defensible logic, sensitivity model, M.A.T.H.
+10. COMPETITIVE POSITIONING: How to win against their current/alternative solutions
+11. RISK ASSESSMENT: Deal risks, information gaps, mitigation strategies
+12. MUST-CONFIRM ITEMS: Top 3-5 critical validations for the meeting
+
+RULES:
+- Every claim must trace to research evidence or be labeled "Unknown — discovery question needed"
+- No generic filler. Every bullet must be specific to THIS company.
+- Include sensitivity model: +5-10% AOV, +5% frequency, -3% churn with revenue direction
+- Use M.A.T.H.: Metric, Actual, Target, Holding back
+- Max 3 bullets per concept. Overflow is fine — Claude will structure it.
+
+Return your synthesis as a structured JSON object:
+{
+  "hypothesis": "...",
+  "why_now": "...",
+  "pov": "3-5 sentence POV",
+  "must_confirm": ["item1", "item2", "item3"],
+  "deal_risks": [{"risk": "...", "mitigation": "..."}],
+  "pain_mapping": {"marketing_pains": ["..."], "csuite_pains": ["..."], "connection": "..."},
+  "subscription_analysis": {"exists": true/false, "model_type": "...", "discount_structure": "...", "frequency_options": "...", "cancel_controls": "...", "vendors": "..."},
+  "lifecycle_maturity": {"level": "early/developing/mature/advanced", "evidence": ["..."], "case_studies": [{"source": "...", "program": "...", "result": "...", "maturity_implication": "...", "talk_track": "...", "trap_question": "...", "validation_question": "..."}]},
+  "tech_stack": [{"layer": "Commerce", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..."}, ...],
+  "roi_framework": {"primary_logic": "...", "sensitivity": [{"scenario": "...", "impact": "...", "question": "..."}], "math": {"metric": "...", "actual": "...", "target": "...", "holding_back": "..."}},
+  "competitive_positioning": [{"competitor": "...", "strengths": "...", "weaknesses": "...", "differentiation": "...", "trap_question": "..."}],
+  "discovery_questions": ["6 specific questions"],
+  "value_selling": {"money": "...", "compete": "...", "current_state": "...", "industry_pressures": "...", "problems_and_pain": "...", "ideal_state": "...", "value_driver": "..."},
+  "customer_examples": [{"customer": "...", "relevance": "...", "link": "..."}],
+  "pivot_statements": {"pain": "...", "fomo": "..."},
+  "objection_handling": [{"objection": "...", "response": "..."}],
+  "executive_snapshot": {"company_overview": "...", "key_metrics": [{"metric": "...", "value": "...", "source": "..."}], "exec_priorities": ["..."]},
+  "appendix": {"cx_audit_detail": "...", "subscription_teardown": "...", "business_model_detail": "...", "industry_analysis": "..."}
+}
+
+Return ONLY the JSON. No markdown fences.`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// STAGE 3 — CLAUDE DOCUMENT AUTHORING
+// Final structured output aligned to approved template
+// ═══════════════════════════════════════════════════════════
+
+function buildDocumentPrompt(inputs: any, synthesis: any): string {
+  return `You are the document author for a Discovery Prep artifact. Your role is to take synthesized intelligence and shape it into the approved template structure.
+
+COMPANY: ${inputs.company_name}
+REP: ${inputs.rep_name || "Corey"}
+OPPORTUNITY: ${inputs.opportunity || "Unknown"}
+STAGE: ${inputs.stage || "Unknown"}
+SCALE: ${inputs.scale || "Unknown"}
+DESIRED NEXT STEP: ${inputs.desired_next_step || "Unknown"}
+
+PARTICIPANTS:
+${(inputs.participants || []).map((p: any) => `- ${p.name}${p.title ? ` (${p.title})` : ""} [${p.side || "prospect"}]`).join("\n")}
+
+SYNTHESIZED INTELLIGENCE:
+${JSON.stringify(synthesis, null, 2)}
+
+YOUR TASK:
+Shape this synthesis into the EXACT Discovery Prep template structure below. You are the final document author — make it polished, scannable, and meeting-ready.
+
+RULES — NON-NEGOTIABLE:
+- Use ONLY the synthesis provided. Do not invent new facts.
+- If information is missing: label "Unknown" and include a discovery question
+- Max 3 bullets per card/cell. Overflow goes to appendix.
+- Every metric needs date + source, or labeled "Unknown"
+- POV must be exactly 3-5 sentences
+- All content must be scannable: bullets, tables, cards. NO long paragraphs.
+- Discovery questions must sound prepared, not generic.
+
+Return a JSON object with this EXACT structure:
 {
   "sections": [
     {
@@ -184,11 +304,11 @@ Return a JSON object with this EXACT structure. Fill EVERY field with specific, 
       "content": {
         "cards": [
           { "label": "Objective & Next Step", "value": "specific objective + desired next step" },
-          { "label": "Working Hypothesis & Why Now", "value": "hypothesis connecting pain to initiative + timing trigger" },
-          { "label": "Must-Confirm", "bullets": ["3 critical items to validate in this meeting"] },
-          { "label": "Deal Risks & Call Control", "bullets": ["2-3 risks + mitigation strategies"] },
-          { "label": "Subscription Model", "value": "Yes/No + key mechanics if found" },
-          { "label": "Lifecycle Proof Points", "bullets": ["top 1-2 public case studies relevant to this company"] }
+          { "label": "Working Hypothesis & Why Now", "value": "from synthesis" },
+          { "label": "Must-Confirm", "bullets": ["from synthesis must_confirm"] },
+          { "label": "Deal Risks & Call Control", "bullets": ["from synthesis deal_risks"] },
+          { "label": "Subscription Model", "value": "Yes/No + key mechanics" },
+          { "label": "Lifecycle Proof Points", "bullets": ["top 1-2 from case studies"] }
         ]
       }
     },
@@ -196,203 +316,173 @@ Return a JSON object with this EXACT structure. Fill EVERY field with specific, 
       "id": "cover",
       "name": "Prep Doc — Cover",
       "content": {
-        "rep_name": "${inputs.rep_name || "Unknown"}",
+        "rep_name": "${inputs.rep_name || "Corey"}",
         "opportunity": "${inputs.opportunity || "Unknown"}",
         "stage": "${inputs.stage || "Unknown"}",
-        "platform_scale": "researched or input value"
+        "platform_scale": "from synthesis or input"
       }
     },
     {
       "id": "participants",
       "name": "Participants",
       "content": {
-        "internal": [{"name": "...", "role": "..."}],
+        "internal": [{"name": "...", "role": "AE/SE/Manager"}],
         "prospect": [{"name": "...", "title": "...", "role": "EB/Champion/Coach/Unknown"}]
       }
     },
     {
       "id": "cx_audit",
       "name": "CX Audit Check",
-      "content": { "completed": false, "notes": "Brief CX audit observations from research" }
+      "content": { "completed": true, "notes": "from synthesis" }
     },
     {
       "id": "executive_snapshot",
       "name": "Executive Snapshot",
       "content": {
-        "company_overview": "2-3 sentence company summary",
-        "why_now": "Why this company, why now — timing triggers and catalysts",
-        "key_metrics": [
-          { "metric": "Revenue", "value": "...", "source": "..." },
-          { "metric": "Employees", "value": "...", "source": "..." },
-          { "metric": "Industry", "value": "...", "source": "..." }
-        ],
-        "exec_priorities": ["stated executive priorities from research"]
+        "company_overview": "from synthesis",
+        "why_now": "from synthesis",
+        "key_metrics": [{"metric": "...", "value": "...", "source": "..."}],
+        "exec_priorities": ["from synthesis"]
       }
     },
     {
       "id": "value_selling",
       "name": "Value Selling Observations Framework",
       "content": {
-        "money": "How they make money — specific revenue model, channels, products",
-        "compete": "Direct competitors and substitutes",
-        "pain_hypothesis": "Pain hypothesis based on research/CX audit observations",
-        "csuite_initiative": "C-Suite initiatives and business objectives",
-        "current_state": "Current state: channels, technology, programs found in research",
-        "industry_pressures": "Industry pressures and market dynamics",
-        "problems_and_pain": "Marketing team problems → how they translate to C-Suite/Business pains",
-        "ideal_state": "What ideal state would look like for this team",
-        "value_driver": "Primary value driver based on pains and observations",
-        "pov": "3-5 sentence POV — specific, grounded, compelling"
+        "money": "...", "compete": "...", "pain_hypothesis": "...",
+        "csuite_initiative": "...", "current_state": "...", "industry_pressures": "...",
+        "problems_and_pain": "...", "ideal_state": "...", "value_driver": "...",
+        "pov": "3-5 sentence POV"
       }
     },
     {
       "id": "discovery_questions",
       "name": "Discovery-1 Questions",
       "content": {
-        "questions": ["6 specific, prepared discovery questions for this company"],
+        "questions": ["6 specific questions"],
         "value_flow": {
-          "current_state": "Their current situation",
-          "problem": "The problem to define",
-          "impact": "Business impact of the problem",
-          "ideal_solution": "What ideal looks like",
-          "business_benefit": "Quantified business benefit"
+          "current_state": "...", "problem": "...", "impact": "...",
+          "ideal_solution": "...", "business_benefit": "..."
         }
       }
     },
     {
       "id": "customer_examples",
       "name": "Customer Examples",
-      "content": [
-        { "customer": "Relevant customer name", "link": "case study URL if known", "relevance": "Why this is relevant to prospect" }
-      ]
+      "content": [{"customer": "...", "link": "...", "relevance": "..."}]
     },
     {
       "id": "pivot_statements",
       "name": "Pivot Statements",
       "content": {
-        "pain_statement": "Many of our customers came to us because they faced [SPECIFIC PAIN]. In helping [BRAND], with [PAIN], they found [RESULT] — how does that resonate with you?",
-        "fomo_statement": "[CUSTOMER] uses Iterable to [SPECIFIC USE CASE]. What would something like that mean for you and your business?"
+        "pain_statement": "from synthesis",
+        "fomo_statement": "from synthesis"
       }
     },
     {
       "id": "objection_handling",
       "name": "Objection Handling",
-      "content": [
-        { "objection": "Anticipated objection specific to this deal", "response": "Prepared response" }
-      ]
+      "content": [{"objection": "...", "response": "..."}]
     },
     {
       "id": "marketing_team",
       "name": "Marketing Team Members",
-      "content": [{ "name": "Name", "title": "Title", "linkedin": "URL if found" }]
+      "content": [{"name": "...", "title": "...", "linkedin": "URL if found"}]
     },
     {
       "id": "exit_criteria",
       "name": "Exit Criteria & MEDDPICC",
       "content": {
-        "known": ["What we already know about MEDDPICC elements"],
-        "gaps": ["Questions we still need answered"],
-        "meddpicc_gaps": ["Specific MEDDPICC fields to fill: Metrics, Economic Buyer, Decision Criteria, Decision Process, Paper Process, Identify Pain, Champion, Competition"]
+        "known": ["..."], "gaps": ["..."],
+        "meddpicc_gaps": ["Metrics", "Economic Buyer", "Decision Criteria", "Decision Process", "Paper Process", "Identify Pain", "Champion", "Competition"]
       }
     },
     {
       "id": "revenue_pathway",
       "name": "Revenue Pathway & Sensitivity",
       "content": {
-        "model": [
-          { "driver": "Revenue driver", "current": "Current state estimate", "potential": "Potential with solution", "assumptions": "Key assumptions" }
-        ],
-        "sensitivity": [
-          { "scenario": "+5-10% AOV lift", "impact": "Revenue impact estimate", "question": "Discovery question to validate" },
-          { "scenario": "+5% purchase frequency", "impact": "Impact estimate", "question": "Validation question" },
-          { "scenario": "-3% churn reduction", "impact": "Impact estimate", "question": "Validation question" }
-        ],
-        "math": {
-          "metric": "Key metric",
-          "actual": "Current value or Unknown",
-          "target": "Target value or Unknown",
-          "holding_back": "What's preventing target achievement"
-        }
+        "model": [{"driver": "...", "current": "...", "potential": "...", "assumptions": "..."}],
+        "sensitivity": [{"scenario": "...", "impact": "...", "question": "..."}],
+        "math": {"metric": "...", "actual": "...", "target": "...", "holding_back": "..."}
       }
     },
     {
       "id": "metrics_intelligence",
       "name": "Metrics Intelligence",
-      "content": [
-        { "metric": "Metric name", "value": "Value or Unknown", "date": "Date or Unknown", "source": "Source or Unknown", "implication": "Strategic implication", "question": "Discovery question to validate" }
-      ]
+      "content": [{"metric": "...", "value": "...", "date": "...", "source": "...", "implication": "...", "question": "..."}]
     },
     {
       "id": "loyalty_analysis",
       "name": "Loyalty Program Analysis",
       "content": {
-        "program_exists": true,
-        "program_type": "Type of loyalty program",
-        "tiers": "Tier structure if found",
-        "subscription_tie_in": "How subscription connects to loyalty",
-        "key_observations": ["Specific observations about their loyalty/retention programs"],
-        "gaps": ["What we don't know and need to discover"]
+        "program_exists": true, "program_type": "...", "tiers": "...",
+        "subscription_tie_in": "...", "key_observations": ["..."], "gaps": ["..."]
       }
     },
     {
       "id": "tech_stack",
       "name": "Tech Stack & Consolidation",
-      "content": [
-        { "layer": "Commerce", "vendor": "Vendor or Unknown", "evidence": "How we know this", "consolidation_opportunity": "Opportunity if any" },
-        { "layer": "ESP", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "SMS", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "Push", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "CMS", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "CDP", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "Analytics", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "Experimentation", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "Reviews", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "Loyalty", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "Support", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "Attribution", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "AI", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." },
-        { "layer": "Subscription/Auto-replenish", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..." }
-      ]
+      "content": [{"layer": "Commerce", "vendor": "...", "evidence": "...", "consolidation_opportunity": "..."}]
     },
     {
       "id": "competitive_war_game",
       "name": "Competitive War Game",
-      "content": [
-        { "competitor": "Competitor name", "strengths": "Their strengths vs us", "weaknesses": "Their weaknesses", "differentiation": "How we win against them", "trap_question": "Question to set a trap" }
-      ]
+      "content": [{"competitor": "...", "strengths": "...", "weaknesses": "...", "differentiation": "...", "trap_question": "..."}]
     },
     {
       "id": "hypotheses_risks",
       "name": "Hypotheses, Blockers & Risk Heatmap",
       "content": {
-        "hypotheses": ["Top 3-5 working hypotheses to validate"],
-        "blockers": ["Known blockers to deal progression"],
-        "gap_log": ["Critical information gaps"],
-        "risk_heatmap": [
-          { "risk": "Risk description", "likelihood": "High/Med/Low", "impact": "High/Med/Low", "mitigation": "Mitigation strategy" }
-        ]
+        "hypotheses": ["..."], "blockers": ["..."], "gap_log": ["..."],
+        "risk_heatmap": [{"risk": "...", "likelihood": "High/Med/Low", "impact": "High/Med/Low", "mitigation": "..."}]
       }
     },
     {
       "id": "appendix",
       "name": "APPENDIX: Deep Research",
       "content": {
-        "cx_audit_detail": "Detailed CX audit findings across the customer journey: capture, browse, checkout, post-purchase, cross-sell, reviews, education, replenishment, winback, loyalty moments",
-        "subscription_teardown": "Full subscription model teardown if applicable: model type, discount structure, frequency options, edit window, reminder timing, pause/skip/cancel controls, cancel reason capture, lifecycle trigger map",
-        "case_studies_full": [
-          { "source": "Vendor/partner", "program": "Use case", "result": "Result + timeframe", "maturity_implication": "What it implies", "talk_track": "1 talk track line", "trap_question": "1 trap question", "validation_question": "1 validation question" }
-        ],
-        "business_model_detail": "Extended business model analysis: revenue model, channel mix, geo mix, key products, pricing position, M&A, recent launches",
-        "industry_analysis": "Industry pressures, trends, and competitive dynamics"
+        "cx_audit_detail": "...", "subscription_teardown": "...",
+        "case_studies_full": [{"source": "...", "program": "...", "result": "...", "maturity_implication": "...", "talk_track": "...", "trap_question": "...", "validation_question": "..."}],
+        "business_model_detail": "...", "industry_analysis": "..."
       }
     }
   ]
 }
 
-CRITICAL: Return ONLY the JSON object. No explanation, no markdown fences. Every section must have content — no empty strings.`;
+Return ONLY the JSON. No markdown fences.`;
 }
 
-// ── Playbook scopes for review ──
+// ═══════════════════════════════════════════════════════════
+// STAGE 4 — REVIEW (Playbook-grounded, use-case specific)
+// Uses Lovable AI Gateway for cost efficiency
+// ═══════════════════════════════════════════════════════════
+
+async function callLovableAI(messages: { role: string; content: string }[], opts: { model?: string; temperature?: number; maxTokens?: number } = {}): Promise<string> {
+  const key = Deno.env.get("LOVABLE_API_KEY");
+  if (!key) throw new Error("LOVABLE_API_KEY not configured");
+
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: opts.model || "google/gemini-2.5-flash",
+      messages,
+      temperature: opts.temperature ?? 0.4,
+      max_tokens: opts.maxTokens || 4000,
+    }),
+  });
+  if (!resp.ok) {
+    const status = resp.status;
+    if (status === 429) throw { status: 429, message: "Rate limited" };
+    if (status === 402) throw { status: 402, message: "AI credits exhausted" };
+    throw new Error(`Lovable AI error: ${status}`);
+  }
+  const data = await resp.json();
+  let content = data.choices?.[0]?.message?.content || "";
+  return content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+}
+
+// Playbook scopes relevant to Discovery Prep
 const PLAYBOOK_SCOPES = [
   "discovery", "hypothesis", "deal_progression", "executive_framing", "meddpicc",
   "objection_handling", "value_selling", "competitive",
@@ -478,10 +568,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    // STEP 1: Gather web research
+    console.log(`[discovery-prep] Starting for ${inputs.company_name}`);
+
+    // STAGE 1: Perplexity — External research & signal gathering
     const research = await gatherResearch(inputs.company_name, inputs.website);
 
-    // STEP 2: Fetch playbooks for review engine
+    // Fetch playbooks for review + synthesis context
     let playbookContext = "";
     try {
       const { data: playbooks } = await supabase
@@ -507,39 +599,56 @@ Deno.serve(async (req) => {
       console.log("Playbook fetch skipped:", e);
     }
 
-    // STEP 3: Generate full document (Output A)
-    console.log(`Generating draft for ${inputs.company_name}...`);
-    const draftPrompt = buildDraftPrompt(inputs, research);
+    // STAGE 2: OpenAI — Deep reasoning, synthesis, POV, hypotheses
+    console.log(`[stage-2] OpenAI synthesis...`);
+    const synthesisPrompt = buildSynthesisPrompt(inputs, research, playbookContext);
+    const synthesisRaw = await callOpenAI([
+      { role: "system", content: "You are a senior sales strategist. Synthesize research into actionable intelligence. Return structured JSON only." },
+      { role: "user", content: synthesisPrompt },
+    ], { model: "gpt-4o", temperature: 0.4, maxTokens: 8192 });
 
-    const draftContent = await callAI([
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: draftPrompt },
-    ], { model: "google/gemini-2.5-pro", temperature: 0.3, maxTokens: 12000 });
+    let synthesis: any;
+    try {
+      const cleaned = synthesisRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      synthesis = JSON.parse(cleaned);
+    } catch {
+      const jsonMatch = synthesisRaw.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try { synthesis = JSON.parse(jsonMatch[0]); } catch { synthesis = { raw: synthesisRaw }; }
+      } else {
+        synthesis = { raw: synthesisRaw };
+      }
+    }
+    console.log(`[stage-2] Synthesis complete: ${Object.keys(synthesis).length} fields`);
+
+    // STAGE 3: Claude — Final structured Discovery Prep document author
+    console.log(`[stage-3] Claude document authoring...`);
+    const documentPrompt = buildDocumentPrompt(inputs, synthesis);
+    const documentRaw = await callClaude([
+      { role: "system", content: "You are a document author. Shape synthesized intelligence into the exact approved Discovery Prep template. Return ONLY valid JSON matching the specified structure. No markdown fences." },
+      { role: "user", content: documentPrompt },
+    ], { model: "claude-sonnet-4-20250514", maxTokens: 12000, temperature: 0.3 });
 
     let draftOutput: any;
     try {
-      draftOutput = JSON.parse(draftContent);
+      const cleaned = documentRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      draftOutput = JSON.parse(cleaned);
     } catch {
-      console.error("Failed to parse draft JSON:", draftContent.slice(0, 500));
-      // Try to extract JSON from the response
-      const jsonMatch = draftContent.match(/\{[\s\S]*\}/);
+      const jsonMatch = documentRaw.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        try {
-          draftOutput = JSON.parse(jsonMatch[0]);
-        } catch {
-          draftOutput = { sections: [], raw: draftContent };
-        }
+        try { draftOutput = JSON.parse(jsonMatch[0]); } catch { draftOutput = { sections: [], raw: documentRaw }; }
       } else {
-        draftOutput = { sections: [], raw: draftContent };
+        draftOutput = { sections: [], raw: documentRaw };
       }
     }
+    console.log(`[stage-3] Document authored: ${draftOutput.sections?.length || 0} sections`);
 
-    // STEP 4: Generate Review (Output B)
+    // STAGE 4: Review — Playbook-grounded, use-case specific (Lovable AI for cost efficiency)
     let reviewOutput: any = { strengths: [], redlines: [] };
 
     if (draftOutput.sections?.length) {
-      console.log("Generating review...");
-      const reviewPrompt = `You are a VP of Sales and a senior deal strategist reviewing a Discovery Prep document for ${inputs.company_name}.
+      console.log("[stage-4] Generating review...");
+      const reviewPrompt = `You are a VP of Sales and senior deal strategist reviewing a Discovery Prep document for ${inputs.company_name}.
 
 Evaluate using these playbook principles:
 ${playbookContext || "Use standard discovery execution, MEDDPICC discipline, value selling, hypothesis development, executive framing, and competitive positioning best practices."}
@@ -560,32 +669,19 @@ Produce a unified review (NOT multiple frameworks — one coherent review):
    - "proposed_text": your improved version
    - "rationale": why this matters (grounded in methodology)
 
-Redlines must be:
-- Specific and actionable
-- Grounded in the relevant playbooks
-- Focused on making this document meeting-ready
-- NOT generic advice — specific rewrites
+Redlines must be specific rewrites, not generic advice.
 
 Return ONLY valid JSON:
 {
   "strengths": ["..."],
-  "redlines": [
-    {
-      "id": "r1",
-      "section_id": "...",
-      "section_name": "...",
-      "current_text": "...",
-      "proposed_text": "...",
-      "rationale": "..."
-    }
-  ]
+  "redlines": [{"id": "r1", "section_id": "...", "section_name": "...", "current_text": "...", "proposed_text": "...", "rationale": "..."}]
 }
 
 No markdown fences.`;
 
       try {
-        const reviewContent = await callAI([
-          { role: "system", content: "You are a senior sales leader reviewing a prep document. Be specific, actionable, and grounded in methodology. Produce one unified review, not multiple competing frameworks." },
+        const reviewContent = await callLovableAI([
+          { role: "system", content: "You are a senior sales leader reviewing a prep document. Be specific, actionable, and grounded in methodology." },
           { role: "user", content: reviewPrompt },
         ], { model: "google/gemini-2.5-flash", temperature: 0.4, maxTokens: 4000 });
 
@@ -596,10 +692,9 @@ No markdown fences.`;
           if (jsonMatch) {
             try { reviewOutput = JSON.parse(jsonMatch[0]); } catch { /* keep default */ }
           }
-          console.error("Failed to parse review JSON");
         }
       } catch (e) {
-        console.error("Review generation error:", e);
+        console.error("[stage-4] Review generation error:", e);
       }
     }
 
@@ -625,6 +720,8 @@ No markdown fences.`;
       throw insertErr;
     }
 
+    console.log(`[discovery-prep] Complete. Run: ${run.id}, Sections: ${draftOutput.sections?.length || 0}, Redlines: ${reviewOutput.redlines?.length || 0}`);
+
     return new Response(JSON.stringify({
       run_id: run.id,
       draft: draftOutput,
@@ -634,10 +731,10 @@ No markdown fences.`;
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  } catch (error: any) {
-    console.error("run-discovery-prep error:", error);
-    const status = error?.status || 500;
-    return new Response(JSON.stringify({ error: error?.message || "An unexpected error occurred. Please try again." }), {
+  } catch (e: any) {
+    console.error("[discovery-prep] Error:", e);
+    const status = e.status || 500;
+    return new Response(JSON.stringify({ error: e.message || "Internal error" }), {
       status, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
