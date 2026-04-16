@@ -148,7 +148,7 @@ export function GlobalSearch({ className }: { className?: string }) {
             onChange={e => handleChange(e.target.value)}
             onFocus={() => { if (results.length > 0) setOpen(true); }}
             placeholder="Search…"
-            className="w-full h-9 rounded-lg border border-border bg-muted/40 pl-9 pr-9 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring focus:bg-background transition-colors"
+            className="w-full h-9 rounded-lg border border-border/40 bg-muted/30 pl-9 pr-9 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/50 focus:bg-background transition-colors"
           />
         </div>
       </PopoverTrigger>
