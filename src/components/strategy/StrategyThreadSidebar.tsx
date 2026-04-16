@@ -67,31 +67,31 @@ export function StrategyThreadSidebar({
   }, [recent]);
 
   return (
-    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/12 flex flex-col shrink-0 h-full')}>
+    <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/8 flex flex-col shrink-0 h-full')}>
       {/* Header */}
-      <div className="px-3 py-1 border-b border-border/6 flex items-center gap-2">
-        <h2 className="text-[10px] font-medium text-foreground/20 tracking-wide flex-1">Threads</h2>
+      <div className="px-3 py-0.5 border-b border-border/5 flex items-center gap-2">
+        <h2 className="text-[10px] font-medium text-foreground/18 tracking-wide flex-1">Threads</h2>
         <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/15" onClick={onCollapse}>
           <ChevronLeft className="h-3 w-3" />
         </Button>
       </div>
 
       {/* New Thread */}
-      <div className="p-2.5 border-b border-border/6">
+      <div className="p-2 border-b border-border/5">
         <Button size="sm" className="w-full gap-1.5 font-medium" onClick={onOpenCreateDialog}>
           <Plus className="h-3.5 w-3.5" /> New Thread
         </Button>
       </div>
 
       {/* Search */}
-      <div className="px-2.5 pb-2 pt-2">
+      <div className="px-2 pb-1.5 pt-1.5">
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/40" />
           <Input
             placeholder="Search…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="h-7 pl-7 text-xs border-border/25 bg-background/20 placeholder:text-muted-foreground/30"
+            className="h-6 pl-6 text-[11px] border-border/15 bg-background/15 placeholder:text-muted-foreground/25"
           />
         </div>
       </div>
