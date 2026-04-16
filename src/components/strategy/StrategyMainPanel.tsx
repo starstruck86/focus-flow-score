@@ -216,8 +216,8 @@ export function StrategyMainPanel({
       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect}
         accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.json,.xml,.html" />
 
-      {/* ── UNIFIED HEADER ── */}
-      <div className="shrink-0 px-3 py-1 flex items-center gap-1.5">
+      {/* ── HEADER — single row ── */}
+      <div className="shrink-0 px-3 py-1 border-b border-border/10 flex items-center gap-1.5">
         {sidebarCollapsed && (
           <Button size="icon" variant="ghost" className="h-5 w-5 shrink-0 text-foreground/30" onClick={onExpandSidebar}>
             <PanelLeftOpen className="h-3 w-3" />
@@ -226,22 +226,9 @@ export function StrategyMainPanel({
         <ThreadIcon className="h-2.5 w-2.5 text-primary/30 shrink-0" />
         <h1 className="text-[11px] font-semibold text-foreground/80 truncate min-w-0">{thread.title}</h1>
 
-        {/* Running status — inline with title */}
-        {activeWorkflow && (
-          <span className="text-[8px] text-primary/50 font-medium shrink-0 flex items-center gap-0.5 ml-0.5">
-            <Loader2 className="h-2 w-2 animate-spin" />
-            {activeWorkflowLabel}
-          </span>
-        )}
-        {isUploading && (
-          <span className="text-[8px] text-muted-foreground/50 shrink-0 flex items-center gap-0.5 animate-pulse">
-            <Loader2 className="h-2 w-2 animate-spin" /> Uploading
-          </span>
-        )}
-
         <div className="flex-1" />
 
-        {/* Workflow actions — part of header, not separate row */}
+        {/* Workflow actions */}
         <div className="flex items-center gap-0.5 shrink-0">
           {visibleWorkflows.map(w => {
             const isRunning = activeWorkflow === w.key;
@@ -265,7 +252,10 @@ export function StrategyMainPanel({
           })}
           {overflowWorkflows.length > 0 && (
             <button
-              className="text-[10px] text-muted-foreground/40 hover:text-foreground/50 transition-colors shrink-0 px-1"
+              className={cn(
+                'h-6 px-2 shrink-0 rounded-full transition-all flex items-center gap-1 text-[10px] font-medium border',
+                'border-border/25 hover:bg-muted/30 text-muted-foreground/50 hover:text-foreground/50'
+              )}
               onClick={() => setWorkflowSheetOpen(true)}
             >
               +{overflowWorkflows.length} more
@@ -279,6 +269,23 @@ export function StrategyMainPanel({
           </Button>
         )}
       </div>
+
+      {/* Running indicator — below header */}
+      {(activeWorkflow || isUploading) && (
+        <div className="shrink-0 px-3 py-0.5">
+          {activeWorkflow && (
+            <span className="text-[9px] text-primary/50 font-medium flex items-center gap-1">
+              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+              Running {activeWorkflowLabel}…
+            </span>
+          )}
+          {isUploading && (
+            <span className="text-[9px] text-muted-foreground/50 flex items-center gap-1 animate-pulse">
+              <Loader2 className="h-2.5 w-2.5 animate-spin" /> Uploading…
+            </span>
+          )}
+        </div>
+      )}
 
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
@@ -330,14 +337,14 @@ export function StrategyMainPanel({
                 );
               })}
               {isSending && !activeWorkflow && (
-                <div className="flex justify-start">
-                  <div className="rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+                <div className="flex justify-start w-full">
+                  <div className="max-w-[78%] w-fit rounded-xl rounded-bl-sm px-3.5 py-2 bg-card border border-border/30 flex items-center gap-1.5">
                     <div className="flex gap-0.5">
                       <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:0ms]" />
                       <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:150ms]" />
                       <span className="h-1 w-1 rounded-full bg-primary/30 animate-bounce [animation-delay:300ms]" />
                     </div>
-                    <span className="text-[10px] text-foreground/30">Thinking…</span>
+                    <span className="text-[10px] text-muted-foreground/50">Thinking…</span>
                   </div>
                 </div>
               )}
@@ -357,8 +364,8 @@ export function StrategyMainPanel({
         </div>
       )}
 
-      {/* ── COMPOSER — docked to canvas ── */}
-      <div className="shrink-0 border-t border-border/15 bg-background/60 px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))] pt-1.5">
+      {/* ── COMPOSER — docked ── */}
+      <div className="shrink-0 border-t border-border/12 bg-muted/15 px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))] pt-1.5">
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
