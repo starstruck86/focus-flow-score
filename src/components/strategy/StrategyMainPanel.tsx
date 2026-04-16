@@ -102,12 +102,14 @@ export function StrategyMainPanel({
   const isMobile = useIsMobile();
   const { messages, sendMessage, runWorkflow, isLoading, isSending } = useStrategyMessages(thread?.id ?? null);
   const { uploads, uploadFiles, isUploading } = useStrategyUploads(thread?.id ?? null);
+  const { isRunning: isTaskRunning, result: taskResult, runDiscoveryPrep, applyRedline, rejectRedline, reset: resetTask } = useTaskExecution();
   const [input, setInput] = useState('');
   const [depth, setDepth] = useState<typeof DEPTH_OPTIONS[number]>('Standard');
   
   const [isDragOver, setIsDragOver] = useState(false);
   const [activeWorkflow, setActiveWorkflow] = useState<string | null>(null);
   const [workflowSheetOpen, setWorkflowSheetOpen] = useState(false);
+  const [taskPrompterOpen, setTaskPrompterOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
