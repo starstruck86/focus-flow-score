@@ -381,6 +381,27 @@ export function StrategyMainPanel({
         </div>
       )}
 
+      {/* ── TASK SHORTCUT ROW ── */}
+      <div className="shrink-0 px-3 py-1 border-t border-border/8">
+        <button
+          className={cn(
+            'flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[10px] font-medium transition-all',
+            'border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary',
+            'active:scale-[0.98]',
+            (isSending || isTaskRunning) && 'opacity-50 pointer-events-none'
+          )}
+          onClick={() => setTaskPrompterOpen(true)}
+          disabled={isSending || isTaskRunning}
+        >
+          {isTaskRunning ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Zap className="h-3 w-3" />
+          )}
+          {isTaskRunning ? 'Generating Prep Doc…' : 'Discovery Prep'}
+        </button>
+      </div>
+
       {/* ── COMPOSER — docked ── */}
       <div className="shrink-0 border-t border-border/15 bg-background/65 backdrop-blur-md px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))] pt-1">
           <Textarea
