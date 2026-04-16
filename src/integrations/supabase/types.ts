@@ -6636,6 +6636,98 @@ export type Database = {
         }
         Relationships: []
       }
+      task_runs: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          draft_output: Json | null
+          id: string
+          inputs: Json
+          opportunity_id: string | null
+          review_output: Json | null
+          status: string
+          task_type: string
+          template_id: string | null
+          thread_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          draft_output?: Json | null
+          id?: string
+          inputs?: Json
+          opportunity_id?: string | null
+          review_output?: Json | null
+          status?: string
+          task_type?: string
+          template_id?: string | null
+          thread_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          draft_output?: Json | null
+          id?: string
+          inputs?: Json
+          opportunity_id?: string | null
+          review_output?: Json | null
+          status?: string
+          task_type?: string
+          template_id?: string | null
+          thread_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_runs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "task_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_templates: {
+        Row: {
+          created_at: string
+          formatting_rules: Json
+          id: string
+          is_system: boolean
+          name: string
+          sections: Json
+          updated_at: string
+          use_case: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          formatting_rules?: Json
+          id?: string
+          is_system?: boolean
+          name: string
+          sections?: Json
+          updated_at?: string
+          use_case: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          formatting_rules?: Json
+          id?: string
+          is_system?: boolean
+          name?: string
+          sections?: Json
+          updated_at?: string
+          use_case?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           category: string | null
