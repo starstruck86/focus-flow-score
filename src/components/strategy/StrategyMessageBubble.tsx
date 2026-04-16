@@ -108,9 +108,9 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
-          'max-w-[80%] w-fit text-sm leading-relaxed',
+          'max-w-[80%] w-fit text-sm leading-relaxed break-words [overflow-wrap:anywhere]',
           isUser
-            ? 'bg-primary text-primary-foreground rounded-xl rounded-br-sm px-3.5 py-2.5'
+            ? 'bg-primary text-primary-foreground rounded-xl rounded-br-sm px-3.5 py-2.5 self-end'
             : isSystem
               ? 'bg-transparent text-muted-foreground/60 italic text-xs px-1 py-1'
               : 'rounded-xl rounded-bl-sm px-3.5 py-2.5 bg-card border border-border/30 text-foreground shadow-sm',
