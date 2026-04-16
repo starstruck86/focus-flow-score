@@ -174,24 +174,23 @@ function ThreadRow({ thread, isActive, onClick }: { thread: StrategyThread; isAc
     <button
       onClick={onClick}
       className={cn(
-        'w-full text-left px-2 py-1.5 rounded-md text-xs flex items-start gap-2 transition-colors',
+        'w-full text-left px-2 py-1 rounded-md text-xs flex items-start gap-1.5 transition-colors',
         isActive
-          ? 'bg-primary/8 text-foreground border-l-2 border-primary/50 pl-1.5'
-          : 'hover:bg-muted/50 text-foreground/70 hover:text-foreground',
+          ? 'bg-primary/8 text-foreground border-l-2 border-primary/40 pl-1.5'
+          : 'hover:bg-muted/40 text-foreground/70 hover:text-foreground',
       )}
     >
-      <Icon className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', isActive ? 'text-primary/70' : 'text-muted-foreground/60')} />
+      <Icon className={cn('h-3 w-3 mt-0.5 shrink-0', isActive ? 'text-primary/60' : 'text-muted-foreground/50')} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1">
-          <span className="truncate font-medium">{thread.title}</span>
-          {thread.is_pinned && <Pin className="h-2.5 w-2.5 text-amber-500 shrink-0" />}
+          <span className="truncate font-medium text-[11px]">{thread.title}</span>
+          {thread.is_pinned && <Pin className="h-2 w-2 text-amber-500/70 shrink-0" />}
         </div>
-        <div className="flex items-center gap-1 mt-0.5">
-          <span className={cn('text-[9px] font-medium', LANE_COLORS[thread.lane]?.split(' ').pop() || 'text-muted-foreground')}>
+        <div className="flex items-center gap-1">
+          <span className={cn('text-[9px]', LANE_COLORS[thread.lane]?.split(' ').pop() || 'text-muted-foreground/50')}>
             {thread.lane}
           </span>
-          <span className="text-[10px] text-muted-foreground/50">·</span>
-          <span className="text-[10px] text-muted-foreground/50">{timeAgo}</span>
+          <span className="text-[9px] text-muted-foreground/40">· {timeAgo}</span>
         </div>
       </div>
     </button>
