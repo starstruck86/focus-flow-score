@@ -1,10 +1,13 @@
 // ════════════════════════════════════════════════════════════════
-// run-discovery-prep — backward-compatible thin shim.
+// run-strategy-task — shared Strategy task orchestration entry point.
 //
-// All orchestration now lives in the shared Strategy task pipeline
-// (_shared/strategy-orchestrator). This function exists only so the
-// existing client (useTaskExecution) keeps working without a
-// frontend-coordinated rename. New code should call run-strategy-task.
+// Single backend for ALL Strategy tasks. Discovery Prep is the first
+// consumer; future tasks (recap email, follow-up, etc.) plug in via
+// the TaskHandler registry — no parallel functions.
+//
+// Body shapes:
+//   { action: "generate", task_type: "discovery_prep", inputs: {...} }
+//   { action: "apply_redline", run_id, section_id, proposed_text }
 // ════════════════════════════════════════════════════════════════
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -50,6 +53,8 @@ Deno.serve(async (req) => {
       });
     }
 
+    // generate
+    const taskType = body.task_type || "discovery_prep";
     const { inputs } = body;
     if (!inputs?.company_name) {
       return new Response(JSON.stringify({ error: "inputs.company_name is required" }), {
@@ -57,18 +62,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    const result = await runStrategyTask({
-      userId: user.id,
-      supabase,
-      inputs,
-      taskType: "discovery_prep",
-    });
-
+    const result = await runStrategyTask({ userId: user.id, supabase, inputs, taskType });
     return new Response(JSON.stringify(result), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
-    console.error("[run-discovery-prep] error:", e);
+    console.error("[run-strategy-task] error:", e);
     const status = e?.status || 500;
     return new Response(JSON.stringify({ error: e?.message || "Internal error" }), {
       status, headers: { ...corsHeaders, "Content-Type": "application/json" },
