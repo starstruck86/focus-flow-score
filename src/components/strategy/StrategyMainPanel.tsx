@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   PanelLeftOpen, PanelRightOpen, Search, Mail, Target, Map,
   FileText, Send, Paperclip, Upload, Loader2, Zap, Database,
-  Building2, MessageSquare,
+  Building2, MessageSquare, ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,6 +18,9 @@ import { StrategyCommandCenter } from './StrategyCommandCenter';
 import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
 import { StrategyMessageBubble } from './StrategyMessageBubble';
+import { DiscoveryPrepPrompter } from './tasks/DiscoveryPrepPrompter';
+import { TaskOutputViewer } from './tasks/TaskOutputViewer';
+import { useTaskExecution } from '@/hooks/strategy/useTaskExecution';
 import type { StrategyThread } from '@/types/strategy';
 import { useIsMobile } from '@/hooks/use-mobile';
 
