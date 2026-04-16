@@ -25,19 +25,50 @@ export interface Redline {
   current_text: string;
   proposed_text: string;
   rationale: string;
+  grounded_by_id?: string | null;
   status?: 'pending' | 'accepted' | 'rejected';
 }
 
 export interface DiscoverySection {
   id: string;
   name: string;
+  /** v2: KI/playbook 8-char ids the section was grounded in. */
+  grounded_by?: string[];
   content: any;
+}
+
+export interface SourceEntry {
+  id: string;       // "S1", "S2", ...
+  label: string;
+  url?: string | null;
+  accessed?: string | null;
+}
+
+export interface LibraryCoverageEntry {
+  id: string;
+  title: string;
+  type: 'KI' | 'Playbook';
+  sections?: string[];
+}
+
+export interface RubricCheck {
+  citation_density?: 'pass' | 'warn' | 'fail';
+  cockpit_completeness?: 'pass' | 'warn' | 'fail';
+  discovery_question_specificity?: 'pass' | 'warn' | 'fail';
+  library_grounding?: 'pass' | 'warn' | 'fail';
+  appendix_richness?: 'pass' | 'warn' | 'fail';
+  notes?: string[];
 }
 
 export interface TaskRunResult {
   run_id: string;
-  draft: { sections: DiscoverySection[] };
-  review: { strengths: string[]; redlines: Redline[] };
+  draft: { sections: DiscoverySection[]; sources?: SourceEntry[] };
+  review: {
+    strengths: string[];
+    redlines: Redline[];
+    library_coverage?: { used: LibraryCoverageEntry[]; gaps: string[]; score?: number };
+    rubric_check?: RubricCheck;
+  };
 }
 
 export function useTaskExecution() {
