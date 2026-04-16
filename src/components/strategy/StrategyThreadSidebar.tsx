@@ -69,15 +69,15 @@ export function StrategyThreadSidebar({
   return (
     <div className={cn(STRATEGY_UI.layout.sidebar, STRATEGY_UI.surface.sidebar, 'border-r border-border/50 flex flex-col shrink-0 h-full')}>
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-border/30 flex items-center gap-2">
-        <h2 className="text-[11px] font-medium text-foreground/50 tracking-wide flex-1">Threads</h2>
+      <div className="px-3 py-1.5 border-b border-border/20 flex items-center gap-2">
+        <h2 className="text-[11px] font-medium text-foreground/40 tracking-wide flex-1">Threads</h2>
         <Button size="icon" variant="ghost" className="h-5 w-5 text-foreground/30" onClick={onCollapse}>
           <ChevronLeft className="h-3 w-3" />
         </Button>
       </div>
 
       {/* New Thread */}
-      <div className="p-2.5 border-b border-border">
+      <div className="p-2.5 border-b border-border/20">
         <Button size="sm" className="w-full gap-1.5 font-medium" onClick={onOpenCreateDialog}>
           <Plus className="h-3.5 w-3.5" /> New Thread
         </Button>
