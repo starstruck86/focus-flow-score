@@ -117,7 +117,7 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         )}
       >
         {isSafeToRender(text) ? (
-          <div className="whitespace-pre-wrap">{text}</div>
+          <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{text}</div>
         ) : (
           <div className="flex items-center gap-1.5 py-0.5">
             <div className="flex gap-0.5">

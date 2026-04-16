@@ -245,16 +245,16 @@ export function StrategyMainPanel({
         <div className="flex-1" />
 
         {/* Workflow actions — part of header, not separate row */}
-        <div className="flex items-center gap-px shrink-0">
+        <div className="flex items-center gap-0.5 shrink-0">
           {visibleWorkflows.map(w => {
             const isRunning = activeWorkflow === w.key;
             return (
               <button
                 key={w.key}
                 className={cn(
-                  'h-5 px-1 shrink-0 rounded transition-all flex items-center gap-0.5',
-                  'hover:bg-muted/30',
-                  isRunning ? 'text-primary' : 'text-foreground/20 hover:text-foreground/40',
+                  'h-6 px-2 shrink-0 rounded-md transition-all flex items-center gap-1 text-[10px] font-medium border',
+                  'border-border/30 hover:bg-muted/40',
+                  isRunning ? 'text-primary border-primary/30 bg-primary/5' : 'text-foreground/40 hover:text-foreground/60',
                   (isSending || !!activeWorkflow) && !isRunning && 'opacity-30 pointer-events-none'
                 )}
                 onClick={() => handleWorkflow(w.key)}
@@ -262,16 +262,16 @@ export function StrategyMainPanel({
                 disabled={isSending || !!activeWorkflow}
               >
                 {isRunning ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <w.icon className="h-2.5 w-2.5" />}
+                <span className={isMobile ? 'hidden sm:inline' : ''}>{w.label}</span>
               </button>
             );
           })}
           {overflowWorkflows.length > 0 && (
             <button
-              className="h-5 px-1.5 text-[9px] font-medium rounded transition-all shrink-0 flex items-center gap-1 text-foreground/25 hover:text-foreground/40 hover:bg-muted/30"
+              className="h-6 px-2 text-xs font-medium rounded-md transition-all shrink-0 flex items-center gap-1 text-foreground/35 hover:text-foreground/50 hover:bg-muted/40 bg-muted/30"
               onClick={() => setWorkflowSheetOpen(true)}
             >
-              <Zap className="h-2.5 w-2.5" />
-              <span className="text-[8px] opacity-60">+{overflowWorkflows.length}</span>
+              +{overflowWorkflows.length} workflows
             </button>
           )}
         </div>
@@ -418,14 +418,14 @@ export function StrategyMainPanel({
 
       {/* ── Workflow overflow sheet (mobile) ── */}
       <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[45vh]">
-          <SheetHeader className="pb-2">
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[65vh]">
+          <SheetHeader className="pb-1.5">
             <SheetTitle className="text-sm">Workflows</SheetTitle>
             <SheetDescription className="text-[11px] text-foreground/50">
               Run a workflow on this thread
             </SheetDescription>
           </SheetHeader>
-          <div className="grid grid-cols-2 gap-2 pb-3">
+          <div className="grid grid-cols-2 gap-1.5 pb-3">
             {WORKFLOWS.map(w => {
               const isRunning = activeWorkflow === w.key;
               const isRecommended = recommendedWorkflows.includes(w.key);
