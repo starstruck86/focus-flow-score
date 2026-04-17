@@ -5,7 +5,7 @@ import type {
   RubricCheck,
   SourceEntry,
   TaskRunResult,
-} from '@/hooks/strategy/useTaskExecution';
+} from '@/types/strategy/discoveryTask';
 
 type UnknownRecord = Record<string, unknown>;
 
