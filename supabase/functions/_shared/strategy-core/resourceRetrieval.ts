@@ -581,5 +581,79 @@ export function renderResourceContextBlock(args: {
     `- Prefer suggesting the closest match by EXACT title rather than describing one generically.`,
   );
 
-  return lines.join("\n");
+}
+
+// ── Cross-thread resource memory: WRITE side ──────────────────────
+
+/**
+ * Persist that a set of resources was actually cited by the assistant
+ * on this thread. This is what makes the `prior_use` retrieval branch
+ * non-empty on the next turn — and what makes "use the same resource
+ * we used last time on this account" possible at all.
+ *
+ * Inputs are the verified resource ids from the citation auditor —
+ * NOT the model's raw output. We never write a fabricated citation.
+ *
+ * Idempotency: callers may invoke this multiple times per turn; the
+ * function dedupes by (thread_id, resource_id) before insert and
+ * silently no-ops on conflict. We deliberately do NOT add a unique
+ * constraint here — the row is cheap and chronological history is
+ * sometimes useful for ranking. The dedupe is per-call.
+ */
+export async function recordResourceUsage(
+  supabase: SupabaseLike,
+  args: {
+    userId: string;
+    threadId: string;
+    resourceIds: string[];
+    sourceType?: "cited" | "uploaded" | "linked";
+  },
+): Promise<{ inserted: number }> {
+  const { userId, threadId, resourceIds, sourceType = "cited" } = args;
+  if (!userId || !threadId || !Array.isArray(resourceIds) || resourceIds.length === 0) {
+    return { inserted: 0 };
+  }
+  // Dedupe within the call.
+  const unique = Array.from(new Set(resourceIds.filter((id) => typeof id === "string" && id.length > 0)));
+  if (unique.length === 0) return { inserted: 0 };
+
+  // Skip ids we already wrote for this thread (prevents per-turn churn).
+  let alreadyWritten = new Set<string>();
+  try {
+    const { data } = await supabase
+      .from("strategy_thread_resources")
+      .select("resource_id")
+      .eq("user_id", userId)
+      .eq("thread_id", threadId)
+      .in("resource_id", unique);
+    if (Array.isArray(data)) {
+      alreadyWritten = new Set(data.map((r: any) => r.resource_id).filter(Boolean));
+    }
+  } catch (e) {
+    console.warn("[recordResourceUsage] dedupe-read failed:", (e as Error).message);
+  }
+
+  const toInsert = unique
+    .filter((id) => !alreadyWritten.has(id))
+    .map((resource_id) => ({
+      user_id: userId,
+      thread_id: threadId,
+      resource_id,
+      source_type: sourceType,
+      is_pinned: false,
+    }));
+
+  if (toInsert.length === 0) return { inserted: 0 };
+
+  try {
+    const { error } = await supabase.from("strategy_thread_resources").insert(toInsert);
+    if (error) {
+      console.warn("[recordResourceUsage] insert failed:", (error as any)?.message ?? error);
+      return { inserted: 0 };
+    }
+    return { inserted: toInsert.length };
+  } catch (e) {
+    console.warn("[recordResourceUsage] insert threw:", (e as Error).message);
+    return { inserted: 0 };
+  }
 }
