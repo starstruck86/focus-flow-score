@@ -581,6 +581,7 @@ export function renderResourceContextBlock(args: {
     `- Prefer suggesting the closest match by EXACT title rather than describing one generically.`,
   );
 
+  return lines.join("\n");
 }
 
 // ── Cross-thread resource memory: WRITE side ──────────────────────
