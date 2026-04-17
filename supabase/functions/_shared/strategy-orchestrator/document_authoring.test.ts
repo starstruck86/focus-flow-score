@@ -1,97 +1,129 @@
 // ════════════════════════════════════════════════════════════════
 // Deterministic proof tests for the document_authoring stage.
 //
-// We do NOT call Claude, OpenAI, Perplexity, or Lovable AI here.
-// Every external call is mocked. The goal is to prove that the
-// stage cannot leave a row stuck in `pending` under any failure
-// mode (timeout, malformed JSON, provider error, missing shape).
+// Strategy: stub global `fetch` so we never hit any provider.
+// We control:
+//   - Claude responses (success / malformed / hang / error)
+//   - Lovable AI synthesis + review responses
+//   - Supabase REST writes (in-memory row state)
 //
-// Run with: deno test --allow-env --allow-net supabase/functions/_shared/strategy-orchestrator/document_authoring.test.ts
+// Goal: prove the row never stays in `pending` under any failure mode.
 // ════════════════════════════════════════════════════════════════
 
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import * as providers from "./providers.ts";
 import { runStrategyTask } from "./runTask.ts";
-import * as registry from "./registry.ts";
-import * as libRet from "./libraryRetrieval.ts";
 
-// ── Tiny in-memory stand-in for the supabase client ──────────────
+// Required env (callClaude / callLovableAI throw if absent).
+Deno.env.set("ANTHROPIC_API_KEY", "test");
+Deno.env.set("LOVABLE_API_KEY", "test");
+Deno.env.set("OPENAI_API_KEY", "test");
+Deno.env.set("PERPLEXITY_API_KEY", "test");
+
+// ── In-memory supabase mock (only the chains the orchestrator uses) ──
 function makeFakeSupabase() {
   const rows: Record<string, any> = {};
   let seq = 0;
 
-  // Returns a chainable query builder used by the orchestrator.
-  function from(table: string) {
-    let pendingFilter: { col: string; val: any } | null = null;
-    let pendingSelect: string | null = null;
-    let pendingUpdate: any = null;
-    let pendingInsert: any = null;
-
+  function from(_table: string) {
+    const ctx: any = {};
     const exec = async () => {
-      if (pendingInsert) {
+      if (ctx.insert) {
         const id = `run_${++seq}`;
-        const row = { id, ...pendingInsert };
-        rows[id] = row;
+        rows[id] = { id, ...ctx.insert };
         return { data: { id }, error: null };
       }
-      if (pendingUpdate && pendingFilter) {
-        const row = rows[pendingFilter.val];
-        if (row) Object.assign(row, pendingUpdate);
+      if (ctx.update && ctx.eq) {
+        const row = rows[ctx.eq.val];
+        if (row) Object.assign(row, ctx.update);
         return { data: row, error: null };
       }
-      if (pendingSelect && pendingFilter) {
-        return { data: rows[pendingFilter.val], error: null };
+      if (ctx.select && ctx.eq) {
+        return { data: rows[ctx.eq.val] ?? null, error: null };
       }
+      // bare .select() with no filter — used by libraryRetrieval; return empty.
+      if (ctx.select) return { data: [], error: null };
       return { data: null, error: null };
     };
-
-    const builder: any = {
-      insert(values: any) { pendingInsert = values; return builder; },
-      update(values: any) { pendingUpdate = values; return builder; },
-      select(_cols?: string) { pendingSelect = _cols || "*"; return builder; },
-      eq(col: string, val: any) { pendingFilter = { col, val }; return builder; },
+    const b: any = {
+      insert(v: any) { ctx.insert = v; return b; },
+      update(v: any) { ctx.update = v; return b; },
+      select(c?: string) { ctx.select = c || "*"; return b; },
+      eq(col: string, val: any) { ctx.eq = { col, val }; return b; },
+      in() { return b; },
+      or() { return b; },
+      ilike() { return b; },
+      limit() { return b; },
+      order() { return b; },
       single() { return exec(); },
-      then(resolve: any, reject: any) { return exec().then(resolve, reject); },
+      then(res: any, rej: any) { return exec().then(res, rej); },
     };
-    return builder;
+    return b;
   }
-
   return { from, _rows: rows };
 }
 
-const stubHandler = {
-  libraryScopes: () => [],
-  buildResearchQueries: () => [], // skip Stage 1 entirely
-  buildSynthesisPrompt: () => "synth",
-  buildDocumentSystemPrompt: () => "sys",
-  buildDocumentUserPrompt: () => "user",
-  buildReviewPrompt: () => "review",
-};
+// ── fetch stub: route by URL ──────────────────────────────────────
+type ClaudeBehavior =
+  | { kind: "ok"; text: string }
+  | { kind: "hang" }
+  | { kind: "error"; status: number; body?: string };
 
-// Monkeypatch getHandler to always return our stub.
-(registry as any).getHandler = (_t: string) => stubHandler;
-
-// Stub library retrieval so it doesn't hit DB.
-(libRet as any).retrieveLibraryContext = async () => ({
-  kis: [], playbooks: [], counts: { kis: 0, playbooks: 0 },
-});
-
-// ── Helper: run with mocked providers and return final row state. ─
-async function runWith({
-  synthesis, claude, claudeDelayMs = 0,
-}: {
-  synthesis: string;
-  claude: () => Promise<string>;
-  claudeDelayMs?: number;
+function installFetch(opts: {
+  synthesisJson: string;
+  reviewJson?: string;
+  claude: ClaudeBehavior;
 }) {
-  const originalLovable = providers.callLovableAI;
-  const originalClaude = providers.callClaude;
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: any, init?: any) => {
+    const u = String(url);
 
-  (providers as any).callLovableAI = async (_msgs: any, _opts: any) => synthesis;
-  (providers as any).callClaude = async () => {
-    if (claudeDelayMs > 0) await new Promise((r) => setTimeout(r, claudeDelayMs));
-    return claude();
-  };
+    // Anthropic — Claude document author
+    if (u.includes("api.anthropic.com")) {
+      if (opts.claude.kind === "hang") {
+        // Respect AbortSignal so the stage-level timeout still fires.
+        return await new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        });
+      }
+      if (opts.claude.kind === "error") {
+        return new Response(opts.claude.body ?? "boom", { status: opts.claude.status });
+      }
+      const body = { content: [{ type: "text", text: opts.claude.text }] };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
+    // Lovable AI Gateway — synthesis (stage 2) and review (stage 4)
+    if (u.includes("ai.gateway.lovable.dev")) {
+      const isReview = JSON.stringify(init?.body || "").includes("reviewing a prep document");
+      const text = isReview ? (opts.reviewJson ?? '{"strengths":[],"redlines":[]}') : opts.synthesisJson;
+      const body = { choices: [{ message: { content: text } }] };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
+    // Anything else (perplexity, etc.) — empty success.
+    return new Response(JSON.stringify({ choices: [{ message: { content: "" } }] }), { status: 200 });
+  }) as any;
+  return () => { globalThis.fetch = original; };
+}
+
+async function runWith(opts: {
+  synthesisJson: string;
+  claude: ClaudeBehavior;
+  reviewJson?: string;
+  compressTimers?: boolean;
+}) {
+  const restoreFetch = installFetch(opts);
+
+  // Optionally compress long timers (>=1000ms) so the 90s authoring
+  // timeout fires immediately. Short timers (Claude retry backoff,
+  // microtasks, etc.) keep their real behavior.
+  let restoreTimer: (() => void) | null = null;
+  if (opts.compressTimers) {
+    const realSet = globalThis.setTimeout;
+    (globalThis as any).setTimeout = ((fn: any, ms: number, ...rest: any[]) =>
+      realSet(fn, ms >= 1000 ? 0 : ms, ...rest)) as any;
+    restoreTimer = () => { globalThis.setTimeout = realSet; };
+  }
 
   const supabase = makeFakeSupabase();
   let threw: any = null;
@@ -106,36 +138,36 @@ async function runWith({
     threw = e;
   }
 
-  (providers as any).callLovableAI = originalLovable;
-  (providers as any).callClaude = originalClaude;
+  restoreFetch();
+  restoreTimer?.();
 
   const finalRow = Object.values(supabase._rows)[0] as any;
   return { finalRow, threw };
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Test 1: happy path — Claude returns valid JSON quickly.
+// Test 1 — happy path
 // ──────────────────────────────────────────────────────────────────
-Deno.test("document_authoring: success writes status=completed", async () => {
+Deno.test("document_authoring: success → status=completed", async () => {
   const { finalRow, threw } = await runWith({
-    synthesis: JSON.stringify({ ok: true }),
-    claude: async () => JSON.stringify({ sections: [{ id: "s1", content: "hello" }] }),
+    synthesisJson: JSON.stringify({ ok: true }),
+    claude: { kind: "ok", text: JSON.stringify({ sections: [{ id: "s1", heading: "H", content: "body" }] }) },
   });
-  assertEquals(threw, null, "no throw on happy path");
+  assertEquals(threw, null);
   assertEquals(finalRow.status, "completed");
   assertEquals(finalRow.progress_step, "completed");
-  assert(finalRow.draft_output?.sections?.length === 1);
+  assertEquals(finalRow.draft_output.sections.length, 1);
 });
 
 // ──────────────────────────────────────────────────────────────────
-// Test 2: malformed JSON — must fail with explicit parse error.
+// Test 2 — malformed JSON
 // ──────────────────────────────────────────────────────────────────
-Deno.test("document_authoring: malformed JSON fails with parse error", async () => {
+Deno.test("document_authoring: malformed JSON → status=failed with parse error", async () => {
   const { finalRow, threw } = await runWith({
-    synthesis: JSON.stringify({ ok: true }),
-    claude: async () => "not json at all, just prose with no braces",
+    synthesisJson: JSON.stringify({ ok: true }),
+    claude: { kind: "ok", text: "this is plain prose with no json structure at all" },
   });
-  assert(threw, "should throw");
+  assert(threw, "expected throw");
   assertEquals(finalRow.status, "failed");
   assertEquals(finalRow.progress_step, "failed");
   assertStringIncludes(finalRow.error, "[document_authoring]");
@@ -143,12 +175,12 @@ Deno.test("document_authoring: malformed JSON fails with parse error", async () 
 });
 
 // ──────────────────────────────────────────────────────────────────
-// Test 3: wrong shape — JSON parses but missing sections array.
+// Test 3 — JSON parses but missing sections
 // ──────────────────────────────────────────────────────────────────
-Deno.test("document_authoring: wrong shape fails with missing-sections error", async () => {
+Deno.test("document_authoring: missing sections array → status=failed", async () => {
   const { finalRow, threw } = await runWith({
-    synthesis: JSON.stringify({ ok: true }),
-    claude: async () => JSON.stringify({ summary: "no sections key" }),
+    synthesisJson: JSON.stringify({ ok: true }),
+    claude: { kind: "ok", text: JSON.stringify({ summary: "no sections key" }) },
   });
   assert(threw);
   assertEquals(finalRow.status, "failed");
@@ -156,64 +188,61 @@ Deno.test("document_authoring: wrong shape fails with missing-sections error", a
 });
 
 // ──────────────────────────────────────────────────────────────────
-// Test 4: provider error — Claude throws (e.g. 5xx after retries).
+// Test 4 — provider error (4xx, no retry)
 // ──────────────────────────────────────────────────────────────────
-Deno.test("document_authoring: provider error surfaces and writes failed", async () => {
+Deno.test("document_authoring: Claude 400 → status=failed with provider error", async () => {
   const { finalRow, threw } = await runWith({
-    synthesis: JSON.stringify({ ok: true }),
-    claude: async () => { throw new Error("Claude error: 503 (after retries)"); },
+    synthesisJson: JSON.stringify({ ok: true }),
+    claude: { kind: "error", status: 400, body: "bad request" },
   });
   assert(threw);
   assertEquals(finalRow.status, "failed");
   assertEquals(finalRow.progress_step, "failed");
-  assertStringIncludes(finalRow.error, "Claude error: 503");
+  assertStringIncludes(finalRow.error, "[document_authoring]");
+  assertStringIncludes(finalRow.error, "Claude error: 400");
 });
 
 // ──────────────────────────────────────────────────────────────────
-// Test 5: hang — Claude never resolves. Stage timeout must fire.
+// Test 5 — hang. Stage-level 90s timeout must fire.
+//   We compress timers so the 90s race timer fires immediately while
+//   the fetch stub respects AbortSignal. The retry-backoff timers
+//   (3s, 9s) also compress, but the first attempt's AbortController
+//   timeout (180s in providers.ts) and the stage race (90s) will
+//   both compress; whichever wins, the row must still land at failed.
 // ──────────────────────────────────────────────────────────────────
-Deno.test("document_authoring: hang triggers 90s timeout (compressed via setTimeout stub)", async () => {
-  const realSetTimeout = globalThis.setTimeout;
-  // Fire any timer >=1000ms instantly. Short timers (DB writes, etc.) keep real behavior.
-  (globalThis as any).setTimeout = ((fn: any, ms: number, ...rest: any[]) => {
-    if (ms >= 1000) return realSetTimeout(fn, 0, ...rest);
-    return realSetTimeout(fn, ms, ...rest);
-  }) as any;
-
-  try {
-    const { finalRow, threw } = await runWith({
-      synthesis: JSON.stringify({ ok: true }),
-      // never resolves
-      claude: () => new Promise<string>(() => {}),
-    });
-    assert(threw, "should throw on timeout");
-    assertEquals(finalRow.status, "failed");
-    assertEquals(finalRow.progress_step, "failed");
-    assertStringIncludes(finalRow.error, "[document_authoring]");
-    assertStringIncludes(finalRow.error, "timed out");
-  } finally {
-    globalThis.setTimeout = realSetTimeout;
-  }
+Deno.test("document_authoring: hang → stage timeout writes status=failed", async () => {
+  const { finalRow, threw } = await runWith({
+    synthesisJson: JSON.stringify({ ok: true }),
+    claude: { kind: "hang" },
+    compressTimers: true,
+  });
+  assert(threw, "expected throw on hang");
+  assertEquals(finalRow.status, "failed");
+  assertEquals(finalRow.progress_step, "failed");
+  assertStringIncludes(finalRow.error, "[document_authoring]");
 });
 
 // ──────────────────────────────────────────────────────────────────
-// Test 6: invariant — under EVERY failure mode the row leaves
-// pending and lands at status='failed' with progress_step='failed'.
+// Test 6 — invariant: no failure mode leaves the row in `pending`.
 // ──────────────────────────────────────────────────────────────────
-Deno.test("document_authoring: no failure mode leaves row in pending", async () => {
-  const failureModes = [
-    { name: "malformed", claude: async () => "garbage" },
-    { name: "wrong-shape", claude: async () => JSON.stringify({ x: 1 }) },
-    { name: "provider-error", claude: async () => { throw new Error("503"); } },
+Deno.test("document_authoring: invariant — row never stuck in pending", async () => {
+  const cases: { name: string; claude: ClaudeBehavior; compress?: boolean }[] = [
+    { name: "malformed", claude: { kind: "ok", text: "garbage" } },
+    { name: "wrong-shape", claude: { kind: "ok", text: '{"x":1}' } },
+    { name: "provider-400", claude: { kind: "error", status: 400 } },
+    { name: "provider-500-then-fail", claude: { kind: "error", status: 500 }, compress: true },
+    { name: "hang", claude: { kind: "hang" }, compress: true },
   ];
-  for (const mode of failureModes) {
+  for (const c of cases) {
     const { finalRow } = await runWith({
-      synthesis: JSON.stringify({ ok: true }),
-      claude: mode.claude,
+      synthesisJson: JSON.stringify({ ok: true }),
+      claude: c.claude,
+      compressTimers: c.compress,
     });
     assert(
-      finalRow.status === "failed" && finalRow.progress_step === "failed",
-      `mode "${mode.name}" left row in status=${finalRow.status}/${finalRow.progress_step}`,
+      finalRow && finalRow.status === "failed" && finalRow.progress_step === "failed",
+      `case "${c.name}" left row at status=${finalRow?.status}/${finalRow?.progress_step}`,
     );
+    assert(finalRow.completed_at, `case "${c.name}" missing completed_at`);
   }
 });
