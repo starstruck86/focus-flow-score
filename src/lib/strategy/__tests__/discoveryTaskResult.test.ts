@@ -107,6 +107,57 @@ const FIXTURES = {
   },
 };
 
+/**
+ * REAL edge-function response shapes from `run-discovery-prep` (action: status).
+ * Keys mirror the exact contract returned by supabase/functions/run-discovery-prep/index.ts:
+ *   { run_id, status, progress_step, error, completed_at, updated_at, draft, review }
+ *
+ * The hook calls `sanitizeTaskRunResult({ run_id, draft, review })` against
+ * these payloads, so the normalizer must accept them as-is.
+ */
+const EDGE_RESPONSES = {
+  in_progress: {
+    run_id: 'run-edge-1',
+    status: 'pending',
+    progress_step: 'document_authoring',
+    error: null,
+    completed_at: null,
+    updated_at: '2026-04-17T13:25:00.000Z',
+    draft: null,        // server returns null while authoring
+    review: null,
+  },
+  completed: {
+    run_id: 'run-edge-2',
+    status: 'completed',
+    progress_step: 'completed',
+    error: null,
+    completed_at: '2026-04-17T13:30:00.000Z',
+    updated_at: '2026-04-17T13:30:00.000Z',
+    draft: {
+      sections: [
+        { id: 'cockpit', name: 'Cockpit', content: { cards: [{ label: 'X', value: 'Y' }] } },
+      ],
+      sources: [],
+    },
+    review: {
+      strengths: ['ok'],
+      redlines: [],
+      library_coverage: { used: [], gaps: [], score: 0.5 },
+      rubric_check: { citation_density: 'pass' },
+    },
+  },
+  failed: {
+    run_id: 'run-edge-3',
+    status: 'failed',
+    progress_step: 'failed',
+    error: 'Run stalled at "synthesis" (no progress for 432s). Please retry.',
+    completed_at: '2026-04-17T13:35:00.000Z',
+    updated_at: '2026-04-17T13:35:00.000Z',
+    draft: null,
+    review: null,
+  },
+};
+
 function expectShape(result: ReturnType<typeof normalizeTaskRunResultPayload>) {
   expect(result).toBeTruthy();
   expect(result.run_id).toEqual(expect.any(String));
@@ -196,5 +247,34 @@ describe('normalizeTaskRunResultPayload — fixture validation', () => {
     expect(result.review.redlines).toHaveLength(1);
     expect(result.review.redlines[0].section_id).toBeTruthy();
     expect(result.review.redlines[0].section_name).toBeTruthy();
+  });
+});
+
+describe('Edge-function response contract — real status shape', () => {
+  it('in_progress: null draft/review degrades to empty safe shape', () => {
+    const r = EDGE_RESPONSES.in_progress;
+    const result = normalizeTaskRunResultPayload(r.run_id, { draft: r.draft, review: r.review });
+    expectShape(result);
+    expect(result.draft.sections).toEqual([]);
+    expect(result.review.redlines).toEqual([]);
+    expect(hasRenderableDiscoveryContent(result)).toBe(false);
+  });
+
+  it('completed: full payload preserved through normalizer', () => {
+    const r = EDGE_RESPONSES.completed;
+    const result = normalizeTaskRunResultPayload(r.run_id, { draft: r.draft, review: r.review });
+    expectShape(result);
+    expect(result.draft.sections).toHaveLength(1);
+    expect(result.review.strengths).toEqual(['ok']);
+    expect(result.review.library_coverage?.score).toBe(0.5);
+    expect(hasRenderableDiscoveryContent(result)).toBe(true);
+  });
+
+  it('failed: null draft/review never throws and yields safe empty shape', () => {
+    const r = EDGE_RESPONSES.failed;
+    const result = normalizeTaskRunResultPayload(r.run_id, { draft: r.draft, review: r.review });
+    expectShape(result);
+    expect(result.draft.sections).toEqual([]);
+    expect(hasRenderableDiscoveryContent(result)).toBe(false);
   });
 });
