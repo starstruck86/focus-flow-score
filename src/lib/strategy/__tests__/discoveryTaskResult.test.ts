@@ -107,6 +107,57 @@ const FIXTURES = {
   },
 };
 
+/**
+ * REAL edge-function response shapes from `run-discovery-prep` (action: status).
+ * Keys mirror the exact contract returned by supabase/functions/run-discovery-prep/index.ts:
+ *   { run_id, status, progress_step, error, completed_at, updated_at, draft, review }
+ *
+ * The hook calls `sanitizeTaskRunResult({ run_id, draft, review })` against
+ * these payloads, so the normalizer must accept them as-is.
+ */
+const EDGE_RESPONSES = {
+  in_progress: {
+    run_id: 'run-edge-1',
+    status: 'pending',
+    progress_step: 'document_authoring',
+    error: null,
+    completed_at: null,
+    updated_at: '2026-04-17T13:25:00.000Z',
+    draft: null,        // server returns null while authoring
+    review: null,
+  },
+  completed: {
+    run_id: 'run-edge-2',
+    status: 'completed',
+    progress_step: 'completed',
+    error: null,
+    completed_at: '2026-04-17T13:30:00.000Z',
+    updated_at: '2026-04-17T13:30:00.000Z',
+    draft: {
+      sections: [
+        { id: 'cockpit', name: 'Cockpit', content: { cards: [{ label: 'X', value: 'Y' }] } },
+      ],
+      sources: [],
+    },
+    review: {
+      strengths: ['ok'],
+      redlines: [],
+      library_coverage: { used: [], gaps: [], score: 0.5 },
+      rubric_check: { citation_density: 'pass' },
+    },
+  },
+  failed: {
+    run_id: 'run-edge-3',
+    status: 'failed',
+    progress_step: 'failed',
+    error: 'Run stalled at "synthesis" (no progress for 432s). Please retry.',
+    completed_at: '2026-04-17T13:35:00.000Z',
+    updated_at: '2026-04-17T13:35:00.000Z',
+    draft: null,
+    review: null,
+  },
+};
+
 function expectShape(result: ReturnType<typeof normalizeTaskRunResultPayload>) {
   expect(result).toBeTruthy();
   expect(result.run_id).toEqual(expect.any(String));
