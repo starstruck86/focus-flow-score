@@ -20,7 +20,7 @@ import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
 import { StrategyMessageBubble } from './StrategyMessageBubble';
 import { DiscoveryPrepPrompter } from './tasks/DiscoveryPrepPrompter';
 import { TaskOutputViewer } from './tasks/TaskOutputViewer';
-import { useTaskExecution } from '@/hooks/strategy/useTaskExecution';
+import { sanitizeTaskRunResult, useTaskExecution } from '@/hooks/strategy/useTaskExecution';
 import type { StrategyThread } from '@/types/strategy';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -115,6 +115,7 @@ export function StrategyMainPanel({
 
   const suggestedPrompts = useMemo(() => getSuggestedPrompts(thread, linkedContext), [thread?.id, linkedContext]);
   const recommendedWorkflows = useMemo(() => getRecommendedWorkflows(thread), [thread?.id]);
+  const safeTaskResult = useMemo(() => sanitizeTaskRunResult(taskResult), [taskResult]);
 
   // Split workflows into visible (recommended) and overflow (rest)
   const visibleWorkflows = useMemo(() =>
@@ -202,10 +203,10 @@ export function StrategyMainPanel({
   }
 
   // If a task result is showing, render the output viewer as a full overlay
-  if (taskResult) {
+  if (safeTaskResult) {
     return (
       <TaskOutputViewer
-        result={taskResult}
+        result={safeTaskResult}
         onBack={resetTask}
         onApplyRedline={applyRedline}
         onRejectRedline={rejectRedline}

@@ -143,6 +143,21 @@ function normalizeTaskRunResult(runId: string, payload?: { draft?: any; review?:
   };
 }
 
+export function sanitizeTaskRunResult(
+  raw?: Partial<TaskRunResult> | { run_id?: string; draft?: unknown; review?: unknown } | null,
+): TaskRunResult | null {
+  if (!raw) return null;
+
+  const runId = typeof raw.run_id === 'string' && raw.run_id.trim()
+    ? raw.run_id
+    : 'pending-run';
+
+  return normalizeTaskRunResult(runId, {
+    draft: raw.draft,
+    review: raw.review,
+  });
+}
+
 async function callDiscoveryPrep(body: Record<string, unknown>) {
   const { data: { session } } = await supabase.auth.getSession();
   const resp = await fetch(
@@ -204,10 +219,12 @@ export function useTaskExecution() {
           throw new Error(status?.error || 'Discovery Prep generation failed');
         }
         if (status?.status === 'completed') {
-          const data = normalizeTaskRunResult(runId, {
+          const data = sanitizeTaskRunResult({
+            run_id: runId,
             draft: status?.draft,
             review: status?.review,
           });
+          if (!data) throw new Error('Discovery Prep completed without a usable result');
           setResult(data);
           toast.success('Discovery Prep document generated');
           return data;
@@ -235,10 +252,12 @@ export function useTaskExecution() {
         proposed_text: proposedText,
       });
       if (result) {
-        const nextResult = normalizeTaskRunResult(runId, {
+        const nextResult = sanitizeTaskRunResult({
+          run_id: runId,
           draft: data?.draft_output ?? result.draft,
           review: data?.review_output ?? result.review,
         });
+        if (!nextResult) throw new Error('Updated result is unavailable');
         setResult({
           ...nextResult,
           review: {

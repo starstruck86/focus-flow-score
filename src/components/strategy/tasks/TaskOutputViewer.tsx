@@ -8,14 +8,14 @@ import {
   ChevronDown, ChevronUp, Pencil, Loader2, FileDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { TaskRunResult, Redline, DiscoverySection } from '@/hooks/strategy/useTaskExecution';
+import { sanitizeTaskRunResult, type TaskRunResult, type Redline, type DiscoverySection } from '@/hooks/strategy/useTaskExecution';
 import { RedlineCard } from './RedlineCard';
 import { generateDiscoveryDocx, downloadBlob } from '@/lib/strategy/discoveryDocxGenerator';
 import { generateDiscoveryPdf } from '@/lib/strategy/discoveryPdfGenerator';
 import { toast } from 'sonner';
 
 interface Props {
-  result: TaskRunResult;
+  result: TaskRunResult | null | undefined;
   onBack: () => void;
   onApplyRedline: (runId: string, sectionId: string, proposedText: string) => void;
   onRejectRedline: (redlineId: string) => void;
@@ -269,11 +269,10 @@ function renderContent(section: DiscoverySection) {
 }
 
 export function TaskOutputViewer({ result, onBack, onApplyRedline, onRejectRedline }: Props) {
-  const draft = result?.draft && typeof result.draft === 'object' ? result.draft : { sections: [] };
-  const review = result?.review && typeof result.review === 'object' ? result.review : { strengths: [], redlines: [] };
-  const sections = Array.isArray(draft.sections) ? draft.sections : [];
-  const strengths = Array.isArray(review.strengths) ? review.strengths : [];
-  const redlines = Array.isArray(review.redlines) ? review.redlines : [];
+  const safeResult = sanitizeTaskRunResult(result);
+  const sections = safeResult?.draft.sections ?? [];
+  const strengths = safeResult?.review.strengths ?? [];
+  const redlines = safeResult?.review.redlines ?? [];
   const [activeTab, setActiveTab] = useState<Tab>('document');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(sections.map((s) => s.id))
@@ -464,7 +463,7 @@ export function TaskOutputViewer({ result, onBack, onApplyRedline, onRejectRedli
                       <RedlineCard
                         key={redline.id}
                         redline={redline}
-                        onAccept={() => onApplyRedline(result.run_id, redline.section_id, redline.proposed_text)}
+                        onAccept={() => safeResult && onApplyRedline(safeResult.run_id, redline.section_id, redline.proposed_text)}
                         onReject={() => onRejectRedline(redline.id)}
                       />
                     ))}
