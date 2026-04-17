@@ -3,8 +3,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
   assembleStrategyContext,
   buildStrategyChatSystemPrompt,
+  emptyWorkingThesisState,
+  loadWorkingThesisState,
+  mergeWorkingThesisState,
+  renderWorkingThesisStateBlock,
   retrieveLibraryContext,
+  saveWorkingThesisState,
   shouldUseStrategyCorePrompt,
+  type ThesisStatePatch,
+  type WorkingThesisState,
 } from "../_shared/strategy-core/index.ts";
 
 const corsHeaders = {
@@ -961,18 +968,19 @@ async function buildChatSystemPrompt(args: {
   contextSection: string;
   pack: ContextPack;
   userContent: string;
-}): Promise<string> {
+}): Promise<{ prompt: string; workingThesis: WorkingThesisState | null }> {
   const { supabase, userId, depth, contextSection, pack, userContent } = args;
   const accountId: string | null = pack.account?.id ?? null;
 
   // No account, no thread context → don't force Strategy Core onto small talk.
   if (!accountId && (!contextSection || contextSection.length < 200)) {
-    return buildGenericChatSystemPrompt(depth, contextSection);
+    return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null };
   }
 
-  // Pull the same context the prep doc gets, in parallel with library retrieval.
+  // Pull the same context the prep doc gets, in parallel with library
+  // retrieval AND the working thesis state for this account.
   const scopes = deriveLibraryScopes(pack.account, userContent);
-  const [assembled, library] = await Promise.all([
+  const [assembled, library, workingThesis] = await Promise.all([
     accountId
       ? assembleStrategyContext({ supabase, userId, accountId }).catch((e) => {
           console.warn("[strategy-chat] assembleStrategyContext failed:", (e as Error).message);
@@ -987,6 +995,12 @@ async function buildChatSystemPrompt(args: {
           },
         )
       : Promise.resolve(null),
+    accountId
+      ? loadWorkingThesisState(supabase, { userId, accountId }).catch((e) => {
+          console.warn("[strategy-chat] loadWorkingThesisState failed:", (e as Error).message);
+          return null;
+        })
+      : Promise.resolve(null),
   ]);
 
   const useCore = shouldUseStrategyCorePrompt({
@@ -995,14 +1009,62 @@ async function buildChatSystemPrompt(args: {
     contextSectionLength: contextSection?.length ?? 0,
   });
 
-  if (!useCore) return buildGenericChatSystemPrompt(depth, contextSection);
+  if (!useCore) return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null };
 
-  return buildStrategyChatSystemPrompt({
+  const workingThesisBlock = renderWorkingThesisStateBlock(workingThesis);
+
+  // Behavior contract for the model: emit a fenced thesis_update JSON
+  // block at the END of the answer when the thesis materially changed.
+  // This is the seam between assistant prose and persisted state.
+  const persistenceContract = `
+=== THESIS STATE PERSISTENCE PROTOCOL ===
+If, and ONLY if, this turn materially advances the working thesis (new evidence, killed hypothesis, refined leakage, resolved/added open question, or a new thesis), append a single fenced block at the very end of your message in this exact format:
+
+\`\`\`thesis_update
+{
+  "current_thesis": "<only when the thesis itself changed>",
+  "current_leakage": "<only when leakage was refined>",
+  "confidence": "VALID|INFER|HYPO|UNKN",
+  "thesis_change_reason": "<required when current_thesis changed: the seller statement / fact that drove the change>",
+  "kill_hypotheses": [{ "hypothesis": "<exact prior claim>", "killed_by": "<seller-provided fact>" }],
+  "add_evidence": ["<short factual statement>"],
+  "add_open_questions": ["<question>"],
+  "resolve_open_questions": ["<question text that's now answered>"]
+}
+\`\`\`
+
+Omit any field that does not apply. If nothing changed materially, do NOT emit the block.
+The block is for system memory — be terse and factual. Do not narrate it.`;
+
+  const prompt = buildStrategyChatSystemPrompt({
     depth,
     contextSection,
     accountContext: assembled?.contextBlock || "",
     libraryContext: library?.contextString || "",
-  });
+    workingThesisBlock,
+  }) + "\n\n" + persistenceContract;
+
+  return { prompt, workingThesis };
+}
+
+// Extract a fenced ```thesis_update { ... }``` block emitted by the
+// assistant. Returns the parsed patch + the cleaned visible text
+// (with the block removed so the user never sees it).
+function extractThesisUpdate(text: string): { patch: ThesisStatePatch | null; visible: string } {
+  if (!text) return { patch: null, visible: text };
+  const re = /```thesis_update\s*\n([\s\S]*?)\n```/i;
+  const m = text.match(re);
+  if (!m) return { patch: null, visible: text };
+  const visible = (text.slice(0, m.index!) + text.slice(m.index! + m[0].length)).trim();
+  try {
+    const parsed = JSON.parse(m[1].trim());
+    if (parsed && typeof parsed === "object") {
+      return { patch: parsed as ThesisStatePatch, visible };
+    }
+  } catch (e) {
+    console.warn("[thesis_update] failed to parse:", (e as Error).message);
+  }
+  return { patch: null, visible };
 }
 
 // ── Chat Handler (streaming via OpenAI direct) ────────────
@@ -1019,9 +1081,10 @@ async function handleChat(
   const route = resolveLLMRoute("chat_general");
   if (forceFallback) route._smokeTestForceFail = true;
 
-  const systemPrompt = await buildChatSystemPrompt({
+  const { prompt: systemPrompt, workingThesis: priorThesis } = await buildChatSystemPrompt({
     supabase, userId, depth, contextSection, pack, userContent: content,
   });
+  const accountId: string | null = pack.account?.id ?? null;
 
   const messages = [
     { role: "system" as const, content: systemPrompt },
@@ -1045,18 +1108,28 @@ async function handleChat(
 
   if (!result.rawStream) {
     // Non-streaming fallback
+    const { patch, visible } = extractThesisUpdate(result.text || "");
     await supabase.from("strategy_messages").insert({
       thread_id: threadId, user_id: userId, role: "assistant",
       message_type: "chat",
       provider_used: result.provider, model_used: result.model,
       fallback_used: result.fallbackUsed, latency_ms: result.latencyMs,
       content_json: {
-        text: result.text, sources_used: pack.sourceCount,
+        text: visible, sources_used: pack.sourceCount,
         retrieval_meta: pack.retrievalMeta, model_used: result.model,
         provider_used: result.provider, fallback_used: result.fallbackUsed,
       },
     });
-    return new Response(JSON.stringify({ text: result.text, provider: result.provider, model: result.model }), {
+    if (accountId && patch) {
+      try {
+        const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
+        const next = mergeWorkingThesisState(base, { ...patch, thread_id: threadId });
+        await saveWorkingThesisState(supabase, { userId, state: next });
+      } catch (e) {
+        console.warn("[thesis] persist (non-stream) failed:", (e as Error).message);
+      }
+    }
+    return new Response(JSON.stringify({ text: visible, provider: result.provider, model: result.model }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -1099,18 +1172,30 @@ async function handleChat(
         if (!fullResponse.trim()) {
           console.warn(`[streaming] empty response after ${chunkCount} chunks, ${latency}ms`);
         }
+        const { patch, visible } = extractThesisUpdate(fullResponse);
         await supabase.from("strategy_messages").insert({
           thread_id: threadId, user_id: userId, role: "assistant",
           message_type: "chat",
           provider_used: route.primaryProvider, model_used: route.model,
           fallback_used: false, latency_ms: latency,
           content_json: {
-            text: fullResponse, sources_used: pack.sourceCount,
+            text: visible, sources_used: pack.sourceCount,
             retrieval_meta: pack.retrievalMeta, model_used: route.model,
             provider_used: route.primaryProvider, fallback_used: false,
           },
         });
         await supabase.from("strategy_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
+
+        // Persist working thesis state if the model emitted an update.
+        if (accountId && patch) {
+          try {
+            const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
+            const next = mergeWorkingThesisState(base, { ...patch, thread_id: threadId });
+            await saveWorkingThesisState(supabase, { userId, state: next });
+          } catch (e) {
+            console.warn("[thesis] persist (stream) failed:", (e as Error).message);
+          }
+        }
 
         const { count } = await supabase.from("strategy_messages")
           .select("id", { count: "exact", head: true }).eq("thread_id", threadId);

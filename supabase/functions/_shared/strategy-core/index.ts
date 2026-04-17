@@ -43,3 +43,15 @@ export {
   shouldUseStrategyCorePrompt,
   type BuildStrategyChatPromptArgs,
 } from "./chatPrompt.ts";
+
+export {
+  emptyWorkingThesisState,
+  loadWorkingThesisState,
+  mergeWorkingThesisState,
+  renderWorkingThesisStateBlock,
+  saveWorkingThesisState,
+  type KilledHypothesis,
+  type ThesisConfidence,
+  type ThesisStatePatch,
+  type WorkingThesisState,
+} from "./thesisMemory.ts";

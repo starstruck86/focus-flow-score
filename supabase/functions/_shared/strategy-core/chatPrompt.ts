@@ -62,6 +62,13 @@ export interface BuildStrategyChatPromptArgs {
   accountContext?: string;
   /** Library retrieval contextString. May be empty when nothing matched. */
   libraryContext?: string;
+  /**
+   * Pre-rendered "=== CURRENT WORKING THESIS STATE ===" block from
+   * thesisMemory.renderWorkingThesisStateBlock(). When present, the
+   * model treats this as the live operating model and continues the
+   * line of reasoning rather than starting over.
+   */
+  workingThesisBlock?: string;
 }
 
 /**
@@ -101,6 +108,14 @@ export function buildStrategyChatSystemPrompt(
   const acct = (args.accountContext || "").trim();
   if (acct) {
     parts.push(`=== ACCOUNT CONTEXT ===\n${acct}`);
+  }
+
+  // Working thesis state — placed AFTER static context so the live
+  // operating model is the last thing the model sees before the user
+  // turn. Already self-headers ("=== CURRENT WORKING THESIS STATE ===").
+  const thesis = (args.workingThesisBlock || "").trim();
+  if (thesis) {
+    parts.push(thesis);
   }
 
   const ctx = (args.contextSection || "").trim();
