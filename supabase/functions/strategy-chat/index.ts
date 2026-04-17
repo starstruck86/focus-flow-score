@@ -937,12 +937,10 @@ async function handleChat(
 
   const route = resolveLLMRoute("chat_general");
   if (forceFallback) route._smokeTestForceFail = true;
-  const systemPrompt = `You are a strategic sales advisor embedded in a Strategy workspace. You help with deep account research, email evaluation, opportunity strategy, territory planning, and brainstorming.
 
-Be specific, actionable, and grounded. Reference concrete details from the context provided. When citing information from strategic memory or uploaded resources, note the source.
-
-Depth mode: ${depth || "Standard"}. ${depth === "Deep" ? "Provide comprehensive, detailed analysis." : depth === "Fast" ? "Be concise and direct." : "Balance detail with clarity."}
-${contextSection}`;
+  const systemPrompt = await buildChatSystemPrompt({
+    supabase, userId, depth, contextSection, pack, userContent: content,
+  });
 
   const messages = [
     { role: "system" as const, content: systemPrompt },
