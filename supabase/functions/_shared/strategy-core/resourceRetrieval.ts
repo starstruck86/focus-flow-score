@@ -393,6 +393,46 @@ export async function retrieveResourceContext(
     }
   }
 
+  // ── 4b. Prior-use resources for this account (cross-thread memory) ─
+  // This is the read side of strategy_thread_resources. When the user
+  // asks "what did we use last time on this account?" — or any time we
+  // have an account context and prior writes exist — pull the resources
+  // we previously cited on threads scoped to this account.
+  if (args.accountId && all.length < HARD_LIMIT) {
+    try {
+      // Step 1: find prior-use resource_ids for any thread linked to
+      // this account (excluding the current thread).
+      const { data: priorRows } = await supabase
+        .from("strategy_thread_resources")
+        .select("resource_id, created_at, thread_id, strategy_threads!inner(linked_account_id)")
+        .eq("user_id", userId)
+        .eq("source_type", "cited")
+        .eq("strategy_threads.linked_account_id", args.accountId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      const priorIds: string[] = [];
+      const seenIds = new Set<string>();
+      for (const r of (priorRows || []) as any[]) {
+        if (!r?.resource_id) continue;
+        if (args.threadId && r.thread_id === args.threadId) continue;
+        if (seenIds.has(r.resource_id)) continue;
+        seenIds.add(r.resource_id);
+        priorIds.push(r.resource_id);
+        if (priorIds.length >= 5) break;
+      }
+      if (priorIds.length > 0) {
+        const { data } = await supabase
+          .from("resources")
+          .select(SAFE_FIELDS)
+          .eq("user_id", userId)
+          .in("id", priorIds);
+        push(data, "prior_use", () => `Used previously on this account`);
+      }
+    } catch (e) {
+      console.warn("[resourceRetrieval] prior-use query failed:", (e as Error).message);
+    }
+  }
+
   // ── 5. Category intent backstop (only when user clearly asked) ─
   if (askedFor && all.length < HARD_LIMIT) {
     for (const cat of categories) {
@@ -412,17 +452,18 @@ export async function retrieveResourceContext(
     }
   }
 
-  // ── Rank: exact > near_exact > entity_linked > category ──────
+  // ── Rank: exact > near_exact > prior_use > entity_linked > category ──
   // Inside each tier, prefer rows whose resource_type matches the
   // user's inferred category. This is the fix for "executive business
   // case template" returning transcripts ahead of the actual template.
   const rank: Record<RetrievedResource["matchKind"], number> = {
     exact_title: 0,
     near_exact_title: 1,
-    account_linked: 2,
-    opportunity_linked: 3,
-    phrase_in_title: 4,
-    category_intent: 5,
+    prior_use: 2,
+    account_linked: 3,
+    opportunity_linked: 4,
+    phrase_in_title: 5,
+    category_intent: 6,
   };
   // Map inferred categories → resource_type values that should be boosted.
   const CATEGORY_TYPE_BOOST: Record<string, string[]> = {
