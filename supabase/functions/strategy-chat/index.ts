@@ -969,6 +969,7 @@ ${contextSection}`;
 async function buildChatSystemPrompt(args: {
   supabase: any;
   userId: string;
+  threadId: string;
   depth: string;
   contextSection: string;
   pack: ContextPack;
@@ -978,7 +979,7 @@ async function buildChatSystemPrompt(args: {
   workingThesis: WorkingThesisState | null;
   resourceHits: Array<{ id: string; title: string }>;
 }> {
-  const { supabase, userId, depth, contextSection, pack, userContent } = args;
+  const { supabase, userId, threadId, depth, contextSection, pack, userContent } = args;
   const accountId: string | null = pack.account?.id ?? null;
   const opportunityId: string | null = pack.opportunity?.id ?? null;
 
@@ -1017,6 +1018,7 @@ async function buildChatSystemPrompt(args: {
       userMessage: userContent,
       accountId,
       opportunityId,
+      threadId,
     }).catch((e) => {
       console.warn("[strategy-chat] retrieveResourceContext failed:", (e as Error).message);
       return null;
@@ -1115,7 +1117,7 @@ async function handleChat(
   if (forceFallback) route._smokeTestForceFail = true;
 
   const { prompt: systemPrompt, workingThesis: priorThesis, resourceHits } = await buildChatSystemPrompt({
-    supabase, userId, depth, contextSection, pack, userContent: content,
+    supabase, userId, threadId, depth, contextSection, pack, userContent: content,
   });
   const accountId: string | null = pack.account?.id ?? null;
 
