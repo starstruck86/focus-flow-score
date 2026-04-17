@@ -98,8 +98,18 @@ export function useTaskExecution() {
    * wait for the previous one to fully resolve.
    */
   const inFlightRef = useRef(false);
+  /**
+   * Tracks the run_id of the currently-active generation. Used to reject
+   * `setResult` writes from a stale/superseded run that resolves AFTER a
+   * reset or a newer run has started. Without this, an old completed
+   * payload can clobber the new run's state.
+   */
+  const activeRunIdRef = useRef<string | null>(null);
 
-  useEffect(() => () => { cancelRef.current = true; }, []);
+  useEffect(() => () => {
+    cancelRef.current = true;
+    activeRunIdRef.current = null;
+  }, []);
 
   const runDiscoveryPrep = useCallback(async (inputs: TaskInputs) => {
     if (!user) { toast.error('Please sign in'); return null; }
@@ -119,15 +129,21 @@ export function useTaskExecution() {
       const start = await callDiscoveryPrep({ action: 'generate', inputs });
       const runId: string | undefined = start?.run_id;
       if (!runId) throw new Error('Failed to start Discovery Prep job');
+      activeRunIdRef.current = runId;
 
-      // 2) Poll until completed/failed.
+      // 2) Poll until completed/failed. Guard every state write with the
+      //    activeRunIdRef so a superseded run (post-reset / new run /
+      //    unmount) cannot overwrite fresh state with stale data.
+      const isStillActive = () => activeRunIdRef.current === runId && !cancelRef.current;
       const startedAt = Date.now();
-      while (!cancelRef.current) {
+      while (isStillActive()) {
         if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
           throw new Error('Discovery Prep is taking longer than expected. Please check back shortly.');
         }
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        if (!isStillActive()) return null;
         const status = await callDiscoveryPrep({ action: 'status', run_id: runId });
+        if (!isStillActive()) return null;
         const step: string = status?.progress_step || status?.status || 'queued';
         setProgressLabel(PROGRESS_LABELS[step] || step);
 
@@ -141,6 +157,7 @@ export function useTaskExecution() {
             review: status?.review,
           });
           if (!data) throw new Error('Discovery Prep completed without a usable result');
+          if (!isStillActive()) return null;
           setResult(data);
           toast.success('Discovery Prep document generated');
           return data;
@@ -205,7 +222,11 @@ export function useTaskExecution() {
   }, [result]);
 
   const reset = useCallback(() => {
+    // Cancel any in-flight poll AND invalidate the active run id so a
+    // late-arriving completion cannot overwrite the cleared state.
     cancelRef.current = true;
+    activeRunIdRef.current = null;
+    inFlightRef.current = false;
     setResult(null);
     setError(null);
     setProgressLabel(null);
