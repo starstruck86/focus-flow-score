@@ -924,6 +924,87 @@ serve(async (req) => {
   }
 });
 
+// ── Strategy Core chat prompt assembly ───────────────────
+// Composes the same reasoning primitives Discovery Prep uses, but only
+// when there's enough real context (account-linked or library hits) to
+// justify the elite-strategist frame. Falls back to the original
+// generic chat prompt for context-less chit-chat so we don't put on
+// strategy theater for unrelated questions.
+function deriveLibraryScopes(account: any, userContent: string): string[] {
+  const scopes: string[] = [];
+  if (account?.industry) scopes.push(String(account.industry));
+  if (Array.isArray(account?.tags)) scopes.push(...account.tags.map(String));
+  if (Array.isArray(account?.tech_stack)) scopes.push(...account.tech_stack.map(String));
+  // Pull a few salient nouns out of the user's question — keeps retrieval
+  // grounded in what the rep is actually asking, not just account meta.
+  const words = (userContent || "")
+    .split(/[^A-Za-z0-9-]+/)
+    .filter((w) => w.length >= 4 && w.length <= 24);
+  scopes.push(...words.slice(0, 8));
+  // De-dup, drop empties.
+  return Array.from(new Set(scopes.map((s) => s.trim()).filter(Boolean)));
+}
+
+function buildGenericChatSystemPrompt(depth: string, contextSection: string): string {
+  return `You are a strategic sales advisor embedded in a Strategy workspace. You help with deep account research, email evaluation, opportunity strategy, territory planning, and brainstorming.
+
+Be specific, actionable, and grounded. Reference concrete details from the context provided. When citing information from strategic memory or uploaded resources, note the source.
+
+Depth mode: ${depth || "Standard"}. ${depth === "Deep" ? "Provide comprehensive, detailed analysis." : depth === "Fast" ? "Be concise and direct." : "Balance detail with clarity."}
+${contextSection}`;
+}
+
+async function buildChatSystemPrompt(args: {
+  supabase: any;
+  userId: string;
+  depth: string;
+  contextSection: string;
+  pack: ContextPack;
+  userContent: string;
+}): Promise<string> {
+  const { supabase, userId, depth, contextSection, pack, userContent } = args;
+  const accountId: string | null = pack.account?.id ?? null;
+
+  // No account, no thread context → don't force Strategy Core onto small talk.
+  if (!accountId && (!contextSection || contextSection.length < 200)) {
+    return buildGenericChatSystemPrompt(depth, contextSection);
+  }
+
+  // Pull the same context the prep doc gets, in parallel with library retrieval.
+  const scopes = deriveLibraryScopes(pack.account, userContent);
+  const [assembled, library] = await Promise.all([
+    accountId
+      ? assembleStrategyContext({ supabase, userId, accountId }).catch((e) => {
+          console.warn("[strategy-chat] assembleStrategyContext failed:", (e as Error).message);
+          return null;
+        })
+      : Promise.resolve(null),
+    scopes.length
+      ? retrieveLibraryContext(supabase, userId, {} as any, { scopes, maxKIs: 8, maxPlaybooks: 4 }).catch(
+          (e) => {
+            console.warn("[strategy-chat] retrieveLibraryContext failed:", (e as Error).message);
+            return null;
+          },
+        )
+      : Promise.resolve(null),
+  ]);
+
+  const useCore = shouldUseStrategyCorePrompt({
+    hasAccount: !!accountId,
+    libraryCounts: library?.counts,
+    contextSectionLength: contextSection?.length ?? 0,
+  });
+
+  if (!useCore) return buildGenericChatSystemPrompt(depth, contextSection);
+
+  return buildStrategyChatSystemPrompt({
+    depth,
+    contextSection,
+    accountContext: assembled?.contextBlock || "",
+    libraryContext: library?.contextString || "",
+  });
+}
+
 // ── Chat Handler (streaming via OpenAI direct) ────────────
 async function handleChat(
   supabase: any, threadId: string, userId: string,
