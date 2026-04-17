@@ -102,7 +102,7 @@ export function StrategyMainPanel({
   const isMobile = useIsMobile();
   const { messages, sendMessage, runWorkflow, isLoading, isSending } = useStrategyMessages(thread?.id ?? null);
   const { uploads, uploadFiles, isUploading } = useStrategyUploads(thread?.id ?? null);
-  const { isRunning: isTaskRunning, result: taskResult, runDiscoveryPrep, applyRedline, rejectRedline, reset: resetTask } = useTaskExecution();
+  const { isRunning: isTaskRunning, progressLabel: taskProgressLabel, result: taskResult, runDiscoveryPrep, applyRedline, rejectRedline, reset: resetTask } = useTaskExecution();
   const [input, setInput] = useState('');
   const [depth, setDepth] = useState<typeof DEPTH_OPTIONS[number]>('Standard');
   
@@ -398,7 +398,7 @@ export function StrategyMainPanel({
           ) : (
             <Zap className="h-3 w-3" />
           )}
-          {isTaskRunning ? 'Generating Prep Doc…' : 'Discovery Prep'}
+          {isTaskRunning ? (taskProgressLabel || 'Generating Prep Doc…') : 'Discovery Prep'}
         </button>
       </div>
 
