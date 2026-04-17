@@ -1228,22 +1228,46 @@ async function handleChat(
             }
           }
         }
-        controller.close();
 
         const latency = Date.now() - startTime;
         if (!fullResponse.trim()) {
           console.warn(`[streaming] empty response after ${chunkCount} chunks, ${latency}ms`);
         }
         const { patch, visible } = extractThesisUpdate(fullResponse);
+        // Citation audit: catch any fabricated RESOURCE[…] references
+        // that slipped through the prompt contract. We persist the
+        // AUDITED text (DB = source of truth) and stream a trailing
+        // SSE delta with the audit banner so the live UI sees it too.
+        const audit = auditResourceCitations(visible, resourceHits);
+        if (audit.modified) {
+          console.log(`[citation-audit] stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`);
+          const trailing = audit.text.slice(visible.length); // banner suffix only
+          if (trailing) {
+            const sseChunk =
+              `data: ${JSON.stringify({ choices: [{ delta: { content: trailing } }] })}\n\n`;
+            try {
+              controller.enqueue(new TextEncoder().encode(sseChunk));
+            } catch (e) {
+              console.warn("[citation-audit] failed to stream trailing banner:", (e as Error).message);
+            }
+          }
+        }
+        const auditedVisible = audit.text;
+        controller.close();
         await supabase.from("strategy_messages").insert({
           thread_id: threadId, user_id: userId, role: "assistant",
           message_type: "chat",
           provider_used: route.primaryProvider, model_used: route.model,
           fallback_used: false, latency_ms: latency,
           content_json: {
-            text: visible, sources_used: pack.sourceCount,
+            text: auditedVisible, sources_used: pack.sourceCount,
             retrieval_meta: pack.retrievalMeta, model_used: route.model,
             provider_used: route.primaryProvider, fallback_used: false,
+            citation_audit: audit.modified ? {
+              modified: true,
+              unverified: audit.unverifiedCitations,
+              verified: audit.verifiedTitles,
+            } : undefined,
           },
         });
         await supabase.from("strategy_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
