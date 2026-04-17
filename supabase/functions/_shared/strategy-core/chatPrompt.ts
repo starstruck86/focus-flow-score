@@ -110,6 +110,14 @@ export function buildStrategyChatSystemPrompt(
     parts.push(`=== ACCOUNT CONTEXT ===\n${acct}`);
   }
 
+  // Working thesis state — placed AFTER static context so the live
+  // operating model is the last thing the model sees before the user
+  // turn. Already self-headers ("=== CURRENT WORKING THESIS STATE ===").
+  const thesis = (args.workingThesisBlock || "").trim();
+  if (thesis) {
+    parts.push(thesis);
+  }
+
   const ctx = (args.contextSection || "").trim();
   if (ctx) {
     parts.push(ctx);
