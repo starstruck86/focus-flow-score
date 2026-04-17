@@ -80,7 +80,7 @@ export async function callClaude(
   }
 
   const body: any = {
-    model: opts.model || "claude-sonnet-4-20250514",
+    model: opts.model || "claude-sonnet-4-5-20250929",
     max_tokens: opts.maxTokens || 12000,
     messages: anthropicMessages,
     temperature: opts.temperature ?? 0.3,

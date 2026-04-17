@@ -97,7 +97,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   const documentRaw = await callClaude([
     { role: "system", content: handler.buildDocumentSystemPrompt() },
     { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
-  ], { model: "claude-sonnet-4-20250514", maxTokens: 12000, temperature: 0.3 });
+  ], { model: "claude-sonnet-4-5-20250929", maxTokens: 12000, temperature: 0.3 });
   const draftOutput = safeParseJSON<any>(documentRaw) ?? { sections: [], raw: documentRaw };
   const sectionCount = draftOutput.sections?.length || 0;
   console.log(`[stage-3] document authored: ${sectionCount} sections`);
