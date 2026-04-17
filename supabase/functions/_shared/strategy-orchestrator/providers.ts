@@ -127,22 +127,45 @@ export async function callLovableAI(
     body.max_tokens = opts.maxTokens || 4000;
   }
 
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    const status = resp.status;
-    const errText = await resp.text().catch(() => "");
-    console.error(`[lovable-ai] error ${status} model=${model}: ${errText.slice(0, 400)}`);
-    if (status === 429) throw { status: 429, message: "Rate limited" };
-    if (status === 402) throw { status: 402, message: "AI credits exhausted" };
-    throw new Error(`Lovable AI error: ${status}`);
+  // Retry transient 5xx errors with exponential backoff (gateway hiccups, especially on gpt-5).
+  // 4 attempts: 0s, 2s, 6s, 14s (cumulative ~22s before final failure).
+  const maxAttempts = 4;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const content = data.choices?.[0]?.message?.content || "";
+        return content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      }
+      const status = resp.status;
+      const errText = await resp.text().catch(() => "");
+      console.error(`[lovable-ai] error ${status} model=${model} attempt=${attempt}/${maxAttempts}: ${errText.slice(0, 400)}`);
+      if (status === 429) throw { status: 429, message: "Rate limited" };
+      if (status === 402) throw { status: 402, message: "AI credits exhausted" };
+      // Retry on transient 5xx; fail immediately on other 4xx.
+      const isTransient = status >= 500 && status < 600;
+      if (!isTransient || attempt === maxAttempts) {
+        throw new Error(`Lovable AI error: ${status}${isTransient ? " (after retries)" : ""}`);
+      }
+      lastErr = new Error(`Lovable AI ${status}`);
+    } catch (e: any) {
+      // Re-throw non-retryable errors immediately.
+      if (e?.status === 429 || e?.status === 402) throw e;
+      if (attempt === maxAttempts) throw (lastErr ?? e);
+      lastErr = e;
+    }
+    // Exponential backoff: 2s, 6s, 14s
+    const delayMs = 2000 * (Math.pow(2, attempt) - 1);
+    console.log(`[lovable-ai] retrying in ${delayMs}ms…`);
+    await new Promise((r) => setTimeout(r, delayMs));
   }
-  const data = await resp.json();
-  let content = data.choices?.[0]?.message?.content || "";
-  return content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  throw lastErr ?? new Error("Lovable AI: exhausted retries");
 }
 
 /** Robust JSON extraction from model output (handles fences, prose preamble). */
