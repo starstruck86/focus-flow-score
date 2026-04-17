@@ -196,3 +196,54 @@ Deno.test("renderResourceContextBlock: lists titles and forces RESOURCE[<title>]
   assertStringIncludes(block, "RESOURCE[abcdef01]");
   assertStringIncludes(block, "EXACT title");
 });
+
+// ── Apostrophe / possessive extraction (regression for "Kevin Dorsey's") ──
+
+Deno.test("extractCandidatePhrases: handles possessive 's without leaking 's into the phrase", () => {
+  const phrases = extractCandidatePhrases("Let's build this off Kevin Dorsey's ROI calculator");
+  // Must include "Kevin Dorsey" cleanly (no leading "s build…")
+  assert(phrases.some((p) => p === "Kevin Dorsey"), `missing 'Kevin Dorsey' in: ${JSON.stringify(phrases)}`);
+  // Must NOT produce the broken artifact we used to see.
+  assert(
+    !phrases.some((p) => p.toLowerCase().startsWith("s build")),
+    `regression: leaked 's' artifact in: ${JSON.stringify(phrases)}`,
+  );
+});
+
+Deno.test("extractCandidatePhrases: ignores lowercase 'let's' / contractions at the start", () => {
+  const phrases = extractCandidatePhrases("let's use Kevin Dorsey ROI thinking here");
+  assert(phrases.some((p) => p.includes("Kevin Dorsey")));
+  assert(!phrases.some((p) => /^let/i.test(p)));
+});
+
+// ── Type-aware ranking (regression: template should outrank transcripts) ──
+
+Deno.test("retrieveResourceContext: template resource_type outranks transcripts when user asks for a template", async () => {
+  const rows = [
+    // Two near-exact title hits, returned in this order:
+    { id: "11111111-aaaa-bbbb-cccc-000000000000", title: "9 Mistakes Salespeople Make with Business Cases", description: null, resource_type: "transcript", is_template: false, template_category: null, account_id: null, opportunity_id: null, tags: null },
+    { id: "22222222-aaaa-bbbb-cccc-000000000000", title: "AE Operating System - Business Case Template", description: null, resource_type: "template", is_template: false, template_category: null, account_id: null, opportunity_id: null, tags: null },
+  ];
+  const stub: any = {
+    from: (_t: string) => {
+      const b: any = {
+        _rows: rows,
+        select: () => b,
+        eq: () => b,
+        ilike: () => b,
+        order: () => b,
+        limit: async () => ({ data: rows }),
+      };
+      return b;
+    },
+  };
+  const out = await retrieveResourceContext(stub, "user-1", {
+    userMessage: "Do we have an executive business case template?",
+  });
+  // Template should appear before the transcript.
+  const titles = out.hits.map((h) => h.title);
+  const tplIdx = titles.indexOf("AE Operating System - Business Case Template");
+  const txIdx = titles.indexOf("9 Mistakes Salespeople Make with Business Cases");
+  assert(tplIdx >= 0 && txIdx >= 0, `expected both rows in hits, got ${JSON.stringify(titles)}`);
+  assert(tplIdx < txIdx, `expected template to outrank transcript; got order ${JSON.stringify(titles)}`);
+});
