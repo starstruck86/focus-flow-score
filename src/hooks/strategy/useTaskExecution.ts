@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -38,7 +38,7 @@ export interface DiscoverySection {
 }
 
 export interface SourceEntry {
-  id: string;       // "S1", "S2", ...
+  id: string;
   label: string;
   url?: string | null;
   accessed?: string | null;
@@ -71,51 +71,99 @@ export interface TaskRunResult {
   };
 }
 
+const PROGRESS_LABELS: Record<string, string> = {
+  queued: 'Queued…',
+  library_retrieval: 'Pulling internal playbooks & KIs…',
+  research: 'Researching company & market…',
+  synthesis: 'Synthesizing strategic intelligence…',
+  document_authoring: 'Authoring prep document…',
+  review: 'Reviewing against playbooks…',
+  completed: 'Done',
+  failed: 'Failed',
+};
+
+const POLL_INTERVAL_MS = 3000;
+const POLL_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes hard cap
+
+async function callDiscoveryPrep(body: Record<string, unknown>) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const resp = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/run-discovery-prep`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token}`,
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  const json = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    if (resp.status === 429) throw new Error('Rate limited — please try again in a moment.');
+    if (resp.status === 402) throw new Error('AI credits exhausted.');
+    throw new Error(json?.error || `Error ${resp.status}`);
+  }
+  return json;
+}
+
 export function useTaskExecution() {
   const { user } = useAuth();
   const [isRunning, setIsRunning] = useState(false);
+  const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [result, setResult] = useState<TaskRunResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const cancelRef = useRef(false);
+
+  useEffect(() => () => { cancelRef.current = true; }, []);
 
   const runDiscoveryPrep = useCallback(async (inputs: TaskInputs) => {
     if (!user) { toast.error('Please sign in'); return null; }
     setIsRunning(true);
     setError(null);
+    setProgressLabel(PROGRESS_LABELS.queued);
+    cancelRef.current = false;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/run-discovery-prep`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session?.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-          body: JSON.stringify({ action: 'generate', inputs }),
+      // 1) Kick off the background job (returns immediately).
+      const start = await callDiscoveryPrep({ action: 'generate', inputs });
+      const runId: string | undefined = start?.run_id;
+      if (!runId) throw new Error('Failed to start Discovery Prep job');
+
+      // 2) Poll until completed/failed.
+      const startedAt = Date.now();
+      while (!cancelRef.current) {
+        if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+          throw new Error('Discovery Prep is taking longer than expected. Please check back shortly.');
         }
-      );
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        const status = await callDiscoveryPrep({ action: 'status', run_id: runId });
+        const step: string = status?.progress_step || status?.status || 'queued';
+        setProgressLabel(PROGRESS_LABELS[step] || step);
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: 'Unknown error' }));
-        if (resp.status === 429) throw new Error('Rate limited — please try again in a moment.');
-        if (resp.status === 402) throw new Error('AI credits exhausted.');
-        throw new Error(err.error || `Error ${resp.status}`);
+        if (status?.status === 'failed') {
+          throw new Error(status?.error || 'Discovery Prep generation failed');
+        }
+        if (status?.status === 'completed') {
+          const data: TaskRunResult = {
+            run_id: runId,
+            draft: status.draft || { sections: [] },
+            review: status.review || { strengths: [], redlines: [] },
+          };
+          if (data.review?.redlines) {
+            data.review.redlines = data.review.redlines.map((r, i) => ({
+              ...r,
+              id: r.id || `r${i}`,
+              status: r.status || 'pending',
+            }));
+          }
+          setResult(data);
+          toast.success('Discovery Prep document generated');
+          return data;
+        }
       }
-
-      const data: TaskRunResult = await resp.json();
-      // Ensure redlines have status
-      if (data.review?.redlines) {
-        data.review.redlines = data.review.redlines.map((r, i) => ({
-          ...r,
-          id: r.id || `r${i}`,
-          status: r.status || 'pending',
-        }));
-      }
-      setResult(data);
-      toast.success('Discovery Prep document generated');
-      return data;
+      return null;
     } catch (e: any) {
       const msg = e.message || 'Failed to generate prep doc';
       setError(msg);
@@ -123,30 +171,19 @@ export function useTaskExecution() {
       return null;
     } finally {
       setIsRunning(false);
+      setProgressLabel(null);
     }
   }, [user]);
 
   const applyRedline = useCallback(async (runId: string, sectionId: string, proposedText: string) => {
     if (!user) return;
-
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/run-discovery-prep`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session?.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-          body: JSON.stringify({ action: 'apply_redline', run_id: runId, section_id: sectionId, proposed_text: proposedText }),
-        }
-      );
-
-      if (!resp.ok) throw new Error('Failed to apply edit');
-
-      const data = await resp.json();
+      const data = await callDiscoveryPrep({
+        action: 'apply_redline',
+        run_id: runId,
+        section_id: sectionId,
+        proposed_text: proposedText,
+      });
       if (result) {
         setResult({
           ...result,
@@ -154,7 +191,7 @@ export function useTaskExecution() {
           review: {
             ...result.review,
             redlines: result.review.redlines.map(r =>
-              r.section_id === sectionId ? { ...r, status: 'accepted' as const } : r
+              r.section_id === sectionId ? { ...r, status: 'accepted' as const } : r,
             ),
           },
         });
@@ -172,7 +209,7 @@ export function useTaskExecution() {
       review: {
         ...result.review,
         redlines: result.review.redlines.map(r =>
-          r.id === redlineId ? { ...r, status: 'rejected' as const } : r
+          r.id === redlineId ? { ...r, status: 'rejected' as const } : r,
         ),
       },
     });
@@ -181,7 +218,8 @@ export function useTaskExecution() {
   const reset = useCallback(() => {
     setResult(null);
     setError(null);
+    setProgressLabel(null);
   }, []);
 
-  return { isRunning, result, error, runDiscoveryPrep, applyRedline, rejectRedline, reset };
+  return { isRunning, progressLabel, result, error, runDiscoveryPrep, applyRedline, rejectRedline, reset };
 }
