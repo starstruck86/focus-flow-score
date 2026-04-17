@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
   assembleStrategyContext,
+  auditResourceCitations,
   buildStrategyChatSystemPrompt,
   emptyWorkingThesisState,
   extractThesisPatchFromProse,
@@ -971,14 +972,18 @@ async function buildChatSystemPrompt(args: {
   contextSection: string;
   pack: ContextPack;
   userContent: string;
-}): Promise<{ prompt: string; workingThesis: WorkingThesisState | null }> {
+}): Promise<{
+  prompt: string;
+  workingThesis: WorkingThesisState | null;
+  resourceHits: Array<{ id: string; title: string }>;
+}> {
   const { supabase, userId, depth, contextSection, pack, userContent } = args;
   const accountId: string | null = pack.account?.id ?? null;
   const opportunityId: string | null = pack.opportunity?.id ?? null;
 
   // No account, no thread context → don't force Strategy Core onto small talk.
   if (!accountId && (!contextSection || contextSection.length < 200)) {
-    return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null };
+    return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null, resourceHits: [] };
   }
 
   // Pull the same context the prep doc gets, in parallel with library
@@ -1026,7 +1031,7 @@ async function buildChatSystemPrompt(args: {
     contextSectionLength: contextSection?.length ?? 0,
   }) || !!resources?.userAskedForResource;
 
-  if (!useCore) return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null };
+  if (!useCore) return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null, resourceHits: [] };
 
   const workingThesisBlock = renderWorkingThesisStateBlock(workingThesis);
 
@@ -1070,7 +1075,8 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     resourceContextBlock: resources?.contextBlock || "",
   }) + "\n\n" + persistenceContract;
 
-  return { prompt, workingThesis };
+  const resourceHits = (resources?.hits || []).map((h) => ({ id: h.id, title: h.title }));
+  return { prompt, workingThesis, resourceHits };
 }
 
 // Extract a fenced ```thesis_update { ... }``` block emitted by the
@@ -1107,7 +1113,7 @@ async function handleChat(
   const route = resolveLLMRoute("chat_general");
   if (forceFallback) route._smokeTestForceFail = true;
 
-  const { prompt: systemPrompt, workingThesis: priorThesis } = await buildChatSystemPrompt({
+  const { prompt: systemPrompt, workingThesis: priorThesis, resourceHits } = await buildChatSystemPrompt({
     supabase, userId, depth, contextSection, pack, userContent: content,
   });
   const accountId: string | null = pack.account?.id ?? null;
@@ -1135,15 +1141,26 @@ async function handleChat(
   if (!result.rawStream) {
     // Non-streaming fallback
     const { patch, visible } = extractThesisUpdate(result.text || "");
+    // Citation audit: catch any fabricated RESOURCE[…] references.
+    const audit = auditResourceCitations(visible, resourceHits);
+    if (audit.modified) {
+      console.log(`[citation-audit] non-stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`);
+    }
+    const auditedVisible = audit.text;
     await supabase.from("strategy_messages").insert({
       thread_id: threadId, user_id: userId, role: "assistant",
       message_type: "chat",
       provider_used: result.provider, model_used: result.model,
       fallback_used: result.fallbackUsed, latency_ms: result.latencyMs,
       content_json: {
-        text: visible, sources_used: pack.sourceCount,
+        text: auditedVisible, sources_used: pack.sourceCount,
         retrieval_meta: pack.retrievalMeta, model_used: result.model,
         provider_used: result.provider, fallback_used: result.fallbackUsed,
+        citation_audit: audit.modified ? {
+          modified: true,
+          unverified: audit.unverifiedCitations,
+          verified: audit.verifiedTitles,
+        } : undefined,
       },
     });
     if (accountId) {
@@ -1174,7 +1191,7 @@ async function handleChat(
         }
       }
     }
-    return new Response(JSON.stringify({ text: visible, provider: result.provider, model: result.model }), {
+    return new Response(JSON.stringify({ text: auditedVisible, provider: result.provider, model: result.model }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -1211,22 +1228,46 @@ async function handleChat(
             }
           }
         }
-        controller.close();
 
         const latency = Date.now() - startTime;
         if (!fullResponse.trim()) {
           console.warn(`[streaming] empty response after ${chunkCount} chunks, ${latency}ms`);
         }
         const { patch, visible } = extractThesisUpdate(fullResponse);
+        // Citation audit: catch any fabricated RESOURCE[…] references
+        // that slipped through the prompt contract. We persist the
+        // AUDITED text (DB = source of truth) and stream a trailing
+        // SSE delta with the audit banner so the live UI sees it too.
+        const audit = auditResourceCitations(visible, resourceHits);
+        if (audit.modified) {
+          console.log(`[citation-audit] stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`);
+          const trailing = audit.text.slice(visible.length); // banner suffix only
+          if (trailing) {
+            const sseChunk =
+              `data: ${JSON.stringify({ choices: [{ delta: { content: trailing } }] })}\n\n`;
+            try {
+              controller.enqueue(new TextEncoder().encode(sseChunk));
+            } catch (e) {
+              console.warn("[citation-audit] failed to stream trailing banner:", (e as Error).message);
+            }
+          }
+        }
+        const auditedVisible = audit.text;
+        controller.close();
         await supabase.from("strategy_messages").insert({
           thread_id: threadId, user_id: userId, role: "assistant",
           message_type: "chat",
           provider_used: route.primaryProvider, model_used: route.model,
           fallback_used: false, latency_ms: latency,
           content_json: {
-            text: visible, sources_used: pack.sourceCount,
+            text: auditedVisible, sources_used: pack.sourceCount,
             retrieval_meta: pack.retrievalMeta, model_used: route.model,
             provider_used: route.primaryProvider, fallback_used: false,
+            citation_audit: audit.modified ? {
+              modified: true,
+              unverified: audit.unverifiedCitations,
+              verified: audit.verifiedTitles,
+            } : undefined,
           },
         });
         await supabase.from("strategy_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
