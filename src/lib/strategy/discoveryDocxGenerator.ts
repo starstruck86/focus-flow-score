@@ -457,6 +457,13 @@ export async function generateDiscoveryDocx(sections: any[], companyName: string
   }
 
   const doc = new Document({
+    // Disable Word auto-hyphenation so long words wrap whole to the next
+    // line instead of being broken with a hyphen mid-word.
+    hyphenation: {
+      autoHyphenation: false,
+      doNotHyphenateCaps: true,
+      consecutiveHyphenLimit: 0,
+    },
     numbering: {
       config: [{
         reference: 'bullets',
