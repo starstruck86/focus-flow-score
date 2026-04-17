@@ -18,6 +18,18 @@ import {
   DISCOVERY_PREP_SCHEMA,
   DISCOVERY_PREP_SECTIONS,
 } from "./discoveryPrepTemplate.ts";
+// Strategy Core — shared reasoning + critique primitives.
+// Discovery Prep composes its prompts from these so the same brain is
+// available to chat and to every future task. Strings remain
+// byte-identical to the previous inline versions.
+import {
+  ACCOUNT_SPECIFICITY_RULE,
+  CRITIQUE_IDENTITY_INSTRUCTION,
+  ECONOMIC_FRAMING_RULES,
+  FACT_DISCIPLINE_RULES,
+  STRATEGY_CORE_THINKING_ORDER,
+  libraryGroundingHeader,
+} from "../../strategy-core/index.ts";
 
 export const discoveryPrepHandler: TaskHandler = {
   taskType: "discovery_prep",
