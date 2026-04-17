@@ -7,8 +7,10 @@ import { assert, assertEquals, assertStringIncludes } from "https://deno.land/st
 import {
   extractCandidatePhrases,
   inferResourceCategories,
+  recordResourceUsage,
   renderResourceContextBlock,
   retrieveResourceContext,
+  userAskedForPriorUse,
   userAskedForResource,
 } from "./resourceRetrieval.ts";
 
@@ -246,4 +248,144 @@ Deno.test("retrieveResourceContext: template resource_type outranks transcripts 
   const txIdx = titles.indexOf("9 Mistakes Salespeople Make with Business Cases");
   assert(tplIdx >= 0 && txIdx >= 0, `expected both rows in hits, got ${JSON.stringify(titles)}`);
   assert(tplIdx < txIdx, `expected template to outrank transcript; got order ${JSON.stringify(titles)}`);
+});
+
+// ── Cross-thread resource memory (NEW) ────────────────────────────
+
+Deno.test("userAskedForPriorUse: detects continuity phrases", () => {
+  assert(userAskedForPriorUse("use the same resource we used last time"));
+  assert(userAskedForPriorUse("what template did we use previously on this account?"));
+  assert(userAskedForPriorUse("the deck we used before"));
+  assert(!userAskedForPriorUse("what's the weather"));
+  assert(!userAskedForPriorUse(""));
+});
+
+Deno.test("recordResourceUsage: writes deduped, non-empty inserts only", async () => {
+  const inserts: any[] = [];
+  const reads: any[] = [];
+  const stub: any = {
+    from: (table: string) => {
+      const b: any = {
+        _table: table,
+        _filters: {} as Record<string, any>,
+        select: (_c: string) => b,
+        eq: (col: string, val: any) => { b._filters[col] = val; return b; },
+        in: (col: string, vals: any[]) => {
+          // simulate dedupe-read returning empty (nothing previously written)
+          reads.push({ table, col, vals, filters: { ...b._filters } });
+          return Promise.resolve({ data: [] });
+        },
+        insert: (rows: any[]) => {
+          inserts.push({ table, rows });
+          return Promise.resolve({ error: null });
+        },
+      };
+      return b;
+    },
+  };
+  const out = await recordResourceUsage(stub, {
+    userId: "user-1",
+    threadId: "thread-1",
+    resourceIds: ["a", "b", "a", ""], // dedupe + drop empty
+  });
+  assertEquals(out.inserted, 2);
+  assertEquals(inserts.length, 1);
+  assertEquals(inserts[0].table, "strategy_thread_resources");
+  assertEquals(inserts[0].rows.length, 2);
+  assertEquals(inserts[0].rows[0].source_type, "cited");
+  assertEquals(inserts[0].rows[0].user_id, "user-1");
+  assertEquals(inserts[0].rows[0].thread_id, "thread-1");
+  // Dedupe-read happened first
+  assertEquals(reads.length, 1);
+  assertEquals(reads[0].vals.sort(), ["a", "b"]);
+});
+
+Deno.test("recordResourceUsage: skips ids already written for the same thread", async () => {
+  const inserts: any[] = [];
+  const stub: any = {
+    from: (_t: string) => {
+      const b: any = {
+        select: (_c: string) => b,
+        eq: () => b,
+        in: () => Promise.resolve({ data: [{ resource_id: "a" }, { resource_id: "b" }] }),
+        insert: (rows: any[]) => { inserts.push(rows); return Promise.resolve({ error: null }); },
+      };
+      return b;
+    },
+  };
+  const out = await recordResourceUsage(stub, {
+    userId: "u", threadId: "t", resourceIds: ["a", "b", "c"],
+  });
+  assertEquals(out.inserted, 1);
+  assertEquals(inserts[0].length, 1);
+  assertEquals(inserts[0][0].resource_id, "c");
+});
+
+Deno.test("recordResourceUsage: empty input is a no-op", async () => {
+  const stub: any = { from: (_t: string) => { throw new Error("should not query"); } };
+  const out = await recordResourceUsage(stub, { userId: "u", threadId: "t", resourceIds: [] });
+  assertEquals(out.inserted, 0);
+});
+
+Deno.test("retrieveResourceContext: prior_use branch queries strategy_thread_resources when accountId present", async () => {
+  const seenTables: string[] = [];
+  const stub: any = {
+    from: (table: string) => {
+      seenTables.push(table);
+      const b: any = {
+        select: (_c: string) => b,
+        eq: () => b,
+        in: () => Promise.resolve({ data: [{ id: "r1", title: "Prior Resource", description: null, resource_type: "template", is_template: false, template_category: null, account_id: null, opportunity_id: null, tags: null }] }),
+        ilike: () => b,
+        order: () => b,
+        limit: () => {
+          if (table === "strategy_thread_resources") {
+            return Promise.resolve({ data: [{ resource_id: "r1", thread_id: "other-thread", created_at: new Date().toISOString() }] });
+          }
+          return Promise.resolve({ data: [] });
+        },
+      };
+      return b;
+    },
+  };
+  const out = await retrieveResourceContext(stub, "u", {
+    userMessage: "use the same template we used last time",
+    accountId: "acct-1",
+    threadId: "current-thread",
+  });
+  assert(seenTables.includes("strategy_thread_resources"), `expected prior-use query; tables=${seenTables.join(",")}`);
+  assert(out.hits.some((h) => h.matchKind === "prior_use"), `expected a prior_use hit; got ${JSON.stringify(out.hits.map((h) => h.matchKind))}`);
+});
+
+Deno.test("retrieveResourceContext: prior_use excludes resources from the current thread", async () => {
+  const stub: any = {
+    from: (table: string) => {
+      const b: any = {
+        select: (_c: string) => b,
+        eq: () => b,
+        in: () => Promise.resolve({ data: [] }),
+        ilike: () => b,
+        order: () => b,
+        limit: () => {
+          if (table === "strategy_thread_resources") {
+            // Both rows belong to the *current* thread → must be filtered out.
+            return Promise.resolve({
+              data: [
+                { resource_id: "r1", thread_id: "current-thread", created_at: new Date().toISOString() },
+                { resource_id: "r2", thread_id: "current-thread", created_at: new Date().toISOString() },
+              ],
+            });
+          }
+          return Promise.resolve({ data: [] });
+        },
+      };
+      return b;
+    },
+  };
+  const out = await retrieveResourceContext(stub, "u", {
+    userMessage: "use the same template we used last time",
+    accountId: "acct-1",
+    threadId: "current-thread",
+  });
+  assert(!out.hits.some((h) => h.matchKind === "prior_use"), `expected no prior_use hits; got ${JSON.stringify(out.hits)}`);
 });
