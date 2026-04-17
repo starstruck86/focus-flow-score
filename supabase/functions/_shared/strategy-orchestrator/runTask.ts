@@ -148,8 +148,12 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       sections: sectionCount,
     }));
   } catch (e: any) {
+    if (authoringTimeoutId) clearTimeout(authoringTimeoutId);
     const durationMs = Date.now() - authoringStartedAt;
     const message = e?.message || String(e);
+    const prefixed = message.startsWith("[document_authoring]")
+      ? message
+      : `[document_authoring] ${message}`;
     console.error(JSON.stringify({
       tag: "stage-3:end",
       run_id: runId,
@@ -165,7 +169,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         .update({
           status: "failed",
           progress_step: "failed",
-          error: `[document_authoring] ${message}`.slice(0, 1000),
+          error: prefixed.slice(0, 1000),
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -173,7 +177,12 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     } catch (writeErr) {
       console.error(`[stage-3] failed to mark run failed:`, (writeErr as Error).message);
     }
-    throw e;
+    // Re-throw with the prefix so the outer catch in runStrategyTask /
+    // runStrategyTaskInBackground doesn't overwrite our DB error message
+    // with the bare provider text.
+    const wrapped = new Error(prefixed);
+    (wrapped as any).cause = e;
+    throw wrapped;
   }
 
   // ── Stage 4: Review (Lovable AI, playbook-grounded) ──────────
