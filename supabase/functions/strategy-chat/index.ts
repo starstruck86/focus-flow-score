@@ -1166,6 +1166,28 @@ async function handleChat(
         } : undefined,
       },
     });
+    // Cross-thread resource memory: persist VERIFIED citations only.
+    // This is the write side of strategy_thread_resources — what makes
+    // "use the same resource we used last time on this account" work
+    // on the next turn. Never write fabricated/UNVERIFIED titles.
+    try {
+      const verifiedNorm = new Set(
+        audit.verifiedTitles.map((t) => t.toLowerCase().replace(/\s+/g, " ").trim()),
+      );
+      const verifiedIds = resourceHits
+        .filter((h) => verifiedNorm.has(h.title.toLowerCase().replace(/\s+/g, " ").trim()))
+        .map((h) => h.id);
+      if (verifiedIds.length > 0) {
+        const { inserted } = await recordResourceUsage(supabase, {
+          userId, threadId, resourceIds: verifiedIds, sourceType: "cited",
+        });
+        if (inserted > 0) {
+          console.log(`[resource-usage] non-stream: persisted ${inserted} cited resource(s)`);
+        }
+      }
+    } catch (e) {
+      console.warn("[resource-usage] non-stream persist failed:", (e as Error).message);
+    }
     if (accountId) {
       // Primary path: fenced thesis_update block.
       // Fallback path: deterministic prose extraction (only when the
