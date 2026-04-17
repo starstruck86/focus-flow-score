@@ -6639,11 +6639,14 @@ export type Database = {
       task_runs: {
         Row: {
           account_id: string | null
+          completed_at: string | null
           created_at: string
           draft_output: Json | null
+          error: string | null
           id: string
           inputs: Json
           opportunity_id: string | null
+          progress_step: string | null
           review_output: Json | null
           status: string
           task_type: string
@@ -6654,11 +6657,14 @@ export type Database = {
         }
         Insert: {
           account_id?: string | null
+          completed_at?: string | null
           created_at?: string
           draft_output?: Json | null
+          error?: string | null
           id?: string
           inputs?: Json
           opportunity_id?: string | null
+          progress_step?: string | null
           review_output?: Json | null
           status?: string
           task_type?: string
@@ -6669,11 +6675,14 @@ export type Database = {
         }
         Update: {
           account_id?: string | null
+          completed_at?: string | null
           created_at?: string
           draft_output?: Json | null
+          error?: string | null
           id?: string
           inputs?: Json
           opportunity_id?: string | null
+          progress_step?: string | null
           review_output?: Json | null
           status?: string
           task_type?: string
