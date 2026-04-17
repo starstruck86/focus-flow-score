@@ -144,7 +144,8 @@ const STOP_TOKENS = new Set(
 export function userAskedForResource(text: string): boolean {
   if (!text) return false;
   const lower = text.toLowerCase();
-  if (/["'`]/.test(text) && /\w/.test(text)) return true;
+  // Real paired-quote (not just an apostrophe in a contraction).
+  if (/["“”`][^"“”`]{2,}["“”`]/.test(text)) return true;
   for (const w of RESOURCE_INTENT_WORDS) {
     if (lower.includes(w)) return true;
   }
