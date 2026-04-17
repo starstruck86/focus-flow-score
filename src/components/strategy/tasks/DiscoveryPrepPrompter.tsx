@@ -47,6 +47,11 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
   const [participants, setParticipants] = useState<Participant[]>([
     { name: '', title: '', role: '', side: 'prospect' },
   ]);
+  // Local guard: blocks double-click before parent isRunning flips.
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Whenever the modal opens fresh, re-arm the local guard.
+  useEffect(() => { if (open) setIsSubmitting(false); }, [open]);
 
   useEffect(() => {
     if (open && linkedContext?.account?.name) setCompanyName(linkedContext.account.name);
