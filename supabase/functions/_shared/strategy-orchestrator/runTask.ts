@@ -11,6 +11,14 @@
 // All task-specific behavior lives in the TaskHandler. The pipeline
 // itself is generic so future tasks (recap email, follow-up, etc.)
 // reuse the same orchestration without forking it.
+//
+// ──────────────────────────────────────────────────────────────────
+// ASYNC EXECUTION
+// ──────────────────────────────────────────────────────────────────
+// `runStrategyTaskInBackground` inserts a `pending` row immediately,
+// returns its id, then runs all 5 stages off the request lifecycle
+// via EdgeRuntime.waitUntil. Status/error/completed_at are written
+// back to the row at every stage transition so the client can poll.
 // ════════════════════════════════════════════════════════════════
 
 import { retrieveLibraryContext } from "./libraryRetrieval.ts";
@@ -18,12 +26,26 @@ import { callClaude, callLovableAI, callPerplexity, safeParseJSON } from "./prov
 import { getHandler } from "./registry.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
-export async function runStrategyTask(ctx: OrchestrationContext): Promise<OrchestrationResult> {
+// ── Internal: write a progress step to the run row (best-effort). ─
+async function setProgress(supabase: any, runId: string, step: string) {
+  try {
+    await supabase
+      .from("task_runs")
+      .update({ progress_step: step, updated_at: new Date().toISOString() })
+      .eq("id", runId);
+  } catch (e) {
+    console.warn(`[orchestrator] progress update failed (${step}):`, (e as Error).message);
+  }
+}
+
+// ── Core pipeline — bound to an existing pending run row. ─────────
+async function executePipeline(ctx: OrchestrationContext, runId: string): Promise<void> {
   const { supabase, userId, inputs, taskType } = ctx;
   const handler = getHandler(taskType);
-  console.log(`[orchestrator] task=${taskType} company=${inputs.company_name || "(none)"} user=${userId.slice(0, 8)}`);
+  console.log(`[orchestrator] task=${taskType} run=${runId} company=${inputs.company_name || "(none)"} user=${userId.slice(0, 8)}`);
 
   // ── Stage 0: Library retrieval ────────────────────────────────
+  await setProgress(supabase, runId, "library_retrieval");
   const library = await retrieveLibraryContext(supabase, userId, inputs, {
     scopes: handler.libraryScopes(inputs),
     maxKIs: 12,
@@ -35,6 +57,7 @@ export async function runStrategyTask(ctx: OrchestrationContext): Promise<Orches
   const research: ResearchBundle = { results: {}, totalChars: 0 };
 
   if (queries.length) {
+    await setProgress(supabase, runId, "research");
     console.log(`[stage-1] ${queries.length} parallel research queries...`);
     const settled = await Promise.allSettled(
       queries.map(async (q) => {
@@ -57,18 +80,19 @@ export async function runStrategyTask(ctx: OrchestrationContext): Promise<Orches
     console.log(`[stage-1] research complete: ${research.totalChars} chars`);
   }
 
-  // ── Stage 2: Synthesis via Lovable AI Gateway (gemini-2.5-pro) ────
-  // gemini-2.5-pro is faster than gpt-5 on the gateway and avoids
-  // long-running reasoning that can blow the edge function wall clock.
-  console.log(`[stage-2] synthesis via Lovable AI (gemini-2.5-pro)...`);
+  // ── Stage 2: Synthesis — STRONG model (openai/gpt-5 via Lovable AI Gateway).
+  // We run this in the background, so wall-clock is no longer a constraint.
+  await setProgress(supabase, runId, "synthesis");
+  console.log(`[stage-2] synthesis via Lovable AI (openai/gpt-5)...`);
   const synthesisRaw = await callLovableAI([
     { role: "system", content: "You are a senior sales strategist. Synthesize research + internal IP into actionable intelligence. Return structured JSON only. No markdown fences, no preamble." },
     { role: "user", content: handler.buildSynthesisPrompt(inputs, research, library) },
-  ], { model: "google/gemini-2.5-pro", temperature: 0.4, maxTokens: 8192 });
+  ], { model: "openai/gpt-5", maxTokens: 12000 });
   const synthesis = safeParseJSON<any>(synthesisRaw) ?? { raw: synthesisRaw };
   console.log(`[stage-2] synthesis fields: ${Object.keys(synthesis).length}`);
 
   // ── Stage 3: Claude document authoring (locked template) ─────
+  await setProgress(supabase, runId, "document_authoring");
   console.log(`[stage-3] Claude document authoring...`);
   const documentRaw = await callClaude([
     { role: "system", content: handler.buildDocumentSystemPrompt() },
@@ -81,6 +105,7 @@ export async function runStrategyTask(ctx: OrchestrationContext): Promise<Orches
   // ── Stage 4: Review (Lovable AI, playbook-grounded) ──────────
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };
   if (sectionCount > 0) {
+    await setProgress(supabase, runId, "review");
     console.log("[stage-4] generating playbook-grounded review...");
     try {
       const reviewRaw = await callLovableAI([
@@ -91,30 +116,25 @@ export async function runStrategyTask(ctx: OrchestrationContext): Promise<Orches
       if (parsed) reviewOutput = { ...reviewOutput, ...parsed };
     } catch (e: any) {
       console.error("[stage-4] review failed:", e?.message || e);
-      if (e?.status === 429 || e?.status === 402) throw e;
+      // Don't fail the whole run for review issues; surface in row.
     }
   }
 
-  // ── Stage 5: Persist run ─────────────────────────────────────
-  const { data: run, error: insertErr } = await supabase
+  // ── Stage 5: Finalize the run row ────────────────────────────
+  const { error: updateErr } = await supabase
     .from("task_runs")
-    .insert({
-      user_id: userId,
-      task_type: taskType,
-      inputs,
+    .update({
       draft_output: draftOutput,
       review_output: reviewOutput,
       status: "completed",
-      thread_id: inputs.thread_id || null,
-      account_id: inputs.account_id || null,
-      opportunity_id: inputs.opportunity_id || null,
+      progress_step: "completed",
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
-    .select("id")
-    .single();
-
-  if (insertErr) {
-    console.error("[orchestrator] insert error:", insertErr);
-    throw insertErr;
+    .eq("id", runId);
+  if (updateErr) {
+    console.error("[orchestrator] finalize update error:", updateErr);
+    throw updateErr;
   }
 
   const meta = {
@@ -124,9 +144,121 @@ export async function runStrategyTask(ctx: OrchestrationContext): Promise<Orches
     sections: sectionCount,
     redlines: reviewOutput.redlines?.length || 0,
   };
-  console.log(`[orchestrator] complete run=${run.id} ${JSON.stringify(meta)}`);
+  console.log(`[orchestrator] complete run=${runId} ${JSON.stringify(meta)}`);
+}
 
-  return { run_id: run.id, draft: draftOutput, review: reviewOutput, meta };
+/**
+ * Synchronous entry point (kept for back-compat / smoke tests).
+ * For end-user requests, prefer `runStrategyTaskInBackground`.
+ */
+export async function runStrategyTask(ctx: OrchestrationContext): Promise<OrchestrationResult> {
+  // Insert pending row first so the same finalize path is used.
+  const { data: row, error: insertErr } = await ctx.supabase
+    .from("task_runs")
+    .insert({
+      user_id: ctx.userId,
+      task_type: ctx.taskType,
+      inputs: ctx.inputs,
+      status: "pending",
+      progress_step: "queued",
+      thread_id: ctx.inputs.thread_id || null,
+      account_id: ctx.inputs.account_id || null,
+      opportunity_id: ctx.inputs.opportunity_id || null,
+    })
+    .select("id")
+    .single();
+  if (insertErr || !row) throw insertErr || new Error("Failed to create task_runs row");
+
+  try {
+    await executePipeline(ctx, row.id);
+  } catch (e: any) {
+    await ctx.supabase
+      .from("task_runs")
+      .update({
+        status: "failed",
+        error: (e?.message || String(e)).slice(0, 1000),
+        progress_step: "failed",
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", row.id);
+    throw e;
+  }
+
+  // Return final state from DB (consistent shape with async path).
+  const { data: finalRow } = await ctx.supabase
+    .from("task_runs").select("draft_output, review_output").eq("id", row.id).single();
+  return {
+    run_id: row.id,
+    draft: finalRow?.draft_output ?? { sections: [] },
+    review: finalRow?.review_output ?? { strengths: [], redlines: [] },
+    meta: {},
+  };
+}
+
+/**
+ * Async entry point: insert a pending row, kick off the pipeline on
+ * the edge runtime's background lifecycle, return the run_id immediately.
+ *
+ * Caller should poll `task_runs` (status / progress_step) until
+ * status ∈ {completed, failed}.
+ */
+export async function runStrategyTaskInBackground(
+  ctx: OrchestrationContext,
+): Promise<{ run_id: string; status: "pending" }> {
+  const { data: row, error: insertErr } = await ctx.supabase
+    .from("task_runs")
+    .insert({
+      user_id: ctx.userId,
+      task_type: ctx.taskType,
+      inputs: ctx.inputs,
+      status: "pending",
+      progress_step: "queued",
+      thread_id: ctx.inputs.thread_id || null,
+      account_id: ctx.inputs.account_id || null,
+      opportunity_id: ctx.inputs.opportunity_id || null,
+    })
+    .select("id")
+    .single();
+  if (insertErr || !row) throw insertErr || new Error("Failed to create task_runs row");
+
+  const runId: string = row.id;
+
+  // Detach from the request lifecycle so the HTTP response can return
+  // immediately while the heavy pipeline keeps running.
+  const work = (async () => {
+    try {
+      await executePipeline(ctx, runId);
+    } catch (e: any) {
+      console.error(`[orchestrator] background run=${runId} failed:`, e?.message || e);
+      try {
+        await ctx.supabase
+          .from("task_runs")
+          .update({
+            status: "failed",
+            error: (e?.message || String(e)).slice(0, 1000),
+            progress_step: "failed",
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", runId);
+      } catch (writeErr) {
+        console.error(`[orchestrator] failed to mark run=${runId} as failed:`, (writeErr as Error).message);
+      }
+    }
+  })();
+
+  // Supabase edge runtime exposes EdgeRuntime.waitUntil in production.
+  // Fall back to a fire-and-forget promise locally.
+  // @ts-ignore — EdgeRuntime is provided by the platform.
+  if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
+    // @ts-ignore
+    EdgeRuntime.waitUntil(work);
+  } else {
+    work.catch(() => { /* already logged */ });
+  }
+
+  return { run_id: runId, status: "pending" };
 }
 
 /** Apply a single section-level redline to an existing run. Shared across tasks. */
