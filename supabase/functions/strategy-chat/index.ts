@@ -9,6 +9,7 @@ import {
   mergeWorkingThesisState,
   renderWorkingThesisStateBlock,
   retrieveLibraryContext,
+  retrieveResourceContext,
   saveWorkingThesisState,
   shouldUseStrategyCorePrompt,
   validateWorkingThesisState,
