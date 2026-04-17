@@ -47,6 +47,11 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
   const [participants, setParticipants] = useState<Participant[]>([
     { name: '', title: '', role: '', side: 'prospect' },
   ]);
+  // Local guard: blocks double-click before parent isRunning flips.
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Whenever the modal opens fresh, re-arm the local guard.
+  useEffect(() => { if (open) setIsSubmitting(false); }, [open]);
 
   useEffect(() => {
     if (open && linkedContext?.account?.name) setCompanyName(linkedContext.account.name);
@@ -69,7 +74,8 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
   const canSubmit = companyName.trim() && participants.some(p => p.name.trim());
 
   const handleSubmit = () => {
-    if (!canSubmit) return;
+    if (!canSubmit || isSubmitting || isRunning) return;
+    setIsSubmitting(true);
     onSubmit({
       company_name: companyName.trim(),
       rep_name: repName.trim() || undefined,
@@ -220,9 +226,9 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
         </ScrollArea>
 
         <DialogFooter className="px-5 py-3 border-t border-border/10">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isRunning}>Cancel</Button>
-          <Button size="sm" onClick={handleSubmit} disabled={!canSubmit || isRunning} className="gap-1.5">
-            {isRunning ? (
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isRunning || isSubmitting}>Cancel</Button>
+          <Button size="sm" onClick={handleSubmit} disabled={!canSubmit || isRunning || isSubmitting} className="gap-1.5">
+            {(isRunning || isSubmitting) ? (
               <><Loader2 className="h-3.5 w-3.5 animate-spin" />Researching & generating…</>
             ) : (
               <><Zap className="h-3.5 w-3.5" />Generate Prep Doc</>

@@ -2,74 +2,31 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import {
+  normalizeTaskRunResultPayload,
+  hasRenderableDiscoveryContent,
+} from '@/lib/strategy/discoveryTaskResult';
+import type {
+  DiscoverySection,
+  LibraryCoverageEntry,
+  Redline,
+  RubricCheck,
+  SourceEntry,
+  TaskInputs,
+  TaskRunResult,
+} from '@/types/strategy/discoveryTask';
 
-export interface TaskInputs {
-  company_name: string;
-  rep_name?: string;
-  participants: { name: string; title?: string; role?: string; side?: 'internal' | 'prospect' }[];
-  opportunity?: string;
-  stage?: string;
-  prior_notes?: string;
-  scale?: string;
-  desired_next_step?: string;
-  website?: string;
-  thread_id?: string;
-  account_id?: string;
-  opportunity_id?: string;
-}
-
-export interface Redline {
-  id: string;
-  section_id: string;
-  section_name: string;
-  current_text: string;
-  proposed_text: string;
-  rationale: string;
-  grounded_by_id?: string | null;
-  status?: 'pending' | 'accepted' | 'rejected';
-}
-
-export interface DiscoverySection {
-  id: string;
-  name: string;
-  /** v2: KI/playbook 8-char ids the section was grounded in. */
-  grounded_by?: string[];
-  content: any;
-}
-
-export interface SourceEntry {
-  id: string;
-  label: string;
-  url?: string | null;
-  accessed?: string | null;
-}
-
-export interface LibraryCoverageEntry {
-  id: string;
-  title: string;
-  type: 'KI' | 'Playbook';
-  sections?: string[];
-}
-
-export interface RubricCheck {
-  citation_density?: 'pass' | 'warn' | 'fail';
-  cockpit_completeness?: 'pass' | 'warn' | 'fail';
-  discovery_question_specificity?: 'pass' | 'warn' | 'fail';
-  library_grounding?: 'pass' | 'warn' | 'fail';
-  appendix_richness?: 'pass' | 'warn' | 'fail';
-  notes?: string[];
-}
-
-export interface TaskRunResult {
-  run_id: string;
-  draft: { sections: DiscoverySection[]; sources?: SourceEntry[] };
-  review: {
-    strengths: string[];
-    redlines: Redline[];
-    library_coverage?: { used: LibraryCoverageEntry[]; gaps: string[]; score?: number };
-    rubric_check?: RubricCheck;
-  };
-}
+// Re-export shared types so existing import sites
+// (`@/hooks/strategy/useTaskExecution`) keep working.
+export type {
+  DiscoverySection,
+  LibraryCoverageEntry,
+  Redline,
+  RubricCheck,
+  SourceEntry,
+  TaskInputs,
+  TaskRunResult,
+};
 
 const PROGRESS_LABELS: Record<string, string> = {
   queued: 'Queued…',
@@ -85,78 +42,25 @@ const PROGRESS_LABELS: Record<string, string> = {
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes hard cap
 
-function normalizeTaskRunResult(runId: string, payload?: { draft?: any; review?: any }): TaskRunResult {
-  const rawDraft = payload?.draft && typeof payload.draft === 'object' ? payload.draft : {};
-  const rawReview = payload?.review && typeof payload.review === 'object' ? payload.review : {};
-
-  const sections: DiscoverySection[] = Array.isArray(rawDraft.sections)
-    ? rawDraft.sections.map((section: any, index: number) => ({
-        id: typeof section?.id === 'string' && section.id ? section.id : `section-${index + 1}`,
-        name: typeof section?.name === 'string' && section.name
-          ? section.name
-          : typeof section?.id === 'string' && section.id
-            ? section.id.replace(/_/g, ' ')
-            : `Section ${index + 1}`,
-        grounded_by: Array.isArray(section?.grounded_by) ? section.grounded_by : undefined,
-        content: section?.content ?? null,
-      }))
-    : [];
-
-  const redlines: Redline[] = Array.isArray(rawReview.redlines)
-    ? rawReview.redlines.map((redline: any, index: number) => ({
-        id: typeof redline?.id === 'string' && redline.id ? redline.id : `r${index}`,
-        section_id: typeof redline?.section_id === 'string' && redline.section_id ? redline.section_id : sections[index]?.id || `section-${index + 1}`,
-        section_name: typeof redline?.section_name === 'string' && redline.section_name
-          ? redline.section_name
-          : sections.find((section) => section.id === redline?.section_id)?.name || 'Section',
-        current_text: typeof redline?.current_text === 'string' ? redline.current_text : '',
-        proposed_text: typeof redline?.proposed_text === 'string' ? redline.proposed_text : '',
-        rationale: typeof redline?.rationale === 'string' ? redline.rationale : '',
-        grounded_by_id: redline?.grounded_by_id ?? null,
-        status: redline?.status === 'accepted' || redline?.status === 'rejected' ? redline.status : 'pending',
-      }))
-    : [];
-
-  const sources: SourceEntry[] | undefined = Array.isArray(rawDraft.sources)
-    ? rawDraft.sources.map((source: any, index: number) => ({
-        id: typeof source?.id === 'string' && source.id ? source.id : `source-${index + 1}`,
-        label: typeof source?.label === 'string' && source.label ? source.label : `Source ${index + 1}`,
-        url: typeof source?.url === 'string' ? source.url : null,
-        accessed: typeof source?.accessed === 'string' ? source.accessed : null,
-      }))
-    : undefined;
-
-  return {
-    run_id: runId,
-    draft: {
-      sections,
-      ...(sources ? { sources } : {}),
-    },
-    review: {
-      strengths: Array.isArray(rawReview.strengths)
-        ? rawReview.strengths.filter((item: unknown): item is string => typeof item === 'string')
-        : [],
-      redlines,
-      library_coverage: rawReview?.library_coverage,
-      rubric_check: rawReview?.rubric_check,
-    },
-  };
-}
-
+/**
+ * Single-source-of-truth sanitizer used by both the hook AND every render
+ * boundary. Always returns either a fully normalized TaskRunResult shape or
+ * null — never a partial object that can crash the viewer.
+ */
 export function sanitizeTaskRunResult(
   raw?: Partial<TaskRunResult> | { run_id?: string; draft?: unknown; review?: unknown } | null,
 ): TaskRunResult | null {
   if (!raw) return null;
-
   const runId = typeof raw.run_id === 'string' && raw.run_id.trim()
     ? raw.run_id
     : 'pending-run';
-
-  return normalizeTaskRunResult(runId, {
-    draft: raw.draft,
-    review: raw.review,
+  return normalizeTaskRunResultPayload(runId, {
+    draft: (raw as { draft?: unknown }).draft,
+    review: (raw as { review?: unknown }).review,
   });
 }
+
+export { hasRenderableDiscoveryContent };
 
 async function callDiscoveryPrep(body: Record<string, unknown>) {
   const { data: { session } } = await supabase.auth.getSession();
@@ -188,13 +92,25 @@ export function useTaskExecution() {
   const [result, setResult] = useState<TaskRunResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const cancelRef = useRef(false);
+  /**
+   * Hard guard against duplicate generations from a single click,
+   * rapid double-clicks, or Strict-Mode double-renders. Each new run must
+   * wait for the previous one to fully resolve.
+   */
+  const inFlightRef = useRef(false);
 
   useEffect(() => () => { cancelRef.current = true; }, []);
 
   const runDiscoveryPrep = useCallback(async (inputs: TaskInputs) => {
     if (!user) { toast.error('Please sign in'); return null; }
+    if (inFlightRef.current) {
+      // Silent reject — never spend credits on an accidental second click.
+      return null;
+    }
+    inFlightRef.current = true;
     setIsRunning(true);
     setError(null);
+    setResult(null);
     setProgressLabel(PROGRESS_LABELS.queued);
     cancelRef.current = false;
 
@@ -239,6 +155,7 @@ export function useTaskExecution() {
     } finally {
       setIsRunning(false);
       setProgressLabel(null);
+      inFlightRef.current = false;
     }
   }, [user]);
 
@@ -288,6 +205,7 @@ export function useTaskExecution() {
   }, [result]);
 
   const reset = useCallback(() => {
+    cancelRef.current = true;
     setResult(null);
     setError(null);
     setProgressLabel(null);
