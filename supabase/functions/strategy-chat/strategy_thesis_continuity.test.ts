@@ -216,12 +216,17 @@ Deno.test("continuity: composed system prompt makes saved thesis the starting po
 //     a seller-confirmed patch can.
 // ──────────────────────────────────────────────────────────────────
 Deno.test("continuity: seller evidence beats model pattern-match on confidence", () => {
-  const prior = limaOneAfterTurn4();
+  // Use a state with NO carried supporting_evidence so the model-only
+  // branch genuinely lacks grounding (Rule 1 requires either
+  // seller_confirmed, new add_evidence, OR carried evidence).
+  const prior = emptyWorkingThesisState(ACCOUNT_ID);
+  prior.current_thesis =
+    "Lima One has a retention problem at the repeat-borrower layer.";
+  prior.confidence = "HYPO";
 
   // Model alone tries to upgrade confidence to VALID with no evidence.
   const modelOnly = validateWorkingThesisState(prior, {
     confidence: "VALID",
-    current_thesis: prior.current_thesis, // unchanged — pure upgrade
   });
   assertEquals(modelOnly.patch.confidence, "INFER");
   assert(
@@ -229,27 +234,15 @@ Deno.test("continuity: seller evidence beats model pattern-match on confidence",
     "model-only VALID upgrade must be downgraded",
   );
 
-  // Same move, but this time grounded in a seller-confirmed fact
-  // with numeric evidence (current_leakage carries "18%" so the
-  // numeric rule requires a number-bearing evidence entry too).
+  // Same move, but grounded in seller-confirmed evidence — survives.
   const sellerGrounded = validateWorkingThesisState(prior, {
     confidence: "VALID",
     seller_confirmed: true,
     add_evidence: [
-      "VP Originations confirmed on call: repeat-borrower rate is 18%.",
+      "VP Originations confirmed on call: repeat-borrower retention is the open wound.",
     ],
   });
-  // Either VALID survives, OR validator capped to INFER for numeric
-  // safety — both are acceptable "seller beats model" outcomes
-  // because pure model-only never gets above INFER. The point of
-  // this test is the DELTA vs the model-only branch above.
-  assert(
-    sellerGrounded.patch.confidence === "VALID" ||
-      sellerGrounded.patch.confidence === "INFER",
-    `expected seller-grounded confidence VALID or INFER, got ${sellerGrounded.patch.confidence}`,
-  );
-  // The discriminating signal: model-only got DOWNGRADED, seller-
-  // grounded did NOT get downgraded for lack of evidence.
+  assertEquals(sellerGrounded.patch.confidence, "VALID");
   assert(
     !sellerGrounded.downgrades.some((d) => d.includes("VALID downgraded")),
     "seller-grounded patch must not be downgraded for lack of evidence",
