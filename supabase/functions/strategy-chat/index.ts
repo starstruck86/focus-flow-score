@@ -1081,9 +1081,10 @@ async function handleChat(
   const route = resolveLLMRoute("chat_general");
   if (forceFallback) route._smokeTestForceFail = true;
 
-  const systemPrompt = await buildChatSystemPrompt({
+  const { prompt: systemPrompt, workingThesis: priorThesis } = await buildChatSystemPrompt({
     supabase, userId, depth, contextSection, pack, userContent: content,
   });
+  const accountId: string | null = pack.account?.id ?? null;
 
   const messages = [
     { role: "system" as const, content: systemPrompt },
