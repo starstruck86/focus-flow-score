@@ -152,8 +152,15 @@ export function auditResourceCitations(
   // ── 2. Informal "<Title>" + artifact-word references ──────────
   // We only flag quoted strings that sit next to an artifact word, so
   // we don't spuriously annotate seller quotes from a transcript.
+  // We also skip anything already wrapped by RESOURCE[…] / UNVERIFIED[…]
+  // (handled by step 1) to avoid double-flagging.
   const quotedRe = /["“]([A-Z][^"“”]{2,80})["”]/g;
   out = out.replace(quotedRe, (full, inner: string, offset: number) => {
+    // Skip if this quoted string is the value of a RESOURCE[…] or
+    // UNVERIFIED[…] bracket (already audited in step 1).
+    const before = out.slice(Math.max(0, offset - 20), offset);
+    if (/(?:RESOURCE|UNVERIFIED)\[\s*$/.test(before)) return full;
+
     const window = out.slice(Math.max(0, offset - 60), Math.min(out.length, offset + full.length + 60)).toLowerCase();
     const looksLikeArtifact = ARTIFACT_WORDS.some((w) => window.includes(w));
     if (!looksLikeArtifact) return full;
