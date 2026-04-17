@@ -53,6 +53,7 @@ export interface RetrievedResource {
     | "exact_title"
     | "near_exact_title"
     | "phrase_in_title"
+    | "prior_use"
     | "account_linked"
     | "opportunity_linked"
     | "category_intent";
@@ -275,6 +276,18 @@ const SAFE_FIELDS =
 
 const HARD_LIMIT = 12;
 
+/** True when the user is asking about prior usage on this account/thread. */
+export function userAskedForPriorUse(text: string): boolean {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  // Phrases that imply continuity / "what we used before".
+  return (
+    /\b(last time|previously|before|earlier|prior|the one we used|same (resource|template|playbook|calculator|deck|doc)|that (template|deck|doc|playbook|calculator) we)\b/.test(
+      lower,
+    )
+  );
+}
+
 export async function retrieveResourceContext(
   supabase: SupabaseLike,
   userId: string,
@@ -282,12 +295,15 @@ export async function retrieveResourceContext(
     userMessage: string;
     accountId?: string | null;
     opportunityId?: string | null;
+    /** Current thread id — used to scope/exclude when pulling prior-use rows. */
+    threadId?: string | null;
   },
 ): Promise<ResourceRetrievalResult> {
   const userMessage = (args.userMessage || "").trim();
   const phrases = extractCandidatePhrases(userMessage);
   const categories = inferResourceCategories(userMessage);
-  const askedFor = userAskedForResource(userMessage) || phrases.length > 0;
+  const askedForPrior = userAskedForPriorUse(userMessage);
+  const askedFor = userAskedForResource(userMessage) || phrases.length > 0 || askedForPrior;
 
   const all: RetrievedResource[] = [];
   const seen = new Set<string>();
@@ -377,6 +393,46 @@ export async function retrieveResourceContext(
     }
   }
 
+  // ── 4b. Prior-use resources for this account (cross-thread memory) ─
+  // This is the read side of strategy_thread_resources. When the user
+  // asks "what did we use last time on this account?" — or any time we
+  // have an account context and prior writes exist — pull the resources
+  // we previously cited on threads scoped to this account.
+  if (args.accountId && all.length < HARD_LIMIT) {
+    try {
+      // Step 1: find prior-use resource_ids for any thread linked to
+      // this account (excluding the current thread).
+      const { data: priorRows } = await supabase
+        .from("strategy_thread_resources")
+        .select("resource_id, created_at, thread_id, strategy_threads!inner(linked_account_id)")
+        .eq("user_id", userId)
+        .eq("source_type", "cited")
+        .eq("strategy_threads.linked_account_id", args.accountId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      const priorIds: string[] = [];
+      const seenIds = new Set<string>();
+      for (const r of (priorRows || []) as any[]) {
+        if (!r?.resource_id) continue;
+        if (args.threadId && r.thread_id === args.threadId) continue;
+        if (seenIds.has(r.resource_id)) continue;
+        seenIds.add(r.resource_id);
+        priorIds.push(r.resource_id);
+        if (priorIds.length >= 5) break;
+      }
+      if (priorIds.length > 0) {
+        const { data } = await supabase
+          .from("resources")
+          .select(SAFE_FIELDS)
+          .eq("user_id", userId)
+          .in("id", priorIds);
+        push(data, "prior_use", () => `Used previously on this account`);
+      }
+    } catch (e) {
+      console.warn("[resourceRetrieval] prior-use query failed:", (e as Error).message);
+    }
+  }
+
   // ── 5. Category intent backstop (only when user clearly asked) ─
   if (askedFor && all.length < HARD_LIMIT) {
     for (const cat of categories) {
@@ -396,17 +452,18 @@ export async function retrieveResourceContext(
     }
   }
 
-  // ── Rank: exact > near_exact > entity_linked > category ──────
+  // ── Rank: exact > near_exact > prior_use > entity_linked > category ──
   // Inside each tier, prefer rows whose resource_type matches the
   // user's inferred category. This is the fix for "executive business
   // case template" returning transcripts ahead of the actual template.
   const rank: Record<RetrievedResource["matchKind"], number> = {
     exact_title: 0,
     near_exact_title: 1,
-    account_linked: 2,
-    opportunity_linked: 3,
-    phrase_in_title: 4,
-    category_intent: 5,
+    prior_use: 2,
+    account_linked: 3,
+    opportunity_linked: 4,
+    phrase_in_title: 5,
+    category_intent: 6,
   };
   // Map inferred categories → resource_type values that should be boosted.
   const CATEGORY_TYPE_BOOST: Record<string, string[]> = {
@@ -525,4 +582,79 @@ export function renderResourceContextBlock(args: {
   );
 
   return lines.join("\n");
+}
+
+// ── Cross-thread resource memory: WRITE side ──────────────────────
+
+/**
+ * Persist that a set of resources was actually cited by the assistant
+ * on this thread. This is what makes the `prior_use` retrieval branch
+ * non-empty on the next turn — and what makes "use the same resource
+ * we used last time on this account" possible at all.
+ *
+ * Inputs are the verified resource ids from the citation auditor —
+ * NOT the model's raw output. We never write a fabricated citation.
+ *
+ * Idempotency: callers may invoke this multiple times per turn; the
+ * function dedupes by (thread_id, resource_id) before insert and
+ * silently no-ops on conflict. We deliberately do NOT add a unique
+ * constraint here — the row is cheap and chronological history is
+ * sometimes useful for ranking. The dedupe is per-call.
+ */
+export async function recordResourceUsage(
+  supabase: SupabaseLike,
+  args: {
+    userId: string;
+    threadId: string;
+    resourceIds: string[];
+    sourceType?: "cited" | "uploaded" | "linked";
+  },
+): Promise<{ inserted: number }> {
+  const { userId, threadId, resourceIds, sourceType = "cited" } = args;
+  if (!userId || !threadId || !Array.isArray(resourceIds) || resourceIds.length === 0) {
+    return { inserted: 0 };
+  }
+  // Dedupe within the call.
+  const unique = Array.from(new Set(resourceIds.filter((id) => typeof id === "string" && id.length > 0)));
+  if (unique.length === 0) return { inserted: 0 };
+
+  // Skip ids we already wrote for this thread (prevents per-turn churn).
+  let alreadyWritten = new Set<string>();
+  try {
+    const { data } = await supabase
+      .from("strategy_thread_resources")
+      .select("resource_id")
+      .eq("user_id", userId)
+      .eq("thread_id", threadId)
+      .in("resource_id", unique);
+    if (Array.isArray(data)) {
+      alreadyWritten = new Set(data.map((r: any) => r.resource_id).filter(Boolean));
+    }
+  } catch (e) {
+    console.warn("[recordResourceUsage] dedupe-read failed:", (e as Error).message);
+  }
+
+  const toInsert = unique
+    .filter((id) => !alreadyWritten.has(id))
+    .map((resource_id) => ({
+      user_id: userId,
+      thread_id: threadId,
+      resource_id,
+      source_type: sourceType,
+      is_pinned: false,
+    }));
+
+  if (toInsert.length === 0) return { inserted: 0 };
+
+  try {
+    const { error } = await supabase.from("strategy_thread_resources").insert(toInsert);
+    if (error) {
+      console.warn("[recordResourceUsage] insert failed:", (error as any)?.message ?? error);
+      return { inserted: 0 };
+    }
+    return { inserted: toInsert.length };
+  } catch (e) {
+    console.warn("[recordResourceUsage] insert threw:", (e as Error).message);
+    return { inserted: 0 };
+  }
 }
