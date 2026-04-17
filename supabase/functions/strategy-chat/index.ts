@@ -10,6 +10,7 @@ import {
   retrieveLibraryContext,
   saveWorkingThesisState,
   shouldUseStrategyCorePrompt,
+  validateWorkingThesisState,
   type ThesisStatePatch,
   type WorkingThesisState,
 } from "../_shared/strategy-core/index.ts";
@@ -1026,12 +1027,20 @@ If, and ONLY if, this turn materially advances the working thesis (new evidence,
   "current_leakage": "<only when leakage was refined>",
   "confidence": "VALID|INFER|HYPO|UNKN",
   "thesis_change_reason": "<required when current_thesis changed: the seller statement / fact that drove the change>",
+  "seller_confirmed": <true ONLY when this update is grounded in the seller's own words this turn, a transcript citation, or a retrieved KI/Playbook. false (or omit) when this is your own pattern-matching>,
+  "revive_hypothesis_reason": "<required ONLY when current_thesis matches a previously killed hypothesis: the new evidence that revives it>",
   "kill_hypotheses": [{ "hypothesis": "<exact prior claim>", "killed_by": "<seller-provided fact>" }],
-  "add_evidence": ["<short factual statement>"],
+  "add_evidence": ["<short factual statement, prefer numeric specifics from the seller>"],
   "add_open_questions": ["<question>"],
   "resolve_open_questions": ["<question text that's now answered>"]
 }
 \`\`\`
+
+TRUST RULES (enforced server-side — pretending will be downgraded):
+- Set confidence="VALID" only when seller_confirmed=true OR you are adding new evidence the seller stated this turn.
+- Any thesis or leakage with a number ($, %, "X points", "Nx") needs the supporting number in add_evidence and seller_confirmed=true to stay VALID. Otherwise it will be capped at INFER.
+- A current_thesis matching a previously killed hypothesis will be DROPPED unless revive_hypothesis_reason + seller_confirmed are both present.
+- Empty current_thesis cannot overwrite a non-empty prior thesis.
 
 Omit any field that does not apply. If nothing changed materially, do NOT emit the block.
 The block is for system memory — be terse and factual. Do not narrate it.`;
@@ -1123,7 +1132,9 @@ async function handleChat(
     if (accountId && patch) {
       try {
         const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
-        const next = mergeWorkingThesisState(base, { ...patch, thread_id: threadId });
+        const { patch: safe, downgrades } = validateWorkingThesisState(base, { ...patch, thread_id: threadId });
+        if (downgrades.length) console.log("[thesis] validator downgrades (non-stream):", downgrades);
+        const next = mergeWorkingThesisState(base, safe);
         await saveWorkingThesisState(supabase, { userId, state: next });
       } catch (e) {
         console.warn("[thesis] persist (non-stream) failed:", (e as Error).message);
@@ -1190,7 +1201,9 @@ async function handleChat(
         if (accountId && patch) {
           try {
             const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
-            const next = mergeWorkingThesisState(base, { ...patch, thread_id: threadId });
+            const { patch: safe, downgrades } = validateWorkingThesisState(base, { ...patch, thread_id: threadId });
+            if (downgrades.length) console.log("[thesis] validator downgrades (stream):", downgrades);
+            const next = mergeWorkingThesisState(base, safe);
             await saveWorkingThesisState(supabase, { userId, state: next });
           } catch (e) {
             console.warn("[thesis] persist (stream) failed:", (e as Error).message);

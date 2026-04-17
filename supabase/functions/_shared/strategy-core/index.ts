@@ -50,8 +50,10 @@ export {
   mergeWorkingThesisState,
   renderWorkingThesisStateBlock,
   saveWorkingThesisState,
+  validateWorkingThesisState,
   type KilledHypothesis,
   type ThesisConfidence,
   type ThesisStatePatch,
+  type ValidationResult,
   type WorkingThesisState,
 } from "./thesisMemory.ts";
