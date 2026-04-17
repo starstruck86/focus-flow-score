@@ -159,10 +159,16 @@ Deno.test("fallback cannot revive a killed hypothesis silently", () => {
 
   // Assistant prose tries to declare the dead thesis as current again,
   // with no revive_hypothesis_reason and no seller_confirmed.
+  // Single-line prose so the captured thesis matches the killed
+  // hypothesis exactly under normalized comparison.
   const prose =
-    "Current thesis: Broker channel is the wedge. We should refocus there.";
+    "Current thesis: Broker channel is the wedge\nWe should refocus there.";
   const inferred = extractThesisPatchFromProse(prose);
   assertExists(inferred);
+  assertEquals(
+    (inferred!.current_thesis ?? "").toLowerCase(),
+    "broker channel is the wedge",
+  );
 
   const { patch: safe, downgrades } = validateWorkingThesisState(prior, inferred!);
   // Validator must drop the zombie revival.
