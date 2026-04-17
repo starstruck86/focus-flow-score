@@ -971,14 +971,18 @@ async function buildChatSystemPrompt(args: {
   contextSection: string;
   pack: ContextPack;
   userContent: string;
-}): Promise<{ prompt: string; workingThesis: WorkingThesisState | null }> {
+}): Promise<{
+  prompt: string;
+  workingThesis: WorkingThesisState | null;
+  resourceHits: Array<{ id: string; title: string }>;
+}> {
   const { supabase, userId, depth, contextSection, pack, userContent } = args;
   const accountId: string | null = pack.account?.id ?? null;
   const opportunityId: string | null = pack.opportunity?.id ?? null;
 
   // No account, no thread context → don't force Strategy Core onto small talk.
   if (!accountId && (!contextSection || contextSection.length < 200)) {
-    return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null };
+    return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null, resourceHits: [] };
   }
 
   // Pull the same context the prep doc gets, in parallel with library
@@ -1026,7 +1030,7 @@ async function buildChatSystemPrompt(args: {
     contextSectionLength: contextSection?.length ?? 0,
   }) || !!resources?.userAskedForResource;
 
-  if (!useCore) return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null };
+  if (!useCore) return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null, resourceHits: [] };
 
   const workingThesisBlock = renderWorkingThesisStateBlock(workingThesis);
 
@@ -1070,7 +1074,8 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     resourceContextBlock: resources?.contextBlock || "",
   }) + "\n\n" + persistenceContract;
 
-  return { prompt, workingThesis };
+  const resourceHits = (resources?.hits || []).map((h) => ({ id: h.id, title: h.title }));
+  return { prompt, workingThesis, resourceHits };
 }
 
 // Extract a fenced ```thesis_update { ... }``` block emitted by the
