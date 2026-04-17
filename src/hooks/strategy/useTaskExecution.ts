@@ -85,6 +85,64 @@ const PROGRESS_LABELS: Record<string, string> = {
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes hard cap
 
+function normalizeTaskRunResult(runId: string, payload?: { draft?: any; review?: any }): TaskRunResult {
+  const rawDraft = payload?.draft && typeof payload.draft === 'object' ? payload.draft : {};
+  const rawReview = payload?.review && typeof payload.review === 'object' ? payload.review : {};
+
+  const sections: DiscoverySection[] = Array.isArray(rawDraft.sections)
+    ? rawDraft.sections.map((section: any, index: number) => ({
+        id: typeof section?.id === 'string' && section.id ? section.id : `section-${index + 1}`,
+        name: typeof section?.name === 'string' && section.name
+          ? section.name
+          : typeof section?.id === 'string' && section.id
+            ? section.id.replace(/_/g, ' ')
+            : `Section ${index + 1}`,
+        grounded_by: Array.isArray(section?.grounded_by) ? section.grounded_by : undefined,
+        content: section?.content ?? null,
+      }))
+    : [];
+
+  const redlines: Redline[] = Array.isArray(rawReview.redlines)
+    ? rawReview.redlines.map((redline: any, index: number) => ({
+        id: typeof redline?.id === 'string' && redline.id ? redline.id : `r${index}`,
+        section_id: typeof redline?.section_id === 'string' && redline.section_id ? redline.section_id : sections[index]?.id || `section-${index + 1}`,
+        section_name: typeof redline?.section_name === 'string' && redline.section_name
+          ? redline.section_name
+          : sections.find((section) => section.id === redline?.section_id)?.name || 'Section',
+        current_text: typeof redline?.current_text === 'string' ? redline.current_text : '',
+        proposed_text: typeof redline?.proposed_text === 'string' ? redline.proposed_text : '',
+        rationale: typeof redline?.rationale === 'string' ? redline.rationale : '',
+        grounded_by_id: redline?.grounded_by_id ?? null,
+        status: redline?.status === 'accepted' || redline?.status === 'rejected' ? redline.status : 'pending',
+      }))
+    : [];
+
+  const sources: SourceEntry[] | undefined = Array.isArray(rawDraft.sources)
+    ? rawDraft.sources.map((source: any, index: number) => ({
+        id: typeof source?.id === 'string' && source.id ? source.id : `source-${index + 1}`,
+        label: typeof source?.label === 'string' && source.label ? source.label : `Source ${index + 1}`,
+        url: typeof source?.url === 'string' ? source.url : null,
+        accessed: typeof source?.accessed === 'string' ? source.accessed : null,
+      }))
+    : undefined;
+
+  return {
+    run_id: runId,
+    draft: {
+      sections,
+      ...(sources ? { sources } : {}),
+    },
+    review: {
+      strengths: Array.isArray(rawReview.strengths)
+        ? rawReview.strengths.filter((item: unknown): item is string => typeof item === 'string')
+        : [],
+      redlines,
+      library_coverage: rawReview?.library_coverage,
+      rubric_check: rawReview?.rubric_check,
+    },
+  };
+}
+
 async function callDiscoveryPrep(body: Record<string, unknown>) {
   const { data: { session } } = await supabase.auth.getSession();
   const resp = await fetch(
@@ -146,18 +204,10 @@ export function useTaskExecution() {
           throw new Error(status?.error || 'Discovery Prep generation failed');
         }
         if (status?.status === 'completed') {
-          const data: TaskRunResult = {
-            run_id: runId,
-            draft: status.draft || { sections: [] },
-            review: status.review || { strengths: [], redlines: [] },
-          };
-          if (data.review?.redlines) {
-            data.review.redlines = data.review.redlines.map((r, i) => ({
-              ...r,
-              id: r.id || `r${i}`,
-              status: r.status || 'pending',
-            }));
-          }
+          const data = normalizeTaskRunResult(runId, {
+            draft: status?.draft,
+            review: status?.review,
+          });
           setResult(data);
           toast.success('Discovery Prep document generated');
           return data;
@@ -185,12 +235,15 @@ export function useTaskExecution() {
         proposed_text: proposedText,
       });
       if (result) {
+        const nextResult = normalizeTaskRunResult(runId, {
+          draft: data?.draft_output ?? result.draft,
+          review: data?.review_output ?? result.review,
+        });
         setResult({
-          ...result,
-          draft: data.draft_output,
+          ...nextResult,
           review: {
-            ...result.review,
-            redlines: result.review.redlines.map(r =>
+            ...nextResult.review,
+            redlines: nextResult.review.redlines.map(r =>
               r.section_id === sectionId ? { ...r, status: 'accepted' as const } : r,
             ),
           },
