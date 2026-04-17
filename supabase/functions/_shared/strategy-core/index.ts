@@ -55,6 +55,12 @@ export {
 } from "./resourceRetrieval.ts";
 
 export {
+  auditResourceCitations,
+  type CitationAuditHit,
+  type CitationAuditResult,
+} from "./citationAudit.ts";
+
+export {
   emptyWorkingThesisState,
   extractThesisPatchFromProse,
   loadWorkingThesisState,
