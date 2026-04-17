@@ -53,6 +53,7 @@ export interface RetrievedResource {
     | "exact_title"
     | "near_exact_title"
     | "phrase_in_title"
+    | "prior_use"
     | "account_linked"
     | "opportunity_linked"
     | "category_intent";
@@ -275,6 +276,18 @@ const SAFE_FIELDS =
 
 const HARD_LIMIT = 12;
 
+/** True when the user is asking about prior usage on this account/thread. */
+export function userAskedForPriorUse(text: string): boolean {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  // Phrases that imply continuity / "what we used before".
+  return (
+    /\b(last time|previously|before|earlier|prior|the one we used|same (resource|template|playbook|calculator|deck|doc)|that (template|deck|doc|playbook|calculator) we)\b/.test(
+      lower,
+    )
+  );
+}
+
 export async function retrieveResourceContext(
   supabase: SupabaseLike,
   userId: string,
@@ -282,12 +295,15 @@ export async function retrieveResourceContext(
     userMessage: string;
     accountId?: string | null;
     opportunityId?: string | null;
+    /** Current thread id — used to scope/exclude when pulling prior-use rows. */
+    threadId?: string | null;
   },
 ): Promise<ResourceRetrievalResult> {
   const userMessage = (args.userMessage || "").trim();
   const phrases = extractCandidatePhrases(userMessage);
   const categories = inferResourceCategories(userMessage);
   const askedFor = userAskedForResource(userMessage) || phrases.length > 0;
+  const askedForPrior = userAskedForPriorUse(userMessage);
 
   const all: RetrievedResource[] = [];
   const seen = new Set<string>();
