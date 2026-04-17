@@ -47,8 +47,10 @@ export {
 export {
   extractCandidatePhrases,
   inferResourceCategories,
+  recordResourceUsage,
   renderResourceContextBlock,
   retrieveResourceContext,
+  userAskedForPriorUse,
   userAskedForResource,
   type ResourceRetrievalResult,
   type RetrievedResource,

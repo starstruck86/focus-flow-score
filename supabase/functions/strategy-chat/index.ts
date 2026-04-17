@@ -8,6 +8,7 @@ import {
   extractThesisPatchFromProse,
   loadWorkingThesisState,
   mergeWorkingThesisState,
+  recordResourceUsage,
   renderWorkingThesisStateBlock,
   retrieveLibraryContext,
   retrieveResourceContext,
