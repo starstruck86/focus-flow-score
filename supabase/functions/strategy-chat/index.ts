@@ -1191,7 +1191,7 @@ async function handleChat(
         }
       }
     }
-    return new Response(JSON.stringify({ text: visible, provider: result.provider, model: result.model }), {
+    return new Response(JSON.stringify({ text: auditedVisible, provider: result.provider, model: result.model }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
