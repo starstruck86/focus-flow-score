@@ -108,29 +108,36 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   const AUTHORING_TIMEOUT_MS = 90_000;
   let draftOutput: any;
   let sectionCount = 0;
+  // Track the timeout id so we can clear it on success and not leak a 90s
+  // dangling timer that keeps the worker alive past the request.
+  let authoringTimeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
     const documentRaw = await Promise.race<string>([
       callClaude([
         { role: "system", content: handler.buildDocumentSystemPrompt() },
         { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
       ], { model: authoringModel, maxTokens: 12000, temperature: 0.3 }),
-      new Promise<string>((_, reject) =>
-        setTimeout(
+      new Promise<string>((_, reject) => {
+        authoringTimeoutId = setTimeout(
           () => reject(new Error(`Document authoring timed out after ${AUTHORING_TIMEOUT_MS / 1000}s`)),
           AUTHORING_TIMEOUT_MS,
-        ),
-      ),
+        );
+      }),
     ]);
+    if (authoringTimeoutId) clearTimeout(authoringTimeoutId);
 
-    try {
-      draftOutput = safeParseJSON<any>(documentRaw) ?? { sections: [], raw: documentRaw };
-    } catch (parseErr: any) {
-      throw new Error(`Document authoring returned invalid JSON: ${parseErr?.message || parseErr}`);
+    // safeParseJSON returns `null` for unparseable input — treat that as a
+    // hard failure rather than silently shipping an empty `sections: []`
+    // shell, which previously let runs complete "successfully" with no
+    // content.
+    const parsed = safeParseJSON<any>(documentRaw);
+    if (parsed === null || parsed === undefined) {
+      throw new Error("Document authoring returned invalid JSON (unparseable model output)");
     }
-    if (!draftOutput || typeof draftOutput !== "object" || !Array.isArray(draftOutput.sections)) {
-      // safeParseJSON returned something but it's not the expected shape.
+    if (typeof parsed !== "object" || !Array.isArray(parsed.sections)) {
       throw new Error("Document authoring returned invalid JSON (missing sections array)");
     }
+    draftOutput = parsed;
     sectionCount = draftOutput.sections.length;
 
     console.log(JSON.stringify({
@@ -141,8 +148,12 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       sections: sectionCount,
     }));
   } catch (e: any) {
+    if (authoringTimeoutId) clearTimeout(authoringTimeoutId);
     const durationMs = Date.now() - authoringStartedAt;
     const message = e?.message || String(e);
+    const prefixed = message.startsWith("[document_authoring]")
+      ? message
+      : `[document_authoring] ${message}`;
     console.error(JSON.stringify({
       tag: "stage-3:end",
       run_id: runId,
@@ -158,7 +169,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         .update({
           status: "failed",
           progress_step: "failed",
-          error: `[document_authoring] ${message}`.slice(0, 1000),
+          error: prefixed.slice(0, 1000),
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -166,7 +177,12 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     } catch (writeErr) {
       console.error(`[stage-3] failed to mark run failed:`, (writeErr as Error).message);
     }
-    throw e;
+    // Re-throw with the prefix so the outer catch in runStrategyTask /
+    // runStrategyTaskInBackground doesn't overwrite our DB error message
+    // with the bare provider text.
+    const wrapped = new Error(prefixed);
+    (wrapped as any).cause = e;
+    throw wrapped;
   }
 
   // ── Stage 4: Review (Lovable AI, playbook-grounded) ──────────
