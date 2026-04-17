@@ -1297,6 +1297,26 @@ async function handleChat(
         });
         await supabase.from("strategy_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
 
+        // Cross-thread resource memory: persist VERIFIED citations only.
+        try {
+          const verifiedNorm = new Set(
+            audit.verifiedTitles.map((t) => t.toLowerCase().replace(/\s+/g, " ").trim()),
+          );
+          const verifiedIds = resourceHits
+            .filter((h) => verifiedNorm.has(h.title.toLowerCase().replace(/\s+/g, " ").trim()))
+            .map((h) => h.id);
+          if (verifiedIds.length > 0) {
+            const { inserted } = await recordResourceUsage(supabase, {
+              userId, threadId, resourceIds: verifiedIds, sourceType: "cited",
+            });
+            if (inserted > 0) {
+              console.log(`[resource-usage] stream: persisted ${inserted} cited resource(s)`);
+            }
+          }
+        } catch (e) {
+          console.warn("[resource-usage] stream persist failed:", (e as Error).message);
+        }
+
         // Persist working thesis state.
         // Primary path: fenced thesis_update block (preferred).
         // Fallback path: deterministic prose extraction when the model
