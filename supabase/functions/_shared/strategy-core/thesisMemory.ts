@@ -168,6 +168,143 @@ export interface ThesisStatePatch {
    */
   thesis_change_reason?: string;
   thread_id?: string | null;
+  /**
+   * Set true ONLY when this patch is grounded in seller-provided
+   * evidence on the live conversation, retrieved library/source
+   * material, or transcript content. Required to promote confidence
+   * to VALID. Defaults to false. The chat layer infers this from the
+   * model's emitted patch — the model is instructed to set it true
+   * only when citing the seller / a transcript / a retrieved KI.
+   */
+  seller_confirmed?: boolean;
+  /**
+   * Required when current_thesis matches a previously killed
+   * hypothesis. Without this, the validator drops the thesis change
+   * to prevent silent zombie revival.
+   */
+  revive_hypothesis_reason?: string;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Validation — the trust boundary.
+//
+// Saved thesis state must be MORE disciplined than the model, not
+// less. The validator never throws — it returns a sanitized patch
+// plus a list of human-readable downgrades so callers can log them.
+//
+// Rules enforced:
+//   1. Patch.confidence cannot be promoted to VALID by model
+//      pattern-matching alone. Requires seller_confirmed === true OR
+//      add_evidence with at least one entry OR prior state already
+//      has supporting evidence carrying through.
+//   2. Numeric claims (%, $, "X points", "Nx") in current_thesis or
+//      current_leakage cap confidence at INFER unless evidence is
+//      provided (seller_confirmed or add_evidence with a numeric).
+//   3. Empty / whitespace-only current_thesis cannot overwrite a
+//      non-empty prior thesis.
+//   4. current_thesis matching a previously killed hypothesis is
+//      dropped unless revive_hypothesis_reason is present and
+//      seller_confirmed is true.
+// ──────────────────────────────────────────────────────────────────
+const NUMERIC_CLAIM_RE = /(\$\s?\d|\d+\s?%|\b\d+(\.\d+)?\s?(points?|x|bps|basis points|million|billion|m|bn|k|years?|months?|days?)\b)/i;
+
+function hasNumericClaim(s: string | undefined | null): boolean {
+  if (!s) return false;
+  return NUMERIC_CLAIM_RE.test(s);
+}
+
+function normalizeForCompare(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export interface ValidationResult {
+  patch: ThesisStatePatch;
+  downgrades: string[];
+}
+
+export function validateWorkingThesisState(
+  prior: WorkingThesisState | null,
+  patchIn: ThesisStatePatch,
+): ValidationResult {
+  const patch: ThesisStatePatch = { ...patchIn };
+  const downgrades: string[] = [];
+
+  // Rule 3: empty thesis cannot overwrite a good thesis.
+  if (
+    typeof patch.current_thesis === "string" &&
+    !patch.current_thesis.trim() &&
+    prior?.current_thesis?.trim()
+  ) {
+    downgrades.push(
+      "Empty current_thesis ignored — refusing to overwrite a non-empty prior thesis.",
+    );
+    delete patch.current_thesis;
+    delete patch.thesis_change_reason;
+  }
+
+  // Rule 4: zombie revival of killed hypothesis without explicit reason.
+  if (
+    typeof patch.current_thesis === "string" &&
+    patch.current_thesis.trim() &&
+    prior?.killed_hypotheses?.length
+  ) {
+    const candidate = normalizeForCompare(patch.current_thesis);
+    const isZombie = prior.killed_hypotheses.some(
+      (k) => normalizeForCompare(k.hypothesis) === candidate,
+    );
+    if (isZombie) {
+      const hasReason = !!patch.revive_hypothesis_reason?.trim();
+      if (!hasReason || patch.seller_confirmed !== true) {
+        downgrades.push(
+          `Refused to revive killed hypothesis "${patch.current_thesis.trim()}" — needs revive_hypothesis_reason + seller_confirmed.`,
+        );
+        delete patch.current_thesis;
+        delete patch.thesis_change_reason;
+      }
+    }
+  }
+
+  // Rule 1: VALID requires real grounding.
+  if (patch.confidence === "VALID") {
+    const hasNewEvidence = (patch.add_evidence ?? []).some((e) =>
+      (e ?? "").trim().length > 0
+    );
+    const carriedEvidence = (prior?.supporting_evidence ?? []).length > 0;
+    const sellerConfirmed = patch.seller_confirmed === true;
+    if (!sellerConfirmed && !hasNewEvidence && !carriedEvidence) {
+      downgrades.push(
+        "Confidence VALID downgraded to INFER — no seller-confirmed evidence, no new add_evidence, no carried supporting_evidence.",
+      );
+      patch.confidence = "INFER";
+    }
+  }
+
+  // Rule 2: numeric claims in thesis/leakage cap confidence at INFER
+  // unless the patch itself is seller_confirmed OR carries numeric
+  // evidence (a number-bearing add_evidence entry).
+  const thesisHasNumeric = hasNumericClaim(patch.current_thesis) ||
+    (patch.current_thesis === undefined &&
+      hasNumericClaim(prior?.current_thesis));
+  const leakageHasNumeric = hasNumericClaim(patch.current_leakage) ||
+    (patch.current_leakage === undefined &&
+      hasNumericClaim(prior?.current_leakage));
+  const numericInEvidence = (patch.add_evidence ?? []).some(hasNumericClaim) ||
+    (prior?.supporting_evidence ?? []).some(hasNumericClaim);
+  const targetConfidence = patch.confidence ?? prior?.confidence ?? "UNKN";
+
+  if (
+    (thesisHasNumeric || leakageHasNumeric) &&
+    targetConfidence === "VALID" &&
+    !patch.seller_confirmed &&
+    !numericInEvidence
+  ) {
+    downgrades.push(
+      "Numeric claim present without numeric evidence — confidence capped at INFER.",
+    );
+    patch.confidence = "INFER";
+  }
+
+  return { patch, downgrades };
 }
 
 function dedupTrim(values: string[]): string[] {
