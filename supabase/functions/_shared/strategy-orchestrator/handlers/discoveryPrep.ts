@@ -186,28 +186,13 @@ Return ONLY JSON. No markdown fences.`;
 THIS IS NOT A RESEARCH MEMO. NOT A MARKETING BRIEF. It is an internal, executive-grade sales weapon.
 The template is the execution layer. The appendix is the intelligence layer. Do NOT confuse them.
 
-NON-NEGOTIABLE STRATEGY CORE THINKING ORDER (you must complete BEFORE writing):
-  STEP 1 — ACCOUNT THESIS: define account_truth, primary_growth_lever, primary_value_leakage,
-    biggest_risk, best_entry_point_motion, one_line_story. Account-specific. Opinionated. Business-first.
-  STEP 2 — VALUE LEAKAGE MAP: 4-6 leakage points, each with evidence, grade (VALID/INFER/HYPO/UNKN),
-    strategic_implication, economic_impact, discovery_angle.
-  STEP 3 — SECTION POV: every required section starts with a pov_block (call/grade/economic_consequence/
-    discovery_action). Each call MUST be DISTINCT — no copy-paste across sections.
-  STEP 4 — ALIGNMENT: every section ties back to the thesis or the leakage map. No orphaned sections.
+${STRATEGY_CORE_THINKING_ORDER}
 
-FACT DISCIPLINE (CRITICAL):
-- Use VALID / INFER / HYPO / UNKN. Do NOT overstate certainty. Do NOT hide it.
-- Do NOT let fact discipline FLATTEN the point of view. State the strongest reasonable conclusion,
-  THEN label it honestly. A graded HYPO is better than a generic safe statement.
-- Use vendor names sparingly when evidence is thin — prefer "Most likely operating pattern".
+${FACT_DISCIPLINE_RULES}
 
-ACCOUNT-SPECIFICITY RULE:
-- Every major section must contain at least one detail unique to this account (named program, venue,
-  audience, leader, surface, behavior). FAIL if a section could apply to any similar company.
+${ACCOUNT_SPECIFICITY_RULE}
 
-SOLUTION DISCIPLINE:
-- For tech_stack: DIAGNOSE business breakage BEFORE prescribing platform. Stack does not lead the call.
-- Order: Diagnose → Quantify → Validate → Propose motion.
+${ECONOMIC_FRAMING_RULES}
 
 TEMPLATE RULES:
 - Use the EXACT 19-section schema below — same ids, names, order, field names.
