@@ -226,9 +226,9 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
         </ScrollArea>
 
         <DialogFooter className="px-5 py-3 border-t border-border/10">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isRunning}>Cancel</Button>
-          <Button size="sm" onClick={handleSubmit} disabled={!canSubmit || isRunning} className="gap-1.5">
-            {isRunning ? (
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isRunning || isSubmitting}>Cancel</Button>
+          <Button size="sm" onClick={handleSubmit} disabled={!canSubmit || isRunning || isSubmitting} className="gap-1.5">
+            {(isRunning || isSubmitting) ? (
               <><Loader2 className="h-3.5 w-3.5 animate-spin" />Researching & generating…</>
             ) : (
               <><Zap className="h-3.5 w-3.5" />Generate Prep Doc</>
