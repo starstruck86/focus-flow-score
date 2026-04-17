@@ -1172,18 +1172,30 @@ async function handleChat(
         if (!fullResponse.trim()) {
           console.warn(`[streaming] empty response after ${chunkCount} chunks, ${latency}ms`);
         }
+        const { patch, visible } = extractThesisUpdate(fullResponse);
         await supabase.from("strategy_messages").insert({
           thread_id: threadId, user_id: userId, role: "assistant",
           message_type: "chat",
           provider_used: route.primaryProvider, model_used: route.model,
           fallback_used: false, latency_ms: latency,
           content_json: {
-            text: fullResponse, sources_used: pack.sourceCount,
+            text: visible, sources_used: pack.sourceCount,
             retrieval_meta: pack.retrievalMeta, model_used: route.model,
             provider_used: route.primaryProvider, fallback_used: false,
           },
         });
         await supabase.from("strategy_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
+
+        // Persist working thesis state if the model emitted an update.
+        if (accountId && patch) {
+          try {
+            const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
+            const next = mergeWorkingThesisState(base, { ...patch, thread_id: threadId });
+            await saveWorkingThesisState(supabase, { userId, state: next });
+          } catch (e) {
+            console.warn("[thesis] persist (stream) failed:", (e as Error).message);
+          }
+        }
 
         const { count } = await supabase.from("strategy_messages")
           .select("id", { count: "exact", head: true }).eq("thread_id", threadId);
