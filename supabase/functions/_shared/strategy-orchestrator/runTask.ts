@@ -275,7 +275,7 @@ export async function runStrategyTask(ctx: OrchestrationContext): Promise<Orches
     run_id: row.id,
     draft: finalRow?.draft_output ?? { sections: [] },
     review: finalRow?.review_output ?? { strengths: [], redlines: [] },
-    meta: {},
+    meta: {} as OrchestrationResult["meta"],
   };
 }
 
