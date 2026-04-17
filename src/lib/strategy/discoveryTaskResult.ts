@@ -62,13 +62,15 @@ function sanitizeGenericValue(value: unknown, depth = 0): unknown {
 }
 
 function normalizeObjectRows(value: unknown, keys: string[]): UnknownRecord[] {
-  return asArray(value)
-    .map((item) => {
-      const record = asRecord(item);
-      const next = Object.fromEntries(keys.map((key) => [key, asString(record[key])]));
-      return hasMeaningfulValue(next) ? next : null;
-    })
-    .filter((item): item is UnknownRecord => item !== null);
+  const rows: UnknownRecord[] = [];
+  for (const item of asArray(value)) {
+    const record = asRecord(item);
+    const next: UnknownRecord = Object.fromEntries(
+      keys.map((key) => [key, asString(record[key])])
+    );
+    if (hasMeaningfulValue(next)) rows.push(next);
+  }
+  return rows;
 }
 
 function normalizeCockpitContent(content: unknown) {
