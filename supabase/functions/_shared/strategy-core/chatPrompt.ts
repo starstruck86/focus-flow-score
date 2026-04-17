@@ -69,6 +69,13 @@ export interface BuildStrategyChatPromptArgs {
    * line of reasoning rather than starting over.
    */
   workingThesisBlock?: string;
+  /**
+   * Pre-rendered "=== LIBRARY RESOURCES ===" block from
+   * resourceRetrieval.renderResourceContextBlock(). Self-headers.
+   * When present, it forces the model to either cite an exact title
+   * or admit absence — never to invent a template/example/calculator.
+   */
+  resourceContextBlock?: string;
 }
 
 /**
@@ -108,6 +115,14 @@ export function buildStrategyChatSystemPrompt(
   const acct = (args.accountContext || "").trim();
   if (acct) {
     parts.push(`=== ACCOUNT CONTEXT ===\n${acct}`);
+  }
+
+  // Library resources block — already self-headers ("=== LIBRARY
+  // RESOURCES ==="). Placed alongside other context so the model
+  // sees both the entity context and the retrieved artifact list.
+  const res = (args.resourceContextBlock || "").trim();
+  if (res) {
+    parts.push(res);
   }
 
   // Working thesis state — placed AFTER static context so the live
