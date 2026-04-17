@@ -148,8 +148,9 @@ export function userAskedForResource(text: string): boolean {
   for (const w of RESOURCE_INTENT_WORDS) {
     if (lower.includes(w)) return true;
   }
-  // "use … X" / "build off … X" patterns
-  if (/\b(use|based on|based off|build off|built off|model after|like)\s+/i.test(text)) {
+  // "use … X" / "build off … X" patterns. We deliberately exclude
+  // "like" here because it is far too broad ("the weather is like…").
+  if (/\b(use|based on|based off|build off|built off|model after)\s+/i.test(text)) {
     return true;
   }
   return false;

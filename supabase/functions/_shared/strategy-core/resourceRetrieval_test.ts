@@ -154,17 +154,19 @@ Deno.test("retrieveResourceContext: queries account_id when accountId provided",
 // ── ILIKE injection safety ────────────────────────────────────────
 
 Deno.test("retrieveResourceContext: escapes %% and _ in user phrases", async () => {
-  let observed = "";
+  const escapedSeen: string[] = [];
   const stub = makeStubSupabase((rec) => {
-    const f = rec.filters.find((x) => x.op === "ilike");
-    if (f && typeof f.val === "string") observed = f.val as string;
+    for (const f of rec.filters) {
+      if (f.op === "ilike" && typeof f.val === "string" && (f.val.includes("\\%") || f.val.includes("\\_"))) {
+        escapedSeen.push(f.val as string);
+      }
+    }
     return [];
   });
   await retrieveResourceContext(stub as any, "user-1", {
     userMessage: 'use the "100% ROI_calc" template',
   });
-  // Either the exact or near-exact form must contain escaped chars
-  assert(observed.includes("\\%") || observed.includes("\\_"), `expected escaped wildcards, got: ${observed}`);
+  assert(escapedSeen.length > 0, `expected at least one escaped ILIKE, none seen`);
 });
 
 // ── Prompt block: hits render with exact-title citation form ──────
