@@ -4,6 +4,7 @@ import {
   assembleStrategyContext,
   buildStrategyChatSystemPrompt,
   emptyWorkingThesisState,
+  extractThesisPatchFromProse,
   loadWorkingThesisState,
   mergeWorkingThesisState,
   renderWorkingThesisStateBlock,
@@ -1129,15 +1130,32 @@ async function handleChat(
         provider_used: result.provider, fallback_used: result.fallbackUsed,
       },
     });
-    if (accountId && patch) {
-      try {
-        const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
-        const { patch: safe, downgrades } = validateWorkingThesisState(base, { ...patch, thread_id: threadId });
-        if (downgrades.length) console.log("[thesis] validator downgrades (non-stream):", downgrades);
-        const next = mergeWorkingThesisState(base, safe);
-        await saveWorkingThesisState(supabase, { userId, state: next });
-      } catch (e) {
-        console.warn("[thesis] persist (non-stream) failed:", (e as Error).message);
+    if (accountId) {
+      // Primary path: fenced thesis_update block.
+      // Fallback path: deterministic prose extraction (only when the
+      // fenced block was missing or unparsable). Saving nothing is
+      // better than saving weak state — extractor returns null on
+      // ambiguous prose.
+      let effectivePatch: ThesisStatePatch | null = patch;
+      let patchSource: "fenced" | "fallback" = "fenced";
+      if (!effectivePatch) {
+        const inferred = extractThesisPatchFromProse(visible);
+        if (inferred) {
+          effectivePatch = inferred;
+          patchSource = "fallback";
+          console.log("[thesis] fallback extractor inferred patch (non-stream)");
+        }
+      }
+      if (effectivePatch) {
+        try {
+          const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
+          const { patch: safe, downgrades } = validateWorkingThesisState(base, { ...effectivePatch, thread_id: threadId });
+          if (downgrades.length) console.log(`[thesis] validator downgrades (non-stream, ${patchSource}):`, downgrades);
+          const next = mergeWorkingThesisState(base, safe);
+          await saveWorkingThesisState(supabase, { userId, state: next });
+        } catch (e) {
+          console.warn("[thesis] persist (non-stream) failed:", (e as Error).message);
+        }
       }
     }
     return new Response(JSON.stringify({ text: visible, provider: result.provider, model: result.model }), {
@@ -1197,16 +1215,31 @@ async function handleChat(
         });
         await supabase.from("strategy_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
 
-        // Persist working thesis state if the model emitted an update.
-        if (accountId && patch) {
-          try {
-            const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
-            const { patch: safe, downgrades } = validateWorkingThesisState(base, { ...patch, thread_id: threadId });
-            if (downgrades.length) console.log("[thesis] validator downgrades (stream):", downgrades);
-            const next = mergeWorkingThesisState(base, safe);
-            await saveWorkingThesisState(supabase, { userId, state: next });
-          } catch (e) {
-            console.warn("[thesis] persist (stream) failed:", (e as Error).message);
+        // Persist working thesis state.
+        // Primary path: fenced thesis_update block (preferred).
+        // Fallback path: deterministic prose extraction when the model
+        // forgot the fenced block. Validator still gates everything.
+        if (accountId) {
+          let effectivePatch: ThesisStatePatch | null = patch;
+          let patchSource: "fenced" | "fallback" = "fenced";
+          if (!effectivePatch) {
+            const inferred = extractThesisPatchFromProse(visible);
+            if (inferred) {
+              effectivePatch = inferred;
+              patchSource = "fallback";
+              console.log("[thesis] fallback extractor inferred patch (stream)");
+            }
+          }
+          if (effectivePatch) {
+            try {
+              const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
+              const { patch: safe, downgrades } = validateWorkingThesisState(base, { ...effectivePatch, thread_id: threadId });
+              if (downgrades.length) console.log(`[thesis] validator downgrades (stream, ${patchSource}):`, downgrades);
+              const next = mergeWorkingThesisState(base, safe);
+              await saveWorkingThesisState(supabase, { userId, state: next });
+            } catch (e) {
+              console.warn("[thesis] persist (stream) failed:", (e as Error).message);
+            }
           }
         }
 
