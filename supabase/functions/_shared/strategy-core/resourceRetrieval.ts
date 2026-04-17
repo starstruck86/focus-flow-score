@@ -180,16 +180,47 @@ function extractQuotedPhrases(text: string): string[] {
  */
 function extractCapitalizedSpans(text: string): string[] {
   const out: string[] = [];
-  const CAP = "(?:[A-Z][a-zA-Z0-9'’\\-]+|[A-Z]{2,5})";
-  const JOIN = "(?:of|the|for|and)";
-  // CAP (JOIN|CAP)* CAP — greedy, must end on a CAP
-  const re = new RegExp(`\\b(${CAP}(?:\\s+(?:${JOIN}|${CAP}))*\\s+${CAP})\\b`, "g");
+  // A capitalized token: "Kevin", "ROI", "Dorsey" (excluding trailing 's so
+  // possessives don't poison the span). We tokenize first, then walk —
+  // simpler and far more reliable than a single mega-regex.
+  const TOKEN_RE = /[A-Za-z][A-Za-z0-9\-]*/g;
+  const JOINERS = new Set(["of", "the", "for", "and"]);
+
+  type Tok = { raw: string; start: number; end: number };
+  const tokens: Tok[] = [];
   let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    const phrase = m[1].trim();
-    if (phrase.length < 4) continue;
-    if (phrase.split(/\s+/).every((w) => STOP_TOKENS.has(w.toLowerCase()))) continue;
-    out.push(phrase);
+  while ((m = TOKEN_RE.exec(text)) !== null) {
+    tokens.push({ raw: m[0], start: m.index, end: m.index + m[0].length });
+  }
+
+  const isCap = (t: string) =>
+    /^[A-Z]{2,5}$/.test(t) || /^[A-Z][a-zA-Z0-9\-]+$/.test(t);
+  const isJoin = (t: string) => JOINERS.has(t.toLowerCase());
+
+  let i = 0;
+  while (i < tokens.length) {
+    if (!isCap(tokens[i].raw)) { i++; continue; }
+    // Walk forward as long as we see CAP or (JOIN followed by CAP).
+    let j = i;
+    while (j + 1 < tokens.length) {
+      const next = tokens[j + 1];
+      if (isCap(next.raw)) { j++; continue; }
+      if (isJoin(next.raw) && j + 2 < tokens.length && isCap(tokens[j + 2].raw)) {
+        j += 2; continue;
+      }
+      break;
+    }
+    if (j > i) {
+      const phrase = tokens.slice(i, j + 1).map((t) => t.raw).join(" ");
+      // Filter pure-stopword runs and require ≥ 4 chars total.
+      if (
+        phrase.length >= 4 &&
+        !phrase.split(/\s+/).every((w) => STOP_TOKENS.has(w.toLowerCase()))
+      ) {
+        out.push(phrase);
+      }
+    }
+    i = j + 1;
   }
   return out;
 }
@@ -360,6 +391,9 @@ export async function retrieveResourceContext(
   }
 
   // ── Rank: exact > near_exact > entity_linked > category ──────
+  // Inside each tier, prefer rows whose resource_type matches the
+  // user's inferred category. This is the fix for "executive business
+  // case template" returning transcripts ahead of the actual template.
   const rank: Record<RetrievedResource["matchKind"], number> = {
     exact_title: 0,
     near_exact_title: 1,
@@ -368,7 +402,29 @@ export async function retrieveResourceContext(
     phrase_in_title: 4,
     category_intent: 5,
   };
-  all.sort((a, b) => rank[a.matchKind] - rank[b.matchKind]);
+  // Map inferred categories → resource_type values that should be boosted.
+  const CATEGORY_TYPE_BOOST: Record<string, string[]> = {
+    template: ["template"],
+    calculator: ["template", "document"], // calculators are stored as templates/docs
+    framework: ["framework", "template"],
+    playbook: ["framework", "template", "document"],
+    "business case": ["template", "document"],
+    "one-pager": ["template", "document"],
+    checklist: ["template", "document"],
+    example: ["template", "document", "presentation"],
+  };
+  const boostedTypes = new Set<string>();
+  for (const cat of categories) {
+    for (const t of CATEGORY_TYPE_BOOST[cat] ?? []) boostedTypes.add(t);
+  }
+  const typeBoost = (r: RetrievedResource) =>
+    boostedTypes.size > 0 && boostedTypes.has(r.resource_type) ? 0 : 1;
+
+  all.sort((a, b) => {
+    const t = rank[a.matchKind] - rank[b.matchKind];
+    if (t !== 0) return t;
+    return typeBoost(a) - typeBoost(b);
+  });
 
   const hits = all.slice(0, HARD_LIMIT);
 
