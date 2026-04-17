@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
   assembleStrategyContext,
+  auditResourceCitations,
   buildStrategyChatSystemPrompt,
   emptyWorkingThesisState,
   extractThesisPatchFromProse,
@@ -1112,7 +1113,7 @@ async function handleChat(
   const route = resolveLLMRoute("chat_general");
   if (forceFallback) route._smokeTestForceFail = true;
 
-  const { prompt: systemPrompt, workingThesis: priorThesis } = await buildChatSystemPrompt({
+  const { prompt: systemPrompt, workingThesis: priorThesis, resourceHits } = await buildChatSystemPrompt({
     supabase, userId, depth, contextSection, pack, userContent: content,
   });
   const accountId: string | null = pack.account?.id ?? null;
