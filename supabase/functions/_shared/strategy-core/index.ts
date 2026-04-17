@@ -37,3 +37,9 @@ export {
   assembleStrategyContext,
   type AssembledStrategyContext,
 } from "./contextAssembly.ts";
+
+export {
+  buildStrategyChatSystemPrompt,
+  shouldUseStrategyCorePrompt,
+  type BuildStrategyChatPromptArgs,
+} from "./chatPrompt.ts";
