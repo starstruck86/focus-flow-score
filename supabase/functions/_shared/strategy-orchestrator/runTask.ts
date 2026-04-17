@@ -92,15 +92,82 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   console.log(`[stage-2] synthesis fields: ${Object.keys(synthesis).length}`);
 
   // ── Stage 3: Claude document authoring (locked template) ─────
+  // Hard fail-fast contract: 90s wall-clock cap on this stage. If the
+  // model call hangs (provider socket stuck, retry loop wedged, etc.)
+  // we surface a clear error instead of letting the background promise
+  // die silently and stranding the row in `pending`.
   await setProgress(supabase, runId, "document_authoring");
-  console.log(`[stage-3] Claude document authoring...`);
-  const documentRaw = await callClaude([
-    { role: "system", content: handler.buildDocumentSystemPrompt() },
-    { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
-  ], { model: "claude-sonnet-4-5-20250929", maxTokens: 12000, temperature: 0.3 });
-  const draftOutput = safeParseJSON<any>(documentRaw) ?? { sections: [], raw: documentRaw };
-  const sectionCount = draftOutput.sections?.length || 0;
-  console.log(`[stage-3] document authored: ${sectionCount} sections`);
+  // Heartbeat write right before the call — proves the worker is alive
+  // and resets the reaper window so we know any subsequent stall is
+  // inside the model call itself, not earlier.
+  await setProgress(supabase, runId, "document_authoring");
+  const authoringModel = "claude-sonnet-4-5-20250929";
+  const authoringStartedAt = Date.now();
+  console.log(JSON.stringify({ tag: "stage-3:start", run_id: runId, stage: "document_authoring", model: authoringModel }));
+
+  const AUTHORING_TIMEOUT_MS = 90_000;
+  let draftOutput: any;
+  let sectionCount = 0;
+  try {
+    const documentRaw = await Promise.race<string>([
+      callClaude([
+        { role: "system", content: handler.buildDocumentSystemPrompt() },
+        { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
+      ], { model: authoringModel, maxTokens: 12000, temperature: 0.3 }),
+      new Promise<string>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Document authoring timed out after ${AUTHORING_TIMEOUT_MS / 1000}s`)),
+          AUTHORING_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+
+    try {
+      draftOutput = safeParseJSON<any>(documentRaw) ?? { sections: [], raw: documentRaw };
+    } catch (parseErr: any) {
+      throw new Error(`Document authoring returned invalid JSON: ${parseErr?.message || parseErr}`);
+    }
+    if (!draftOutput || typeof draftOutput !== "object" || !Array.isArray(draftOutput.sections)) {
+      // safeParseJSON returned something but it's not the expected shape.
+      throw new Error("Document authoring returned invalid JSON (missing sections array)");
+    }
+    sectionCount = draftOutput.sections.length;
+
+    console.log(JSON.stringify({
+      tag: "stage-3:end",
+      run_id: runId,
+      duration_ms: Date.now() - authoringStartedAt,
+      success: true,
+      sections: sectionCount,
+    }));
+  } catch (e: any) {
+    const durationMs = Date.now() - authoringStartedAt;
+    const message = e?.message || String(e);
+    console.error(JSON.stringify({
+      tag: "stage-3:end",
+      run_id: runId,
+      duration_ms: durationMs,
+      success: false,
+      error: message,
+    }));
+    // Mark the row failed immediately so the UI exits the loading state
+    // without waiting for the 7-min reaper.
+    try {
+      await supabase
+        .from("task_runs")
+        .update({
+          status: "failed",
+          progress_step: "failed",
+          error: `[document_authoring] ${message}`.slice(0, 1000),
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", runId);
+    } catch (writeErr) {
+      console.error(`[stage-3] failed to mark run failed:`, (writeErr as Error).message);
+    }
+    throw e;
+  }
 
   // ── Stage 4: Review (Lovable AI, playbook-grounded) ──────────
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };
