@@ -1108,18 +1108,28 @@ async function handleChat(
 
   if (!result.rawStream) {
     // Non-streaming fallback
+    const { patch, visible } = extractThesisUpdate(result.text || "");
     await supabase.from("strategy_messages").insert({
       thread_id: threadId, user_id: userId, role: "assistant",
       message_type: "chat",
       provider_used: result.provider, model_used: result.model,
       fallback_used: result.fallbackUsed, latency_ms: result.latencyMs,
       content_json: {
-        text: result.text, sources_used: pack.sourceCount,
+        text: visible, sources_used: pack.sourceCount,
         retrieval_meta: pack.retrievalMeta, model_used: result.model,
         provider_used: result.provider, fallback_used: result.fallbackUsed,
       },
     });
-    return new Response(JSON.stringify({ text: result.text, provider: result.provider, model: result.model }), {
+    if (accountId && patch) {
+      try {
+        const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
+        const next = mergeWorkingThesisState(base, { ...patch, thread_id: threadId });
+        await saveWorkingThesisState(supabase, { userId, state: next });
+      } catch (e) {
+        console.warn("[thesis] persist (non-stream) failed:", (e as Error).message);
+      }
+    }
+    return new Response(JSON.stringify({ text: visible, provider: result.provider, model: result.model }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
