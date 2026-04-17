@@ -3,8 +3,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
   assembleStrategyContext,
   buildStrategyChatSystemPrompt,
+  emptyWorkingThesisState,
+  loadWorkingThesisState,
+  mergeWorkingThesisState,
+  renderWorkingThesisStateBlock,
   retrieveLibraryContext,
+  saveWorkingThesisState,
   shouldUseStrategyCorePrompt,
+  type ThesisStatePatch,
+  type WorkingThesisState,
 } from "../_shared/strategy-core/index.ts";
 
 const corsHeaders = {
