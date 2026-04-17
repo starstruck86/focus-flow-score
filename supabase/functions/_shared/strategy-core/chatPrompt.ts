@@ -62,6 +62,13 @@ export interface BuildStrategyChatPromptArgs {
   accountContext?: string;
   /** Library retrieval contextString. May be empty when nothing matched. */
   libraryContext?: string;
+  /**
+   * Pre-rendered "=== CURRENT WORKING THESIS STATE ===" block from
+   * thesisMemory.renderWorkingThesisStateBlock(). When present, the
+   * model treats this as the live operating model and continues the
+   * line of reasoning rather than starting over.
+   */
+  workingThesisBlock?: string;
 }
 
 /**
