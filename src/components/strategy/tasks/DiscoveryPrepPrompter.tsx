@@ -74,7 +74,8 @@ export function DiscoveryPrepPrompter({ open, onOpenChange, onSubmit, isRunning,
   const canSubmit = companyName.trim() && participants.some(p => p.name.trim());
 
   const handleSubmit = () => {
-    if (!canSubmit) return;
+    if (!canSubmit || isSubmitting || isRunning) return;
+    setIsSubmitting(true);
     onSubmit({
       company_name: companyName.trim(),
       rep_name: repName.trim() || undefined,
