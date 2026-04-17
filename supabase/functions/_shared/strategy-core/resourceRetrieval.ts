@@ -157,10 +157,16 @@ export function userAskedForResource(text: string): boolean {
   return false;
 }
 
-/** Pull quoted strings out of the message. */
+/** Pull quoted strings out of the message.
+ *  Note: we deliberately exclude the straight apostrophe (') from the
+ *  delimiter set. Apostrophes appear in contractions ("Let's", "Kevin
+ *  Dorsey's") and would otherwise pair across the sentence and produce
+ *  garbage spans like "s build this off Kevin Dorsey". Real resource
+ *  titles are quoted with " or “ ” or ` — never with bare apostrophes.
+ */
 function extractQuotedPhrases(text: string): string[] {
   const out: string[] = [];
-  const re = /["“”'`]([^"“”'`]{2,80})["“”'`]/g;
+  const re = /["“”`]([^"“”`]{2,80})["“”`]/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const phrase = m[1].trim();
