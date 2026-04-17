@@ -246,9 +246,9 @@ Produce JSON conforming exactly to the locked 19-section schema. Match the depth
   buildReviewPrompt(inputs, draft, library) {
     return `You are a VP of Sales reviewing a Discovery Prep document for ${inputs.company_name}.
 
-GROUND YOUR REVIEW IN THE INTERNAL PLAYBOOKS / KIs BELOW. Do NOT use generic best practices when the library covers the topic — cite the playbook/KI title in your rationale.
+${CRITIQUE_IDENTITY_INSTRUCTION}
 
-${library.contextString || "(No relevant library entries found — use general discovery, MEDDPICC, value-selling, executive-framing, and competitive positioning best practices, but flag this as a coverage gap.)"}
+${libraryGroundingHeader(library)}
 
 THE PREP DOCUMENT:
 ${JSON.stringify(draft.sections || draft, null, 2)}
