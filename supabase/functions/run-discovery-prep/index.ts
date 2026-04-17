@@ -56,15 +56,44 @@ Deno.serve(async (req) => {
         .single();
       if (error || !row) return jsonResponse({ error: "Run not found" }, 404);
 
+      // Stale-run reaper. If a row is still `pending` but hasn't been
+      // touched in >7 minutes, the background promise is dead (edge worker
+      // recycled, provider socket hung past timeout, etc.). Mark it failed
+      // so the UI exits the loading state and the user can retry.
+      let effectiveRow = row as any;
+      if (row.status === "pending") {
+        const lastUpdate = new Date(row.updated_at).getTime();
+        const ageMs = Date.now() - lastUpdate;
+        if (ageMs > 7 * 60 * 1000) {
+          await supabase
+            .from("task_runs")
+            .update({
+              status: "failed",
+              progress_step: "failed",
+              error: `Run stalled at "${row.progress_step || "unknown"}" (no progress for ${Math.round(ageMs / 1000)}s). Please retry.`,
+              completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", runId)
+            .eq("user_id", user.id);
+          effectiveRow = {
+            ...row,
+            status: "failed",
+            progress_step: "failed",
+            error: `Run stalled at "${row.progress_step || "unknown"}" (no progress for ${Math.round(ageMs / 1000)}s). Please retry.`,
+          };
+        }
+      }
+
       return jsonResponse({
-        run_id: row.id,
-        status: row.status,
-        progress_step: row.progress_step,
-        error: row.error,
-        completed_at: row.completed_at,
-        updated_at: row.updated_at,
-        draft: row.draft_output,
-        review: row.review_output,
+        run_id: effectiveRow.id,
+        status: effectiveRow.status,
+        progress_step: effectiveRow.progress_step,
+        error: effectiveRow.error,
+        completed_at: effectiveRow.completed_at,
+        updated_at: effectiveRow.updated_at,
+        draft: effectiveRow.draft_output,
+        review: effectiveRow.review_output,
       });
     }
 

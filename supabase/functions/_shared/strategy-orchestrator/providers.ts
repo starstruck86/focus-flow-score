@@ -87,26 +87,61 @@ export async function callClaude(
   };
   if (systemPrompt) body.system = systemPrompt;
 
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => "");
-    console.error(`[claude] error ${resp.status}: ${errText.slice(0, 200)}`);
-    throw new Error(`Claude error: ${resp.status}`);
+  // Hard timeout + retry on transient failures. Without this, a hung
+  // Anthropic socket leaves the background promise stuck forever and the
+  // task_runs row sits in `pending` indefinitely.
+  const TIMEOUT_MS = 180_000; // 3 minutes per attempt — Claude long-form authoring needs headroom.
+  const MAX_ATTEMPTS = 3;
+  let lastErr: unknown = null;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    try {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": key,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+
+      if (resp.ok) {
+        const data = await resp.json();
+        let text = "";
+        for (const block of (data.content || [])) {
+          if (block.type === "text") text += block.text;
+        }
+        return text;
+      }
+
+      const status = resp.status;
+      const errText = await resp.text().catch(() => "");
+      console.error(`[claude] error ${status} attempt=${attempt}/${MAX_ATTEMPTS}: ${errText.slice(0, 300)}`);
+
+      // 4xx (other than 429) — fail immediately, no retry.
+      const isTransient = status === 429 || (status >= 500 && status < 600);
+      if (!isTransient || attempt === MAX_ATTEMPTS) {
+        throw new Error(`Claude error: ${status}${isTransient ? " (after retries)" : ""}`);
+      }
+      lastErr = new Error(`Claude ${status}`);
+    } catch (e: any) {
+      clearTimeout(timer);
+      const isAbort = e?.name === "AbortError";
+      console.error(`[claude] ${isAbort ? "timeout" : "fetch error"} attempt=${attempt}/${MAX_ATTEMPTS}: ${e?.message || e}`);
+      if (attempt === MAX_ATTEMPTS) throw isAbort ? new Error(`Claude timeout after ${TIMEOUT_MS}ms (3 attempts)`) : e;
+      lastErr = e;
+    }
+    // Backoff: 3s, 9s
+    const delayMs = 3000 * Math.pow(3, attempt - 1);
+    console.log(`[claude] retrying in ${delayMs}ms…`);
+    await new Promise((r) => setTimeout(r, delayMs));
   }
-  const data = await resp.json();
-  let text = "";
-  for (const block of (data.content || [])) {
-    if (block.type === "text") text += block.text;
-  }
-  return text;
+  throw lastErr ?? new Error("Claude: exhausted retries");
 }
 
 export async function callLovableAI(
