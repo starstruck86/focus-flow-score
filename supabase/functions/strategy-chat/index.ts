@@ -9,6 +9,7 @@ import {
   mergeWorkingThesisState,
   renderWorkingThesisStateBlock,
   retrieveLibraryContext,
+  retrieveResourceContext,
   saveWorkingThesisState,
   shouldUseStrategyCorePrompt,
   validateWorkingThesisState,
@@ -973,6 +974,7 @@ async function buildChatSystemPrompt(args: {
 }): Promise<{ prompt: string; workingThesis: WorkingThesisState | null }> {
   const { supabase, userId, depth, contextSection, pack, userContent } = args;
   const accountId: string | null = pack.account?.id ?? null;
+  const opportunityId: string | null = pack.opportunity?.id ?? null;
 
   // No account, no thread context → don't force Strategy Core onto small talk.
   if (!accountId && (!contextSection || contextSection.length < 200)) {
@@ -980,9 +982,11 @@ async function buildChatSystemPrompt(args: {
   }
 
   // Pull the same context the prep doc gets, in parallel with library
-  // retrieval AND the working thesis state for this account.
+  // retrieval AND the working thesis state for this account AND the
+  // newly-added resource retrieval (exact / near-exact title + entity
+  // links + category backstop).
   const scopes = deriveLibraryScopes(pack.account, userContent);
-  const [assembled, library, workingThesis] = await Promise.all([
+  const [assembled, library, workingThesis, resources] = await Promise.all([
     accountId
       ? assembleStrategyContext({ supabase, userId, accountId }).catch((e) => {
           console.warn("[strategy-chat] assembleStrategyContext failed:", (e as Error).message);
@@ -1003,13 +1007,24 @@ async function buildChatSystemPrompt(args: {
           return null;
         })
       : Promise.resolve(null),
+    retrieveResourceContext(supabase, userId, {
+      userMessage: userContent,
+      accountId,
+      opportunityId,
+    }).catch((e) => {
+      console.warn("[strategy-chat] retrieveResourceContext failed:", (e as Error).message);
+      return null;
+    }),
   ]);
 
+  // Force Strategy Core whenever the user asked for a named resource —
+  // even on otherwise-small contexts — so the admit-absence contract
+  // is enforced instead of being lost to the generic prompt path.
   const useCore = shouldUseStrategyCorePrompt({
     hasAccount: !!accountId,
     libraryCounts: library?.counts,
     contextSectionLength: contextSection?.length ?? 0,
-  });
+  }) || !!resources?.userAskedForResource;
 
   if (!useCore) return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null };
 
@@ -1052,6 +1067,7 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     accountContext: assembled?.contextBlock || "",
     libraryContext: library?.contextString || "",
     workingThesisBlock,
+    resourceContextBlock: resources?.contextBlock || "",
   }) + "\n\n" + persistenceContract;
 
   return { prompt, workingThesis };

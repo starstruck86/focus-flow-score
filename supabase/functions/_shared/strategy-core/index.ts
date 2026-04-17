@@ -45,6 +45,16 @@ export {
 } from "./chatPrompt.ts";
 
 export {
+  extractCandidatePhrases,
+  inferResourceCategories,
+  renderResourceContextBlock,
+  retrieveResourceContext,
+  userAskedForResource,
+  type ResourceRetrievalResult,
+  type RetrievedResource,
+} from "./resourceRetrieval.ts";
+
+export {
   emptyWorkingThesisState,
   extractThesisPatchFromProse,
   loadWorkingThesisState,
