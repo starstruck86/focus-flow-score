@@ -57,12 +57,14 @@ export async function runStrategyTask(ctx: OrchestrationContext): Promise<Orches
     console.log(`[stage-1] research complete: ${research.totalChars} chars`);
   }
 
-  // ── Stage 2: Synthesis via Lovable AI Gateway (gpt-5) ────────
-  console.log(`[stage-2] synthesis via Lovable AI (gpt-5)...`);
+  // ── Stage 2: Synthesis via Lovable AI Gateway (gemini-2.5-pro) ────
+  // gemini-2.5-pro is faster than gpt-5 on the gateway and avoids
+  // long-running reasoning that can blow the edge function wall clock.
+  console.log(`[stage-2] synthesis via Lovable AI (gemini-2.5-pro)...`);
   const synthesisRaw = await callLovableAI([
     { role: "system", content: "You are a senior sales strategist. Synthesize research + internal IP into actionable intelligence. Return structured JSON only. No markdown fences, no preamble." },
     { role: "user", content: handler.buildSynthesisPrompt(inputs, research, library) },
-  ], { model: "openai/gpt-5", temperature: 0.4, maxTokens: 8192 });
+  ], { model: "google/gemini-2.5-pro", temperature: 0.4, maxTokens: 8192 });
   const synthesis = safeParseJSON<any>(synthesisRaw) ?? { raw: synthesisRaw };
   console.log(`[stage-2] synthesis fields: ${Object.keys(synthesis).length}`);
 
