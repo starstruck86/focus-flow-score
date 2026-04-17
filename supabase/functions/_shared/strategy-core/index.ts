@@ -1,0 +1,39 @@
+// ════════════════════════════════════════════════════════════════
+// Strategy Core — Public API
+//
+// One brain. Many surfaces.
+//
+//   • Reasoning primitives  → reasoningCore.ts
+//   • Critique primitives   → critique.ts
+//   • Library retrieval     → library.ts (re-export)
+//   • Context assembly      → contextAssembly.ts
+//
+// Tasks compose from these. They MUST NOT redefine them.
+// ════════════════════════════════════════════════════════════════
+
+export {
+  ACCOUNT_SPECIFICITY_RULE,
+  ACCOUNT_THESIS_SCHEMA,
+  ECONOMIC_FRAMING_RULES,
+  FACT_DISCIPLINE_RULES,
+  POV_BLOCK_SCHEMA,
+  STRATEGY_CORE_THINKING_ORDER,
+  VALUE_LEAKAGE_ENTRY_SCHEMA,
+} from "./reasoningCore.ts";
+
+export {
+  CRITIQUE_IDENTITY_INSTRUCTION,
+  libraryGroundingHeader,
+} from "./critique.ts";
+
+export {
+  retrieveLibraryContext,
+  type LibraryRetrievalResult,
+  type RetrievedKI,
+  type RetrievedPlaybook,
+} from "./library.ts";
+
+export {
+  assembleStrategyContext,
+  type AssembledStrategyContext,
+} from "./contextAssembly.ts";
