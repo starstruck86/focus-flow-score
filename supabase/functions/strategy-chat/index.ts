@@ -968,18 +968,19 @@ async function buildChatSystemPrompt(args: {
   contextSection: string;
   pack: ContextPack;
   userContent: string;
-}): Promise<string> {
+}): Promise<{ prompt: string; workingThesis: WorkingThesisState | null }> {
   const { supabase, userId, depth, contextSection, pack, userContent } = args;
   const accountId: string | null = pack.account?.id ?? null;
 
   // No account, no thread context → don't force Strategy Core onto small talk.
   if (!accountId && (!contextSection || contextSection.length < 200)) {
-    return buildGenericChatSystemPrompt(depth, contextSection);
+    return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null };
   }
 
-  // Pull the same context the prep doc gets, in parallel with library retrieval.
+  // Pull the same context the prep doc gets, in parallel with library
+  // retrieval AND the working thesis state for this account.
   const scopes = deriveLibraryScopes(pack.account, userContent);
-  const [assembled, library] = await Promise.all([
+  const [assembled, library, workingThesis] = await Promise.all([
     accountId
       ? assembleStrategyContext({ supabase, userId, accountId }).catch((e) => {
           console.warn("[strategy-chat] assembleStrategyContext failed:", (e as Error).message);
@@ -994,6 +995,12 @@ async function buildChatSystemPrompt(args: {
           },
         )
       : Promise.resolve(null),
+    accountId
+      ? loadWorkingThesisState(supabase, { userId, accountId }).catch((e) => {
+          console.warn("[strategy-chat] loadWorkingThesisState failed:", (e as Error).message);
+          return null;
+        })
+      : Promise.resolve(null),
   ]);
 
   const useCore = shouldUseStrategyCorePrompt({
@@ -1002,14 +1009,62 @@ async function buildChatSystemPrompt(args: {
     contextSectionLength: contextSection?.length ?? 0,
   });
 
-  if (!useCore) return buildGenericChatSystemPrompt(depth, contextSection);
+  if (!useCore) return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null };
 
-  return buildStrategyChatSystemPrompt({
+  const workingThesisBlock = renderWorkingThesisStateBlock(workingThesis);
+
+  // Behavior contract for the model: emit a fenced thesis_update JSON
+  // block at the END of the answer when the thesis materially changed.
+  // This is the seam between assistant prose and persisted state.
+  const persistenceContract = `
+=== THESIS STATE PERSISTENCE PROTOCOL ===
+If, and ONLY if, this turn materially advances the working thesis (new evidence, killed hypothesis, refined leakage, resolved/added open question, or a new thesis), append a single fenced block at the very end of your message in this exact format:
+
+\`\`\`thesis_update
+{
+  "current_thesis": "<only when the thesis itself changed>",
+  "current_leakage": "<only when leakage was refined>",
+  "confidence": "VALID|INFER|HYPO|UNKN",
+  "thesis_change_reason": "<required when current_thesis changed: the seller statement / fact that drove the change>",
+  "kill_hypotheses": [{ "hypothesis": "<exact prior claim>", "killed_by": "<seller-provided fact>" }],
+  "add_evidence": ["<short factual statement>"],
+  "add_open_questions": ["<question>"],
+  "resolve_open_questions": ["<question text that's now answered>"]
+}
+\`\`\`
+
+Omit any field that does not apply. If nothing changed materially, do NOT emit the block.
+The block is for system memory — be terse and factual. Do not narrate it.`;
+
+  const prompt = buildStrategyChatSystemPrompt({
     depth,
     contextSection,
     accountContext: assembled?.contextBlock || "",
     libraryContext: library?.contextString || "",
-  });
+    workingThesisBlock,
+  }) + "\n\n" + persistenceContract;
+
+  return { prompt, workingThesis };
+}
+
+// Extract a fenced ```thesis_update { ... }``` block emitted by the
+// assistant. Returns the parsed patch + the cleaned visible text
+// (with the block removed so the user never sees it).
+function extractThesisUpdate(text: string): { patch: ThesisStatePatch | null; visible: string } {
+  if (!text) return { patch: null, visible: text };
+  const re = /```thesis_update\s*\n([\s\S]*?)\n```/i;
+  const m = text.match(re);
+  if (!m) return { patch: null, visible: text };
+  const visible = (text.slice(0, m.index!) + text.slice(m.index! + m[0].length)).trim();
+  try {
+    const parsed = JSON.parse(m[1].trim());
+    if (parsed && typeof parsed === "object") {
+      return { patch: parsed as ThesisStatePatch, visible };
+    }
+  } catch (e) {
+    console.warn("[thesis_update] failed to parse:", (e as Error).message);
+  }
+  return { patch: null, visible };
 }
 
 // ── Chat Handler (streaming via OpenAI direct) ────────────
