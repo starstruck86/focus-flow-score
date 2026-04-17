@@ -302,7 +302,7 @@ export async function retrieveResourceContext(
   const userMessage = (args.userMessage || "").trim();
   const phrases = extractCandidatePhrases(userMessage);
   const categories = inferResourceCategories(userMessage);
-  const askedFor = userAskedForResource(userMessage) || phrases.length > 0;
+  const askedFor = userAskedForResource(userMessage) || phrases.length > 0 || askedForPrior;
   const askedForPrior = userAskedForPriorUse(userMessage);
 
   const all: RetrievedResource[] = [];
