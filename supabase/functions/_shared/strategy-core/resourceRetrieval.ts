@@ -173,11 +173,17 @@ function extractQuotedPhrases(text: string): string[] {
  * Pull capitalized title-like spans (≥2 consecutive Capitalized words,
  * or a Proper Name + a noun like "ROI Calculator"). This is the path
  * that catches "Kevin Dorsey ROI calculator" without requiring quotes.
+ *
+ * Important: spans must START and END on a capitalized/ALL-CAPS token.
+ * Internal lowercase joiners (of/the/for/and) are allowed in the middle
+ * but must not appear at either end. This keeps "What's the" out.
  */
 function extractCapitalizedSpans(text: string): string[] {
   const out: string[] = [];
-  // Allow ALL-CAPS acronyms (ROI, KPI, AE) as part of the span.
-  const re = /\b((?:[A-Z][a-zA-Z0-9'’\-]+|[A-Z]{2,5})(?:\s+(?:[A-Z][a-zA-Z0-9'’\-]+|[A-Z]{2,5}|of|the|for|and))+)\b/g;
+  const CAP = "(?:[A-Z][a-zA-Z0-9'’\\-]+|[A-Z]{2,5})";
+  const JOIN = "(?:of|the|for|and)";
+  // CAP (JOIN|CAP)* CAP — greedy, must end on a CAP
+  const re = new RegExp(`\\b(${CAP}(?:\\s+(?:${JOIN}|${CAP}))*\\s+${CAP})\\b`, "g");
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const phrase = m[1].trim();
