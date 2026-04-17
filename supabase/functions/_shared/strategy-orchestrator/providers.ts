@@ -116,18 +116,26 @@ export async function callLovableAI(
   const key = Deno.env.get("LOVABLE_API_KEY");
   if (!key) throw new Error("LOVABLE_API_KEY not configured");
 
+  const model = opts.model || "google/gemini-2.5-flash";
+  // GPT-5 family rejects custom temperature and uses max_completion_tokens.
+  const isGpt5 = model.startsWith("openai/gpt-5");
+  const body: Record<string, unknown> = { model, messages };
+  if (isGpt5) {
+    if (opts.maxTokens) body.max_completion_tokens = opts.maxTokens;
+  } else {
+    body.temperature = opts.temperature ?? 0.4;
+    body.max_tokens = opts.maxTokens || 4000;
+  }
+
   const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: opts.model || "google/gemini-2.5-flash",
-      messages,
-      temperature: opts.temperature ?? 0.4,
-      max_tokens: opts.maxTokens || 4000,
-    }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) {
     const status = resp.status;
+    const errText = await resp.text().catch(() => "");
+    console.error(`[lovable-ai] error ${status} model=${model}: ${errText.slice(0, 400)}`);
     if (status === 429) throw { status: 429, message: "Rate limited" };
     if (status === 402) throw { status: 402, message: "AI credits exhausted" };
     throw new Error(`Lovable AI error: ${status}`);
