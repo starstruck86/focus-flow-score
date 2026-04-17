@@ -235,24 +235,30 @@ Deno.test({
 // ──────────────────────────────────────────────────────────────────
 // Test 6 — invariant: no failure mode leaves the row in `pending`.
 // ──────────────────────────────────────────────────────────────────
-Deno.test("document_authoring: invariant — row never stuck in pending", async () => {
-  const cases: { name: string; claude: ClaudeBehavior; compress?: boolean }[] = [
-    { name: "malformed", claude: { kind: "ok", text: "garbage" } },
-    { name: "wrong-shape", claude: { kind: "ok", text: '{"x":1}' } },
-    { name: "provider-400", claude: { kind: "error", status: 400 } },
-    { name: "provider-500-then-fail", claude: { kind: "error", status: 500 }, compress: true },
-    { name: "hang", claude: { kind: "hang" }, compress: true },
-  ];
-  for (const c of cases) {
-    const { finalRow } = await runWith({
-      synthesisJson: JSON.stringify({ ok: true }),
-      claude: c.claude,
-      compressTimers: c.compress,
-    });
-    assert(
-      finalRow && finalRow.status === "failed" && finalRow.progress_step === "failed",
-      `case "${c.name}" left row at status=${finalRow?.status}/${finalRow?.progress_step}`,
-    );
-    assert(finalRow.completed_at, `case "${c.name}" missing completed_at`);
-  }
+Deno.test({
+  name: "document_authoring: invariant — row never stuck in pending",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  sanitizeExit: false,
+  fn: async () => {
+    const cases: { name: string; claude: ClaudeBehavior; compress?: boolean }[] = [
+      { name: "malformed", claude: { kind: "ok", text: "garbage" } },
+      { name: "wrong-shape", claude: { kind: "ok", text: '{"x":1}' } },
+      { name: "provider-400", claude: { kind: "error", status: 400 } },
+      { name: "provider-500-then-fail", claude: { kind: "error", status: 500 }, compress: true },
+      { name: "hang", claude: { kind: "hang" }, compress: true },
+    ];
+    for (const c of cases) {
+      const { finalRow } = await runWith({
+        synthesisJson: JSON.stringify({ ok: true }),
+        claude: c.claude,
+        compressTimers: c.compress,
+      });
+      assert(
+        finalRow && finalRow.status === "failed" && finalRow.progress_step === "failed",
+        `case "${c.name}" left row at status=${finalRow?.status}/${finalRow?.progress_step}`,
+      );
+      assert(finalRow.completed_at, `case "${c.name}" missing completed_at`);
+    }
+  },
 });
