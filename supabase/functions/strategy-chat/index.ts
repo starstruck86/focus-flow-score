@@ -4,6 +4,7 @@ import {
   assembleStrategyContext,
   buildStrategyChatSystemPrompt,
   emptyWorkingThesisState,
+  extractThesisPatchFromProse,
   loadWorkingThesisState,
   mergeWorkingThesisState,
   renderWorkingThesisStateBlock,

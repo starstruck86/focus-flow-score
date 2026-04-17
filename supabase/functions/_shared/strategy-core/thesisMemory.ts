@@ -449,3 +449,178 @@ export function renderWorkingThesisStateBlock(
   );
   return lines.join("\n");
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Fallback extractor — deterministic, prose-only.
+//
+// Runs ONLY when the model forgot to emit the fenced ```thesis_update
+// block. Reads the assistant's visible answer text and infers a
+// minimal patch from explicit signal phrases. No LLM call. No
+// guessing. If the prose is ambiguous, returns null and we save
+// nothing — saving nothing is better than saving weak state.
+//
+// Detected signals (case-insensitive):
+//   • Thesis declarations:
+//       "current thesis: X" / "revised thesis: X" / "working thesis: X"
+//       "the (real|new|updated) thesis is X"
+//   • Killed hypotheses:
+//       "throw out X" / "kill the X (thesis|hypothesis)"
+//       "X is dead" / "that hypothesis is dead"
+//       "this kills the X (thesis|hypothesis)"
+//   • Open questions:
+//       "open question: X" / "we still need to know X"
+//   • Seller-confirmed evidence:
+//       "seller said X" / "VP confirmed X" / "confirmed by seller: X"
+//       "the (VP|CFO|CRO|champion|buyer) (said|told us|confirmed) X"
+//   • Confidence words: "valid" / "infer" / "hypo(thesis)" / "unknown"
+//
+// The returned patch goes through validateWorkingThesisState exactly
+// like a fenced patch — so all trust rules still apply.
+// ──────────────────────────────────────────────────────────────────
+
+const THESIS_DECLARATION_PATTERNS: RegExp[] = [
+  /(?:^|\n)\s*(?:current|revised|updated|new|working|real)\s+thesis\s*[:\-—]\s*(.+?)(?:\n|$)/i,
+  /(?:^|\n)\s*thesis\s*[:\-—]\s*(.+?)(?:\n|$)/i,
+  /\bthe\s+(?:real|new|updated|revised)\s+thesis\s+is\s+(?:that\s+)?(.+?)(?:[.!?\n]|$)/i,
+];
+
+const KILL_PATTERNS: RegExp[] = [
+  /\bthrow(?:ing)?\s+out\s+(?:the\s+)?(.+?)\s+(?:thesis|hypothesis|theory|story|idea)\b/i,
+  /\bkill(?:s|ed|ing)?\s+(?:the\s+)?(.+?)\s+(?:thesis|hypothesis|theory)\b/i,
+  /\bthis\s+kills\s+(?:the\s+)?(.+?)(?:[.!?\n]|$)/i,
+  /\b(?:that\s+|the\s+)?(.+?)\s+(?:thesis|hypothesis|theory|story)\s+is\s+dead\b/i,
+  /\bdrop(?:ping)?\s+(?:the\s+)?(.+?)\s+(?:thesis|hypothesis|theory)\b/i,
+];
+
+const OPEN_QUESTION_PATTERNS: RegExp[] = [
+  /(?:^|\n)\s*open\s+question\s*[:\-—]\s*(.+?)(?:\n|$)/i,
+  /\bwe\s+still\s+(?:need\s+to\s+know|don'?t\s+know)\s+(.+?)(?:[.!?\n]|$)/i,
+  /\bstill\s+unresolved\s*[:\-—]\s*(.+?)(?:\n|$)/i,
+];
+
+const SELLER_EVIDENCE_PATTERNS: RegExp[] = [
+  /\b(?:the\s+)?(?:VP|CFO|CRO|CEO|COO|CTO|champion|buyer|seller|prospect)\s+(?:said|told\s+us|confirmed|stated|mentioned)\s+(?:that\s+)?(.+?)(?:[.!?\n]|$)/i,
+  /\bconfirmed\s+by\s+(?:the\s+)?(?:seller|VP|CFO|CRO|champion|buyer)\s*[:\-—]?\s*(.+?)(?:[.!?\n]|$)/i,
+  /\bseller\s+(?:just\s+)?confirmed\s+(?:that\s+)?(.+?)(?:[.!?\n]|$)/i,
+  /\bon\s+the\s+call\s+the\s+(?:VP|CFO|CRO|champion|buyer)\s+(?:said|confirmed)\s+(?:that\s+)?(.+?)(?:[.!?\n]|$)/i,
+];
+
+const CONFIDENCE_WORD_RE =
+  /\b(?:confidence\s*[:=]\s*)?(VALID|INFER|HYPO|HYPOTHESIS|UNKN|UNKNOWN)\b/i;
+
+function cleanCapture(s: string | undefined): string {
+  if (!s) return "";
+  let out = s.trim();
+  // Strip surrounding quotes/markdown emphasis.
+  out = out.replace(/^[\s"'`*_]+|[\s"'`*_.,;:]+$/g, "");
+  return out;
+}
+
+function firstMatch(text: string, patterns: RegExp[]): string {
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m && m[1]) {
+      const cleaned = cleanCapture(m[1]);
+      if (cleaned.length >= 4 && cleaned.length <= 280) return cleaned;
+    }
+  }
+  return "";
+}
+
+function allMatches(text: string, patterns: RegExp[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const re of patterns) {
+    // Re-run with global flag for sweep.
+    const gre = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+    let m: RegExpExecArray | null;
+    while ((m = gre.exec(text)) !== null) {
+      const cleaned = cleanCapture(m[1]);
+      if (cleaned.length < 4 || cleaned.length > 280) continue;
+      const k = cleaned.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(cleaned);
+      if (out.length >= 5) return out;
+    }
+  }
+  return out;
+}
+
+function inferConfidence(text: string): ThesisConfidence | undefined {
+  const m = text.match(CONFIDENCE_WORD_RE);
+  if (!m) return undefined;
+  const raw = m[1].toUpperCase();
+  if (raw === "VALID") return "VALID";
+  if (raw === "INFER") return "INFER";
+  if (raw === "HYPO" || raw === "HYPOTHESIS") return "HYPO";
+  if (raw === "UNKN" || raw === "UNKNOWN") return "UNKN";
+  return undefined;
+}
+
+/**
+ * Deterministically infer a thesis patch from the assistant's visible
+ * prose. Returns null when the prose is too ambiguous to safely persist.
+ *
+ * The caller MUST still pass the result through validateWorkingThesisState
+ * before merging — fallback inference does not bypass the trust boundary.
+ */
+export function extractThesisPatchFromProse(
+  text: string,
+): ThesisStatePatch | null {
+  if (!text || typeof text !== "string") return null;
+  const body = text.trim();
+  if (body.length < 30) return null;
+
+  const thesis = firstMatch(body, THESIS_DECLARATION_PATTERNS);
+  const killedTargets = allMatches(body, KILL_PATTERNS);
+  const openQs = allMatches(body, OPEN_QUESTION_PATTERNS);
+  const sellerFacts = allMatches(body, SELLER_EVIDENCE_PATTERNS);
+
+  // Ambiguity guard: nothing structural to lean on → save nothing.
+  if (!thesis && killedTargets.length === 0 && sellerFacts.length === 0) {
+    return null;
+  }
+
+  const patch: ThesisStatePatch = {};
+
+  if (thesis) {
+    patch.current_thesis = thesis;
+    // thesis_change_reason: prefer a seller fact, else generic.
+    patch.thesis_change_reason = sellerFacts[0]
+      ? `Inferred from assistant prose; grounded in: ${sellerFacts[0]}`
+      : "Inferred from assistant prose (fallback extractor)";
+  }
+
+  if (killedTargets.length) {
+    patch.kill_hypotheses = killedTargets.map((h) => ({
+      hypothesis: h,
+      killed_by: sellerFacts[0]
+        ? `Seller evidence: ${sellerFacts[0]}`
+        : "Assistant marked dead in prose (fallback extractor)",
+    }));
+  }
+
+  if (openQs.length) patch.add_open_questions = openQs;
+
+  if (sellerFacts.length) {
+    patch.add_evidence = sellerFacts;
+    patch.seller_confirmed = true;
+  }
+
+  // Confidence: only carry through if the model explicitly named it AND
+  // we have grounding for VALID. Otherwise leave undefined and let the
+  // validator apply defaults.
+  const conf = inferConfidence(body);
+  if (conf) patch.confidence = conf;
+
+  // Final ambiguity guard: an empty patch is not worth persisting.
+  const hasAnything =
+    !!patch.current_thesis ||
+    (patch.kill_hypotheses?.length ?? 0) > 0 ||
+    (patch.add_evidence?.length ?? 0) > 0 ||
+    (patch.add_open_questions?.length ?? 0) > 0;
+  if (!hasAnything) return null;
+
+  return patch;
+}

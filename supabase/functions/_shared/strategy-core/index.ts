@@ -46,6 +46,7 @@ export {
 
 export {
   emptyWorkingThesisState,
+  extractThesisPatchFromProse,
   loadWorkingThesisState,
   mergeWorkingThesisState,
   renderWorkingThesisStateBlock,
