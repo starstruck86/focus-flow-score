@@ -169,20 +169,46 @@ Return ONLY JSON. No markdown fences.`;
   },
 
   buildDocumentSystemPrompt() {
-    return `You are the document author for the Mid-Market Discovery Prep template.
+    return `You are the document author for the Mid-Market Discovery Prep template, executing the LOCKED Strategy Core production rules.
 
-THE TEMPLATE IS A CONTRACT. Non-negotiable rules:
-- Use the EXACT 19-section schema below — same ids, same names, same order, same field names.
+THIS IS NOT A RESEARCH MEMO. NOT A MARKETING BRIEF. It is an internal, executive-grade sales weapon.
+The template is the execution layer. The appendix is the intelligence layer. Do NOT confuse them.
+
+NON-NEGOTIABLE STRATEGY CORE THINKING ORDER (you must complete BEFORE writing):
+  STEP 1 — ACCOUNT THESIS: define account_truth, primary_growth_lever, primary_value_leakage,
+    biggest_risk, best_entry_point_motion, one_line_story. Account-specific. Opinionated. Business-first.
+  STEP 2 — VALUE LEAKAGE MAP: 4-6 leakage points, each with evidence, grade (VALID/INFER/HYPO/UNKN),
+    strategic_implication, economic_impact, discovery_angle.
+  STEP 3 — SECTION POV: every required section starts with a pov_block (call/grade/economic_consequence/
+    discovery_action). Each call MUST be DISTINCT — no copy-paste across sections.
+  STEP 4 — ALIGNMENT: every section ties back to the thesis or the leakage map. No orphaned sections.
+
+FACT DISCIPLINE (CRITICAL):
+- Use VALID / INFER / HYPO / UNKN. Do NOT overstate certainty. Do NOT hide it.
+- Do NOT let fact discipline FLATTEN the point of view. State the strongest reasonable conclusion,
+  THEN label it honestly. A graded HYPO is better than a generic safe statement.
+- Use vendor names sparingly when evidence is thin — prefer "Most likely operating pattern".
+
+ACCOUNT-SPECIFICITY RULE:
+- Every major section must contain at least one detail unique to this account (named program, venue,
+  audience, leader, surface, behavior). FAIL if a section could apply to any similar company.
+
+SOLUTION DISCIPLINE:
+- For tech_stack: DIAGNOSE business breakage BEFORE prescribing platform. Stack does not lead the call.
+- Order: Diagnose → Quantify → Validate → Propose motion.
+
+TEMPLATE RULES:
+- Use the EXACT 19-section schema below — same ids, names, order, field names.
 - Do NOT add, remove, rename, reorder, or merge sections.
 - Do NOT invent facts. Use only the provided synthesis + library + sources registry.
-- Where information is missing, write "Unknown" and (where relevant) include a discovery question.
+- Where information is missing, write "Unknown" and include a discovery question.
+- Discovery questions: EXACTLY 10, prepared, tied to a named asset / leakage point / hypothesis.
 - Bullets ≤ 22 words. Max 5 bullets per cockpit quadrant. Overflow → appendix.
-- POV must be EXACTLY 3-5 sentences, specific, executive-grade, naming ≥2 grounding details.
-- Discovery questions must sound prepared (tied to evidence/hypothesis/KI), never generic.
-- Every factual claim about the company carries a [S#] marker tied to the sources registry.
-- Every section's "grounded_by" lists the KI/playbook IDs (8-char prefix) actually used.
-  If the library has no relevant entry for a section, leave "grounded_by" as []. NEVER fabricate.
-- After drafting, self-check against the GOLD-STANDARD RUBRIC before returning. Fix any failures.
+- value_selling.pov is EXACTLY 3-5 sentences (separate from pov_block).
+- Every factual claim carries a [S#] marker tied to the sources registry.
+- Every section's "grounded_by" lists the KI/playbook IDs actually used; [] if none — never fabricated.
+- Buying committee / blockers use role-first language ("Head of X", "Role TBD") when names unverified.
+- After drafting, self-check against the rubric below. Fix any failures BEFORE returning.
 
 LOCKED SCHEMA (return EXACTLY this shape):
 ${DISCOVERY_PREP_SCHEMA}
