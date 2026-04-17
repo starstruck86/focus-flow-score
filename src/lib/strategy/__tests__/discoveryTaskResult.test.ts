@@ -249,3 +249,32 @@ describe('normalizeTaskRunResultPayload — fixture validation', () => {
     expect(result.review.redlines[0].section_name).toBeTruthy();
   });
 });
+
+describe('Edge-function response contract — real status shape', () => {
+  it('in_progress: null draft/review degrades to empty safe shape', () => {
+    const r = EDGE_RESPONSES.in_progress;
+    const result = normalizeTaskRunResultPayload(r.run_id, { draft: r.draft, review: r.review });
+    expectShape(result);
+    expect(result.draft.sections).toEqual([]);
+    expect(result.review.redlines).toEqual([]);
+    expect(hasRenderableDiscoveryContent(result)).toBe(false);
+  });
+
+  it('completed: full payload preserved through normalizer', () => {
+    const r = EDGE_RESPONSES.completed;
+    const result = normalizeTaskRunResultPayload(r.run_id, { draft: r.draft, review: r.review });
+    expectShape(result);
+    expect(result.draft.sections).toHaveLength(1);
+    expect(result.review.strengths).toEqual(['ok']);
+    expect(result.review.library_coverage?.score).toBe(0.5);
+    expect(hasRenderableDiscoveryContent(result)).toBe(true);
+  });
+
+  it('failed: null draft/review never throws and yields safe empty shape', () => {
+    const r = EDGE_RESPONSES.failed;
+    const result = normalizeTaskRunResultPayload(r.run_id, { draft: r.draft, review: r.review });
+    expectShape(result);
+    expect(result.draft.sections).toEqual([]);
+    expect(hasRenderableDiscoveryContent(result)).toBe(false);
+  });
+});
