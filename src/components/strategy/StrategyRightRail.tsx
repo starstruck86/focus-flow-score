@@ -61,6 +61,15 @@ interface Props {
   onEditProposalPayload?: (id: string, payload: Record<string, unknown>) => Promise<boolean>;
   onPromoteProposal?: (id: string, opts?: { mark_reusable?: boolean; resource_type_override?: string }) => Promise<{ success?: boolean; promoted_table?: string; promoted_record_id?: string; already_promoted?: boolean; error?: string }>;
   onScanThreadProposals?: () => Promise<{ scanned: number; created: number; errors: number }>;
+  onStageProposal?: (input: {
+    sourceType: 'artifact' | 'upload';
+    sourceId: string;
+    targetAccountId?: string | null;
+    targetOpportunityId?: string | null;
+    targetScope?: ProposalScope;
+    proposalType?: 'artifact_promotion' | 'resource_promotion' | 'transcript';
+    markReusable?: boolean;
+  }) => Promise<{ proposal_id: string | null; reused?: boolean; error?: string }>;
 }
 
 const MEMORY_TYPES = [
@@ -125,6 +134,7 @@ export function StrategyRightRail({
   onRegenerateArtifact, isTransforming, onReprocessUpload,
   onUseArtifactAsInput, onDuplicateArtifact,
   proposals, proposalsLoading, onConfirmProposal, onRejectProposal, onEditProposalPayload, onPromoteProposal, onScanThreadProposals,
+  onStageProposal,
 }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
