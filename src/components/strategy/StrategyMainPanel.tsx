@@ -49,6 +49,8 @@ interface Props {
   onBranchThread?: (title: string, content: string) => void;
   onTransformOutput?: (sourceOutputId: string, targetArtifactType: string) => void;
   isTransforming?: boolean;
+  /** Phase 3 — fired after a streamed assistant turn completes */
+  onAssistantComplete?: (assistantText: string) => void;
 }
 
 function getSuggestedPrompts(thread: StrategyThread | null, linkedContext?: any) {
@@ -98,10 +100,13 @@ export function StrategyMainPanel({
   thread, onUpdateThread, sidebarCollapsed, onExpandSidebar,
   rightRailCollapsed, onToggleRightRail, linkedContext,
   onSaveMemory, onWorkflowComplete, onBranchThread,
-  onTransformOutput, isTransforming,
+  onTransformOutput, isTransforming, onAssistantComplete,
 }: Props) {
   const isMobile = useIsMobile();
-  const { messages, sendMessage, runWorkflow, isLoading, isSending } = useStrategyMessages(thread?.id ?? null);
+  const { messages, sendMessage, runWorkflow, isLoading, isSending } = useStrategyMessages(
+    thread?.id ?? null,
+    { onAssistantComplete },
+  );
   const { uploads, uploadFiles, isUploading } = useStrategyUploads(thread?.id ?? null);
   const { isRunning: isTaskRunning, progressLabel: taskProgressLabel, result: taskResult, runDiscoveryPrep, applyRedline, rejectRedline, reset: resetTask } = useTaskExecution();
   const [input, setInput] = useState('');

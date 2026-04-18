@@ -6296,6 +6296,126 @@ export type Database = {
           },
         ]
       }
+      strategy_promotion_proposals: {
+        Row: {
+          confirmed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          dedupe_key: string
+          detector_confidence: number | null
+          detector_version: string
+          id: string
+          payload_json: Json
+          promoted_at: string | null
+          promoted_record_id: string | null
+          promotion_error: string | null
+          proposal_type: string
+          rationale: string | null
+          rejected_reason: string | null
+          scope_rationale: string | null
+          source_artifact_id: string | null
+          source_message_id: string | null
+          status: string
+          target_account_id: string | null
+          target_opportunity_id: string | null
+          target_scope: string
+          target_table: string
+          thread_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          dedupe_key: string
+          detector_confidence?: number | null
+          detector_version?: string
+          id?: string
+          payload_json?: Json
+          promoted_at?: string | null
+          promoted_record_id?: string | null
+          promotion_error?: string | null
+          proposal_type: string
+          rationale?: string | null
+          rejected_reason?: string | null
+          scope_rationale?: string | null
+          source_artifact_id?: string | null
+          source_message_id?: string | null
+          status?: string
+          target_account_id?: string | null
+          target_opportunity_id?: string | null
+          target_scope: string
+          target_table: string
+          thread_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          dedupe_key?: string
+          detector_confidence?: number | null
+          detector_version?: string
+          id?: string
+          payload_json?: Json
+          promoted_at?: string | null
+          promoted_record_id?: string | null
+          promotion_error?: string | null
+          proposal_type?: string
+          rationale?: string | null
+          rejected_reason?: string | null
+          scope_rationale?: string | null
+          source_artifact_id?: string | null
+          source_message_id?: string | null
+          status?: string
+          target_account_id?: string | null
+          target_opportunity_id?: string | null
+          target_scope?: string
+          target_table?: string
+          thread_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_promotion_proposals_source_message_id_fkey"
+            columns: ["source_message_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_promotion_proposals_target_account_id_fkey"
+            columns: ["target_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_promotion_proposals_target_account_id_fkey"
+            columns: ["target_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_promotion_proposals_target_opportunity_id_fkey"
+            columns: ["target_opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_promotion_proposals_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       strategy_rollups: {
         Row: {
           content_json: Json
