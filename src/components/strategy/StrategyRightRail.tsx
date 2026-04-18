@@ -60,6 +60,7 @@ interface Props {
   onRejectProposal?: (id: string, reason?: string) => Promise<boolean>;
   onEditProposalPayload?: (id: string, payload: Record<string, unknown>) => Promise<boolean>;
   onPromoteProposal?: (id: string, opts?: { mark_reusable?: boolean; resource_type_override?: string }) => Promise<{ success?: boolean; promoted_table?: string; promoted_record_id?: string; already_promoted?: boolean; error?: string }>;
+  onScanThreadProposals?: () => Promise<{ scanned: number; created: number; errors: number }>;
 }
 
 const MEMORY_TYPES = [
