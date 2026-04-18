@@ -142,10 +142,45 @@ export function StrategyRightRail({
   const [savedSuggestions, setSavedSuggestions] = useState<Set<number>>(new Set());
   const [selectedArtifact, setSelectedArtifact] = useState<StrategyArtifact | null>(null);
   const [expandedUploadId, setExpandedUploadId] = useState<string | null>(null);
+  const [stagingId, setStagingId] = useState<string | null>(null);
 
   const pinnedMemories = useMemo(() => memories.filter(m => m.is_pinned), [memories]);
   const risks = useMemo(() => memories.filter(m => m.memory_type === 'risk').slice(0, 5), [memories]);
   const nextSteps = useMemo(() => memories.filter(m => m.memory_type === 'next_step' || m.memory_type === 'priority').slice(0, 5), [memories]);
+
+  const handleStage = useCallback(async (
+    sourceType: 'artifact' | 'upload',
+    sourceId: string,
+    proposalType?: 'artifact_promotion' | 'resource_promotion' | 'transcript',
+  ) => {
+    if (!onStageProposal) return;
+    setStagingId(sourceId);
+    try {
+      // Default scope: opportunity if thread is opp-linked, else account.
+      // Safe — the rep still must explicitly classify + confirm in the
+      // proposal review panel before any shared write happens.
+      const targetScope: ProposalScope =
+        thread.linked_opportunity_id ? 'opportunity' : 'account';
+      const result = await onStageProposal({
+        sourceType,
+        sourceId,
+        targetAccountId: thread.linked_account_id ?? null,
+        targetOpportunityId: thread.linked_opportunity_id ?? null,
+        targetScope,
+        proposalType,
+      });
+      if (result.error || !result.proposal_id) {
+        toast.error(result.error || 'Could not stage promotion');
+      } else if (result.reused) {
+        toast.success('Already staged — review in Proposals above');
+      } else {
+        toast.success('Staged for promotion — review above to classify and confirm');
+      }
+    } finally {
+      setStagingId(null);
+    }
+  }, [onStageProposal, thread.linked_account_id, thread.linked_opportunity_id]);
+
 
   const handleSave = () => {
     if (!memContent.trim()) return;
