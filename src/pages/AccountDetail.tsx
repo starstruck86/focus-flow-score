@@ -26,6 +26,7 @@ import {
   FileText, CheckSquare, Calendar, Sparkles,
 } from 'lucide-react';
 import { AccountSynopsisModal } from '@/components/AccountSynopsisModal';
+import { FromStrategyPanel } from '@/components/strategy/FromStrategyPanel';
 import { cn } from '@/lib/utils';
 import type { AccountTier, AccountStatus } from '@/types';
 
@@ -345,6 +346,12 @@ export default function AccountDetail() {
 
         {/* Relationship Health */}
         <RelationshipHealthCard accountId={account.id} />
+
+        <Separator />
+
+        <Separator />
+
+        <FromStrategyPanel scope="account" recordId={account.id} />
 
         <Separator />
 
