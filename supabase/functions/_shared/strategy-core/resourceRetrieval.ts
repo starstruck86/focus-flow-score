@@ -668,6 +668,9 @@ export function renderResourceContextBlock(args: {
   lines.push(
     `- Prefer suggesting the closest match by EXACT title rather than describing one generically.`,
   );
+  lines.push(
+    `- For hits flagged "body-match" or "desc-match": the title may not contain the user's words. State this honestly, e.g. "the closest thing in your library is RESOURCE[\"…\"] — the topic appears in the body, not the title."`,
+  );
 
   return lines.join("\n");
 }
