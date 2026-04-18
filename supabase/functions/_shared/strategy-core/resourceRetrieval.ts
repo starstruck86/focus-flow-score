@@ -312,7 +312,12 @@ export async function retrieveResourceContext(
   const all: RetrievedResource[] = [];
   const seen = new Set<string>();
 
-  const push = (rows: any[] | null | undefined, kind: RetrievedResource["matchKind"], reason: (r: any) => string) => {
+  const push = (
+    rows: any[] | null | undefined,
+    kind: RetrievedResource["matchKind"],
+    reason: (r: any) => string,
+    snippetFor?: (r: any) => string | undefined,
+  ) => {
     if (!rows) return;
     for (const r of rows) {
       if (!r?.id || seen.has(r.id)) continue;
@@ -329,8 +334,20 @@ export async function retrieveResourceContext(
         tags: r.tags ?? null,
         matchKind: kind,
         matchReason: reason(r),
+        matchSnippet: snippetFor ? snippetFor(r) : undefined,
       });
     }
+  };
+
+  /** Build a ±80-char snippet around the first hit of `needle` in `hay`. */
+  const snippetAround = (hay: string | null | undefined, needle: string): string | undefined => {
+    if (!hay || !needle) return undefined;
+    const idx = hay.toLowerCase().indexOf(needle.toLowerCase());
+    if (idx < 0) return undefined;
+    const start = Math.max(0, idx - 80);
+    const end = Math.min(hay.length, idx + needle.length + 80);
+    const slice = hay.slice(start, end).replace(/\s+/g, " ").trim();
+    return (start > 0 ? "…" : "") + slice + (end < hay.length ? "…" : "");
   };
 
   // ── 1. Exact title (case-insensitive) for each phrase ─────────
