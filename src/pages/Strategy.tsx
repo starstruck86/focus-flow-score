@@ -219,6 +219,7 @@ export default function Strategy() {
             onRejectProposal={rejectProposal}
             onEditProposalPayload={editProposalPayload}
             onPromoteProposal={promoteProposal}
+            onScanThreadProposals={scanThreadProposals}
           />
         )}
 
