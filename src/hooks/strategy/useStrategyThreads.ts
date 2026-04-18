@@ -77,7 +77,8 @@ export function useStrategyThreads() {
   }, [user]);
 
   const updateThread = useCallback(async (id: string, updates: Partial<StrategyThread>) => {
-    const dbUpdates: Record<string, unknown> = { ...updates };
+    // Explicitly include null linkage values (spread preserves them, but be defensive)
+    const dbUpdates: Record<string, unknown> = { ...updates, updated_at: new Date().toISOString() };
     const { error } = await supabase
       .from('strategy_threads')
       .update(dbUpdates as any)

@@ -2,8 +2,9 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   PanelLeftOpen, PanelRightOpen, Search, Mail, Target, Map,
   FileText, Send, Paperclip, Upload, Loader2, Zap, Database,
-  Building2, MessageSquare, ClipboardList,
+  Building2, MessageSquare, ClipboardList, Link2, Link2Off,
 } from 'lucide-react';
+import { LinkThreadDialog } from './LinkThreadDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -110,6 +111,7 @@ export function StrategyMainPanel({
   const [activeWorkflow, setActiveWorkflow] = useState<string | null>(null);
   const [workflowSheetOpen, setWorkflowSheetOpen] = useState(false);
   const [taskPrompterOpen, setTaskPrompterOpen] = useState(false);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -243,6 +245,29 @@ export function StrategyMainPanel({
         )}
         <ThreadIcon className="h-2.5 w-2.5 text-primary/30 shrink-0" />
         <h1 className="text-[11px] font-semibold text-foreground/70 truncate min-w-0">{thread.title}</h1>
+
+        {/* Linkage chip — explicit confirmed-mode signal. Click to open LinkThreadDialog. */}
+        {(() => {
+          const acctName = linkedContext?.account?.name as string | undefined;
+          const oppName = linkedContext?.opportunity?.name as string | undefined;
+          const isLinked = !!(thread.linked_account_id || thread.linked_opportunity_id);
+          const label = acctName ?? oppName ?? (isLinked ? 'Linked' : 'Freeform');
+          return (
+            <button
+              onClick={() => setLinkDialogOpen(true)}
+              className={cn(
+                'h-5 px-1.5 rounded-md flex items-center gap-1 text-[10px] font-medium border transition-colors shrink-0 max-w-[140px]',
+                isLinked
+                  ? 'border-primary/30 bg-primary/5 text-primary hover:bg-primary/10'
+                  : 'border-dashed border-border/50 text-muted-foreground hover:border-border hover:text-foreground/70'
+              )}
+              title={isLinked ? `Linked to ${label} — click to change` : 'Freeform thread — click to link to an account or opportunity'}
+            >
+              {isLinked ? <Link2 className="h-2.5 w-2.5" /> : <Link2Off className="h-2.5 w-2.5" />}
+              <span className="truncate">{label}</span>
+            </button>
+          );
+        })()}
 
         <div className="flex-1" />
 
@@ -509,6 +534,16 @@ export function StrategyMainPanel({
         }}
         isRunning={isTaskRunning}
         linkedContext={linkedContext}
+      />
+
+      {/* ── Link Thread Dialog — explicit account/opportunity linkage ── */}
+      <LinkThreadDialog
+        open={linkDialogOpen}
+        onOpenChange={setLinkDialogOpen}
+        thread={thread}
+        onApply={async (updates) => {
+          await onUpdateThread(thread.id, updates);
+        }}
       />
     </div>
   );
