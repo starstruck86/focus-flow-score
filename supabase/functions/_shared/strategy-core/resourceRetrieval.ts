@@ -56,7 +56,11 @@ export interface RetrievedResource {
     | "prior_use"
     | "account_linked"
     | "opportunity_linked"
+    | "description_match"
+    | "content_match"
     | "category_intent";
+  /** Short snippet of the matched body, when matchKind is description/content. */
+  matchSnippet?: string;
   /** Human-readable reason — surfaced in the prompt block. */
   matchReason: string;
 }
