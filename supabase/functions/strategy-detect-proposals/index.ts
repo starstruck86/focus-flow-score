@@ -165,16 +165,18 @@ async function callLLMForExtraction(prompt: string): Promise<DetectedProposal[]>
 
   const data = await resp.json();
   const text = data?.choices?.[0]?.message?.content ?? "{}";
+  console.log("[detector] raw LLM output (first 2k):", text.slice(0, 2000));
   try {
     const parsed = JSON.parse(text);
     const arr = Array.isArray(parsed?.proposals) ? parsed.proposals : [];
+    console.log("[detector] parsed proposals count:", arr.length);
     return arr.filter((p: any) =>
       p && typeof p.proposal_type === "string" &&
       typeof p.target_scope === "string" &&
       p.payload && typeof p.dedupe_seed === "string"
     );
   } catch (e) {
-    console.error("[detector] JSON parse failed", e);
+    console.error("[detector] JSON parse failed", e, "raw:", text.slice(0, 500));
     return [];
   }
 }
