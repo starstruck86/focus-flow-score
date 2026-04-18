@@ -87,8 +87,26 @@ Deno.serve(async (req) => {
     if (!a) return err(403, 'target_account_id does not belong to user');
   }
   if (targetOpportunityId) {
-    const { data: o } = await svc.from('opportunities').select('id').eq('id', targetOpportunityId).eq('user_id', user.id).maybeSingle();
+    const { data: o } = await svc.from('opportunities').select('id, account_id').eq('id', targetOpportunityId).eq('user_id', user.id).maybeSingle();
     if (!o) return err(403, 'target_opportunity_id does not belong to user');
+    if (targetAccountId && o.account_id && o.account_id !== targetAccountId) {
+      return err(409, 'Opportunity belongs to a different account than target_account_id', {
+        code: 'opp_account_mismatch',
+        opp_account_id: o.account_id,
+        target_account_id: targetAccountId,
+      });
+    }
+  }
+
+  // Trust gate: if the thread already carries unresolved blocking conflicts,
+  // do not allow staging anything for promotion. Resolve first.
+  const { data: trustRow } = await svc.rpc('compute_thread_trust_state', { p_thread_id: threadId });
+  const trustState = (typeof trustRow === 'string' ? trustRow : 'safe') as 'safe' | 'warning' | 'blocked';
+  if (trustState === 'blocked') {
+    return err(409, 'Thread has unresolved entity conflicts; staging is blocked', {
+      code: 'thread_trust_blocked',
+      trust_state: trustState,
+    });
   }
 
   let proposalType: 'artifact_promotion' | 'resource_promotion' | 'transcript' =
