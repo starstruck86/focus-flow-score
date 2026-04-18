@@ -642,9 +642,16 @@ export function renderResourceContextBlock(args: {
     if (h.template_category) flags.push(`cat:${h.template_category}`);
     if (h.account_id) flags.push("account-linked");
     if (h.opportunity_id) flags.push("opp-linked");
+    // Tag body matches so the model knows this hit came from content,
+    // not from the title — and must say so honestly to the user.
+    if (h.matchKind === "content_match") flags.push("body-match");
+    if (h.matchKind === "description_match") flags.push("desc-match");
     lines.push(`- RESOURCE[${idShort}] "${h.title}" — ${flags.join(", ")}`);
     lines.push(`    why: ${h.matchReason}`);
-    if (h.description) {
+    if (h.matchSnippet) {
+      lines.push(`    snippet: ${h.matchSnippet}`);
+    }
+    if (h.description && !h.matchSnippet) {
       const desc = h.description.replace(/\s+/g, " ").trim().slice(0, 180);
       if (desc) lines.push(`    desc: ${desc}`);
     }
