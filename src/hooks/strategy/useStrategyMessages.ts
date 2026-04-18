@@ -6,7 +6,12 @@ import { toast } from 'sonner';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
-export function useStrategyMessages(threadId: string | null) {
+interface UseStrategyMessagesOpts {
+  /** Called after an assistant streamed response completes. Receives the final text. */
+  onAssistantComplete?: (assistantText: string) => void;
+}
+
+export function useStrategyMessages(threadId: string | null, opts?: UseStrategyMessagesOpts) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<StrategyMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -125,13 +130,19 @@ export function useStrategyMessages(threadId: string | null) {
       }
 
       setTimeout(() => fetchMessages(), 500);
+
+      // Phase 3: fire detector once assistant message is fully streamed.
+      // Non-blocking — failures here must never break chat.
+      if (assistantText.trim().length > 200 && opts?.onAssistantComplete) {
+        try { opts.onAssistantComplete(assistantText); } catch (e) { console.warn('[chat] detector hook failed', e); }
+      }
     } catch (e: any) {
       toast.error(e.message || 'Failed to send message');
       setMessages(prev => prev.filter(m => m.id !== optimisticId));
     } finally {
       setIsSending(false);
     }
-  }, [threadId, user, fetchMessages, isSending]);
+  }, [threadId, user, fetchMessages, isSending, opts]);
 
   const runWorkflow = useCallback(async (
     workflowType: string,
