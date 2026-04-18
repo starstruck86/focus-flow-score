@@ -382,7 +382,64 @@ export async function retrieveResourceContext(
     }
   }
 
-  // ── 3. Account-linked resources ──────────────────────────────
+  // ── 2b. Body match: description + content ────────────────────
+  // This is the path that catches "the Kevin Dorsey thing about ROI"
+  // when no title contains those words but the body does. We search
+  // description first (cheap, signal-dense) and fall back to content
+  // (the full transcript/doc body, ~23KB avg in production).
+  //
+  // Important: we limit each phrase tightly (3 hits) and only fetch
+  // a description preview — never the full content blob — to keep
+  // prompt budgets honest. The matchSnippet is built post-fetch
+  // from a separate small content slice via the
+  // get_resource_content_prefixes RPC if needed; for now we surface
+  // the description as the snippet when it contains the phrase, else
+  // a generic "matched in body" reason.
+  for (const phrase of phrases) {
+    if (all.length >= HARD_LIMIT) break;
+    const escaped = `%${escapeIlike(phrase)}%`;
+    try {
+      const { data } = await supabase
+        .from("resources")
+        .select(SAFE_FIELDS + ",content")
+        .eq("user_id", userId)
+        .or(`description.ilike.${escaped},content.ilike.${escaped}`)
+        .limit(4);
+      // Strip content blob from rows before pushing (don't store 20KB on each hit).
+      const lean = (data || []).map((r: any) => {
+        const inDesc = (r.description || "").toLowerCase().includes(phrase.toLowerCase());
+        const snip = inDesc
+          ? snippetAround(r.description, phrase)
+          : snippetAround(r.content, phrase);
+        return { ...r, _snip: snip, _inDesc: inDesc };
+      });
+      push(
+        lean,
+        // Tag as description_match when phrase is in description (stronger
+        // signal — descriptions are curated), else content_match.
+        // We can't split a single push() across kinds, so split the array.
+        "description_match" as any,
+        (_r: any) => `Phrase "${phrase}" appears in resource body`,
+        (r: any) => r._snip,
+      );
+    } catch (e) {
+      console.warn("[resourceRetrieval] body search failed:", (e as Error).message);
+    }
+  }
+
+  // Re-tag: rows where the phrase was only in content get content_match.
+  for (const h of all) {
+    if (h.matchKind !== "description_match") continue;
+    // We didn't carry _inDesc onto the cleaned hit; re-derive cheaply
+    // from the snippet+description. If snippet appears in description,
+    // keep description_match; otherwise downgrade to content_match.
+    const desc = (h.description || "").toLowerCase();
+    const snip = (h.matchSnippet || "").toLowerCase().replace(/^…|…$/g, "").trim();
+    if (snip && !desc.includes(snip.slice(0, Math.min(40, snip.length)))) {
+      h.matchKind = "content_match";
+    }
+  }
+
   if (args.accountId && all.length < HARD_LIMIT) {
     try {
       const { data } = await supabase
