@@ -711,24 +711,42 @@ const ARTIFACT_TYPE_ICONS: Record<string, typeof FileText> = {
   next_steps: ArrowRight,
 };
 
-function ArtifactRailCard({ artifact, onClick }: {
+function ArtifactRailCard({ artifact, onClick, onPromote, isStaging }: {
   artifact: StrategyArtifact;
   onClick: () => void;
+  onPromote?: () => void;
+  isStaging?: boolean;
 }) {
   const TypeIcon = ARTIFACT_TYPE_ICONS[artifact.artifact_type] || FileText;
   const typeLabel = artifact.artifact_type.replace(/_/g, ' ');
 
   return (
-    <button
-      className="w-full bg-muted/20 rounded-lg border border-border/20 overflow-hidden px-2.5 py-2 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors"
-      onClick={onClick}
-    >
-      <TypeIcon className="h-3 w-3 text-primary/70 shrink-0" />
-      <span className="text-[11px] font-medium truncate flex-1">{artifact.title}</span>
-      <Badge variant="outline" className="text-[8px] px-1 py-0 capitalize shrink-0">{typeLabel}</Badge>
-      {artifact.version > 1 && (
-        <Badge variant="secondary" className="text-[7px] px-1 py-0">v{artifact.version}</Badge>
+    <div className="w-full bg-muted/20 rounded-lg border border-border/20 overflow-hidden">
+      <button
+        className="w-full px-2.5 py-2 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors"
+        onClick={onClick}
+      >
+        <TypeIcon className="h-3 w-3 text-primary/70 shrink-0" />
+        <span className="text-[11px] font-medium truncate flex-1">{artifact.title}</span>
+        <Badge variant="outline" className="text-[8px] px-1 py-0 capitalize shrink-0">{typeLabel}</Badge>
+        {artifact.version > 1 && (
+          <Badge variant="secondary" className="text-[7px] px-1 py-0">v{artifact.version}</Badge>
+        )}
+      </button>
+      {onPromote && (
+        <div className="px-2.5 pb-1.5">
+          <Button
+            size="sm" variant="ghost"
+            className="h-5 text-[9px] px-1.5 gap-0.5 text-cyan-300 hover:bg-cyan-500/10 w-full justify-start"
+            onClick={onPromote}
+            disabled={isStaging}
+            title="Stage as proposal — rep classifies and confirms before any shared write"
+          >
+            {isStaging ? <Loader2 className="h-2 w-2 animate-spin" /> : <ArrowRight className="h-2 w-2" />}
+            Promote to shared resource
+          </Button>
+        </div>
       )}
-    </button>
+    </div>
   );
 }
