@@ -440,6 +440,7 @@ export async function retrieveResourceContext(
     }
   }
 
+  // ── 3. Account-linked resources ──────────────────────────────
   if (args.accountId && all.length < HARD_LIMIT) {
     try {
       const { data } = await supabase
