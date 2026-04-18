@@ -89,13 +89,22 @@ export function CreateThreadDialog({ open, onOpenChange, onCreateThread }: Props
     }
   }, [threadType, linkedAccountId, linkedOpportunityId, accounts, opportunities]);
 
+  // Linkage validity — prevents the "account_linked but no account selected" bug
+  // that caused threads to be created with linked_account_id = NULL
+  const linkageValid =
+    threadType === 'freeform' ||
+    threadType === 'territory_linked' ||
+    (threadType === 'account_linked' && !!linkedAccountId) ||
+    (threadType === 'opportunity_linked' && !!linkedOpportunityId);
+
   const handleCreate = () => {
+    if (!linkageValid) return;
     onCreateThread({
       title: title.trim() || 'Untitled Thread',
       lane,
       threadType,
-      linkedAccountId: threadType === 'account_linked' ? linkedAccountId : undefined,
-      linkedOpportunityId: threadType === 'opportunity_linked' ? linkedOpportunityId : undefined,
+      linkedAccountId: threadType === 'account_linked' && linkedAccountId ? linkedAccountId : undefined,
+      linkedOpportunityId: threadType === 'opportunity_linked' && linkedOpportunityId ? linkedOpportunityId : undefined,
     });
     onOpenChange(false);
     // Reset
