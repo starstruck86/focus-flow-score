@@ -61,6 +61,15 @@ interface Props {
   onEditProposalPayload?: (id: string, payload: Record<string, unknown>) => Promise<boolean>;
   onPromoteProposal?: (id: string, opts?: { mark_reusable?: boolean; resource_type_override?: string }) => Promise<{ success?: boolean; promoted_table?: string; promoted_record_id?: string; already_promoted?: boolean; error?: string }>;
   onScanThreadProposals?: () => Promise<{ scanned: number; created: number; errors: number }>;
+  onStageProposal?: (input: {
+    sourceType: 'artifact' | 'upload';
+    sourceId: string;
+    targetAccountId?: string | null;
+    targetOpportunityId?: string | null;
+    targetScope?: ProposalScope;
+    proposalType?: 'artifact_promotion' | 'resource_promotion' | 'transcript';
+    markReusable?: boolean;
+  }) => Promise<{ proposal_id: string | null; reused?: boolean; error?: string }>;
 }
 
 const MEMORY_TYPES = [
@@ -125,6 +134,7 @@ export function StrategyRightRail({
   onRegenerateArtifact, isTransforming, onReprocessUpload,
   onUseArtifactAsInput, onDuplicateArtifact,
   proposals, proposalsLoading, onConfirmProposal, onRejectProposal, onEditProposalPayload, onPromoteProposal, onScanThreadProposals,
+  onStageProposal,
 }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
@@ -132,10 +142,45 @@ export function StrategyRightRail({
   const [savedSuggestions, setSavedSuggestions] = useState<Set<number>>(new Set());
   const [selectedArtifact, setSelectedArtifact] = useState<StrategyArtifact | null>(null);
   const [expandedUploadId, setExpandedUploadId] = useState<string | null>(null);
+  const [stagingId, setStagingId] = useState<string | null>(null);
 
   const pinnedMemories = useMemo(() => memories.filter(m => m.is_pinned), [memories]);
   const risks = useMemo(() => memories.filter(m => m.memory_type === 'risk').slice(0, 5), [memories]);
   const nextSteps = useMemo(() => memories.filter(m => m.memory_type === 'next_step' || m.memory_type === 'priority').slice(0, 5), [memories]);
+
+  const handleStage = useCallback(async (
+    sourceType: 'artifact' | 'upload',
+    sourceId: string,
+    proposalType?: 'artifact_promotion' | 'resource_promotion' | 'transcript',
+  ) => {
+    if (!onStageProposal) return;
+    setStagingId(sourceId);
+    try {
+      // Default scope: opportunity if thread is opp-linked, else account.
+      // Safe — the rep still must explicitly classify + confirm in the
+      // proposal review panel before any shared write happens.
+      const targetScope: ProposalScope =
+        thread.linked_opportunity_id ? 'opportunity' : 'account';
+      const result = await onStageProposal({
+        sourceType,
+        sourceId,
+        targetAccountId: thread.linked_account_id ?? null,
+        targetOpportunityId: thread.linked_opportunity_id ?? null,
+        targetScope,
+        proposalType,
+      });
+      if (result.error || !result.proposal_id) {
+        toast.error(result.error || 'Could not stage promotion');
+      } else if (result.reused) {
+        toast.success('Already staged — review in Proposals above');
+      } else {
+        toast.success('Staged for promotion — review above to classify and confirm');
+      }
+    } finally {
+      setStagingId(null);
+    }
+  }, [onStageProposal, thread.linked_account_id, thread.linked_opportunity_id]);
+
 
   const handleSave = () => {
     if (!memContent.trim()) return;
@@ -425,6 +470,18 @@ export function StrategyRightRail({
                             <RefreshCw className="h-2 w-2" /> Reprocess
                           </Button>
                         )}
+                        {onStageProposal && (
+                          <Button
+                            size="sm" variant="ghost"
+                            className="h-5 text-[9px] px-1.5 gap-0.5 text-cyan-300 hover:bg-cyan-500/10"
+                            onClick={() => handleStage('upload', u.id)}
+                            disabled={stagingId === u.id}
+                            title="Stage as proposal — rep classifies and confirms before any shared write"
+                          >
+                            {stagingId === u.id ? <Loader2 className="h-2 w-2 animate-spin" /> : <ArrowRight className="h-2 w-2" />}
+                            Promote
+                          </Button>
+                        )}
                       </div>
                     </div>
                     {isExpanded && u.parsed_text && (
@@ -487,6 +544,8 @@ export function StrategyRightRail({
                   key={a.id}
                   artifact={a}
                   onClick={() => setSelectedArtifact(a)}
+                  onPromote={onStageProposal ? () => handleStage('artifact', a.id, 'artifact_promotion') : undefined}
+                  isStaging={stagingId === a.id}
                 />
               ))}
             </div>
@@ -652,24 +711,42 @@ const ARTIFACT_TYPE_ICONS: Record<string, typeof FileText> = {
   next_steps: ArrowRight,
 };
 
-function ArtifactRailCard({ artifact, onClick }: {
+function ArtifactRailCard({ artifact, onClick, onPromote, isStaging }: {
   artifact: StrategyArtifact;
   onClick: () => void;
+  onPromote?: () => void;
+  isStaging?: boolean;
 }) {
   const TypeIcon = ARTIFACT_TYPE_ICONS[artifact.artifact_type] || FileText;
   const typeLabel = artifact.artifact_type.replace(/_/g, ' ');
 
   return (
-    <button
-      className="w-full bg-muted/20 rounded-lg border border-border/20 overflow-hidden px-2.5 py-2 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors"
-      onClick={onClick}
-    >
-      <TypeIcon className="h-3 w-3 text-primary/70 shrink-0" />
-      <span className="text-[11px] font-medium truncate flex-1">{artifact.title}</span>
-      <Badge variant="outline" className="text-[8px] px-1 py-0 capitalize shrink-0">{typeLabel}</Badge>
-      {artifact.version > 1 && (
-        <Badge variant="secondary" className="text-[7px] px-1 py-0">v{artifact.version}</Badge>
+    <div className="w-full bg-muted/20 rounded-lg border border-border/20 overflow-hidden">
+      <button
+        className="w-full px-2.5 py-2 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors"
+        onClick={onClick}
+      >
+        <TypeIcon className="h-3 w-3 text-primary/70 shrink-0" />
+        <span className="text-[11px] font-medium truncate flex-1">{artifact.title}</span>
+        <Badge variant="outline" className="text-[8px] px-1 py-0 capitalize shrink-0">{typeLabel}</Badge>
+        {artifact.version > 1 && (
+          <Badge variant="secondary" className="text-[7px] px-1 py-0">v{artifact.version}</Badge>
+        )}
+      </button>
+      {onPromote && (
+        <div className="px-2.5 pb-1.5">
+          <Button
+            size="sm" variant="ghost"
+            className="h-5 text-[9px] px-1.5 gap-0.5 text-cyan-300 hover:bg-cyan-500/10 w-full justify-start"
+            onClick={onPromote}
+            disabled={isStaging}
+            title="Stage as proposal — rep classifies and confirms before any shared write"
+          >
+            {isStaging ? <Loader2 className="h-2 w-2 animate-spin" /> : <ArrowRight className="h-2 w-2" />}
+            Promote to shared resource
+          </Button>
+        </div>
       )}
-    </button>
+    </div>
   );
 }

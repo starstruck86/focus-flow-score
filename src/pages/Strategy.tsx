@@ -70,7 +70,7 @@ export default function Strategy() {
   const { outputs, refetch: refetchOutputs } = useStrategyOutputs(activeThread?.id ?? null);
   const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
   const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
-  const { proposals, isLoading: proposalsLoading, detect: detectProposals, scanThread: scanThreadProposals, confirm: confirmProposal, reject: rejectProposal, editPayload: editProposalPayload, promote: promoteProposal } = useStrategyProposals(activeThread?.id ?? null);
+  const { proposals, isLoading: proposalsLoading, detect: detectProposals, scanThread: scanThreadProposals, confirm: confirmProposal, reject: rejectProposal, editPayload: editProposalPayload, promote: promoteProposal, stageProposal } = useStrategyProposals(activeThread?.id ?? null);
 
   // Auto-collapse right rail when it has no meaningful content.
   // Linked threads ALWAYS show the rail so the scan affordance is reachable.
@@ -220,6 +220,7 @@ export default function Strategy() {
             onEditProposalPayload={editProposalPayload}
             onPromoteProposal={promoteProposal}
             onScanThreadProposals={scanThreadProposals}
+            onStageProposal={stageProposal}
           />
         )}
 
