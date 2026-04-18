@@ -2,8 +2,15 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-export type ProposalStatus = 'pending' | 'confirmed' | 'rejected' | 'promoted' | 'failed' | 'superseded';
+export type ProposalStatus =
+  | 'pending'
+  | 'confirmed'                      // legacy
+  | 'confirmed_research_only'
+  | 'confirmed_shared_intelligence'
+  | 'confirmed_crm_contact'
+  | 'rejected' | 'promoted' | 'failed' | 'superseded';
 export type ProposalScope = 'account' | 'opportunity' | 'both';
+export type PromotionClass = 'research_only' | 'shared_intelligence' | 'crm_contact';
 export type ProposalType =
   | 'contact' | 'account_note' | 'account_intelligence'
   | 'opportunity_note' | 'opportunity_intelligence'
@@ -34,6 +41,7 @@ export interface StrategyProposal {
   promotion_error: string | null;
   detector_version: string;
   detector_confidence: number | null;
+  confirmed_class: PromotionClass | null;
   created_at: string;
   updated_at: string;
 }
@@ -55,7 +63,12 @@ export function useStrategyProposals(threadId: string | null) {
       .from('strategy_promotion_proposals')
       .select('*')
       .eq('thread_id', threadId)
-      .in('status', ['pending', 'confirmed', 'promoted', 'failed'])
+      .in('status', [
+        'pending',
+        'confirmed', 'confirmed_research_only',
+        'confirmed_shared_intelligence', 'confirmed_crm_contact',
+        'promoted', 'failed',
+      ])
       .order('created_at', { ascending: false })
       .limit(50);
     if (!error && data) setProposals(data as StrategyProposal[]);
@@ -151,13 +164,29 @@ export function useStrategyProposals(threadId: string | null) {
     return { scanned: jobs.length, created, errors };
   }, [threadId, user, detect, fetchProposals]);
 
+  /**
+   * Class-aware confirm. The rep MUST pick a promotion class:
+   *  - 'research_only'        → durable Strategy proposal, never promoted
+   *  - 'shared_intelligence'  → eligible to write to *_strategy_memory / call_transcripts / resources
+   *  - 'crm_contact'          → eligible to write to contacts + account_contacts (person-types only)
+   *
+   * crm_contact is the relationship-confirmation gate: caller must also pass a
+   * target_account_id or the promoter will reject it.
+   */
   const confirm = useCallback(async (
     proposalId: string,
+    promotionClass: PromotionClass,
     overrides?: { target_account_id?: string | null; target_opportunity_id?: string | null; target_scope?: ProposalScope; payload_json?: Record<string, unknown> }
   ) => {
     if (!user) return false;
+    const statusByClass: Record<PromotionClass, ProposalStatus> = {
+      research_only: 'confirmed_research_only',
+      shared_intelligence: 'confirmed_shared_intelligence',
+      crm_contact: 'confirmed_crm_contact',
+    };
     const updates: Record<string, unknown> = {
-      status: 'confirmed',
+      status: statusByClass[promotionClass],
+      confirmed_class: promotionClass,
       confirmed_by: user.id,
       confirmed_at: new Date().toISOString(),
     };

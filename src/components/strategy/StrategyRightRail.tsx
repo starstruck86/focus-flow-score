@@ -29,7 +29,7 @@ import { getParseStatus } from '@/hooks/strategy/useStrategyUploads';
 import type { StrategyRollup, MemorySuggestion } from '@/lib/strategy/workflowSchemas';
 import { ArtifactDetailModal } from './ArtifactDetailModal';
 import { ProposalReviewPanel } from './ProposalReviewPanel';
-import type { StrategyProposal, ProposalScope } from '@/hooks/strategy/useStrategyProposals';
+import type { StrategyProposal, ProposalScope, PromotionClass } from '@/hooks/strategy/useStrategyProposals';
 
 interface Props {
   thread: StrategyThread;
@@ -56,7 +56,7 @@ interface Props {
   // Phase 3 — proposal review
   proposals?: StrategyProposal[];
   proposalsLoading?: boolean;
-  onConfirmProposal?: (id: string, overrides?: { target_account_id?: string | null; target_opportunity_id?: string | null; target_scope?: ProposalScope; payload_json?: Record<string, unknown> }) => Promise<boolean>;
+  onConfirmProposal?: (id: string, promotionClass: PromotionClass, overrides?: { target_account_id?: string | null; target_opportunity_id?: string | null; target_scope?: ProposalScope; payload_json?: Record<string, unknown> }) => Promise<boolean>;
   onRejectProposal?: (id: string, reason?: string) => Promise<boolean>;
   onEditProposalPayload?: (id: string, payload: Record<string, unknown>) => Promise<boolean>;
   onPromoteProposal?: (id: string, opts?: { mark_reusable?: boolean; resource_type_override?: string }) => Promise<{ success?: boolean; promoted_table?: string; promoted_record_id?: string; already_promoted?: boolean; error?: string }>;

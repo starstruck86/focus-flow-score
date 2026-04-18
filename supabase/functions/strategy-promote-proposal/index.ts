@@ -1,18 +1,19 @@
 // strategy-promote-proposal
-// Phase 4 Promoter — turns a confirmed strategy_promotion_proposals row into
-// a real shared system-of-record row with full provenance.
+// Phase 5 Promoter — class-aware, scope-aware, relationship-confirmed shared writes.
 //
-// Hard rules:
-//  - Proposal MUST be in status='confirmed'.
-//  - target_scope MUST be set.
-//  - For account-scope writes, target_account_id MUST be present.
-//  - For opportunity-scope writes, target_opportunity_id MUST be present.
-//  - Scope='both' requires BOTH ids.
-//  - All writes carry source='strategy', source_strategy_thread_id,
-//    source_proposal_id, promoted_by, promoted_at.
-//  - On success, proposal is updated to status='promoted', promoted_record_id set.
-//  - On failure, proposal is updated to status='failed', promotion_error set.
-//  - Idempotent: if proposal already promoted, return the existing record.
+// CORE SAFETY MODEL:
+//   A proposal becomes a shared row ONLY when ALL are true:
+//     - status starts in one of: 'confirmed_shared_intelligence' | 'confirmed_crm_contact'
+//       (legacy 'confirmed' still works but maps to 'shared_intelligence' for non-contact types only)
+//     - confirmed_class explicitly set
+//     - target_scope satisfies its required ids
+//     - For 'crm_contact': proposal_type ∈ {contact, stakeholder, champion}
+//                         AND target_account_id is set AND owned by the user
+//
+//   research_only NEVER promotes — it stays in proposals as the durable record.
+//
+// All writes carry source='strategy', source_strategy_thread_id,
+// source_proposal_id, promoted_by, promoted_at, promotion scope and class.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
@@ -32,6 +33,7 @@ type ProposalType =
   | 'resource_promotion' | 'artifact_promotion';
 
 type Scope = 'account' | 'opportunity' | 'both';
+type PromotionClass = 'research_only' | 'shared_intelligence' | 'crm_contact';
 
 interface Proposal {
   id: string;
@@ -46,8 +48,11 @@ interface Proposal {
   target_opportunity_id: string | null;
   payload_json: Record<string, unknown>;
   status: string;
+  confirmed_class: PromotionClass | null;
   promoted_record_id: string | null;
 }
+
+const PERSON_TYPES: ProposalType[] = ['contact', 'stakeholder', 'champion'];
 
 function err(status: number, message: string, extra: Record<string, unknown> = {}) {
   return new Response(JSON.stringify({ error: message, ...extra }), {
@@ -71,7 +76,6 @@ Deno.serve(async (req) => {
   const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-  // Authenticated user (RLS context)
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) return err(401, 'Missing Authorization');
 
@@ -82,8 +86,6 @@ Deno.serve(async (req) => {
   const user = userResp?.user;
   if (!user) return err(401, 'Invalid token');
 
-  // Service client used to bypass RLS for atomic provenance writes.
-  // We still scope every query by user_id so cross-user writes are impossible.
   const svc = createClient(SUPABASE_URL, SERVICE_KEY);
 
   let body: { proposal_id?: string; mark_reusable?: boolean; resource_type_override?: string };
@@ -105,18 +107,59 @@ Deno.serve(async (req) => {
   if (p.status === 'promoted' && p.promoted_record_id) {
     return ok({ already_promoted: true, promoted_record_id: p.promoted_record_id, proposal: p });
   }
-  if (p.status !== 'confirmed') {
-    return err(409, `Proposal is in status='${p.status}', must be 'confirmed' to promote`);
+
+  // ============ CLASS GATE ============
+  // Determine effective class. Reject anything that hasn't been class-confirmed.
+  let effectiveClass: PromotionClass | null = p.confirmed_class;
+
+  if (!effectiveClass) {
+    // Legacy fallback: a 'confirmed' (no class) proposal is treated as shared_intelligence
+    // ONLY for non-person types. Person types REQUIRE explicit crm_contact class.
+    if (p.status === 'confirmed' && !PERSON_TYPES.includes(p.proposal_type)) {
+      effectiveClass = 'shared_intelligence';
+    } else {
+      return err(409, 'Proposal must be class-confirmed before promotion', {
+        hint: 'Set confirmed_class to research_only, shared_intelligence, or crm_contact',
+        current_status: p.status,
+        proposal_type: p.proposal_type,
+      });
+    }
   }
 
-  // Scope discipline
+  // Status must be one of the confirmed states
+  const validConfirmedStates = new Set([
+    'confirmed', 'confirmed_research_only',
+    'confirmed_shared_intelligence', 'confirmed_crm_contact',
+  ]);
+  if (!validConfirmedStates.has(p.status)) {
+    return err(409, `Proposal status='${p.status}' is not promotable`);
+  }
+
+  // research_only NEVER promotes — that is the entire point of the class.
+  if (effectiveClass === 'research_only') {
+    return err(409, 'research_only proposals are not promoted to shared tables', {
+      hint: 'They live as durable Strategy proposals only. Re-classify as shared_intelligence or crm_contact to promote.',
+    });
+  }
+
+  // crm_contact gate: only person-types, must have account
+  if (effectiveClass === 'crm_contact') {
+    if (!PERSON_TYPES.includes(p.proposal_type)) {
+      return err(422, `crm_contact class requires proposal_type ∈ {contact, stakeholder, champion} (got ${p.proposal_type})`);
+    }
+    if (!p.target_account_id) {
+      return err(422, 'crm_contact promotion requires target_account_id (relationship-confirmed account)');
+    }
+  }
+
+  // ============ SCOPE GATE ============
   const scope = p.target_scope;
   const needsAccount = scope === 'account' || scope === 'both';
   const needsOpp = scope === 'opportunity' || scope === 'both';
   if (needsAccount && !p.target_account_id) return err(422, 'target_account_id required for account-scope promotion');
   if (needsOpp && !p.target_opportunity_id) return err(422, 'target_opportunity_id required for opportunity-scope promotion');
 
-  // Verify entity ownership for any referenced ids (defense in depth — RLS would catch this anyway)
+  // Ownership defense in depth
   if (p.target_account_id) {
     const { data: a } = await svc.from('accounts').select('id').eq('id', p.target_account_id).eq('user_id', user.id).maybeSingle();
     if (!a) return err(403, 'target_account_id does not belong to user');
@@ -139,107 +182,29 @@ Deno.serve(async (req) => {
     let promotedTable: string;
     const payload = p.payload_json ?? {};
 
-    switch (p.proposal_type) {
-      case 'contact':
-      case 'stakeholder':
-      case 'champion': {
-        promotedTable = 'contacts';
-        if (!p.target_account_id) {
-          throw new Error('Contacts must be promoted with an account scope (target_account_id)');
-        }
-        const name = String(payload.name ?? '').trim();
-        if (!name) throw new Error('payload.name is required for contact promotion');
-        const email = payload.email ? String(payload.email).trim().toLowerCase() : null;
+    // ============ ROUTING ============
+    // Person-type proposals split by class:
+    //   crm_contact → contacts + account_contacts
+    //   shared_intelligence → account_strategy_memory (as a "person of interest" intel note)
+    if (PERSON_TYPES.includes(p.proposal_type)) {
+      const name = String(payload.name ?? '').trim();
+      if (!name) throw new Error('payload.name is required for person promotion');
 
-        // Dedupe by email (per user)
-        if (email) {
-          const { data: existing } = await svc
-            .from('contacts').select('id, account_id').eq('user_id', user.id).ilike('email', email).maybeSingle();
-          if (existing) {
-            // attach to account if not already linked
-            if (!existing.account_id) {
-              await svc.from('contacts').update({ account_id: p.target_account_id, ...provenance })
-                .eq('id', existing.id).eq('user_id', user.id);
-            }
-            promotedId = existing.id;
-            break;
-          }
-        } else {
-          // dedupe by (account_id, lower(name))
-          const { data: existingByName } = await svc
-            .from('contacts').select('id').eq('user_id', user.id)
-            .eq('account_id', p.target_account_id).ilike('name', name).maybeSingle();
-          if (existingByName) { promotedId = existingByName.id; break; }
-        }
-
-        const insert = {
-          user_id: user.id,
-          account_id: p.target_account_id,
-          name,
-          email,
-          title: payload.title ?? null,
-          department: payload.department ?? null,
-          seniority: payload.seniority ?? null,
-          influence_level: payload.influence_level ?? 'medium',
-          buyer_role: p.proposal_type === 'champion' ? 'champion'
-            : p.proposal_type === 'stakeholder' ? (payload.buyer_role ?? 'stakeholder')
-            : payload.buyer_role ?? null,
-          notes: payload.notes ?? null,
-          linkedin_url: payload.linkedin_url ?? null,
-          ai_discovered: true,
-          discovery_source: 'strategy',
-          status: 'target',
-          ...provenance,
-        };
-        const { data: created, error } = await svc.from('contacts').insert(insert).select('id').single();
-        if (error) throw error;
-        promotedId = created.id;
-
-        // Mirror into account_contacts (lightweight join used by other surfaces)
-        await svc.from('account_contacts').insert({
-          user_id: user.id,
-          account_id: p.target_account_id,
-          name,
-          title: payload.title ?? null,
-          notes: payload.notes ?? null,
-          source_proposal_id: p.id,
-        });
-        break;
-      }
-
-      case 'transcript': {
-        promotedTable = 'call_transcripts';
-        const content = String(payload.content ?? payload.text ?? '').trim();
-        if (!content) throw new Error('payload.content is required for transcript promotion');
-        const { data: created, error } = await svc.from('call_transcripts').insert({
-          user_id: user.id,
-          account_id: p.target_account_id,
-          opportunity_id: p.target_opportunity_id,
-          title: String(payload.title ?? 'Strategy-promoted context'),
-          content,
-          summary: payload.summary ?? null,
-          call_date: payload.call_date ?? new Date().toISOString().slice(0, 10),
-          call_type: payload.call_type ?? 'Strategy Context',
-          participants: payload.participants ?? null,
-          tags: Array.isArray(payload.tags) ? payload.tags : ['strategy'],
-          ...provenance,
-        }).select('id').single();
-        if (error) throw error;
-        promotedId = created.id;
-        break;
-      }
-
-      case 'account_note':
-      case 'account_intelligence': {
+      if (effectiveClass === 'shared_intelligence') {
+        // Save as account intelligence note, NOT as a CRM contact.
+        if (!p.target_account_id) throw new Error('shared_intelligence for a person requires target_account_id');
         promotedTable = 'account_strategy_memory';
-        if (!p.target_account_id) throw new Error('account scope required');
-        const content = String(payload.content ?? payload.text ?? '').trim();
-        if (!content) throw new Error('payload.content required');
+        const role = p.proposal_type === 'champion' ? 'potential champion'
+                  : p.proposal_type === 'stakeholder' ? 'potential stakeholder'
+                  : 'person of interest';
+        const noteParts = [`${role}: ${name}`];
+        if (payload.title) noteParts.push(`(${payload.title})`);
+        if (payload.notes) noteParts.push(`— ${payload.notes}`);
         const { data: created, error } = await svc.from('account_strategy_memory').insert({
           user_id: user.id,
           account_id: p.target_account_id,
-          memory_type: payload.memory_type ?? (p.proposal_type === 'account_intelligence' ? 'fact' : 'fact'),
-          content,
+          memory_type: 'stakeholder_note',
+          content: noteParts.join(' '),
           confidence: payload.confidence ?? null,
           source_thread_id: p.thread_id,
           source_message_id: p.source_message_id,
@@ -247,93 +212,195 @@ Deno.serve(async (req) => {
         }).select('id').single();
         if (error) throw error;
         promotedId = created.id;
-        break;
-      }
+      } else {
+        // crm_contact — write real contact + account link
+        promotedTable = 'contacts';
+        const email = payload.email ? String(payload.email).trim().toLowerCase() : null;
 
-      case 'opportunity_note':
-      case 'opportunity_intelligence':
-      case 'risk':
-      case 'blocker': {
-        // Scope-aware routing: risk/blocker can be account-level when no opp exists.
-        // - opportunity scope OR both → opportunity_strategy_memory (requires opp id)
-        // - account scope → account_strategy_memory (requires account id)
-        const content = String(payload.content ?? payload.text ?? '').trim();
-        if (!content) throw new Error('payload.content required');
-        const memoryType = (p.proposal_type === 'risk' || p.proposal_type === 'blocker')
-          ? 'risk'
-          : (payload.memory_type ?? 'fact');
+        // Dedupe by email (per user, scoped to account)
+        if (email) {
+          const { data: existing } = await svc
+            .from('contacts').select('id, account_id')
+            .eq('user_id', user.id).ilike('email', email).maybeSingle();
+          if (existing) {
+            if (existing.account_id !== p.target_account_id) {
+              await svc.from('contacts').update({ account_id: p.target_account_id, ...provenance })
+                .eq('id', existing.id).eq('user_id', user.id);
+            }
+            promotedId = existing.id;
+          }
+        }
+        if (!promotedId) {
+          // dedupe by (account_id, lower(name))
+          const { data: existingByName } = await svc
+            .from('contacts').select('id').eq('user_id', user.id)
+            .eq('account_id', p.target_account_id).ilike('name', name).maybeSingle();
+          if (existingByName) promotedId = existingByName.id;
+        }
 
-        if (p.target_scope === 'opportunity' || p.target_scope === 'both') {
-          if (!p.target_opportunity_id) throw new Error('target_opportunity_id required for opportunity-scope risk/blocker');
-          promotedTable = 'opportunity_strategy_memory';
-          const { data: created, error } = await svc.from('opportunity_strategy_memory').insert({
-            user_id: user.id,
-            opportunity_id: p.target_opportunity_id,
-            memory_type: memoryType,
-            content,
-            confidence: payload.confidence ?? null,
-            source_thread_id: p.thread_id,
-            source_message_id: p.source_message_id,
-            source_proposal_id: p.id,
-          }).select('id').single();
-          if (error) throw error;
-          promotedId = created.id;
-        } else {
-          // account-scope (default for risks discovered before a deal exists)
-          if (!p.target_account_id) throw new Error('target_account_id required for account-scope risk/blocker');
-          promotedTable = 'account_strategy_memory';
-          const { data: created, error } = await svc.from('account_strategy_memory').insert({
+        if (!promotedId) {
+          const insert = {
             user_id: user.id,
             account_id: p.target_account_id,
-            memory_type: memoryType,
-            content,
-            confidence: payload.confidence ?? null,
-            source_thread_id: p.thread_id,
-            source_message_id: p.source_message_id,
-            source_proposal_id: p.id,
-          }).select('id').single();
+            name,
+            email,
+            title: payload.title ?? null,
+            department: payload.department ?? null,
+            seniority: payload.seniority ?? null,
+            influence_level: payload.influence_level ?? 'medium',
+            buyer_role: p.proposal_type === 'champion' ? 'champion'
+              : p.proposal_type === 'stakeholder' ? (payload.buyer_role ?? 'stakeholder')
+              : payload.buyer_role ?? null,
+            notes: payload.notes ?? null,
+            linkedin_url: payload.linkedin_url ?? null,
+            ai_discovered: true,
+            discovery_source: 'strategy',
+            status: 'target',
+            ...provenance,
+          };
+          const { data: created, error } = await svc.from('contacts').insert(insert).select('id').single();
           if (error) throw error;
           promotedId = created.id;
         }
-        break;
+
+        // Mirror into account_contacts only if not already linked from this proposal
+        const { data: existingLink } = await svc.from('account_contacts').select('id')
+          .eq('user_id', user.id).eq('account_id', p.target_account_id)
+          .ilike('name', name).maybeSingle();
+        if (!existingLink) {
+          await svc.from('account_contacts').insert({
+            user_id: user.id,
+            account_id: p.target_account_id,
+            name,
+            title: payload.title ?? null,
+            notes: payload.notes ?? null,
+            source_proposal_id: p.id,
+          });
+        }
       }
+    } else {
+      // Non-person types: use type-driven routing (all are shared_intelligence-class)
+      switch (p.proposal_type) {
+        case 'transcript': {
+          promotedTable = 'call_transcripts';
+          const content = String(payload.content ?? payload.text ?? '').trim();
+          if (!content) throw new Error('payload.content is required for transcript promotion');
+          const { data: created, error } = await svc.from('call_transcripts').insert({
+            user_id: user.id,
+            account_id: p.target_account_id,
+            opportunity_id: p.target_opportunity_id,
+            title: String(payload.title ?? 'Strategy-promoted context'),
+            content,
+            summary: payload.summary ?? null,
+            call_date: payload.call_date ?? new Date().toISOString().slice(0, 10),
+            call_type: payload.call_type ?? 'Strategy Context',
+            participants: payload.participants ?? null,
+            tags: Array.isArray(payload.tags) ? payload.tags : ['strategy'],
+            ...provenance,
+          }).select('id').single();
+          if (error) throw error;
+          promotedId = created.id;
+          break;
+        }
 
-      case 'resource_promotion':
-      case 'artifact_promotion': {
-        promotedTable = 'resources';
-        const title = String(payload.title ?? 'Strategy-promoted artifact').trim();
-        const content = String(payload.content ?? '').trim();
-        const resourceType = body.resource_type_override
-          ?? payload.resource_type
-          ?? 'document';
-        const isReusableTemplate = body.mark_reusable === true || payload.is_template === true;
+        case 'account_note':
+        case 'account_intelligence': {
+          promotedTable = 'account_strategy_memory';
+          if (!p.target_account_id) throw new Error('account scope required');
+          const content = String(payload.content ?? payload.text ?? '').trim();
+          if (!content) throw new Error('payload.content required');
+          const { data: created, error } = await svc.from('account_strategy_memory').insert({
+            user_id: user.id,
+            account_id: p.target_account_id,
+            memory_type: payload.memory_type ?? 'fact',
+            content,
+            confidence: payload.confidence ?? null,
+            source_thread_id: p.thread_id,
+            source_message_id: p.source_message_id,
+            source_proposal_id: p.id,
+          }).select('id').single();
+          if (error) throw error;
+          promotedId = created.id;
+          break;
+        }
 
-        const { data: created, error } = await svc.from('resources').insert({
-          user_id: user.id,
-          title,
-          description: payload.description ?? null,
-          resource_type: resourceType,
-          content,
-          content_status: content ? 'content' : 'enriched',
-          account_id: needsAccount ? p.target_account_id : null,
-          opportunity_id: needsOpp ? p.target_opportunity_id : null,
-          tags: Array.isArray(payload.tags) ? payload.tags : ['strategy'],
-          is_template: isReusableTemplate,
-          template_category: isReusableTemplate ? (payload.template_category ?? 'strategy') : null,
-          source_strategy_artifact_id: p.source_artifact_id,
-          promotion_scope: scope,
-          ...provenance,
-        }).select('id').single();
-        if (error) throw error;
-        promotedId = created.id;
-        break;
+        case 'opportunity_note':
+        case 'opportunity_intelligence':
+        case 'risk':
+        case 'blocker': {
+          const content = String(payload.content ?? payload.text ?? '').trim();
+          if (!content) throw new Error('payload.content required');
+          const memoryType = (p.proposal_type === 'risk' || p.proposal_type === 'blocker')
+            ? 'risk' : (payload.memory_type ?? 'fact');
+
+          if (p.target_scope === 'opportunity' || p.target_scope === 'both') {
+            if (!p.target_opportunity_id) throw new Error('target_opportunity_id required for opportunity-scope risk/blocker');
+            promotedTable = 'opportunity_strategy_memory';
+            const { data: created, error } = await svc.from('opportunity_strategy_memory').insert({
+              user_id: user.id,
+              opportunity_id: p.target_opportunity_id,
+              memory_type: memoryType,
+              content,
+              confidence: payload.confidence ?? null,
+              source_thread_id: p.thread_id,
+              source_message_id: p.source_message_id,
+              source_proposal_id: p.id,
+            }).select('id').single();
+            if (error) throw error;
+            promotedId = created.id;
+          } else {
+            if (!p.target_account_id) throw new Error('target_account_id required for account-scope risk/blocker');
+            promotedTable = 'account_strategy_memory';
+            const { data: created, error } = await svc.from('account_strategy_memory').insert({
+              user_id: user.id,
+              account_id: p.target_account_id,
+              memory_type: memoryType,
+              content,
+              confidence: payload.confidence ?? null,
+              source_thread_id: p.thread_id,
+              source_message_id: p.source_message_id,
+              source_proposal_id: p.id,
+            }).select('id').single();
+            if (error) throw error;
+            promotedId = created.id;
+          }
+          break;
+        }
+
+        case 'resource_promotion':
+        case 'artifact_promotion': {
+          promotedTable = 'resources';
+          const title = String(payload.title ?? 'Strategy-promoted artifact').trim();
+          const content = String(payload.content ?? '').trim();
+          const resourceType = body.resource_type_override ?? payload.resource_type ?? 'document';
+          const isReusableTemplate = body.mark_reusable === true || payload.is_template === true;
+
+          const { data: created, error } = await svc.from('resources').insert({
+            user_id: user.id,
+            title,
+            description: payload.description ?? null,
+            resource_type: resourceType,
+            content,
+            content_status: content ? 'content' : 'enriched',
+            account_id: needsAccount ? p.target_account_id : null,
+            opportunity_id: needsOpp ? p.target_opportunity_id : null,
+            tags: Array.isArray(payload.tags) ? payload.tags : ['strategy'],
+            is_template: isReusableTemplate,
+            template_category: isReusableTemplate ? (payload.template_category ?? 'strategy') : null,
+            source_strategy_artifact_id: p.source_artifact_id,
+            promotion_scope: scope,
+            ...provenance,
+          }).select('id').single();
+          if (error) throw error;
+          promotedId = created.id;
+          break;
+        }
+
+        default:
+          throw new Error(`Unsupported proposal_type: ${p.proposal_type}`);
       }
-
-      default:
-        throw new Error(`Unsupported proposal_type: ${p.proposal_type}`);
     }
 
-    // Mark proposal promoted
     await svc.from('strategy_promotion_proposals').update({
       status: 'promoted',
       promoted_record_id: promotedId,
@@ -344,12 +411,13 @@ Deno.serve(async (req) => {
     return ok({
       success: true,
       proposal_id: p.id,
-      promoted_table: promotedTable,
+      promoted_table: promotedTable!,
       promoted_record_id: promotedId,
       scope,
+      promotion_class: effectiveClass,
     });
   } catch (e: any) {
-    console.error('[promoter] failed', { proposal_id: p.id, type: p.proposal_type, error: e?.message });
+    console.error('[promoter] failed', { proposal_id: p.id, type: p.proposal_type, class: effectiveClass, error: e?.message });
     await svc.from('strategy_promotion_proposals').update({
       status: 'failed',
       promotion_error: String(e?.message ?? e).slice(0, 1000),
