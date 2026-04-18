@@ -213,5 +213,5 @@ export function useStrategyProposals(threadId: string | null) {
     }
   }, [fetchProposals]);
 
-  return { proposals, isLoading, refetch: fetchProposals, detect, confirm, reject, editPayload, promote };
+  return { proposals, isLoading, refetch: fetchProposals, detect, scanThread, confirm, reject, editPayload, promote };
 }
