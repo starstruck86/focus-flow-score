@@ -225,6 +225,44 @@ export function useStrategyProposals(threadId: string | null) {
   }, [fetchProposals]);
 
   /**
+   * Phase 6: Stage an artifact or upload as a pending promotion proposal.
+   * This is the bridge from Strategy "thinking" surfaces (artifacts/uploads)
+   * into the class-aware promoter pipeline. The created proposal is `pending`
+   * and must still be classified + promoted explicitly by the rep.
+   */
+  const stageProposal = useCallback(async (input: {
+    sourceType: 'artifact' | 'upload';
+    sourceId: string;
+    targetAccountId?: string | null;
+    targetOpportunityId?: string | null;
+    targetScope?: ProposalScope;
+    proposalType?: 'artifact_promotion' | 'resource_promotion' | 'transcript';
+    markReusable?: boolean;
+  }) => {
+    if (!threadId) return { proposal_id: null as string | null, error: 'No thread' };
+    try {
+      const { data, error } = await supabase.functions.invoke('strategy-stage-proposal', {
+        body: {
+          source_type: input.sourceType,
+          source_id: input.sourceId,
+          thread_id: threadId,
+          target_account_id: input.targetAccountId ?? null,
+          target_opportunity_id: input.targetOpportunityId ?? null,
+          target_scope: input.targetScope ?? 'account',
+          proposal_type: input.proposalType,
+          mark_reusable: input.markReusable === true,
+        },
+      });
+      if (error) throw error;
+      await fetchProposals();
+      return data as { proposal_id: string; reused?: boolean };
+    } catch (e: any) {
+      console.error('[proposals] stage failed', e);
+      return { proposal_id: null, error: String(e?.message ?? e) };
+    }
+  }, [threadId, fetchProposals]);
+
+  /**
    * Phase 4: Promote a confirmed proposal into the appropriate shared
    * system-of-record table via the promoter edge function.
    */
