@@ -263,7 +263,8 @@ Deno.serve(async (req) => {
           promotedId = created.id;
         }
 
-        // Mirror into account_contacts only if not already linked from this proposal
+        // Mirror into account_contacts only if not already linked.
+        // Dedupe on (account_id, lower(name)) — same dedupe key the contacts table uses.
         const { data: existingLink } = await svc.from('account_contacts').select('id')
           .eq('user_id', user.id).eq('account_id', p.target_account_id)
           .ilike('name', name).maybeSingle();
@@ -275,6 +276,10 @@ Deno.serve(async (req) => {
             title: payload.title ?? null,
             notes: payload.notes ?? null,
             source_proposal_id: p.id,
+            source: 'strategy',
+            source_strategy_thread_id: p.thread_id,
+            promoted_by: user.id,
+            promoted_at: new Date().toISOString(),
           });
         }
       }
