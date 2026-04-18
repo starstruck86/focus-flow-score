@@ -22,6 +22,7 @@ interface Props {
   onReject: (id: string, reason?: string) => Promise<boolean>;
   onEditPayload: (id: string, payload: Record<string, unknown>) => Promise<boolean>;
   onPromote: (id: string, opts?: { mark_reusable?: boolean; resource_type_override?: string }) => Promise<{ success?: boolean; promoted_table?: string; promoted_record_id?: string; already_promoted?: boolean; error?: string }>;
+  onScanThread?: () => Promise<{ scanned: number; created: number; errors: number }>;
   isLoading?: boolean;
 }
 
