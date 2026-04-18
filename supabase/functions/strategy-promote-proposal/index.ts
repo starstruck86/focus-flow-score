@@ -167,6 +167,40 @@ Deno.serve(async (req) => {
   if (p.target_opportunity_id) {
     const { data: o } = await svc.from('opportunities').select('id, account_id').eq('id', p.target_opportunity_id).eq('user_id', user.id).maybeSingle();
     if (!o) return err(403, 'target_opportunity_id does not belong to user');
+    // Coherence: opp.account_id must match the target_account_id when both are set.
+    // Prevents cross-account opp drift even if both ids are owned by the same user.
+    if (p.target_account_id && o.account_id && o.account_id !== p.target_account_id) {
+      return err(409, 'Opportunity belongs to a different account than the proposal target_account_id', {
+        code: 'opp_account_mismatch',
+        opportunity_id: p.target_opportunity_id,
+        opp_account_id: o.account_id,
+        target_account_id: p.target_account_id,
+      });
+    }
+  }
+
+  // ============ TRUST GATE (Phase 3) ============
+  // Block promotion when the source thread has unresolved blocking conflicts.
+  // The detector persists conflicts; we read them here so this check is durable
+  // even if a client tries to bypass the UI.
+  const { data: trustRow } = await svc
+    .rpc('compute_thread_trust_state', { p_thread_id: p.thread_id });
+  const trustState = (typeof trustRow === 'string' ? trustRow : 'safe') as 'safe' | 'warning' | 'blocked';
+  if (trustState === 'blocked') {
+    const { data: blockingConflicts } = await svc
+      .from('strategy_thread_conflicts')
+      .select('conflict_kind, reason, detected_account_name, linked_account_name')
+      .eq('thread_id', p.thread_id)
+      .eq('user_id', user.id)
+      .eq('severity', 'blocking')
+      .is('resolved_at', null)
+      .limit(3);
+    return err(409, 'Thread has unresolved entity conflicts; shared promotion is blocked', {
+      code: 'thread_trust_blocked',
+      trust_state: trustState,
+      conflicts: blockingConflicts ?? [],
+      hint: 'Resolve via clone, unlink, or detector re-clear before promoting.',
+    });
   }
 
   const provenance = {
