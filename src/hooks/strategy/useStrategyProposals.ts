@@ -55,8 +55,9 @@ export function useStrategyProposals(threadId: string | null) {
       .from('strategy_promotion_proposals')
       .select('*')
       .eq('thread_id', threadId)
-      .in('status', ['pending', 'confirmed'])
-      .order('created_at', { ascending: false });
+      .in('status', ['pending', 'confirmed', 'promoted', 'failed'])
+      .order('created_at', { ascending: false })
+      .limit(50);
     if (!error && data) setProposals(data as StrategyProposal[]);
     setIsLoading(false);
   }, [user, threadId]);
