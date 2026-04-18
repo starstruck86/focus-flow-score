@@ -21,6 +21,7 @@ import { useStrategyOutputs } from '@/hooks/strategy/useStrategyOutputs';
 import { useStrategyArtifacts } from '@/hooks/strategy/useStrategyArtifacts';
 import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
 import { useStrategyRollups } from '@/hooks/strategy/useStrategyRollups';
+import { useStrategyProposals } from '@/hooks/strategy/useStrategyProposals';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   Drawer, DrawerContent, DrawerTrigger, DrawerTitle,
