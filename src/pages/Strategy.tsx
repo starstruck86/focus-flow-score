@@ -70,19 +70,37 @@ export default function Strategy() {
   const { outputs, refetch: refetchOutputs } = useStrategyOutputs(activeThread?.id ?? null);
   const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
   const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
+  const { proposals, isLoading: proposalsLoading, detect: detectProposals, confirm: confirmProposal, reject: rejectProposal, editPayload: editProposalPayload } = useStrategyProposals(activeThread?.id ?? null);
 
   // Auto-collapse right rail when it has no meaningful content
   const hasRailContent = !!(
     linkedContext?.account || linkedContext?.opportunity ||
     memories.length > 0 || uploads.length > 0 || outputs.length > 0 ||
-    artifacts.length > 0 || rollup || memorySuggestions.length > 0
+    artifacts.length > 0 || rollup || memorySuggestions.length > 0 ||
+    proposals.length > 0
   );
+
+  const handleAssistantComplete = useCallback((assistantText: string) => {
+    if (!activeThread) return;
+    detectProposals({ content: assistantText }).catch(() => { /* swallow */ });
+  }, [activeThread, detectProposals]);
 
   const handleWorkflowComplete = useCallback(() => {
     refetchOutputs();
     refetchRollup();
     refetchArtifacts();
-  }, [refetchOutputs, refetchRollup, refetchArtifacts]);
+    // Phase 3: also detect against newly produced artifacts
+    if (activeThread) {
+      // Detect against latest artifact's content if any (best-effort)
+      const latest = artifacts[0];
+      if (latest?.content_json) {
+        const text = typeof latest.content_json === 'string'
+          ? latest.content_json
+          : JSON.stringify(latest.content_json).slice(0, 8000);
+        detectProposals({ content: text, sourceArtifactId: latest.id, artifactType: latest.artifact_type, artifactTitle: latest.title }).catch(() => {});
+      }
+    }
+  }, [refetchOutputs, refetchRollup, refetchArtifacts, activeThread, artifacts, detectProposals]);
 
   const handleCreateThreadWithOpts = useCallback((opts: CreateThreadOpts) => {
     createThreadWithOpts(opts);
