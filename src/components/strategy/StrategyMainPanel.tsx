@@ -246,6 +246,29 @@ export function StrategyMainPanel({
         <ThreadIcon className="h-2.5 w-2.5 text-primary/30 shrink-0" />
         <h1 className="text-[11px] font-semibold text-foreground/70 truncate min-w-0">{thread.title}</h1>
 
+        {/* Linkage chip — explicit confirmed-mode signal. Click to open LinkThreadDialog. */}
+        {(() => {
+          const acctName = linkedContext?.account?.name as string | undefined;
+          const oppName = linkedContext?.opportunity?.name as string | undefined;
+          const isLinked = !!(thread.linked_account_id || thread.linked_opportunity_id);
+          const label = acctName ?? oppName ?? (isLinked ? 'Linked' : 'Freeform');
+          return (
+            <button
+              onClick={() => setLinkDialogOpen(true)}
+              className={cn(
+                'h-5 px-1.5 rounded-md flex items-center gap-1 text-[10px] font-medium border transition-colors shrink-0 max-w-[140px]',
+                isLinked
+                  ? 'border-primary/30 bg-primary/5 text-primary hover:bg-primary/10'
+                  : 'border-dashed border-border/50 text-muted-foreground hover:border-border hover:text-foreground/70'
+              )}
+              title={isLinked ? `Linked to ${label} — click to change` : 'Freeform thread — click to link to an account or opportunity'}
+            >
+              {isLinked ? <Link2 className="h-2.5 w-2.5" /> : <Link2Off className="h-2.5 w-2.5" />}
+              <span className="truncate">{label}</span>
+            </button>
+          );
+        })()}
+
         <div className="flex-1" />
 
         {/* Workflow actions */}
