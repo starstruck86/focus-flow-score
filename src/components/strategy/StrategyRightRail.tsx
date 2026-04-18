@@ -124,7 +124,7 @@ export function StrategyRightRail({
   rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
   onRegenerateArtifact, isTransforming, onReprocessUpload,
   onUseArtifactAsInput, onDuplicateArtifact,
-  proposals, proposalsLoading, onConfirmProposal, onRejectProposal, onEditProposalPayload, onPromoteProposal,
+  proposals, proposalsLoading, onConfirmProposal, onRejectProposal, onEditProposalPayload, onPromoteProposal, onScanThreadProposals,
 }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
@@ -176,15 +176,17 @@ export function StrategyRightRail({
       </div>
 
       <ScrollArea className="flex-1">
-        {/* Phase 3: Promotion proposals — surfaced above context so they're seen */}
-        {proposals && proposals.length > 0 && onConfirmProposal && onRejectProposal && onEditProposalPayload && onPromoteProposal && (
+        {/* Promotion proposals — always rendered when handlers are wired so the
+            scan affordance is reachable even with zero existing proposals. */}
+        {onConfirmProposal && onRejectProposal && onEditProposalPayload && onPromoteProposal && (
           <ProposalReviewPanel
             thread={thread}
-            proposals={proposals}
+            proposals={proposals ?? []}
             onConfirm={onConfirmProposal}
             onReject={onRejectProposal}
             onEditPayload={onEditProposalPayload}
             onPromote={onPromoteProposal}
+            onScanThread={onScanThreadProposals}
             isLoading={proposalsLoading}
           />
         )}
