@@ -89,13 +89,13 @@ export function ThreadTrustBanner({
     <div
       role="status"
       className={cn(
-        'shrink-0 mx-3 mt-2 mb-1 rounded-md border border-amber-500/30 bg-amber-500/5',
+        'shrink-0 mx-3 mt-2 mb-1 rounded-md border border-primary/30 bg-primary/5',
         'px-3 py-1.5 flex items-start gap-2'
       )}
     >
-      <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+      <AlertTriangle className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0 space-y-0.5">
-        <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
+        <span className="text-[11px] font-medium text-primary">
           Unconfirmed entity in this thread
         </span>
         {warnings.map(w => (
