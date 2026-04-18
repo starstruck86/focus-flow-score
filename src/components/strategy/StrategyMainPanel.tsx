@@ -2,8 +2,9 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   PanelLeftOpen, PanelRightOpen, Search, Mail, Target, Map,
   FileText, Send, Paperclip, Upload, Loader2, Zap, Database,
-  Building2, MessageSquare, ClipboardList,
+  Building2, MessageSquare, ClipboardList, Link2, Link2Off,
 } from 'lucide-react';
+import { LinkThreadDialog } from './LinkThreadDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
