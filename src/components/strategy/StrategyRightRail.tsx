@@ -122,6 +122,7 @@ export function StrategyRightRail({
   rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
   onRegenerateArtifact, isTransforming, onReprocessUpload,
   onUseArtifactAsInput, onDuplicateArtifact,
+  proposals, proposalsLoading, onConfirmProposal, onRejectProposal, onEditProposalPayload,
 }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
