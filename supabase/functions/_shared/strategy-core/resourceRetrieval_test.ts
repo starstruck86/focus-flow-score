@@ -32,6 +32,14 @@ function makeStubSupabase(rowsByQuery: (rec: Recorded) => any[]) {
       rec.filters.push({ op: "ilike", col, val });
       return builder(rec);
     },
+    or: (val: string) => {
+      rec.filters.push({ op: "or", col: "or", val });
+      return builder(rec);
+    },
+    in: (col: string, val: unknown) => {
+      rec.filters.push({ op: "in", col, val });
+      return builder(rec);
+    },
     order: (_c: string, _o: unknown) => builder(rec),
     limit: (_n: number) => Promise.resolve({ data: rowsByQuery(rec), error: null }),
   });
@@ -388,4 +396,79 @@ Deno.test("retrieveResourceContext: prior_use excludes resources from the curren
     threadId: "current-thread",
   });
   assert(!out.hits.some((h) => h.matchKind === "prior_use"), `expected no prior_use hits; got ${JSON.stringify(out.hits)}`);
+});
+
+// ── Body search (description / content) ──────────────────────────
+
+Deno.test("retrieveResourceContext: body search finds resource when title misses", async () => {
+  const stub: any = {
+    from: (table: string) => {
+      const b: any = {
+        select: () => b,
+        eq: () => b,
+        ilike: (_col: string, val: string) => { b._lastIlike = String(val); b._lastOr = undefined; return b; },
+        or: (val: string) => { b._lastOr = val; return b; },
+        in: () => b,
+        order: () => b,
+        limit: () => {
+          if (table !== "resources") return Promise.resolve({ data: [] });
+          if (b._lastOr) {
+            return Promise.resolve({
+              data: [{
+                id: "r-body", title: "How Top Reps Win Renewals",
+                description: "renewal motion",
+                content: "...the ROI calculation that justifies demand requires...",
+                resource_type: "transcript",
+              }],
+            });
+          }
+          if (b._lastIlike && b._lastIlike.toLowerCase().includes("kevin")) {
+            return Promise.resolve({
+              data: [{
+                id: "r-title", title: "Cloning Your Top Reps (Kevin Dorsey)",
+                description: "podcast", resource_type: "transcript",
+              }],
+            });
+          }
+          return Promise.resolve({ data: [] });
+        },
+      };
+      return b;
+    },
+  };
+  const out = await retrieveResourceContext(stub, "u", {
+    userMessage: "the Kevin Dorsey thing about ROI",
+  });
+  const kinds = out.hits.map((h) => h.matchKind);
+  assert(out.hits.some((h) => h.id === "r-body"), `expected body row; got ${JSON.stringify(out.hits)}`);
+  assert(
+    kinds.includes("content_match") || kinds.includes("description_match"),
+    `expected body match kind; got ${JSON.stringify(kinds)}`,
+  );
+  const titleIdx = out.hits.findIndex((h) => h.id === "r-title");
+  const bodyIdx = out.hits.findIndex((h) => h.id === "r-body");
+  if (titleIdx >= 0 && bodyIdx >= 0) {
+    assert(titleIdx < bodyIdx, "title match must rank above body match");
+  }
+});
+
+Deno.test("renderResourceContextBlock: surfaces body-match flag and snippet", () => {
+  const block = renderResourceContextBlock({
+    hits: [{
+      id: "abcd1234-xxxx", title: "Some Renewal Talk",
+      description: null, resource_type: "transcript",
+      is_template: null, template_category: null,
+      account_id: null, opportunity_id: null, tags: null,
+      matchKind: "content_match",
+      matchReason: 'Phrase "ROI" appears in resource body',
+      matchSnippet: "…the ROI calculation that justifies demand requires…",
+    }],
+    userAskedForResource: true,
+    extractedPhrases: ["ROI"],
+    inferredCategories: ["roi"],
+  });
+  assertStringIncludes(block, "body-match");
+  assertStringIncludes(block, "snippet:");
+  assertStringIncludes(block, "ROI calculation");
+  assertStringIncludes(block, "body, not the title");
 });

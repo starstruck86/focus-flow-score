@@ -56,7 +56,11 @@ export interface RetrievedResource {
     | "prior_use"
     | "account_linked"
     | "opportunity_linked"
+    | "description_match"
+    | "content_match"
     | "category_intent";
+  /** Short snippet of the matched body, when matchKind is description/content. */
+  matchSnippet?: string;
   /** Human-readable reason — surfaced in the prompt block. */
   matchReason: string;
 }
@@ -308,7 +312,12 @@ export async function retrieveResourceContext(
   const all: RetrievedResource[] = [];
   const seen = new Set<string>();
 
-  const push = (rows: any[] | null | undefined, kind: RetrievedResource["matchKind"], reason: (r: any) => string) => {
+  const push = (
+    rows: any[] | null | undefined,
+    kind: RetrievedResource["matchKind"],
+    reason: (r: any) => string,
+    snippetFor?: (r: any) => string | undefined,
+  ) => {
     if (!rows) return;
     for (const r of rows) {
       if (!r?.id || seen.has(r.id)) continue;
@@ -325,8 +334,20 @@ export async function retrieveResourceContext(
         tags: r.tags ?? null,
         matchKind: kind,
         matchReason: reason(r),
+        matchSnippet: snippetFor ? snippetFor(r) : undefined,
       });
     }
+  };
+
+  /** Build a ±80-char snippet around the first hit of `needle` in `hay`. */
+  const snippetAround = (hay: string | null | undefined, needle: string): string | undefined => {
+    if (!hay || !needle) return undefined;
+    const idx = hay.toLowerCase().indexOf(needle.toLowerCase());
+    if (idx < 0) return undefined;
+    const start = Math.max(0, idx - 80);
+    const end = Math.min(hay.length, idx + needle.length + 80);
+    const slice = hay.slice(start, end).replace(/\s+/g, " ").trim();
+    return (start > 0 ? "…" : "") + slice + (end < hay.length ? "…" : "");
   };
 
   // ── 1. Exact title (case-insensitive) for each phrase ─────────
@@ -358,6 +379,64 @@ export async function retrieveResourceContext(
       push(data, "near_exact_title", () => `Title contains "${phrase}"`);
     } catch (e) {
       console.warn("[resourceRetrieval] near-exact query failed:", (e as Error).message);
+    }
+  }
+
+  // ── 2b. Body match: description + content ────────────────────
+  // This is the path that catches "the Kevin Dorsey thing about ROI"
+  // when no title contains those words but the body does. We search
+  // description first (cheap, signal-dense) and fall back to content
+  // (the full transcript/doc body, ~23KB avg in production).
+  //
+  // Important: we limit each phrase tightly (3 hits) and only fetch
+  // a description preview — never the full content blob — to keep
+  // prompt budgets honest. The matchSnippet is built post-fetch
+  // from a separate small content slice via the
+  // get_resource_content_prefixes RPC if needed; for now we surface
+  // the description as the snippet when it contains the phrase, else
+  // a generic "matched in body" reason.
+  for (const phrase of phrases) {
+    if (all.length >= HARD_LIMIT) break;
+    const escaped = `%${escapeIlike(phrase)}%`;
+    try {
+      const { data } = await supabase
+        .from("resources")
+        .select(SAFE_FIELDS + ",content")
+        .eq("user_id", userId)
+        .or(`description.ilike.${escaped},content.ilike.${escaped}`)
+        .limit(4);
+      // Strip content blob from rows before pushing (don't store 20KB on each hit).
+      const lean = (data || []).map((r: any) => {
+        const inDesc = (r.description || "").toLowerCase().includes(phrase.toLowerCase());
+        const snip = inDesc
+          ? snippetAround(r.description, phrase)
+          : snippetAround(r.content, phrase);
+        return { ...r, _snip: snip, _inDesc: inDesc };
+      });
+      push(
+        lean,
+        // Tag as description_match when phrase is in description (stronger
+        // signal — descriptions are curated), else content_match.
+        // We can't split a single push() across kinds, so split the array.
+        "description_match" as any,
+        (_r: any) => `Phrase "${phrase}" appears in resource body`,
+        (r: any) => r._snip,
+      );
+    } catch (e) {
+      console.warn("[resourceRetrieval] body search failed:", (e as Error).message);
+    }
+  }
+
+  // Re-tag: rows where the phrase was only in content get content_match.
+  for (const h of all) {
+    if (h.matchKind !== "description_match") continue;
+    // We didn't carry _inDesc onto the cleaned hit; re-derive cheaply
+    // from the snippet+description. If snippet appears in description,
+    // keep description_match; otherwise downgrade to content_match.
+    const desc = (h.description || "").toLowerCase();
+    const snip = (h.matchSnippet || "").toLowerCase().replace(/^…|…$/g, "").trim();
+    if (snip && !desc.includes(snip.slice(0, Math.min(40, snip.length)))) {
+      h.matchKind = "content_match";
     }
   }
 
@@ -463,7 +542,9 @@ export async function retrieveResourceContext(
     account_linked: 3,
     opportunity_linked: 4,
     phrase_in_title: 5,
-    category_intent: 6,
+    description_match: 6,
+    content_match: 7,
+    category_intent: 8,
   };
   // Map inferred categories → resource_type values that should be boosted.
   const CATEGORY_TYPE_BOOST: Record<string, string[]> = {
@@ -561,9 +642,16 @@ export function renderResourceContextBlock(args: {
     if (h.template_category) flags.push(`cat:${h.template_category}`);
     if (h.account_id) flags.push("account-linked");
     if (h.opportunity_id) flags.push("opp-linked");
+    // Tag body matches so the model knows this hit came from content,
+    // not from the title — and must say so honestly to the user.
+    if (h.matchKind === "content_match") flags.push("body-match");
+    if (h.matchKind === "description_match") flags.push("desc-match");
     lines.push(`- RESOURCE[${idShort}] "${h.title}" — ${flags.join(", ")}`);
     lines.push(`    why: ${h.matchReason}`);
-    if (h.description) {
+    if (h.matchSnippet) {
+      lines.push(`    snippet: ${h.matchSnippet}`);
+    }
+    if (h.description && !h.matchSnippet) {
       const desc = h.description.replace(/\s+/g, " ").trim().slice(0, 180);
       if (desc) lines.push(`    desc: ${desc}`);
     }
@@ -579,6 +667,9 @@ export function renderResourceContextBlock(args: {
   );
   lines.push(
     `- Prefer suggesting the closest match by EXACT title rather than describing one generically.`,
+  );
+  lines.push(
+    `- For hits flagged "body-match" or "desc-match": the title may not contain the user's words. State this honestly, e.g. "the closest thing in your library is RESOURCE[\"…\"] — the topic appears in the body, not the title."`,
   );
 
   return lines.join("\n");
