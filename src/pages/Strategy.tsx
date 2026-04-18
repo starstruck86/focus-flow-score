@@ -187,6 +187,7 @@ export default function Strategy() {
           onBranchThread={handleBranchThread}
           onTransformOutput={handleTransformOutput}
           isTransforming={isTransforming}
+          onAssistantComplete={handleAssistantComplete}
         />
 
         {!isMobile && !rightRailCollapsed && activeThread && hasRailContent && (
@@ -210,6 +211,11 @@ export default function Strategy() {
             onRegenerateArtifact={regenerateArtifact}
             isTransforming={isTransforming}
             onReprocessUpload={summarizeUpload}
+            proposals={proposals}
+            proposalsLoading={proposalsLoading}
+            onConfirmProposal={confirmProposal}
+            onRejectProposal={rejectProposal}
+            onEditProposalPayload={editProposalPayload}
           />
         )}
 
