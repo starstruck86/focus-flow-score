@@ -49,6 +49,8 @@ interface Props {
   onBranchThread?: (title: string, content: string) => void;
   onTransformOutput?: (sourceOutputId: string, targetArtifactType: string) => void;
   isTransforming?: boolean;
+  /** Phase 3 — fired after a streamed assistant turn completes */
+  onAssistantComplete?: (assistantText: string) => void;
 }
 
 function getSuggestedPrompts(thread: StrategyThread | null, linkedContext?: any) {
