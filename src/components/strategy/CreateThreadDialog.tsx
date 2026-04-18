@@ -256,7 +256,7 @@ export function CreateThreadDialog({ open, onOpenChange, onCreateThread }: Props
           </div>
 
           {!linkageValid && (
-            <p className="text-[10px] text-amber-600 dark:text-amber-400">
+            <p className="text-[10px] text-destructive">
               {threadType === 'account_linked' ? 'Select an account to continue.' : 'Select an opportunity to continue.'}
             </p>
           )}
