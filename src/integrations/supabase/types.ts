@@ -6430,6 +6430,7 @@ export type Database = {
         Row: {
           confirmed_at: string | null
           confirmed_by: string | null
+          confirmed_class: string | null
           created_at: string
           dedupe_key: string
           detector_confidence: number | null
@@ -6457,6 +6458,7 @@ export type Database = {
         Insert: {
           confirmed_at?: string | null
           confirmed_by?: string | null
+          confirmed_class?: string | null
           created_at?: string
           dedupe_key: string
           detector_confidence?: number | null
@@ -6484,6 +6486,7 @@ export type Database = {
         Update: {
           confirmed_at?: string | null
           confirmed_by?: string | null
+          confirmed_class?: string | null
           created_at?: string
           dedupe_key?: string
           detector_confidence?: number | null
