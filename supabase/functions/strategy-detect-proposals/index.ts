@@ -91,28 +91,82 @@ function buildDetectorPrompt(input: DetectorRequest, threadCtx: { hasAccount: bo
     ? "This thread is FREEFORM (no linked account or opportunity). Propose scope based on content alone; the user will confirm the target later."
     : `Linked context: ${threadCtx.hasAccount ? `account="${threadCtx.accountName}"` : "no account"}, ${threadCtx.hasOpp ? `opportunity="${threadCtx.oppName}"` : "no opportunity"}.`;
 
-  return `You are a discovery detector. Read the SALES STRATEGY CONTENT below and extract ONLY concrete, promotable discoveries that a sales rep would want pushed back into shared CRM-like tables.
+  return `You are a discovery detector for a sales-intelligence system. Read the SALES STRATEGY CONTENT below and extract EVERY concrete, promotable discovery a rep would want pushed back into shared CRM tables.
 
 ${scopeHint}
 
-EXTRACT only items that are clearly NEW INFORMATION worth saving. Skip:
-- generic advice
-- summaries of what the user said
-- speculative or hypothetical info
-- anything that's just rephrasing existing context
+# OUTPUT SCHEMA — STRICT
+Return ONLY this exact JSON shape. Do NOT invent new top-level fields. Do NOT replace "proposal_type" with "memory_type" or "target_scope" with "scope". Use these exact field names:
 
-For EACH discovery output an object with:
-- proposal_type: one of [contact, stakeholder, champion, account_note, account_intelligence, opportunity_note, opportunity_intelligence, transcript, risk, blocker, resource_promotion, artifact_promotion]
-- target_scope: "account" | "opportunity" | "both"
-- payload: structured object (e.g. { name, title, email } for contact, { content } for note, etc.)
-- rationale: 1 short sentence — what was detected and why it's promotable
-- scope_rationale: 1 short sentence — why this scope (account vs opp)
-- dedupe_seed: short stable string identifying this fact (e.g. email, name+role, or first 80 chars of the insight)
-- detector_confidence: 0..1
+{
+  "proposals": [
+    {
+      "proposal_type": "contact" | "stakeholder" | "champion" | "account_note" | "account_intelligence" | "opportunity_note" | "opportunity_intelligence" | "transcript" | "risk" | "blocker" | "resource_promotion" | "artifact_promotion",
+      "target_scope": "account" | "opportunity" | "both",
+      "payload": { /* type-specific shape, see below */ },
+      "rationale": "<=140 char sentence describing what was detected and why it's promotable",
+      "scope_rationale": "<=140 char sentence describing why this scope",
+      "dedupe_seed": "stable lowercase identifier",
+      "detector_confidence": 0.0-1.0
+    }
+  ]
+}
 
-Return JSON: { "proposals": [...] }. Empty array if nothing meaningful.
+# WORKED EXAMPLE — required field names
+INPUT: "Matthew Pertgen said Acoustic is not a fit because they're heavily invested in HubSpot."
+OUTPUT:
+{
+  "proposals": [
+    {
+      "proposal_type": "contact",
+      "target_scope": "account",
+      "payload": { "name": "Matthew Pertgen", "notes": "Stated Acoustic not a fit; deeply invested in HubSpot." },
+      "rationale": "Named buyer-side contact identified in transcript context.",
+      "scope_rationale": "Person belongs to the company, not a specific deal.",
+      "dedupe_seed": "matthew pertgen",
+      "detector_confidence": 0.92
+    },
+    {
+      "proposal_type": "blocker",
+      "target_scope": "account",
+      "payload": { "content": "Buyer explicitly said Acoustic is not a fit due to HubSpot investment." },
+      "rationale": "Explicit buyer-stated rejection signal.",
+      "scope_rationale": "Tied to company-level tech stack, not a single deal yet.",
+      "dedupe_seed": "acoustic not a fit hubspot",
+      "detector_confidence": 0.9
+    }
+  ]
+}
 
-CONTENT:
+# CRITICAL EXTRACTION RULES
+
+1. NAMED PEOPLE ARE ALWAYS A SEPARATE PROPOSAL.
+   - Whenever a real person is named (first + last, or first + role), emit a "contact"/"stakeholder"/"champion" proposal for them — EVEN IF they also appear in a risk/blocker/note.
+   - Use "champion" only with explicit positive signal. "stakeholder" for buying-committee members. Default to "contact" otherwise.
+
+2. EACH DISTINCT FACT IS ONE PROPOSAL. Don't merge unrelated facts.
+
+3. SKIP:
+   - generic sales advice
+   - rep's own questions/plans (workflow, not intelligence)
+   - speculation ("they might…", "they could…")
+   - rephrasing of context already discussed
+
+4. PAYLOAD SHAPES (must be inside the "payload" object, NOT at top level):
+   - contact / stakeholder / champion: { name, title?, email?, department?, seniority?, notes? }
+   - account_note / account_intelligence / opportunity_note / opportunity_intelligence: { content, memory_type? }
+   - risk / blocker: { content }
+   - transcript: { title, content, summary?, call_date? }
+   - resource_promotion / artifact_promotion: { title, content, description?, resource_type?, tags? }
+
+5. SCOPE DISCIPLINE:
+   - "account" = company-wide truths (tech stack, org, strategy)
+   - "opportunity" = single-deal specifics (timeline, pricing, motion)
+   - "both" = sparingly, when truly needed at both levels
+
+If nothing meaningful, return: { "proposals": [] }
+
+# CONTENT
 """
 ${input.content.slice(0, 8000)}
 """`;
@@ -146,18 +200,73 @@ async function callLLMForExtraction(prompt: string): Promise<DetectedProposal[]>
 
   const data = await resp.json();
   const text = data?.choices?.[0]?.message?.content ?? "{}";
+  console.log("[detector] raw LLM output (first 2k):", text.slice(0, 2000));
   try {
     const parsed = JSON.parse(text);
     const arr = Array.isArray(parsed?.proposals) ? parsed.proposals : [];
-    return arr.filter((p: any) =>
-      p && typeof p.proposal_type === "string" &&
-      typeof p.target_scope === "string" &&
-      p.payload && typeof p.dedupe_seed === "string"
-    );
+    console.log("[detector] parsed proposals count:", arr.length);
+    const normalized = arr.map(normalizeProposal).filter(Boolean) as DetectedProposal[];
+    console.log("[detector] normalized count:", normalized.length);
+    return normalized;
   } catch (e) {
-    console.error("[detector] JSON parse failed", e);
+    console.error("[detector] JSON parse failed", e, "raw:", text.slice(0, 500));
     return [];
   }
+}
+
+/**
+ * Tolerant normalizer: LLMs sometimes flatten the schema (e.g. emit `scope` instead of
+ * `target_scope`, `memory_type` instead of `proposal_type`, or put payload fields at the top
+ * level). We recover those rather than dropping the proposal silently.
+ */
+function normalizeProposal(raw: any): DetectedProposal | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const proposal_type = String(raw.proposal_type ?? raw.memory_type ?? raw.type ?? "").trim() as ProposalType;
+  const target_scope = String(raw.target_scope ?? raw.scope ?? "").trim() as Scope;
+  if (!proposal_type || !target_scope) return null;
+
+  const validTypes: ProposalType[] = ["contact","stakeholder","champion","account_note","account_intelligence","opportunity_note","opportunity_intelligence","transcript","risk","blocker","resource_promotion","artifact_promotion"];
+  const validScopes: Scope[] = ["account","opportunity","both"];
+  if (!validTypes.includes(proposal_type) || !validScopes.includes(target_scope)) return null;
+
+  // Recover payload from top-level fields if missing
+  let payload = raw.payload && typeof raw.payload === "object" ? { ...raw.payload } : {};
+  const isContactType = proposal_type === "contact" || proposal_type === "stakeholder" || proposal_type === "champion";
+  if (isContactType) {
+    if (!payload.name && raw.name) payload.name = raw.name;
+    if (!payload.title && raw.title) payload.title = raw.title;
+    if (!payload.email && raw.email) payload.email = raw.email;
+    if (!payload.notes && raw.notes) payload.notes = raw.notes;
+  } else {
+    if (!payload.content && raw.content) payload.content = raw.content;
+    if (!payload.title && raw.title) payload.title = raw.title;
+  }
+
+  // dedupe_seed fallback
+  let dedupe_seed = String(raw.dedupe_seed ?? "").trim();
+  if (!dedupe_seed) {
+    if (isContactType && payload.name) dedupe_seed = String(payload.name).toLowerCase();
+    else if (payload.content) dedupe_seed = String(payload.content).toLowerCase().slice(0, 80);
+    else if (payload.title) dedupe_seed = String(payload.title).toLowerCase();
+    else return null;
+  }
+
+  // Skip empty payloads
+  if (isContactType && !payload.name) return null;
+  if (!isContactType && !payload.content && !payload.title) return null;
+
+  const conf = typeof raw.detector_confidence === "number" ? raw.detector_confidence : 0.7;
+
+  return {
+    proposal_type,
+    target_scope,
+    payload,
+    rationale: String(raw.rationale ?? "").slice(0, 280),
+    scope_rationale: String(raw.scope_rationale ?? "").slice(0, 280),
+    dedupe_seed,
+    detector_confidence: Math.max(0, Math.min(1, conf)),
+  };
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────

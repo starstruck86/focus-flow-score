@@ -254,25 +254,47 @@ Deno.serve(async (req) => {
       case 'opportunity_intelligence':
       case 'risk':
       case 'blocker': {
-        promotedTable = 'opportunity_strategy_memory';
-        if (!p.target_opportunity_id) throw new Error('opportunity scope required');
+        // Scope-aware routing: risk/blocker can be account-level when no opp exists.
+        // - opportunity scope OR both → opportunity_strategy_memory (requires opp id)
+        // - account scope → account_strategy_memory (requires account id)
         const content = String(payload.content ?? payload.text ?? '').trim();
         if (!content) throw new Error('payload.content required');
-        const memoryType = p.proposal_type === 'risk' ? 'risk'
-          : p.proposal_type === 'blocker' ? 'risk'
-          : payload.memory_type ?? 'fact';
-        const { data: created, error } = await svc.from('opportunity_strategy_memory').insert({
-          user_id: user.id,
-          opportunity_id: p.target_opportunity_id,
-          memory_type: memoryType,
-          content,
-          confidence: payload.confidence ?? null,
-          source_thread_id: p.thread_id,
-          source_message_id: p.source_message_id,
-          source_proposal_id: p.id,
-        }).select('id').single();
-        if (error) throw error;
-        promotedId = created.id;
+        const memoryType = (p.proposal_type === 'risk' || p.proposal_type === 'blocker')
+          ? 'risk'
+          : (payload.memory_type ?? 'fact');
+
+        if (p.target_scope === 'opportunity' || p.target_scope === 'both') {
+          if (!p.target_opportunity_id) throw new Error('target_opportunity_id required for opportunity-scope risk/blocker');
+          promotedTable = 'opportunity_strategy_memory';
+          const { data: created, error } = await svc.from('opportunity_strategy_memory').insert({
+            user_id: user.id,
+            opportunity_id: p.target_opportunity_id,
+            memory_type: memoryType,
+            content,
+            confidence: payload.confidence ?? null,
+            source_thread_id: p.thread_id,
+            source_message_id: p.source_message_id,
+            source_proposal_id: p.id,
+          }).select('id').single();
+          if (error) throw error;
+          promotedId = created.id;
+        } else {
+          // account-scope (default for risks discovered before a deal exists)
+          if (!p.target_account_id) throw new Error('target_account_id required for account-scope risk/blocker');
+          promotedTable = 'account_strategy_memory';
+          const { data: created, error } = await svc.from('account_strategy_memory').insert({
+            user_id: user.id,
+            account_id: p.target_account_id,
+            memory_type: memoryType,
+            content,
+            confidence: payload.confidence ?? null,
+            source_thread_id: p.thread_id,
+            source_message_id: p.source_message_id,
+            source_proposal_id: p.id,
+          }).select('id').single();
+          if (error) throw error;
+          promotedId = created.id;
+        }
         break;
       }
 
@@ -292,7 +314,7 @@ Deno.serve(async (req) => {
           description: payload.description ?? null,
           resource_type: resourceType,
           content,
-          content_status: content ? 'manual' : 'file',
+          content_status: content ? 'content' : 'enriched',
           account_id: needsAccount ? p.target_account_id : null,
           opportunity_id: needsOpp ? p.target_opportunity_id : null,
           tags: Array.isArray(payload.tags) ? payload.tags : ['strategy'],
