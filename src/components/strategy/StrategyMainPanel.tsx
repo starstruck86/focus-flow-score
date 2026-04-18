@@ -111,6 +111,7 @@ export function StrategyMainPanel({
   const [activeWorkflow, setActiveWorkflow] = useState<string | null>(null);
   const [workflowSheetOpen, setWorkflowSheetOpen] = useState(false);
   const [taskPrompterOpen, setTaskPrompterOpen] = useState(false);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
