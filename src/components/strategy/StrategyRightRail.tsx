@@ -28,6 +28,8 @@ import type { StrategyUpload } from '@/hooks/strategy/useStrategyUploads';
 import { getParseStatus } from '@/hooks/strategy/useStrategyUploads';
 import type { StrategyRollup, MemorySuggestion } from '@/lib/strategy/workflowSchemas';
 import { ArtifactDetailModal } from './ArtifactDetailModal';
+import { ProposalReviewPanel } from './ProposalReviewPanel';
+import type { StrategyProposal, ProposalScope } from '@/hooks/strategy/useStrategyProposals';
 
 interface Props {
   thread: StrategyThread;
@@ -51,6 +53,12 @@ interface Props {
   onReprocessUpload?: (uploadId: string) => void;
   onUseArtifactAsInput?: (artifact: StrategyArtifact) => void;
   onDuplicateArtifact?: (artifact: StrategyArtifact) => void;
+  // Phase 3 — proposal review
+  proposals?: StrategyProposal[];
+  proposalsLoading?: boolean;
+  onConfirmProposal?: (id: string, overrides?: { target_account_id?: string | null; target_opportunity_id?: string | null; target_scope?: ProposalScope; payload_json?: Record<string, unknown> }) => Promise<boolean>;
+  onRejectProposal?: (id: string, reason?: string) => Promise<boolean>;
+  onEditProposalPayload?: (id: string, payload: Record<string, unknown>) => Promise<boolean>;
 }
 
 const MEMORY_TYPES = [
