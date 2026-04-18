@@ -255,7 +255,12 @@ export function CreateThreadDialog({ open, onOpenChange, onCreateThread }: Props
             />
           </div>
 
-          <Button size="sm" className="w-full" onClick={handleCreate}>
+          {!linkageValid && (
+            <p className="text-[10px] text-amber-600 dark:text-amber-400">
+              {threadType === 'account_linked' ? 'Select an account to continue.' : 'Select an opportunity to continue.'}
+            </p>
+          )}
+          <Button size="sm" className="w-full" onClick={handleCreate} disabled={!linkageValid}>
             Create Thread
           </Button>
         </div>
