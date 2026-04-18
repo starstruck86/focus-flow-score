@@ -59,6 +59,7 @@ interface Props {
   onConfirmProposal?: (id: string, overrides?: { target_account_id?: string | null; target_opportunity_id?: string | null; target_scope?: ProposalScope; payload_json?: Record<string, unknown> }) => Promise<boolean>;
   onRejectProposal?: (id: string, reason?: string) => Promise<boolean>;
   onEditProposalPayload?: (id: string, payload: Record<string, unknown>) => Promise<boolean>;
+  onPromoteProposal?: (id: string, opts?: { mark_reusable?: boolean; resource_type_override?: string }) => Promise<{ success?: boolean; promoted_table?: string; promoted_record_id?: string; already_promoted?: boolean; error?: string }>;
 }
 
 const MEMORY_TYPES = [
@@ -122,7 +123,7 @@ export function StrategyRightRail({
   rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
   onRegenerateArtifact, isTransforming, onReprocessUpload,
   onUseArtifactAsInput, onDuplicateArtifact,
-  proposals, proposalsLoading, onConfirmProposal, onRejectProposal, onEditProposalPayload,
+  proposals, proposalsLoading, onConfirmProposal, onRejectProposal, onEditProposalPayload, onPromoteProposal,
 }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
@@ -175,13 +176,14 @@ export function StrategyRightRail({
 
       <ScrollArea className="flex-1">
         {/* Phase 3: Promotion proposals — surfaced above context so they're seen */}
-        {proposals && proposals.length > 0 && onConfirmProposal && onRejectProposal && onEditProposalPayload && (
+        {proposals && proposals.length > 0 && onConfirmProposal && onRejectProposal && onEditProposalPayload && onPromoteProposal && (
           <ProposalReviewPanel
             thread={thread}
             proposals={proposals}
             onConfirm={onConfirmProposal}
             onReject={onRejectProposal}
             onEditPayload={onEditProposalPayload}
+            onPromote={onPromoteProposal}
             isLoading={proposalsLoading}
           />
         )}
