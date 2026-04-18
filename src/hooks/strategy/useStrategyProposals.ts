@@ -55,8 +55,9 @@ export function useStrategyProposals(threadId: string | null) {
       .from('strategy_promotion_proposals')
       .select('*')
       .eq('thread_id', threadId)
-      .in('status', ['pending', 'confirmed'])
-      .order('created_at', { ascending: false });
+      .in('status', ['pending', 'confirmed', 'promoted', 'failed'])
+      .order('created_at', { ascending: false })
+      .limit(50);
     if (!error && data) setProposals(data as StrategyProposal[]);
     setIsLoading(false);
   }, [user, threadId]);
@@ -135,5 +136,23 @@ export function useStrategyProposals(threadId: string | null) {
     return true;
   }, [fetchProposals]);
 
-  return { proposals, isLoading, refetch: fetchProposals, detect, confirm, reject, editPayload };
+  /**
+   * Phase 4: Promote a confirmed proposal into the appropriate shared
+   * system-of-record table via the promoter edge function.
+   */
+  const promote = useCallback(async (proposalId: string, opts?: { mark_reusable?: boolean; resource_type_override?: string }) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('strategy-promote-proposal', {
+        body: { proposal_id: proposalId, ...opts },
+      });
+      if (error) throw error;
+      await fetchProposals();
+      return data as { success?: boolean; promoted_table?: string; promoted_record_id?: string; already_promoted?: boolean; error?: string };
+    } catch (e: any) {
+      console.error('[proposals] promote failed', e);
+      return { success: false, error: String(e?.message ?? e) };
+    }
+  }, [fetchProposals]);
+
+  return { proposals, isLoading, refetch: fetchProposals, detect, confirm, reject, editPayload, promote };
 }

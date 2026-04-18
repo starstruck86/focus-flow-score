@@ -70,7 +70,7 @@ export default function Strategy() {
   const { outputs, refetch: refetchOutputs } = useStrategyOutputs(activeThread?.id ?? null);
   const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
   const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
-  const { proposals, isLoading: proposalsLoading, detect: detectProposals, confirm: confirmProposal, reject: rejectProposal, editPayload: editProposalPayload } = useStrategyProposals(activeThread?.id ?? null);
+  const { proposals, isLoading: proposalsLoading, detect: detectProposals, confirm: confirmProposal, reject: rejectProposal, editPayload: editProposalPayload, promote: promoteProposal } = useStrategyProposals(activeThread?.id ?? null);
 
   // Auto-collapse right rail when it has no meaningful content
   const hasRailContent = !!(
@@ -216,6 +216,7 @@ export default function Strategy() {
             onConfirmProposal={confirmProposal}
             onRejectProposal={rejectProposal}
             onEditProposalPayload={editProposalPayload}
+            onPromoteProposal={promoteProposal}
           />
         )}
 

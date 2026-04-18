@@ -22,6 +22,7 @@ export type Database = {
           name: string
           notes: string | null
           renewal_id: string | null
+          source_proposal_id: string | null
           title: string | null
           user_id: string
         }
@@ -32,6 +33,7 @@ export type Database = {
           name: string
           notes?: string | null
           renewal_id?: string | null
+          source_proposal_id?: string | null
           title?: string | null
           user_id: string
         }
@@ -42,6 +44,7 @@ export type Database = {
           name?: string
           notes?: string | null
           renewal_id?: string | null
+          source_proposal_id?: string | null
           title?: string | null
           user_id?: string
         }
@@ -67,6 +70,13 @@ export type Database = {
             referencedRelation: "renewals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "account_contacts_source_proposal_id_fkey"
+            columns: ["source_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_promotion_proposals"
+            referencedColumns: ["id"]
+          },
         ]
       }
       account_strategy_memory: {
@@ -81,6 +91,7 @@ export type Database = {
           last_used_at: string | null
           memory_type: string
           source_message_id: string | null
+          source_proposal_id: string | null
           source_thread_id: string | null
           updated_at: string
           user_id: string
@@ -96,6 +107,7 @@ export type Database = {
           last_used_at?: string | null
           memory_type?: string
           source_message_id?: string | null
+          source_proposal_id?: string | null
           source_thread_id?: string | null
           updated_at?: string
           user_id: string
@@ -111,6 +123,7 @@ export type Database = {
           last_used_at?: string | null
           memory_type?: string
           source_message_id?: string | null
+          source_proposal_id?: string | null
           source_thread_id?: string | null
           updated_at?: string
           user_id?: string
@@ -135,6 +148,13 @@ export type Database = {
             columns: ["source_message_id"]
             isOneToOne: false
             referencedRelation: "strategy_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_strategy_memory_source_proposal_id_fkey"
+            columns: ["source_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_promotion_proposals"
             referencedColumns: ["id"]
           },
           {
@@ -848,7 +868,12 @@ export type Database = {
           notes: string | null
           opportunity_id: string | null
           participants: string | null
+          promoted_at: string | null
+          promoted_by: string | null
           renewal_id: string | null
+          source: string | null
+          source_proposal_id: string | null
+          source_strategy_thread_id: string | null
           summary: string | null
           tags: string[] | null
           title: string
@@ -868,7 +893,12 @@ export type Database = {
           notes?: string | null
           opportunity_id?: string | null
           participants?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
           renewal_id?: string | null
+          source?: string | null
+          source_proposal_id?: string | null
+          source_strategy_thread_id?: string | null
           summary?: string | null
           tags?: string[] | null
           title?: string
@@ -888,7 +918,12 @@ export type Database = {
           notes?: string | null
           opportunity_id?: string | null
           participants?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
           renewal_id?: string | null
+          source?: string | null
+          source_proposal_id?: string | null
+          source_strategy_thread_id?: string | null
           summary?: string | null
           tags?: string[] | null
           title?: string
@@ -922,6 +957,20 @@ export type Database = {
             columns: ["renewal_id"]
             isOneToOne: false
             referencedRelation: "renewals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_transcripts_source_proposal_id_fkey"
+            columns: ["source_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_promotion_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_transcripts_source_strategy_thread_id_fkey"
+            columns: ["source_strategy_thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
             referencedColumns: ["id"]
           },
         ]
@@ -1161,10 +1210,15 @@ export type Database = {
           name: string
           notes: string | null
           preferred_channel: string | null
+          promoted_at: string | null
+          promoted_by: string | null
           reporting_to: string | null
           salesforce_id: string | null
           salesforce_link: string | null
           seniority: string | null
+          source: string | null
+          source_proposal_id: string | null
+          source_strategy_thread_id: string | null
           status: string | null
           title: string | null
           updated_at: string
@@ -1185,10 +1239,15 @@ export type Database = {
           name: string
           notes?: string | null
           preferred_channel?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
           reporting_to?: string | null
           salesforce_id?: string | null
           salesforce_link?: string | null
           seniority?: string | null
+          source?: string | null
+          source_proposal_id?: string | null
+          source_strategy_thread_id?: string | null
           status?: string | null
           title?: string | null
           updated_at?: string
@@ -1209,10 +1268,15 @@ export type Database = {
           name?: string
           notes?: string | null
           preferred_channel?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
           reporting_to?: string | null
           salesforce_id?: string | null
           salesforce_link?: string | null
           seniority?: string | null
+          source?: string | null
+          source_proposal_id?: string | null
+          source_strategy_thread_id?: string | null
           status?: string | null
           title?: string | null
           updated_at?: string
@@ -1231,6 +1295,20 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_source_proposal_id_fkey"
+            columns: ["source_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_promotion_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_source_strategy_thread_id_fkey"
+            columns: ["source_strategy_thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
             referencedColumns: ["id"]
           },
         ]
@@ -3806,6 +3884,7 @@ export type Database = {
           memory_type: string
           opportunity_id: string
           source_message_id: string | null
+          source_proposal_id: string | null
           source_thread_id: string | null
           updated_at: string
           user_id: string
@@ -3821,6 +3900,7 @@ export type Database = {
           memory_type?: string
           opportunity_id: string
           source_message_id?: string | null
+          source_proposal_id?: string | null
           source_thread_id?: string | null
           updated_at?: string
           user_id: string
@@ -3836,6 +3916,7 @@ export type Database = {
           memory_type?: string
           opportunity_id?: string
           source_message_id?: string | null
+          source_proposal_id?: string | null
           source_thread_id?: string | null
           updated_at?: string
           user_id?: string
@@ -3853,6 +3934,13 @@ export type Database = {
             columns: ["source_message_id"]
             isOneToOne: false
             referencedRelation: "strategy_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunity_strategy_memory_source_proposal_id_fkey"
+            columns: ["source_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_promotion_proposals"
             referencedColumns: ["id"]
           },
           {
@@ -5305,6 +5393,9 @@ export type Database = {
           original_url: string | null
           pipeline_queue: string | null
           platform_status: string | null
+          promoted_at: string | null
+          promoted_by: string | null
+          promotion_scope: string | null
           raw_candidate_counts: Json | null
           re_extract_at: string | null
           re_extract_status: string
@@ -5317,10 +5408,14 @@ export type Database = {
           retry_scheduled_at: string | null
           screenshot_structure: string | null
           show_title: string | null
+          source: string | null
           source_created_at: string | null
+          source_proposal_id: string | null
           source_published_at: string | null
           source_registry_id: string | null
           source_resource_id: string | null
+          source_strategy_artifact_id: string | null
+          source_strategy_thread_id: string | null
           tags: string[] | null
           template_category: string | null
           title: string
@@ -5433,6 +5528,9 @@ export type Database = {
           original_url?: string | null
           pipeline_queue?: string | null
           platform_status?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
+          promotion_scope?: string | null
           raw_candidate_counts?: Json | null
           re_extract_at?: string | null
           re_extract_status?: string
@@ -5445,10 +5543,14 @@ export type Database = {
           retry_scheduled_at?: string | null
           screenshot_structure?: string | null
           show_title?: string | null
+          source?: string | null
           source_created_at?: string | null
+          source_proposal_id?: string | null
           source_published_at?: string | null
           source_registry_id?: string | null
           source_resource_id?: string | null
+          source_strategy_artifact_id?: string | null
+          source_strategy_thread_id?: string | null
           tags?: string[] | null
           template_category?: string | null
           title: string
@@ -5561,6 +5663,9 @@ export type Database = {
           original_url?: string | null
           pipeline_queue?: string | null
           platform_status?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
+          promotion_scope?: string | null
           raw_candidate_counts?: Json | null
           re_extract_at?: string | null
           re_extract_status?: string
@@ -5573,10 +5678,14 @@ export type Database = {
           retry_scheduled_at?: string | null
           screenshot_structure?: string | null
           show_title?: string | null
+          source?: string | null
           source_created_at?: string | null
+          source_proposal_id?: string | null
           source_published_at?: string | null
           source_registry_id?: string | null
           source_resource_id?: string | null
+          source_strategy_artifact_id?: string | null
+          source_strategy_thread_id?: string | null
           tags?: string[] | null
           template_category?: string | null
           title?: string
@@ -5616,6 +5725,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "resources_source_proposal_id_fkey"
+            columns: ["source_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_promotion_proposals"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "resources_source_registry_id_fkey"
             columns: ["source_registry_id"]
             isOneToOne: false
@@ -5627,6 +5743,20 @@ export type Database = {
             columns: ["source_resource_id"]
             isOneToOne: false
             referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resources_source_strategy_artifact_id_fkey"
+            columns: ["source_strategy_artifact_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_artifacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resources_source_strategy_thread_id_fkey"
+            columns: ["source_strategy_thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
             referencedColumns: ["id"]
           },
         ]
