@@ -174,6 +174,17 @@ export function StrategyRightRail({
       </div>
 
       <ScrollArea className="flex-1">
+        {/* Phase 3: Promotion proposals — surfaced above context so they're seen */}
+        {proposals && proposals.length > 0 && onConfirmProposal && onRejectProposal && onEditProposalPayload && (
+          <ProposalReviewPanel
+            thread={thread}
+            proposals={proposals}
+            onConfirm={onConfirmProposal}
+            onReject={onRejectProposal}
+            onEditPayload={onEditProposalPayload}
+            isLoading={proposalsLoading}
+          />
+        )}
         {/* Linked Object */}
         <RailSection title="Context" icon={Link2}>
           {linkedContext?.account ? (
