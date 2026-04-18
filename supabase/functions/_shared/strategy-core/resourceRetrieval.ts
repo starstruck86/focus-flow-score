@@ -542,7 +542,9 @@ export async function retrieveResourceContext(
     account_linked: 3,
     opportunity_linked: 4,
     phrase_in_title: 5,
-    category_intent: 6,
+    description_match: 6,
+    content_match: 7,
+    category_intent: 8,
   };
   // Map inferred categories → resource_type values that should be boosted.
   const CATEGORY_TYPE_BOOST: Record<string, string[]> = {
