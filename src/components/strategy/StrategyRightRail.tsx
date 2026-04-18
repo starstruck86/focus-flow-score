@@ -470,6 +470,18 @@ export function StrategyRightRail({
                             <RefreshCw className="h-2 w-2" /> Reprocess
                           </Button>
                         )}
+                        {onStageProposal && (
+                          <Button
+                            size="sm" variant="ghost"
+                            className="h-5 text-[9px] px-1.5 gap-0.5 text-cyan-300 hover:bg-cyan-500/10"
+                            onClick={() => handleStage('upload', u.id)}
+                            disabled={stagingId === u.id}
+                            title="Stage as proposal — rep classifies and confirms before any shared write"
+                          >
+                            {stagingId === u.id ? <Loader2 className="h-2 w-2 animate-spin" /> : <ArrowRight className="h-2 w-2" />}
+                            Promote
+                          </Button>
+                        )}
                       </div>
                     </div>
                     {isExpanded && u.parsed_text && (
@@ -532,6 +544,8 @@ export function StrategyRightRail({
                   key={a.id}
                   artifact={a}
                   onClick={() => setSelectedArtifact(a)}
+                  onPromote={onStageProposal ? () => handleStage('artifact', a.id, 'artifact_promotion') : undefined}
+                  isStaging={stagingId === a.id}
                 />
               ))}
             </div>
