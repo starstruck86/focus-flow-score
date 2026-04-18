@@ -31,6 +31,7 @@ import { ClaudeSynopsisModal } from '@/components/ClaudeSynopsisModal';
 import { DealIntelligenceCard } from '@/components/DealIntelligenceCard';
 import { OrgChartView } from '@/components/OrgChartView';
 import { MethodologyTracker } from '@/components/MethodologyTracker';
+import { FromStrategyPanel } from '@/components/strategy/FromStrategyPanel';
 import { cn } from '@/lib/utils';
 import type { OpportunityStage, OpportunityStatus, DealType, ChurnRisk } from '@/types';
 
@@ -395,6 +396,11 @@ export default function OpportunityDetail() {
             </div>
           )}
         </CollapsibleSection>
+
+        <Separator />
+
+        {/* From Strategy — promoted intel/resources/transcripts for this opportunity */}
+        <FromStrategyPanel scope="opportunity" recordId={opp.id} />
 
         <Separator />
 
