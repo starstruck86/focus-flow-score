@@ -91,28 +91,47 @@ function buildDetectorPrompt(input: DetectorRequest, threadCtx: { hasAccount: bo
     ? "This thread is FREEFORM (no linked account or opportunity). Propose scope based on content alone; the user will confirm the target later."
     : `Linked context: ${threadCtx.hasAccount ? `account="${threadCtx.accountName}"` : "no account"}, ${threadCtx.hasOpp ? `opportunity="${threadCtx.oppName}"` : "no opportunity"}.`;
 
-  return `You are a discovery detector. Read the SALES STRATEGY CONTENT below and extract ONLY concrete, promotable discoveries that a sales rep would want pushed back into shared CRM-like tables.
+  return `You are a discovery detector for a sales-intelligence system. Read the SALES STRATEGY CONTENT below and extract EVERY concrete, promotable discovery a rep would want pushed back into shared CRM tables.
 
 ${scopeHint}
 
-EXTRACT only items that are clearly NEW INFORMATION worth saving. Skip:
-- generic advice
-- summaries of what the user said
-- speculative or hypothetical info
-- anything that's just rephrasing existing context
+# CRITICAL EXTRACTION RULES
 
-For EACH discovery output an object with:
-- proposal_type: one of [contact, stakeholder, champion, account_note, account_intelligence, opportunity_note, opportunity_intelligence, transcript, risk, blocker, resource_promotion, artifact_promotion]
-- target_scope: "account" | "opportunity" | "both"
-- payload: structured object (e.g. { name, title, email } for contact, { content } for note, etc.)
-- rationale: 1 short sentence — what was detected and why it's promotable
-- scope_rationale: 1 short sentence — why this scope (account vs opp)
-- dedupe_seed: short stable string identifying this fact (e.g. email, name+role, or first 80 chars of the insight)
-- detector_confidence: 0..1
+1. NAMED PEOPLE ARE ALWAYS A SEPARATE PROPOSAL.
+   - Whenever a real person is named (first + last, or first + role), emit a "contact" or "stakeholder" or "champion" proposal for that person — EVEN IF that person also appears in a risk, blocker, or note.
+   - A risk like "Matthew said this is not a fit" must produce TWO proposals: (a) contact "Matthew <Lastname>" with title if known, and (b) the risk itself.
+   - Never collapse a named person into a risk-only record. Names are first-class.
+   - Use "champion" only with explicit positive signal. Use "stakeholder" for buying-committee members. Default to "contact" otherwise.
+
+2. EACH FACT IS ONE PROPOSAL. Don't merge unrelated facts.
+
+3. SKIP:
+   - generic sales advice
+   - rep's own questions/plans (those are workflow, not intelligence)
+   - speculation ("they might…", "they could…")
+   - rephrasing of context already in the conversation
+
+4. PAYLOAD SHAPES (be exact):
+   - contact / stakeholder / champion: { name, title?, email?, department?, seniority?, notes? }
+   - account_note / account_intelligence / opportunity_note / opportunity_intelligence: { content, memory_type? }
+   - risk / blocker: { content }
+   - transcript: { title, content, summary?, call_date? }
+   - resource_promotion / artifact_promotion: { title, content, description?, resource_type?, tags? }
+
+5. SCOPE DISCIPLINE:
+   - Use "account" for tech stack, company strategy, org structure — anything true about the company independent of a single deal.
+   - Use "opportunity" only when clearly about ONE deal (specific timeline, pricing, single buying motion).
+   - Use "both" sparingly — only when the fact is materially needed at both levels.
+
+6. RATIONALE / SCOPE_RATIONALE: each ONE short sentence (<140 chars).
+
+7. dedupe_seed: stable identifier — for contacts use lowercased "name|title"; for notes use the first 80 chars of the content; for risks use the risk subject.
+
+8. detector_confidence: be honest. Named contacts pulled from clear text → 0.85+. Inferred facts → 0.5-0.7.
 
 Return JSON: { "proposals": [...] }. Empty array if nothing meaningful.
 
-CONTENT:
+# CONTENT
 """
 ${input.content.slice(0, 8000)}
 """`;
