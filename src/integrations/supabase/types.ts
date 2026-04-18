@@ -21,8 +21,12 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          promoted_at: string | null
+          promoted_by: string | null
           renewal_id: string | null
+          source: string | null
           source_proposal_id: string | null
+          source_strategy_thread_id: string | null
           title: string | null
           user_id: string
         }
@@ -32,8 +36,12 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
           renewal_id?: string | null
+          source?: string | null
           source_proposal_id?: string | null
+          source_strategy_thread_id?: string | null
           title?: string | null
           user_id: string
         }
@@ -43,8 +51,12 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
           renewal_id?: string | null
+          source?: string | null
           source_proposal_id?: string | null
+          source_strategy_thread_id?: string | null
           title?: string | null
           user_id?: string
         }
@@ -75,6 +87,13 @@ export type Database = {
             columns: ["source_proposal_id"]
             isOneToOne: false
             referencedRelation: "strategy_promotion_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_contacts_source_strategy_thread_id_fkey"
+            columns: ["source_strategy_thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
             referencedColumns: ["id"]
           },
         ]
