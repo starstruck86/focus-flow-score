@@ -252,10 +252,29 @@ serve(async (req) => {
       };
     }));
 
-    // Insert with conflict-tolerant approach: try insert, ignore unique violations
+    // Pre-filter against the partial unique index
+    // (thread_id, proposal_type, dedupe_key) WHERE status IN ('pending','confirmed').
+    // We cannot use ON CONFLICT against a partial index, so we check first.
+    const dedupeKeys = rows.map((r) => r.dedupe_key);
+    const { data: existing } = await supabase
+      .from("strategy_promotion_proposals")
+      .select("proposal_type, dedupe_key")
+      .eq("thread_id", thread.id)
+      .in("status", ["pending", "confirmed"])
+      .in("dedupe_key", dedupeKeys);
+
+    const existingSet = new Set((existing ?? []).map((r: any) => `${r.proposal_type}|${r.dedupe_key}`));
+    const fresh = rows.filter((r) => !existingSet.has(`${r.proposal_type}|${r.dedupe_key}`));
+
+    if (fresh.length === 0) {
+      return new Response(JSON.stringify({ created: 0, proposals: [], skipped_duplicates: rows.length }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: inserted, error: insertErr } = await supabase
       .from("strategy_promotion_proposals")
-      .upsert(rows, { onConflict: "thread_id,proposal_type,dedupe_key", ignoreDuplicates: true })
+      .insert(fresh)
       .select("id, proposal_type, target_scope, dedupe_key");
 
     if (insertErr) {
@@ -265,7 +284,7 @@ serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ created: inserted?.length ?? 0, proposals: inserted ?? [] }), {
+    return new Response(JSON.stringify({ created: inserted?.length ?? 0, proposals: inserted ?? [], skipped_duplicates: rows.length - fresh.length }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

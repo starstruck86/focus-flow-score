@@ -70,10 +70,12 @@ export default function Strategy() {
   const { outputs, refetch: refetchOutputs } = useStrategyOutputs(activeThread?.id ?? null);
   const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
   const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
-  const { proposals, isLoading: proposalsLoading, detect: detectProposals, confirm: confirmProposal, reject: rejectProposal, editPayload: editProposalPayload, promote: promoteProposal } = useStrategyProposals(activeThread?.id ?? null);
+  const { proposals, isLoading: proposalsLoading, detect: detectProposals, scanThread: scanThreadProposals, confirm: confirmProposal, reject: rejectProposal, editPayload: editProposalPayload, promote: promoteProposal } = useStrategyProposals(activeThread?.id ?? null);
 
-  // Auto-collapse right rail when it has no meaningful content
+  // Auto-collapse right rail when it has no meaningful content.
+  // Linked threads ALWAYS show the rail so the scan affordance is reachable.
   const hasRailContent = !!(
+    activeThread?.linked_account_id || activeThread?.linked_opportunity_id ||
     linkedContext?.account || linkedContext?.opportunity ||
     memories.length > 0 || uploads.length > 0 || outputs.length > 0 ||
     artifacts.length > 0 || rollup || memorySuggestions.length > 0 ||
@@ -217,6 +219,7 @@ export default function Strategy() {
             onRejectProposal={rejectProposal}
             onEditProposalPayload={editProposalPayload}
             onPromoteProposal={promoteProposal}
+            onScanThreadProposals={scanThreadProposals}
           />
         )}
 

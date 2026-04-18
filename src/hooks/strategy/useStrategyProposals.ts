@@ -92,6 +92,65 @@ export function useStrategyProposals(threadId: string | null) {
     }
   }, [threadId, fetchProposals]);
 
+  /**
+   * Retroactive scan: runs the detector against every recent assistant message
+   * AND every artifact in the thread. Idempotent — the detector dedupes on
+   * (thread_id, proposal_type, dedupe_key). This is the activation surface
+   * that turns the pipeline on for historical content.
+   */
+  const scanThread = useCallback(async (): Promise<{ scanned: number; created: number; errors: number }> => {
+    if (!threadId || !user) return { scanned: 0, created: 0, errors: 0 };
+    const [{ data: msgs }, { data: arts }] = await Promise.all([
+      (supabase as any)
+        .from('strategy_messages')
+        .select('id, content_json')
+        .eq('thread_id', threadId)
+        .eq('role', 'assistant')
+        .order('created_at', { ascending: false })
+        .limit(20),
+      (supabase as any)
+        .from('strategy_artifacts')
+        .select('id, artifact_type, title, content_json')
+        .eq('thread_id', threadId)
+        .order('created_at', { ascending: false })
+        .limit(20),
+    ]);
+
+    const messageJobs = (msgs ?? []).map((m: any) => {
+      const text = typeof m.content_json === 'string'
+        ? m.content_json
+        : (m.content_json?.text ?? JSON.stringify(m.content_json ?? {}));
+      return { kind: 'message' as const, id: m.id, content: String(text), title: undefined, type: undefined };
+    }).filter((j: any) => j.content.trim().length >= 200);
+
+    const artifactJobs = (arts ?? []).map((a: any) => {
+      const text = typeof a.content_json === 'string'
+        ? a.content_json
+        : JSON.stringify(a.content_json ?? {});
+      return { kind: 'artifact' as const, id: a.id, content: String(text), title: a.title, type: a.artifact_type };
+    }).filter((j: any) => j.content.trim().length >= 100);
+
+    const jobs = [...messageJobs, ...artifactJobs];
+    let created = 0;
+    let errors = 0;
+    // Run sequentially to avoid hammering the LLM gateway with parallel bursts
+    for (const job of jobs) {
+      try {
+        const res = await detect({
+          ...(job.kind === 'message'
+            ? { sourceMessageId: job.id }
+            : { sourceArtifactId: job.id, artifactType: job.type, artifactTitle: job.title }),
+          content: job.content.slice(0, 8000),
+        });
+        created += (res as any)?.created ?? 0;
+      } catch {
+        errors += 1;
+      }
+    }
+    await fetchProposals();
+    return { scanned: jobs.length, created, errors };
+  }, [threadId, user, detect, fetchProposals]);
+
   const confirm = useCallback(async (
     proposalId: string,
     overrides?: { target_account_id?: string | null; target_opportunity_id?: string | null; target_scope?: ProposalScope; payload_json?: Record<string, unknown> }
@@ -154,5 +213,5 @@ export function useStrategyProposals(threadId: string | null) {
     }
   }, [fetchProposals]);
 
-  return { proposals, isLoading, refetch: fetchProposals, detect, confirm, reject, editPayload, promote };
+  return { proposals, isLoading, refetch: fetchProposals, detect, scanThread, confirm, reject, editPayload, promote };
 }

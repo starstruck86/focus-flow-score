@@ -22,6 +22,7 @@ interface Props {
   onReject: (id: string, reason?: string) => Promise<boolean>;
   onEditPayload: (id: string, payload: Record<string, unknown>) => Promise<boolean>;
   onPromote: (id: string, opts?: { mark_reusable?: boolean; resource_type_override?: string }) => Promise<{ success?: boolean; promoted_table?: string; promoted_record_id?: string; already_promoted?: boolean; error?: string }>;
+  onScanThread?: () => Promise<{ scanned: number; created: number; errors: number }>;
   isLoading?: boolean;
 }
 
@@ -304,15 +305,30 @@ function ProposalCard({ proposal, thread, onConfirm, onReject, onEditPayload, on
   );
 }
 
-export function ProposalReviewPanel({ thread, proposals, onConfirm, onReject, onEditPayload, onPromote, isLoading }: Props) {
+export function ProposalReviewPanel({ thread, proposals, onConfirm, onReject, onEditPayload, onPromote, onScanThread, isLoading }: Props) {
   const [collapsed, setCollapsed] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const pending = proposals.filter(p => p.status === 'pending');
   const confirmed = proposals.filter(p => p.status === 'confirmed');
   const promoted = proposals.filter(p => p.status === 'promoted');
   const failed = proposals.filter(p => p.status === 'failed');
 
-  if (proposals.length === 0 && !isLoading) return null;
+  const handleScan = async () => {
+    if (!onScanThread) return;
+    setScanning(true);
+    try {
+      const r = await onScanThread();
+      if (r.created > 0) toast.success(`Found ${r.created} new proposal${r.created === 1 ? '' : 's'} (scanned ${r.scanned})`);
+      else if (r.scanned === 0) toast('Nothing in this thread to scan yet');
+      else toast(`Scanned ${r.scanned} item${r.scanned === 1 ? '' : 's'} — no new promotable discoveries`);
+    } catch (e: any) {
+      toast.error(`Scan failed: ${e?.message ?? e}`);
+    } finally {
+      setScanning(false);
+    }
+  };
 
+  // Always render so the scan affordance is reachable even with zero proposals
   return (
     <div className="px-3 py-2.5 border-b border-border/30">
       <button onClick={() => setCollapsed(c => !c)} className="w-full flex items-center gap-1.5 mb-2 text-left">
@@ -340,7 +356,26 @@ export function ProposalReviewPanel({ thread, proposals, onConfirm, onReject, on
 
       {!collapsed && (
         <div className="space-y-2">
+          {onScanThread && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleScan}
+              disabled={scanning}
+              className="w-full h-7 text-[10px] gap-1.5 border-dashed border-border/50"
+            >
+              {scanning
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <ClipboardCheck className="h-3 w-3" />}
+              {scanning ? 'Scanning thread…' : proposals.length === 0 ? 'Scan thread for promotable discoveries' : 'Re-scan thread'}
+            </Button>
+          )}
           {isLoading && <p className="text-[10px] text-muted-foreground italic pl-5">Loading…</p>}
+          {proposals.length === 0 && !isLoading && !scanning && (
+            <p className="text-[10px] text-muted-foreground italic px-1">
+              No proposals yet. Run a scan to extract contacts, risks, stakeholders, or artifacts from this thread.
+            </p>
+          )}
           {[...pending, ...confirmed, ...failed, ...promoted].map(p => (
             <ProposalCard key={p.id} proposal={p} thread={thread} onConfirm={onConfirm} onReject={onReject} onEditPayload={onEditPayload} onPromote={onPromote} />
           ))}

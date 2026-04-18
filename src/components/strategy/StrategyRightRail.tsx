@@ -60,6 +60,7 @@ interface Props {
   onRejectProposal?: (id: string, reason?: string) => Promise<boolean>;
   onEditProposalPayload?: (id: string, payload: Record<string, unknown>) => Promise<boolean>;
   onPromoteProposal?: (id: string, opts?: { mark_reusable?: boolean; resource_type_override?: string }) => Promise<{ success?: boolean; promoted_table?: string; promoted_record_id?: string; already_promoted?: boolean; error?: string }>;
+  onScanThreadProposals?: () => Promise<{ scanned: number; created: number; errors: number }>;
 }
 
 const MEMORY_TYPES = [
@@ -123,7 +124,7 @@ export function StrategyRightRail({
   rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
   onRegenerateArtifact, isTransforming, onReprocessUpload,
   onUseArtifactAsInput, onDuplicateArtifact,
-  proposals, proposalsLoading, onConfirmProposal, onRejectProposal, onEditProposalPayload, onPromoteProposal,
+  proposals, proposalsLoading, onConfirmProposal, onRejectProposal, onEditProposalPayload, onPromoteProposal, onScanThreadProposals,
 }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [memType, setMemType] = useState('fact');
@@ -175,15 +176,17 @@ export function StrategyRightRail({
       </div>
 
       <ScrollArea className="flex-1">
-        {/* Phase 3: Promotion proposals — surfaced above context so they're seen */}
-        {proposals && proposals.length > 0 && onConfirmProposal && onRejectProposal && onEditProposalPayload && onPromoteProposal && (
+        {/* Promotion proposals — always rendered when handlers are wired so the
+            scan affordance is reachable even with zero existing proposals. */}
+        {onConfirmProposal && onRejectProposal && onEditProposalPayload && onPromoteProposal && (
           <ProposalReviewPanel
             thread={thread}
-            proposals={proposals}
+            proposals={proposals ?? []}
             onConfirm={onConfirmProposal}
             onReject={onRejectProposal}
             onEditPayload={onEditProposalPayload}
             onPromote={onPromoteProposal}
+            onScanThread={onScanThreadProposals}
             isLoading={proposalsLoading}
           />
         )}
