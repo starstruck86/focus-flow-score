@@ -535,6 +535,16 @@ export function StrategyMainPanel({
         isRunning={isTaskRunning}
         linkedContext={linkedContext}
       />
+
+      {/* ── Link Thread Dialog — explicit account/opportunity linkage ── */}
+      <LinkThreadDialog
+        open={linkDialogOpen}
+        onOpenChange={setLinkDialogOpen}
+        thread={thread}
+        onApply={async (updates) => {
+          await onUpdateThread(thread.id, updates);
+        }}
+      />
     </div>
   );
 }
