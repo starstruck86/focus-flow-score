@@ -95,23 +95,64 @@ function buildDetectorPrompt(input: DetectorRequest, threadCtx: { hasAccount: bo
 
 ${scopeHint}
 
+# OUTPUT SCHEMA — STRICT
+Return ONLY this exact JSON shape. Do NOT invent new top-level fields. Do NOT replace "proposal_type" with "memory_type" or "target_scope" with "scope". Use these exact field names:
+
+{
+  "proposals": [
+    {
+      "proposal_type": "contact" | "stakeholder" | "champion" | "account_note" | "account_intelligence" | "opportunity_note" | "opportunity_intelligence" | "transcript" | "risk" | "blocker" | "resource_promotion" | "artifact_promotion",
+      "target_scope": "account" | "opportunity" | "both",
+      "payload": { /* type-specific shape, see below */ },
+      "rationale": "<=140 char sentence describing what was detected and why it's promotable",
+      "scope_rationale": "<=140 char sentence describing why this scope",
+      "dedupe_seed": "stable lowercase identifier",
+      "detector_confidence": 0.0-1.0
+    }
+  ]
+}
+
+# WORKED EXAMPLE — required field names
+INPUT: "Matthew Pertgen said Acoustic is not a fit because they're heavily invested in HubSpot."
+OUTPUT:
+{
+  "proposals": [
+    {
+      "proposal_type": "contact",
+      "target_scope": "account",
+      "payload": { "name": "Matthew Pertgen", "notes": "Stated Acoustic not a fit; deeply invested in HubSpot." },
+      "rationale": "Named buyer-side contact identified in transcript context.",
+      "scope_rationale": "Person belongs to the company, not a specific deal.",
+      "dedupe_seed": "matthew pertgen",
+      "detector_confidence": 0.92
+    },
+    {
+      "proposal_type": "blocker",
+      "target_scope": "account",
+      "payload": { "content": "Buyer explicitly said Acoustic is not a fit due to HubSpot investment." },
+      "rationale": "Explicit buyer-stated rejection signal.",
+      "scope_rationale": "Tied to company-level tech stack, not a single deal yet.",
+      "dedupe_seed": "acoustic not a fit hubspot",
+      "detector_confidence": 0.9
+    }
+  ]
+}
+
 # CRITICAL EXTRACTION RULES
 
 1. NAMED PEOPLE ARE ALWAYS A SEPARATE PROPOSAL.
-   - Whenever a real person is named (first + last, or first + role), emit a "contact" or "stakeholder" or "champion" proposal for that person — EVEN IF that person also appears in a risk, blocker, or note.
-   - A risk like "Matthew said this is not a fit" must produce TWO proposals: (a) contact "Matthew <Lastname>" with title if known, and (b) the risk itself.
-   - Never collapse a named person into a risk-only record. Names are first-class.
-   - Use "champion" only with explicit positive signal. Use "stakeholder" for buying-committee members. Default to "contact" otherwise.
+   - Whenever a real person is named (first + last, or first + role), emit a "contact"/"stakeholder"/"champion" proposal for them — EVEN IF they also appear in a risk/blocker/note.
+   - Use "champion" only with explicit positive signal. "stakeholder" for buying-committee members. Default to "contact" otherwise.
 
-2. EACH FACT IS ONE PROPOSAL. Don't merge unrelated facts.
+2. EACH DISTINCT FACT IS ONE PROPOSAL. Don't merge unrelated facts.
 
 3. SKIP:
    - generic sales advice
-   - rep's own questions/plans (those are workflow, not intelligence)
+   - rep's own questions/plans (workflow, not intelligence)
    - speculation ("they might…", "they could…")
-   - rephrasing of context already in the conversation
+   - rephrasing of context already discussed
 
-4. PAYLOAD SHAPES (be exact):
+4. PAYLOAD SHAPES (must be inside the "payload" object, NOT at top level):
    - contact / stakeholder / champion: { name, title?, email?, department?, seniority?, notes? }
    - account_note / account_intelligence / opportunity_note / opportunity_intelligence: { content, memory_type? }
    - risk / blocker: { content }
@@ -119,17 +160,11 @@ ${scopeHint}
    - resource_promotion / artifact_promotion: { title, content, description?, resource_type?, tags? }
 
 5. SCOPE DISCIPLINE:
-   - Use "account" for tech stack, company strategy, org structure — anything true about the company independent of a single deal.
-   - Use "opportunity" only when clearly about ONE deal (specific timeline, pricing, single buying motion).
-   - Use "both" sparingly — only when the fact is materially needed at both levels.
+   - "account" = company-wide truths (tech stack, org, strategy)
+   - "opportunity" = single-deal specifics (timeline, pricing, motion)
+   - "both" = sparingly, when truly needed at both levels
 
-6. RATIONALE / SCOPE_RATIONALE: each ONE short sentence (<140 chars).
-
-7. dedupe_seed: stable identifier — for contacts use lowercased "name|title"; for notes use the first 80 chars of the content; for risks use the risk subject.
-
-8. detector_confidence: be honest. Named contacts pulled from clear text → 0.85+. Inferred facts → 0.5-0.7.
-
-Return JSON: { "proposals": [...] }. Empty array if nothing meaningful.
+If nothing meaningful, return: { "proposals": [] }
 
 # CONTENT
 """
