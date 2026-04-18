@@ -205,15 +205,68 @@ async function callLLMForExtraction(prompt: string): Promise<DetectedProposal[]>
     const parsed = JSON.parse(text);
     const arr = Array.isArray(parsed?.proposals) ? parsed.proposals : [];
     console.log("[detector] parsed proposals count:", arr.length);
-    return arr.filter((p: any) =>
-      p && typeof p.proposal_type === "string" &&
-      typeof p.target_scope === "string" &&
-      p.payload && typeof p.dedupe_seed === "string"
-    );
+    const normalized = arr.map(normalizeProposal).filter(Boolean) as DetectedProposal[];
+    console.log("[detector] normalized count:", normalized.length);
+    return normalized;
   } catch (e) {
     console.error("[detector] JSON parse failed", e, "raw:", text.slice(0, 500));
     return [];
   }
+}
+
+/**
+ * Tolerant normalizer: LLMs sometimes flatten the schema (e.g. emit `scope` instead of
+ * `target_scope`, `memory_type` instead of `proposal_type`, or put payload fields at the top
+ * level). We recover those rather than dropping the proposal silently.
+ */
+function normalizeProposal(raw: any): DetectedProposal | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const proposal_type = String(raw.proposal_type ?? raw.memory_type ?? raw.type ?? "").trim() as ProposalType;
+  const target_scope = String(raw.target_scope ?? raw.scope ?? "").trim() as Scope;
+  if (!proposal_type || !target_scope) return null;
+
+  const validTypes: ProposalType[] = ["contact","stakeholder","champion","account_note","account_intelligence","opportunity_note","opportunity_intelligence","transcript","risk","blocker","resource_promotion","artifact_promotion"];
+  const validScopes: Scope[] = ["account","opportunity","both"];
+  if (!validTypes.includes(proposal_type) || !validScopes.includes(target_scope)) return null;
+
+  // Recover payload from top-level fields if missing
+  let payload = raw.payload && typeof raw.payload === "object" ? { ...raw.payload } : {};
+  const isContactType = proposal_type === "contact" || proposal_type === "stakeholder" || proposal_type === "champion";
+  if (isContactType) {
+    if (!payload.name && raw.name) payload.name = raw.name;
+    if (!payload.title && raw.title) payload.title = raw.title;
+    if (!payload.email && raw.email) payload.email = raw.email;
+    if (!payload.notes && raw.notes) payload.notes = raw.notes;
+  } else {
+    if (!payload.content && raw.content) payload.content = raw.content;
+    if (!payload.title && raw.title) payload.title = raw.title;
+  }
+
+  // dedupe_seed fallback
+  let dedupe_seed = String(raw.dedupe_seed ?? "").trim();
+  if (!dedupe_seed) {
+    if (isContactType && payload.name) dedupe_seed = String(payload.name).toLowerCase();
+    else if (payload.content) dedupe_seed = String(payload.content).toLowerCase().slice(0, 80);
+    else if (payload.title) dedupe_seed = String(payload.title).toLowerCase();
+    else return null;
+  }
+
+  // Skip empty payloads
+  if (isContactType && !payload.name) return null;
+  if (!isContactType && !payload.content && !payload.title) return null;
+
+  const conf = typeof raw.detector_confidence === "number" ? raw.detector_confidence : 0.7;
+
+  return {
+    proposal_type,
+    target_scope,
+    payload,
+    rationale: String(raw.rationale ?? "").slice(0, 280),
+    scope_rationale: String(raw.scope_rationale ?? "").slice(0, 280),
+    dedupe_seed,
+    detector_confidence: Math.max(0, Math.min(1, conf)),
+  };
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
