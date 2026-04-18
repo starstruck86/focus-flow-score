@@ -32,6 +32,14 @@ function makeStubSupabase(rowsByQuery: (rec: Recorded) => any[]) {
       rec.filters.push({ op: "ilike", col, val });
       return builder(rec);
     },
+    or: (val: string) => {
+      rec.filters.push({ op: "or", col: "or", val });
+      return builder(rec);
+    },
+    in: (col: string, val: unknown) => {
+      rec.filters.push({ op: "in", col, val });
+      return builder(rec);
+    },
     order: (_c: string, _o: unknown) => builder(rec),
     limit: (_n: number) => Promise.resolve({ data: rowsByQuery(rec), error: null }),
   });
