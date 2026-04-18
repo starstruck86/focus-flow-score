@@ -6601,6 +6601,68 @@ export type Database = {
         }
         Relationships: []
       }
+      strategy_thread_conflicts: {
+        Row: {
+          conflict_kind: string
+          created_at: string
+          detected_account_name: string | null
+          evidence_json: Json
+          id: string
+          linked_account_id: string | null
+          linked_account_name: string | null
+          reason: string
+          resolution_action: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          thread_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          conflict_kind: string
+          created_at?: string
+          detected_account_name?: string | null
+          evidence_json?: Json
+          id?: string
+          linked_account_id?: string | null
+          linked_account_name?: string | null
+          reason: string
+          resolution_action?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity: string
+          thread_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          conflict_kind?: string
+          created_at?: string
+          detected_account_name?: string | null
+          evidence_json?: Json
+          id?: string
+          linked_account_id?: string | null
+          linked_account_name?: string | null
+          reason?: string
+          resolution_action?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          thread_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_thread_conflicts_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       strategy_thread_resources: {
         Row: {
           created_at: string
@@ -6644,7 +6706,9 @@ export type Database = {
       }
       strategy_threads: {
         Row: {
+          cloned_from_thread_id: string | null
           created_at: string
+          entity_signals: Json | null
           id: string
           is_pinned: boolean
           lane: string
@@ -6657,11 +6721,16 @@ export type Database = {
           summary: string | null
           thread_type: string
           title: string
+          trust_checked_at: string | null
+          trust_state: string
+          trust_state_reason: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          cloned_from_thread_id?: string | null
           created_at?: string
+          entity_signals?: Json | null
           id?: string
           is_pinned?: boolean
           lane?: string
@@ -6674,11 +6743,16 @@ export type Database = {
           summary?: string | null
           thread_type?: string
           title?: string
+          trust_checked_at?: string | null
+          trust_state?: string
+          trust_state_reason?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          cloned_from_thread_id?: string | null
           created_at?: string
+          entity_signals?: Json | null
           id?: string
           is_pinned?: boolean
           lane?: string
@@ -6691,10 +6765,20 @@ export type Database = {
           summary?: string | null
           thread_type?: string
           title?: string
+          trust_checked_at?: string | null
+          trust_state?: string
+          trust_state_reason?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "strategy_threads_cloned_from_thread_id_fkey"
+            columns: ["cloned_from_thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "strategy_threads_linked_account_id_fkey"
             columns: ["linked_account_id"]
@@ -8033,6 +8117,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      compute_thread_trust_state: {
+        Args: { p_thread_id: string }
+        Returns: string
       }
       get_resource_content_prefixes: {
         Args: { p_user_id: string }
