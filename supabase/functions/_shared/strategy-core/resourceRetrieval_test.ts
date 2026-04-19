@@ -473,3 +473,92 @@ Deno.test("renderResourceContextBlock: surfaces body-match flag and snippet", ()
   assertStringIncludes(block, "ROI calculation");
   assertStringIncludes(block, "body, not the title");
 });
+
+// ── Source-shape detection ────────────────────────────────────────
+
+Deno.test("detectSourceShape: empty body → empty", () => {
+  const out = detectSourceShape("");
+  assertEquals(out.shape, "empty");
+});
+
+Deno.test("detectSourceShape: transcript resource_type → unstructured even if it has a heading", () => {
+  const body = "# Episode 540\nHost: Welcome back. Today we talk about cold calling.\nGuest: Thanks for having me.\nHost: Let's dive in.";
+  const out = detectSourceShape(body, { resource_type: "transcript" });
+  assertEquals(out.shape, "unstructured");
+});
+
+Deno.test("detectSourceShape: dialogue markers → unstructured", () => {
+  const body = "Host: Welcome.\nGuest: Hi.\nHost: Tell me about discovery.\nGuest: Sure, the first thing I do is...\nHost: Interesting.\nGuest: Then I ask about budget.";
+  const out = detectSourceShape(body);
+  assertEquals(out.shape, "unstructured");
+});
+
+Deno.test("detectSourceShape: business-case style → structured", () => {
+  const body = `# FTD Q2 Business Case
+## Situation
+Customer is at 50 seats and growing 30% QoQ.
+## Ask
+Expand to 200 seats with multi-year commit.
+## Value
+Projected $480K ARR uplift, 6-month payback.
+## Outcome
+Champion presents to CFO in week 3.`;
+  const out = detectSourceShape(body, { resource_type: "document" });
+  assertEquals(out.shape, "structured");
+});
+
+Deno.test("detectSourceShape: is_template=true → structured", () => {
+  const out = detectSourceShape("Just a paragraph of text.", { is_template: true });
+  assertEquals(out.shape, "structured");
+});
+
+Deno.test("detectSourceShape: presentation resource_type → structured", () => {
+  const out = detectSourceShape("Slide content here.", { resource_type: "presentation" });
+  assertEquals(out.shape, "structured");
+});
+
+Deno.test("renderResourceContextBlock: emits STRUCTURED contract for structured picked resources", () => {
+  const block = renderResourceContextBlock({
+    hits: [{
+      id: "p-1", title: "FTD Q2 Business Case",
+      description: null, resource_type: "document",
+      is_template: null, template_category: null,
+      account_id: null, opportunity_id: null, tags: null,
+      matchKind: "picked",
+      matchReason: "User picked from /library this turn",
+      bodyExcerpt: "## Situation\n## Ask\n## Value",
+      sourceShape: "structured",
+      sourceShapeReason: "3 md-headings, labeled-section lines",
+    }],
+    userAskedForResource: true,
+    extractedPhrases: [],
+    inferredCategories: [],
+  });
+  assertStringIncludes(block, "source-shape: structured");
+  assertStringIncludes(block, "STRUCTURED SOURCE");
+  assertStringIncludes(block, "Mirror the source's actual section structure");
+  assertStringIncludes(block, "NEVER respond with only a question");
+});
+
+Deno.test("renderResourceContextBlock: emits UNSTRUCTURED contract for transcript picked resources", () => {
+  const block = renderResourceContextBlock({
+    hits: [{
+      id: "p-2", title: "#540 Cold Call Masterclass",
+      description: null, resource_type: "transcript",
+      is_template: null, template_category: null,
+      account_id: null, opportunity_id: null, tags: null,
+      matchKind: "picked",
+      matchReason: "User picked from /library this turn",
+      bodyExcerpt: "Host: Let's break down a cold opener... Guest: I always lead with...",
+      sourceShape: "unstructured",
+      sourceShapeReason: "resource_type=transcript",
+    }],
+    userAskedForResource: true,
+    extractedPhrases: [],
+    inferredCategories: [],
+  });
+  assertStringIncludes(block, "source-shape: unstructured");
+  assertStringIncludes(block, "UNSTRUCTURED SOURCE");
+  assertStringIncludes(block, "EXTRACT the reusable substance");
+  assertStringIncludes(block, 'NEVER answer only with "I need a fact');
+});
