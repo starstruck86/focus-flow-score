@@ -2266,24 +2266,33 @@ function enforceModeLock(
     }
 
     case "next_steps": {
-      // Forbidden email fingerprints
-      if (/^subject:/im.test(text) || /^hi\s+\[?[a-z]/im.test(text)) {
+      // Physically strip appended email/template blocks BEFORE other checks.
+      const emailIdx = text.search(/(^|\n)\s*(subject:|hi\s+\[?[a-z]|here'?s\s+(a|an|the)\s+(template|email|outreach))/im);
+      if (emailIdx > 40) {
+        text = text.slice(0, emailIdx).trim();
+        modified = true;
+        violations.push("stripped_appended_email");
+      } else if (/^subject:/im.test(text) || /^hi\s+\[?[a-z]/im.test(text)) {
         violations.push("next_steps_contains_email");
         shouldRegenerate = true;
       }
       // Must contain a numbered list
       if (!/^\s*\d+[.)]\s/m.test(text)) {
         violations.push("next_steps_missing_numbered_list");
-        shouldRegenerate = true;
       }
       break;
     }
 
     case "pitch": {
+      // Strip any appended numbered list / email block AFTER the pitch line.
+      const cutMatch = text.match(/\n\s*(?:\d+[.)]\s|subject:|hi\s+\[?[a-z]|here'?s\s+(?:a|an|the)\s+(?:template|email|outreach))/i);
+      if (cutMatch && cutMatch.index !== undefined && cutMatch.index > 40) {
+        text = text.slice(0, cutMatch.index).trim();
+        modified = true;
+        violations.push("stripped_appended_asset");
+      }
       // Must lead with "Say this:"
       if (!/^say this:/i.test(text)) {
-        // Try to recover by prepending — but only if there's no obvious
-        // framework/list garbage first.
         if (!/^\s*\d+[.)]\s/m.test(text) && !/^subject:/im.test(text)) {
           text = `Say this: ${text.replace(/^[\s\n]+/, "")}`;
           modified = true;
@@ -2293,7 +2302,7 @@ function enforceModeLock(
           shouldRegenerate = true;
         }
       }
-      // No numbered lists
+      // No numbered lists remaining
       if (/^\s*\d+[.)]\s/m.test(text)) {
         violations.push("pitch_contains_list");
         shouldRegenerate = true;
@@ -2302,8 +2311,17 @@ function enforceModeLock(
     }
 
     case "provenance": {
-      // ≤3 sentences, no email structure
-      if (/^subject:/im.test(text) || /^hi\s+\[?[a-z]/im.test(text)) {
+      // CRITICAL: physically strip any appended asset (email/template/script)
+      // BEFORE sentence-cap counting. Provenance must answer the source
+      // question only — no second asset, ever.
+      const cutPattern = /(^|\n)\s*(here'?s\s+(?:a|an|the|some)\s+(?:template|email|outreach|follow[- ]?up|script|message)|subject:|hi\s+\[?[a-z]|---\s*$|```)/im;
+      const cutMatch = text.match(cutPattern);
+      if (cutMatch && cutMatch.index !== undefined && cutMatch.index > 20) {
+        text = text.slice(0, cutMatch.index).trim();
+        modified = true;
+        violations.push("stripped_appended_asset");
+      } else if (/^subject:/im.test(text) || /^hi\s+\[?[a-z]/im.test(text)) {
+        // Email started at the very top — the model ignored the lock entirely.
         violations.push("provenance_contains_email");
         shouldRegenerate = true;
       }
