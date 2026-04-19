@@ -820,6 +820,13 @@ export function renderResourceContextBlock(args: {
     if (withBody && h.bodyExcerpt) {
       // Render the body excerpt as a fenced block so the model treats it
       // as source material to mirror, not as a description to summarize.
+      // Surface the detected shape so the model knows whether to mirror
+      // a real scaffold or extract reusable patterns from prose.
+      if (h.sourceShape) {
+        lines.push(
+          `    source-shape: ${h.sourceShape}${h.sourceShapeReason ? ` (${h.sourceShapeReason})` : ""}`,
+        );
+      }
       lines.push(`    --- BODY EXCERPT (verbatim from this resource) ---`);
       lines.push(h.bodyExcerpt);
       lines.push(`    --- END BODY EXCERPT ---`);
