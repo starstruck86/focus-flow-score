@@ -2043,11 +2043,17 @@ function classifyChatIntent(userContent: string): IntentResult {
     /\b(cfo|chief\s+financial|finance\s+(team|leader|chief)|controller|treasur(er|y)|economic\s+buyer)\b/.test(text);
 
 
-  // 1. Provenance — "where is this from", "how do you know", "source"
-  if (
-    /\b(where (is|are|did) (this|that|it|they)|where('?s| is) (this|that) (from|pulled|coming)|source(s)?\??$|how (do|did) you know|why (do|did) you (think|say)|what('?s| is) the source)\b/
-      .test(text)
-  ) {
+  // 1. Provenance — ALWAYS WINS. Outranks analysis even in account-linked
+  // threads. Patterns: "where is this from", "where did it come from",
+  // "where are you pulling this from", "where is this being pulled from",
+  // "what source is this", "what is this based on", "how do you know this",
+  // "why do you think/say", "source(s)?".
+  const PROVENANCE_RE =
+    /\b(where (is|are|did|does|do) (this|that|it|they|you)|where('?s| is) (this|that|it) (from|pulled|coming|based|sourced|getting)|where (is|are) (this|that|it|you|i) (being\s+)?(pulled|sourced|getting|coming|drawing|reading|reading from)|what('?s| is) (this|that|it) based on|what('?s| is) (the|your) (source|basis)|source(s)?\??$|how (do|did) you know (this|that)?|why (do|did) you (think|say|believe)|what(?:'?s| is) the (source|basis|reference)|pulled from)\b/;
+  if (PROVENANCE_RE.test(text)) {
+    console.log(
+      `[mode-lock] intent_forced_provenance text="${text.slice(0, 80)}"`,
+    );
     return { intent: "provenance" };
   }
 
