@@ -3254,10 +3254,15 @@ async function handleChat(
     }
     const visible = subst.text;
     // Citation audit: catch any fabricated RESOURCE[…] references.
-    const audit = auditResourceCitations(visible, resourceHits);
+    // Closed-set mode is enabled when the user picked a resource via
+    // /library — this prevents adjacent-variant hallucinations
+    // (e.g. "Q3" when they picked "Q2").
+    const audit = auditResourceCitations(visible, resourceHits, {
+      closedSet: pickedResourceIds.length > 0,
+    });
     if (audit.modified) {
       console.log(
-        `[citation-audit] non-stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`,
+        `[citation-audit] non-stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
       );
     }
     const auditedVisible = audit.text;
@@ -3457,11 +3462,15 @@ async function handleChat(
         const visible = subst.text;
 
         // Step 3: citation audit on the GUARDED text (so banner
-        // attaches to the same body that's persisted).
-        const audit = auditResourceCitations(visible, resourceHits);
+        // attaches to the same body that's persisted). Closed-set
+        // mode prevents adjacent-variant hallucinations when the
+        // user picked a resource via /library.
+        const audit = auditResourceCitations(visible, resourceHits, {
+          closedSet: pickedResourceIds.length > 0,
+        });
         if (audit.modified) {
           console.log(
-            `[citation-audit] stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`,
+            `[citation-audit] stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
           );
         }
         const auditedVisible = audit.text;

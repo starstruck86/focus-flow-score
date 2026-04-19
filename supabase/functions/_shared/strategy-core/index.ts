@@ -59,6 +59,7 @@ export {
 export {
   auditResourceCitations,
   type CitationAuditHit,
+  type CitationAuditOptions,
   type CitationAuditResult,
 } from "./citationAudit.ts";
 
