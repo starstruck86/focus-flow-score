@@ -14,6 +14,7 @@ import { ArrowUp } from 'lucide-react';
 interface Props {
   disabled?: boolean;
   placeholder?: string;
+  serifPlaceholder?: boolean;
   onSend: (text: string) => void;
 }
 
@@ -22,7 +23,7 @@ export interface StrategyComposerHandle {
 }
 
 export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function StrategyComposer(
-  { disabled, placeholder = 'Message…', onSend }, ref
+  { disabled, placeholder = 'Message…', serifPlaceholder = false, onSend }, ref
 ) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState('');
@@ -77,10 +78,10 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           rows={1}
           placeholder={placeholder}
           disabled={disabled}
-          className="flex-1 bg-transparent border-0 outline-none resize-none text-[15px] leading-[1.5]"
+          className={`flex-1 bg-transparent border-0 outline-none resize-none leading-[1.5] ${serifPlaceholder && !value ? 'text-[17px]' : 'text-[15px]'}`}
           style={{
             color: 'hsl(var(--sv-ink))',
-            fontFamily: 'var(--sv-sans)',
+            fontFamily: serifPlaceholder && !value ? 'var(--sv-serif)' : 'var(--sv-sans)',
             paddingRight: 40,
             maxHeight: 240,
           }}

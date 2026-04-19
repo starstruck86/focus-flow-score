@@ -211,7 +211,12 @@ export function StrategyShell() {
         <StrategyComposer
           ref={composerRef}
           disabled={isSending}
-          placeholder={entityName ? `Message about ${entityName}…` : 'Message…'}
+          placeholder={
+            messages.length === 0
+              ? 'What are you thinking about?'
+              : entityName ? `Message about ${entityName}…` : 'Message…'
+          }
+          serifPlaceholder={messages.length === 0}
           onSend={handleSend}
         />
       )}
