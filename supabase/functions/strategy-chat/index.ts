@@ -2202,25 +2202,41 @@ The user asked WHAT TO DO NEXT. Return numbered actions.
 - ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm the budget owner this week or this slips to next quarter").${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "analysis":
-      return `═══ MODE LOCK: STRATEGIC ANALYSIS ═══
+      return `═══ MODE LOCK: STRATEGIC ANALYSIS (ELITE OPERATOR) ═══
 The user explicitly asked for analysis / thesis / read on the deal. ANSWER WITH THE THESIS ITSELF — do NOT explain where it came from, do NOT describe methodology, do NOT frame how you'd think about it. The thesis IS the answer.
-- REQUIRED OUTPUT SHAPE (use these EXACT labels, each on its own line):
+
+═══ ELITE LANGUAGE STANDARD (NON-NEGOTIABLE) ═══
+Write like a top-1% AE briefing their VP, not like a consultant hedging. The output must make the rep think "that is exactly what's happening in my deal" — not "that sounds reasonable."
+- KILL SOFT LANGUAGE. Do NOT use: "may", "might", "could", "potential", "potentially", "possibly", "perhaps", "likely" (when used as a hedge), "tends to", "often", "in general", "it's worth noting", "it's possible that", "there's a chance", "this suggests", "this indicates" (as hedge).
+- USE CONFIDENT ASSERTIONS when inference is reasonable from context. State the mechanism. State the consequence. Own the read.
+- FORCE MECHANISM, NOT DESCRIPTION. Every claim must name the SPECIFIC actor + the SPECIFIC action + the SPECIFIC effect.
+   Bad: "Procurement may delay deals."
+   Good: "Abrigo will insert a centralized procurement step that adds 2–4 weeks to every renewal cycle."
+- ECONOMIC CONSEQUENCE must tie to PIPELINE REALITY (quarter-end, budget cycles, deal resets, champion churn, displacement risk, competitor entry) — not abstract harm.
+   Bad: "Deals may be delayed."
+   Good: "If this slips past quarter-end, the budget resets, the deal cycle restarts, and your champion loses internal credibility for pushing it."
+- NEXT BEST DISCOVERY ACTION must be ONE surgical question worded exactly as the rep would ask it. Not "reach out", not "explore", not "discuss". A literal question in quotes, targeted at a named role.
+   Bad: "Reach out to the buyer about procurement."
+   Good: "Ask the economic buyer: 'Has this deal already cleared the new Abrigo procurement process, or will it require a fresh approval cycle?'"
+
+- REQUIRED OUTPUT SHAPE (use these EXACT labels, each on its own line — DO NOT change the structure):
   Account thesis:
-  [one sharp account-specific sentence — the commercial truth]
+  [one sharp account-specific sentence — the commercial truth, stated as a confident assertion with a named mechanism]
 
   Value leakage:
-  - [where money / margin / velocity / retention is leaking — bullet 1]
+  - [specific actor + specific action + specific \$/time/velocity effect — bullet 1]
   - [bullet 2]
   - [bullet 3]
 
   Economic consequence:
-  [one short paragraph — what it costs them in \$ / margin / retention / velocity if nothing changes]
+  [one short paragraph — concrete pipeline/quarter/budget/deal-cycle consequence if nothing changes. Name the deadline, the dollar exposure, or the deal-reset risk.]
 
   Next best discovery action:
-  [one concrete move — named role + specific question/ask]
+  [ONE surgical question in quotes, targeted at a named role — the single highest-leverage thing to ask next]
+
 - FORBIDDEN META/PROVENANCE LANGUAGE (these will be STRIPPED by the server guard and you will be marked incorrect): "this comes from", "this is based on", "based on the (available |provided |given )?context", "informed by", "derived from", "pulled from", "the thesis is based on", "this assessment uses", "this analysis draws on", "where this comes from", "according to (the|your) (thread|context|notes|account)", "given the limited context", "without more information", "to provide a more accurate", "here's how to think about", "the way to think about this is".
-- FORBIDDEN: an email, a template, a script, a "here's how to think about it" essay, a recap of what data you do/don't have.
-- IF DATA IS THIN: still produce the thesis shape. Write the actual commercial read using the facts you DO have, then in the Economic consequence section, name the one missing fact in plain English (e.g. "I still need the renewal value to size the downside"). NEVER substitute meta-commentary for the thesis. NEVER emit bracket placeholders.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- FORBIDDEN: an email, a template, a script, a "here's how to think about it" essay, a recap of what data you do/don't have, hedge words listed above.
+- IF DATA IS THIN: still produce the thesis shape with confident mechanism-driven language using the facts you DO have. In the Economic consequence section, name the one missing fact plainly (e.g. "I still need the renewal value to size the dollar exposure"). NEVER substitute meta-commentary for the thesis. NEVER emit bracket placeholders. NEVER hedge with "may/might/could" — if you don't know, say what you'd need to know.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "provenance":
       return `═══ MODE LOCK: PROVENANCE ═══
@@ -2580,6 +2596,42 @@ function enforceModeLock(
         console.log(
           `[mode-lock] analysis_meta_stripped count=${metaHits}`,
         );
+      }
+
+      // ── HEDGE / SOFT-LANGUAGE GUARD (ELITE OPERATOR STANDARD) ──
+      // Rewrites timid hedge phrases into confident mechanism-driven language.
+      // Only the clearest hedge patterns are rewritten so we don't change
+      // the substance of a real claim.
+      const HEDGE_REWRITES: Array<{ re: RegExp; to: string; tag: string }> = [
+        { re: /\bmay\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_may_will" },
+        { re: /\bmight\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_might_will" },
+        { re: /\bcould\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_could_will" },
+        { re: /\bpotentially\s+/gi, to: "", tag: "hedge_potentially" },
+        { re: /\bpossibly\s+/gi, to: "", tag: "hedge_possibly" },
+        { re: /\bperhaps\s+/gi, to: "", tag: "hedge_perhaps" },
+        { re: /\bit'?s\s+possible\s+that\s+/gi, to: "", tag: "hedge_its_possible" },
+        { re: /\bthere'?s\s+a\s+chance\s+(?:that\s+)?/gi, to: "", tag: "hedge_chance" },
+        { re: /\bthis\s+suggests\s+that\s+/gi, to: "", tag: "hedge_suggests" },
+        { re: /\bthis\s+indicates\s+that\s+/gi, to: "", tag: "hedge_indicates" },
+        { re: /\bit'?s\s+worth\s+noting\s+that\s+/gi, to: "", tag: "hedge_worth_noting" },
+        { re: /\bin\s+general,?\s+/gi, to: "", tag: "hedge_in_general" },
+        { re: /\btends\s+to\s+/gi, to: "will ", tag: "hedge_tends_to" },
+      ];
+      let hedgeHits = 0;
+      for (const { re, to, tag } of HEDGE_REWRITES) {
+        const before = text;
+        text = text.replace(re, to);
+        if (text !== before) {
+          hedgeHits += 1;
+          violations.push(`stripped_${tag}`);
+        }
+      }
+      if (hedgeHits > 0) {
+        text = text
+          .replace(/[ \t]{2,}/g, " ")
+          .replace(/(^|[\.\?!]\s+)([a-z])/g, (_m, p, c) => p + c.toUpperCase());
+        modified = true;
+        console.log(`[mode-lock] analysis_hedges_rewritten count=${hedgeHits}`);
       }
 
       // Shape check: must have an Account thesis line. If not, flag for
