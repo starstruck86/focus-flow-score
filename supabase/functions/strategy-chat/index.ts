@@ -2679,7 +2679,19 @@ function enforceModeLock(
         violations.push("analysis_missing_leakage_label");
       }
 
-      // If after stripping meta lines we have almost nothing left, replace
+      // ── DECISION FORCE: branching/multi-thesis detector ──
+      // If the model still ships multiple competing scenarios after rewrites,
+      // flag for one strict regeneration. We look for residual branching
+      // markers OR multiple "Assume X / Or assume Y" patterns inside the
+      // Account thesis section.
+      const thesisBlock = text.match(/Account thesis:\s*([\s\S]*?)(?:\n\s*Value leakage:|$)/i)?.[1] ?? "";
+      const branchMarkers = /\b(or\s+assume|or\s+alternatively|either\s+.{2,40}\s+or\s+|two\s+possibilities|several\s+scenarios|in\s+(?:the\s+)?other\s+case)\b/i;
+      if (branchMarkers.test(thesisBlock)) {
+        violations.push("analysis_branching_thesis");
+        shouldRegenerate = true;
+        console.log(`[mode-lock] analysis_branching_thesis detected`);
+      }
+
       // with an honest missing-fact thesis instead of shipping a stub.
       if (text.length < 60) {
         text =
