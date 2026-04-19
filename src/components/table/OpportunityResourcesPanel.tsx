@@ -35,7 +35,9 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName, acco
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
 
-  // Fetch resources linked to this opportunity
+  // Fetch resources linked to this opportunity.
+  // Quarantine filter: rows whose source Strategy thread was later flagged with an
+  // identity conflict are hidden from consumer surfaces (DB row preserved for audit).
   const { data: oppResources = [] } = useQuery({
     queryKey: ['resources', 'opportunity', opportunityId],
     queryFn: async () => {
@@ -43,6 +45,7 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName, acco
         .from('resources')
         .select('*')
         .eq('opportunity_id', opportunityId)
+        .is('quarantined_at', null)
         .order('updated_at', { ascending: false });
       if (error) throw error;
       return data as Resource[];
@@ -50,7 +53,9 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName, acco
     enabled: !!user && !!opportunityId,
   });
 
-  // Fetch account-level resources (shared across opps for same account)
+  // Fetch account-level resources (shared across opps for same account).
+  // Same quarantine filter applies — a contaminated Strategy thread must not
+  // bleed its promoted artifacts onto every opp under the linked account.
   const { data: accountResources = [] } = useQuery({
     queryKey: ['resources', 'account', accountId],
     queryFn: async () => {
@@ -59,6 +64,7 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName, acco
         .select('*')
         .eq('account_id', accountId!)
         .is('opportunity_id', null)
+        .is('quarantined_at', null)
         .order('updated_at', { ascending: false });
       if (error) throw error;
       return data as Resource[];
