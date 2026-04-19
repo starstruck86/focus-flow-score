@@ -5,6 +5,7 @@
 
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  detectSourceShape,
   extractCandidatePhrases,
   inferResourceCategories,
   recordResourceUsage,
