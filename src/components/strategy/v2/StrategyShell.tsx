@@ -606,9 +606,19 @@ export function StrategyShell() {
         onPick={handlePickEntity}
       />
       <SlashMenu
-        query={slashQuery}
+        query={isLibraryQuery ? null : slashQuery}
         anchorRect={composerRect}
         onPick={handleSlashPick}
+        onClose={() => {
+          setSlashQuery(null);
+          const ta = composerRef.current as (HTMLTextAreaElement & { clearSlash?: () => void }) | null;
+          ta?.clearSlash?.();
+        }}
+      />
+      <LibraryPicker
+        query={isLibraryQuery ? slashQuery : null}
+        anchorRect={composerRect}
+        onPick={handleLibraryPick}
         onClose={() => {
           setSlashQuery(null);
           const ta = composerRef.current as (HTMLTextAreaElement & { clearSlash?: () => void }) | null;
