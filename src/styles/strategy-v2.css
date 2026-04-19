@@ -1,0 +1,91 @@
+/**
+ * Strategy v2 — scoped design tokens.
+ * These ONLY apply inside .strategy-v2 root and never leak globally.
+ * Locked Phase 1 brief: warm-paper canvas, single elevation, hairline borders.
+ */
+
+.strategy-v2 {
+  /* Palette — light, warm off-white. NOT pure white. */
+  --sv-paper: 40 12% 98%;          /* page background */
+  --sv-ink: 40 10% 15%;            /* primary text */
+  --sv-muted: 40 6% 45%;           /* secondary text */
+  --sv-hairline: 40 8% 90%;        /* the only border color */
+  --sv-clay: 20 70% 50%;           /* the single accent */
+  --sv-amber: 35 60% 55%;          /* warning trust dot only */
+  --sv-hover: 40 8% 94%;           /* hover bg shift */
+  --sv-selection: 20 70% 50%;      /* selection highlight (used at 18% alpha) */
+
+  /* The only shadow in the entire app. */
+  --sv-shadow-e1: 0 8px 24px -8px hsl(40 10% 20% / 0.12);
+
+  /* Radii */
+  --sv-radius-surface: 8px;
+  --sv-radius-composer: 6px;
+  --sv-radius-chip: 4px;
+
+  /* Typography stacks */
+  --sv-serif: Charter, "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --sv-sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  background-color: hsl(var(--sv-paper));
+  color: hsl(var(--sv-ink));
+  font-family: var(--sv-sans);
+}
+
+/* Selection colour inside the canvas */
+.strategy-v2 ::selection {
+  background-color: hsl(var(--sv-selection) / 0.18);
+  color: hsl(var(--sv-ink));
+}
+
+/* Single focus ring — clay, offset 2px */
+.strategy-v2 :focus-visible {
+  outline: 2px solid hsl(var(--sv-clay));
+  outline-offset: 2px;
+}
+
+/* Hairline utility */
+.sv-hairline {
+  border-color: hsl(var(--sv-hairline));
+}
+
+/* Hover bg utility — used by chrome only, never on canvas messages */
+.sv-hover-bg:hover {
+  background-color: hsl(var(--sv-hover));
+}
+
+/* Summoned-surface elevation — the ONLY shadow allowed */
+.sv-e1 {
+  box-shadow: var(--sv-shadow-e1);
+  background-color: hsl(var(--sv-paper));
+}
+
+/* Switcher / Inspector enter/exit — fade + 4px translate, 80ms. No spring. */
+@keyframes sv-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes sv-fade-in-right {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes sv-overlay-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.sv-enter-fade {
+  animation: sv-fade-in 80ms ease-out;
+}
+.sv-enter-fade-right {
+  animation: sv-fade-in-right 120ms ease-out;
+}
+.sv-overlay-enter {
+  animation: sv-overlay-fade 80ms ease-out;
+}
+
+/* Caret colour — clay accent */
+.strategy-v2 textarea,
+.strategy-v2 input {
+  caret-color: hsl(var(--sv-clay));
+}
