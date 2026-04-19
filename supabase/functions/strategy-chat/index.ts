@@ -2761,11 +2761,18 @@ async function handleChat(
     );
   }
 
-  // Stream the response with read timeout protection
+  // Stream the response with read timeout protection.
+  // IMPORTANT: We do NOT pass-through model chunks anymore. Mode-lock
+  // enforcement requires us to see the full response before deciding
+  // whether to truncate / strip drift. We buffer server-side, then
+  // emit the GUARDED text as a single SSE event. This sacrifices
+  // token-by-token streaming for behavioral correctness — explicitly
+  // required by the mode-lock contract.
   const reader = result.rawStream.body!.getReader();
   const decoder = new TextDecoder();
   let fullResponse = "";
   let chunkCount = 0;
+  let sseBuffer = "";
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -2781,19 +2788,25 @@ async function handleChat(
           const { done, value } = await reader.read();
           if (done) break;
           chunkCount++;
-          const chunk = decoder.decode(value, { stream: true });
-          controller.enqueue(new TextEncoder().encode(chunk));
-          for (const line of chunk.split("\n")) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data: ") || trimmed === "data: [DONE]") {
-              continue;
-            }
+          sseBuffer += decoder.decode(value, { stream: true });
+          // Parse complete SSE lines into deltas. We do NOT enqueue
+          // anything to the client during this loop.
+          let nl: number;
+          while ((nl = sseBuffer.indexOf("\n")) !== -1) {
+            let line = sseBuffer.slice(0, nl);
+            sseBuffer = sseBuffer.slice(nl + 1);
+            if (line.endsWith("\r")) line = line.slice(0, -1);
+            if (!line.startsWith("data: ")) continue;
+            const payload = line.slice(6).trim();
+            if (payload === "[DONE]") continue;
             try {
-              const parsed = JSON.parse(trimmed.slice(6));
+              const parsed = JSON.parse(payload);
               const delta = parsed.choices?.[0]?.delta?.content;
               if (delta) fullResponse += delta;
             } catch {
-              // Non-JSON SSE line — skip silently
+              // Re-buffer partial JSON for next chunk
+              sseBuffer = line + "\n" + sseBuffer;
+              break;
             }
           }
         }
@@ -2804,32 +2817,40 @@ async function handleChat(
             `[streaming] empty response after ${chunkCount} chunks, ${latency}ms`,
           );
         }
-        const { patch, visible } = extractThesisUpdate(fullResponse);
-        // Citation audit: catch any fabricated RESOURCE[…] references
-        // that slipped through the prompt contract. We persist the
-        // AUDITED text (DB = source of truth) and stream a trailing
-        // SSE delta with the audit banner so the live UI sees it too.
+
+        // Step 1: extract thesis update + visible body.
+        const { patch, visible: rawVisible } = extractThesisUpdate(fullResponse);
+
+        // Step 2: MODE-LOCK GUARD — strip forbidden tails, truncate
+        // sentence-cap violations, prepend missing sentinels. This
+        // happens BEFORE the user sees a single character.
+        const guarded = enforceModeLock(rawVisible, intent);
+        if (guarded.modified || guarded.violations.length) {
+          console.log(
+            `[mode-lock] stream intent=${intent.intent} violations=${
+              JSON.stringify(guarded.violations)
+            } modified=${guarded.modified}`,
+          );
+        }
+        const visible = guarded.text;
+
+        // Step 3: citation audit on the GUARDED text (so banner
+        // attaches to the same body that's persisted).
         const audit = auditResourceCitations(visible, resourceHits);
         if (audit.modified) {
           console.log(
             `[citation-audit] stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`,
           );
-          const trailing = audit.text.slice(visible.length); // banner suffix only
-          if (trailing) {
-            const sseChunk = `data: ${
-              JSON.stringify({ choices: [{ delta: { content: trailing } }] })
-            }\n\n`;
-            try {
-              controller.enqueue(new TextEncoder().encode(sseChunk));
-            } catch (e) {
-              console.warn(
-                "[citation-audit] failed to stream trailing banner:",
-                (e as Error).message,
-              );
-            }
-          }
         }
         const auditedVisible = audit.text;
+
+        // Step 4: emit the entire guarded+audited text in ONE SSE
+        // delta, then [DONE]. Client renders this atomically — no
+        // first-token-drop risk.
+        const sseChunk = `data: ${
+          JSON.stringify({ choices: [{ delta: { content: auditedVisible } }] })
+        }\n\ndata: [DONE]\n\n`;
+        controller.enqueue(new TextEncoder().encode(sseChunk));
         controller.close();
         await supabase.from("strategy_messages").insert({
           thread_id: threadId,
