@@ -96,53 +96,115 @@ export function LibraryPicker({ query, anchorRect, onPick, onClose }: Props) {
     return query.replace(/^\/library\s*/i, '').trim().toLowerCase();
   }, [query]);
 
-  // Initial fetch — top 50 most-recent resources for this user, then we
-  // filter/group/cap client-side. Cheap and avoids per-keystroke round trips.
+  // ── Server-side full-corpus search ──
+  // The library can be 700+ items; client-side filtering over a recent slice
+  // is structurally wrong. We query the entire user library on every keystroke
+  // (debounced) using ILIKE across title/description/category/type/tags, then
+  // rank by relevance. Empty query → honest browse: most recent 25.
   useEffect(() => {
     if (!isOpen || !user) return;
     let cancelled = false;
-    (async () => {
+    const handle = setTimeout(async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('resources')
-        .select('id, title, template_category, resource_type')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
-        .limit(80);
-      if (cancelled) return;
-      if (error || !data) {
-        setItems([]);
-      } else {
-        setItems(
-          data.map((r: any) => ({
-            id: r.id,
-            title: r.title || 'Untitled',
-            category: r.template_category || r.resource_type || 'other',
-            resourceType: r.resource_type ?? null,
-          })),
-        );
-      }
-      setLoading(false);
-    })();
-    return () => { cancelled = true; };
-    // We refetch only when the picker opens — search filtering is local.
-  }, [isOpen, user]);
+      try {
+        let q = supabase
+          .from('resources')
+          .select('id, title, template_category, resource_type, description, updated_at')
+          .eq('user_id', user.id);
 
-  // Filter + group + cap.
+        if (needle) {
+          // Server-side OR across the searchable fields.
+          // Postgrest pattern: `or=(title.ilike.*x*,description.ilike.*x*,...)`.
+          const safe = escapeOrValue(needle);
+          if (safe) {
+            const pat = `*${safe}*`;
+            q = q.or(
+              [
+                `title.ilike.${pat}`,
+                `description.ilike.${pat}`,
+                `template_category.ilike.${pat}`,
+                `resource_type.ilike.${pat}`,
+              ].join(','),
+            );
+          }
+          // Fetch enough to rank well — DB does the heavy lifting.
+          q = q.order('updated_at', { ascending: false }).limit(120);
+        } else {
+          // Empty query → honest browse: recent 25, no false coverage claim.
+          q = q.order('updated_at', { ascending: false }).limit(MAX_ITEMS);
+        }
+
+        const { data, error } = await q;
+        if (cancelled) return;
+        if (error || !data) {
+          setItems([]);
+        } else {
+          setItems(
+            (data as any[]).map((r) => ({
+              id: r.id,
+              title: r.title || 'Untitled',
+              category: r.template_category || r.resource_type || 'other',
+              resourceType: r.resource_type ?? null,
+              description: r.description ?? null,
+              updatedAt: r.updated_at ?? null,
+            })),
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, needle ? SEARCH_DEBOUNCE_MS : 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [isOpen, user, needle]);
+
+  // Relevance ranking — recency is a tie-breaker only.
+  // Order:
+  //   0 exact title (case-insensitive)
+  //   1 title starts with needle
+  //   2 title contains needle as whole word
+  //   3 title contains needle (substring)
+  //   4 category contains needle
+  //   5 resource_type contains needle
+  //   6 description contains needle
+  //   7 anything else (browse mode)
+  const ranked = useMemo(() => {
+    if (!needle) return items;
+    const n = needle;
+    const wordRe = new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    const scored = items.map((it) => {
+      const title = (it.title || '').toLowerCase();
+      const cat = (it.category || '').toLowerCase();
+      const type = (it.resourceType || '').toLowerCase();
+      const desc = (it.description || '').toLowerCase();
+      let rank = 7;
+      if (title === n) rank = 0;
+      else if (title.startsWith(n)) rank = 1;
+      else if (wordRe.test(it.title || '')) rank = 2;
+      else if (title.includes(n)) rank = 3;
+      else if (cat.includes(n)) rank = 4;
+      else if (type.includes(n)) rank = 5;
+      else if (desc.includes(n)) rank = 6;
+      return { it, rank, ts: it.updatedAt ? Date.parse(it.updatedAt) : 0 };
+    });
+    scored.sort((a, b) => a.rank - b.rank || b.ts - a.ts);
+    return scored.map((s) => s.it);
+  }, [items, needle]);
+
+  // Group + cap. We rank first, THEN cap, so relevance survives the cut.
   const grouped = useMemo(() => {
-    const filtered = needle
-      ? items.filter((i) => i.title.toLowerCase().includes(needle))
-      : items;
-    const capped = filtered.slice(0, MAX_ITEMS);
+    const capped = ranked.slice(0, MAX_ITEMS);
     const buckets = new Map<string, LibraryItem[]>();
     for (const it of capped) {
       const lbl = labelFor(it.category);
       if (!buckets.has(lbl)) buckets.set(lbl, []);
       buckets.get(lbl)!.push(it);
     }
-    // Stable order: insertion order from the query (recency-driven).
     return Array.from(buckets.entries()).map(([label, rows]) => ({ label, rows }));
-  }, [items, needle]);
+  }, [ranked]);
 
   // Flatten for keyboard navigation.
   const flat = useMemo(() => grouped.flatMap((g) => g.rows), [grouped]);
