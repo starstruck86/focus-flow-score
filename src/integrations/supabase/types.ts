@@ -5415,6 +5415,8 @@ export type Database = {
           promoted_at: string | null
           promoted_by: string | null
           promotion_scope: string | null
+          quarantine_reason: string | null
+          quarantined_at: string | null
           raw_candidate_counts: Json | null
           re_extract_at: string | null
           re_extract_status: string
@@ -5550,6 +5552,8 @@ export type Database = {
           promoted_at?: string | null
           promoted_by?: string | null
           promotion_scope?: string | null
+          quarantine_reason?: string | null
+          quarantined_at?: string | null
           raw_candidate_counts?: Json | null
           re_extract_at?: string | null
           re_extract_status?: string
@@ -5685,6 +5689,8 @@ export type Database = {
           promoted_at?: string | null
           promoted_by?: string | null
           promotion_scope?: string | null
+          quarantine_reason?: string | null
+          quarantined_at?: string | null
           raw_candidate_counts?: Json | null
           re_extract_at?: string | null
           re_extract_status?: string
