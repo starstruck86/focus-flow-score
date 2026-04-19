@@ -55,10 +55,28 @@ interface AdapterRequest {
 }
 
 // ── Header helpers (direct API keys) ──────────────────────
+/**
+ * Validate the OpenAI API key shape before we ever ship it to api.openai.com.
+ * Catches the "secret got pasted as a URL" failure mode that previously caused
+ * silent fallback to Gemini and produced wrong outputs (cold emails for
+ * everything). Fail loud here so callers can surface a clear error instead of
+ * generating off-spec content under a different model.
+ */
+function validateOpenAIKey(key: string | undefined): { ok: true; key: string } | { ok: false; reason: string } {
+  if (!key) return { ok: false, reason: "OPENAI_API_KEY not configured" };
+  const trimmed = key.trim();
+  if (!trimmed) return { ok: false, reason: "OPENAI_API_KEY is empty" };
+  if (/^https?:\/\//i.test(trimmed)) return { ok: false, reason: "OPENAI_API_KEY looks like a URL, not a key" };
+  if (trimmed.includes(" ") || trimmed.includes("\n")) return { ok: false, reason: "OPENAI_API_KEY contains whitespace" };
+  if (!/^sk-/.test(trimmed)) return { ok: false, reason: "OPENAI_API_KEY missing 'sk-' prefix" };
+  if (trimmed.length < 30) return { ok: false, reason: "OPENAI_API_KEY too short" };
+  return { ok: true, key: trimmed };
+}
+
 function getOpenAIHeaders(): Record<string, string> {
-  const key = Deno.env.get("OPENAI_API_KEY");
-  if (!key) throw new Error("OPENAI_API_KEY not configured");
-  return { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+  const v = validateOpenAIKey(Deno.env.get("OPENAI_API_KEY"));
+  if (!v.ok) throw new Error(v.reason);
+  return { Authorization: `Bearer ${v.key}`, "Content-Type": "application/json" };
 }
 
 function getAnthropicHeaders(): Record<string, string> {
@@ -312,13 +330,15 @@ const ADAPTERS: Record<ProviderKey, AdapterFn> = {
 // PROVIDER HEALTH CHECK — logged on every cold start
 // All providers use direct API keys. No Lovable gateway.
 // ═══════════════════════════════════════════════════════════
+const _openaiKeyCheck = validateOpenAIKey(Deno.env.get("OPENAI_API_KEY"));
 const PROVIDER_HEALTH = {
-  openaiDirect: !!Deno.env.get("OPENAI_API_KEY"),
+  openaiDirect: _openaiKeyCheck.ok,
+  openaiDirectReason: _openaiKeyCheck.ok ? "valid" : _openaiKeyCheck.reason,
   anthropicDirect: !!Deno.env.get("ANTHROPIC_API_KEY"),
   perplexityDirect: !!Deno.env.get("PERPLEXITY_API_KEY"),
   lovableGateway: !!Deno.env.get("LOVABLE_API_KEY"),
 };
-console.log(`[provider-health] OpenAI: ${PROVIDER_HEALTH.openaiDirect ? "ON" : "OFF"} | Anthropic: ${PROVIDER_HEALTH.anthropicDirect ? "ON" : "OFF"} | Perplexity: ${PROVIDER_HEALTH.perplexityDirect ? "ON" : "OFF"} | Lovable: ${PROVIDER_HEALTH.lovableGateway ? "ON" : "OFF"}`);
+console.log(`[provider-health] OpenAI: ${PROVIDER_HEALTH.openaiDirect ? "ON" : `OFF (${PROVIDER_HEALTH.openaiDirectReason})`} | Anthropic: ${PROVIDER_HEALTH.anthropicDirect ? "ON" : "OFF"} | Perplexity: ${PROVIDER_HEALTH.perplexityDirect ? "ON" : "OFF"} | Lovable: ${PROVIDER_HEALTH.lovableGateway ? "ON" : "OFF"}`);
 
 // ═══════════════════════════════════════════════════════════
 // LAYER 2 — ROUTER
@@ -454,7 +474,16 @@ async function callWithFallback(
   }
 }
 
-// Streaming call (OpenAI direct only, with fallback to non-streaming)
+// Streaming call (OpenAI direct only).
+//
+// Phase 0 contract: chat MUST run on the intended model (OpenAI). Silent
+// fallback to Gemini was producing wrong outputs (cold emails for everything)
+// because the fallback model ignores the elite-operator prompt. We now fail
+// loud — handleChat surfaces "Assistant temporarily unavailable" instead.
+//
+// Workflow tasks (structured tool-calling) keep their own fallback in
+// callWithFallback because they need a working JSON path even if OpenAI
+// degrades; that lives outside this function.
 async function callStreaming(
   taskType: string,
   adapterReq: Omit<AdapterRequest, "model" | "stream">,
@@ -464,59 +493,53 @@ async function callStreaming(
   const timeout = setTimeout(() => controller.abort(), 55000);
 
   try {
-    // SMOKE TEST MODE: skip primary if forced fail
+    // SMOKE TEST MODE: explicitly fail to exercise the error path.
     if (route._smokeTestForceFail) {
-      console.log(`[routing] SMOKE_TEST_MODE: forcing stream primary failure for task=${taskType}`);
-      console.warn(`[routing] stream primary failed: SMOKE_TEST_MODE forced. Falling back to ${route.fallbackProvider} (non-stream)`);
-      clearTimeout(timeout);
-      const fbController = new AbortController();
-      const fbTimeout = setTimeout(() => fbController.abort(), 55000);
-      try {
-        const fbAdapter = ADAPTERS[route.fallbackProvider];
-        const fbResult = await fbAdapter({ ...adapterReq, model: route.fallbackModel }, fbController.signal);
-        fbResult.fallbackUsed = true;
-        console.log(`[routing] stream fallback task=${taskType} provider=${fbResult.provider} model=${fbResult.model} latency=${fbResult.latencyMs}ms`);
-        return fbResult;
-      } finally { clearTimeout(fbTimeout); }
+      console.warn(`[routing] stream task=${taskType} SMOKE_TEST forced primary failure — no fallback (chat is fail-loud)`);
+      return {
+        text: "", provider: "openai", model: route.model, latencyMs: 0, fallbackUsed: false,
+        error: { type: "smoke_test_forced", message: "SMOKE_TEST_MODE: forced primary failure" },
+      };
     }
 
-    console.log(`[routing] stream task=${taskType} provider=${route.primaryProvider} model=${route.model}`);
+    console.log(JSON.stringify({
+      _type: "routing.stream.start",
+      task: taskType, provider: route.primaryProvider, model: route.model, fallback: false,
+    }));
     const result = await openaiAdapter({ ...adapterReq, model: route.model, stream: true }, controller.signal);
     if (result.error) {
-      console.warn(`[routing] stream primary failed: ${result.error.message}. Falling back to ${route.fallbackProvider} (non-stream)`);
-      clearTimeout(timeout);
-      const fbController = new AbortController();
-      const fbTimeout = setTimeout(() => fbController.abort(), 55000);
-      try {
-        const fbAdapter = ADAPTERS[route.fallbackProvider];
-        const fbResult = await fbAdapter({ ...adapterReq, model: route.fallbackModel }, fbController.signal);
-        fbResult.fallbackUsed = true;
-        console.log(`[routing] stream fallback task=${taskType} provider=${fbResult.provider} model=${fbResult.model} latency=${fbResult.latencyMs}ms`);
-        return fbResult;
-      } finally { clearTimeout(fbTimeout); }
+      console.error(JSON.stringify({
+        _type: "routing.stream.fail",
+        task: taskType, model: route.model, fallback: false,
+        reason: result.error.message,
+      }));
+      return result; // surface error — no silent fallback
     }
+    console.log(JSON.stringify({
+      _type: "routing.stream.ok",
+      task: taskType, provider: result.provider, model: result.model,
+      path: "openai-direct", fallback: false,
+    }));
     return result;
   } catch (e: any) {
     if (e.name === "AbortError") {
-      console.warn(`[routing] stream timed out for task=${taskType}. Trying fallback=${route.fallbackProvider} (non-stream)`);
-      clearTimeout(timeout);
-      const fbController = new AbortController();
-      const fbTimeout = setTimeout(() => fbController.abort(), 55000);
-      try {
-        const fbAdapter = ADAPTERS[route.fallbackProvider];
-        const fbResult = await fbAdapter({ ...adapterReq, model: route.fallbackModel }, fbController.signal);
-        fbResult.fallbackUsed = true;
-        console.log(`[routing] stream fallback-after-timeout task=${taskType} provider=${fbResult.provider} latency=${fbResult.latencyMs}ms`);
-        return fbResult;
-      } catch (fe: any) {
-        if (fe.name === "AbortError") {
-          return { text: "", provider: route.fallbackProvider, model: route.fallbackModel, latencyMs: 55000, fallbackUsed: true,
-            error: { type: "timeout", message: "Both stream primary and fallback timed out" } };
-        }
-        throw fe;
-      } finally { clearTimeout(fbTimeout); }
+      console.error(JSON.stringify({
+        _type: "routing.stream.timeout",
+        task: taskType, model: route.model, fallback: false, timeout_ms: 55000,
+      }));
+      return {
+        text: "", provider: "openai", model: route.model, latencyMs: 55000, fallbackUsed: false,
+        error: { type: "timeout", message: "OpenAI stream timed out" },
+      };
     }
-    throw e;
+    console.error(JSON.stringify({
+      _type: "routing.stream.error",
+      task: taskType, model: route.model, fallback: false, message: String(e?.message || e),
+    }));
+    return {
+      text: "", provider: "openai", model: route.model, latencyMs: Date.now(), fallbackUsed: false,
+      error: { type: "exception", message: String(e?.message || e) },
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -912,6 +935,40 @@ serve(async (req) => {
     const body = await req.json();
     const { action, threadId, content, workflowType, depth, force_primary_failure } = body;
 
+    // ── Debug: OpenAI key health check ──────────────────────
+    // Phase 0 acceptance gate. Returns 200 only when the key is shaped
+    // correctly AND a real round-trip to api.openai.com succeeds.
+    if (action === "debug_openai_test") {
+      const v = validateOpenAIKey(Deno.env.get("OPENAI_API_KEY"));
+      if (!v.ok) {
+        return new Response(JSON.stringify({ status: "fail", stage: "shape", reason: v.reason }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      try {
+        const start = Date.now();
+        const resp = await fetch("https://api.openai.com/v1/models", {
+          headers: { Authorization: `Bearer ${v.key}` },
+        });
+        const latency = Date.now() - start;
+        if (!resp.ok) {
+          const errText = await resp.text().catch(() => "");
+          return new Response(JSON.stringify({
+            status: "fail", stage: "auth", http: resp.status,
+            reason: errText.slice(0, 200), latency_ms: latency,
+          }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        await resp.body?.cancel();
+        return new Response(JSON.stringify({ status: "ok", latency_ms: latency, key_prefix: v.key.slice(0, 7) + "…" }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ status: "fail", stage: "network", reason: String(e?.message || e) }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Smoke test mode: allow forced fallback only when SMOKE_TEST_MODE env is set
     const smokeTestMode = Deno.env.get("SMOKE_TEST_MODE") === "true";
     const forceFallback = smokeTestMode && force_primary_failure === true;
@@ -1155,8 +1212,11 @@ async function handleChat(
   }, route);
 
   if (result.error) {
-    return new Response(JSON.stringify({ error: result.error.message }), {
-      status: result.error.type === "timeout" ? 504 : 500,
+    const userMessage = result.error.type === "timeout"
+      ? "Assistant temporarily unavailable: model timed out. Please retry."
+      : `Assistant temporarily unavailable: ${result.error.message}`;
+    return new Response(JSON.stringify({ error: userMessage, errorType: result.error.type, model: route.model }), {
+      status: result.error.type === "timeout" ? 504 : 502,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
