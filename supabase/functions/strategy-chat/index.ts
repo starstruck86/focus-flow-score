@@ -2637,6 +2637,17 @@ function enforceModeLock(
         { re: /\bthis\s+could\s+create\s+/gi, to: "this will create ", tag: "passive_could_create" },
         { re: /\bit\s+remains\s+to\s+be\s+seen\s+(?:whether\s+|if\s+)?/gi, to: "", tag: "passive_remains_to_be_seen" },
         { re: /\bone\s+possibility\s+is\s+(?:that\s+)?/gi, to: "", tag: "passive_one_possibility" },
+        // ── DECISION FORCE LAYER: ban safe-thinking + branching ──
+        { re: /\bprobably\s+/gi, to: "", tag: "safe_probably" },
+        { re: /\blikely\s+/gi, to: "", tag: "safe_likely" },
+        { re: /\bit\s+depends\b\s*(?:on\s+)?/gi, to: "", tag: "safe_depends" },
+        { re: /\b(?:you\s+)?should\s+explore\s+/gi, to: "confront ", tag: "safe_should_explore" },
+        { re: /\b(?:to\s+)?(?:better\s+)?understand\s+(?:the|whether|if|how)\s+/gi, to: "confirm ", tag: "safe_understand" },
+        { re: /\blearn\s+more\s+about\s+/gi, to: "confirm ", tag: "safe_learn_more" },
+        { re: /\bon\s+the\s+other\s+hand,?\s+/gi, to: "", tag: "branch_other_hand" },
+        { re: /\balternatively,?\s+/gi, to: "", tag: "branch_alternatively" },
+        { re: /\bit\s+could\s+also\s+be\s+(?:that\s+)?/gi, to: "", tag: "branch_could_also_be" },
+        { re: /\banother\s+possibility\s+is\s+(?:that\s+)?/gi, to: "", tag: "branch_another_possibility" },
       ];
       let hedgeHits = 0;
       for (const { re, to, tag } of HEDGE_REWRITES) {
