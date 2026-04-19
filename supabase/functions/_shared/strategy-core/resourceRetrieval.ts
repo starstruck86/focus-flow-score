@@ -695,19 +695,22 @@ export function renderResourceContextBlock(args: {
   );
   lines.push("");
 
-  for (const h of hits) {
+  const pickedHits = hits.filter((h) => h.matchKind === "picked");
+  const otherHits = hits.filter((h) => h.matchKind !== "picked");
+  const hasPicked = pickedHits.length > 0;
+
+  /** Render a single hit row. `withBody` controls whether to dump the
+   *  ~2.5KB excerpt (only for picked resources — keeps prompt budgets
+   *  honest for incidental hits). */
+  const renderHit = (h: RetrievedResource, withBody: boolean) => {
     const idShort = h.id.slice(0, 8);
     const flags: string[] = [h.resource_type];
     if (h.is_template) flags.push("template");
     if (h.template_category) flags.push(`cat:${h.template_category}`);
     if (h.account_id) flags.push("account-linked");
     if (h.opportunity_id) flags.push("opp-linked");
-    // Tag body matches so the model knows this hit came from content,
-    // not from the title — and must say so honestly to the user.
     if (h.matchKind === "content_match") flags.push("body-match");
     if (h.matchKind === "description_match") flags.push("desc-match");
-    // The user explicitly picked this resource from /library this turn.
-    // Surface it loudly so the model anchors on it instead of inventing.
     if (h.matchKind === "picked") flags.push("USER-PICKED");
     lines.push(`- RESOURCE[${idShort}] "${h.title}" — ${flags.join(", ")}`);
     lines.push(`    why: ${h.matchReason}`);
@@ -718,11 +721,32 @@ export function renderResourceContextBlock(args: {
       const desc = h.description.replace(/\s+/g, " ").trim().slice(0, 180);
       if (desc) lines.push(`    desc: ${desc}`);
     }
+    if (withBody && h.bodyExcerpt) {
+      // Render the body excerpt as a fenced block so the model treats it
+      // as source material to mirror, not as a description to summarize.
+      lines.push(`    --- BODY EXCERPT (verbatim from this resource) ---`);
+      lines.push(h.bodyExcerpt);
+      lines.push(`    --- END BODY EXCERPT ---`);
+    } else if (withBody && !h.bodyExcerpt) {
+      lines.push(
+        `    NOTE: This picked resource has no stored body content. ` +
+          `You CANNOT mirror its structure or claims — say so plainly to the user.`,
+      );
+    }
+  };
+
+  if (hasPicked) {
+    lines.push(`### PRIMARY PICKED RESOURCE${pickedHits.length === 1 ? "" : "S"} (treat as the primary source)`);
+    for (const h of pickedHits) renderHit(h, true);
+    lines.push("");
   }
 
-  lines.push("");
-  const pickedHits = hits.filter((h) => h.matchKind === "picked");
-  const hasPicked = pickedHits.length > 0;
+  if (otherHits.length > 0) {
+    if (hasPicked) lines.push(`### Other retrieved (secondary — for context only, do NOT pivot to these)`);
+    for (const h of otherHits) renderHit(h, false);
+    lines.push("");
+  }
+
   if (hasPicked) {
     const pickedTitles = pickedHits.map((h) => `"${h.title}"`).join(", ");
     lines.push(
@@ -737,6 +761,28 @@ export function renderResourceContextBlock(args: {
         `INTERPRETATION: If the user says "this", "adapt this", "use this", or similar without naming another resource, "this" refers to "${t}". Default to phrasing like: Using "${t}"… / Based on "${t}"…`,
       );
     }
+    // ── NEW: grounding-depth rules ──
+    lines.push(
+      `GROUNDING DEPTH (mandatory when adapting a picked resource):`,
+    );
+    lines.push(
+      `  1. Read the BODY EXCERPT above first. Extract its actual section structure (headings, ordering) and mirror it in your answer when relevant — do NOT impose a generic business-case scaffold.`,
+    );
+    lines.push(
+      `  2. Reuse the resource's language patterns, framings, and phrasings where they fit the user's deal. The user picked this asset because they want THIS voice and THIS structure adapted.`,
+    );
+    lines.push(
+      `  3. You may ONLY restate concrete claims (metrics, dates, customer names, ROI numbers, percentages, quotes) that are actually present in the BODY EXCERPT. Do NOT invent metrics. Do NOT invent dates. Do NOT invent outcomes.`,
+    );
+    lines.push(
+      `  4. If the BODY EXCERPT lacks a section the user implicitly needs (e.g. they ask to "adapt this for my deal" and the source has no implementation timeline), say so plainly — e.g. "The source doesn't include X — want me to draft that fresh?" — instead of filling with generic boilerplate.`,
+    );
+    lines.push(
+      `  5. If the BODY EXCERPT is missing or empty, say so plainly: "I can see this resource exists but its body isn't loaded — I can only adapt at the structural level." Do NOT invent its contents.`,
+    );
+    lines.push(
+      `  6. Adapt to the current deal AFTER mirroring the source — swap names, numbers, and context the user has provided in this thread, but only where you have real values. Mark unknowns as [TBD: <what's needed>] rather than fabricating.`,
+    );
   }
   lines.push(`RULES (mandatory):`);
   lines.push(
