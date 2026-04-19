@@ -64,6 +64,12 @@ export interface RetrievedResource {
   matchSnippet?: string;
   /** Human-readable reason — surfaced in the prompt block. */
   matchReason: string;
+  /**
+   * Larger body excerpt (~2.5KB). Populated ONLY for picked resources so the
+   * model can adapt actual structure/claims instead of inventing a generic
+   * scaffold. Never populated for incidental hits — keeps prompt budgets honest.
+   */
+  bodyExcerpt?: string;
 }
 
 export interface ResourceRetrievalResult {
