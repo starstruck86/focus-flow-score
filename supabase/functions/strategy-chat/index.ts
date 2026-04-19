@@ -933,6 +933,40 @@ serve(async (req) => {
     const body = await req.json();
     const { action, threadId, content, workflowType, depth, force_primary_failure } = body;
 
+    // ── Debug: OpenAI key health check ──────────────────────
+    // Phase 0 acceptance gate. Returns 200 only when the key is shaped
+    // correctly AND a real round-trip to api.openai.com succeeds.
+    if (action === "debug_openai_test") {
+      const v = validateOpenAIKey(Deno.env.get("OPENAI_API_KEY"));
+      if (!v.ok) {
+        return new Response(JSON.stringify({ status: "fail", stage: "shape", reason: v.reason }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      try {
+        const start = Date.now();
+        const resp = await fetch("https://api.openai.com/v1/models", {
+          headers: { Authorization: `Bearer ${v.key}` },
+        });
+        const latency = Date.now() - start;
+        if (!resp.ok) {
+          const errText = await resp.text().catch(() => "");
+          return new Response(JSON.stringify({
+            status: "fail", stage: "auth", http: resp.status,
+            reason: errText.slice(0, 200), latency_ms: latency,
+          }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        await resp.body?.cancel();
+        return new Response(JSON.stringify({ status: "ok", latency_ms: latency, key_prefix: v.key.slice(0, 7) + "…" }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ status: "fail", stage: "network", reason: String(e?.message || e) }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Smoke test mode: allow forced fallback only when SMOKE_TEST_MODE env is set
     const smokeTestMode = Deno.env.get("SMOKE_TEST_MODE") === "true";
     const forceFallback = smokeTestMode && force_primary_failure === true;
