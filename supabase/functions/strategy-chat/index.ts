@@ -2580,16 +2580,20 @@ async function handleChat(
   const route = resolveLLMRoute("chat_general");
   if (forceFallback) route._smokeTestForceFail = true;
 
-  const { prompt: systemPrompt, workingThesis: priorThesis, resourceHits } =
-    await buildChatSystemPrompt({
-      supabase,
-      userId,
-      threadId,
-      depth,
-      contextSection,
-      pack,
-      userContent: content,
-    });
+  const {
+    prompt: systemPrompt,
+    workingThesis: priorThesis,
+    resourceHits,
+    intent,
+  } = await buildChatSystemPrompt({
+    supabase,
+    userId,
+    threadId,
+    depth,
+    contextSection,
+    pack,
+    userContent: content,
+  });
   const accountId: string | null = pack.account?.id ?? null;
 
   const messages = [
