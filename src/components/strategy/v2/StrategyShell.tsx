@@ -269,13 +269,9 @@ export function StrategyShell() {
         break;
       }
       case 'upload':
-        toast('Drag a file onto the canvas to upload');
-        break;
-      case 'artifact':
-        toast('Artifact builder — coming next');
-        break;
-      case 'scan':
-        toast('Account scan — coming next');
+        // Real flow: open the hidden file picker. The file selection handler
+        // pushes through useStrategyUploads.uploadFile().
+        slashFileInputRef.current?.click();
         break;
     }
   }, [handleBranch, messages, activeThread, save, showSaveToast]);
