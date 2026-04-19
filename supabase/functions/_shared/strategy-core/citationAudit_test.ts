@@ -96,3 +96,48 @@ Deno.test("auditResourceCitations: no hits + fabricated citation → still flagg
   assertEquals(out.modified, true);
   assertStringIncludes(out.text, "⚠ UNVERIFIED");
 });
+
+// ── Closed-set mode (user picked a resource via /library) ─────────
+
+const PICKED_HITS = [
+  { id: "33333333-aaaa-bbbb-cccc-dddddddddddd", title: "FTD Q2 Business Case" },
+];
+
+Deno.test("auditResourceCitations closed-set: flags adjacent variant (Q3 vs picked Q2) without artifact word", () => {
+  // Bare quoted title with no "template/playbook/etc." nearby — in
+  // closed-set mode it must STILL be flagged because it shares ≥2
+  // significant tokens with the picked title.
+  const text = `Adapting the approach: see "FTD Q3 Business Case" for the full structure.`;
+  const out = auditResourceCitations(text, PICKED_HITS, { closedSet: true });
+  assertEquals(out.modified, true);
+  assertStringIncludes(out.text, "only the picked resource may be cited");
+  assert(out.unverifiedCitations.some((c) => c.includes("Q3")));
+});
+
+Deno.test("auditResourceCitations closed-set: passes the exact picked title through unchanged", () => {
+  const text = `Using "FTD Q2 Business Case" as the base, adapt the structure for the deal.`;
+  const out = auditResourceCitations(text, PICKED_HITS, { closedSet: true });
+  assertEquals(out.modified, false);
+  assertEquals(out.unverifiedCitations.length, 0);
+});
+
+Deno.test("auditResourceCitations closed-set: does NOT flag unrelated quoted strings (seller quotes)", () => {
+  const text = `The CFO said "we are losing 18 points to churn" on the call.`;
+  const out = auditResourceCitations(text, PICKED_HITS, { closedSet: true });
+  assertEquals(out.modified, false);
+});
+
+Deno.test("auditResourceCitations closed-set: flags sibling variant inside RESOURCE[\"…\"] too", () => {
+  const text = `Pull from RESOURCE["FTD Q4 Business Case"] for context.`;
+  const out = auditResourceCitations(text, PICKED_HITS, { closedSet: true });
+  assertEquals(out.modified, true);
+  assertStringIncludes(out.text, "⚠ UNVERIFIED");
+});
+
+Deno.test("auditResourceCitations closed-set off: bare quoted variant is left alone (no artifact word)", () => {
+  // Without closedSet=true the legacy behavior is preserved — bare
+  // quoted strings without an artifact word are not annotated.
+  const text = `Adapting the approach: see "FTD Q3 Business Case" for the full structure.`;
+  const out = auditResourceCitations(text, PICKED_HITS);
+  assertEquals(out.modified, false);
+});
