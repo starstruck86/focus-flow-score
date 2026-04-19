@@ -2629,7 +2629,17 @@ async function handleChat(
 
   if (!result.rawStream) {
     // Non-streaming fallback
-    const { patch, visible } = extractThesisUpdate(result.text || "");
+    const { patch, visible: rawVisible } = extractThesisUpdate(result.text || "");
+    // Mode-lock guard FIRST — strip drift / forbidden tail / hard-truncate.
+    const guarded = enforceModeLock(rawVisible, intent);
+    if (guarded.modified || guarded.violations.length) {
+      console.log(
+        `[mode-lock] non-stream intent=${intent.intent} violations=${
+          JSON.stringify(guarded.violations)
+        } modified=${guarded.modified}`,
+      );
+    }
+    const visible = guarded.text;
     // Citation audit: catch any fabricated RESOURCE[…] references.
     const audit = auditResourceCitations(visible, resourceHits);
     if (audit.modified) {
