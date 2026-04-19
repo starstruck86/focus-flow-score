@@ -680,6 +680,9 @@ export function renderResourceContextBlock(args: {
     // not from the title — and must say so honestly to the user.
     if (h.matchKind === "content_match") flags.push("body-match");
     if (h.matchKind === "description_match") flags.push("desc-match");
+    // The user explicitly picked this resource from /library this turn.
+    // Surface it loudly so the model anchors on it instead of inventing.
+    if (h.matchKind === "picked") flags.push("USER-PICKED");
     lines.push(`- RESOURCE[${idShort}] "${h.title}" — ${flags.join(", ")}`);
     lines.push(`    why: ${h.matchReason}`);
     if (h.matchSnippet) {
