@@ -2375,6 +2375,8 @@ async function buildChatSystemPrompt(args: {
   prompt: string;
   workingThesis: WorkingThesisState | null;
   resourceHits: Array<{ id: string; title: string }>;
+  intent: IntentResult;
+  modeLockBlock: string;
 }> {
   const {
     supabase,
@@ -2401,6 +2403,8 @@ async function buildChatSystemPrompt(args: {
       prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
       workingThesis: null,
       resourceHits: [],
+      intent,
+      modeLockBlock,
     };
   }
 
@@ -2471,6 +2475,8 @@ async function buildChatSystemPrompt(args: {
       prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
       workingThesis: null,
       resourceHits: [],
+      intent,
+      modeLockBlock,
     };
   }
 
