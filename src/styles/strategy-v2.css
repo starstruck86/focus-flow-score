@@ -38,10 +38,17 @@
   color: hsl(var(--sv-ink));
 }
 
-/* Single focus ring — clay, offset 2px */
+/* Single focus ring — clay, offset 2px. Suppressed for writing surfaces. */
 .strategy-v2 :focus-visible {
   outline: 2px solid hsl(var(--sv-clay));
   outline-offset: 2px;
+}
+.strategy-v2 textarea:focus-visible,
+.strategy-v2 textarea:focus,
+.strategy-v2 input:focus-visible,
+.strategy-v2 input:focus {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* Hairline utility */
