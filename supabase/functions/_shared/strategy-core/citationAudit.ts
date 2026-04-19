@@ -42,6 +42,18 @@ export interface CitationAuditHit {
   title: string;
 }
 
+export interface CitationAuditOptions {
+  /**
+   * When true, treat the hit set as a CLOSED naming set: any quoted
+   * resource-like title in the assistant text that is not present in
+   * the hit set is stripped/annotated even if it isn't wrapped in
+   * RESOURCE[…]. Used when the user explicitly picked a resource via
+   * /library and we must prevent adjacent-variant hallucinations
+   * ("Q3" when they picked "Q2", etc.).
+   */
+  closedSet?: boolean;
+}
+
 export interface CitationAuditResult {
   /** Possibly-rewritten assistant text. Falls back to input if nothing changed. */
   text: string;
