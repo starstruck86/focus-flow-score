@@ -182,11 +182,11 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
 
   return createPortal(
     <div className="strategy-v2" style={{ position: 'fixed', inset: 0, zIndex: 70 }}>
-      {/* Quiet veil — paper-tone, low opacity. Page remains perceptible. No blur. */}
+      {/* Whisper-thin veil — page behind stays clearly legible. No takeover. */}
       <div
         onClick={onClose}
         className="sv-overlay-enter"
-        style={{ position: 'absolute', inset: 0, background: 'hsl(40 12% 98% / 0.55)' }}
+        style={{ position: 'absolute', inset: 0, background: 'hsl(40 12% 92% / 0.18)' }}
       />
       <div
         role="dialog"
@@ -210,10 +210,11 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
           value={q}
           onChange={e => setQ(e.target.value)}
           placeholder="Search threads, accounts, opportunities…"
-          className="w-full h-11 px-4 bg-transparent border-0 outline-none text-[14px]"
+          className="w-full h-11 px-4 bg-transparent border-0 outline-none focus:outline-none focus:ring-0 text-[14px]"
           style={{
             color: 'hsl(var(--sv-ink))',
             borderBottom: '1px solid hsl(var(--sv-hairline))',
+            boxShadow: 'none',
           }}
         />
         <div style={{ maxHeight: '54vh', overflowY: 'auto' }}>
