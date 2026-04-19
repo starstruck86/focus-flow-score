@@ -327,6 +327,30 @@ export function StrategyShell() {
         uploads={uploads}
         artifacts={artifacts}
       />
+
+      {/* Phase 2 — gesture surfaces. All portals; never shift layout. */}
+      <SelectionActionBar
+        selection={scopePickerOpen ? null : selection}
+        hasOpportunity={!!activeThread?.linked_opportunity_id}
+        hasAccount={!!activeThread?.linked_account_id}
+        onAction={handleSelectionAction}
+        onDismiss={clearSelection}
+      />
+      <ScopePicker
+        open={scopePickerOpen}
+        anchorRect={selection?.rect ?? null}
+        onClose={() => { setScopePickerOpen(false); setPendingPick(null); }}
+        onPick={handleScopePick}
+      />
+      <PromotionsInbox
+        open={inboxOpen}
+        onClose={() => setInboxOpen(false)}
+      />
+      <SaveToast
+        toast={toast}
+        onDismiss={() => setToast(null)}
+        onOpen={(path) => { setToast(null); navigate(path); }}
+      />
     </div>
   );
 }
