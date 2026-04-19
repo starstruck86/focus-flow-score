@@ -276,7 +276,11 @@ export function LibraryPicker({ query, anchorRect, onPick, onClose }: Props) {
           className="px-4 pt-2.5 pb-1 text-[11px] flex items-center justify-between"
           style={{ color: 'hsl(var(--sv-muted))' }}
         >
-          <span>Library{needle ? ` · "${needle}"` : ''}</span>
+          <span>
+            {needle
+              ? `Library · "${needle}"`
+              : 'Library · recent — type to search all 700+'}
+          </span>
           {loading && <span>loading…</span>}
         </div>
 
