@@ -2011,6 +2011,10 @@ interface IntentResult {
   sentenceCap?: number;
   /** Free-text constraint phrase, e.g. "3 sentence", "two bullets". */
   rawConstraint?: string;
+  /** Sub-flag: this is a business-case-style ask (CFO, ROI, business case). */
+  isBusinessCase?: boolean;
+  /** Sub-flag: this is a CFO/finance audience ask. */
+  isCFO?: boolean;
 }
 
 function classifyChatIntent(userContent: string): IntentResult {
