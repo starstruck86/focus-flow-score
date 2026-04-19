@@ -57,7 +57,7 @@ export function StrategyShell() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { threads, activeThread, setActiveThreadId, updateThread } = useStrategyThreads();
+  const { threads, activeThread, setActiveThreadId, updateThread, upsertThreadLocal } = useStrategyThreads();
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const chipRef = useRef<HTMLButtonElement>(null);
   const slashFileInputRef = useRef<HTMLInputElement>(null);
@@ -205,10 +205,13 @@ export function StrategyShell() {
           },
         });
       }
+      // Push into local state synchronously so activeThread resolves immediately
+      // — otherwise topbar would briefly show fallback while threads list refetches.
+      upsertThreadLocal(newThread as StrategyThread);
       setActiveThreadId(newThread.id);
       clearSelection();
     }
-  }, [user, activeThread, selection, setActiveThreadId, clearSelection]);
+  }, [user, activeThread, selection, setActiveThreadId, clearSelection, upsertThreadLocal]);
 
   const handleOpenLinkedAccount = useCallback(() => {
     const id = activeThread?.linked_account_id;
