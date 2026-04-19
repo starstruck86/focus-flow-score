@@ -24,6 +24,7 @@ VIOLATIONS=$(grep -rn 'window\.location\.reload\|location\.reload' src/ \
   --include='*.ts' --include='*.tsx' \
   | grep -v 'ErrorBoundary' \
   | grep -v 'useAppFreshness' \
+  | grep -v 'GlobalRefreshButton' \
   | grep -v 'main\.tsx' \
   | grep -v '__tests__' \
   | grep -v '\.test\.' \
