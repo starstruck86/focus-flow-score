@@ -2266,6 +2266,67 @@ function enforceModeLock(
     violations.push("stripped_trailing_upgrade_line");
   }
 
+  // ── ZERO-PLACEHOLDER GUARD (non-template modes) ──
+  // Bracket-placeholder cosplay is fake precision. Outside template mode it
+  // is FORBIDDEN. We aggressively strip / collapse / replace so the UI never
+  // ships [BRACKETED_*], $[…], [Client], [Contact Name], [specific date], etc.
+  if (intent.intent !== "template") {
+    const PLACEHOLDER_RE =
+      /(?:\$|%)?\[(?:BRACKETED_[A-Z_]+|Bracketed_[A-Za-z_]+|Client(?:'s)?(?:\s+[A-Z][A-Za-z]+)*|Customer(?:'s)?(?:\s+[A-Z][A-Za-z]+)*|Contact(?:\s+Name)?|Account(?:\s+Name)?|Company(?:\s+Name)?|Champion(?:\s+Name)?|CFO\s+Name|Buyer(?:\s+Name)?|specific\s+date|specific\s+deadline|specific\s+number|specific\s+amount|specific\s+metric[^\]]*|specific\s+constraint[^\]]*|specific\s+issue[^\]]*|date|deadline|number|amount|percentage|name|insert[^\]]*|placeholder|fill[^\]]*|TBD|TBC|XXX+|\.\.\.|Department|Finance\s+Department|Legal\s+Team|Marketing\s+Team|Sales\s+Team|Solution(?:\/Product)?\s+Name|Project\/Initiative\s+Name|Product\s+Name|COMPLIANCE_DATE|DATE|NUMBER|PERCENTAGE)\]%?/gi;
+    if (PLACEHOLDER_RE.test(text)) {
+      // Reset the regex stateful index since /g + .test interacts.
+      PLACEHOLDER_RE.lastIndex = 0;
+      const stripped = text.replace(PLACEHOLDER_RE, "").replace(/\s{2,}/g, " ");
+      // Also strip any sentence that became hollow (e.g. "Investing in our solution will drive a  reduction in operational costs, translating to /year.")
+      // Heuristic: collapse leftover empty $/% markers and orphaned punctuation.
+      const cleaned = stripped
+        .replace(/\$\s*(?=[\/\.\,\;\)\s])/g, "")
+        .replace(/%\s*(?=[\/\.\,\;\)\s])/g, "")
+        .replace(/\(\s*\)/g, "")
+        .replace(/\s+([\.\,\;\:\!\?])/g, "$1")
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      // If stripping mangled the output (very short or near-empty), replace
+      // with an honest "missing variable" line per mode.
+      const usable = cleaned.length >= 30;
+      if (usable) {
+        text = cleaned;
+        modified = true;
+        violations.push("placeholder_blocked_non_template");
+        console.log(
+          `[mode-lock] placeholder_blocked_non_template intent=${intent.intent} stripped_count=${
+            (rawText.match(PLACEHOLDER_RE) || []).length
+          }`,
+        );
+      } else {
+        // Too damaged — replace entire response with an honest ask.
+        const askMap: Record<string, string> = {
+          email:
+            "Send this:\nI need a real fact (decision date, budget, owner name) before I can write this email — what's the one specific you want me to anchor it on?",
+          pitch:
+            "Say this: I'd rather not pitch this without one real number — give me the savings figure or the decision deadline and I'll tighten this for the CFO.",
+          next_steps:
+            "Do this next:\n1. Tell me the named buyer, the decision date, and the dollar figure that matter on this deal so I can give you steps grounded in this account, not a generic checklist.",
+          analysis:
+            "I don't have enough account-specific data in this thread to write a real thesis without inventing numbers. Give me the ARR, the decision date, or the named economic buyer and I'll produce the leakage map and economic consequence with real anchors.",
+          provenance:
+            "I can't ground this in a specific source in the current thread. Treat this as operator reasoning, not a cited internal source.",
+          message:
+            "Say this: I need one real specific (name, date, or number) before I write the script — what should I anchor it on?",
+          freeform:
+            "I don't have a real specific to anchor this on. Give me the one fact that matters (name, number, or date) and I'll produce the output without placeholders.",
+        };
+        text = askMap[intent.intent] || askMap.freeform;
+        modified = true;
+        violations.push("placeholder_blocked_replaced_with_ask");
+        console.log(
+          `[mode-lock] placeholder_blocked_replaced_with_ask intent=${intent.intent}`,
+        );
+      }
+    }
+  }
+
   switch (intent.intent) {
     case "template": {
       // Must contain bracketed placeholders OR section headers.
