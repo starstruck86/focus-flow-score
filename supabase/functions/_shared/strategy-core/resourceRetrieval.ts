@@ -864,28 +864,53 @@ export function renderResourceContextBlock(args: {
         `INTERPRETATION: If the user says "this", "adapt this", "use this", or similar without naming another resource, "this" refers to "${t}". Default to phrasing like: Using "${t}"… / Based on "${t}"…`,
       );
     }
-    // ── NEW: grounding-depth rules ──
+    // ── Source-shape-aware grounding contract ──
+    // The model now sees a `source-shape:` tag per picked resource and
+    // MUST follow the matching response pattern. This kills the failure
+    // mode where the model collapses every picked resource into a
+    // one-line refusal ("give me one fact to anchor on").
+    const shapes = new Set(pickedHits.map((h) => h.sourceShape || "empty"));
+    const hasStructured = shapes.has("structured");
+    const hasUnstructured = shapes.has("unstructured");
+    const hasEmpty = shapes.has("empty");
+
+    lines.push(`GROUNDING DEPTH (mandatory when adapting a picked resource):`);
     lines.push(
-      `GROUNDING DEPTH (mandatory when adapting a picked resource):`,
+      `  Universal: never invent metrics, dates, customer names, ROI numbers, or quotes that are not in the BODY EXCERPT. Mark genuinely missing deal-specific facts as [TBD: <what's needed>] — never as a substitute for reading the source.`,
     );
-    lines.push(
-      `  1. Read the BODY EXCERPT above first. Extract its actual section structure (headings, ordering) and mirror it in your answer when relevant — do NOT impose a generic business-case scaffold.`,
-    );
-    lines.push(
-      `  2. Reuse the resource's language patterns, framings, and phrasings where they fit the user's deal. The user picked this asset because they want THIS voice and THIS structure adapted.`,
-    );
-    lines.push(
-      `  3. You may ONLY restate concrete claims (metrics, dates, customer names, ROI numbers, percentages, quotes) that are actually present in the BODY EXCERPT. Do NOT invent metrics. Do NOT invent dates. Do NOT invent outcomes.`,
-    );
-    lines.push(
-      `  4. If the BODY EXCERPT lacks a section the user implicitly needs (e.g. they ask to "adapt this for my deal" and the source has no implementation timeline), say so plainly — e.g. "The source doesn't include X — want me to draft that fresh?" — instead of filling with generic boilerplate.`,
-    );
-    lines.push(
-      `  5. If the BODY EXCERPT is missing or empty, say so plainly: "I can see this resource exists but its body isn't loaded — I can only adapt at the structural level." Do NOT invent its contents.`,
-    );
-    lines.push(
-      `  6. Adapt to the current deal AFTER mirroring the source — swap names, numbers, and context the user has provided in this thread, but only where you have real values. Mark unknowns as [TBD: <what's needed>] rather than fabricating.`,
-    );
+
+    if (hasStructured) {
+      lines.push(``);
+      lines.push(`  STRUCTURED SOURCE (source-shape: structured) — required response shape:`);
+      lines.push(`    1. Open with: Using "<exact title>" as the base… (one short line, no preamble).`);
+      lines.push(`    2. Mirror the source's actual section structure — reuse its headings, ordering, and labels verbatim where they appear (e.g. Situation / Ask / Value / Outcome). Do NOT impose a generic business-case scaffold the source does not contain.`);
+      lines.push(`    3. Reuse the source's language, framings, and any concrete numbers it actually contains. Substitute deal-specific values the user has provided in this thread; mark missing fields as [TBD: …].`);
+      lines.push(`    4. End with ONE short missing-anchor question (account, deal size, timing, champion name) — only ONE, after the scaffold is rendered, never instead of it.`);
+      lines.push(`    5. NEVER respond with only a question. The scaffold MUST appear first.`);
+    }
+
+    if (hasUnstructured) {
+      lines.push(``);
+      lines.push(`  UNSTRUCTURED SOURCE (source-shape: unstructured — transcript / podcast / loose prose) — required response shape:`);
+      lines.push(`    1. Open with: Using "<exact title>" as the source… (one short line, no preamble).`);
+      lines.push(`    2. Do NOT pretend it is a ready-made template. EXTRACT the reusable substance from the BODY EXCERPT — pick what the source actually contains:`);
+      lines.push(`         • key questions to ask`);
+      lines.push(`         • discovery checklist items`);
+      lines.push(`         • talk-track lines or framings`);
+      lines.push(`         • objection responses`);
+      lines.push(`         • business-case angles or value framings`);
+      lines.push(`         • numbered method/steps`);
+      lines.push(`       Convert what's there into a seller-ready scaffold the user can use right now. Quote or near-quote the source for any specific phrasings — do not paraphrase into generic advice.`);
+      lines.push(`    3. After the scaffold, add one short note naming what the source does NOT cover for this use case (e.g. "the source doesn't include pricing framing — want me to draft that fresh?").`);
+      lines.push(`    4. End with ONE short missing-anchor question — only ONE, after the scaffold is rendered, never instead of it.`);
+      lines.push(`    5. NEVER answer only with "I need a fact to anchor this on." If the BODY EXCERPT contains reusable material, you MUST produce a scaffold first.`);
+    }
+
+    if (hasEmpty) {
+      lines.push(``);
+      lines.push(`  EMPTY SOURCE (source-shape: empty) — body is not loaded:`);
+      lines.push(`    Say so plainly: "I can see <title> in your library, but its body isn't loaded — I can only adapt at the structural level." Then offer to (a) work from the title's apparent topic with a generic scaffold the user can edit, or (b) wait for them to upload/paste the body. Do NOT invent the contents.`);
+    }
   }
   lines.push(`RULES (mandatory):`);
   lines.push(
