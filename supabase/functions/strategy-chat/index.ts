@@ -330,13 +330,15 @@ const ADAPTERS: Record<ProviderKey, AdapterFn> = {
 // PROVIDER HEALTH CHECK — logged on every cold start
 // All providers use direct API keys. No Lovable gateway.
 // ═══════════════════════════════════════════════════════════
+const _openaiKeyCheck = validateOpenAIKey(Deno.env.get("OPENAI_API_KEY"));
 const PROVIDER_HEALTH = {
-  openaiDirect: !!Deno.env.get("OPENAI_API_KEY"),
+  openaiDirect: _openaiKeyCheck.ok,
+  openaiDirectReason: _openaiKeyCheck.ok ? "valid" : _openaiKeyCheck.reason,
   anthropicDirect: !!Deno.env.get("ANTHROPIC_API_KEY"),
   perplexityDirect: !!Deno.env.get("PERPLEXITY_API_KEY"),
   lovableGateway: !!Deno.env.get("LOVABLE_API_KEY"),
 };
-console.log(`[provider-health] OpenAI: ${PROVIDER_HEALTH.openaiDirect ? "ON" : "OFF"} | Anthropic: ${PROVIDER_HEALTH.anthropicDirect ? "ON" : "OFF"} | Perplexity: ${PROVIDER_HEALTH.perplexityDirect ? "ON" : "OFF"} | Lovable: ${PROVIDER_HEALTH.lovableGateway ? "ON" : "OFF"}`);
+console.log(`[provider-health] OpenAI: ${PROVIDER_HEALTH.openaiDirect ? "ON" : `OFF (${PROVIDER_HEALTH.openaiDirectReason})`} | Anthropic: ${PROVIDER_HEALTH.anthropicDirect ? "ON" : "OFF"} | Perplexity: ${PROVIDER_HEALTH.perplexityDirect ? "ON" : "OFF"} | Lovable: ${PROVIDER_HEALTH.lovableGateway ? "ON" : "OFF"}`);
 
 // ═══════════════════════════════════════════════════════════
 // LAYER 2 — ROUTER
