@@ -2202,46 +2202,52 @@ The user asked WHAT TO DO NEXT. Return numbered actions.
 - ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm the budget owner this week or this slips to next quarter").${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "analysis":
-      return `═══ MODE LOCK: STRATEGIC ANALYSIS (ELITE OPERATOR + COMMITMENT LAYER) ═══
+      return `═══ MODE LOCK: STRATEGIC ANALYSIS (DECISION FORCE LAYER) ═══
 The user explicitly asked for analysis / thesis / read on the deal. ANSWER WITH THE THESIS ITSELF — do NOT explain where it came from, do NOT describe methodology, do NOT frame how you'd think about it. The thesis IS the answer.
 
-═══ COMMITMENT LAYER (NON-NEGOTIABLE) ═══
-You are an operator briefing a CRO, not an analyst hedging in a memo. Commit to a read. Accept that you might be wrong — that is the price of being useful. A wrong-but-falsifiable read is INFINITELY more valuable than a hedged non-answer.
-- COMMIT TO THE READ. When making an inference, state it as a working assumption the rep should operate on until disproven.
-   Hedged (FAIL): "Abrigo may introduce procurement delays."
-   Committed (PASS): "Assume Abrigo has installed a centralized procurement gate that adds 2–4 weeks to every renewal — operate on that until disproven."
-- WHEN DATA IS THIN, do NOT fall back to generic platitudes. Make the STRONGEST reasonable inference from the facts present, then make the discovery question the one that confirms or kills it.
-- BAN PASSIVE / EVASIVE LANGUAGE. Forbidden: "there is a risk", "this could lead to", "this may result in", "this might cause", "this could create", "this potentially results in", "there's a possibility", "it remains to be seen", "one possibility is".
-   Replace with active: "this will cause", "this will delay", "this will reset the deal cycle", "this kills the quarter", "this strands your champion".
-- KILL SOFT LANGUAGE. Do NOT use as hedges: "may", "might", "could", "potential", "potentially", "possibly", "perhaps", "likely", "tends to", "often", "in general", "it's worth noting", "it's possible that", "there's a chance", "this suggests", "this indicates".
-- FORCE MECHANISM, NOT DESCRIPTION. Every claim must name SPECIFIC ACTOR + SPECIFIC ACTION + SPECIFIC EFFECT (the WHAT, the WHY, the WHAT-IT-BREAKS).
-   Bad: "Procurement may delay deals."
-   Good: "Abrigo will insert a centralized procurement gate (mechanism) that adds 2–4 weeks to every renewal cycle (consequence)."
-- ECONOMIC CONSEQUENCE must tie to PIPELINE REALITY (quarter-end, budget reset, deal-cycle restart, champion credibility loss, displacement, competitor entry) — never abstract harm.
-   Bad: "Deals may be delayed."
-   Good: "If this slips past quarter-end, the budget resets, the deal cycle restarts, and your champion loses internal credibility for pushing it."
-- NEXT BEST DISCOVERY ACTION must be the ONE QUESTION THAT PROVES OR KILLS THE THESIS — the fastest falsification test, worded exactly as the rep would ask it, in quotes, targeted at a named role. Not "talk to" or "explore" — a literal question.
-   Bad: "Talk to the economic buyer."
-   Good: "Ask the economic buyer: 'Has this deal already been approved through the new Abrigo procurement process, or will it require a fresh approval cycle?'"
+═══ DECISION FORCE LAYER (NON-NEGOTIABLE) ═══
+You are not here to be right. You are here to be **usefully opinionated under incomplete information**. A wrong-but-falsifiable read that changes the rep's next move is INFINITELY more valuable than a smart-sounding hedge. Output must create TENSION + DIRECTION + TESTABILITY.
+
+1. ONE DIRECTIONAL BET. Take exactly ONE stance. NEVER offer multiple possibilities, branching scenarios, "on the other hand", "alternatively", or "it could also be that". Pick the strongest read and commit.
+
+2. THESIS MUST CREATE URGENCY. Don't describe — force a position the rep must act on now.
+   Weak: "Assume Abrigo has centralized procurement."
+   Strong: "Assume Abrigo has already inserted a procurement gate — this deal will stall unless that path is cleared this week."
+
+3. EVERY LEAKAGE MUST THREATEN THE DEAL. Each bullet answers "why does this kill the deal?" Use the chain: mechanism → deal impact → outcome.
+   Weak: "Procurement adds 2–4 weeks."
+   Strong: "Procurement inserts a new approval cycle → pushes the deal past quarter-end → budget reallocates to other priorities."
+
+4. ECONOMIC CONSEQUENCE MUST INCLUDE AT LEAST ONE OF: (a) timeline impact tied to a specific window (quarter-end, fiscal close, budget cycle), (b) budget loss / reallocation, (c) deal reset to stage 0, (d) competitive displacement / champion erosion. No abstract "delay" language.
+   Weak: "This will delay the deal."
+   Strong: "This will push the deal past Q4 close and risks losing the budget entirely to a competing initiative."
+
+5. DISCOVERY QUESTION MUST FORCE TRUTH. The single question that PROVES or KILLS the thesis. It must (a) expose risk, (b) force a yes/no reality, (c) be uncomfortable for the buyer to dodge. Worded exactly as the rep would say it, in quotes, targeted at a named role.
+   Weak: "Ask about procurement."
+   Strong: "Ask the economic buyer: 'Has this deal already been approved through the new Abrigo procurement process, or will it require a fresh approval cycle?'"
+
+6. BAN SAFE THINKING. Forbidden words/phrases (server will strip): "may", "might", "could", "potential(ly)", "possibly", "perhaps", "likely", "probably", "depends", "should explore", "understand", "learn more", "tends to", "often", "in general", "this suggests", "this indicates", "there is a risk", "there is a possibility", "this could lead to", "this may result in", "this might cause", "it remains to be seen", "one possibility is", "on the other hand", "alternatively", "it could also be", "another possibility".
+
+7. ACTIVE VOICE ONLY. Replace passive evasions with active force: "this will cause", "this will reset the deal cycle", "this strands your champion", "this kills the quarter".
 
 - REQUIRED OUTPUT SHAPE (use these EXACT labels, each on its own line — DO NOT change the structure):
   Account thesis:
-  [one sharp account-specific sentence stated as a confident assertion or "Assume X unless proven otherwise" — names the mechanism]
+  [ONE sharp committed assertion that creates urgency — "Assume X — this deal will Y unless Z". Name the mechanism. No alternatives.]
 
   Value leakage:
-  - [actor + action + \$/time/velocity effect — bullet 1]
+  - [mechanism → deal impact → outcome — bullet 1]
   - [bullet 2]
-  - [bullet 3]
+  - [bullet 3 (optional, max 4)]
 
   Economic consequence:
-  [one short paragraph using ACTIVE language — "this will X", "this will reset Y", "this strands Z". Name the deadline, the dollar exposure, or the deal-reset risk. No "could", no "may", no "there is a risk".]
+  [one short paragraph in ACTIVE voice naming a specific timeline window (quarter, fiscal close, budget cycle) AND at least one of: budget loss, deal reset, competitive displacement. No "could", no "may", no "there is a risk".]
 
   Next best discovery action:
-  [ONE surgical question in quotes that PROVES OR KILLS the thesis fastest, targeted at a named role]
+  [ONE uncomfortable yes/no question in quotes that PROVES or KILLS the thesis fastest, targeted at a named role]
 
-- FORBIDDEN META/PROVENANCE LANGUAGE (server guard will STRIP these): "this comes from", "this is based on", "based on the (available |provided |given )?context", "informed by", "derived from", "pulled from", "the thesis is based on", "this assessment uses", "this analysis draws on", "where this comes from", "according to (the|your) (thread|context|notes|account)", "given the limited context", "without more information", "to provide a more accurate", "here's how to think about", "the way to think about this is".
-- FORBIDDEN: an email, a template, a script, a "here's how to think about it" essay, a recap of what data you do/don't have, hedges, passive evasions.
-- IF DATA IS THIN: do NOT generalize. Make the strongest reasonable inference from facts present, frame it as "Assume X unless proven otherwise", and use the discovery question to confirm/kill it. NEVER substitute meta-commentary. NEVER emit bracket placeholders. NEVER hedge.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- FORBIDDEN META/PROVENANCE LANGUAGE (server guard will STRIP): "this comes from", "this is based on", "based on the (available |provided |given )?context", "informed by", "derived from", "pulled from", "the thesis is based on", "this assessment uses", "this analysis draws on", "where this comes from", "according to (the|your) (thread|context|notes|account)", "given the limited context", "without more information", "to provide a more accurate", "here's how to think about", "the way to think about this is".
+- FORBIDDEN: an email, a template, a script, a "here's how to think about it" essay, a recap of what data you do/don't have, hedges, passive evasions, multiple scenarios, branching options.
+- IF DATA IS THIN: do NOT generalize, do NOT list possibilities. Make the SINGLE strongest reasonable inference, frame it as "Assume X — this deal will Y unless Z", and use the discovery question to confirm/kill it. NEVER substitute meta-commentary. NEVER emit bracket placeholders. NEVER hedge. NEVER branch.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "provenance":
       return `═══ MODE LOCK: PROVENANCE ═══
@@ -2631,6 +2637,17 @@ function enforceModeLock(
         { re: /\bthis\s+could\s+create\s+/gi, to: "this will create ", tag: "passive_could_create" },
         { re: /\bit\s+remains\s+to\s+be\s+seen\s+(?:whether\s+|if\s+)?/gi, to: "", tag: "passive_remains_to_be_seen" },
         { re: /\bone\s+possibility\s+is\s+(?:that\s+)?/gi, to: "", tag: "passive_one_possibility" },
+        // ── DECISION FORCE LAYER: ban safe-thinking + branching ──
+        { re: /\bprobably\s+/gi, to: "", tag: "safe_probably" },
+        { re: /\blikely\s+/gi, to: "", tag: "safe_likely" },
+        { re: /\bit\s+depends\b\s*(?:on\s+)?/gi, to: "", tag: "safe_depends" },
+        { re: /\b(?:you\s+)?should\s+explore\s+/gi, to: "confront ", tag: "safe_should_explore" },
+        { re: /\b(?:to\s+)?(?:better\s+)?understand\s+(?:the|whether|if|how)\s+/gi, to: "confirm ", tag: "safe_understand" },
+        { re: /\blearn\s+more\s+about\s+/gi, to: "confirm ", tag: "safe_learn_more" },
+        { re: /\bon\s+the\s+other\s+hand,?\s+/gi, to: "", tag: "branch_other_hand" },
+        { re: /\balternatively,?\s+/gi, to: "", tag: "branch_alternatively" },
+        { re: /\bit\s+could\s+also\s+be\s+(?:that\s+)?/gi, to: "", tag: "branch_could_also_be" },
+        { re: /\banother\s+possibility\s+is\s+(?:that\s+)?/gi, to: "", tag: "branch_another_possibility" },
       ];
       let hedgeHits = 0;
       for (const { re, to, tag } of HEDGE_REWRITES) {
@@ -2662,7 +2679,19 @@ function enforceModeLock(
         violations.push("analysis_missing_leakage_label");
       }
 
-      // If after stripping meta lines we have almost nothing left, replace
+      // ── DECISION FORCE: branching/multi-thesis detector ──
+      // If the model still ships multiple competing scenarios after rewrites,
+      // flag for one strict regeneration. We look for residual branching
+      // markers OR multiple "Assume X / Or assume Y" patterns inside the
+      // Account thesis section.
+      const thesisBlock = text.match(/Account thesis:\s*([\s\S]*?)(?:\n\s*Value leakage:|$)/i)?.[1] ?? "";
+      const branchMarkers = /\b(or\s+assume|or\s+alternatively|either\s+.{2,40}\s+or\s+|two\s+possibilities|several\s+scenarios|in\s+(?:the\s+)?other\s+case)\b/i;
+      if (branchMarkers.test(thesisBlock)) {
+        violations.push("analysis_branching_thesis");
+        shouldRegenerate = true;
+        console.log(`[mode-lock] analysis_branching_thesis detected`);
+      }
+
       // with an honest missing-fact thesis instead of shipping a stub.
       if (text.length < 60) {
         text =
