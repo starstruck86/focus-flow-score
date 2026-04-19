@@ -2115,11 +2115,14 @@ The user asked for a TEMPLATE. You MUST return a structured, fill-in-the-blank t
 - One short upgrade line at the end is allowed (e.g. "Want me to fill this in for [account]?"). Nothing else.${constraintLine}${bindingClause}`;
 
     case "email":
-      return `═══ MODE LOCK: EMAIL ═══
-The user asked for an EMAIL. Return ONLY the email body (with Subject line if appropriate).
+      return `═══ MODE LOCK: EMAIL (BODY-ONLY) ═══
+The user asked for an EMAIL. Return ONLY the email BODY in body-only format.
+- REQUIRED FORMAT: First line is exactly "Send this:" on its own line. Then the email body sentences. Nothing else.
+- FORBIDDEN: "Subject:" line. FORBIDDEN: greeting lines like "Hi [Name]," / "Hello," / "Hey,". FORBIDDEN: signoff lines like "Thanks,", "Best,", "Cheers,", "— [Name]".
 - FORBIDDEN: a plan, bullets, numbered lists, multiple versions, a voicemail, a script, commentary, or pre-amble.
-- FORBIDDEN: a "here's how I'd think about this" preface. FORBIDDEN: "Do this next:".
-- REQUIRED: Start with "Send this:" then the email. Nothing after the email except (optionally) one short upgrade line.${constraintLine}${bindingClause}`;
+- FORBIDDEN: a "here's how I'd think about this" preface. FORBIDDEN: "Do this next:". FORBIDDEN: trailing "Want me to tailor this..." line.
+- The body is the message itself — direct sentences a rep can paste into a thread mid-conversation. No envelope, no salutation, no sign-off.
+- Only add a Subject, greeting, or signoff if the user EXPLICITLY asks for one.${constraintLine}${bindingClause}`;
 
     case "message":
       return `═══ MODE LOCK: MESSAGE / SCRIPT ═══
@@ -2230,11 +2233,12 @@ function enforceModeLock(
     }
 
     case "email": {
-      // Strip leading "Send this:" sentinel for cap counting only.
-      const body = text.replace(/^send this:\s*/i, "").trim();
-      // No numbered lists or "Do this next:" injections.
+      // BODY-ONLY contract: "Send this:" sentinel + email body sentences only.
+      // No Subject, no greeting, no signoff (unless user explicitly asked).
+      const APO_E = "['\u2019]";
+
+      // 1) Strip "Do this next:" appended block.
       if (/\bdo this next:/i.test(text)) {
-        // Truncate at "Do this next:" — likely an appended next-steps block.
         const idx = text.search(/\bdo this next:/i);
         if (idx > 60) {
           text = text.slice(0, idx).trim();
@@ -2245,23 +2249,84 @@ function enforceModeLock(
           shouldRegenerate = true;
         }
       }
-      if (/^\s*\d+[.)]\s/m.test(body)) {
+
+      // 2) Strip trailing "Want me to ..." tail line (forbidden in body-only).
+      const tailRe = new RegExp(
+        `\\n+\\s*(want\\s+me\\s+to|let\\s+me\\s+know\\s+if|happy\\s+to\\s+(tailor|adjust|tweak))[^\\n]*$`,
+        "i",
+      );
+      if (tailRe.test(text)) {
+        text = text.replace(tailRe, "").trim();
+        modified = true;
+        violations.push("stripped_tail_line");
+      }
+
+      // 3) Detect whether user explicitly asked for subject/greeting/signoff.
+      const userAskedFullEmail = /\b(subject\s*line|with\s+(a\s+)?subject|full\s+email|complete\s+email|with\s+greeting|with\s+sign[- ]?off)\b/i
+        .test(intent.rawConstraint || "");
+
+      // 4) Normalize sentinel: ensure exactly one "Send this:" prefix.
+      let working = text.trim();
+      // Drop any leading "Subject: ..." line(s) when not explicitly requested.
+      if (!userAskedFullEmail) {
+        // Remove a leading Subject: line (and its content up to the next newline).
+        working = working.replace(/^\s*subject:[^\n]*\n+/i, "");
+        // Remove a leading greeting line: "Hi X,", "Hello,", "Hey [Name],"
+        working = working.replace(
+          /^\s*(hi|hello|hey|dear)\b[^\n]{0,80}[,!]?\s*\n+/i,
+          "",
+        );
+        // Remove a "Send this:" prefix temporarily so we can re-add cleanly.
+        working = working.replace(/^\s*send this:\s*\n*/i, "").trim();
+        // Strip trailing signoff block: a signoff word/phrase followed by optional name lines.
+        const signoffRe = new RegExp(
+          `\\n+\\s*(thanks|thank\\s+you|best(\\s+regards)?|regards|cheers|sincerely|talk\\s+soon|warmly|kind\\s+regards|all\\s+the\\s+best)\\b[^\\n]{0,40}[,.!]?(\\s*\\n[^\\n]{0,80}){0,2}\\s*$`,
+          "i",
+        );
+        if (signoffRe.test(working)) {
+          working = working.replace(signoffRe, "").trim();
+          modified = true;
+          violations.push("stripped_signoff");
+        }
+        // Strip trailing em-dash signature like "— Alex" or "-- Alex".
+        working = working.replace(/\n+\s*[—–-]{1,2}\s*[^\n]{1,40}\s*$/i, "").trim();
+      } else {
+        working = working.replace(/^\s*send this:\s*\n*/i, "").trim();
+      }
+
+      // 5) Numbered list check on body.
+      if (/^\s*\d+[.)]\s/m.test(working)) {
         violations.push("email_contains_numbered_list");
       }
+
+      // 6) Sentence cap: count only the body, then truncate.
       if (intent.sentenceCap) {
-        const count = countSentences(body);
+        const count = countSentences(working);
         if (count > intent.sentenceCap) {
-          // Hard-truncate to the first N sentences.
-          const sentences = body.match(/[^.!?]+[.!?]+/g) || [body];
-          const kept = sentences.slice(0, intent.sentenceCap).join(" ").trim();
-          const prefix = text.startsWith("Send this:") || text.startsWith("send this:")
-            ? "Send this:\n"
-            : "";
-          text = `${prefix}${kept}`;
+          const sentences = working.match(/[^.!?]+[.!?]+/g) || [working];
+          working = sentences.slice(0, intent.sentenceCap).join(" ").trim();
           modified = true;
           violations.push(`truncated_to_${intent.sentenceCap}_sentences`);
         }
       }
+
+      // 7) Re-assemble: always "Send this:\n<body>" in body-only mode.
+      if (!userAskedFullEmail) {
+        const reassembled = `Send this:\n${working}`;
+        if (reassembled !== text) {
+          modified = true;
+          if (!violations.some((v) => v.startsWith("truncated_") || v.startsWith("stripped_"))) {
+            violations.push("normalized_body_only_format");
+          }
+        }
+        text = reassembled;
+      } else {
+        // User explicitly wanted subject/greeting/signoff — keep their format.
+        text = working;
+      }
+
+      // Reference suppress to keep ts happy for unused regex helper.
+      void APO_E;
       break;
     }
 
