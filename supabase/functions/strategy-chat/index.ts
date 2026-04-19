@@ -2303,7 +2303,7 @@ async function buildChatSystemPrompt(args: {
 
   if (!useCore) {
     return {
-      prompt: buildGenericChatSystemPrompt(depth, contextSection),
+      prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
       workingThesis: null,
       resourceHits: [],
     };
