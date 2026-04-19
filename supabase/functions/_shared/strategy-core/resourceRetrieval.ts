@@ -50,6 +50,7 @@ export interface RetrievedResource {
   tags: string[] | null;
   /** How this resource was matched. Lets the prompt explain itself. */
   matchKind:
+    | "picked"
     | "exact_title"
     | "near_exact_title"
     | "phrase_in_title"
@@ -301,13 +302,24 @@ export async function retrieveResourceContext(
     opportunityId?: string | null;
     /** Current thread id — used to scope/exclude when pulling prior-use rows. */
     threadId?: string | null;
+    /**
+     * Sidecar: resource IDs the user explicitly picked (e.g. via /library)
+     * this turn. These are resolved by ID FIRST and inserted at the top of
+     * the hit list so grounding never depends on title-string coincidence.
+     */
+    pickedResourceIds?: string[];
   },
 ): Promise<ResourceRetrievalResult> {
   const userMessage = (args.userMessage || "").trim();
   const phrases = extractCandidatePhrases(userMessage);
   const categories = inferResourceCategories(userMessage);
   const askedForPrior = userAskedForPriorUse(userMessage);
-  const askedFor = userAskedForResource(userMessage) || phrases.length > 0 || askedForPrior;
+  const pickedIds = Array.isArray(args.pickedResourceIds)
+    ? args.pickedResourceIds.filter((s) => typeof s === "string" && s.length > 0)
+    : [];
+  // A picked resource always counts as "asked for one" — the user's
+  // explicit selection is the strongest possible signal of intent.
+  const askedFor = userAskedForResource(userMessage) || phrases.length > 0 || askedForPrior || pickedIds.length > 0;
 
   const all: RetrievedResource[] = [];
   const seen = new Set<string>();
@@ -349,6 +361,24 @@ export async function retrieveResourceContext(
     const slice = hay.slice(start, end).replace(/\s+/g, " ").trim();
     return (start > 0 ? "…" : "") + slice + (end < hay.length ? "…" : "");
   };
+
+  // ── 0. Picked resources (sidecar IDs from /library) ───────────
+  // Resolved by ID first so grounding never depends on title coincidence.
+  // Scoped to the requesting user so a hostile client can't pull rows
+  // belonging to another seller.
+  if (pickedIds.length > 0) {
+    try {
+      const { data } = await supabase
+        .from("resources")
+        .select(SAFE_FIELDS)
+        .eq("user_id", userId)
+        .in("id", pickedIds.slice(0, HARD_LIMIT))
+        .limit(HARD_LIMIT);
+      push(data, "picked", () => `User picked from /library this turn`);
+    } catch (e) {
+      console.warn("[resourceRetrieval] picked-id resolve failed:", (e as Error).message);
+    }
+  }
 
   // ── 1. Exact title (case-insensitive) for each phrase ─────────
   for (const phrase of phrases) {
@@ -536,6 +566,10 @@ export async function retrieveResourceContext(
   // user's inferred category. This is the fix for "executive business
   // case template" returning transcripts ahead of the actual template.
   const rank: Record<RetrievedResource["matchKind"], number> = {
+    // picked beats everything — the user's explicit selection is the
+    // strongest possible grounding signal and must never be reordered
+    // behind a fuzzy title match.
+    picked: -1,
     exact_title: 0,
     near_exact_title: 1,
     prior_use: 2,
@@ -646,6 +680,9 @@ export function renderResourceContextBlock(args: {
     // not from the title — and must say so honestly to the user.
     if (h.matchKind === "content_match") flags.push("body-match");
     if (h.matchKind === "description_match") flags.push("desc-match");
+    // The user explicitly picked this resource from /library this turn.
+    // Surface it loudly so the model anchors on it instead of inventing.
+    if (h.matchKind === "picked") flags.push("USER-PICKED");
     lines.push(`- RESOURCE[${idShort}] "${h.title}" — ${flags.join(", ")}`);
     lines.push(`    why: ${h.matchReason}`);
     if (h.matchSnippet) {
@@ -658,6 +695,12 @@ export function renderResourceContextBlock(args: {
   }
 
   lines.push("");
+  const hasPicked = hits.some((h) => h.matchKind === "picked");
+  if (hasPicked) {
+    lines.push(
+      `PRIORITY: One or more resources are flagged USER-PICKED above — the user explicitly selected them this turn. Your answer MUST be grounded in those resources. Cite them by exact title. Do not pivot to a different resource unless the user's question is unrelated.`,
+    );
+  }
   lines.push(`RULES (mandatory):`);
   lines.push(
     `- If the user named a specific resource and it is NOT in the list above, say so plainly: "I don't see that exact resource in your library."`,
