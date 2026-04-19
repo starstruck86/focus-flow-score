@@ -2011,6 +2011,10 @@ interface IntentResult {
   sentenceCap?: number;
   /** Free-text constraint phrase, e.g. "3 sentence", "two bullets". */
   rawConstraint?: string;
+  /** Sub-flag: this is a business-case-style ask (CFO, ROI, business case). */
+  isBusinessCase?: boolean;
+  /** Sub-flag: this is a CFO/finance audience ask. */
+  isCFO?: boolean;
 }
 
 function classifyChatIntent(userContent: string): IntentResult {
@@ -2032,6 +2036,13 @@ function classifyChatIntent(userContent: string): IntentResult {
     rawConstraint = sentMatch[0];
   }
 
+  // Sub-flags: business case + CFO audience drive economic-pressure injection.
+  const isBusinessCase =
+    /\b(business\s*case|roi|payback|justification|cost\s+benefit|investment\s+case)\b/.test(text);
+  const isCFO =
+    /\b(cfo|chief\s+financial|finance\s+(team|leader|chief)|controller|treasur(er|y)|economic\s+buyer)\b/.test(text);
+
+
   // 1. Provenance — "where is this from", "how do you know", "source"
   if (
     /\b(where (is|are|did) (this|that|it|they)|where('?s| is) (this|that) (from|pulled|coming)|source(s)?\??$|how (do|did) you know|why (do|did) you (think|say)|what('?s| is) the source)\b/
@@ -2046,7 +2057,7 @@ function classifyChatIntent(userContent: string): IntentResult {
     /(what|which|give|need|use|share|send|build|create|recommend|suggest|good|best)/
       .test(text)
   ) {
-    return { intent: "template", sentenceCap, rawConstraint };
+    return { intent: "template", sentenceCap, rawConstraint, isBusinessCase, isCFO };
   }
 
   // 3. Email — explicit "email" or "write me an email"
@@ -2054,7 +2065,7 @@ function classifyChatIntent(userContent: string): IntentResult {
     /\b(email|e-mail)\b/.test(text) &&
     /(write|draft|send|give|need|craft|compose|reply|respond)/.test(text)
   ) {
-    return { intent: "email", sentenceCap, rawConstraint };
+    return { intent: "email", sentenceCap, rawConstraint, isBusinessCase, isCFO };
   }
 
   // 4. Message / script / voicemail / DM / SMS / LinkedIn note
@@ -2063,7 +2074,7 @@ function classifyChatIntent(userContent: string): IntentResult {
       .test(text) &&
     /(write|draft|send|give|need|craft|leave|record|reply)/.test(text)
   ) {
-    return { intent: "message", sentenceCap, rawConstraint };
+    return { intent: "message", sentenceCap, rawConstraint, isBusinessCase, isCFO };
   }
 
   // 5. Pitch / exact words to say
@@ -2071,7 +2082,7 @@ function classifyChatIntent(userContent: string): IntentResult {
     /\b(pitch|say|tell|frame|position|open(er)?|talk track)\b/.test(text) &&
     /(how|what|words|exact|should i)/.test(text)
   ) {
-    return { intent: "pitch", sentenceCap, rawConstraint };
+    return { intent: "pitch", sentenceCap, rawConstraint, isBusinessCase, isCFO };
   }
 
   // 6. Next steps — "what should I do", "next step", "next move", "what now"
@@ -2079,7 +2090,7 @@ function classifyChatIntent(userContent: string): IntentResult {
     /\b(next step(s)?|next move|what (should|do) i do|what now|where (do|should) i (go|take|move)|what('?s| is) my (move|play))\b/
       .test(text)
   ) {
-    return { intent: "next_steps" };
+    return { intent: "next_steps", isBusinessCase, isCFO };
   }
 
   // 7. Analysis / thesis / how should I think
@@ -2087,14 +2098,14 @@ function classifyChatIntent(userContent: string): IntentResult {
     /\b(thesis|account thesis|leakage|economic consequence|deal review|analy(s|z)e|how (should|do) i think|read on|take on|view on|assess(ment)?|risk(s)? (here|on this))\b/
       .test(text)
   ) {
-    return { intent: "analysis" };
+    return { intent: "analysis", isBusinessCase, isCFO };
   }
 
-  return { intent: "freeform", sentenceCap, rawConstraint };
+  return { intent: "freeform", sentenceCap, rawConstraint, isBusinessCase, isCFO };
 }
 
 function buildModeLockBlock(intent: IntentResult): string {
-  const { intent: kind, sentenceCap, rawConstraint } = intent;
+  const { intent: kind, sentenceCap, rawConstraint, isBusinessCase, isCFO } = intent;
 
   const constraintLine = sentenceCap
     ? `\n- HARD CONSTRAINT: Output EXACTLY ${sentenceCap} sentence${sentenceCap === 1 ? "" : "s"} (the user said "${rawConstraint}"). No more. No less. Count them before you finish.`
@@ -2105,6 +2116,23 @@ function buildModeLockBlock(intent: IntentResult): string {
   const bindingClause =
     `\n- BINDING: If you produce ANY content outside this mode, your answer is incorrect. Server-side guards will TRUNCATE or REJECT it.`;
 
+  // ── SUBSTANCE CONTRACT ──
+  // Banned-phrase list applied to EVERY mode. These are the soft-AE
+  // patterns we keep seeing: "I hope this finds you well", "just
+  // checking in", "let me know if", etc. Top reps don't write this way.
+  const substanceContract =
+    `\n- SUBSTANCE CONTRACT: NEVER use any of these phrases — "I hope this finds you well", "I hope this email finds you well", "I hope you're doing well", "I hope all is well", "just checking in", "circling back", "touching base", "reaching out to see", "let me know if", "let me know your thoughts", "I wanted to", "I just wanted to", "happy to chat", "happy to discuss", "would love to", "I'd love to", "I look forward to hearing", "thoughts?", "any thoughts", "feel free to", "at your earliest convenience", "as per", "kindly", "warm regards". They make you sound like a junior SDR.
+- VERB FLOOR: lead sentences with strong, specific verbs. Replace "follow up on X" → "ask Y to confirm Z by [date]". Replace "check in on the deal" → "ask [name] for the [decision/signature/intro]". Replace "learn more about needs" → "confirm the [specific constraint, budget, timeline]".
+- SPECIFICITY FLOOR: every concrete reference (person, number, date, system, dollar amount) you have in context MUST appear in the output. If a placeholder is the only honest option, use [BRACKETED_PLACEHOLDER] — never vague nouns like "the team", "your needs", "the opportunity".`;
+
+  // Economic pressure injection — fires for pitch + next_steps + analysis +
+  // any business-case template + any CFO-audience ask.
+  const economicPressureRequired = isBusinessCase || isCFO ||
+    kind === "pitch" || kind === "analysis";
+  const economicLayer = economicPressureRequired
+    ? `\n- ECONOMIC PRESSURE LAYER (REQUIRED): Anchor the output in money + time. Include AT LEAST ONE concrete economic element: cost of inaction (\$/quarter or % loss), urgency trigger (compliance deadline, contract date, market window), tradeoff (what they give up by waiting). If you don't have a number, use [BRACKETED_NUMBER] so the rep fills it in. No vague phrases like "significant savings" or "improved efficiency".`
+    : "";
+
   switch (kind) {
     case "template":
       return `═══ MODE LOCK: TEMPLATE ═══
@@ -2112,7 +2140,11 @@ The user asked for a TEMPLATE. You MUST return a structured, fill-in-the-blank t
 - FORBIDDEN: returning an email draft (no "Subject:", no "Hi [name]"), a follow-up note, a voicemail, a framework explanation, or any other asset type.
 - FORBIDDEN: explaining what a template is, how to think about it, or why it matters.
 - REQUIRED: First line names the template (e.g. "Use this Business Case template:"). Then the template itself with clear section headers and [BRACKETED] placeholders.
-- One short upgrade line at the end is allowed (e.g. "Want me to fill this in for [account]?"). Nothing else.${constraintLine}${bindingClause}`;
+- One short upgrade line at the end is allowed (e.g. "Want me to fill this in for [account]?"). Nothing else.${
+        isBusinessCase
+          ? `\n- BUSINESS CASE REQUIRED SECTIONS: must include "CURRENT COST OF INACTION", "PROJECTED ROI / PAYBACK", "RISK OF DELAY", "DECISION DEADLINE". Use \$/% placeholders, not adjectives.`
+          : ""
+      }${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "email":
       return `═══ MODE LOCK: EMAIL (BODY-ONLY) ═══
@@ -2122,37 +2154,43 @@ The user asked for an EMAIL. Return ONLY the email BODY in body-only format.
 - FORBIDDEN: a plan, bullets, numbered lists, multiple versions, a voicemail, a script, commentary, or pre-amble.
 - FORBIDDEN: a "here's how I'd think about this" preface. FORBIDDEN: "Do this next:". FORBIDDEN: trailing "Want me to tailor this..." line.
 - The body is the message itself — direct sentences a rep can paste into a thread mid-conversation. No envelope, no salutation, no sign-off.
-- Only add a Subject, greeting, or signoff if the user EXPLICITLY asks for one.${constraintLine}${bindingClause}`;
+- DIRECT-ASK RULE: the email MUST contain ONE clear ask anchored to a decision, date, or named artifact (e.g. "Are we aligned to move forward on the [pricing we discussed] by [date], or is there a blocker I should address?"). No vague "checking in" energy.
+- Only add a Subject, greeting, or signoff if the user EXPLICITLY asks for one.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "message":
       return `═══ MODE LOCK: MESSAGE / SCRIPT ═══
 The user asked for exact wording (voicemail, SMS, LinkedIn note, script, DM).
 - FORBIDDEN: an email, a plan, a framework, multiple versions unless asked.
-- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${constraintLine}${bindingClause}`;
+- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "pitch":
       return `═══ MODE LOCK: PITCH (exact words) ═══
 The user asked how to PITCH or POSITION something. Give the exact words to say.
-- FORBIDDEN: a plan, a framework, a methodology, a numbered list of considerations, "Subject:", "Hi [name]".
-- REQUIRED: Start with "Say this:" then the exact pitch (1–4 sentences). Nothing else. No upgrade line.${constraintLine}${bindingClause}`;
+- FORBIDDEN: a plan, a framework, a methodology, a numbered list of considerations, "Subject:", "Hi [name]", a generic prospecting opener, "I wanted to share…".
+- REQUIRED: Start with "Say this:" then the exact pitch (1–4 sentences). Nothing else. No upgrade line.${
+        isCFO
+          ? `\n- CFO AUDIENCE: lead with money. Frame on cost of inaction, payback period, or risk-adjusted return. Use \$ figures or % deltas (placeholders OK). No SDR-style "want to learn about your priorities" openings — CFOs hate it.`
+          : ""
+      }${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "next_steps":
       return `═══ MODE LOCK: NEXT STEPS ═══
 The user asked WHAT TO DO NEXT. Return numbered actions.
 - FORBIDDEN: a cold email (no "Subject:", no "Hi"), a script, a pitch, a thesis, a framework, a "here's how to think about this" preface.
-- REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with the verb first ("Call X to confirm Y", "Send the MAP to Z", "Lock 30 min with the CFO"). No commentary between items. No trailing upgrade line.${constraintLine}${bindingClause}`;
+- REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with the verb first AND a named target AND an outcome ("Call [name] to confirm [decision] by [date]", "Send the MAP to [econ buyer] with [signature ask]", "Lock 30 min with the CFO on [ROI question]"). No commentary between items. No trailing upgrade line.
+- ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm budget owner before [date] or this slips to next quarter").${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "analysis":
       return `═══ MODE LOCK: STRATEGIC ANALYSIS ═══
 The user explicitly asked for analysis / thesis / read on the deal. Use the strategic frame.
-- REQUIRED: Lead with the ACCOUNT THESIS in one line. Then VALUE LEAKAGE (where money leaks today). Then ECONOMIC CONSEQUENCE (in $/margin/retention/velocity terms). End with ONE NEXT BEST DISCOVERY ACTION.
-- FORBIDDEN: an email, a template, a script, a generic "here's how to think about it" essay.${constraintLine}${bindingClause}`;
+- REQUIRED: Lead with the ACCOUNT THESIS in one line. Then VALUE LEAKAGE (where money leaks today, in \$ or % terms). Then ECONOMIC CONSEQUENCE (in \$/margin/retention/velocity terms). End with ONE NEXT BEST DISCOVERY ACTION (named person, specific question).
+- FORBIDDEN: an email, a template, a script, a generic "here's how to think about it" essay.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "provenance":
       return `═══ MODE LOCK: PROVENANCE ═══
 The user asked WHERE the information came from. Answer in plain English in 1–3 sentences MAX.
 - REQUIRED: Name the source(s) directly — linked account, uploaded file, internal KI/Playbook by short id, prior thread message, or "operator pattern (no internal source)".
-- FORBIDDEN: defensive language, methodology theater, robotic disclaimers, a new asset, restating the question, "Subject:", "Hi", any email structure, numbered lists, trailing upgrade line ("Want me to…").${constraintLine}${bindingClause}`;
+- FORBIDDEN: defensive language, methodology theater, robotic disclaimers, a new asset, restating the question, "Subject:", "Hi", any email structure, numbered lists, trailing upgrade line ("Want me to…").${constraintLine}${substanceContract}${bindingClause}`;
 
     case "freeform":
     default:
@@ -2160,7 +2198,7 @@ The user asked WHERE the information came from. Answer in plain English in 1–3
 The user's intent isn't a clear asset request. Pick the SMALLEST useful output that answers the literal question.
 - FORBIDDEN: defaulting to an email or a generic template just because that's easy.
 - FORBIDDEN: a strategic-thesis essay unless they explicitly asked for analysis.
-- REQUIRED: First line answers the question directly. If an asset is the right answer, give it. If a one-line answer is the right answer, give that and stop.${constraintLine}${bindingClause}`;
+- REQUIRED: First line answers the question directly. If an asset is the right answer, give it. If a one-line answer is the right answer, give that and stop.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
   }
 }
 
@@ -2421,6 +2459,104 @@ function enforceModeLock(
 
   return { text, modified, violations, shouldRegenerate };
 }
+
+// ── SUBSTANCE ENFORCER ───────────────────────────────────────
+// Runs AFTER mode-lock. Rewrites the response to remove fluff,
+// generic phrases, weak verbs, and over-politeness. This is the
+// "would a top 1% AE actually send this?" gate.
+//
+// Strategy: deterministic regex replacements + violation flags.
+// We do NOT make a second LLM call — too slow and unreliable. We
+// also do not rewrite verbs aggressively because that risks losing
+// meaning. Instead we strip the worst offender phrases outright and
+// flag the rest so the operator sees the substance score in logs.
+interface SubstanceResult {
+  text: string;
+  modified: boolean;
+  violations: string[];
+}
+
+// Banned filler/soft-AE phrases. Matched case-insensitively. These
+// phrases are deleted (along with surrounding punctuation/spaces).
+// Order matters: longer phrases first so they win over shorter ones.
+const BANNED_PHRASES: Array<{ pattern: RegExp; tag: string }> = [
+  // Opener fluff — also strip a trailing comma + space if present.
+  { pattern: /\bI hope (this|the) (email|message|note) finds you well[,.]?\s*/gi, tag: "hope_finds_well" },
+  { pattern: /\bI hope (this|that) finds you well[,.]?\s*/gi, tag: "hope_finds_well" },
+  { pattern: /\bI hope you('re| are) (doing\s+)?well[,.]?\s*/gi, tag: "hope_doing_well" },
+  { pattern: /\bI hope all is well[,.]?\s*/gi, tag: "hope_all_well" },
+  { pattern: /\bHope you('re| are) (doing\s+)?well[,.]?\s*/gi, tag: "hope_doing_well" },
+  { pattern: /\bHope (this|that) (email|message|note)? ?finds you well[,.]?\s*/gi, tag: "hope_finds_well" },
+  // Filler intent verbs.
+  { pattern: /\bI (just\s+)?wanted to (reach out|share|let you know|check in|see if|follow up|touch base|circle back)\b[^.!?\n]*[.!?]?/gi, tag: "wanted_to_filler" },
+  { pattern: /\bI(?:'m| am) (just\s+)?(reaching out|writing|following up|checking in|circling back|touching base)\b[^.!?\n]*[.!?]?/gi, tag: "reaching_out_filler" },
+  { pattern: /\bJust (checking in|circling back|touching base|following up|wanted to (check|ask|share))\b[^.!?\n]*[.!?]?/gi, tag: "just_checking_in" },
+  // Closer fluff.
+  { pattern: /\b(Please\s+)?(let me know (your thoughts|if (this|that|you|there)|what you think)|happy to (chat|discuss|jump on|hop on|connect|tailor|adjust)|would love to (hear|connect|chat|discuss)|I('?d| would) love to (hear|connect|chat|discuss)|I look forward to hearing (from you|back)|feel free to|at your earliest convenience|kindly\b|warm regards|warmest regards)\b[^.!?\n]*[.!?]?/gi, tag: "closer_fluff" },
+  { pattern: /\b(Any\s+)?[Tt]houghts\?\s*$/gm, tag: "thoughts_q" },
+];
+
+// Weak-verb / vague-noun flags (no rewrite — we only flag because
+// blind verb replacement breaks meaning). Logged to surface drift.
+const WEAK_PATTERNS: Array<{ pattern: RegExp; tag: string }> = [
+  { pattern: /\b(follow up|circle back|touch base|check in)\b/gi, tag: "weak_verb_followup" },
+  { pattern: /\b(your\s+(needs|priorities|goals|challenges|pain points))\b/gi, tag: "vague_noun_needs" },
+  { pattern: /\b(assess(ing)?|understand(ing)?|learn more about|explore)\s+(your|their|the)\s+(needs|requirements|situation|environment)\b/gi, tag: "vague_assess" },
+  { pattern: /\b(significant\s+(savings|value|improvement|impact)|improved\s+efficiency|streamlin(e|ed|ing)\s+operations|drive\s+(value|outcomes|growth))\b/gi, tag: "vague_value_phrase" },
+];
+
+function enforceSubstance(
+  rawText: string,
+  intent: IntentResult,
+): SubstanceResult {
+  let text = rawText;
+  const violations: string[] = [];
+  let modified = false;
+
+  if (!text || !text.trim()) {
+    return { text, modified: false, violations: [] };
+  }
+
+  // 1) Strip every banned phrase. Track which tags fired.
+  for (const { pattern, tag } of BANNED_PHRASES) {
+    if (pattern.test(text)) {
+      text = text.replace(pattern, "").replace(/  +/g, " ");
+      // Fix doubled punctuation introduced by deletions: ".." → ".", " ," → ","
+      text = text.replace(/\s+([,.!?])/g, "$1").replace(/([.!?]){2,}/g, "$1");
+      modified = true;
+      if (!violations.includes(`stripped_${tag}`)) violations.push(`stripped_${tag}`);
+    }
+  }
+
+  // 2) Tighten dangling whitespace + leading newlines after strips.
+  text = text.replace(/\n{3,}/g, "\n\n").trim();
+  // If we accidentally left a sentinel followed by blank lines, collapse.
+  text = text.replace(/^(Send this:|Say this:|Do this next:|Use this[^\n]*template[^\n]*:)\s*\n\s*\n+/i, "$1\n");
+
+  // 3) Flag weak/vague patterns (no rewrite, just logged).
+  for (const { pattern, tag } of WEAK_PATTERNS) {
+    if (pattern.test(text)) {
+      if (!violations.includes(`flag_${tag}`)) violations.push(`flag_${tag}`);
+    }
+  }
+
+  // 4) Economic-pressure check for modes that require it.
+  const economicRequired =
+    intent.intent === "pitch" ||
+    intent.intent === "analysis" ||
+    intent.isBusinessCase ||
+    intent.isCFO ||
+    (intent.intent === "next_steps");
+  if (economicRequired) {
+    const hasMoney = /(\$\s?\d|\d+\s?%|\bROI\b|\bpayback\b|\bcost of (inaction|delay|doing nothing)\b|\bquarter(ly)?\b|\bdeadline\b|\brisk of\b|\bbudget\b|\b(margin|retention|churn|velocity)\b)/i.test(text);
+    if (!hasMoney) {
+      violations.push("missing_economic_anchor");
+    }
+  }
+
+  return { text, modified, violations };
+}
+
 
 function buildGenericChatSystemPrompt(
   depth: string,
@@ -2740,7 +2876,16 @@ async function handleChat(
         } modified=${guarded.modified}`,
       );
     }
-    const visible = guarded.text;
+    // Substance enforcer SECOND — strip filler/banned phrases, flag weak verbs.
+    const subst = enforceSubstance(guarded.text, intent);
+    if (subst.modified || subst.violations.length) {
+      console.log(
+        `[substance] non-stream intent=${intent.intent} violations=${
+          JSON.stringify(subst.violations)
+        } modified=${subst.modified}`,
+      );
+    }
+    const visible = subst.text;
     // Citation audit: catch any fabricated RESOURCE[…] references.
     const audit = auditResourceCitations(visible, resourceHits);
     if (audit.modified) {
@@ -2933,7 +3078,16 @@ async function handleChat(
             } modified=${guarded.modified}`,
           );
         }
-        const visible = guarded.text;
+        // Step 2b: SUBSTANCE ENFORCER — strip filler/banned phrases.
+        const subst = enforceSubstance(guarded.text, intent);
+        if (subst.modified || subst.violations.length) {
+          console.log(
+            `[substance] stream intent=${intent.intent} violations=${
+              JSON.stringify(subst.violations)
+            } modified=${subst.modified}`,
+          );
+        }
+        const visible = subst.text;
 
         // Step 3: citation audit on the GUARDED text (so banner
         // attaches to the same body that's persisted).
