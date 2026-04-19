@@ -289,6 +289,78 @@ function escapeIlike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+// ── Source-shape detection ────────────────────────────────────────
+// Bifurcate the model's response pattern by source shape. Without this
+// the model collapses transcripts into "give me one fact to anchor on"
+// and over-imposes a generic business-case scaffold onto loose prose.
+//
+// Heuristics, deliberately simple and fully testable:
+//   • structured: markdown headings, numbered/bulleted scaffolds,
+//     labelled sections (Situation/Ask/Value), slide/template framing.
+//     `is_template=true` + presentation/framework resource_types are
+//     structured by default.
+//   • unstructured: long prose with dialogue markers ("Host:",
+//     "Speaker 1:"), timestamps, or transcript/podcast resource_types.
+//     Reusable IDEAS but no scaffold to mirror — model must EXTRACT.
+//   • empty: no body. Model can only adapt at the structural level
+//     (we already had a NOTE for this case).
+export function detectSourceShape(
+  raw: string,
+  meta?: { resource_type?: string | null; is_template?: boolean | null },
+): { shape: "structured" | "unstructured" | "empty"; reason: string } {
+  const text = (raw || "").trim();
+  if (!text) return { shape: "empty", reason: "no body content stored" };
+
+  const rt = (meta?.resource_type || "").toLowerCase();
+  const isTemplate = meta?.is_template === true;
+
+  // Strong unstructured signals first — transcripts/podcasts dominate
+  // the live library and we never want to mis-classify them as structured.
+  const dialogueMarkers = (text.match(
+    /^(?:host|guest|speaker\s*\d+|interviewer|interviewee|[A-Z][a-z]+):/gim,
+  ) || []).length;
+  const timestampMarkers = (text.match(/\[?\b\d{1,2}:\d{2}(?::\d{2})?\b\]?/g) || []).length;
+  if (rt === "transcript" || rt === "podcast" || dialogueMarkers >= 4 || timestampMarkers >= 6) {
+    return {
+      shape: "unstructured",
+      reason: rt === "transcript" || rt === "podcast"
+        ? `resource_type=${rt}`
+        : `${dialogueMarkers} dialogue markers, ${timestampMarkers} timestamps`,
+    };
+  }
+
+  // Structured signals.
+  const mdHeadings = (text.match(/^\s{0,3}#{1,4}\s+\S/gm) || []).length;
+  const numberedSections = (text.match(/^\s{0,3}\d+[.)]\s+\S/gm) || []).length;
+  const bulletLines = (text.match(/^\s{0,3}[-*•]\s+\S/gm) || []).length;
+  const allCapsHeadings = (text.match(/^\s{0,3}[A-Z][A-Z0-9 \/&-]{3,40}:?\s*$/gm) || []).length;
+  const slideMarkers = (text.match(/^(?:slide|section|step|phase)\s+\d+/gim) || []).length;
+  const labelLines = (text.match(
+    /^\s{0,3}(?:situation|ask|value|outcome|owner|next steps|impact|risk|metric|kpi|stakeholders?|timeline|budget|investment|roi|payback|context|problem|solution|why now|why us)\s*[:\-—]/gim,
+  ) || []).length;
+
+  const structureScore =
+    mdHeadings + numberedSections + slideMarkers + labelLines +
+    Math.min(allCapsHeadings, 4) + Math.floor(bulletLines / 4);
+
+  if (isTemplate || rt === "presentation" || rt === "framework" || structureScore >= 4) {
+    const evid: string[] = [];
+    if (isTemplate) evid.push("is_template=true");
+    if (rt === "presentation" || rt === "framework") evid.push(`resource_type=${rt}`);
+    if (mdHeadings) evid.push(`${mdHeadings} md-headings`);
+    if (numberedSections) evid.push(`${numberedSections} numbered sections`);
+    if (labelLines) evid.push(`${labelLines} labeled-section lines`);
+    if (slideMarkers) evid.push(`${slideMarkers} slide/step markers`);
+    return { shape: "structured", reason: evid.join(", ") || `structure score ${structureScore}` };
+  }
+
+  // Default: prose-heavy → unstructured.
+  return {
+    shape: "unstructured",
+    reason: `prose-dominant (no clear scaffold; structure score ${structureScore})`,
+  };
+}
+
 // ── Main retrieval ────────────────────────────────────────────────
 
 const SAFE_FIELDS =
