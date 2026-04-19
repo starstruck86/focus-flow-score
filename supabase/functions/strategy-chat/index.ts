@@ -2226,9 +2226,11 @@ You are not here to be right. You are here to be **usefully opinionated under in
    Weak: "Ask about procurement."
    Strong: "Ask the economic buyer: 'Has this deal already been approved through the new Abrigo procurement process, or will it require a fresh approval cycle?'"
 
-6. BAN SAFE THINKING. Forbidden words/phrases (server will strip): "may", "might", "could", "potential(ly)", "possibly", "perhaps", "likely", "probably", "depends", "should explore", "understand", "learn more", "tends to", "often", "in general", "this suggests", "this indicates", "there is a risk", "there is a possibility", "this could lead to", "this may result in", "this might cause", "it remains to be seen", "one possibility is", "on the other hand", "alternatively", "it could also be", "another possibility".
+6. BAN SAFE THINKING. Forbidden words/phrases (server will strip): "may", "might", "could", "potential(ly)", "possibly", "perhaps", "likely", "probably", "depends", "should explore", "understand", "learn more", "tends to", "often", "in general", "this suggests", "this indicates", "there is a risk", "there is a possibility", "this could lead to", "this may result in", "this might cause", "it remains to be seen", "one possibility is", "on the other hand", "alternatively", "it could also be", "another possibility", "risks <verbing>" (e.g. "risks losing the budget" — say "will lose the budget"), "at risk of", "risk of <verbing>".
 
-7. ACTIVE VOICE ONLY. Replace passive evasions with active force: "this will cause", "this will reset the deal cycle", "this strands your champion", "this kills the quarter".
+7. ACTIVE VOICE — HARD OUTCOME VERBS ONLY. Every consequence sentence must use one of: "will cause", "will push", "will create", "will stall", "will reset", "will reallocate", "will lose", "will strand", "will erode", "will displace", "will block", "will kill", "will miss", "will derail", "will jeopardize". No "risks <ing>", no "could", no "may", no passive evasions.
+
+8. NO VAGUE LEAKAGE. A leakage bullet is INVALID if it just names a category ("procurement risk", "stakeholder change", "budget concerns"). It MUST name (a) the SPECIFIC mechanism (who does what), (b) the SPECIFIC deal impact (what step/stage breaks), and (c) the SPECIFIC outcome (what the rep loses). If you can't name all three, drop the bullet.
 
 - REQUIRED OUTPUT SHAPE (use these EXACT labels, each on its own line — DO NOT change the structure):
   Account thesis:
@@ -2613,10 +2615,26 @@ function enforceModeLock(
       // Rewrites timid hedge phrases into confident mechanism-driven language.
       // Only the clearest hedge patterns are rewritten so we don't change
       // the substance of a real claim.
+      // Broad action-verb list — anything an operator would assert as a
+      // mechanism. We force the active "will <verb>" form.
+      const HARD_VERBS = "delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift|stall|reset|reallocate|kill|lose|strand|erode|displace|block|pause|freeze|deprioritize|drop|slip|miss|jeopardize|threaten|complicate|fragment|undermine|weaken|expose|break|derail";
       const HEDGE_REWRITES: Array<{ re: RegExp; to: string; tag: string }> = [
-        { re: /\bmay\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_may_will" },
-        { re: /\bmight\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_might_will" },
-        { re: /\bcould\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_could_will" },
+        { re: new RegExp(`\\bmay\\s+(?:potentially\\s+)?(${HARD_VERBS})\\b`, "gi"), to: "will $1", tag: "hedge_may_will" },
+        { re: new RegExp(`\\bmight\\s+(?:potentially\\s+)?(${HARD_VERBS})\\b`, "gi"), to: "will $1", tag: "hedge_might_will" },
+        { re: new RegExp(`\\bcould\\s+(?:potentially\\s+)?(${HARD_VERBS})\\b`, "gi"), to: "will $1", tag: "hedge_could_will" },
+        // Bare-form fallback for "may/might/could" without a recognised verb —
+        // strip the modal so the next verb reads as an assertion.
+        { re: /\b(?:may|might|could)\s+(?=[a-z])/gi, to: "will ", tag: "hedge_modal_bare_to_will" },
+        // "risks <verb>ing" → "will <verb>" (e.g. "risks losing" → "will lose",
+        // "risks pushing" → "will push"). Keeps the verb root, drops the hedge.
+        { re: /\brisks?\s+(losing|pushing|delaying|stalling|missing|slipping|breaking|resetting|fragmenting|eroding|exposing|killing|jeopardizing|displacing|deprioritizing|reallocating|extending|disrupting|complicating|undermining)\b/gi, to: (_m: string, v: string) => "will " + v.replace(/ing$/i, (m) => (m === "ing" ? "" : "")), tag: "hedge_risks_verb_ing" } as any,
+        // "risk of <noun>ing" / "at risk of" → drop the framing
+        { re: /\b(?:there\s+is\s+a\s+)?risk\s+of\s+/gi, to: "will cause ", tag: "hedge_risk_of" },
+        { re: /\bat\s+risk\s+of\s+/gi, to: "will ", tag: "hedge_at_risk_of" },
+        // Standalone "risks <noun-phrase>" at sentence-mid → "will lose <np>"
+        // (we use "lose" as the safest active stand-in for nominal risks like
+        // "risks the budget", "risks the renewal", "risks the quarter").
+        { re: /\brisks\s+(the\s+(?:budget|renewal|quarter|deal|opportunity|account|champion|contract|window|cycle|close|forecast))\b/gi, to: "will lose $1", tag: "hedge_risks_noun" },
         { re: /\bpotentially\s+/gi, to: "", tag: "hedge_potentially" },
         { re: /\bpossibly\s+/gi, to: "", tag: "hedge_possibly" },
         { re: /\bperhaps\s+/gi, to: "", tag: "hedge_perhaps" },
