@@ -78,6 +78,67 @@ export function useStrategySelection(): { selection: StrategySelection | null; c
     setSelection(null);
   }, []);
 
+  // Dev-only: ?devSelect=<text> programmatically selects matching text inside a
+  // [data-strategy-selectable] node so the SelectionActionBar can be screenshot-proven
+  // by automation. No-op when the param is absent. Retries until a match is found
+  // (assistant messages stream in async).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const needle = params.get('devSelect');
+    if (!needle) return;
+    let cancelled = false;
+    let attempts = 0;
+    const tryApply = () => {
+      if (cancelled) return;
+      attempts++;
+      const containers = document.querySelectorAll<HTMLElement>('[data-strategy-selectable]');
+      for (const el of Array.from(containers)) {
+        const text = el.textContent ?? '';
+        const idx = text.indexOf(needle);
+        if (idx === -1) continue;
+        // Walk text nodes to map offset
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let acc = 0;
+        let startNode: Text | null = null;
+        let startOffset = 0;
+        let endNode: Text | null = null;
+        let endOffset = 0;
+        let n: Node | null = walker.nextNode();
+        while (n) {
+          const tn = n as Text;
+          const len = tn.data.length;
+          if (!startNode && acc + len > idx) {
+            startNode = tn;
+            startOffset = idx - acc;
+          }
+          if (!endNode && acc + len >= idx + needle.length) {
+            endNode = tn;
+            endOffset = idx + needle.length - acc;
+            break;
+          }
+          acc += len;
+          n = walker.nextNode();
+        }
+        if (startNode && endNode) {
+          const range = document.createRange();
+          range.setStart(startNode, startOffset);
+          range.setEnd(endNode, endOffset);
+          const sel = window.getSelection();
+          if (sel) {
+            sel.removeAllRanges();
+            sel.addRange(range);
+            update();
+            return;
+          }
+        }
+      }
+      if (attempts < 40) setTimeout(tryApply, 250);
+    };
+    setTimeout(tryApply, 300);
+    return () => { cancelled = true; };
+  }, [update]);
+
   useEffect(() => {
     // selectionchange fires on every caret move; debounce to mouseup/keyup for stability
     const onMouseUp = () => setTimeout(update, 0);
