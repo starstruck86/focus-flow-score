@@ -21,14 +21,14 @@ export type SlashVerb =
 interface VerbDef {
   key: SlashVerb;
   label: string;
-  hint: string;
+  shortcut: string;
 }
 
 const VERBS: VerbDef[] = [
-  { key: 'upload',       label: '/upload',       hint: 'Attach a file to this thread' },
-  { key: 'branch',       label: '/branch',       hint: 'Fork this line of thought' },
-  { key: 'link',         label: '/link',         hint: 'Link to account or opp' },
-  { key: 'promote-last', label: '/promote-last', hint: 'Save the last assistant turn' },
+  { key: 'upload',       label: 'Upload file',       shortcut: '⌘U' },
+  { key: 'branch',       label: 'Branch thought',    shortcut: '⌘B' },
+  { key: 'link',         label: 'Link to account',   shortcut: '⌘L' },
+  { key: 'promote-last', label: 'Promote insight',   shortcut: '⌘S' },
 ];
 
 interface Props {
@@ -48,7 +48,7 @@ export function SlashMenu({ query, anchorRect, onPick, onClose }: Props) {
     if (!query) return VERBS;
     const needle = query.replace(/^\//, '').toLowerCase().trim();
     if (!needle) return VERBS;
-    return VERBS.filter(v => v.key.includes(needle) || v.label.toLowerCase().includes(needle));
+    return VERBS.filter(v => v.key.includes(needle) || v.label.toLowerCase().includes(needle.replace(/\s+/g, '')));
   }, [query]);
 
   useEffect(() => { setActiveIdx(0); }, [query]);
@@ -135,8 +135,8 @@ export function SlashMenu({ query, anchorRect, onPick, onClose }: Props) {
                 <span className="text-[13px]" style={{ color: 'hsl(var(--sv-ink))', fontFamily: 'var(--sv-sans)' }}>
                   {v.label}
                 </span>
-                <span className="text-[11px] truncate ml-3" style={{ color: 'hsl(var(--sv-muted))' }}>
-                  {v.hint}
+                <span className="text-[11px] font-mono ml-3" style={{ color: 'hsl(var(--sv-muted))' }}>
+                  {v.shortcut}
                 </span>
               </button>
             );

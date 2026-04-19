@@ -93,6 +93,10 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
     onSend(v);
   };
 
+  // Phase 1.6 — discoverability hints
+  const showEmptyHint = serifPlaceholder && !value;
+  const showTypingHint = value.length > 0 && !value.startsWith('/');
+
   return (
     <div
       className="w-full px-6 pb-8 pt-2"
@@ -177,6 +181,22 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
         >
           <ArrowUp size={16} strokeWidth={1.75} />
         </button>
+      </div>
+      {/* Phase 1.6 — discoverability hint line. Same place, two states. */}
+      <div
+        className="mx-auto px-[14px] text-[12px] leading-none"
+        style={{
+          maxWidth: 760,
+          color: 'hsl(var(--sv-muted))',
+          minHeight: 14,
+          marginTop: 6,
+          opacity: showEmptyHint || showTypingHint ? 0.7 : 0,
+          fontFamily: 'var(--sv-sans)',
+        }}
+        aria-hidden={!(showEmptyHint || showTypingHint)}
+      >
+        {showEmptyHint && <>Type to start · / for actions · ⌘K to switch</>}
+        {showTypingHint && <>⌘S save · / actions · ⌘K switch</>}
       </div>
     </div>
   );

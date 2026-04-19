@@ -109,7 +109,7 @@ export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function Strateg
           onClick={onOpenSwitcher}
           className="h-7 px-2 rounded-[4px] sv-hover-bg text-[12px] font-mono"
           style={{ color: 'hsl(var(--sv-muted))' }}
-          title="Open switcher (⌘K)"
+          title="Switch threads, accounts, opportunities (⌘K)"
         >
           Go ⌘K
         </button>
@@ -117,7 +117,7 @@ export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function Strateg
           onClick={onOpenInspector}
           className="h-7 px-2 rounded-[4px] sv-hover-bg text-[12px] font-mono inline-flex items-center gap-1"
           style={{ color: 'hsl(var(--sv-muted))' }}
-          title="Open inspector (⌘I)"
+          title="View context — memory, files, artifacts (⌘I)"
         >
           {inspectorLabel}
         </button>
