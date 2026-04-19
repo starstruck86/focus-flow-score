@@ -1176,8 +1176,11 @@ async function handleChat(
   }, route);
 
   if (result.error) {
-    return new Response(JSON.stringify({ error: result.error.message }), {
-      status: result.error.type === "timeout" ? 504 : 500,
+    const userMessage = result.error.type === "timeout"
+      ? "Assistant temporarily unavailable: model timed out. Please retry."
+      : `Assistant temporarily unavailable: ${result.error.message}`;
+    return new Response(JSON.stringify({ error: userMessage, errorType: result.error.type, model: route.model }), {
+      status: result.error.type === "timeout" ? 504 : 502,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
