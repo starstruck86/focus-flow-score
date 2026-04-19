@@ -15,7 +15,10 @@ export default function Strategy() {
   return (
     <div
       className="fixed inset-0 flex flex-col"
-      style={{ background: 'hsl(40 12% 98%)' }}
+      style={{
+        background: 'hsl(40 12% 98%)',
+        paddingTop: 'env(safe-area-inset-top)',
+      }}
       data-testid="main-content"
     >
       <StrategyShell />
