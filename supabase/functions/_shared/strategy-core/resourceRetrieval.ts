@@ -695,6 +695,12 @@ export function renderResourceContextBlock(args: {
   }
 
   lines.push("");
+  const hasPicked = hits.some((h) => h.matchKind === "picked");
+  if (hasPicked) {
+    lines.push(
+      `PRIORITY: One or more resources are flagged USER-PICKED above — the user explicitly selected them this turn. Your answer MUST be grounded in those resources. Cite them by exact title. Do not pivot to a different resource unless the user's question is unrelated.`,
+    );
+  }
   lines.push(`RULES (mandatory):`);
   lines.push(
     `- If the user named a specific resource and it is NOT in the list above, say so plainly: "I don't see that exact resource in your library."`,
