@@ -566,6 +566,10 @@ export async function retrieveResourceContext(
   // user's inferred category. This is the fix for "executive business
   // case template" returning transcripts ahead of the actual template.
   const rank: Record<RetrievedResource["matchKind"], number> = {
+    // picked beats everything — the user's explicit selection is the
+    // strongest possible grounding signal and must never be reordered
+    // behind a fuzzy title match.
+    picked: -1,
     exact_title: 0,
     near_exact_title: 1,
     prior_use: 2,
