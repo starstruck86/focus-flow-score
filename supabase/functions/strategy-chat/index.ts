@@ -1032,6 +1032,58 @@ serve(async (req) => {
       }
     }
 
+    if (action === "debug_chat_model_test") {
+      const route = resolveLLMRoute("chat_general");
+      const routeName = route.primaryProvider === "openai" ? "openai-direct" : `${route.primaryProvider}-direct`;
+      const start = Date.now();
+      const result = await (route.primaryProvider === "openai"
+        ? openaiAdapter({
+            model: route.model,
+            messages: [
+              { role: "system", content: "Reply with exactly: ok" },
+              { role: "user", content: "ok" },
+            ],
+            temperature: 0,
+            maxTokens: 16,
+          }, new AbortController().signal)
+        : ADAPTERS[route.primaryProvider]({
+            model: route.model,
+            messages: [
+              { role: "system", content: "Reply with exactly: ok" },
+              { role: "user", content: "ok" },
+            ],
+            temperature: 0,
+            maxTokens: 16,
+          }, new AbortController().signal));
+
+      if (result.error) {
+        return new Response(JSON.stringify({
+          status: "fail",
+          provider: result.provider,
+          model: result.model,
+          route: routeName,
+          http: result.error.status ?? 502,
+          latency_ms: Date.now() - start,
+          reason: result.error.message,
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({
+        status: "ok",
+        provider: result.provider,
+        model: result.model,
+        route: routeName,
+        http: 200,
+        latency_ms: Date.now() - start,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Smoke test mode: allow forced fallback only when SMOKE_TEST_MODE env is set
     const smokeTestMode = Deno.env.get("SMOKE_TEST_MODE") === "true";
     const forceFallback = smokeTestMode && force_primary_failure === true;
@@ -1275,11 +1327,13 @@ async function handleChat(
   }, route);
 
   if (result.error) {
-    const userMessage = result.error.type === "timeout"
-      ? "Assistant temporarily unavailable: model timed out. Please retry."
-      : `Assistant temporarily unavailable: ${result.error.message}`;
-    return new Response(JSON.stringify({ error: userMessage, errorType: result.error.type, model: route.model }), {
-      status: result.error.type === "timeout" ? 504 : 502,
+    return new Response(JSON.stringify({
+      error: "Assistant temporarily unavailable",
+      errorType: result.error.type,
+      model: route.model,
+      route: "openai-direct",
+    }), {
+      status: result.error.status ?? (result.error.type === "timeout" ? 504 : 502),
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
