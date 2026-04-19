@@ -60,6 +60,7 @@ export function StrategyShell() {
   const { threads, activeThread, setActiveThreadId, updateThread } = useStrategyThreads();
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const chipRef = useRef<HTMLButtonElement>(null);
+  const slashFileInputRef = useRef<HTMLInputElement>(null);
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -87,7 +88,7 @@ export function StrategyShell() {
     || null;
 
   const { memories } = useStrategyMemory(memoryObjectType, memoryObjectId);
-  const { uploads } = useStrategyUploads(threadId);
+  const { uploads, uploadFiles } = useStrategyUploads(threadId);
   const { artifacts } = useStrategyArtifacts(threadId);
   const { proposals } = useStrategyProposals(threadId);
 
@@ -269,13 +270,9 @@ export function StrategyShell() {
         break;
       }
       case 'upload':
-        toast('Drag a file onto the canvas to upload');
-        break;
-      case 'artifact':
-        toast('Artifact builder — coming next');
-        break;
-      case 'scan':
-        toast('Account scan — coming next');
+        // Real flow: open the hidden file picker. The file selection handler
+        // pushes through useStrategyUploads.uploadFile().
+        slashFileInputRef.current?.click();
         break;
     }
   }, [handleBranch, messages, activeThread, save, showSaveToast]);
@@ -329,15 +326,30 @@ export function StrategyShell() {
   });
 
   // ---------- Dev-only proof hooks ----------
-  // Reads ?devOpen= and ?devAction= once on mount and applies to state.
+  // Supported params:
+  //   ?devThread=<uuid>          switch to a specific thread first (use with devAction)
+  //   ?devOpen=switcher|linkpicker|inbox|inspector|slash
+  //   ?devAction=newThread|branch|openAccount|openOpportunity
+  //
+  // For devAction we wait until activeThread.id matches devThread (if provided)
+  // before firing — this eliminates the race where the action ran against a
+  // stale or unloaded thread.
+  const devActionFiredRef = useRef(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
+    const devThread = params.get('devThread');
     const devOpen = params.get('devOpen');
     const devAction = params.get('devAction');
 
+    // If devThread is supplied and we're not on it yet, switch and wait for the
+    // next render cycle to fire the rest.
+    if (devThread && activeThread?.id !== devThread) {
+      setActiveThreadId(devThread);
+      return;
+    }
+
     if (devOpen) {
-      // Wait one tick so state is mounted, then summon
       const t = setTimeout(() => {
         if (devOpen === 'switcher') setSwitcherOpen(true);
         else if (devOpen === 'inspector') setInspectorOpen(true);
@@ -345,9 +357,7 @@ export function StrategyShell() {
         else if (devOpen === 'linkpicker') setLinkPickerOpen(true);
         else if (devOpen === 'slash') {
           composerRef.current?.focus();
-          // Inject a slash query so the menu shows up
           setSlashQuery('/');
-          // Also reflect the slash in the textarea visually
           if (composerRef.current) {
             const ta = composerRef.current as HTMLTextAreaElement;
             const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
@@ -359,18 +369,22 @@ export function StrategyShell() {
       return () => clearTimeout(t);
     }
 
-    if (devAction) {
+    // devAction needs a hydrated thread — guard against the race.
+    if (devAction && !devActionFiredRef.current) {
+      // For newThread we don't need an existing thread.
+      const needsThread = devAction !== 'newThread';
+      if (needsThread && !activeThread) return;
+      devActionFiredRef.current = true;
       const t = setTimeout(() => {
         if (devAction === 'newThread') handleNewThread();
         else if (devAction === 'branch') handleBranch();
         else if (devAction === 'openAccount') handleOpenLinkedAccount();
         else if (devAction === 'openOpportunity') handleOpenLinkedOpportunity();
-      }, 400);
+      }, 250);
       return () => clearTimeout(t);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeThread?.id]);
 
   // Auto-detect trust state when switching threads
   useEffect(() => {
@@ -565,6 +579,19 @@ export function StrategyShell() {
         toast={toastState}
         onDismiss={() => setToastState(null)}
         onOpen={(path) => { setToastState(null); navigate(path); }}
+      />
+
+      {/* Hidden file picker driven by /upload slash verb */}
+      <input
+        ref={slashFileInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const files = e.target.files;
+          if (files && files.length) uploadFiles(files);
+          e.target.value = '';
+        }}
       />
     </div>
   );

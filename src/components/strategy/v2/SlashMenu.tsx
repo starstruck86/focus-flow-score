@@ -14,8 +14,6 @@ import { createPortal } from 'react-dom';
 
 export type SlashVerb =
   | 'upload'
-  | 'artifact'
-  | 'scan'
   | 'branch'
   | 'link'
   | 'promote-last';
@@ -28,8 +26,6 @@ interface VerbDef {
 
 const VERBS: VerbDef[] = [
   { key: 'upload',       label: '/upload',       hint: 'Attach a file to this thread' },
-  { key: 'artifact',     label: '/artifact',     hint: 'Generate a strategy artifact' },
-  { key: 'scan',         label: '/scan',         hint: 'Scan account or opportunity' },
   { key: 'branch',       label: '/branch',       hint: 'Fork this line of thought' },
   { key: 'link',         label: '/link',         hint: 'Link to account or opp' },
   { key: 'promote-last', label: '/promote-last', hint: 'Save the last assistant turn' },
