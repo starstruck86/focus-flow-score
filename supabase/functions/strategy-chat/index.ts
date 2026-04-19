@@ -2181,6 +2181,31 @@ function buildModeLockBlock(intent: IntentResult): string {
     : "";
 
   switch (kind) {
+    case "bootstrap":
+      return `═══ MODE LOCK: BOOTSTRAP (ORIENTATION) ═══
+The user opened the assistant with no account context and a vague prompt. This is ORIENTATION, not execution. Help them understand what to do next in 6 lines or fewer.
+
+═══ REQUIRED OUTPUT (EXACT SHAPE — NO DEVIATION) ═══
+First line, verbatim:
+Here's how I can help you move a deal forward:
+
+Then exactly four short bullets, in this order, in plain English (you may lightly adapt the wording but keep the same four capabilities and same order):
+- Pressure test a deal
+- Write emails or talk tracks
+- Build a business case
+- Plan next steps
+
+Then a blank line, then the closing line, verbatim:
+Start here: What account or deal are you working on?
+
+═══ HARD RULES ═══
+- FORBIDDEN: refusing, asking for "a real specific…", saying "I need more info", saying "I don't have enough context", any defensive or rigid framing.
+- FORBIDDEN: an email, a template, a thesis, a script, a numbered list of considerations, a "here's how I'd think about this" preface.
+- FORBIDDEN: bracket placeholders of any kind ([Account], [Client], [name], etc.).
+- FORBIDDEN: switching to analysis mode, template mode, or any other mode.
+- FORBIDDEN: trailing upgrade lines like "Want me to…" — the closing question IS the call to action.
+- TONE: confident, plainspoken, helpful. No SDR fluff. No "I'd love to". No "happy to".${bindingClause}`;
+
     case "template":
       return `═══ MODE LOCK: TEMPLATE ═══
 The user asked for a TEMPLATE. You MUST return a structured, fill-in-the-blank template for the exact thing they named.
