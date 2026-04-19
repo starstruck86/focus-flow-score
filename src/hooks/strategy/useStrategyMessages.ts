@@ -33,7 +33,7 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
 
   const sendMessage = useCallback(async (
     content: string,
-    options?: { depth?: string }
+    options?: { depth?: string; pickedResourceIds?: string[] }
   ) => {
     if (!threadId || !user || !content.trim() || isSending) return;
     setIsSending(true);
@@ -56,7 +56,18 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
           Authorization: `Bearer ${session?.access_token}`,
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
-        body: JSON.stringify({ action: 'chat', threadId, content, depth: options?.depth }),
+        body: JSON.stringify({
+          action: 'chat',
+          threadId,
+          content,
+          depth: options?.depth,
+          // Sidecar: resource IDs the user explicitly picked from /library this turn.
+          // Backend resolves these by ID before any fuzzy title matching so grounding
+          // never depends on title-string coincidence.
+          pickedResourceIds: Array.isArray(options?.pickedResourceIds) && options.pickedResourceIds.length > 0
+            ? options.pickedResourceIds
+            : undefined,
+        }),
       });
 
       if (!resp.ok) {
