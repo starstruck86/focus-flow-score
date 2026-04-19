@@ -2057,7 +2057,7 @@ function classifyChatIntent(userContent: string): IntentResult {
     /(what|which|give|need|use|share|send|build|create|recommend|suggest|good|best)/
       .test(text)
   ) {
-    return { intent: "template", sentenceCap, rawConstraint };
+    return { intent: "template", sentenceCap, rawConstraint, isBusinessCase, isCFO };
   }
 
   // 3. Email — explicit "email" or "write me an email"
@@ -2065,7 +2065,7 @@ function classifyChatIntent(userContent: string): IntentResult {
     /\b(email|e-mail)\b/.test(text) &&
     /(write|draft|send|give|need|craft|compose|reply|respond)/.test(text)
   ) {
-    return { intent: "email", sentenceCap, rawConstraint };
+    return { intent: "email", sentenceCap, rawConstraint, isBusinessCase, isCFO };
   }
 
   // 4. Message / script / voicemail / DM / SMS / LinkedIn note
@@ -2074,7 +2074,7 @@ function classifyChatIntent(userContent: string): IntentResult {
       .test(text) &&
     /(write|draft|send|give|need|craft|leave|record|reply)/.test(text)
   ) {
-    return { intent: "message", sentenceCap, rawConstraint };
+    return { intent: "message", sentenceCap, rawConstraint, isBusinessCase, isCFO };
   }
 
   // 5. Pitch / exact words to say
@@ -2082,7 +2082,7 @@ function classifyChatIntent(userContent: string): IntentResult {
     /\b(pitch|say|tell|frame|position|open(er)?|talk track)\b/.test(text) &&
     /(how|what|words|exact|should i)/.test(text)
   ) {
-    return { intent: "pitch", sentenceCap, rawConstraint };
+    return { intent: "pitch", sentenceCap, rawConstraint, isBusinessCase, isCFO };
   }
 
   // 6. Next steps — "what should I do", "next step", "next move", "what now"
@@ -2090,7 +2090,7 @@ function classifyChatIntent(userContent: string): IntentResult {
     /\b(next step(s)?|next move|what (should|do) i do|what now|where (do|should) i (go|take|move)|what('?s| is) my (move|play))\b/
       .test(text)
   ) {
-    return { intent: "next_steps" };
+    return { intent: "next_steps", isBusinessCase, isCFO };
   }
 
   // 7. Analysis / thesis / how should I think
@@ -2098,10 +2098,10 @@ function classifyChatIntent(userContent: string): IntentResult {
     /\b(thesis|account thesis|leakage|economic consequence|deal review|analy(s|z)e|how (should|do) i think|read on|take on|view on|assess(ment)?|risk(s)? (here|on this))\b/
       .test(text)
   ) {
-    return { intent: "analysis" };
+    return { intent: "analysis", isBusinessCase, isCFO };
   }
 
-  return { intent: "freeform", sentenceCap, rawConstraint };
+  return { intent: "freeform", sentenceCap, rawConstraint, isBusinessCase, isCFO };
 }
 
 function buildModeLockBlock(intent: IntentResult): string {
