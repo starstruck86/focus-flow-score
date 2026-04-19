@@ -50,6 +50,7 @@ export interface RetrievedResource {
   tags: string[] | null;
   /** How this resource was matched. Lets the prompt explain itself. */
   matchKind:
+    | "picked"
     | "exact_title"
     | "near_exact_title"
     | "phrase_in_title"
@@ -301,13 +302,24 @@ export async function retrieveResourceContext(
     opportunityId?: string | null;
     /** Current thread id — used to scope/exclude when pulling prior-use rows. */
     threadId?: string | null;
+    /**
+     * Sidecar: resource IDs the user explicitly picked (e.g. via /library)
+     * this turn. These are resolved by ID FIRST and inserted at the top of
+     * the hit list so grounding never depends on title-string coincidence.
+     */
+    pickedResourceIds?: string[];
   },
 ): Promise<ResourceRetrievalResult> {
   const userMessage = (args.userMessage || "").trim();
   const phrases = extractCandidatePhrases(userMessage);
   const categories = inferResourceCategories(userMessage);
   const askedForPrior = userAskedForPriorUse(userMessage);
-  const askedFor = userAskedForResource(userMessage) || phrases.length > 0 || askedForPrior;
+  const pickedIds = Array.isArray(args.pickedResourceIds)
+    ? args.pickedResourceIds.filter((s) => typeof s === "string" && s.length > 0)
+    : [];
+  // A picked resource always counts as "asked for one" — the user's
+  // explicit selection is the strongest possible signal of intent.
+  const askedFor = userAskedForResource(userMessage) || phrases.length > 0 || askedForPrior || pickedIds.length > 0;
 
   const all: RetrievedResource[] = [];
   const seen = new Set<string>();
