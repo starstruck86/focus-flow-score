@@ -373,15 +373,34 @@ export async function retrieveResourceContext(
   // Resolved by ID first so grounding never depends on title coincidence.
   // Scoped to the requesting user so a hostile client can't pull rows
   // belonging to another seller.
+  //
+  // We also pull a ~2.5KB body excerpt for picked resources so the model
+  // can adapt actual structure/claims from the source — not just cite the
+  // title. This is the difference between "grounded by identity" and
+  // "grounded by content depth".
   if (pickedIds.length > 0) {
     try {
       const { data } = await supabase
         .from("resources")
-        .select(SAFE_FIELDS)
+        .select(SAFE_FIELDS + ",content")
         .eq("user_id", userId)
         .in("id", pickedIds.slice(0, HARD_LIMIT))
         .limit(HARD_LIMIT);
-      push(data, "picked", () => `User picked from /library this turn`);
+      // Build a body excerpt per row before pushing — the push() helper
+      // will pick it up via the _bodyExcerpt sidecar field.
+      const enriched = (data || []).map((r: any) => {
+        const raw = typeof r.content === "string" ? r.content : "";
+        // Collapse whitespace, cap at ~2500 chars. Keep enough surface for
+        // the model to mirror section logic and reuse real claims.
+        const trimmed = raw.replace(/\s+/g, " ").trim();
+        const _bodyExcerpt = trimmed
+          ? trimmed.slice(0, 2500) + (trimmed.length > 2500 ? "…" : "")
+          : undefined;
+        // Strip the heavy content blob before handing back to push().
+        const { content: _drop, ...rest } = r;
+        return { ...rest, _bodyExcerpt };
+      });
+      push(enriched, "picked", () => `User picked from /library this turn`);
     } catch (e) {
       console.warn("[resourceRetrieval] picked-id resolve failed:", (e as Error).message);
     }
