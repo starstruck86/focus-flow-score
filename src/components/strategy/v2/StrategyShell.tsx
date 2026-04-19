@@ -17,8 +17,12 @@
  *
  * Dev-only proof hooks (no production effect):
  *   ?devOpen=switcher|linkpicker|inbox|inspector|slash
- *   ?devAction=newThread|branch|openAccount|openOpportunity
+ *   ?devAction=newThread|branch|openAccount|openOpportunity|upload
  *   ?devSelect=<text>   (pre-existing)
+ *
+ * `?devAction=upload` synthesizes a small in-memory File and feeds it to the
+ * real upload pipeline — bypassing the OS file picker (which browser automation
+ * cannot drive) while still proving the post-upload product behavior.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
