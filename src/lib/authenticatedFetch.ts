@@ -69,10 +69,23 @@ export async function authenticatedFetch(
   }
 
   if (!opts.skipAuth) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      headers['Authorization'] = `Bearer ${session.access_token}`;
+    let session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] = null;
+    try {
+      const result = await supabase.auth.getSession();
+      session = result.data.session;
+    } catch (err) {
+      logger.warn('getSession failed', { traceId, message: (err as Error)?.message });
     }
+
+    // Fail fast: if there's no valid session, do not call the function with only an anon key.
+    // The function will reject with 401 anyway, and the stale refresh token causes a redirect loop.
+    if (!session?.access_token) {
+      // Stale/expired refresh token — force sign-out so the UI re-prompts login instead of looping.
+      try { await supabase.auth.signOut(); } catch { /* noop */ }
+      throw new Error(`No active session for ${opts.functionName}. Please sign in again.`);
+    }
+
+    headers['Authorization'] = `Bearer ${session.access_token}`;
   }
 
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${opts.functionName}`;
