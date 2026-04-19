@@ -397,8 +397,9 @@ export async function retrieveResourceContext(
         .eq("user_id", userId)
         .in("id", pickedIds.slice(0, HARD_LIMIT))
         .limit(HARD_LIMIT);
-      // Build a body excerpt per row before pushing — the push() helper
-      // will pick it up via the _bodyExcerpt sidecar field.
+      // Build a body excerpt + source-shape per row before pushing — the
+      // push() helper picks them up via the _bodyExcerpt / _sourceShape
+      // sidecar fields.
       const enriched = (data || []).map((r: any) => {
         const raw = typeof r.content === "string" ? r.content : "";
         // Collapse whitespace, cap at ~2500 chars. Keep enough surface for
@@ -407,9 +408,21 @@ export async function retrieveResourceContext(
         const _bodyExcerpt = trimmed
           ? trimmed.slice(0, 2500) + (trimmed.length > 2500 ? "…" : "")
           : undefined;
+        // Detect on the FULL raw body (not the trimmed excerpt) so we don't
+        // misread a transcript as "structured" just because the first 2.5KB
+        // happens to contain a heading.
+        const shape = detectSourceShape(raw, {
+          resource_type: r.resource_type,
+          is_template: r.is_template,
+        });
         // Strip the heavy content blob before handing back to push().
         const { content: _drop, ...rest } = r;
-        return { ...rest, _bodyExcerpt };
+        return {
+          ...rest,
+          _bodyExcerpt,
+          _sourceShape: shape.shape,
+          _sourceShapeReason: shape.reason,
+        };
       });
       push(enriched, "picked", () => `User picked from /library this turn`);
     } catch (e) {
