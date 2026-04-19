@@ -326,15 +326,30 @@ export function StrategyShell() {
   });
 
   // ---------- Dev-only proof hooks ----------
-  // Reads ?devOpen= and ?devAction= once on mount and applies to state.
+  // Supported params:
+  //   ?devThread=<uuid>          switch to a specific thread first (use with devAction)
+  //   ?devOpen=switcher|linkpicker|inbox|inspector|slash
+  //   ?devAction=newThread|branch|openAccount|openOpportunity
+  //
+  // For devAction we wait until activeThread.id matches devThread (if provided)
+  // before firing — this eliminates the race where the action ran against a
+  // stale or unloaded thread.
+  const devActionFiredRef = useRef(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
+    const devThread = params.get('devThread');
     const devOpen = params.get('devOpen');
     const devAction = params.get('devAction');
 
+    // If devThread is supplied and we're not on it yet, switch and wait for the
+    // next render cycle to fire the rest.
+    if (devThread && activeThread?.id !== devThread) {
+      setActiveThreadId(devThread);
+      return;
+    }
+
     if (devOpen) {
-      // Wait one tick so state is mounted, then summon
       const t = setTimeout(() => {
         if (devOpen === 'switcher') setSwitcherOpen(true);
         else if (devOpen === 'inspector') setInspectorOpen(true);
@@ -342,9 +357,7 @@ export function StrategyShell() {
         else if (devOpen === 'linkpicker') setLinkPickerOpen(true);
         else if (devOpen === 'slash') {
           composerRef.current?.focus();
-          // Inject a slash query so the menu shows up
           setSlashQuery('/');
-          // Also reflect the slash in the textarea visually
           if (composerRef.current) {
             const ta = composerRef.current as HTMLTextAreaElement;
             const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
@@ -356,18 +369,22 @@ export function StrategyShell() {
       return () => clearTimeout(t);
     }
 
-    if (devAction) {
+    // devAction needs a hydrated thread — guard against the race.
+    if (devAction && !devActionFiredRef.current) {
+      // For newThread we don't need an existing thread.
+      const needsThread = devAction !== 'newThread';
+      if (needsThread && !activeThread) return;
+      devActionFiredRef.current = true;
       const t = setTimeout(() => {
         if (devAction === 'newThread') handleNewThread();
         else if (devAction === 'branch') handleBranch();
         else if (devAction === 'openAccount') handleOpenLinkedAccount();
         else if (devAction === 'openOpportunity') handleOpenLinkedOpportunity();
-      }, 400);
+      }, 250);
       return () => clearTimeout(t);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeThread?.id]);
 
   // Auto-detect trust state when switching threads
   useEffect(() => {
