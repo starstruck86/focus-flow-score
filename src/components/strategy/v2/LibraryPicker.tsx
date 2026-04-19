@@ -27,6 +27,14 @@ export interface LibraryItem {
   title: string;
   category: string;
   resourceType: string | null;
+  description?: string | null;
+  updatedAt?: string | null;
+}
+
+/** Escape a value for use inside a PostgREST `or=` filter argument. */
+function escapeOrValue(v: string): string {
+  // PostgREST `or` filter values use `,` and `)` as separators — strip them.
+  return v.replace(/[(),*]/g, ' ').trim();
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -69,7 +77,9 @@ interface Props {
   onClose: () => void;
 }
 
-const MAX_ITEMS = 15;
+const MAX_ITEMS = 25;
+/** Debounce window for server-side search keystrokes. */
+const SEARCH_DEBOUNCE_MS = 180;
 
 export function LibraryPicker({ query, anchorRect, onPick, onClose }: Props) {
   const { user } = useAuth();
