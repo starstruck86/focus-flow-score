@@ -61,10 +61,18 @@ export function StrategyShell() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { threads, activeThread, setActiveThreadId, updateThread, upsertThreadLocal } = useStrategyThreads();
+  const {
+    threads,
+    activeThread,
+    setActiveThreadId,
+    updateThread,
+    upsertThreadLocal,
+    createThread,
+  } = useStrategyThreads();
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const chipRef = useRef<HTMLButtonElement>(null);
   const slashFileInputRef = useRef<HTMLInputElement>(null);
+  const queuedInitialMessageRef = useRef<string | null>(null);
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -75,6 +83,8 @@ export function StrategyShell() {
   const [toastState, setToastState] = useState<SaveToastState | null>(null);
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
   const [composerRect, setComposerRect] = useState<DOMRect | null>(null);
+  const [pendingThreadId, setPendingThreadId] = useState<string | null>(null);
+  const [isCreatingThread, setIsCreatingThread] = useState(false);
 
   const threadId = activeThread?.id ?? null;
 
@@ -155,22 +165,26 @@ export function StrategyShell() {
   // ---------- Phase 3 verbs ----------
 
   const handleNewThread = useCallback(async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('strategy_threads')
-      .insert({
-        user_id: user.id,
-        title: 'Untitled thread',
-        lane: 'strategy',
-        thread_type: 'freeform',
-      } as any)
-      .select()
-      .single();
-    if (data?.id) {
-      setActiveThreadId(data.id);
-      setTimeout(() => composerRef.current?.focus(), 0);
+    if (!user || pendingThreadId || isCreatingThread) return;
+    setIsCreatingThread(true);
+    const newId = await createThread('Untitled thread', 'strategy', 'freeform');
+    if (newId) {
+      setPendingThreadId(newId);
+      return;
     }
-  }, [user, setActiveThreadId]);
+    setIsCreatingThread(false);
+    toast.error('Failed to create thread');
+  }, [user, pendingThreadId, isCreatingThread, createThread]);
+
+  useEffect(() => {
+    if (!pendingThreadId || activeThread?.id !== pendingThreadId) return;
+    setPendingThreadId(null);
+    setIsCreatingThread(false);
+    const queued = queuedInitialMessageRef.current;
+    queuedInitialMessageRef.current = null;
+    requestAnimationFrame(() => composerRef.current?.focus());
+    if (queued) requestAnimationFrame(() => sendMessage(queued));
+  }, [pendingThreadId, activeThread?.id, sendMessage]);
 
   /** Branch from selection (if any) or current thread state. Provenance preserved via cloned_from_thread_id. */
   const handleBranch = useCallback(async () => {
@@ -411,21 +425,24 @@ export function StrategyShell() {
   }, [threadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSend = useCallback((text: string) => {
+    if (pendingThreadId || isCreatingThread || isSending) return;
     if (!threadId) {
       (async () => {
         if (!user) return;
-        const { data } = await supabase.from('strategy_threads').insert({
-          user_id: user.id, title: 'Untitled thread', lane: 'strategy', thread_type: 'freeform',
-        } as any).select().single();
-        if (data?.id) {
-          setActiveThreadId(data.id);
-          setTimeout(() => sendMessage(text), 0);
+        setIsCreatingThread(true);
+        const newId = await createThread('Untitled thread', 'strategy', 'freeform');
+        if (newId) {
+          queuedInitialMessageRef.current = text;
+          setPendingThreadId(newId);
+        } else {
+          setIsCreatingThread(false);
+          toast.error('Failed to create thread');
         }
       })();
       return;
     }
     sendMessage(text);
-  }, [threadId, sendMessage, user, setActiveThreadId]);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
@@ -529,7 +546,7 @@ export function StrategyShell() {
       ) : (
         <StrategyComposer
           ref={composerRef}
-          disabled={isSending}
+          disabled={isSending || !!pendingThreadId || isCreatingThread}
           placeholder={
             messages.length === 0
               ? 'What are you thinking about?'
