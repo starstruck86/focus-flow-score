@@ -1,236 +1,30 @@
 /**
- * Strategy Workspace — durable strategic operating system.
- * Three-column layout: thread sidebar (drawer on mobile), main working area, right rail.
- * 
- * Layout: true flex-column shell. No calc-based height math.
- *   header/meta = auto height
- *   content = flex-1 min-h-0 overflow-y-auto
- *   composer = shrink-0 anchored at bottom
+ * Strategy Workspace — Phase 1 redesign.
+ * Shell-only file. All composition lives in StrategyShell.
+ *
+ * Backend guarantees preserved: trust gates, promotion pipeline, provenance,
+ * quarantine, account/opportunity parent-child enforcement, clone-first
+ * contamination handling — all flow through unchanged hooks.
  */
-import { useState, useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import { Layout } from '@/components/Layout';
-import { StrategyThreadSidebar } from '@/components/strategy/StrategyThreadSidebar';
-import { StrategyMainPanel } from '@/components/strategy/StrategyMainPanel';
-import { StrategyRightRail } from '@/components/strategy/StrategyRightRail';
-import { CreateThreadDialog } from '@/components/strategy/CreateThreadDialog';
-import type { CreateThreadOpts } from '@/components/strategy/CreateThreadDialog';
-import { useStrategyThreads } from '@/hooks/strategy/useStrategyThreads';
-import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
-import { useStrategyMemory } from '@/hooks/strategy/useStrategyMemory';
-import { useStrategyOutputs } from '@/hooks/strategy/useStrategyOutputs';
-import { useStrategyArtifacts } from '@/hooks/strategy/useStrategyArtifacts';
-import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
-import { useStrategyRollups } from '@/hooks/strategy/useStrategyRollups';
-import { useStrategyProposals } from '@/hooks/strategy/useStrategyProposals';
-import { useIsMobile } from '@/hooks/use-mobile';
-import {
-  Drawer, DrawerContent, DrawerTrigger, DrawerTitle,
-} from '@/components/ui/drawer';
-import { Button } from '@/components/ui/button';
-import { PanelLeftOpen } from 'lucide-react';
-import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
+import { StrategyShell } from '@/components/strategy/v2/StrategyShell';
 
 export default function Strategy() {
-  const isMobile = useIsMobile();
-
-  // Make Layout's <main> a flex container so Strategy fills it properly
+  // Make Layout's <main> a flex container so the shell fills it without
+  // its own scroll context fighting the canvas.
   useEffect(() => {
     const main = document.querySelector('main[data-testid="main-content"]');
     if (!main) return;
-    // Override main's scroll behavior — Strategy manages its own scrolling
-    main.classList.add('!overflow-hidden', '!flex', '!flex-col');
+    main.classList.add('!overflow-hidden', '!flex', '!flex-col', '!p-0');
     return () => {
-      main.classList.remove('!overflow-hidden', '!flex', '!flex-col');
+      main.classList.remove('!overflow-hidden', '!flex', '!flex-col', '!p-0');
     };
   }, []);
 
-  const {
-    threads, activeThread, setActiveThreadId, createThread, createThreadWithOpts, updateThread, isLoading,
-  } = useStrategyThreads();
-
-  const [laneFilter, setLaneFilter] = useState<string>('all');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [rightRailCollapsed, setRightRailCollapsed] = useState(false);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-
-  const { linkedContext } = useLinkedObjectContext(activeThread);
-
-  const memoryObjectType = activeThread?.linked_account_id ? 'account' as const
-    : activeThread?.linked_opportunity_id ? 'opportunity' as const
-    : activeThread?.linked_territory_id ? 'territory' as const
-    : null;
-  const memoryObjectId = activeThread?.linked_account_id
-    || activeThread?.linked_opportunity_id
-    || activeThread?.linked_territory_id
-    || null;
-
-  const { memories, saveMemory, deleteMemory, togglePin, setConfidence, markIrrelevant } = useStrategyMemory(memoryObjectType, memoryObjectId);
-  const { uploads, summarizeUpload } = useStrategyUploads(activeThread?.id ?? null);
-  const { outputs, refetch: refetchOutputs } = useStrategyOutputs(activeThread?.id ?? null);
-  const { artifacts, isTransforming, transformOutput, regenerateArtifact, refetch: refetchArtifacts } = useStrategyArtifacts(activeThread?.id ?? null);
-  const { rollup, memorySuggestions, isLoading: isRollupLoading, triggerRollup, refetch: refetchRollup } = useStrategyRollups(activeThread?.id ?? null);
-  const { proposals, isLoading: proposalsLoading, detect: detectProposals, scanThread: scanThreadProposals, confirm: confirmProposal, reject: rejectProposal, editPayload: editProposalPayload, promote: promoteProposal, stageProposal } = useStrategyProposals(activeThread?.id ?? null);
-
-  // Auto-collapse right rail when it has no meaningful content.
-  // Linked threads ALWAYS show the rail so the scan affordance is reachable.
-  const hasRailContent = !!(
-    activeThread?.linked_account_id || activeThread?.linked_opportunity_id ||
-    linkedContext?.account || linkedContext?.opportunity ||
-    memories.length > 0 || uploads.length > 0 || outputs.length > 0 ||
-    artifacts.length > 0 || rollup || memorySuggestions.length > 0 ||
-    proposals.length > 0
-  );
-
-  const handleAssistantComplete = useCallback((assistantText: string) => {
-    if (!activeThread) return;
-    detectProposals({ content: assistantText }).catch(() => { /* swallow */ });
-  }, [activeThread, detectProposals]);
-
-  const handleWorkflowComplete = useCallback(() => {
-    refetchOutputs();
-    refetchRollup();
-    refetchArtifacts();
-    // Phase 3: also detect against newly produced artifacts
-    if (activeThread) {
-      // Detect against latest artifact's content if any (best-effort)
-      const latest = artifacts[0];
-      if (latest?.content_json) {
-        const text = typeof latest.content_json === 'string'
-          ? latest.content_json
-          : JSON.stringify(latest.content_json).slice(0, 8000);
-        detectProposals({ content: text, sourceArtifactId: latest.id, artifactType: latest.artifact_type, artifactTitle: latest.title }).catch(() => {});
-      }
-    }
-  }, [refetchOutputs, refetchRollup, refetchArtifacts, activeThread, artifacts, detectProposals]);
-
-  const handleCreateThreadWithOpts = useCallback((opts: CreateThreadOpts) => {
-    createThreadWithOpts(opts);
-  }, [createThreadWithOpts]);
-
-  const handleSelectThread = useCallback((id: string) => {
-    setActiveThreadId(id);
-    if (isMobile) setMobileDrawerOpen(false);
-  }, [setActiveThreadId, isMobile]);
-
-  const handleBranchThread = useCallback(async (title: string, content: string) => {
-    const newThreadId = await createThread(title, 'strategy', 'freeform');
-    if (newThreadId && content) {
-      try {
-        const { supabase } = await import('@/integrations/supabase/client');
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await (supabase as any).from('strategy_messages').insert({
-            thread_id: newThreadId,
-            user_id: user.id,
-            role: 'system',
-            message_type: 'system',
-            content_json: {
-              text: `This thread continues from a previous analysis.\n\n---\n\n${content}`,
-            },
-          });
-        }
-      } catch (e) {
-        console.error('Failed to seed branch thread:', e);
-      }
-    }
-  }, [createThread]);
-
-  const handleTransformOutput = useCallback(async (sourceOutputId: string, targetArtifactType: string) => {
-    const artifact = await transformOutput(sourceOutputId, targetArtifactType);
-    if (artifact) {
-      handleWorkflowComplete();
-    }
-  }, [transformOutput, handleWorkflowComplete]);
-
-  const sidebarContent = (
-    <StrategyThreadSidebar
-      threads={threads}
-      activeThreadId={activeThread?.id ?? null}
-      onSelectThread={handleSelectThread}
-      onOpenCreateDialog={() => setCreateDialogOpen(true)}
-      laneFilter={laneFilter}
-      onLaneFilterChange={setLaneFilter}
-      onCollapse={() => isMobile ? setMobileDrawerOpen(false) : setSidebarCollapsed(true)}
-      isLoading={isLoading}
-    />
-  );
-
   return (
     <Layout hideFloatingFab>
-      {/* Strategy fills the flex main — no calc, no absolute */}
-      <div className="flex flex-1 min-h-0">
-
-        {/* Desktop sidebar */}
-        {!isMobile && !sidebarCollapsed && sidebarContent}
-
-        {/* Mobile sidebar drawer */}
-        {isMobile && (
-          <Drawer open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen} direction="left">
-            <DrawerContent className="h-full w-[260px] rounded-none border-r border-border/20 fixed inset-y-0 left-0 right-auto">
-              <VisuallyHidden.Root>
-                <DrawerTitle>Thread Navigation</DrawerTitle>
-              </VisuallyHidden.Root>
-              {sidebarContent}
-            </DrawerContent>
-          </Drawer>
-        )}
-
-        <StrategyMainPanel
-          thread={activeThread}
-          onUpdateThread={updateThread}
-          sidebarCollapsed={isMobile || sidebarCollapsed}
-          onExpandSidebar={() => isMobile ? setMobileDrawerOpen(true) : setSidebarCollapsed(false)}
-          rightRailCollapsed={rightRailCollapsed}
-          onToggleRightRail={() => setRightRailCollapsed(r => !r)}
-          linkedContext={linkedContext}
-          onSaveMemory={memoryObjectType ? (type, content) => saveMemory(type, content) : undefined}
-          onWorkflowComplete={handleWorkflowComplete}
-          onBranchThread={handleBranchThread}
-          onTransformOutput={handleTransformOutput}
-          isTransforming={isTransforming}
-          onAssistantComplete={handleAssistantComplete}
-          onSwitchToThread={setActiveThreadId}
-        />
-
-        {!isMobile && !rightRailCollapsed && activeThread && hasRailContent && (
-          <StrategyRightRail
-            thread={activeThread}
-            onCollapse={() => setRightRailCollapsed(true)}
-            linkedContext={linkedContext}
-            memories={memories}
-            uploads={uploads}
-            outputs={outputs}
-            artifacts={artifacts}
-            onSaveMemory={saveMemory}
-            onDeleteMemory={deleteMemory}
-            onTogglePin={togglePin}
-            onSetConfidence={setConfidence}
-            onMarkIrrelevant={markIrrelevant}
-            rollup={rollup}
-            memorySuggestions={memorySuggestions}
-            isRollupLoading={isRollupLoading}
-            onTriggerRollup={triggerRollup}
-            onRegenerateArtifact={regenerateArtifact}
-            isTransforming={isTransforming}
-            onReprocessUpload={summarizeUpload}
-            proposals={proposals}
-            proposalsLoading={proposalsLoading}
-            onConfirmProposal={confirmProposal}
-            onRejectProposal={rejectProposal}
-            onEditProposalPayload={editProposalPayload}
-            onPromoteProposal={promoteProposal}
-            onScanThreadProposals={scanThreadProposals}
-            onStageProposal={stageProposal}
-          />
-        )}
-
-        <CreateThreadDialog
-          open={createDialogOpen}
-          onOpenChange={setCreateDialogOpen}
-          onCreateThread={handleCreateThreadWithOpts}
-        />
-      </div>
+      <StrategyShell />
     </Layout>
   );
 }
