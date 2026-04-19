@@ -1996,6 +1996,7 @@ function deriveLibraryScopes(account: any, userContent: string): string[] {
 // We classify by intent verbs/nouns in the user's question, not by
 // account context. Order matters — earliest match wins.
 type ChatIntent =
+  | "bootstrap" // vague ask + no account context — orient the user
   | "template"
   | "email"
   | "message" // SMS/LinkedIn/Slack/voicemail/script
@@ -2017,8 +2018,33 @@ interface IntentResult {
   isCFO?: boolean;
 }
 
-function classifyChatIntent(userContent: string): IntentResult {
+function classifyChatIntent(
+  userContent: string,
+  ctx?: { hasAccountContext?: boolean },
+): IntentResult {
   const text = (userContent || "").toLowerCase().trim();
+  const hasAccountContext = ctx?.hasAccountContext === true;
+
+  // 0. BOOTSTRAP — fires BEFORE all other intents.
+  // Trigger: vague/orienting prompt AND no account context.
+  // Goal: orient the user (capabilities + one guiding question), never refuse.
+  // We deliberately keep this list tight — anything that mentions a real
+  // task verb (write, draft, plan, analyze, send, build, etc.) skips bootstrap
+  // and falls through to the normal classifier so we never hijack a real ask.
+  if (!hasAccountContext) {
+    const isEmptyOrTiny = !text || text.length < 4;
+    const VAGUE_OPENERS_RE =
+      /^(hi|hello|hey|yo|sup|hola|howdy|test|testing|ping|\?)[\s\.\?!]*$/;
+    const HELP_RE =
+      /^(help( me)?|what (can|do) you do|what is this|what('?s| is) this( for)?|what should i (use|do with) (this|you)( for)?|how (do|does) (this|it|you) work|how (can|do) i (use|start) (this|you)|where (do|should) i start|what now|what next|what should i ask|getting started|onboard(ing)?|who are you|what are you)[\s\.\?!]*$/;
+    if (isEmptyOrTiny || VAGUE_OPENERS_RE.test(text) || HELP_RE.test(text)) {
+      console.log(
+        `[mode-lock] intent_forced_bootstrap text="${text.slice(0, 80)}"`,
+      );
+      return { intent: "bootstrap" };
+    }
+  }
+
   if (!text) return { intent: "freeform" };
 
   // Numeric constraint: "3 sentence", "two sentences", "5 bullets", etc.
@@ -2155,6 +2181,31 @@ function buildModeLockBlock(intent: IntentResult): string {
     : "";
 
   switch (kind) {
+    case "bootstrap":
+      return `═══ MODE LOCK: BOOTSTRAP (ORIENTATION) ═══
+The user opened the assistant with no account context and a vague prompt. This is ORIENTATION, not execution. Help them understand what to do next in 6 lines or fewer.
+
+═══ REQUIRED OUTPUT (EXACT SHAPE — NO DEVIATION) ═══
+First line, verbatim:
+Here's how I can help you move a deal forward:
+
+Then exactly four short bullets, in this order, in plain English (you may lightly adapt the wording but keep the same four capabilities and same order):
+- Pressure test a deal
+- Write emails or talk tracks
+- Build a business case
+- Plan next steps
+
+Then a blank line, then the closing line, verbatim:
+Start here: What account or deal are you working on?
+
+═══ HARD RULES ═══
+- FORBIDDEN: refusing, asking for "a real specific…", saying "I need more info", saying "I don't have enough context", any defensive or rigid framing.
+- FORBIDDEN: an email, a template, a thesis, a script, a numbered list of considerations, a "here's how I'd think about this" preface.
+- FORBIDDEN: bracket placeholders of any kind ([Account], [Client], [name], etc.).
+- FORBIDDEN: switching to analysis mode, template mode, or any other mode.
+- FORBIDDEN: trailing upgrade lines like "Want me to…" — the closing question IS the call to action.
+- TONE: confident, plainspoken, helpful. No SDR fluff. No "I'd love to". No "happy to".${bindingClause}`;
+
     case "template":
       return `═══ MODE LOCK: TEMPLATE ═══
 The user asked for a TEMPLATE. You MUST return a structured, fill-in-the-blank template for the exact thing they named.
@@ -2393,6 +2444,8 @@ function enforceModeLock(
             "I can't ground this in a specific source in the current thread. Treat this as operator reasoning, not a cited internal source.",
           message:
             "Say this: I need one real specific (name, date, or number) before I write the script — what should I anchor it on?",
+          bootstrap:
+            "Here's how I can help you move a deal forward:\n- Pressure test a deal\n- Write emails or talk tracks\n- Build a business case\n- Plan next steps\n\nStart here: What account or deal are you working on?",
           freeform:
             "I don't have a real specific to anchor this on. Give me the one fact that matters (name, number, or date) and I'll produce the output without placeholders.",
         };
@@ -2927,7 +2980,9 @@ async function buildChatSystemPrompt(args: {
   // a binding MODE LOCK block. This is the single biggest lever against
   // the production drift pattern (e.g. asking for a template and getting
   // an email back).
-  const intent = classifyChatIntent(userContent);
+  const intent = classifyChatIntent(userContent, {
+    hasAccountContext: !!accountId || (!!contextSection && contextSection.length >= 200),
+  });
   const modeLockBlock = buildModeLockBlock(intent);
 
   // No account, no thread context → don't force Strategy Core onto small talk.
