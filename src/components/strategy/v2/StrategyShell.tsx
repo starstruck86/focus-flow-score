@@ -580,6 +580,19 @@ export function StrategyShell() {
         onDismiss={() => setToastState(null)}
         onOpen={(path) => { setToastState(null); navigate(path); }}
       />
+
+      {/* Hidden file picker driven by /upload slash verb */}
+      <input
+        ref={slashFileInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const files = e.target.files;
+          if (files && files.length) uploadFiles(files);
+          e.target.value = '';
+        }}
+      />
     </div>
   );
 }
