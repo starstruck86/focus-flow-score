@@ -1985,6 +1985,177 @@ function deriveLibraryScopes(account: any, userContent: string): string[] {
   return Array.from(new Set(scopes.map((s) => s.trim()).filter(Boolean)));
 }
 
+// ── Intent classifier + Mode Lock ────────────────────────────────────
+// Deterministic, lightweight, invisible. Inspects the user's last
+// message and returns a HARD MODE LOCK block that gets prepended to
+// the system prompt. The block tells the model exactly what asset
+// type to produce and forbids the common drift patterns we've seen
+// in production (e.g. answering "what template should I use?" with
+// a follow-up email).
+//
+// We classify by intent verbs/nouns in the user's question, not by
+// account context. Order matters — earliest match wins.
+type ChatIntent =
+  | "template"
+  | "email"
+  | "message" // SMS/LinkedIn/Slack/voicemail/script
+  | "pitch" // exact wording for a moment
+  | "next_steps"
+  | "analysis"
+  | "provenance"
+  | "freeform";
+
+interface IntentResult {
+  intent: ChatIntent;
+  /** Numeric constraint extracted from the ask (e.g. "3 sentence" → 3). */
+  sentenceCap?: number;
+  /** Free-text constraint phrase, e.g. "3 sentence", "two bullets". */
+  rawConstraint?: string;
+}
+
+function classifyChatIntent(userContent: string): IntentResult {
+  const text = (userContent || "").toLowerCase().trim();
+  if (!text) return { intent: "freeform" };
+
+  // Numeric constraint: "3 sentence", "two sentences", "5 bullets", etc.
+  let sentenceCap: number | undefined;
+  let rawConstraint: string | undefined;
+  const numWords: Record<string, number> = {
+    one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  };
+  const sentMatch = text.match(
+    /\b(\d+|one|two|three|four|five|six|seven)[-\s]+sentence/,
+  );
+  if (sentMatch) {
+    const raw = sentMatch[1];
+    sentenceCap = /^\d+$/.test(raw) ? parseInt(raw, 10) : numWords[raw];
+    rawConstraint = sentMatch[0];
+  }
+
+  // 1. Provenance — "where is this from", "how do you know", "source"
+  if (
+    /\b(where (is|are|did) (this|that|it|they)|where('?s| is) (this|that) (from|pulled|coming)|source(s)?\??$|how (do|did) you know|why (do|did) you (think|say)|what('?s| is) the source)\b/
+      .test(text)
+  ) {
+    return { intent: "provenance" };
+  }
+
+  // 2. Template — "what template", "give me a template", "template for"
+  if (
+    /\btemplate(s)?\b/.test(text) &&
+    /(what|which|give|need|use|share|send|build|create|recommend|suggest|good|best)/
+      .test(text)
+  ) {
+    return { intent: "template", sentenceCap, rawConstraint };
+  }
+
+  // 3. Email — explicit "email" or "write me an email"
+  if (
+    /\b(email|e-mail)\b/.test(text) &&
+    /(write|draft|send|give|need|craft|compose|reply|respond)/.test(text)
+  ) {
+    return { intent: "email", sentenceCap, rawConstraint };
+  }
+
+  // 4. Message / script / voicemail / DM / SMS / LinkedIn note
+  if (
+    /\b(voicemail|vm|script|sms|text|dm|message|linkedin (note|message|inmail)|slack)\b/
+      .test(text) &&
+    /(write|draft|send|give|need|craft|leave|record|reply)/.test(text)
+  ) {
+    return { intent: "message", sentenceCap, rawConstraint };
+  }
+
+  // 5. Pitch / exact words to say
+  if (
+    /\b(pitch|say|tell|frame|position|open(er)?|talk track)\b/.test(text) &&
+    /(how|what|words|exact|should i)/.test(text)
+  ) {
+    return { intent: "pitch", sentenceCap, rawConstraint };
+  }
+
+  // 6. Next steps — "what should I do", "next step", "next move", "what now"
+  if (
+    /\b(next step(s)?|next move|what (should|do) i do|what now|where (do|should) i (go|take|move)|what('?s| is) my (move|play))\b/
+      .test(text)
+  ) {
+    return { intent: "next_steps" };
+  }
+
+  // 7. Analysis / thesis / how should I think
+  if (
+    /\b(thesis|account thesis|leakage|economic consequence|deal review|analy(s|z)e|how (should|do) i think|read on|take on|view on|assess(ment)?|risk(s)? (here|on this))\b/
+      .test(text)
+  ) {
+    return { intent: "analysis" };
+  }
+
+  return { intent: "freeform", sentenceCap, rawConstraint };
+}
+
+function buildModeLockBlock(intent: IntentResult): string {
+  const { intent: kind, sentenceCap, rawConstraint } = intent;
+
+  const constraintLine = sentenceCap
+    ? `\n- HARD CONSTRAINT: Output EXACTLY ${sentenceCap} sentence${sentenceCap === 1 ? "" : "s"} (the user said "${rawConstraint}"). No more. No less. Count them before you finish.`
+    : "";
+
+  switch (kind) {
+    case "template":
+      return `═══ MODE LOCK: TEMPLATE ═══
+The user asked for a TEMPLATE. You MUST return a structured, fill-in-the-blank template for the exact thing they named.
+- FORBIDDEN: returning an email draft, a follow-up note, a voicemail, a framework explanation, or any other asset type.
+- FORBIDDEN: explaining what a template is, how to think about it, or why it matters.
+- REQUIRED: First line names the template (e.g. "Use this Business Case template:"). Then the template itself with clear section headers and [BRACKETED] placeholders.
+- One short upgrade line at the end is allowed (e.g. "Want me to fill this in for [account]?"). Nothing else.${constraintLine}`;
+
+    case "email":
+      return `═══ MODE LOCK: EMAIL ═══
+The user asked for an EMAIL. Return ONLY the email body (with Subject line if appropriate).
+- FORBIDDEN: a plan, bullets, multiple versions, a voicemail, a script, commentary, or pre-amble.
+- FORBIDDEN: a "here's how I'd think about this" preface.
+- REQUIRED: Start with "Send this:" then the email. Nothing after the email except (optionally) one short upgrade line.${constraintLine}`;
+
+    case "message":
+      return `═══ MODE LOCK: MESSAGE / SCRIPT ═══
+The user asked for exact wording (voicemail, SMS, LinkedIn note, script, DM).
+- FORBIDDEN: an email, a plan, a framework, multiple versions unless asked.
+- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${constraintLine}`;
+
+    case "pitch":
+      return `═══ MODE LOCK: PITCH (exact words) ═══
+The user asked how to PITCH or POSITION something. Give the exact words to say.
+- FORBIDDEN: a plan, a framework, a methodology, a numbered list of considerations.
+- REQUIRED: Start with "Say this:" then the exact pitch (1–4 sentences). Optionally one short follow-up line if it materially sharpens the moment.${constraintLine}`;
+
+    case "next_steps":
+      return `═══ MODE LOCK: NEXT STEPS ═══
+The user asked WHAT TO DO NEXT. Return numbered actions.
+- FORBIDDEN: a cold email, a script, a pitch, a thesis, a framework, a "here's how to think about this" preface.
+- REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with the verb first ("Call X to confirm Y", "Send the MAP to Z", "Lock 30 min with the CFO"). No commentary between items.${constraintLine}`;
+
+    case "analysis":
+      return `═══ MODE LOCK: STRATEGIC ANALYSIS ═══
+The user explicitly asked for analysis / thesis / read on the deal. Use the strategic frame.
+- REQUIRED: Lead with the ACCOUNT THESIS in one line. Then VALUE LEAKAGE (where money leaks today). Then ECONOMIC CONSEQUENCE (in $/margin/retention/velocity terms). End with ONE NEXT BEST DISCOVERY ACTION.
+- FORBIDDEN: an email, a template, a script, a generic "here's how to think about it" essay.${constraintLine}`;
+
+    case "provenance":
+      return `═══ MODE LOCK: PROVENANCE ═══
+The user asked WHERE the information came from. Answer in plain English in 1–3 sentences.
+- REQUIRED: Name the source(s) directly — linked account, uploaded file, internal KI/Playbook by short id, prior thread message, or "operator pattern (no internal source)".
+- FORBIDDEN: defensive language, methodology theater, robotic disclaimers, a new asset, or restating the question.${constraintLine}`;
+
+    case "freeform":
+    default:
+      return `═══ MODE LOCK: FREEFORM ═══
+The user's intent isn't a clear asset request. Pick the SMALLEST useful output that answers the literal question.
+- FORBIDDEN: defaulting to an email or a generic template just because that's easy.
+- FORBIDDEN: a strategic-thesis essay unless they explicitly asked for analysis.
+- REQUIRED: First line answers the question directly. If an asset is the right answer, give it. If a one-line answer is the right answer, give that and stop.${constraintLine}`;
+  }
+}
+
 function buildGenericChatSystemPrompt(
   depth: string,
   contextSection: string,
