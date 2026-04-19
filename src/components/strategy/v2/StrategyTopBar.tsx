@@ -97,12 +97,21 @@ export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function Strateg
 
         {/* Keyboard verbs */}
         <button
+          onClick={onNewThread}
+          className="h-7 px-2 rounded-[4px] sv-hover-bg text-[14px] leading-none"
+          style={{ color: 'hsl(var(--sv-muted))' }}
+          title="New thread (⌘⇧N)"
+          aria-label="New thread"
+        >
+          +
+        </button>
+        <button
           onClick={onOpenSwitcher}
           className="h-7 px-2 rounded-[4px] sv-hover-bg text-[12px] font-mono"
           style={{ color: 'hsl(var(--sv-muted))' }}
           title="Open switcher (⌘K)"
         >
-          ⌘K
+          Go ⌘K
         </button>
         <button
           onClick={onOpenInspector}
