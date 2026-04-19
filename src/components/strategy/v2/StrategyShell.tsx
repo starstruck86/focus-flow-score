@@ -57,7 +57,7 @@ export function StrategyShell() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { threads, activeThread, setActiveThreadId, updateThread } = useStrategyThreads();
+  const { threads, activeThread, setActiveThreadId, updateThread, upsertThreadLocal } = useStrategyThreads();
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const chipRef = useRef<HTMLButtonElement>(null);
   const slashFileInputRef = useRef<HTMLInputElement>(null);
@@ -192,23 +192,25 @@ export function StrategyShell() {
       .single();
 
     if (newThread?.id) {
-      // If branching from a selection, seed the new thread with a system message
-      // capturing the original line of thought as provenance.
-      if (seedText) {
-        await (supabase as any).from('strategy_messages').insert({
-          thread_id: newThread.id,
-          user_id: user.id,
-          role: 'system',
-          message_type: 'chat',
-          content_json: {
-            text: `Branched from "${baseTitle}":\n\n> ${seedText}`,
-          },
-        });
-      }
+      // Always seed a provenance system message so the user can instantly tell
+      // they are in a branch — even when no selection seeded the fork.
+      const provenanceText = seedText
+        ? `Branched from "${baseTitle}":\n\n> ${seedText}`
+        : `Branched from "${baseTitle}". Original thread preserved.`;
+      await (supabase as any).from('strategy_messages').insert({
+        thread_id: newThread.id,
+        user_id: user.id,
+        role: 'system',
+        message_type: 'chat',
+        content_json: { text: provenanceText },
+      });
+      // Push into local state synchronously so activeThread resolves immediately
+      // — otherwise topbar would briefly show fallback while threads list refetches.
+      upsertThreadLocal(newThread as StrategyThread);
       setActiveThreadId(newThread.id);
       clearSelection();
     }
-  }, [user, activeThread, selection, setActiveThreadId, clearSelection]);
+  }, [user, activeThread, selection, setActiveThreadId, clearSelection, upsertThreadLocal]);
 
   const handleOpenLinkedAccount = useCallback(() => {
     const id = activeThread?.linked_account_id;
@@ -343,8 +345,10 @@ export function StrategyShell() {
     const devAction = params.get('devAction');
 
     // If devThread is supplied and we're not on it yet, switch and wait for the
-    // next render cycle to fire the rest.
-    if (devThread && activeThread?.id !== devThread) {
+    // next render cycle to fire the rest. CRITICAL: stop snapping back once the
+    // devAction has already fired — otherwise actions like branch (which switch
+    // to a new thread id) would get clobbered.
+    if (devThread && activeThread?.id !== devThread && !devActionFiredRef.current) {
       setActiveThreadId(devThread);
       return;
     }

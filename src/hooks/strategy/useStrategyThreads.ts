@@ -76,6 +76,16 @@ export function useStrategyThreads() {
     }
   }, [user]);
 
+  /** Synchronously add a thread to local state (used after server-side inserts) */
+  const upsertThreadLocal = useCallback((thread: StrategyThread) => {
+    setThreads(prev => {
+      const exists = prev.some(t => t.id === thread.id);
+      return exists
+        ? prev.map(t => t.id === thread.id ? { ...t, ...thread } : t)
+        : [thread, ...prev];
+    });
+  }, []);
+
   const updateThread = useCallback(async (id: string, updates: Partial<StrategyThread>) => {
     // Explicitly include null linkage values (spread preserves them, but be defensive)
     const dbUpdates: Record<string, unknown> = { ...updates, updated_at: new Date().toISOString() };
@@ -98,6 +108,7 @@ export function useStrategyThreads() {
     createThread,
     createThreadWithOpts,
     updateThread,
+    upsertThreadLocal,
     isLoading,
     refetch: fetchThreads,
   };
