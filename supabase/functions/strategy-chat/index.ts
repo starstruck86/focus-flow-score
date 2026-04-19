@@ -2613,10 +2613,26 @@ function enforceModeLock(
       // Rewrites timid hedge phrases into confident mechanism-driven language.
       // Only the clearest hedge patterns are rewritten so we don't change
       // the substance of a real claim.
+      // Broad action-verb list — anything an operator would assert as a
+      // mechanism. We force the active "will <verb>" form.
+      const HARD_VERBS = "delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift|stall|reset|reallocate|kill|lose|strand|erode|displace|block|pause|freeze|deprioritize|drop|slip|miss|jeopardize|threaten|complicate|fragment|undermine|weaken|expose|break|derail";
       const HEDGE_REWRITES: Array<{ re: RegExp; to: string; tag: string }> = [
-        { re: /\bmay\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_may_will" },
-        { re: /\bmight\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_might_will" },
-        { re: /\bcould\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_could_will" },
+        { re: new RegExp(`\\bmay\\s+(?:potentially\\s+)?(${HARD_VERBS})\\b`, "gi"), to: "will $1", tag: "hedge_may_will" },
+        { re: new RegExp(`\\bmight\\s+(?:potentially\\s+)?(${HARD_VERBS})\\b`, "gi"), to: "will $1", tag: "hedge_might_will" },
+        { re: new RegExp(`\\bcould\\s+(?:potentially\\s+)?(${HARD_VERBS})\\b`, "gi"), to: "will $1", tag: "hedge_could_will" },
+        // Bare-form fallback for "may/might/could" without a recognised verb —
+        // strip the modal so the next verb reads as an assertion.
+        { re: /\b(?:may|might|could)\s+(?=[a-z])/gi, to: "will ", tag: "hedge_modal_bare_to_will" },
+        // "risks <verb>ing" → "will <verb>" (e.g. "risks losing" → "will lose",
+        // "risks pushing" → "will push"). Keeps the verb root, drops the hedge.
+        { re: /\brisks?\s+(losing|pushing|delaying|stalling|missing|slipping|breaking|resetting|fragmenting|eroding|exposing|killing|jeopardizing|displacing|deprioritizing|reallocating|extending|disrupting|complicating|undermining)\b/gi, to: (_m: string, v: string) => "will " + v.replace(/ing$/i, (m) => (m === "ing" ? "" : "")), tag: "hedge_risks_verb_ing" } as any,
+        // "risk of <noun>ing" / "at risk of" → drop the framing
+        { re: /\b(?:there\s+is\s+a\s+)?risk\s+of\s+/gi, to: "will cause ", tag: "hedge_risk_of" },
+        { re: /\bat\s+risk\s+of\s+/gi, to: "will ", tag: "hedge_at_risk_of" },
+        // Standalone "risks <noun-phrase>" at sentence-mid → "will lose <np>"
+        // (we use "lose" as the safest active stand-in for nominal risks like
+        // "risks the budget", "risks the renewal", "risks the quarter").
+        { re: /\brisks\s+(the\s+(?:budget|renewal|quarter|deal|opportunity|account|champion|contract|window|cycle|close|forecast))\b/gi, to: "will lose $1", tag: "hedge_risks_noun" },
         { re: /\bpotentially\s+/gi, to: "", tag: "hedge_potentially" },
         { re: /\bpossibly\s+/gi, to: "", tag: "hedge_possibly" },
         { re: /\bperhaps\s+/gi, to: "", tag: "hedge_perhaps" },
