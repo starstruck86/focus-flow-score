@@ -39,7 +39,7 @@ interface NormalizedResponse {
   model: string;
   latencyMs: number;
   fallbackUsed: boolean;
-  error?: { type: string; message: string };
+  error?: { type: string; message: string; status?: number };
   rawStream?: Response;
 }
 
@@ -116,9 +116,18 @@ async function openaiAdapter(req: AdapterRequest, signal: AbortSignal): Promise<
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
+    let message = `OpenAI direct error: ${resp.status}`;
+    try {
+      const parsed = JSON.parse(errText);
+      if (typeof parsed?.error?.message === "string" && parsed.error.message.trim()) {
+        message = parsed.error.message.trim();
+      }
+    } catch {
+      if (errText.trim()) message = errText.trim().slice(0, 300);
+    }
     console.error(`[openai-direct] error ${resp.status}: ${errText.slice(0, 200)}`);
     return { text: "", provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: `http_${resp.status}`, message: `OpenAI direct error: ${resp.status}` } };
+      error: { type: `http_${resp.status}`, message, status: resp.status } };
   }
 
   if (req.stream) {
@@ -130,7 +139,7 @@ async function openaiAdapter(req: AdapterRequest, signal: AbortSignal): Promise<
   if (!choice) {
     console.error("[openai-direct] no choices in response");
     return { text: "", provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: "empty_response", message: "OpenAI returned no choices" } };
+      error: { type: "empty_response", message: "OpenAI returned no choices", status: 502 } };
   }
 
   const toolCall = choice.message?.tool_calls?.[0];
@@ -145,15 +154,15 @@ async function openaiAdapter(req: AdapterRequest, signal: AbortSignal): Promise<
       // If tools were requested but parse failed, treat as error to trigger fallback
       if (req.tools?.length) {
         return { text, provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-          error: { type: "tool_parse_error", message: "Tool call returned invalid JSON" } };
+          error: { type: "tool_parse_error", message: "Tool call returned invalid JSON", status: 502 } };
       }
     }
   } else if (req.tools?.length && req.toolChoice) {
     // Tools requested with forced choice but no tool_calls returned
     console.warn("[openai-direct] tool_choice forced but no tool_calls in response — falling back to text");
     if (!text) {
-      return { text: "", provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-        error: { type: "missing_tool_call", message: "No tool call returned despite tool_choice" } };
+        return { text: "", provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
+          error: { type: "missing_tool_call", message: "No tool call returned despite tool_choice", status: 502 } };
     }
   }
 
@@ -362,34 +371,32 @@ interface LLMRoute {
 // - Perplexity = external research ONLY — fallback: OpenAI
 // - Anthropic = artifact engine ONLY (in strategy-transform-output, NOT here as primary)
 const ROUTES: Record<TaskType, LLMRoute> = {
-  chat_general:         { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.7, maxTokens: 4096, useTools: false },
-  deep_research:        { primaryProvider: "perplexity", model: "sonar-pro",                   fallbackProvider: "lovable", fallbackModel: "google/gemini-3-flash-preview", temperature: 0.3, maxTokens: 8192, useTools: false },
-  email_evaluation:     { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.4, maxTokens: 4096, useTools: true },
-  territory_tiering:    { primaryProvider: "lovable", model: "google/gemini-2.5-pro",         fallbackProvider: "lovable", fallbackModel: "google/gemini-3-flash-preview", temperature: 0.2, maxTokens: 8192, useTools: true, reasoning: { effort: "medium" } },
-  account_plan:         { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.5, maxTokens: 8192, useTools: true },
-  opportunity_strategy: { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.5, maxTokens: 8192, useTools: true },
-  brainstorm:           { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.9, maxTokens: 4096, useTools: true },
-  rollup:               { primaryProvider: "lovable", model: "google/gemini-3-flash-preview", fallbackProvider: "lovable", fallbackModel: "google/gemini-2.5-flash", temperature: 0.3, maxTokens: 4096, useTools: true },
+  chat_general:         { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.7, maxTokens: 4096, useTools: false },
+  deep_research:        { primaryProvider: "perplexity", model: "sonar-pro", fallbackProvider: "openai", fallbackModel: "gpt-4o", temperature: 0.3, maxTokens: 8192, useTools: false },
+  email_evaluation:     { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.4, maxTokens: 4096, useTools: true },
+  territory_tiering:    { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.2, maxTokens: 8192, useTools: true, reasoning: { effort: "medium" } },
+  account_plan:         { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
+  opportunity_strategy: { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
+  brainstorm:           { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.9, maxTokens: 4096, useTools: true },
+  rollup:               { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.3, maxTokens: 4096, useTools: true },
 };
 
 function resolveLLMRoute(taskType: string): LLMRoute {
   const route = { ...(ROUTES[taskType as TaskType] || ROUTES.chat_general) };
 
-  // ── PERPLEXITY GUARDRAIL — only deep_research may use Perplexity ──
   if (route.primaryProvider === "perplexity" && taskType !== "deep_research") {
-    console.error(`[routing] GUARDRAIL: task=${taskType} tried to use Perplexity — forcing Lovable`);
-    route.primaryProvider = "lovable";
-    route.model = "google/gemini-3-flash-preview";
+    console.error(`[routing] GUARDRAIL: task=${taskType} tried to use Perplexity — forcing OpenAI direct`);
+    route.primaryProvider = "openai";
+    route.model = "gpt-4o";
   }
 
-  // ── RUNTIME KEY GUARDS ──
-  if (route.primaryProvider === "perplexity" && !PROVIDER_HEALTH.perplexityDirect) {
-    console.warn(`[routing] PERPLEXITY_API_KEY missing — downgrading deep_research to Lovable`);
-    route.primaryProvider = "lovable";
-    route.model = "google/gemini-3-flash-preview";
+  if (route.primaryProvider === "openai" && !PROVIDER_HEALTH.openaiDirect) {
+    console.error(`[routing] OPENAI_API_KEY invalid/unavailable — cannot serve task=${taskType} on OpenAI direct`);
   }
-  if (route.primaryProvider === "lovable" && !PROVIDER_HEALTH.lovableGateway) {
-    console.error(`[routing] LOVABLE_API_KEY missing — cannot serve task=${taskType}`);
+  if (route.primaryProvider === "perplexity" && !PROVIDER_HEALTH.perplexityDirect) {
+    console.warn(`[routing] PERPLEXITY_API_KEY missing — downgrading deep_research to OpenAI direct`);
+    route.primaryProvider = "openai";
+    route.model = "gpt-4o";
   }
 
   return route;
@@ -491,55 +498,111 @@ async function callStreaming(
 ): Promise<NormalizedResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 55000);
+  const routeName = "openai-direct";
 
   try {
-    // SMOKE TEST MODE: explicitly fail to exercise the error path.
-    if (route._smokeTestForceFail) {
-      console.warn(`[routing] stream task=${taskType} SMOKE_TEST forced primary failure — no fallback (chat is fail-loud)`);
-      return {
-        text: "", provider: "openai", model: route.model, latencyMs: 0, fallbackUsed: false,
-        error: { type: "smoke_test_forced", message: "SMOKE_TEST_MODE: forced primary failure" },
-      };
-    }
-
     console.log(JSON.stringify({
       _type: "routing.stream.start",
-      task: taskType, provider: route.primaryProvider, model: route.model, fallback: false,
+      task: taskType,
+      intended_provider: route.primaryProvider,
+      intended_model: route.model,
+      route: routeName,
     }));
+
+    if (route.primaryProvider !== "openai") {
+      const misconfig = {
+        text: "",
+        provider: route.primaryProvider,
+        model: route.model,
+        latencyMs: 0,
+        fallbackUsed: false,
+        error: { type: "misconfigured_route", message: `Chat route must use OpenAI direct, got ${route.primaryProvider}`, status: 500 },
+      } satisfies NormalizedResponse;
+      console.error(JSON.stringify({
+        _type: "routing.stream.fail",
+        task: taskType,
+        actual_provider: misconfig.provider,
+        actual_model: misconfig.model,
+        route: routeName,
+        fallback_used: false,
+        status: 500,
+        reason: misconfig.error?.message,
+      }));
+      return misconfig;
+    }
+
+    if (route._smokeTestForceFail) {
+      const forced = {
+        text: "",
+        provider: "openai",
+        model: route.model,
+        latencyMs: 0,
+        fallbackUsed: false,
+        error: { type: "smoke_test_forced", message: "SMOKE_TEST_MODE: forced primary failure", status: 503 },
+      } satisfies NormalizedResponse;
+      console.error(JSON.stringify({
+        _type: "routing.stream.fail",
+        task: taskType,
+        actual_provider: forced.provider,
+        actual_model: forced.model,
+        route: routeName,
+        fallback_used: false,
+        status: 503,
+        reason: forced.error?.message,
+      }));
+      return forced;
+    }
+
     const result = await openaiAdapter({ ...adapterReq, model: route.model, stream: true }, controller.signal);
     if (result.error) {
       console.error(JSON.stringify({
         _type: "routing.stream.fail",
-        task: taskType, model: route.model, fallback: false,
+        task: taskType,
+        actual_provider: result.provider,
+        actual_model: result.model,
+        route: routeName,
+        fallback_used: false,
+        status: result.error.status ?? 502,
         reason: result.error.message,
       }));
-      return result; // surface error — no silent fallback
+      return result;
     }
+
     console.log(JSON.stringify({
       _type: "routing.stream.ok",
-      task: taskType, provider: result.provider, model: result.model,
-      path: "openai-direct", fallback: false,
+      task: taskType,
+      actual_provider: result.provider,
+      actual_model: result.model,
+      route: routeName,
+      fallback_used: false,
+      status: 200,
     }));
     return result;
   } catch (e: any) {
-    if (e.name === "AbortError") {
-      console.error(JSON.stringify({
-        _type: "routing.stream.timeout",
-        task: taskType, model: route.model, fallback: false, timeout_ms: 55000,
-      }));
-      return {
-        text: "", provider: "openai", model: route.model, latencyMs: 55000, fallbackUsed: false,
-        error: { type: "timeout", message: "OpenAI stream timed out" },
-      };
-    }
+    const isAbort = e?.name === "AbortError";
+    const errorResult = {
+      text: "",
+      provider: "openai",
+      model: route.model,
+      latencyMs: isAbort ? 55000 : Date.now(),
+      fallbackUsed: false,
+      error: {
+        type: isAbort ? "timeout" : "exception",
+        message: isAbort ? "OpenAI stream timed out" : String(e?.message || e),
+        status: isAbort ? 504 : 500,
+      },
+    } satisfies NormalizedResponse;
     console.error(JSON.stringify({
-      _type: "routing.stream.error",
-      task: taskType, model: route.model, fallback: false, message: String(e?.message || e),
+      _type: "routing.stream.fail",
+      task: taskType,
+      actual_provider: errorResult.provider,
+      actual_model: errorResult.model,
+      route: routeName,
+      fallback_used: false,
+      status: errorResult.error?.status,
+      reason: errorResult.error?.message,
     }));
-    return {
-      text: "", provider: "openai", model: route.model, latencyMs: Date.now(), fallbackUsed: false,
-      error: { type: "exception", message: String(e?.message || e) },
-    };
+    return errorResult;
   } finally {
     clearTimeout(timeout);
   }
@@ -1362,12 +1425,12 @@ async function handleChat(
         await supabase.from("strategy_messages").insert({
           thread_id: threadId, user_id: userId, role: "assistant",
           message_type: "chat",
-          provider_used: route.primaryProvider, model_used: route.model,
+          provider_used: result.provider, model_used: result.model,
           fallback_used: false, latency_ms: latency,
           content_json: {
             text: auditedVisible, sources_used: pack.sourceCount,
-            retrieval_meta: pack.retrievalMeta, model_used: route.model,
-            provider_used: route.primaryProvider, fallback_used: false,
+            retrieval_meta: pack.retrievalMeta, model_used: result.model,
+            provider_used: result.provider, fallback_used: false,
             citation_audit: audit.modified ? {
               modified: true,
               unverified: audit.unverifiedCitations,
