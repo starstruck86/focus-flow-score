@@ -185,7 +185,7 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
       {/* No veil. Canvas remains 100% visible. Click-catcher is fully transparent. */}
       <div
         onClick={onClose}
-        style={{ position: 'absolute', inset: 0, background: 'transparent' }}
+        style={{ position: 'absolute', inset: 0, background: 'transparent', pointerEvents: 'auto' }}
       />
       <div
         role="dialog"
