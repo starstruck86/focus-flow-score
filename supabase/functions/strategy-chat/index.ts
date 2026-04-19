@@ -55,10 +55,28 @@ interface AdapterRequest {
 }
 
 // ── Header helpers (direct API keys) ──────────────────────
+/**
+ * Validate the OpenAI API key shape before we ever ship it to api.openai.com.
+ * Catches the "secret got pasted as a URL" failure mode that previously caused
+ * silent fallback to Gemini and produced wrong outputs (cold emails for
+ * everything). Fail loud here so callers can surface a clear error instead of
+ * generating off-spec content under a different model.
+ */
+function validateOpenAIKey(key: string | undefined): { ok: true; key: string } | { ok: false; reason: string } {
+  if (!key) return { ok: false, reason: "OPENAI_API_KEY not configured" };
+  const trimmed = key.trim();
+  if (!trimmed) return { ok: false, reason: "OPENAI_API_KEY is empty" };
+  if (/^https?:\/\//i.test(trimmed)) return { ok: false, reason: "OPENAI_API_KEY looks like a URL, not a key" };
+  if (trimmed.includes(" ") || trimmed.includes("\n")) return { ok: false, reason: "OPENAI_API_KEY contains whitespace" };
+  if (!/^sk-/.test(trimmed)) return { ok: false, reason: "OPENAI_API_KEY missing 'sk-' prefix" };
+  if (trimmed.length < 30) return { ok: false, reason: "OPENAI_API_KEY too short" };
+  return { ok: true, key: trimmed };
+}
+
 function getOpenAIHeaders(): Record<string, string> {
-  const key = Deno.env.get("OPENAI_API_KEY");
-  if (!key) throw new Error("OPENAI_API_KEY not configured");
-  return { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+  const v = validateOpenAIKey(Deno.env.get("OPENAI_API_KEY"));
+  if (!v.ok) throw new Error(v.reason);
+  return { Authorization: `Bearer ${v.key}`, "Content-Type": "application/json" };
 }
 
 function getAnthropicHeaders(): Record<string, string> {
