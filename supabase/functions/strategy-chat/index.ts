@@ -2621,6 +2621,16 @@ function enforceModeLock(
         { re: /\bit'?s\s+worth\s+noting\s+that\s+/gi, to: "", tag: "hedge_worth_noting" },
         { re: /\bin\s+general,?\s+/gi, to: "", tag: "hedge_in_general" },
         { re: /\btends\s+to\s+/gi, to: "will ", tag: "hedge_tends_to" },
+        // ── COMMITMENT LAYER: passive / evasive constructions → active ──
+        { re: /\bthere\s+is\s+a\s+risk\s+(?:that\s+)?/gi, to: "", tag: "passive_there_is_risk" },
+        { re: /\bthere\s+is\s+a\s+possibility\s+(?:that\s+)?/gi, to: "", tag: "passive_there_is_possibility" },
+        { re: /\bthis\s+could\s+lead\s+to\s+/gi, to: "this will cause ", tag: "passive_could_lead_to" },
+        { re: /\bthis\s+may\s+(?:potentially\s+)?result\s+in\s+/gi, to: "this will cause ", tag: "passive_may_result_in" },
+        { re: /\bthis\s+could\s+result\s+in\s+/gi, to: "this will cause ", tag: "passive_could_result_in" },
+        { re: /\bthis\s+might\s+cause\s+/gi, to: "this will cause ", tag: "passive_might_cause" },
+        { re: /\bthis\s+could\s+create\s+/gi, to: "this will create ", tag: "passive_could_create" },
+        { re: /\bit\s+remains\s+to\s+be\s+seen\s+(?:whether\s+|if\s+)?/gi, to: "", tag: "passive_remains_to_be_seen" },
+        { re: /\bone\s+possibility\s+is\s+(?:that\s+)?/gi, to: "", tag: "passive_one_possibility" },
       ];
       let hedgeHits = 0;
       for (const { re, to, tag } of HEDGE_REWRITES) {
