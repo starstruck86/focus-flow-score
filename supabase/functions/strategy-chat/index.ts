@@ -2460,6 +2460,104 @@ function enforceModeLock(
   return { text, modified, violations, shouldRegenerate };
 }
 
+// ── SUBSTANCE ENFORCER ───────────────────────────────────────
+// Runs AFTER mode-lock. Rewrites the response to remove fluff,
+// generic phrases, weak verbs, and over-politeness. This is the
+// "would a top 1% AE actually send this?" gate.
+//
+// Strategy: deterministic regex replacements + violation flags.
+// We do NOT make a second LLM call — too slow and unreliable. We
+// also do not rewrite verbs aggressively because that risks losing
+// meaning. Instead we strip the worst offender phrases outright and
+// flag the rest so the operator sees the substance score in logs.
+interface SubstanceResult {
+  text: string;
+  modified: boolean;
+  violations: string[];
+}
+
+// Banned filler/soft-AE phrases. Matched case-insensitively. These
+// phrases are deleted (along with surrounding punctuation/spaces).
+// Order matters: longer phrases first so they win over shorter ones.
+const BANNED_PHRASES: Array<{ pattern: RegExp; tag: string }> = [
+  // Opener fluff — also strip a trailing comma + space if present.
+  { pattern: /\bI hope (this|the) (email|message|note) finds you well[,.]?\s*/gi, tag: "hope_finds_well" },
+  { pattern: /\bI hope (this|that) finds you well[,.]?\s*/gi, tag: "hope_finds_well" },
+  { pattern: /\bI hope you('re| are) (doing\s+)?well[,.]?\s*/gi, tag: "hope_doing_well" },
+  { pattern: /\bI hope all is well[,.]?\s*/gi, tag: "hope_all_well" },
+  { pattern: /\bHope you('re| are) (doing\s+)?well[,.]?\s*/gi, tag: "hope_doing_well" },
+  { pattern: /\bHope (this|that) (email|message|note)? ?finds you well[,.]?\s*/gi, tag: "hope_finds_well" },
+  // Filler intent verbs.
+  { pattern: /\bI (just\s+)?wanted to (reach out|share|let you know|check in|see if|follow up|touch base|circle back)\b[^.!?\n]*[.!?]?/gi, tag: "wanted_to_filler" },
+  { pattern: /\bI(?:'m| am) (just\s+)?(reaching out|writing|following up|checking in|circling back|touching base)\b[^.!?\n]*[.!?]?/gi, tag: "reaching_out_filler" },
+  { pattern: /\bJust (checking in|circling back|touching base|following up|wanted to (check|ask|share))\b[^.!?\n]*[.!?]?/gi, tag: "just_checking_in" },
+  // Closer fluff.
+  { pattern: /\b(Please\s+)?(let me know (your thoughts|if (this|that|you|there)|what you think)|happy to (chat|discuss|jump on|hop on|connect|tailor|adjust)|would love to (hear|connect|chat|discuss)|I('?d| would) love to (hear|connect|chat|discuss)|I look forward to hearing (from you|back)|feel free to|at your earliest convenience|kindly\b|warm regards|warmest regards)\b[^.!?\n]*[.!?]?/gi, tag: "closer_fluff" },
+  { pattern: /\b(Any\s+)?[Tt]houghts\?\s*$/gm, tag: "thoughts_q" },
+];
+
+// Weak-verb / vague-noun flags (no rewrite — we only flag because
+// blind verb replacement breaks meaning). Logged to surface drift.
+const WEAK_PATTERNS: Array<{ pattern: RegExp; tag: string }> = [
+  { pattern: /\b(follow up|circle back|touch base|check in)\b/gi, tag: "weak_verb_followup" },
+  { pattern: /\b(your\s+(needs|priorities|goals|challenges|pain points))\b/gi, tag: "vague_noun_needs" },
+  { pattern: /\b(assess(ing)?|understand(ing)?|learn more about|explore)\s+(your|their|the)\s+(needs|requirements|situation|environment)\b/gi, tag: "vague_assess" },
+  { pattern: /\b(significant\s+(savings|value|improvement|impact)|improved\s+efficiency|streamlin(e|ed|ing)\s+operations|drive\s+(value|outcomes|growth))\b/gi, tag: "vague_value_phrase" },
+];
+
+function enforceSubstance(
+  rawText: string,
+  intent: IntentResult,
+): SubstanceResult {
+  let text = rawText;
+  const violations: string[] = [];
+  let modified = false;
+
+  if (!text || !text.trim()) {
+    return { text, modified: false, violations: [] };
+  }
+
+  // 1) Strip every banned phrase. Track which tags fired.
+  for (const { pattern, tag } of BANNED_PHRASES) {
+    if (pattern.test(text)) {
+      text = text.replace(pattern, "").replace(/  +/g, " ");
+      // Fix doubled punctuation introduced by deletions: ".." → ".", " ," → ","
+      text = text.replace(/\s+([,.!?])/g, "$1").replace(/([.!?]){2,}/g, "$1");
+      modified = true;
+      if (!violations.includes(`stripped_${tag}`)) violations.push(`stripped_${tag}`);
+    }
+  }
+
+  // 2) Tighten dangling whitespace + leading newlines after strips.
+  text = text.replace(/\n{3,}/g, "\n\n").trim();
+  // If we accidentally left a sentinel followed by blank lines, collapse.
+  text = text.replace(/^(Send this:|Say this:|Do this next:|Use this[^\n]*template[^\n]*:)\s*\n\s*\n+/i, "$1\n");
+
+  // 3) Flag weak/vague patterns (no rewrite, just logged).
+  for (const { pattern, tag } of WEAK_PATTERNS) {
+    if (pattern.test(text)) {
+      if (!violations.includes(`flag_${tag}`)) violations.push(`flag_${tag}`);
+    }
+  }
+
+  // 4) Economic-pressure check for modes that require it.
+  const economicRequired =
+    intent.intent === "pitch" ||
+    intent.intent === "analysis" ||
+    intent.isBusinessCase ||
+    intent.isCFO ||
+    (intent.intent === "next_steps");
+  if (economicRequired) {
+    const hasMoney = /(\$\s?\d|\d+\s?%|\bROI\b|\bpayback\b|\bcost of (inaction|delay|doing nothing)\b|\bquarter(ly)?\b|\bdeadline\b|\brisk of\b|\bbudget\b|\b(margin|retention|churn|velocity)\b)/i.test(text);
+    if (!hasMoney) {
+      violations.push("missing_economic_anchor");
+    }
+  }
+
+  return { text, modified, violations };
+}
+
+
 function buildGenericChatSystemPrompt(
   depth: string,
   contextSection: string,
