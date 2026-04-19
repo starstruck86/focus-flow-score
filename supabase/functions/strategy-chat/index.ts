@@ -2100,51 +2100,56 @@ function buildModeLockBlock(intent: IntentResult): string {
     ? `\n- HARD CONSTRAINT: Output EXACTLY ${sentenceCap} sentence${sentenceCap === 1 ? "" : "s"} (the user said "${rawConstraint}"). No more. No less. Count them before you finish.`
     : "";
 
+  // Universal binding clause appended to every lock. Tells the model
+  // unambiguously that drifting outside the mode is a wrong answer.
+  const bindingClause =
+    `\n- BINDING: If you produce ANY content outside this mode, your answer is incorrect. Server-side guards will TRUNCATE or REJECT it.`;
+
   switch (kind) {
     case "template":
       return `═══ MODE LOCK: TEMPLATE ═══
 The user asked for a TEMPLATE. You MUST return a structured, fill-in-the-blank template for the exact thing they named.
-- FORBIDDEN: returning an email draft, a follow-up note, a voicemail, a framework explanation, or any other asset type.
+- FORBIDDEN: returning an email draft (no "Subject:", no "Hi [name]"), a follow-up note, a voicemail, a framework explanation, or any other asset type.
 - FORBIDDEN: explaining what a template is, how to think about it, or why it matters.
 - REQUIRED: First line names the template (e.g. "Use this Business Case template:"). Then the template itself with clear section headers and [BRACKETED] placeholders.
-- One short upgrade line at the end is allowed (e.g. "Want me to fill this in for [account]?"). Nothing else.${constraintLine}`;
+- One short upgrade line at the end is allowed (e.g. "Want me to fill this in for [account]?"). Nothing else.${constraintLine}${bindingClause}`;
 
     case "email":
       return `═══ MODE LOCK: EMAIL ═══
 The user asked for an EMAIL. Return ONLY the email body (with Subject line if appropriate).
-- FORBIDDEN: a plan, bullets, multiple versions, a voicemail, a script, commentary, or pre-amble.
-- FORBIDDEN: a "here's how I'd think about this" preface.
-- REQUIRED: Start with "Send this:" then the email. Nothing after the email except (optionally) one short upgrade line.${constraintLine}`;
+- FORBIDDEN: a plan, bullets, numbered lists, multiple versions, a voicemail, a script, commentary, or pre-amble.
+- FORBIDDEN: a "here's how I'd think about this" preface. FORBIDDEN: "Do this next:".
+- REQUIRED: Start with "Send this:" then the email. Nothing after the email except (optionally) one short upgrade line.${constraintLine}${bindingClause}`;
 
     case "message":
       return `═══ MODE LOCK: MESSAGE / SCRIPT ═══
 The user asked for exact wording (voicemail, SMS, LinkedIn note, script, DM).
 - FORBIDDEN: an email, a plan, a framework, multiple versions unless asked.
-- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${constraintLine}`;
+- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${constraintLine}${bindingClause}`;
 
     case "pitch":
       return `═══ MODE LOCK: PITCH (exact words) ═══
 The user asked how to PITCH or POSITION something. Give the exact words to say.
-- FORBIDDEN: a plan, a framework, a methodology, a numbered list of considerations.
-- REQUIRED: Start with "Say this:" then the exact pitch (1–4 sentences). Optionally one short follow-up line if it materially sharpens the moment.${constraintLine}`;
+- FORBIDDEN: a plan, a framework, a methodology, a numbered list of considerations, "Subject:", "Hi [name]".
+- REQUIRED: Start with "Say this:" then the exact pitch (1–4 sentences). Nothing else. No upgrade line.${constraintLine}${bindingClause}`;
 
     case "next_steps":
       return `═══ MODE LOCK: NEXT STEPS ═══
 The user asked WHAT TO DO NEXT. Return numbered actions.
-- FORBIDDEN: a cold email, a script, a pitch, a thesis, a framework, a "here's how to think about this" preface.
-- REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with the verb first ("Call X to confirm Y", "Send the MAP to Z", "Lock 30 min with the CFO"). No commentary between items.${constraintLine}`;
+- FORBIDDEN: a cold email (no "Subject:", no "Hi"), a script, a pitch, a thesis, a framework, a "here's how to think about this" preface.
+- REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with the verb first ("Call X to confirm Y", "Send the MAP to Z", "Lock 30 min with the CFO"). No commentary between items. No trailing upgrade line.${constraintLine}${bindingClause}`;
 
     case "analysis":
       return `═══ MODE LOCK: STRATEGIC ANALYSIS ═══
 The user explicitly asked for analysis / thesis / read on the deal. Use the strategic frame.
 - REQUIRED: Lead with the ACCOUNT THESIS in one line. Then VALUE LEAKAGE (where money leaks today). Then ECONOMIC CONSEQUENCE (in $/margin/retention/velocity terms). End with ONE NEXT BEST DISCOVERY ACTION.
-- FORBIDDEN: an email, a template, a script, a generic "here's how to think about it" essay.${constraintLine}`;
+- FORBIDDEN: an email, a template, a script, a generic "here's how to think about it" essay.${constraintLine}${bindingClause}`;
 
     case "provenance":
       return `═══ MODE LOCK: PROVENANCE ═══
-The user asked WHERE the information came from. Answer in plain English in 1–3 sentences.
+The user asked WHERE the information came from. Answer in plain English in 1–3 sentences MAX.
 - REQUIRED: Name the source(s) directly — linked account, uploaded file, internal KI/Playbook by short id, prior thread message, or "operator pattern (no internal source)".
-- FORBIDDEN: defensive language, methodology theater, robotic disclaimers, a new asset, or restating the question.${constraintLine}`;
+- FORBIDDEN: defensive language, methodology theater, robotic disclaimers, a new asset, restating the question, "Subject:", "Hi", any email structure, numbered lists, trailing upgrade line ("Want me to…").${constraintLine}${bindingClause}`;
 
     case "freeform":
     default:
@@ -2152,8 +2157,168 @@ The user asked WHERE the information came from. Answer in plain English in 1–3
 The user's intent isn't a clear asset request. Pick the SMALLEST useful output that answers the literal question.
 - FORBIDDEN: defaulting to an email or a generic template just because that's easy.
 - FORBIDDEN: a strategic-thesis essay unless they explicitly asked for analysis.
-- REQUIRED: First line answers the question directly. If an asset is the right answer, give it. If a one-line answer is the right answer, give that and stop.${constraintLine}`;
+- REQUIRED: First line answers the question directly. If an asset is the right answer, give it. If a one-line answer is the right answer, give that and stop.${constraintLine}${bindingClause}`;
   }
+}
+
+// ── POST-GENERATION MODE-LOCK GUARD ────────────────────────
+// Validates model output against the classified intent and either
+// (a) hard-truncates the offending tail or (b) flags the response
+// for a single strict regeneration. We DO NOT silently retry — the
+// caller decides whether to regenerate.
+interface GuardResult {
+  text: string;
+  modified: boolean;
+  violations: string[];
+  /** True when violation is severe enough that caller should regenerate once. */
+  shouldRegenerate: boolean;
+}
+
+const TAIL_LINE_REGEX =
+  /\n+\s*(?:want me to|let me know if|happy to|shall i|should i|would you like)[^\n]*\??\s*$/i;
+
+function countSentences(text: string): number {
+  // Strip trailing whitespace and split on sentence terminators followed
+  // by space or end. Conservative — counts "?" and "!" as well as ".".
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  const matches = trimmed.match(/[^.!?]+[.!?]+(?:\s|$)/g);
+  if (!matches) return 1; // a single line without terminator
+  return matches.length;
+}
+
+function enforceModeLock(
+  rawText: string,
+  intent: IntentResult,
+): GuardResult {
+  let text = rawText.trim();
+  const violations: string[] = [];
+  let modified = false;
+  let shouldRegenerate = false;
+
+  if (!text) {
+    return { text, modified: false, violations: ["empty"], shouldRegenerate: true };
+  }
+
+  // ── Allowed-tail-line policy ──
+  // Only template + email may keep a "Want me to tailor…" upgrade line.
+  // For all other modes, strip it.
+  const tailAllowed = intent.intent === "template" || intent.intent === "email";
+  if (!tailAllowed && TAIL_LINE_REGEX.test(text)) {
+    text = text.replace(TAIL_LINE_REGEX, "").trim();
+    modified = true;
+    violations.push("stripped_trailing_upgrade_line");
+  }
+
+  switch (intent.intent) {
+    case "template": {
+      // Must contain bracketed placeholders OR section headers.
+      const hasPlaceholders = /\[[A-Z][A-Z _\/-]*\]/.test(text) ||
+        /\[[a-z][a-z _\/-]*\]/i.test(text);
+      const hasHeaders = /^[A-Z][A-Z0-9 \-_/]{3,}$/m.test(text) ||
+        /^#{1,3}\s+\S/m.test(text);
+      if (!hasPlaceholders && !hasHeaders) {
+        violations.push("template_missing_structure");
+        shouldRegenerate = true;
+      }
+      // Forbidden email fingerprints
+      if (/^subject:/im.test(text) || /^hi\s+\[?[a-z]/im.test(text)) {
+        violations.push("template_contains_email_fingerprint");
+        shouldRegenerate = true;
+      }
+      break;
+    }
+
+    case "email": {
+      // Strip leading "Send this:" sentinel for cap counting only.
+      const body = text.replace(/^send this:\s*/i, "").trim();
+      // No numbered lists or "Do this next:" injections.
+      if (/\bdo this next:/i.test(text)) {
+        // Truncate at "Do this next:" — likely an appended next-steps block.
+        const idx = text.search(/\bdo this next:/i);
+        if (idx > 60) {
+          text = text.slice(0, idx).trim();
+          modified = true;
+          violations.push("truncated_appended_next_steps");
+        } else {
+          violations.push("email_contains_next_steps");
+          shouldRegenerate = true;
+        }
+      }
+      if (/^\s*\d+[.)]\s/m.test(body)) {
+        violations.push("email_contains_numbered_list");
+      }
+      if (intent.sentenceCap) {
+        const count = countSentences(body);
+        if (count > intent.sentenceCap) {
+          // Hard-truncate to the first N sentences.
+          const sentences = body.match(/[^.!?]+[.!?]+/g) || [body];
+          const kept = sentences.slice(0, intent.sentenceCap).join(" ").trim();
+          const prefix = text.startsWith("Send this:") || text.startsWith("send this:")
+            ? "Send this:\n"
+            : "";
+          text = `${prefix}${kept}`;
+          modified = true;
+          violations.push(`truncated_to_${intent.sentenceCap}_sentences`);
+        }
+      }
+      break;
+    }
+
+    case "next_steps": {
+      // Forbidden email fingerprints
+      if (/^subject:/im.test(text) || /^hi\s+\[?[a-z]/im.test(text)) {
+        violations.push("next_steps_contains_email");
+        shouldRegenerate = true;
+      }
+      // Must contain a numbered list
+      if (!/^\s*\d+[.)]\s/m.test(text)) {
+        violations.push("next_steps_missing_numbered_list");
+        shouldRegenerate = true;
+      }
+      break;
+    }
+
+    case "pitch": {
+      // Must lead with "Say this:"
+      if (!/^say this:/i.test(text)) {
+        // Try to recover by prepending — but only if there's no obvious
+        // framework/list garbage first.
+        if (!/^\s*\d+[.)]\s/m.test(text) && !/^subject:/im.test(text)) {
+          text = `Say this: ${text.replace(/^[\s\n]+/, "")}`;
+          modified = true;
+          violations.push("prepended_say_this");
+        } else {
+          violations.push("pitch_missing_say_this");
+          shouldRegenerate = true;
+        }
+      }
+      // No numbered lists
+      if (/^\s*\d+[.)]\s/m.test(text)) {
+        violations.push("pitch_contains_list");
+        shouldRegenerate = true;
+      }
+      break;
+    }
+
+    case "provenance": {
+      // ≤3 sentences, no email structure
+      if (/^subject:/im.test(text) || /^hi\s+\[?[a-z]/im.test(text)) {
+        violations.push("provenance_contains_email");
+        shouldRegenerate = true;
+      }
+      const count = countSentences(text);
+      if (count > 3) {
+        const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+        text = sentences.slice(0, 3).join(" ").trim();
+        modified = true;
+        violations.push("truncated_to_3_sentences");
+      }
+      break;
+    }
+  }
+
+  return { text, modified, violations, shouldRegenerate };
 }
 
 function buildGenericChatSystemPrompt(
@@ -2210,6 +2375,8 @@ async function buildChatSystemPrompt(args: {
   prompt: string;
   workingThesis: WorkingThesisState | null;
   resourceHits: Array<{ id: string; title: string }>;
+  intent: IntentResult;
+  modeLockBlock: string;
 }> {
   const {
     supabase,
@@ -2236,6 +2403,8 @@ async function buildChatSystemPrompt(args: {
       prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
       workingThesis: null,
       resourceHits: [],
+      intent,
+      modeLockBlock,
     };
   }
 
@@ -2306,6 +2475,8 @@ async function buildChatSystemPrompt(args: {
       prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
       workingThesis: null,
       resourceHits: [],
+      intent,
+      modeLockBlock,
     };
   }
 
@@ -2361,7 +2532,7 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     id: h.id,
     title: h.title,
   }));
-  return { prompt, workingThesis, resourceHits };
+  return { prompt, workingThesis, resourceHits, intent, modeLockBlock };
 }
 
 // Extract a fenced ```thesis_update { ... }``` block emitted by the
@@ -2409,16 +2580,20 @@ async function handleChat(
   const route = resolveLLMRoute("chat_general");
   if (forceFallback) route._smokeTestForceFail = true;
 
-  const { prompt: systemPrompt, workingThesis: priorThesis, resourceHits } =
-    await buildChatSystemPrompt({
-      supabase,
-      userId,
-      threadId,
-      depth,
-      contextSection,
-      pack,
-      userContent: content,
-    });
+  const {
+    prompt: systemPrompt,
+    workingThesis: priorThesis,
+    resourceHits,
+    intent,
+  } = await buildChatSystemPrompt({
+    supabase,
+    userId,
+    threadId,
+    depth,
+    contextSection,
+    pack,
+    userContent: content,
+  });
   const accountId: string | null = pack.account?.id ?? null;
 
   const messages = [
@@ -2454,7 +2629,17 @@ async function handleChat(
 
   if (!result.rawStream) {
     // Non-streaming fallback
-    const { patch, visible } = extractThesisUpdate(result.text || "");
+    const { patch, visible: rawVisible } = extractThesisUpdate(result.text || "");
+    // Mode-lock guard FIRST — strip drift / forbidden tail / hard-truncate.
+    const guarded = enforceModeLock(rawVisible, intent);
+    if (guarded.modified || guarded.violations.length) {
+      console.log(
+        `[mode-lock] non-stream intent=${intent.intent} violations=${
+          JSON.stringify(guarded.violations)
+        } modified=${guarded.modified}`,
+      );
+    }
+    const visible = guarded.text;
     // Citation audit: catch any fabricated RESOURCE[…] references.
     const audit = auditResourceCitations(visible, resourceHits);
     if (audit.modified) {
@@ -2576,11 +2761,18 @@ async function handleChat(
     );
   }
 
-  // Stream the response with read timeout protection
+  // Stream the response with read timeout protection.
+  // IMPORTANT: We do NOT pass-through model chunks anymore. Mode-lock
+  // enforcement requires us to see the full response before deciding
+  // whether to truncate / strip drift. We buffer server-side, then
+  // emit the GUARDED text as a single SSE event. This sacrifices
+  // token-by-token streaming for behavioral correctness — explicitly
+  // required by the mode-lock contract.
   const reader = result.rawStream.body!.getReader();
   const decoder = new TextDecoder();
   let fullResponse = "";
   let chunkCount = 0;
+  let sseBuffer = "";
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -2596,19 +2788,25 @@ async function handleChat(
           const { done, value } = await reader.read();
           if (done) break;
           chunkCount++;
-          const chunk = decoder.decode(value, { stream: true });
-          controller.enqueue(new TextEncoder().encode(chunk));
-          for (const line of chunk.split("\n")) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data: ") || trimmed === "data: [DONE]") {
-              continue;
-            }
+          sseBuffer += decoder.decode(value, { stream: true });
+          // Parse complete SSE lines into deltas. We do NOT enqueue
+          // anything to the client during this loop.
+          let nl: number;
+          while ((nl = sseBuffer.indexOf("\n")) !== -1) {
+            let line = sseBuffer.slice(0, nl);
+            sseBuffer = sseBuffer.slice(nl + 1);
+            if (line.endsWith("\r")) line = line.slice(0, -1);
+            if (!line.startsWith("data: ")) continue;
+            const payload = line.slice(6).trim();
+            if (payload === "[DONE]") continue;
             try {
-              const parsed = JSON.parse(trimmed.slice(6));
+              const parsed = JSON.parse(payload);
               const delta = parsed.choices?.[0]?.delta?.content;
               if (delta) fullResponse += delta;
             } catch {
-              // Non-JSON SSE line — skip silently
+              // Re-buffer partial JSON for next chunk
+              sseBuffer = line + "\n" + sseBuffer;
+              break;
             }
           }
         }
@@ -2619,32 +2817,40 @@ async function handleChat(
             `[streaming] empty response after ${chunkCount} chunks, ${latency}ms`,
           );
         }
-        const { patch, visible } = extractThesisUpdate(fullResponse);
-        // Citation audit: catch any fabricated RESOURCE[…] references
-        // that slipped through the prompt contract. We persist the
-        // AUDITED text (DB = source of truth) and stream a trailing
-        // SSE delta with the audit banner so the live UI sees it too.
+
+        // Step 1: extract thesis update + visible body.
+        const { patch, visible: rawVisible } = extractThesisUpdate(fullResponse);
+
+        // Step 2: MODE-LOCK GUARD — strip forbidden tails, truncate
+        // sentence-cap violations, prepend missing sentinels. This
+        // happens BEFORE the user sees a single character.
+        const guarded = enforceModeLock(rawVisible, intent);
+        if (guarded.modified || guarded.violations.length) {
+          console.log(
+            `[mode-lock] stream intent=${intent.intent} violations=${
+              JSON.stringify(guarded.violations)
+            } modified=${guarded.modified}`,
+          );
+        }
+        const visible = guarded.text;
+
+        // Step 3: citation audit on the GUARDED text (so banner
+        // attaches to the same body that's persisted).
         const audit = auditResourceCitations(visible, resourceHits);
         if (audit.modified) {
           console.log(
             `[citation-audit] stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`,
           );
-          const trailing = audit.text.slice(visible.length); // banner suffix only
-          if (trailing) {
-            const sseChunk = `data: ${
-              JSON.stringify({ choices: [{ delta: { content: trailing } }] })
-            }\n\n`;
-            try {
-              controller.enqueue(new TextEncoder().encode(sseChunk));
-            } catch (e) {
-              console.warn(
-                "[citation-audit] failed to stream trailing banner:",
-                (e as Error).message,
-              );
-            }
-          }
         }
         const auditedVisible = audit.text;
+
+        // Step 4: emit the entire guarded+audited text in ONE SSE
+        // delta, then [DONE]. Client renders this atomically — no
+        // first-token-drop risk.
+        const sseChunk = `data: ${
+          JSON.stringify({ choices: [{ delta: { content: auditedVisible } }] })
+        }\n\ndata: [DONE]\n\n`;
+        controller.enqueue(new TextEncoder().encode(sseChunk));
         controller.close();
         await supabase.from("strategy_messages").insert({
           thread_id: threadId,
