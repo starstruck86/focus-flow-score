@@ -363,6 +363,8 @@ export async function retrieveResourceContext(
         matchReason: reason(r),
         matchSnippet: snippetFor ? snippetFor(r) : undefined,
         bodyExcerpt: typeof r._bodyExcerpt === "string" ? r._bodyExcerpt : undefined,
+        sourceShape: r._sourceShape,
+        sourceShapeReason: r._sourceShapeReason,
       });
     }
   };
