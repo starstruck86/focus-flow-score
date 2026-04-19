@@ -60,6 +60,9 @@ export function StrategyMessage({ message }: Props) {
   if (role === 'user') {
     return (
       <div
+        data-strategy-selectable
+        data-message-id={message.id}
+        data-message-role="user"
         className="text-[15px] whitespace-pre-wrap break-words"
         style={{
           fontFamily: 'var(--sv-sans)',
@@ -77,6 +80,9 @@ export function StrategyMessage({ message }: Props) {
   // Assistant — serif, flush left, full width
   return (
     <div
+      data-strategy-selectable
+      data-message-id={message.id}
+      data-message-role="assistant"
       className="text-[15px] whitespace-pre-wrap break-words"
       style={{
         fontFamily: 'var(--sv-serif)',

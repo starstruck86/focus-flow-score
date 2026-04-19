@@ -12,6 +12,7 @@
  * proposals) is preserved by passing through the existing hooks unchanged.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStrategyThreads } from '@/hooks/strategy/useStrategyThreads';
 import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyMemory } from '@/hooks/strategy/useStrategyMemory';
@@ -21,6 +22,8 @@ import { useStrategyProposals } from '@/hooks/strategy/useStrategyProposals';
 import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
 import { useThreadTrustState } from '@/hooks/strategy/useThreadTrustState';
 import { useStrategyHotkeys } from '@/hooks/strategy/useStrategyHotkeys';
+import { useStrategySelection } from '@/hooks/strategy/useStrategySelection';
+import { useStrategySaveGesture, type SaveScope } from '@/hooks/strategy/useStrategySaveGesture';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { StrategyThread } from '@/types/strategy';
@@ -31,18 +34,27 @@ import { StrategyComposer } from './StrategyComposer';
 import { BlockedComposer } from './BlockedComposer';
 import { StrategySwitcher } from './StrategySwitcher';
 import { ContextInspector } from './ContextInspector';
+import { SelectionActionBar, type ActionKey } from './SelectionActionBar';
+import { ScopePicker, type ScopePick } from './ScopePicker';
+import { PromotionsInbox } from './PromotionsInbox';
+import { SaveToast, type SaveToastState } from './SaveToast';
 import type { LinkPickerSelection } from './LinkPicker';
 
 import '@/styles/strategy-v2.css';
 
 export function StrategyShell() {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const { threads, activeThread, setActiveThreadId, updateThread } = useStrategyThreads();
   const composerRef = useRef<HTMLTextAreaElement>(null);
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [scopePickerOpen, setScopePickerOpen] = useState(false);
+  const [pendingPick, setPendingPick] = useState<{ scope: SaveScope } | null>(null);
+  const [toast, setToast] = useState<SaveToastState | null>(null);
 
   const threadId = activeThread?.id ?? null;
 
@@ -64,19 +76,97 @@ export function StrategyShell() {
   const { artifacts } = useStrategyArtifacts(threadId);
   const { proposals } = useStrategyProposals(threadId);
 
+  // Phase 2 — selection + save gesture
+  const { selection, clear: clearSelection } = useStrategySelection();
+  const { save } = useStrategySaveGesture();
+
   // Unresolved proposals = anything not in a terminal state ("promoted" or "rejected")
   const unresolvedProposalCount = useMemo(
     () => proposals.filter(p => p.status !== 'promoted' && p.status !== 'rejected').length,
     [proposals],
   );
 
+  const showToast = useCallback((t: SaveToastState) => setToast(t), []);
+
+  const performSave = useCallback(async (
+    scope: SaveScope,
+    overrides?: { targetAccountId?: string | null; targetOpportunityId?: string | null },
+  ) => {
+    if (!selection || !activeThread) return;
+    const text = selection.text;
+    const sourceMessageId = selection.sourceMessageId;
+    // Clear selection visually but keep doing the save
+    const result = await save({
+      selectionText: text,
+      sourceMessageId,
+      thread: activeThread,
+      scope,
+      targetAccountId: overrides?.targetAccountId,
+      targetOpportunityId: overrides?.targetOpportunityId,
+    });
+    showToast({
+      id: crypto.randomUUID(),
+      message: result.message,
+      openPath: result.openPath,
+      undo: result.undo,
+      isError: !result.ok,
+    });
+    if (result.ok) clearSelection();
+  }, [selection, activeThread, save, showToast, clearSelection]);
+
+  const handleSelectionAction = useCallback((key: ActionKey) => {
+    if (key === 'pick_scope') {
+      setPendingPick({ scope: 'account' });
+      setScopePickerOpen(true);
+      return;
+    }
+    performSave(key as SaveScope);
+  }, [performSave]);
+
+  const handleScopePick = useCallback(async (pick: ScopePick) => {
+    setScopePickerOpen(false);
+    if (!pendingPick) return;
+    const overrides = pick.kind === 'account'
+      ? { targetAccountId: pick.id, targetOpportunityId: null }
+      : { targetAccountId: null, targetOpportunityId: pick.id };
+    const scope: SaveScope = pick.kind === 'account' ? 'account' : 'opportunity';
+    await performSave(scope, overrides);
+    setPendingPick(null);
+  }, [pendingPick, performSave]);
+
   // Hotkeys
   useStrategyHotkeys({
     onToggleSwitcher: () => setSwitcherOpen(o => !o),
     onToggleInspector: () => setInspectorOpen(o => !o),
+    onToggleInbox: () => setInboxOpen(o => !o),
+    onSavePrimary: () => {
+      if (!selection || !activeThread) return;
+      const primary: SaveScope = activeThread.linked_opportunity_id
+        ? 'opportunity'
+        : activeThread.linked_account_id ? 'account' : 'research';
+      if (primary === 'research') {
+        // No linkage — open scope picker for ⌘S as well
+        setPendingPick({ scope: 'account' });
+        setScopePickerOpen(true);
+        return;
+      }
+      performSave(primary);
+    },
+    onSavePick: () => {
+      if (!selection) return;
+      setPendingPick({ scope: 'account' });
+      setScopePickerOpen(true);
+    },
+    onPromote: () => {
+      if (!selection) return;
+      performSave('crm_contact');
+    },
     onEscape: () => {
-      if (switcherOpen) setSwitcherOpen(false);
-      else if (inspectorOpen) setInspectorOpen(false);
+      if (scopePickerOpen) { setScopePickerOpen(false); return; }
+      if (inboxOpen) { setInboxOpen(false); return; }
+      if (switcherOpen) { setSwitcherOpen(false); return; }
+      if (inspectorOpen) { setInspectorOpen(false); return; }
+      if (selection) { clearSelection(); return; }
     },
     composerRef,
   });
@@ -236,6 +326,30 @@ export function StrategyShell() {
         memories={memories}
         uploads={uploads}
         artifacts={artifacts}
+      />
+
+      {/* Phase 2 — gesture surfaces. All portals; never shift layout. */}
+      <SelectionActionBar
+        selection={scopePickerOpen ? null : selection}
+        hasOpportunity={!!activeThread?.linked_opportunity_id}
+        hasAccount={!!activeThread?.linked_account_id}
+        onAction={handleSelectionAction}
+        onDismiss={clearSelection}
+      />
+      <ScopePicker
+        open={scopePickerOpen}
+        anchorRect={selection?.rect ?? null}
+        onClose={() => { setScopePickerOpen(false); setPendingPick(null); }}
+        onPick={handleScopePick}
+      />
+      <PromotionsInbox
+        open={inboxOpen}
+        onClose={() => setInboxOpen(false)}
+      />
+      <SaveToast
+        toast={toast}
+        onDismiss={() => setToast(null)}
+        onOpen={(path) => { setToast(null); navigate(path); }}
       />
     </div>
   );
