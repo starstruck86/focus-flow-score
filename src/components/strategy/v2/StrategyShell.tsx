@@ -508,6 +508,7 @@ export function StrategyShell() {
         onOpenInspector={() => setInspectorOpen(true)}
         onChipClick={() => setLinkPickerOpen(true)}
         chipRef={chipRef}
+        onNewThread={() => handleNewThread()}
       />
 
       <StrategyCanvas
@@ -538,6 +539,7 @@ export function StrategyShell() {
           onSend={handleSend}
           onSlashChange={setSlashQuery}
           onRectChange={setComposerRect}
+          onAttachFiles={() => slashFileInputRef.current?.click()}
         />
       )}
 
