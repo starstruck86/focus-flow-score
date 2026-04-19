@@ -2444,6 +2444,8 @@ function enforceModeLock(
             "I can't ground this in a specific source in the current thread. Treat this as operator reasoning, not a cited internal source.",
           message:
             "Say this: I need one real specific (name, date, or number) before I write the script — what should I anchor it on?",
+          bootstrap:
+            "Here's how I can help you move a deal forward:\n- Pressure test a deal\n- Write emails or talk tracks\n- Build a business case\n- Plan next steps\n\nStart here: What account or deal are you working on?",
           freeform:
             "I don't have a real specific to anchor this on. Give me the one fact that matters (name, number, or date) and I'll produce the output without placeholders.",
         };
