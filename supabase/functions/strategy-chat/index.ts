@@ -2267,9 +2267,17 @@ function enforceModeLock(
 
     case "next_steps": {
       // Physically strip appended email/template blocks BEFORE other checks.
-      const emailIdx = text.search(/(^|\n)\s*(subject:|hi\s+\[?[a-z]|here'?s\s+(a|an|the)\s+(template|email|outreach))/im);
-      if (emailIdx > 40) {
-        text = text.slice(0, emailIdx).trim();
+      // Apostrophe class covers ASCII ' and curly ’.  Generic "Here's a/an/the X:"
+      // colon-terminated lead-in is also stripped — in next_steps mode any such
+      // intro to a second asset is by definition out of mode.
+      const APO_NS = "['\u2019]";
+      const cutReNS = new RegExp(
+        `(^|\\n)\\s*(subject:|hi\\s+\\[?[a-z]|here${APO_NS}?s\\s+(?:a|an|the|some)\\s+\\w+[^\\n]{0,80}:\\s*$|here${APO_NS}?s\\s+(?:a|an|the|some)\\s+(?:template|email|outreach|follow[- ]?up|script|message))`,
+        "im",
+      );
+      const mNS = text.match(cutReNS);
+      if (mNS && mNS.index !== undefined && mNS.index > 40) {
+        text = text.slice(0, mNS.index).trim();
         modified = true;
         violations.push("stripped_appended_email");
       } else if (/^subject:/im.test(text) || /^hi\s+\[?[a-z]/im.test(text)) {
@@ -2284,10 +2292,14 @@ function enforceModeLock(
     }
 
     case "pitch": {
-      // Strip any appended numbered list / email block AFTER the pitch line.
-      const cutMatch = text.match(/\n\s*(?:\d+[.)]\s|subject:|hi\s+\[?[a-z]|here'?s\s+(?:a|an|the)\s+(?:template|email|outreach))/i);
-      if (cutMatch && cutMatch.index !== undefined && cutMatch.index > 40) {
-        text = text.slice(0, cutMatch.index).trim();
+      const APO_P = "['\u2019]";
+      const cutReP = new RegExp(
+        `\\n\\s*(?:\\d+[.)]\\s|subject:|hi\\s+\\[?[a-z]|here${APO_P}?s\\s+(?:a|an|the|some)\\s+\\w+[^\\n]{0,80}:\\s*$|here${APO_P}?s\\s+(?:a|an|the|some)\\s+(?:template|email|outreach|follow[- ]?up|script|message))`,
+        "i",
+      );
+      const mP = text.match(cutReP);
+      if (mP && mP.index !== undefined && mP.index > 40) {
+        text = text.slice(0, mP.index).trim();
         modified = true;
         violations.push("stripped_appended_asset");
       }
@@ -2314,14 +2326,20 @@ function enforceModeLock(
       // CRITICAL: physically strip any appended asset (email/template/script)
       // BEFORE sentence-cap counting. Provenance must answer the source
       // question only — no second asset, ever.
-      const cutPattern = /(^|\n)\s*(here'?s\s+(?:a|an|the|some)\s+(?:template|email|outreach|follow[- ]?up|script|message)|subject:|hi\s+\[?[a-z]|---\s*$|```)/im;
-      const cutMatch = text.match(cutPattern);
-      if (cutMatch && cutMatch.index !== undefined && cutMatch.index > 20) {
-        text = text.slice(0, cutMatch.index).trim();
+      // Apostrophe class covers ASCII ' and curly ’.  Generic
+      // "Here's a/an/the X:" colon-terminated lead-in is stripped because in
+      // provenance mode it always introduces a second asset.
+      const APO_PR = "['\u2019]";
+      const cutReProv = new RegExp(
+        `(^|\\n)\\s*(here${APO_PR}?s\\s+(?:a|an|the|some)\\s+\\w+[^\\n]{0,80}:\\s*$|here${APO_PR}?s\\s+(?:a|an|the|some)\\s+(?:template|email|outreach|follow[- ]?up|script|message)|subject:|hi\\s+\\[?[a-z]|---\\s*$|\`\`\`)`,
+        "im",
+      );
+      const mProv = text.match(cutReProv);
+      if (mProv && mProv.index !== undefined && mProv.index > 20) {
+        text = text.slice(0, mProv.index).trim();
         modified = true;
         violations.push("stripped_appended_asset");
       } else if (/^subject:/im.test(text) || /^hi\s+\[?[a-z]/im.test(text)) {
-        // Email started at the very top — the model ignored the lock entirely.
         violations.push("provenance_contains_email");
         shouldRegenerate = true;
       }
