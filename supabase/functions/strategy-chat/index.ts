@@ -14,8 +14,8 @@ import {
   retrieveResourceContext,
   saveWorkingThesisState,
   shouldUseStrategyCorePrompt,
-  validateWorkingThesisState,
   type ThesisStatePatch,
+  validateWorkingThesisState,
   type WorkingThesisState,
 } from "../_shared/strategy-core/index.ts";
 
@@ -62,21 +62,34 @@ interface AdapterRequest {
  * everything). Fail loud here so callers can surface a clear error instead of
  * generating off-spec content under a different model.
  */
-function validateOpenAIKey(key: string | undefined): { ok: true; key: string } | { ok: false; reason: string } {
+function validateOpenAIKey(
+  key: string | undefined,
+): { ok: true; key: string } | { ok: false; reason: string } {
   if (!key) return { ok: false, reason: "OPENAI_API_KEY not configured" };
   const trimmed = key.trim();
   if (!trimmed) return { ok: false, reason: "OPENAI_API_KEY is empty" };
-  if (/^https?:\/\//i.test(trimmed)) return { ok: false, reason: "OPENAI_API_KEY looks like a URL, not a key" };
-  if (trimmed.includes(" ") || trimmed.includes("\n")) return { ok: false, reason: "OPENAI_API_KEY contains whitespace" };
-  if (!/^sk-/.test(trimmed)) return { ok: false, reason: "OPENAI_API_KEY missing 'sk-' prefix" };
-  if (trimmed.length < 30) return { ok: false, reason: "OPENAI_API_KEY too short" };
+  if (/^https?:\/\//i.test(trimmed)) {
+    return { ok: false, reason: "OPENAI_API_KEY looks like a URL, not a key" };
+  }
+  if (trimmed.includes(" ") || trimmed.includes("\n")) {
+    return { ok: false, reason: "OPENAI_API_KEY contains whitespace" };
+  }
+  if (!/^sk-/.test(trimmed)) {
+    return { ok: false, reason: "OPENAI_API_KEY missing 'sk-' prefix" };
+  }
+  if (trimmed.length < 30) {
+    return { ok: false, reason: "OPENAI_API_KEY too short" };
+  }
   return { ok: true, key: trimmed };
 }
 
 function getOpenAIHeaders(): Record<string, string> {
   const v = validateOpenAIKey(Deno.env.get("OPENAI_API_KEY"));
   if (!v.ok) throw new Error(v.reason);
-  return { Authorization: `Bearer ${v.key}`, "Content-Type": "application/json" };
+  return {
+    Authorization: `Bearer ${v.key}`,
+    "Content-Type": "application/json",
+  };
 }
 
 function getAnthropicHeaders(): Record<string, string> {
@@ -96,22 +109,33 @@ function getPerplexityHeaders(): Record<string, string> {
 }
 
 // ── OpenAI Adapter (DIRECT — api.openai.com) ──────────────
-async function openaiAdapter(req: AdapterRequest, signal: AbortSignal): Promise<NormalizedResponse> {
+async function openaiAdapter(
+  req: AdapterRequest,
+  signal: AbortSignal,
+): Promise<NormalizedResponse> {
   const start = Date.now();
   // Strip "openai/" prefix for direct API calls
-  const apiModel = req.model.startsWith("openai/") ? req.model.slice(7) : req.model;
+  const apiModel = req.model.startsWith("openai/")
+    ? req.model.slice(7)
+    : req.model;
   const body: any = {
     model: apiModel,
     messages: req.messages,
     temperature: req.temperature ?? 0.7,
     max_tokens: req.maxTokens ?? 4096,
   };
-  if (req.tools?.length) { body.tools = req.tools; body.tool_choice = req.toolChoice; }
+  if (req.tools?.length) {
+    body.tools = req.tools;
+    body.tool_choice = req.toolChoice;
+  }
   if (req.reasoning) body.reasoning = req.reasoning;
   if (req.stream) body.stream = true;
 
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST", headers: getOpenAIHeaders(), signal, body: JSON.stringify(body),
+    method: "POST",
+    headers: getOpenAIHeaders(),
+    signal,
+    body: JSON.stringify(body),
   });
 
   if (!resp.ok) {
@@ -119,27 +143,55 @@ async function openaiAdapter(req: AdapterRequest, signal: AbortSignal): Promise<
     let message = `OpenAI direct error: ${resp.status}`;
     try {
       const parsed = JSON.parse(errText);
-      if (typeof parsed?.error?.message === "string" && parsed.error.message.trim()) {
+      if (
+        typeof parsed?.error?.message === "string" &&
+        parsed.error.message.trim()
+      ) {
         message = parsed.error.message.trim();
       }
     } catch {
       if (errText.trim()) message = errText.trim().slice(0, 300);
     }
-    console.error(`[openai-direct] error ${resp.status}: ${errText.slice(0, 200)}`);
-    return { text: "", provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: `http_${resp.status}`, message, status: resp.status } };
+    console.error(
+      `[openai-direct] error ${resp.status}: ${errText.slice(0, 200)}`,
+    );
+    return {
+      text: "",
+      provider: "openai",
+      model: req.model,
+      latencyMs: Date.now() - start,
+      fallbackUsed: false,
+      error: { type: `http_${resp.status}`, message, status: resp.status },
+    };
   }
 
   if (req.stream) {
-    return { text: "", provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false, rawStream: resp };
+    return {
+      text: "",
+      provider: "openai",
+      model: req.model,
+      latencyMs: Date.now() - start,
+      fallbackUsed: false,
+      rawStream: resp,
+    };
   }
 
   const data = await resp.json();
   const choice = data.choices?.[0];
   if (!choice) {
     console.error("[openai-direct] no choices in response");
-    return { text: "", provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: "empty_response", message: "OpenAI returned no choices", status: 502 } };
+    return {
+      text: "",
+      provider: "openai",
+      model: req.model,
+      latencyMs: Date.now() - start,
+      fallbackUsed: false,
+      error: {
+        type: "empty_response",
+        message: "OpenAI returned no choices",
+        status: 502,
+      },
+    };
   }
 
   const toolCall = choice.message?.tool_calls?.[0];
@@ -150,34 +202,72 @@ async function openaiAdapter(req: AdapterRequest, signal: AbortSignal): Promise<
     try {
       structured = JSON.parse(toolCall.function.arguments);
     } catch (parseErr) {
-      console.error(`[openai-direct] tool call JSON parse failed: ${String(parseErr)}`);
+      console.error(
+        `[openai-direct] tool call JSON parse failed: ${String(parseErr)}`,
+      );
       // If tools were requested but parse failed, treat as error to trigger fallback
       if (req.tools?.length) {
-        return { text, provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-          error: { type: "tool_parse_error", message: "Tool call returned invalid JSON", status: 502 } };
+        return {
+          text,
+          provider: "openai",
+          model: req.model,
+          latencyMs: Date.now() - start,
+          fallbackUsed: false,
+          error: {
+            type: "tool_parse_error",
+            message: "Tool call returned invalid JSON",
+            status: 502,
+          },
+        };
       }
     }
   } else if (req.tools?.length && req.toolChoice) {
     // Tools requested with forced choice but no tool_calls returned
-    console.warn("[openai-direct] tool_choice forced but no tool_calls in response — falling back to text");
+    console.warn(
+      "[openai-direct] tool_choice forced but no tool_calls in response — falling back to text",
+    );
     if (!text) {
-        return { text: "", provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-          error: { type: "missing_tool_call", message: "No tool call returned despite tool_choice", status: 502 } };
+      return {
+        text: "",
+        provider: "openai",
+        model: req.model,
+        latencyMs: Date.now() - start,
+        fallbackUsed: false,
+        error: {
+          type: "missing_tool_call",
+          message: "No tool call returned despite tool_choice",
+          status: 502,
+        },
+      };
     }
   }
 
-  return { text, structured, provider: "openai", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
+  return {
+    text,
+    structured,
+    provider: "openai",
+    model: req.model,
+    latencyMs: Date.now() - start,
+    fallbackUsed: false,
+  };
 }
 
 // ── Anthropic Adapter (DIRECT — api.anthropic.com) ────────
-async function anthropicAdapter(req: AdapterRequest, signal: AbortSignal): Promise<NormalizedResponse> {
+async function anthropicAdapter(
+  req: AdapterRequest,
+  signal: AbortSignal,
+): Promise<NormalizedResponse> {
   const start = Date.now();
 
   let systemPrompt = "";
   const anthropicMessages: Array<{ role: string; content: string }> = [];
   for (const m of req.messages) {
-    if (m.role === "system") { systemPrompt += (systemPrompt ? "\n" : "") + m.content; }
-    else { anthropicMessages.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }); }
+    if (m.role === "system") {
+      systemPrompt += (systemPrompt ? "\n" : "") + m.content;
+    } else {anthropicMessages.push({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.content,
+      });}
   }
 
   // Anthropic requires at least one non-system message
@@ -186,8 +276,17 @@ async function anthropicAdapter(req: AdapterRequest, signal: AbortSignal): Promi
       anthropicMessages.push({ role: "user", content: systemPrompt });
       systemPrompt = "";
     } else {
-      return { text: "", provider: "anthropic", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-        error: { type: "empty_messages", message: "No messages provided for Anthropic" } };
+      return {
+        text: "",
+        provider: "anthropic",
+        model: req.model,
+        latencyMs: Date.now() - start,
+        fallbackUsed: false,
+        error: {
+          type: "empty_messages",
+          message: "No messages provided for Anthropic",
+        },
+      };
     }
   }
 
@@ -206,48 +305,97 @@ async function anthropicAdapter(req: AdapterRequest, signal: AbortSignal): Promi
       input_schema: t.function.parameters,
     }));
     if (req.toolChoice) {
-      body.tool_choice = { type: "tool", name: req.toolChoice.function?.name || req.tools[0].function.name };
+      body.tool_choice = {
+        type: "tool",
+        name: req.toolChoice.function?.name || req.tools[0].function.name,
+      };
     }
   }
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST", headers: getAnthropicHeaders(), signal, body: JSON.stringify(body),
+    method: "POST",
+    headers: getAnthropicHeaders(),
+    signal,
+    body: JSON.stringify(body),
   });
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
-    console.error(`[anthropic-direct] error ${resp.status}: ${errText.slice(0, 200)}`);
-    return { text: "", provider: "anthropic", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: `http_${resp.status}`, message: `Anthropic error: ${resp.status}` } };
+    console.error(
+      `[anthropic-direct] error ${resp.status}: ${errText.slice(0, 200)}`,
+    );
+    return {
+      text: "",
+      provider: "anthropic",
+      model: req.model,
+      latencyMs: Date.now() - start,
+      fallbackUsed: false,
+      error: {
+        type: `http_${resp.status}`,
+        message: `Anthropic error: ${resp.status}`,
+      },
+    };
   }
 
   const data = await resp.json();
   let text = "";
   let structured: any = undefined;
 
-  if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
+  if (
+    !data.content || !Array.isArray(data.content) || data.content.length === 0
+  ) {
     console.error("[anthropic-direct] empty content array in response");
-    return { text: "", provider: "anthropic", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: "empty_response", message: "Anthropic returned empty content" } };
+    return {
+      text: "",
+      provider: "anthropic",
+      model: req.model,
+      latencyMs: Date.now() - start,
+      fallbackUsed: false,
+      error: {
+        type: "empty_response",
+        message: "Anthropic returned empty content",
+      },
+    };
   }
 
   for (const block of data.content) {
     if (block.type === "text") text += block.text;
-    if (block.type === "tool_use") { structured = block.input; }
+    if (block.type === "tool_use") structured = block.input;
   }
 
   // If tools were requested but no structured output, treat as error
   if (req.tools?.length && req.toolChoice && !structured && !text) {
-    console.warn("[anthropic-direct] tool_choice forced but no tool_use block returned");
-    return { text: "", provider: "anthropic", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: "missing_tool_call", message: "No tool_use block in Anthropic response" } };
+    console.warn(
+      "[anthropic-direct] tool_choice forced but no tool_use block returned",
+    );
+    return {
+      text: "",
+      provider: "anthropic",
+      model: req.model,
+      latencyMs: Date.now() - start,
+      fallbackUsed: false,
+      error: {
+        type: "missing_tool_call",
+        message: "No tool_use block in Anthropic response",
+      },
+    };
   }
 
-  return { text, structured, provider: "anthropic", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
+  return {
+    text,
+    structured,
+    provider: "anthropic",
+    model: req.model,
+    latencyMs: Date.now() - start,
+    fallbackUsed: false,
+  };
 }
 
 // ── Perplexity Adapter (DIRECT — api.perplexity.ai) ───────
-async function perplexityAdapter(req: AdapterRequest, signal: AbortSignal): Promise<NormalizedResponse> {
+async function perplexityAdapter(
+  req: AdapterRequest,
+  signal: AbortSignal,
+): Promise<NormalizedResponse> {
   const start = Date.now();
   const body: any = {
     model: req.model,
@@ -257,30 +405,60 @@ async function perplexityAdapter(req: AdapterRequest, signal: AbortSignal): Prom
   };
 
   const resp = await fetch("https://api.perplexity.ai/chat/completions", {
-    method: "POST", headers: getPerplexityHeaders(), signal, body: JSON.stringify(body),
+    method: "POST",
+    headers: getPerplexityHeaders(),
+    signal,
+    body: JSON.stringify(body),
   });
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
-    console.error(`[perplexity-direct] error ${resp.status}: ${errText.slice(0, 200)}`);
-    return { text: "", provider: "perplexity", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: `http_${resp.status}`, message: `Perplexity error: ${resp.status}` } };
+    console.error(
+      `[perplexity-direct] error ${resp.status}: ${errText.slice(0, 200)}`,
+    );
+    return {
+      text: "",
+      provider: "perplexity",
+      model: req.model,
+      latencyMs: Date.now() - start,
+      fallbackUsed: false,
+      error: {
+        type: `http_${resp.status}`,
+        message: `Perplexity error: ${resp.status}`,
+      },
+    };
   }
 
   const data = await resp.json();
   const text = data.choices?.[0]?.message?.content || "";
   const citations = data.citations || [];
 
-  return { text, citations, provider: "perplexity", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
+  return {
+    text,
+    citations,
+    provider: "perplexity",
+    model: req.model,
+    latencyMs: Date.now() - start,
+    fallbackUsed: false,
+  };
 }
 
 // ── Lovable AI Gateway Adapter ────────────────────────────
-async function lovableAdapter(req: AdapterRequest, signal: AbortSignal): Promise<NormalizedResponse> {
+async function lovableAdapter(
+  req: AdapterRequest,
+  signal: AbortSignal,
+): Promise<NormalizedResponse> {
   const start = Date.now();
   const key = Deno.env.get("LOVABLE_API_KEY");
   if (!key) {
-    return { text: "", provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: "config", message: "LOVABLE_API_KEY not configured" } };
+    return {
+      text: "",
+      provider: "lovable",
+      model: req.model,
+      latencyMs: Date.now() - start,
+      fallbackUsed: false,
+      error: { type: "config", message: "LOVABLE_API_KEY not configured" },
+    };
   }
 
   const body: any = {
@@ -295,38 +473,76 @@ async function lovableAdapter(req: AdapterRequest, signal: AbortSignal): Promise
   }
   if (req.reasoning) body.reasoning = req.reasoning;
 
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    signal,
-    body: JSON.stringify(body),
-  });
+  const resp = await fetch(
+    "https://ai.gateway.lovable.dev/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      signal,
+      body: JSON.stringify(body),
+    },
+  );
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
-    console.error(`[lovable-gateway] error ${resp.status}: ${errText.slice(0, 200)}`);
-    return { text: "", provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: `http_${resp.status}`, message: `Lovable gateway error: ${resp.status}` } };
+    console.error(
+      `[lovable-gateway] error ${resp.status}: ${errText.slice(0, 200)}`,
+    );
+    return {
+      text: "",
+      provider: "lovable",
+      model: req.model,
+      latencyMs: Date.now() - start,
+      fallbackUsed: false,
+      error: {
+        type: `http_${resp.status}`,
+        message: `Lovable gateway error: ${resp.status}`,
+      },
+    };
   }
 
   const data = await resp.json();
   const choice = data.choices?.[0];
   if (!choice) {
-    return { text: "", provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false,
-      error: { type: "empty_response", message: "Lovable gateway returned no choices" } };
+    return {
+      text: "",
+      provider: "lovable",
+      model: req.model,
+      latencyMs: Date.now() - start,
+      fallbackUsed: false,
+      error: {
+        type: "empty_response",
+        message: "Lovable gateway returned no choices",
+      },
+    };
   }
 
   let text = choice.message?.content || "";
   let structured: any = undefined;
   const toolCall = choice.message?.tool_calls?.[0];
   if (toolCall?.function?.arguments) {
-    try { structured = JSON.parse(toolCall.function.arguments); } catch { /* ignore */ }
+    try {
+      structured = JSON.parse(toolCall.function.arguments);
+    } catch { /* ignore */ }
   }
 
-  return { text, structured, provider: "lovable", model: req.model, latencyMs: Date.now() - start, fallbackUsed: false };
+  return {
+    text,
+    structured,
+    provider: "lovable",
+    model: req.model,
+    latencyMs: Date.now() - start,
+    fallbackUsed: false,
+  };
 }
 
-type AdapterFn = (req: AdapterRequest, signal: AbortSignal) => Promise<NormalizedResponse>;
+type AdapterFn = (
+  req: AdapterRequest,
+  signal: AbortSignal,
+) => Promise<NormalizedResponse>;
 
 const ADAPTERS: Record<ProviderKey, AdapterFn> = {
   openai: openaiAdapter,
@@ -347,12 +563,30 @@ const PROVIDER_HEALTH = {
   perplexityDirect: !!Deno.env.get("PERPLEXITY_API_KEY"),
   lovableGateway: !!Deno.env.get("LOVABLE_API_KEY"),
 };
-console.log(`[provider-health] OpenAI: ${PROVIDER_HEALTH.openaiDirect ? "ON" : `OFF (${PROVIDER_HEALTH.openaiDirectReason})`} | Anthropic: ${PROVIDER_HEALTH.anthropicDirect ? "ON" : "OFF"} | Perplexity: ${PROVIDER_HEALTH.perplexityDirect ? "ON" : "OFF"} | Lovable: ${PROVIDER_HEALTH.lovableGateway ? "ON" : "OFF"}`);
+console.log(
+  `[provider-health] OpenAI: ${
+    PROVIDER_HEALTH.openaiDirect
+      ? "ON"
+      : `OFF (${PROVIDER_HEALTH.openaiDirectReason})`
+  } | Anthropic: ${
+    PROVIDER_HEALTH.anthropicDirect ? "ON" : "OFF"
+  } | Perplexity: ${
+    PROVIDER_HEALTH.perplexityDirect ? "ON" : "OFF"
+  } | Lovable: ${PROVIDER_HEALTH.lovableGateway ? "ON" : "OFF"}`,
+);
 
 // ═══════════════════════════════════════════════════════════
 // LAYER 2 — ROUTER
 // ═══════════════════════════════════════════════════════════
-type TaskType = "chat_general" | "deep_research" | "email_evaluation" | "territory_tiering" | "account_plan" | "opportunity_strategy" | "brainstorm" | "rollup";
+type TaskType =
+  | "chat_general"
+  | "deep_research"
+  | "email_evaluation"
+  | "territory_tiering"
+  | "account_plan"
+  | "opportunity_strategy"
+  | "brainstorm"
+  | "rollup";
 
 interface LLMRoute {
   primaryProvider: ProviderKey;
@@ -371,30 +605,103 @@ interface LLMRoute {
 // - Perplexity = external research ONLY — fallback: OpenAI
 // - Anthropic = artifact engine ONLY (in strategy-transform-output, NOT here as primary)
 const ROUTES: Record<TaskType, LLMRoute> = {
-  chat_general:         { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.7, maxTokens: 4096, useTools: false },
-  deep_research:        { primaryProvider: "perplexity", model: "sonar-pro", fallbackProvider: "openai", fallbackModel: "gpt-4o", temperature: 0.3, maxTokens: 8192, useTools: false },
-  email_evaluation:     { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.4, maxTokens: 4096, useTools: true },
-  territory_tiering:    { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.2, maxTokens: 8192, useTools: true, reasoning: { effort: "medium" } },
-  account_plan:         { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
-  opportunity_strategy: { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.5, maxTokens: 8192, useTools: true },
-  brainstorm:           { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.9, maxTokens: 4096, useTools: true },
-  rollup:               { primaryProvider: "openai", model: "gpt-4o", fallbackProvider: "anthropic", fallbackModel: "claude-sonnet-4-20250514", temperature: 0.3, maxTokens: 4096, useTools: true },
+  chat_general: {
+    primaryProvider: "openai",
+    model: "gpt-4o",
+    fallbackProvider: "anthropic",
+    fallbackModel: "claude-sonnet-4-20250514",
+    temperature: 0.7,
+    maxTokens: 4096,
+    useTools: false,
+  },
+  deep_research: {
+    primaryProvider: "perplexity",
+    model: "sonar-pro",
+    fallbackProvider: "openai",
+    fallbackModel: "gpt-4o",
+    temperature: 0.3,
+    maxTokens: 8192,
+    useTools: false,
+  },
+  email_evaluation: {
+    primaryProvider: "openai",
+    model: "gpt-4o",
+    fallbackProvider: "anthropic",
+    fallbackModel: "claude-sonnet-4-20250514",
+    temperature: 0.4,
+    maxTokens: 4096,
+    useTools: true,
+  },
+  territory_tiering: {
+    primaryProvider: "openai",
+    model: "gpt-4o",
+    fallbackProvider: "anthropic",
+    fallbackModel: "claude-sonnet-4-20250514",
+    temperature: 0.2,
+    maxTokens: 8192,
+    useTools: true,
+    reasoning: { effort: "medium" },
+  },
+  account_plan: {
+    primaryProvider: "openai",
+    model: "gpt-4o",
+    fallbackProvider: "anthropic",
+    fallbackModel: "claude-sonnet-4-20250514",
+    temperature: 0.5,
+    maxTokens: 8192,
+    useTools: true,
+  },
+  opportunity_strategy: {
+    primaryProvider: "openai",
+    model: "gpt-4o",
+    fallbackProvider: "anthropic",
+    fallbackModel: "claude-sonnet-4-20250514",
+    temperature: 0.5,
+    maxTokens: 8192,
+    useTools: true,
+  },
+  brainstorm: {
+    primaryProvider: "openai",
+    model: "gpt-4o",
+    fallbackProvider: "anthropic",
+    fallbackModel: "claude-sonnet-4-20250514",
+    temperature: 0.9,
+    maxTokens: 4096,
+    useTools: true,
+  },
+  rollup: {
+    primaryProvider: "openai",
+    model: "gpt-4o",
+    fallbackProvider: "anthropic",
+    fallbackModel: "claude-sonnet-4-20250514",
+    temperature: 0.3,
+    maxTokens: 4096,
+    useTools: true,
+  },
 };
 
 function resolveLLMRoute(taskType: string): LLMRoute {
   const route = { ...(ROUTES[taskType as TaskType] || ROUTES.chat_general) };
 
   if (route.primaryProvider === "perplexity" && taskType !== "deep_research") {
-    console.error(`[routing] GUARDRAIL: task=${taskType} tried to use Perplexity — forcing OpenAI direct`);
+    console.error(
+      `[routing] GUARDRAIL: task=${taskType} tried to use Perplexity — forcing OpenAI direct`,
+    );
     route.primaryProvider = "openai";
     route.model = "gpt-4o";
   }
 
   if (route.primaryProvider === "openai" && !PROVIDER_HEALTH.openaiDirect) {
-    console.error(`[routing] OPENAI_API_KEY invalid/unavailable — cannot serve task=${taskType} on OpenAI direct`);
+    console.error(
+      `[routing] OPENAI_API_KEY invalid/unavailable — cannot serve task=${taskType} on OpenAI direct`,
+    );
   }
-  if (route.primaryProvider === "perplexity" && !PROVIDER_HEALTH.perplexityDirect) {
-    console.warn(`[routing] PERPLEXITY_API_KEY missing — downgrading deep_research to OpenAI direct`);
+  if (
+    route.primaryProvider === "perplexity" && !PROVIDER_HEALTH.perplexityDirect
+  ) {
+    console.warn(
+      `[routing] PERPLEXITY_API_KEY missing — downgrading deep_research to OpenAI direct`,
+    );
     route.primaryProvider = "openai";
     route.model = "gpt-4o";
   }
@@ -413,7 +720,9 @@ async function callWithFallback(
   // ── SMOKE TEST MODE: force primary failure for fallback testing ──
   const smokeTestForceFail = route._smokeTestForceFail === true;
   if (smokeTestForceFail) {
-    console.log(`[routing] SMOKE_TEST_MODE: forcing primary failure for task=${taskType}`);
+    console.log(
+      `[routing] SMOKE_TEST_MODE: forcing primary failure for task=${taskType}`,
+    );
   }
 
   const controller = new AbortController();
@@ -424,19 +733,37 @@ async function callWithFallback(
 
     if (!smokeTestForceFail) {
       const primaryAdapter = ADAPTERS[route.primaryProvider];
-      console.log(`[routing] task=${taskType} primary=${route.primaryProvider} model=${route.model}`);
-      result = await primaryAdapter({ ...adapterReq, model: route.model }, controller.signal);
+      console.log(
+        `[routing] task=${taskType} primary=${route.primaryProvider} model=${route.model}`,
+      );
+      result = await primaryAdapter(
+        { ...adapterReq, model: route.model },
+        controller.signal,
+      );
 
       if (!result.error) {
-        console.log(`[routing] task=${taskType} provider=${result.provider} model=${result.model} latency=${result.latencyMs}ms`);
+        console.log(
+          `[routing] task=${taskType} provider=${result.provider} model=${result.model} latency=${result.latencyMs}ms`,
+        );
         return result;
       }
     } else {
-      result = { text: "", provider: route.primaryProvider, model: route.model, latencyMs: 0, fallbackUsed: false,
-        error: { type: "smoke_test_forced", message: "SMOKE_TEST_MODE: forced primary failure" } };
+      result = {
+        text: "",
+        provider: route.primaryProvider,
+        model: route.model,
+        latencyMs: 0,
+        fallbackUsed: false,
+        error: {
+          type: "smoke_test_forced",
+          message: "SMOKE_TEST_MODE: forced primary failure",
+        },
+      };
     }
 
-    console.warn(`[routing] primary failed: ${result.error.message}. Trying fallback=${route.fallbackProvider} model=${route.fallbackModel}`);
+    console.warn(
+      `[routing] primary failed: ${result.error.message}. Trying fallback=${route.fallbackProvider} model=${route.fallbackModel}`,
+    );
     clearTimeout(timeout);
     const fallbackController = new AbortController();
     const fallbackTimeout = setTimeout(() => fallbackController.abort(), 55000);
@@ -444,31 +771,51 @@ async function callWithFallback(
     try {
       const fallbackAdapter = ADAPTERS[route.fallbackProvider];
       const fallbackResult = await fallbackAdapter(
-        { ...adapterReq, model: route.fallbackModel }, fallbackController.signal,
+        { ...adapterReq, model: route.fallbackModel },
+        fallbackController.signal,
       );
       fallbackResult.fallbackUsed = true;
-      console.log(`[routing] fallback task=${taskType} provider=${fallbackResult.provider} model=${fallbackResult.model} latency=${fallbackResult.latencyMs}ms reason=${result.error.message}`);
+      console.log(
+        `[routing] fallback task=${taskType} provider=${fallbackResult.provider} model=${fallbackResult.model} latency=${fallbackResult.latencyMs}ms reason=${result.error.message}`,
+      );
       return fallbackResult;
     } finally {
       clearTimeout(fallbackTimeout);
     }
   } catch (e: any) {
     if (e.name === "AbortError") {
-      console.warn(`[routing] primary timed out for task=${taskType}. Trying fallback=${route.fallbackProvider}`);
+      console.warn(
+        `[routing] primary timed out for task=${taskType}. Trying fallback=${route.fallbackProvider}`,
+      );
       const fallbackController = new AbortController();
-      const fallbackTimeout = setTimeout(() => fallbackController.abort(), 55000);
+      const fallbackTimeout = setTimeout(
+        () => fallbackController.abort(),
+        55000,
+      );
       try {
         const fallbackAdapter = ADAPTERS[route.fallbackProvider];
         const fallbackResult = await fallbackAdapter(
-          { ...adapterReq, model: route.fallbackModel }, fallbackController.signal,
+          { ...adapterReq, model: route.fallbackModel },
+          fallbackController.signal,
         );
         fallbackResult.fallbackUsed = true;
-        console.log(`[routing] fallback-after-timeout task=${taskType} provider=${fallbackResult.provider} latency=${fallbackResult.latencyMs}ms`);
+        console.log(
+          `[routing] fallback-after-timeout task=${taskType} provider=${fallbackResult.provider} latency=${fallbackResult.latencyMs}ms`,
+        );
         return fallbackResult;
       } catch (fe: any) {
         if (fe.name === "AbortError") {
-          return { text: "", provider: route.fallbackProvider, model: route.fallbackModel, latencyMs: 55000, fallbackUsed: true,
-            error: { type: "timeout", message: "Both primary and fallback timed out" } };
+          return {
+            text: "",
+            provider: route.fallbackProvider,
+            model: route.fallbackModel,
+            latencyMs: 55000,
+            fallbackUsed: true,
+            error: {
+              type: "timeout",
+              message: "Both primary and fallback timed out",
+            },
+          };
         }
         throw fe;
       } finally {
@@ -516,7 +863,12 @@ async function callStreaming(
         model: route.model,
         latencyMs: 0,
         fallbackUsed: false,
-        error: { type: "misconfigured_route", message: `Chat route must use OpenAI direct, got ${route.primaryProvider}`, status: 500 },
+        error: {
+          type: "misconfigured_route",
+          message:
+            `Chat route must use OpenAI direct, got ${route.primaryProvider}`,
+          status: 500,
+        },
       } satisfies NormalizedResponse;
       console.error(JSON.stringify({
         _type: "routing.stream.fail",
@@ -538,7 +890,11 @@ async function callStreaming(
         model: route.model,
         latencyMs: 0,
         fallbackUsed: false,
-        error: { type: "smoke_test_forced", message: "SMOKE_TEST_MODE: forced primary failure", status: 503 },
+        error: {
+          type: "smoke_test_forced",
+          message: "SMOKE_TEST_MODE: forced primary failure",
+          status: 503,
+        },
       } satisfies NormalizedResponse;
       console.error(JSON.stringify({
         _type: "routing.stream.fail",
@@ -553,7 +909,11 @@ async function callStreaming(
       return forced;
     }
 
-    const result = await openaiAdapter({ ...adapterReq, model: route.model, stream: true }, controller.signal);
+    const result = await openaiAdapter({
+      ...adapterReq,
+      model: route.model,
+      stream: true,
+    }, controller.signal);
     if (result.error) {
       console.error(JSON.stringify({
         _type: "routing.stream.fail",
@@ -613,76 +973,238 @@ async function callStreaming(
 // ═══════════════════════════════════════════════════════════
 const WORKFLOW_TOOLS: Record<string, any> = {
   deep_research: {
-    type: "function", function: { name: "deep_research_result", description: "Return structured deep research findings.",
-      parameters: { type: "object", properties: {
-        summary: { type: "string" }, company_overview: { type: "string" },
-        key_findings: { type: "array", items: { type: "string" } },
-        strategic_implications: { type: "array", items: { type: "string" } },
-        risks: { type: "array", items: { type: "string" } },
-        opportunities: { type: "array", items: { type: "string" } },
-        recommended_actions: { type: "array", items: { type: "string" } },
-        cited_sources: { type: "array", items: { type: "string" } },
-      }, required: ["summary", "company_overview", "key_findings", "strategic_implications", "risks", "opportunities", "recommended_actions", "cited_sources"], additionalProperties: false } } },
+    type: "function",
+    function: {
+      name: "deep_research_result",
+      description: "Return structured deep research findings.",
+      parameters: {
+        type: "object",
+        properties: {
+          summary: { type: "string" },
+          company_overview: { type: "string" },
+          key_findings: { type: "array", items: { type: "string" } },
+          strategic_implications: { type: "array", items: { type: "string" } },
+          risks: { type: "array", items: { type: "string" } },
+          opportunities: { type: "array", items: { type: "string" } },
+          recommended_actions: { type: "array", items: { type: "string" } },
+          cited_sources: { type: "array", items: { type: "string" } },
+        },
+        required: [
+          "summary",
+          "company_overview",
+          "key_findings",
+          "strategic_implications",
+          "risks",
+          "opportunities",
+          "recommended_actions",
+          "cited_sources",
+        ],
+        additionalProperties: false,
+      },
+    },
+  },
   email_evaluation: {
-    type: "function", function: { name: "email_evaluation_result", description: "Return structured email evaluation.",
-      parameters: { type: "object", properties: {
-        overall_score: { type: "number" }, strengths: { type: "array", items: { type: "string" } },
-        weaknesses: { type: "array", items: { type: "string" } }, subject_line_feedback: { type: "string" },
-        opening_feedback: { type: "string" }, value_prop_feedback: { type: "string" },
-        cta_feedback: { type: "string" }, rewrite: { type: "string" },
-      }, required: ["overall_score", "strengths", "weaknesses", "subject_line_feedback", "opening_feedback", "value_prop_feedback", "cta_feedback", "rewrite"], additionalProperties: false } } },
+    type: "function",
+    function: {
+      name: "email_evaluation_result",
+      description: "Return structured email evaluation.",
+      parameters: {
+        type: "object",
+        properties: {
+          overall_score: { type: "number" },
+          strengths: { type: "array", items: { type: "string" } },
+          weaknesses: { type: "array", items: { type: "string" } },
+          subject_line_feedback: { type: "string" },
+          opening_feedback: { type: "string" },
+          value_prop_feedback: { type: "string" },
+          cta_feedback: { type: "string" },
+          rewrite: { type: "string" },
+        },
+        required: [
+          "overall_score",
+          "strengths",
+          "weaknesses",
+          "subject_line_feedback",
+          "opening_feedback",
+          "value_prop_feedback",
+          "cta_feedback",
+          "rewrite",
+        ],
+        additionalProperties: false,
+      },
+    },
+  },
   territory_tiering: {
-    type: "function", function: { name: "territory_tiering_result", description: "Return structured territory tiering analysis.",
-      parameters: { type: "object", properties: {
-        methodology: { type: "string" },
-        tiers: { type: "array", items: { type: "object", properties: {
-          account_name: { type: "string" }, tier: { type: "string", enum: ["Tier 1", "Tier 2", "Tier 3", "Tier 4"] },
-          rationale: { type: "string" }, next_action: { type: "string" },
-        }, required: ["account_name", "tier", "rationale", "next_action"], additionalProperties: false } },
-        summary: { type: "string" },
-      }, required: ["methodology", "tiers", "summary"], additionalProperties: false } } },
+    type: "function",
+    function: {
+      name: "territory_tiering_result",
+      description: "Return structured territory tiering analysis.",
+      parameters: {
+        type: "object",
+        properties: {
+          methodology: { type: "string" },
+          tiers: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                account_name: { type: "string" },
+                tier: {
+                  type: "string",
+                  enum: ["Tier 1", "Tier 2", "Tier 3", "Tier 4"],
+                },
+                rationale: { type: "string" },
+                next_action: { type: "string" },
+              },
+              required: ["account_name", "tier", "rationale", "next_action"],
+              additionalProperties: false,
+            },
+          },
+          summary: { type: "string" },
+        },
+        required: ["methodology", "tiers", "summary"],
+        additionalProperties: false,
+      },
+    },
+  },
   account_plan: {
-    type: "function", function: { name: "account_plan_result", description: "Return structured account plan.",
-      parameters: { type: "object", properties: {
-        executive_summary: { type: "string" }, account_overview: { type: "string" },
-        stakeholder_map: { type: "array", items: { type: "string" } },
-        strategic_objectives: { type: "array", items: { type: "string" } },
-        action_plan: { type: "array", items: { type: "string" } },
-        risk_factors: { type: "array", items: { type: "string" } },
-        success_metrics: { type: "array", items: { type: "string" } },
-      }, required: ["executive_summary", "account_overview", "stakeholder_map", "strategic_objectives", "action_plan", "risk_factors", "success_metrics"], additionalProperties: false } } },
+    type: "function",
+    function: {
+      name: "account_plan_result",
+      description: "Return structured account plan.",
+      parameters: {
+        type: "object",
+        properties: {
+          executive_summary: { type: "string" },
+          account_overview: { type: "string" },
+          stakeholder_map: { type: "array", items: { type: "string" } },
+          strategic_objectives: { type: "array", items: { type: "string" } },
+          action_plan: { type: "array", items: { type: "string" } },
+          risk_factors: { type: "array", items: { type: "string" } },
+          success_metrics: { type: "array", items: { type: "string" } },
+        },
+        required: [
+          "executive_summary",
+          "account_overview",
+          "stakeholder_map",
+          "strategic_objectives",
+          "action_plan",
+          "risk_factors",
+          "success_metrics",
+        ],
+        additionalProperties: false,
+      },
+    },
+  },
   opportunity_strategy: {
-    type: "function", function: { name: "opportunity_strategy_result", description: "Return structured opportunity strategy.",
-      parameters: { type: "object", properties: {
-        deal_summary: { type: "string" }, decision_process: { type: "string" },
-        champion_status: { type: "string" }, competition_analysis: { type: "string" },
-        value_alignment: { type: "string" }, risks: { type: "array", items: { type: "string" } },
-        next_actions: { type: "array", items: { type: "string" } }, close_plan: { type: "string" },
-      }, required: ["deal_summary", "decision_process", "champion_status", "competition_analysis", "value_alignment", "risks", "next_actions", "close_plan"], additionalProperties: false } } },
+    type: "function",
+    function: {
+      name: "opportunity_strategy_result",
+      description: "Return structured opportunity strategy.",
+      parameters: {
+        type: "object",
+        properties: {
+          deal_summary: { type: "string" },
+          decision_process: { type: "string" },
+          champion_status: { type: "string" },
+          competition_analysis: { type: "string" },
+          value_alignment: { type: "string" },
+          risks: { type: "array", items: { type: "string" } },
+          next_actions: { type: "array", items: { type: "string" } },
+          close_plan: { type: "string" },
+        },
+        required: [
+          "deal_summary",
+          "decision_process",
+          "champion_status",
+          "competition_analysis",
+          "value_alignment",
+          "risks",
+          "next_actions",
+          "close_plan",
+        ],
+        additionalProperties: false,
+      },
+    },
+  },
   brainstorm: {
-    type: "function", function: { name: "brainstorm_result", description: "Return structured brainstorm output.",
-      parameters: { type: "object", properties: {
-        key_insights: { type: "array", items: { type: "string" } },
-        bold_ideas: { type: "array", items: { type: "string" } },
-        quick_wins: { type: "array", items: { type: "string" } },
-        strategic_bets: { type: "array", items: { type: "string" } },
-        summary: { type: "string" },
-      }, required: ["key_insights", "bold_ideas", "quick_wins", "strategic_bets", "summary"], additionalProperties: false } } },
+    type: "function",
+    function: {
+      name: "brainstorm_result",
+      description: "Return structured brainstorm output.",
+      parameters: {
+        type: "object",
+        properties: {
+          key_insights: { type: "array", items: { type: "string" } },
+          bold_ideas: { type: "array", items: { type: "string" } },
+          quick_wins: { type: "array", items: { type: "string" } },
+          strategic_bets: { type: "array", items: { type: "string" } },
+          summary: { type: "string" },
+        },
+        required: [
+          "key_insights",
+          "bold_ideas",
+          "quick_wins",
+          "strategic_bets",
+          "summary",
+        ],
+        additionalProperties: false,
+      },
+    },
+  },
 };
 
 const ROLLUP_TOOL = {
-  type: "function", function: { name: "generate_rollup", description: "Generate a structured thread rollup.",
-    parameters: { type: "object", properties: {
-      summary: { type: "string" }, key_facts: { type: "array", items: { type: "string" } },
-      hypotheses: { type: "array", items: { type: "string" } },
-      risks: { type: "array", items: { type: "string" } },
-      open_questions: { type: "array", items: { type: "string" } },
-      next_steps: { type: "array", items: { type: "string" } },
-      memory_suggestions: { type: "array", items: { type: "object", properties: {
-        memory_type: { type: "string", enum: ["fact", "hypothesis", "risk", "priority", "stakeholder_note", "messaging_note", "next_step"] },
-        content: { type: "string" }, confidence: { type: "number" },
-      }, required: ["memory_type", "content", "confidence"], additionalProperties: false } },
-    }, required: ["summary", "key_facts", "hypotheses", "risks", "open_questions", "next_steps", "memory_suggestions"], additionalProperties: false } },
+  type: "function",
+  function: {
+    name: "generate_rollup",
+    description: "Generate a structured thread rollup.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: { type: "string" },
+        key_facts: { type: "array", items: { type: "string" } },
+        hypotheses: { type: "array", items: { type: "string" } },
+        risks: { type: "array", items: { type: "string" } },
+        open_questions: { type: "array", items: { type: "string" } },
+        next_steps: { type: "array", items: { type: "string" } },
+        memory_suggestions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              memory_type: {
+                type: "string",
+                enum: [
+                  "fact",
+                  "hypothesis",
+                  "risk",
+                  "priority",
+                  "stakeholder_note",
+                  "messaging_note",
+                  "next_step",
+                ],
+              },
+              content: { type: "string" },
+              confidence: { type: "number" },
+            },
+            required: ["memory_type", "content", "confidence"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: [
+        "summary",
+        "key_facts",
+        "hypotheses",
+        "risks",
+        "open_questions",
+        "next_steps",
+        "memory_suggestions",
+      ],
+      additionalProperties: false,
+    },
+  },
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -713,26 +1235,83 @@ interface ContextPack {
 }
 
 async function buildContextPack(
-  supabase: any, threadId: string, userId: string, userQuery?: string, workflowType?: string,
+  supabase: any,
+  threadId: string,
+  userId: string,
+  userQuery?: string,
+  workflowType?: string,
 ): Promise<ContextPack> {
   const pack: ContextPack = {
-    memories: [], uploads: [], outputs: [], recentMessages: [], sourceCount: 0,
-    retrievalMeta: { memoriesScored: 0, uploadsIncluded: 0, outputsIncluded: 0, messagesIncluded: 0, pinnedMemories: 0, uploadNames: [], outputTitles: [], contextType: "minimal", topSources: [] },
+    memories: [],
+    uploads: [],
+    outputs: [],
+    recentMessages: [],
+    sourceCount: 0,
+    retrievalMeta: {
+      memoriesScored: 0,
+      uploadsIncluded: 0,
+      outputsIncluded: 0,
+      messagesIncluded: 0,
+      pinnedMemories: 0,
+      uploadNames: [],
+      outputTitles: [],
+      contextType: "minimal",
+      topSources: [],
+    },
   };
 
   const { data: thread } = await supabase.from("strategy_threads")
-    .select("linked_account_id, linked_opportunity_id, linked_territory_id, title")
+    .select(
+      "linked_account_id, linked_opportunity_id, linked_territory_id, title",
+    )
     .eq("id", threadId).single();
   if (!thread) return pack;
 
   const rawQuery = `${userQuery || ""} ${thread.title || ""}`;
-  const queryTerms = rawQuery.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+  const queryTerms = rawQuery.toLowerCase().split(/\s+/).filter((w: string) =>
+    w.length > 3
+  );
   const workflowBoostTerms: Record<string, string[]> = {
-    deep_research: ["research", "competitor", "industry", "market", "technology", "stakeholder"],
-    account_plan: ["plan", "strategy", "objective", "stakeholder", "timeline", "metric"],
-    territory_tiering: ["tier", "priority", "segment", "icp", "revenue", "potential"],
-    email_evaluation: ["email", "message", "outreach", "subject", "tone", "cta"],
-    opportunity_strategy: ["deal", "champion", "decision", "close", "risk", "competitor"],
+    deep_research: [
+      "research",
+      "competitor",
+      "industry",
+      "market",
+      "technology",
+      "stakeholder",
+    ],
+    account_plan: [
+      "plan",
+      "strategy",
+      "objective",
+      "stakeholder",
+      "timeline",
+      "metric",
+    ],
+    territory_tiering: [
+      "tier",
+      "priority",
+      "segment",
+      "icp",
+      "revenue",
+      "potential",
+    ],
+    email_evaluation: [
+      "email",
+      "message",
+      "outreach",
+      "subject",
+      "tone",
+      "cta",
+    ],
+    opportunity_strategy: [
+      "deal",
+      "champion",
+      "decision",
+      "close",
+      "risk",
+      "competitor",
+    ],
     brainstorm: ["idea", "approach", "creative", "angle", "hypothesis"],
   };
   const boostTerms = workflowBoostTerms[workflowType || ""] || [];
@@ -742,14 +1321,25 @@ async function buildContextPack(
   if (thread.linked_account_id) {
     promises.push((async () => {
       const { data: acct } = await supabase.from("accounts")
-        .select("id, name, industry, tier, website, notes, outreach_status, tech_stack, tags")
+        .select(
+          "id, name, industry, tier, website, notes, outreach_status, tech_stack, tags",
+        )
         .eq("id", thread.linked_account_id).single();
       pack.account = acct;
       const { data: mem } = await supabase.from("account_strategy_memory")
-        .select("id, memory_type, content, is_pinned, confidence, last_used_at, created_at")
-        .eq("account_id", thread.linked_account_id).eq("user_id", userId).eq("is_irrelevant", false)
+        .select(
+          "id, memory_type, content, is_pinned, confidence, last_used_at, created_at",
+        )
+        .eq("account_id", thread.linked_account_id).eq("user_id", userId).eq(
+          "is_irrelevant",
+          false,
+        )
         .order("created_at", { ascending: false }).limit(40);
-      if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "account" })));
+      if (mem) {
+        pack.memories.push(
+          ...mem.map((m: any) => ({ ...m, source: "account" })),
+        );
+      }
     })());
   }
 
@@ -760,20 +1350,36 @@ async function buildContextPack(
         .eq("id", thread.linked_opportunity_id).single();
       pack.opportunity = opp ? { ...opp, amount: null } : null;
       const { data: mem } = await supabase.from("opportunity_strategy_memory")
-        .select("id, memory_type, content, is_pinned, confidence, last_used_at, created_at")
-        .eq("opportunity_id", thread.linked_opportunity_id).eq("user_id", userId).eq("is_irrelevant", false)
+        .select(
+          "id, memory_type, content, is_pinned, confidence, last_used_at, created_at",
+        )
+        .eq("opportunity_id", thread.linked_opportunity_id).eq(
+          "user_id",
+          userId,
+        ).eq("is_irrelevant", false)
         .order("created_at", { ascending: false }).limit(40);
-      if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "opportunity" })));
+      if (mem) {
+        pack.memories.push(
+          ...mem.map((m: any) => ({ ...m, source: "opportunity" })),
+        );
+      }
     })());
   }
 
   if (thread.linked_territory_id) {
     promises.push((async () => {
       const { data: mem } = await supabase.from("territory_strategy_memory")
-        .select("id, memory_type, content, is_pinned, confidence, last_used_at, created_at")
-        .eq("territory_id", thread.linked_territory_id).eq("user_id", userId).eq("is_irrelevant", false)
+        .select(
+          "id, memory_type, content, is_pinned, confidence, last_used_at, created_at",
+        )
+        .eq("territory_id", thread.linked_territory_id).eq("user_id", userId)
+        .eq("is_irrelevant", false)
         .order("created_at", { ascending: false }).limit(40);
-      if (mem) pack.memories.push(...mem.map((m: any) => ({ ...m, source: "territory" })));
+      if (mem) {
+        pack.memories.push(
+          ...mem.map((m: any) => ({ ...m, source: "territory" })),
+        );
+      }
     })());
   }
 
@@ -788,7 +1394,8 @@ async function buildContextPack(
   promises.push((async () => {
     const { data: outs } = await supabase.from("strategy_outputs")
       .select("id, output_type, title, rendered_text, is_pinned, created_at")
-      .eq("thread_id", threadId).order("created_at", { ascending: false }).limit(8);
+      .eq("thread_id", threadId).order("created_at", { ascending: false })
+      .limit(8);
     if (outs) pack.outputs = outs;
   })());
 
@@ -799,7 +1406,9 @@ async function buildContextPack(
       .order("created_at", { ascending: false }).limit(25);
     if (msgs) {
       pack.recentMessages = msgs.reverse().map((m: any) => ({
-        id: m.id, role: m.role, text: (m.content_json?.text || "").slice(0, 600),
+        id: m.id,
+        role: m.role,
+        text: (m.content_json?.text || "").slice(0, 600),
       }));
     }
   })());
@@ -809,7 +1418,8 @@ async function buildContextPack(
   pack.memories = scoreAndRankMemories(pack.memories, queryTerms, boostTerms);
   pack.outputs = scoreAndRankOutputs(pack.outputs, queryTerms);
   pack.uploads = pack.uploads.slice(0, CAPS.uploads).map((u: any) => ({
-    ...u, parsed_text: u.parsed_text ? u.parsed_text.slice(0, 2000) : null,
+    ...u,
+    parsed_text: u.parsed_text ? u.parsed_text.slice(0, 2000) : null,
     summary: u.summary ? u.summary.slice(0, 500) : null,
   }));
   pack.recentMessages = pack.recentMessages.slice(-CAPS.messages);
@@ -821,44 +1431,76 @@ async function buildContextPack(
   const totalWeight = memWeight + upWeight + outWeight;
   let contextType = "minimal";
   if (totalWeight > 0) {
-    if (memWeight > upWeight && memWeight > outWeight) contextType = "memory-driven";
-    else if (upWeight > memWeight && upWeight > outWeight) contextType = "upload-driven";
-    else contextType = "mixed";
+    if (memWeight > upWeight && memWeight > outWeight) {
+      contextType = "memory-driven";
+    } else if (upWeight > memWeight && upWeight > outWeight) {
+      contextType = "upload-driven";
+    } else contextType = "mixed";
   }
 
   const topSources: string[] = [];
-  for (const m of pack.memories.slice(0, 2)) topSources.push(`Memory: ${m.content.slice(0, 60)}`);
-  for (const u of pack.uploads.slice(0, 1)) topSources.push(`Upload: ${u.file_name}`);
+  for (const m of pack.memories.slice(0, 2)) {
+    topSources.push(`Memory: ${m.content.slice(0, 60)}`);
+  }
+  for (const u of pack.uploads.slice(0, 1)) {
+    topSources.push(`Upload: ${u.file_name}`);
+  }
 
   pack.retrievalMeta = {
-    memoriesScored: pack.memories.length, uploadsIncluded: pack.uploads.length,
-    outputsIncluded: pack.outputs.length, messagesIncluded: pack.recentMessages.length,
-    pinnedMemories: pinnedCount, uploadNames: pack.uploads.map((u: any) => u.file_name).filter(Boolean),
-    outputTitles: pack.outputs.map((o: any) => o.title).filter(Boolean).slice(0, 5),
-    contextType, topSources: topSources.slice(0, 3),
+    memoriesScored: pack.memories.length,
+    uploadsIncluded: pack.uploads.length,
+    outputsIncluded: pack.outputs.length,
+    messagesIncluded: pack.recentMessages.length,
+    pinnedMemories: pinnedCount,
+    uploadNames: pack.uploads.map((u: any) => u.file_name).filter(Boolean),
+    outputTitles: pack.outputs.map((o: any) => o.title).filter(Boolean).slice(
+      0,
+      5,
+    ),
+    contextType,
+    topSources: topSources.slice(0, 3),
   };
 
-  pack.sourceCount = (pack.account ? 1 : 0) + (pack.opportunity ? 1 : 0) + pack.memories.length + pack.uploads.length + pack.outputs.length;
+  pack.sourceCount = (pack.account ? 1 : 0) + (pack.opportunity ? 1 : 0) +
+    pack.memories.length + pack.uploads.length + pack.outputs.length;
 
   const memoryIds = pack.memories.map((m: any) => m.id);
   if (memoryIds.length > 0) {
     const now = new Date().toISOString();
-    for (const [table, src] of [["account_strategy_memory", "account"], ["opportunity_strategy_memory", "opportunity"], ["territory_strategy_memory", "territory"]] as const) {
-      const ids = pack.memories.filter((m: any) => m.source === src).map((m: any) => m.id);
-      if (ids.length > 0) await supabase.from(table).update({ last_used_at: now }).in("id", ids);
+    for (
+      const [table, src] of [["account_strategy_memory", "account"], [
+        "opportunity_strategy_memory",
+        "opportunity",
+      ], ["territory_strategy_memory", "territory"]] as const
+    ) {
+      const ids = pack.memories.filter((m: any) => m.source === src).map((
+        m: any,
+      ) => m.id);
+      if (ids.length > 0) {
+        await supabase.from(table).update({ last_used_at: now }).in("id", ids);
+      }
     }
   }
 
-  console.log(`[retrieval] sources=${pack.sourceCount} memories=${pack.memories.length}(${pinnedCount} pinned) uploads=${pack.uploads.length} outputs=${pack.outputs.length} contextType=${contextType}`);
+  console.log(
+    `[retrieval] sources=${pack.sourceCount} memories=${pack.memories.length}(${pinnedCount} pinned) uploads=${pack.uploads.length} outputs=${pack.outputs.length} contextType=${contextType}`,
+  );
   return pack;
 }
 
-function scoreAndRankMemories(memories: any[], queryTerms: string[], boostTerms: string[]): any[] {
+function scoreAndRankMemories(
+  memories: any[],
+  queryTerms: string[],
+  boostTerms: string[],
+): any[] {
   const seen = new Set<string>();
   const deduped = memories.filter((m) => {
     const norm = m.content.toLowerCase().trim().slice(0, 200);
-    for (const s of seen) { if (s.includes(norm) || norm.includes(s)) return false; }
-    seen.add(norm); return true;
+    for (const s of seen) {
+      if (s.includes(norm) || norm.includes(s)) return false;
+    }
+    seen.add(norm);
+    return true;
   });
 
   return deduped.map((m) => {
@@ -868,15 +1510,30 @@ function scoreAndRankMemories(memories: any[], queryTerms: string[], boostTerms:
     else if (m.confidence && m.confidence > 0.5) score += 1;
     else if (m.confidence !== null && m.confidence < 0.3) score -= 1;
     if (m.last_used_at) {
-      const usedAge = (Date.now() - new Date(m.last_used_at).getTime()) / 86400000;
-      if (usedAge < 3) score += 2; else if (usedAge < 7) score += 1;
+      const usedAge = (Date.now() - new Date(m.last_used_at).getTime()) /
+        86400000;
+      if (usedAge < 3) score += 2;
+      else if (usedAge < 7) score += 1;
     }
     const ageDays = (Date.now() - new Date(m.created_at).getTime()) / 86400000;
-    if (ageDays < 1) score += 4; else if (ageDays < 3) score += 3; else if (ageDays < 7) score += 2; else if (ageDays < 30) score += 1; else if (!m.is_pinned) score -= 1;
+    if (ageDays < 1) score += 4;
+    else if (ageDays < 3) score += 3;
+    else if (ageDays < 7) score += 2;
+    else if (ageDays < 30) score += 1;
+    else if (!m.is_pinned) score -= 1;
     const content = m.content.toLowerCase();
-    if (queryTerms.length > 0) score += queryTerms.filter((t: string) => content.includes(t)).length * 2;
-    if (boostTerms.length > 0) score += boostTerms.filter(t => content.includes(t)).length * 1.5;
-    const highPriorityTypes = ["risk", "priority", "next_step", "stakeholder_note"];
+    if (queryTerms.length > 0) {
+      score += queryTerms.filter((t: string) => content.includes(t)).length * 2;
+    }
+    if (boostTerms.length > 0) {
+      score += boostTerms.filter((t) => content.includes(t)).length * 1.5;
+    }
+    const highPriorityTypes = [
+      "risk",
+      "priority",
+      "next_step",
+      "stakeholder_note",
+    ];
     if (highPriorityTypes.includes(m.memory_type)) score += 1;
     return { ...m, score };
   }).sort((a: any, b: any) => b.score - a.score).slice(0, CAPS.memories);
@@ -887,9 +1544,12 @@ function scoreAndRankOutputs(outputs: any[], queryTerms: string[]): any[] {
     let score = 1;
     if (o.is_pinned) score += 4;
     const age = Date.now() - new Date(o.created_at).getTime();
-    if (age < 24 * 3600000) score += 3; else if (age < 7 * 86400000) score += 2;
+    if (age < 24 * 3600000) score += 3;
+    else if (age < 7 * 86400000) score += 2;
     const text = `${o.title} ${o.rendered_text || ""}`.toLowerCase();
-    if (queryTerms.length > 0) score += queryTerms.filter((t: string) => text.includes(t)).length * 1.5;
+    if (queryTerms.length > 0) {
+      score += queryTerms.filter((t: string) => text.includes(t)).length * 1.5;
+    }
     return { ...o, score };
   }).sort((a: any, b: any) => b.score - a.score).slice(0, 5);
 }
@@ -899,23 +1559,48 @@ function packToPromptSection(pack: ContextPack): string {
   let charBudget = MAX_CONTEXT_CHARS;
 
   if (pack.account) {
-    const tags = pack.account.tags?.length ? ` | Tags: ${pack.account.tags.join(", ")}` : "";
-    const tech = pack.account.tech_stack?.length ? ` | Tech: ${pack.account.tech_stack.join(", ")}` : "";
-    const s = `\n### Linked Account: ${pack.account.name}\nIndustry: ${pack.account.industry || "Unknown"} | Tier: ${pack.account.tier || "Unset"} | Status: ${pack.account.outreach_status || "None"}${tags}${tech}${pack.account.notes ? `\nNotes: ${pack.account.notes.slice(0, 400)}` : ""}`;
-    sections.push(s); charBudget -= s.length;
+    const tags = pack.account.tags?.length
+      ? ` | Tags: ${pack.account.tags.join(", ")}`
+      : "";
+    const tech = pack.account.tech_stack?.length
+      ? ` | Tech: ${pack.account.tech_stack.join(", ")}`
+      : "";
+    const s = `\n### Linked Account: ${pack.account.name}\nIndustry: ${
+      pack.account.industry || "Unknown"
+    } | Tier: ${pack.account.tier || "Unset"} | Status: ${
+      pack.account.outreach_status || "None"
+    }${tags}${tech}${
+      pack.account.notes ? `\nNotes: ${pack.account.notes.slice(0, 400)}` : ""
+    }`;
+    sections.push(s);
+    charBudget -= s.length;
   }
   if (pack.opportunity) {
-    const s = `\n### Linked Opportunity: ${pack.opportunity.name}\nStage: ${pack.opportunity.stage || "Unknown"}${pack.opportunity.close_date ? ` | Close: ${pack.opportunity.close_date}` : ""}${pack.opportunity.notes ? `\nNotes: ${pack.opportunity.notes.slice(0, 400)}` : ""}`;
-    sections.push(s); charBudget -= s.length;
+    const s = `\n### Linked Opportunity: ${pack.opportunity.name}\nStage: ${
+      pack.opportunity.stage || "Unknown"
+    }${
+      pack.opportunity.close_date
+        ? ` | Close: ${pack.opportunity.close_date}`
+        : ""
+    }${
+      pack.opportunity.notes
+        ? `\nNotes: ${pack.opportunity.notes.slice(0, 400)}`
+        : ""
+    }`;
+    sections.push(s);
+    charBudget -= s.length;
   }
   if (pack.memories.length > 0) {
     let memSection = "\n### Strategic Memory:";
     for (const m of pack.memories) {
       const pin = m.is_pinned ? " 📌" : "";
       const conf = m.confidence ? ` (${Math.round(m.confidence * 100)}%)` : "";
-      const line = `\n- [${m.memory_type}${pin}${conf}] ${m.content.slice(0, 250)}`;
+      const line = `\n- [${m.memory_type}${pin}${conf}] ${
+        m.content.slice(0, 250)
+      }`;
       if (charBudget - line.length < 0) break;
-      memSection += line; charBudget -= line.length;
+      memSection += line;
+      charBudget -= line.length;
     }
     sections.push(memSection);
   }
@@ -925,7 +1610,8 @@ function packToPromptSection(pack: ContextPack): string {
       const text = u.summary || (u.parsed_text || "").slice(0, 800);
       const line = `\n- ${u.file_name}: ${text}`;
       if (charBudget - line.length < 0) break;
-      upSection += line; charBudget -= line.length;
+      upSection += line;
+      charBudget -= line.length;
     }
     sections.push(upSection);
   }
@@ -936,7 +1622,8 @@ function packToPromptSection(pack: ContextPack): string {
       const pin = o.is_pinned ? " 📌" : "";
       const line = `\n- [${o.output_type}${pin}] ${o.title}: ${text}`;
       if (charBudget - line.length < 0) break;
-      outSection += line; charBudget -= line.length;
+      outSection += line;
+      charBudget -= line.length;
     }
     sections.push(outSection);
   }
@@ -948,26 +1635,109 @@ function renderStructuredOutput(workflowType: string, data: any): string {
   try {
     switch (workflowType) {
       case "deep_research":
-        return `# Deep Research\n\n## Summary\n${data.summary || ""}\n\n## Company Overview\n${data.company_overview || ""}\n\n## Key Findings\n${(data.key_findings || []).map((f: string) => `- ${f}`).join("\n")}\n\n## Strategic Implications\n${(data.strategic_implications || []).map((s: string) => `- ${s}`).join("\n")}\n\n## Risks\n${(data.risks || []).map((r: string) => `- ${r}`).join("\n")}\n\n## Opportunities\n${(data.opportunities || []).map((o: string) => `- ${o}`).join("\n")}\n\n## Recommended Actions\n${(data.recommended_actions || []).map((a: string) => `- ${a}`).join("\n")}\n\n## Sources\n${(data.cited_sources || []).map((s: string) => `- ${s}`).join("\n")}`;
+        return `# Deep Research\n\n## Summary\n${
+          data.summary || ""
+        }\n\n## Company Overview\n${
+          data.company_overview || ""
+        }\n\n## Key Findings\n${
+          (data.key_findings || []).map((f: string) => `- ${f}`).join("\n")
+        }\n\n## Strategic Implications\n${
+          (data.strategic_implications || []).map((s: string) => `- ${s}`).join(
+            "\n",
+          )
+        }\n\n## Risks\n${
+          (data.risks || []).map((r: string) => `- ${r}`).join("\n")
+        }\n\n## Opportunities\n${
+          (data.opportunities || []).map((o: string) => `- ${o}`).join("\n")
+        }\n\n## Recommended Actions\n${
+          (data.recommended_actions || []).map((a: string) => `- ${a}`).join(
+            "\n",
+          )
+        }\n\n## Sources\n${
+          (data.cited_sources || []).map((s: string) => `- ${s}`).join("\n")
+        }`;
       case "email_evaluation":
-        return `# Email Evaluation\n\n**Score: ${data.overall_score ?? "N/A"}/10**\n\n## Strengths\n${(data.strengths || []).map((s: string) => `- ${s}`).join("\n")}\n\n## Weaknesses\n${(data.weaknesses || []).map((w: string) => `- ${w}`).join("\n")}\n\n## Subject Line\n${data.subject_line_feedback || ""}\n\n## Opening\n${data.opening_feedback || ""}\n\n## Value Proposition\n${data.value_prop_feedback || ""}\n\n## CTA\n${data.cta_feedback || ""}\n\n## Suggested Rewrite\n${data.rewrite || ""}`;
+        return `# Email Evaluation\n\n**Score: ${
+          data.overall_score ?? "N/A"
+        }/10**\n\n## Strengths\n${
+          (data.strengths || []).map((s: string) => `- ${s}`).join("\n")
+        }\n\n## Weaknesses\n${
+          (data.weaknesses || []).map((w: string) => `- ${w}`).join("\n")
+        }\n\n## Subject Line\n${
+          data.subject_line_feedback || ""
+        }\n\n## Opening\n${
+          data.opening_feedback || ""
+        }\n\n## Value Proposition\n${
+          data.value_prop_feedback || ""
+        }\n\n## CTA\n${data.cta_feedback || ""}\n\n## Suggested Rewrite\n${
+          data.rewrite || ""
+        }`;
       case "territory_tiering":
-        return `# Territory Tiering\n\n## Methodology\n${data.methodology || ""}\n\n## Results\n${(data.tiers || []).map((t: any) => `### ${t.account_name || "?"} — ${t.tier || "?"}\n${t.rationale || ""}\n**Next:** ${t.next_action || ""}`).join("\n\n")}\n\n## Summary\n${data.summary || ""}`;
+        return `# Territory Tiering\n\n## Methodology\n${
+          data.methodology || ""
+        }\n\n## Results\n${
+          (data.tiers || []).map((t: any) =>
+            `### ${t.account_name || "?"} — ${t.tier || "?"}\n${
+              t.rationale || ""
+            }\n**Next:** ${t.next_action || ""}`
+          ).join("\n\n")
+        }\n\n## Summary\n${data.summary || ""}`;
       case "account_plan":
-        return `# Account Plan\n\n## Executive Summary\n${data.executive_summary || ""}\n\n## Overview\n${data.account_overview || ""}\n\n## Stakeholders\n${(data.stakeholder_map || []).map((s: string) => `- ${s}`).join("\n")}\n\n## Strategic Objectives\n${(data.strategic_objectives || []).map((o: string) => `- ${o}`).join("\n")}\n\n## Action Plan\n${(data.action_plan || []).map((a: string) => `- ${a}`).join("\n")}\n\n## Risk Factors\n${(data.risk_factors || []).map((r: string) => `- ${r}`).join("\n")}\n\n## Success Metrics\n${(data.success_metrics || []).map((m: string) => `- ${m}`).join("\n")}`;
+        return `# Account Plan\n\n## Executive Summary\n${
+          data.executive_summary || ""
+        }\n\n## Overview\n${data.account_overview || ""}\n\n## Stakeholders\n${
+          (data.stakeholder_map || []).map((s: string) => `- ${s}`).join("\n")
+        }\n\n## Strategic Objectives\n${
+          (data.strategic_objectives || []).map((o: string) => `- ${o}`).join(
+            "\n",
+          )
+        }\n\n## Action Plan\n${
+          (data.action_plan || []).map((a: string) => `- ${a}`).join("\n")
+        }\n\n## Risk Factors\n${
+          (data.risk_factors || []).map((r: string) => `- ${r}`).join("\n")
+        }\n\n## Success Metrics\n${
+          (data.success_metrics || []).map((m: string) => `- ${m}`).join("\n")
+        }`;
       case "opportunity_strategy":
-        return `# Opportunity Strategy\n\n## Deal Summary\n${data.deal_summary || ""}\n\n## Decision Process\n${data.decision_process || ""}\n\n## Champion Status\n${data.champion_status || ""}\n\n## Competition\n${data.competition_analysis || ""}\n\n## Value Alignment\n${data.value_alignment || ""}\n\n## Risks\n${(data.risks || []).map((r: string) => `- ${r}`).join("\n")}\n\n## Next Actions\n${(data.next_actions || []).map((a: string) => `- ${a}`).join("\n")}\n\n## Close Plan\n${data.close_plan || ""}`;
+        return `# Opportunity Strategy\n\n## Deal Summary\n${
+          data.deal_summary || ""
+        }\n\n## Decision Process\n${
+          data.decision_process || ""
+        }\n\n## Champion Status\n${
+          data.champion_status || ""
+        }\n\n## Competition\n${
+          data.competition_analysis || ""
+        }\n\n## Value Alignment\n${data.value_alignment || ""}\n\n## Risks\n${
+          (data.risks || []).map((r: string) => `- ${r}`).join("\n")
+        }\n\n## Next Actions\n${
+          (data.next_actions || []).map((a: string) => `- ${a}`).join("\n")
+        }\n\n## Close Plan\n${data.close_plan || ""}`;
       case "brainstorm":
-        return `# Brainstorm\n\n## Key Insights\n${(data.key_insights || []).map((i: string) => `- ${i}`).join("\n")}\n\n## Bold Ideas\n${(data.bold_ideas || []).map((i: string) => `- ${i}`).join("\n")}\n\n## Quick Wins\n${(data.quick_wins || []).map((w: string) => `- ${w}`).join("\n")}\n\n## Strategic Bets\n${(data.strategic_bets || []).map((b: string) => `- ${b}`).join("\n")}\n\n## Summary\n${data.summary || ""}`;
-      default: return JSON.stringify(data, null, 2);
+        return `# Brainstorm\n\n## Key Insights\n${
+          (data.key_insights || []).map((i: string) => `- ${i}`).join("\n")
+        }\n\n## Bold Ideas\n${
+          (data.bold_ideas || []).map((i: string) => `- ${i}`).join("\n")
+        }\n\n## Quick Wins\n${
+          (data.quick_wins || []).map((w: string) => `- ${w}`).join("\n")
+        }\n\n## Strategic Bets\n${
+          (data.strategic_bets || []).map((b: string) => `- ${b}`).join("\n")
+        }\n\n## Summary\n${data.summary || ""}`;
+      default:
+        return JSON.stringify(data, null, 2);
     }
-  } catch { return JSON.stringify(data, null, 2); }
+  } catch {
+    return JSON.stringify(data, null, 2);
+  }
 }
 
 function workflowTypeToOutputType(wt: string): string {
   const map: Record<string, string> = {
-    deep_research: "brief", account_plan: "account_plan", territory_tiering: "tiering_result",
-    email_evaluation: "email", opportunity_strategy: "opportunity_plan", brainstorm: "memo",
+    deep_research: "brief",
+    account_plan: "account_plan",
+    territory_tiering: "tiering_result",
+    email_evaluation: "email",
+    opportunity_strategy: "opportunity_plan",
+    brainstorm: "memo",
   };
   return map[wt] || "memo";
 }
@@ -976,7 +1746,9 @@ function workflowTypeToOutputType(wt: string): string {
 // MAIN HANDLER
 // ═══════════════════════════════════════════════════════════
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -986,17 +1758,27 @@ serve(async (req) => {
 
     let userId: string | null = null;
     if (authHeader) {
-      const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+      const { data: { user } } = await supabase.auth.getUser(
+        authHeader.replace("Bearer ", ""),
+      );
       userId = user?.id ?? null;
     }
     if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const body = await req.json();
-    const { action, threadId, content, workflowType, depth, force_primary_failure } = body;
+    const {
+      action,
+      threadId,
+      content,
+      workflowType,
+      depth,
+      force_primary_failure,
+    } = body;
 
     // ── Debug: OpenAI key health check ──────────────────────
     // Phase 0 acceptance gate. Returns 200 only when the key is shaped
@@ -1004,9 +1786,13 @@ serve(async (req) => {
     if (action === "debug_openai_test") {
       const v = validateOpenAIKey(Deno.env.get("OPENAI_API_KEY"));
       if (!v.ok) {
-        return new Response(JSON.stringify({ status: "fail", stage: "shape", reason: v.reason }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ status: "fail", stage: "shape", reason: v.reason }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       }
       try {
         const start = Date.now();
@@ -1016,72 +1802,105 @@ serve(async (req) => {
         const latency = Date.now() - start;
         if (!resp.ok) {
           const errText = await resp.text().catch(() => "");
-          return new Response(JSON.stringify({
-            status: "fail", stage: "auth", http: resp.status,
-            reason: errText.slice(0, 200), latency_ms: latency,
-          }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          return new Response(
+            JSON.stringify({
+              status: "fail",
+              stage: "auth",
+              http: resp.status,
+              reason: errText.slice(0, 200),
+              latency_ms: latency,
+            }),
+            {
+              status: 500,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
         }
         await resp.body?.cancel();
-        return new Response(JSON.stringify({ status: "ok", latency_ms: latency, key_prefix: v.key.slice(0, 7) + "…" }), {
-          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            latency_ms: latency,
+            key_prefix: v.key.slice(0, 7) + "…",
+          }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       } catch (e: any) {
-        return new Response(JSON.stringify({ status: "fail", stage: "network", reason: String(e?.message || e) }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            status: "fail",
+            stage: "network",
+            reason: String(e?.message || e),
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       }
     }
 
     if (action === "debug_chat_model_test") {
       const route = resolveLLMRoute("chat_general");
-      const routeName = route.primaryProvider === "openai" ? "openai-direct" : `${route.primaryProvider}-direct`;
+      const routeName = route.primaryProvider === "openai"
+        ? "openai-direct"
+        : `${route.primaryProvider}-direct`;
       const start = Date.now();
       const result = await (route.primaryProvider === "openai"
         ? openaiAdapter({
-            model: route.model,
-            messages: [
-              { role: "system", content: "Reply with exactly: ok" },
-              { role: "user", content: "ok" },
-            ],
-            temperature: 0,
-            maxTokens: 16,
-          }, new AbortController().signal)
+          model: route.model,
+          messages: [
+            { role: "system", content: "Reply with exactly: ok" },
+            { role: "user", content: "ok" },
+          ],
+          temperature: 0,
+          maxTokens: 16,
+        }, new AbortController().signal)
         : ADAPTERS[route.primaryProvider]({
-            model: route.model,
-            messages: [
-              { role: "system", content: "Reply with exactly: ok" },
-              { role: "user", content: "ok" },
-            ],
-            temperature: 0,
-            maxTokens: 16,
-          }, new AbortController().signal));
+          model: route.model,
+          messages: [
+            { role: "system", content: "Reply with exactly: ok" },
+            { role: "user", content: "ok" },
+          ],
+          temperature: 0,
+          maxTokens: 16,
+        }, new AbortController().signal));
 
       if (result.error) {
-        return new Response(JSON.stringify({
-          status: "fail",
+        return new Response(
+          JSON.stringify({
+            status: "fail",
+            provider: result.provider,
+            model: result.model,
+            route: routeName,
+            http: result.error.status ?? 502,
+            latency_ms: Date.now() - start,
+            reason: result.error.message,
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          status: "ok",
           provider: result.provider,
           model: result.model,
           route: routeName,
-          http: result.error.status ?? 502,
+          http: 200,
           latency_ms: Date.now() - start,
-          reason: result.error.message,
-        }), {
-          status: 500,
+        }),
+        {
+          status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify({
-        status: "ok",
-        provider: result.provider,
-        model: result.model,
-        route: routeName,
-        http: 200,
-        latency_ms: Date.now() - start,
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        },
+      );
     }
 
     // Smoke test mode: allow forced fallback only when SMOKE_TEST_MODE env is set
@@ -1090,21 +1909,56 @@ serve(async (req) => {
 
     if (!threadId) {
       return new Response(JSON.stringify({ error: "threadId required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const contextPack = await buildContextPack(supabase, threadId, userId, content, workflowType);
+    const contextPack = await buildContextPack(
+      supabase,
+      threadId,
+      userId,
+      content,
+      workflowType,
+    );
     const contextSection = packToPromptSection(contextPack);
 
-    if (action === "rollup") return await handleRollup(supabase, threadId, userId, contextPack);
-    if (action === "workflow") return await handleWorkflow(supabase, threadId, userId, workflowType, content, contextSection, contextPack, forceFallback);
-    return await handleChat(supabase, threadId, userId, content, depth, contextSection, contextPack, forceFallback);
+    if (action === "rollup") {
+      return await handleRollup(supabase, threadId, userId, contextPack);
+    }
+    if (action === "workflow") {
+      return await handleWorkflow(
+        supabase,
+        threadId,
+        userId,
+        workflowType,
+        content,
+        contextSection,
+        contextPack,
+        forceFallback,
+      );
+    }
+    return await handleChat(
+      supabase,
+      threadId,
+      userId,
+      content,
+      depth,
+      contextSection,
+      contextPack,
+      forceFallback,
+    );
   } catch (e) {
     console.error("strategy-chat error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: e instanceof Error ? e.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
 
@@ -1118,7 +1972,9 @@ function deriveLibraryScopes(account: any, userContent: string): string[] {
   const scopes: string[] = [];
   if (account?.industry) scopes.push(String(account.industry));
   if (Array.isArray(account?.tags)) scopes.push(...account.tags.map(String));
-  if (Array.isArray(account?.tech_stack)) scopes.push(...account.tech_stack.map(String));
+  if (Array.isArray(account?.tech_stack)) {
+    scopes.push(...account.tech_stack.map(String));
+  }
   // Pull a few salient nouns out of the user's question — keeps retrieval
   // grounded in what the rep is actually asking, not just account meta.
   const words = (userContent || "")
@@ -1129,7 +1985,10 @@ function deriveLibraryScopes(account: any, userContent: string): string[] {
   return Array.from(new Set(scopes.map((s) => s.trim()).filter(Boolean)));
 }
 
-function buildGenericChatSystemPrompt(depth: string, contextSection: string): string {
+function buildGenericChatSystemPrompt(
+  depth: string,
+  contextSection: string,
+): string {
   return `You are a high-performance sales operator embedded in the rep's Strategy workspace. You produce work the rep can copy and use right now.
 
 ═══ ELITE OPERATOR CONTRACT ═══
@@ -1154,7 +2013,13 @@ Every response MUST follow this shape:
 - If they ask "what should I do" → give numbered steps.
 - If they ask for a template → give the template, no commentary.
 
-Depth: ${depth || "Standard"}.${depth === "Fast" ? " Cut everything optional." : depth === "Deep" ? " You may add one short follow-up paragraph after the usable output if it materially helps." : ""}
+Depth: ${depth || "Standard"}.${
+    depth === "Fast"
+      ? " Cut everything optional."
+      : depth === "Deep"
+      ? " You may add one short follow-up paragraph after the usable output if it materially helps."
+      : ""
+  }
 ${contextSection}`;
 }
 
@@ -1171,13 +2036,25 @@ async function buildChatSystemPrompt(args: {
   workingThesis: WorkingThesisState | null;
   resourceHits: Array<{ id: string; title: string }>;
 }> {
-  const { supabase, userId, threadId, depth, contextSection, pack, userContent } = args;
+  const {
+    supabase,
+    userId,
+    threadId,
+    depth,
+    contextSection,
+    pack,
+    userContent,
+  } = args;
   const accountId: string | null = pack.account?.id ?? null;
   const opportunityId: string | null = pack.opportunity?.id ?? null;
 
   // No account, no thread context → don't force Strategy Core onto small talk.
   if (!accountId && (!contextSection || contextSection.length < 200)) {
-    return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null, resourceHits: [] };
+    return {
+      prompt: buildGenericChatSystemPrompt(depth, contextSection),
+      workingThesis: null,
+      resourceHits: [],
+    };
   }
 
   // Pull the same context the prep doc gets, in parallel with library
@@ -1188,23 +2065,36 @@ async function buildChatSystemPrompt(args: {
   const [assembled, library, workingThesis, resources] = await Promise.all([
     accountId
       ? assembleStrategyContext({ supabase, userId, accountId }).catch((e) => {
-          console.warn("[strategy-chat] assembleStrategyContext failed:", (e as Error).message);
-          return null;
-        })
+        console.warn(
+          "[strategy-chat] assembleStrategyContext failed:",
+          (e as Error).message,
+        );
+        return null;
+      })
       : Promise.resolve(null),
     scopes.length
-      ? retrieveLibraryContext(supabase, userId, {} as any, { scopes, maxKIs: 8, maxPlaybooks: 4 }).catch(
-          (e) => {
-            console.warn("[strategy-chat] retrieveLibraryContext failed:", (e as Error).message);
-            return null;
-          },
-        )
+      ? retrieveLibraryContext(supabase, userId, {} as any, {
+        scopes,
+        maxKIs: 8,
+        maxPlaybooks: 4,
+      }).catch(
+        (e) => {
+          console.warn(
+            "[strategy-chat] retrieveLibraryContext failed:",
+            (e as Error).message,
+          );
+          return null;
+        },
+      )
       : Promise.resolve(null),
     accountId
       ? loadWorkingThesisState(supabase, { userId, accountId }).catch((e) => {
-          console.warn("[strategy-chat] loadWorkingThesisState failed:", (e as Error).message);
-          return null;
-        })
+        console.warn(
+          "[strategy-chat] loadWorkingThesisState failed:",
+          (e as Error).message,
+        );
+        return null;
+      })
       : Promise.resolve(null),
     retrieveResourceContext(supabase, userId, {
       userMessage: userContent,
@@ -1212,7 +2102,10 @@ async function buildChatSystemPrompt(args: {
       opportunityId,
       threadId,
     }).catch((e) => {
-      console.warn("[strategy-chat] retrieveResourceContext failed:", (e as Error).message);
+      console.warn(
+        "[strategy-chat] retrieveResourceContext failed:",
+        (e as Error).message,
+      );
       return null;
     }),
   ]);
@@ -1226,7 +2119,13 @@ async function buildChatSystemPrompt(args: {
     contextSectionLength: contextSection?.length ?? 0,
   }) || !!resources?.userAskedForResource;
 
-  if (!useCore) return { prompt: buildGenericChatSystemPrompt(depth, contextSection), workingThesis: null, resourceHits: [] };
+  if (!useCore) {
+    return {
+      prompt: buildGenericChatSystemPrompt(depth, contextSection),
+      workingThesis: null,
+      resourceHits: [],
+    };
+  }
 
   const workingThesisBlock = renderWorkingThesisStateBlock(workingThesis);
 
@@ -1270,19 +2169,25 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     resourceContextBlock: resources?.contextBlock || "",
   }) + "\n\n" + persistenceContract;
 
-  const resourceHits = (resources?.hits || []).map((h) => ({ id: h.id, title: h.title }));
+  const resourceHits = (resources?.hits || []).map((h) => ({
+    id: h.id,
+    title: h.title,
+  }));
   return { prompt, workingThesis, resourceHits };
 }
 
 // Extract a fenced ```thesis_update { ... }``` block emitted by the
 // assistant. Returns the parsed patch + the cleaned visible text
 // (with the block removed so the user never sees it).
-function extractThesisUpdate(text: string): { patch: ThesisStatePatch | null; visible: string } {
+function extractThesisUpdate(
+  text: string,
+): { patch: ThesisStatePatch | null; visible: string } {
   if (!text) return { patch: null, visible: text };
   const re = /```thesis_update\s*\n([\s\S]*?)\n```/i;
   const m = text.match(re);
   if (!m) return { patch: null, visible: text };
-  const visible = (text.slice(0, m.index!) + text.slice(m.index! + m[0].length)).trim();
+  const visible = (text.slice(0, m.index!) + text.slice(m.index! + m[0].length))
+    .trim();
   try {
     const parsed = JSON.parse(m[1].trim());
     if (parsed && typeof parsed === "object") {
@@ -1296,21 +2201,36 @@ function extractThesisUpdate(text: string): { patch: ThesisStatePatch | null; vi
 
 // ── Chat Handler (streaming via OpenAI direct) ────────────
 async function handleChat(
-  supabase: any, threadId: string, userId: string,
-  content: string, depth: string, contextSection: string, pack: ContextPack,
+  supabase: any,
+  threadId: string,
+  userId: string,
+  content: string,
+  depth: string,
+  contextSection: string,
+  pack: ContextPack,
   forceFallback?: boolean,
 ) {
   await supabase.from("strategy_messages").insert({
-    thread_id: threadId, user_id: userId, role: "user",
-    message_type: "chat", content_json: { text: content },
+    thread_id: threadId,
+    user_id: userId,
+    role: "user",
+    message_type: "chat",
+    content_json: { text: content },
   });
 
   const route = resolveLLMRoute("chat_general");
   if (forceFallback) route._smokeTestForceFail = true;
 
-  const { prompt: systemPrompt, workingThesis: priorThesis, resourceHits } = await buildChatSystemPrompt({
-    supabase, userId, threadId, depth, contextSection, pack, userContent: content,
-  });
+  const { prompt: systemPrompt, workingThesis: priorThesis, resourceHits } =
+    await buildChatSystemPrompt({
+      supabase,
+      userId,
+      threadId,
+      depth,
+      contextSection,
+      pack,
+      userContent: content,
+    });
   const accountId: string | null = pack.account?.id ?? null;
 
   const messages = [
@@ -1323,19 +2243,25 @@ async function handleChat(
 
   const startTime = Date.now();
   const result = await callStreaming("chat_general", {
-    messages, temperature: route.temperature, maxTokens: route.maxTokens,
+    messages,
+    temperature: route.temperature,
+    maxTokens: route.maxTokens,
   }, route);
 
   if (result.error) {
-    return new Response(JSON.stringify({
-      error: "Assistant temporarily unavailable",
-      errorType: result.error.type,
-      model: route.model,
-      route: "openai-direct",
-    }), {
-      status: result.error.status ?? (result.error.type === "timeout" ? 504 : 502),
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: "Assistant temporarily unavailable",
+        errorType: result.error.type,
+        model: route.model,
+        route: "openai-direct",
+      }),
+      {
+        status: result.error.status ??
+          (result.error.type === "timeout" ? 504 : 502),
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 
   if (!result.rawStream) {
@@ -1344,23 +2270,34 @@ async function handleChat(
     // Citation audit: catch any fabricated RESOURCE[…] references.
     const audit = auditResourceCitations(visible, resourceHits);
     if (audit.modified) {
-      console.log(`[citation-audit] non-stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`);
+      console.log(
+        `[citation-audit] non-stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`,
+      );
     }
     const auditedVisible = audit.text;
     await supabase.from("strategy_messages").insert({
-      thread_id: threadId, user_id: userId, role: "assistant",
+      thread_id: threadId,
+      user_id: userId,
+      role: "assistant",
       message_type: "chat",
-      provider_used: result.provider, model_used: result.model,
-      fallback_used: result.fallbackUsed, latency_ms: result.latencyMs,
+      provider_used: result.provider,
+      model_used: result.model,
+      fallback_used: result.fallbackUsed,
+      latency_ms: result.latencyMs,
       content_json: {
-        text: auditedVisible, sources_used: pack.sourceCount,
-        retrieval_meta: pack.retrievalMeta, model_used: result.model,
-        provider_used: result.provider, fallback_used: result.fallbackUsed,
-        citation_audit: audit.modified ? {
-          modified: true,
-          unverified: audit.unverifiedCitations,
-          verified: audit.verifiedTitles,
-        } : undefined,
+        text: auditedVisible,
+        sources_used: pack.sourceCount,
+        retrieval_meta: pack.retrievalMeta,
+        model_used: result.model,
+        provider_used: result.provider,
+        fallback_used: result.fallbackUsed,
+        citation_audit: audit.modified
+          ? {
+            modified: true,
+            unverified: audit.unverifiedCitations,
+            verified: audit.verifiedTitles,
+          }
+          : undefined,
       },
     });
     // Cross-thread resource memory: persist VERIFIED citations only.
@@ -1369,21 +2306,33 @@ async function handleChat(
     // on the next turn. Never write fabricated/UNVERIFIED titles.
     try {
       const verifiedNorm = new Set(
-        audit.verifiedTitles.map((t) => t.toLowerCase().replace(/\s+/g, " ").trim()),
+        audit.verifiedTitles.map((t) =>
+          t.toLowerCase().replace(/\s+/g, " ").trim()
+        ),
       );
       const verifiedIds = resourceHits
-        .filter((h) => verifiedNorm.has(h.title.toLowerCase().replace(/\s+/g, " ").trim()))
+        .filter((h) =>
+          verifiedNorm.has(h.title.toLowerCase().replace(/\s+/g, " ").trim())
+        )
         .map((h) => h.id);
       if (verifiedIds.length > 0) {
         const { inserted } = await recordResourceUsage(supabase, {
-          userId, threadId, resourceIds: verifiedIds, sourceType: "cited",
+          userId,
+          threadId,
+          resourceIds: verifiedIds,
+          sourceType: "cited",
         });
         if (inserted > 0) {
-          console.log(`[resource-usage] non-stream: persisted ${inserted} cited resource(s)`);
+          console.log(
+            `[resource-usage] non-stream: persisted ${inserted} cited resource(s)`,
+          );
         }
       }
     } catch (e) {
-      console.warn("[resource-usage] non-stream persist failed:", (e as Error).message);
+      console.warn(
+        "[resource-usage] non-stream persist failed:",
+        (e as Error).message,
+      );
     }
     if (accountId) {
       // Primary path: fenced thesis_update block.
@@ -1398,24 +2347,45 @@ async function handleChat(
         if (inferred) {
           effectivePatch = inferred;
           patchSource = "fallback";
-          console.log("[thesis] fallback extractor inferred patch (non-stream)");
+          console.log(
+            "[thesis] fallback extractor inferred patch (non-stream)",
+          );
         }
       }
       if (effectivePatch) {
         try {
-          const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
-          const { patch: safe, downgrades } = validateWorkingThesisState(base, { ...effectivePatch, thread_id: threadId });
-          if (downgrades.length) console.log(`[thesis] validator downgrades (non-stream, ${patchSource}):`, downgrades);
+          const base = priorThesis ??
+            emptyWorkingThesisState(accountId, threadId);
+          const { patch: safe, downgrades } = validateWorkingThesisState(base, {
+            ...effectivePatch,
+            thread_id: threadId,
+          });
+          if (downgrades.length) {
+            console.log(
+              `[thesis] validator downgrades (non-stream, ${patchSource}):`,
+              downgrades,
+            );
+          }
           const next = mergeWorkingThesisState(base, safe);
           await saveWorkingThesisState(supabase, { userId, state: next });
         } catch (e) {
-          console.warn("[thesis] persist (non-stream) failed:", (e as Error).message);
+          console.warn(
+            "[thesis] persist (non-stream) failed:",
+            (e as Error).message,
+          );
         }
       }
     }
-    return new Response(JSON.stringify({ text: auditedVisible, provider: result.provider, model: result.model }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        text: auditedVisible,
+        provider: result.provider,
+        model: result.model,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 
   // Stream the response with read timeout protection
@@ -1430,7 +2400,9 @@ async function handleChat(
       try {
         while (true) {
           if (Date.now() > streamDeadline) {
-            console.warn(`[streaming] read deadline exceeded after ${chunkCount} chunks, closing`);
+            console.warn(
+              `[streaming] read deadline exceeded after ${chunkCount} chunks, closing`,
+            );
             break;
           }
           const { done, value } = await reader.read();
@@ -1440,7 +2412,9 @@ async function handleChat(
           controller.enqueue(new TextEncoder().encode(chunk));
           for (const line of chunk.split("\n")) {
             const trimmed = line.trim();
-            if (!trimmed.startsWith("data: ") || trimmed === "data: [DONE]") continue;
+            if (!trimmed.startsWith("data: ") || trimmed === "data: [DONE]") {
+              continue;
+            }
             try {
               const parsed = JSON.parse(trimmed.slice(6));
               const delta = parsed.choices?.[0]?.delta?.content;
@@ -1453,7 +2427,9 @@ async function handleChat(
 
         const latency = Date.now() - startTime;
         if (!fullResponse.trim()) {
-          console.warn(`[streaming] empty response after ${chunkCount} chunks, ${latency}ms`);
+          console.warn(
+            `[streaming] empty response after ${chunkCount} chunks, ${latency}ms`,
+          );
         }
         const { patch, visible } = extractThesisUpdate(fullResponse);
         // Citation audit: catch any fabricated RESOURCE[…] references
@@ -1462,56 +2438,87 @@ async function handleChat(
         // SSE delta with the audit banner so the live UI sees it too.
         const audit = auditResourceCitations(visible, resourceHits);
         if (audit.modified) {
-          console.log(`[citation-audit] stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`);
+          console.log(
+            `[citation-audit] stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`,
+          );
           const trailing = audit.text.slice(visible.length); // banner suffix only
           if (trailing) {
-            const sseChunk =
-              `data: ${JSON.stringify({ choices: [{ delta: { content: trailing } }] })}\n\n`;
+            const sseChunk = `data: ${
+              JSON.stringify({ choices: [{ delta: { content: trailing } }] })
+            }\n\n`;
             try {
               controller.enqueue(new TextEncoder().encode(sseChunk));
             } catch (e) {
-              console.warn("[citation-audit] failed to stream trailing banner:", (e as Error).message);
+              console.warn(
+                "[citation-audit] failed to stream trailing banner:",
+                (e as Error).message,
+              );
             }
           }
         }
         const auditedVisible = audit.text;
         controller.close();
         await supabase.from("strategy_messages").insert({
-          thread_id: threadId, user_id: userId, role: "assistant",
+          thread_id: threadId,
+          user_id: userId,
+          role: "assistant",
           message_type: "chat",
-          provider_used: result.provider, model_used: result.model,
-          fallback_used: false, latency_ms: latency,
+          provider_used: result.provider,
+          model_used: result.model,
+          fallback_used: false,
+          latency_ms: latency,
           content_json: {
-            text: auditedVisible, sources_used: pack.sourceCount,
-            retrieval_meta: pack.retrievalMeta, model_used: result.model,
-            provider_used: result.provider, fallback_used: false,
-            citation_audit: audit.modified ? {
-              modified: true,
-              unverified: audit.unverifiedCitations,
-              verified: audit.verifiedTitles,
-            } : undefined,
+            text: auditedVisible,
+            sources_used: pack.sourceCount,
+            retrieval_meta: pack.retrievalMeta,
+            model_used: result.model,
+            provider_used: result.provider,
+            fallback_used: false,
+            citation_audit: audit.modified
+              ? {
+                modified: true,
+                unverified: audit.unverifiedCitations,
+                verified: audit.verifiedTitles,
+              }
+              : undefined,
           },
         });
-        await supabase.from("strategy_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
+        await supabase.from("strategy_threads").update({
+          updated_at: new Date().toISOString(),
+        }).eq("id", threadId);
 
         // Cross-thread resource memory: persist VERIFIED citations only.
         try {
           const verifiedNorm = new Set(
-            audit.verifiedTitles.map((t) => t.toLowerCase().replace(/\s+/g, " ").trim()),
+            audit.verifiedTitles.map((t) =>
+              t.toLowerCase().replace(/\s+/g, " ").trim()
+            ),
           );
           const verifiedIds = resourceHits
-            .filter((h) => verifiedNorm.has(h.title.toLowerCase().replace(/\s+/g, " ").trim()))
+            .filter((h) =>
+              verifiedNorm.has(
+                h.title.toLowerCase().replace(/\s+/g, " ").trim(),
+              )
+            )
             .map((h) => h.id);
           if (verifiedIds.length > 0) {
             const { inserted } = await recordResourceUsage(supabase, {
-              userId, threadId, resourceIds: verifiedIds, sourceType: "cited",
+              userId,
+              threadId,
+              resourceIds: verifiedIds,
+              sourceType: "cited",
             });
             if (inserted > 0) {
-              console.log(`[resource-usage] stream: persisted ${inserted} cited resource(s)`);
+              console.log(
+                `[resource-usage] stream: persisted ${inserted} cited resource(s)`,
+              );
             }
           }
         } catch (e) {
-          console.warn("[resource-usage] stream persist failed:", (e as Error).message);
+          console.warn(
+            "[resource-usage] stream persist failed:",
+            (e as Error).message,
+          );
         }
 
         // Persist working thesis state.
@@ -1526,91 +2533,163 @@ async function handleChat(
             if (inferred) {
               effectivePatch = inferred;
               patchSource = "fallback";
-              console.log("[thesis] fallback extractor inferred patch (stream)");
+              console.log(
+                "[thesis] fallback extractor inferred patch (stream)",
+              );
             }
           }
           if (effectivePatch) {
             try {
-              const base = priorThesis ?? emptyWorkingThesisState(accountId, threadId);
-              const { patch: safe, downgrades } = validateWorkingThesisState(base, { ...effectivePatch, thread_id: threadId });
-              if (downgrades.length) console.log(`[thesis] validator downgrades (stream, ${patchSource}):`, downgrades);
+              const base = priorThesis ??
+                emptyWorkingThesisState(accountId, threadId);
+              const { patch: safe, downgrades } = validateWorkingThesisState(
+                base,
+                { ...effectivePatch, thread_id: threadId },
+              );
+              if (downgrades.length) {
+                console.log(
+                  `[thesis] validator downgrades (stream, ${patchSource}):`,
+                  downgrades,
+                );
+              }
               const next = mergeWorkingThesisState(base, safe);
               await saveWorkingThesisState(supabase, { userId, state: next });
             } catch (e) {
-              console.warn("[thesis] persist (stream) failed:", (e as Error).message);
+              console.warn(
+                "[thesis] persist (stream) failed:",
+                (e as Error).message,
+              );
             }
           }
         }
 
         const { count } = await supabase.from("strategy_messages")
-          .select("id", { count: "exact", head: true }).eq("thread_id", threadId);
+          .select("id", { count: "exact", head: true }).eq(
+            "thread_id",
+            threadId,
+          );
         if (count && count % 8 === 0) {
           console.log(`[auto-rollup] triggering at ${count} messages`);
           triggerRollupAsync(supabase, threadId, userId);
         }
-      } catch (e) { controller.error(e); }
+      } catch (e) {
+        controller.error(e);
+      }
     },
   });
 
-  return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+  return new Response(stream, {
+    headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+  });
 }
 
 // ── Workflow Handler ──────────────────────────────────────
 async function handleWorkflow(
-  supabase: any, threadId: string, userId: string,
-  workflowType: string, content: string, contextSection: string, pack: ContextPack,
+  supabase: any,
+  threadId: string,
+  userId: string,
+  workflowType: string,
+  content: string,
+  contextSection: string,
+  pack: ContextPack,
   forceFallback?: boolean,
 ) {
   const route = resolveLLMRoute(workflowType);
   if (forceFallback) route._smokeTestForceFail = true;
   const tool = WORKFLOW_TOOLS[workflowType];
 
-  const { data: run, error: runErr } = await supabase.from("strategy_workflow_runs")
-    .insert({ user_id: userId, thread_id: threadId, workflow_type: workflowType, status: "running", input_json: { content, workflowType } })
+  const { data: run, error: runErr } = await supabase.from(
+    "strategy_workflow_runs",
+  )
+    .insert({
+      user_id: userId,
+      thread_id: threadId,
+      workflow_type: workflowType,
+      status: "running",
+      input_json: { content, workflowType },
+    })
     .select().single();
   if (runErr) throw runErr;
 
   await supabase.from("strategy_messages").insert({
-    thread_id: threadId, user_id: userId, role: "system", message_type: "workflow_update",
-    content_json: { text: `Running ${workflowType.replace(/_/g, " ")}…`, workflowType, runId: run.id },
+    thread_id: threadId,
+    user_id: userId,
+    role: "system",
+    message_type: "workflow_update",
+    content_json: {
+      text: `Running ${workflowType.replace(/_/g, " ")}…`,
+      workflowType,
+      runId: run.id,
+    },
   });
 
   const workflowPrompts: Record<string, string> = {
-    deep_research: "Conduct deep research on the linked account or topic. Analyze business, industry trends, competitive landscape, technology stack, key stakeholders, and potential pain points. Use all available context including account memory and uploaded resources.",
-    account_plan: "Create a comprehensive account plan including executive summary, stakeholder map, strategic objectives, action plan, risks, and success metrics.",
-    territory_tiering: "Analyze and tier accounts in the territory by ICP fit, revenue potential, engagement level, competitive position, and timing signals.",
-    email_evaluation: "Evaluate the provided email or messaging for subject line, opening, value prop, CTA strength, tone, and personalization. Provide scored assessment and rewrite.",
-    opportunity_strategy: "Build an opportunity strategy covering deal summary, decision process, champion status, competition, value alignment, risks, next actions, and close plan.",
-    brainstorm: "Facilitate a strategic brainstorm. Generate creative ideas, challenge assumptions, identify non-obvious angles.",
+    deep_research:
+      "Conduct deep research on the linked account or topic. Analyze business, industry trends, competitive landscape, technology stack, key stakeholders, and potential pain points. Use all available context including account memory and uploaded resources.",
+    account_plan:
+      "Create a comprehensive account plan including executive summary, stakeholder map, strategic objectives, action plan, risks, and success metrics.",
+    territory_tiering:
+      "Analyze and tier accounts in the territory by ICP fit, revenue potential, engagement level, competitive position, and timing signals.",
+    email_evaluation:
+      "Evaluate the provided email or messaging for subject line, opening, value prop, CTA strength, tone, and personalization. Provide scored assessment and rewrite.",
+    opportunity_strategy:
+      "Build an opportunity strategy covering deal summary, decision process, champion status, competition, value alignment, risks, next actions, and close plan.",
+    brainstorm:
+      "Facilitate a strategic brainstorm. Generate creative ideas, challenge assumptions, identify non-obvious angles.",
   };
 
-  const systemPrompt = `You are a strategic sales advisor. Use the context below to produce a thorough, grounded analysis.
+  const systemPrompt =
+    `You are a strategic sales advisor. Use the context below to produce a thorough, grounded analysis.
 ${contextSection}
 
 ${workflowPrompts[workflowType] || workflowPrompts.brainstorm}
 
 You MUST call the provided tool function with your structured result.`;
 
-  const userPrompt = content || `Execute ${workflowType.replace(/_/g, " ")} workflow based on available context.`;
+  const userPrompt = content ||
+    `Execute ${
+      workflowType.replace(/_/g, " ")
+    } workflow based on available context.`;
 
   const adapterReq: Omit<AdapterRequest, "model"> = {
-    messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
-    temperature: route.temperature, maxTokens: route.maxTokens,
+    messages: [{ role: "system", content: systemPrompt }, {
+      role: "user",
+      content: userPrompt,
+    }],
+    temperature: route.temperature,
+    maxTokens: route.maxTokens,
   };
   if (tool && route.primaryProvider !== "perplexity") {
     adapterReq.tools = [tool];
-    adapterReq.toolChoice = { type: "function", function: { name: tool.function.name } };
+    adapterReq.toolChoice = {
+      type: "function",
+      function: { name: tool.function.name },
+    };
   }
   if (route.reasoning) adapterReq.reasoning = route.reasoning;
 
-  console.log(`[workflow] ${workflowType} provider=${route.primaryProvider} model=${route.model}`);
+  console.log(
+    `[workflow] ${workflowType} provider=${route.primaryProvider} model=${route.model}`,
+  );
 
   const result = await callWithFallback(workflowType, adapterReq, route);
 
   if (result.error) {
-    await supabase.from("strategy_workflow_runs").update({ status: "failed", error_json: { error: result.error.message } }).eq("id", run.id);
-    const status = result.error.type === "timeout" ? 504 : result.error.type.includes("429") ? 429 : result.error.type.includes("402") ? 402 : 500;
-    return new Response(JSON.stringify({ error: result.error.message }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    await supabase.from("strategy_workflow_runs").update({
+      status: "failed",
+      error_json: { error: result.error.message },
+    }).eq("id", run.id);
+    const status = result.error.type === "timeout"
+      ? 504
+      : result.error.type.includes("429")
+      ? 429
+      : result.error.type.includes("402")
+      ? 402
+      : 500;
+    return new Response(JSON.stringify({ error: result.error.message }), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   let structuredData = result.structured;
@@ -1620,7 +2699,9 @@ You MUST call the provided tool function with your structured result.`;
     structuredData = {
       summary: result.text.slice(0, 500),
       company_overview: "",
-      key_findings: result.text.split("\n").filter((l: string) => l.trim().startsWith("-") || l.trim().startsWith("•")).map((l: string) => l.replace(/^[-•]\s*/, "").trim()).slice(0, 10),
+      key_findings: result.text.split("\n").filter((l: string) =>
+        l.trim().startsWith("-") || l.trim().startsWith("•")
+      ).map((l: string) => l.replace(/^[-•]\s*/, "").trim()).slice(0, 10),
       strategic_implications: [],
       risks: [],
       opportunities: [],
@@ -1636,69 +2717,121 @@ You MUST call the provided tool function with your structured result.`;
     structuredData = { text: renderedText };
   }
 
-  await supabase.from("strategy_workflow_runs").update({ status: "completed", result_json: structuredData }).eq("id", run.id);
+  await supabase.from("strategy_workflow_runs").update({
+    status: "completed",
+    result_json: structuredData,
+  }).eq("id", run.id);
 
   let outputTitle = `${workflowType.replace(/_/g, " ")}`;
   if (pack.account) outputTitle = `${pack.account.name} — ${outputTitle}`;
-  else if (pack.opportunity) outputTitle = `${pack.opportunity.name} — ${outputTitle}`;
+  else if (pack.opportunity) {
+    outputTitle = `${pack.opportunity.name} — ${outputTitle}`;
+  }
   outputTitle += ` — ${new Date().toLocaleDateString()}`;
 
   const { data: output } = await supabase.from("strategy_outputs").insert({
-    user_id: userId, thread_id: threadId, workflow_run_id: run.id,
-    output_type: workflowTypeToOutputType(workflowType), title: outputTitle,
-    content_json: structuredData, rendered_text: renderedText,
-    linked_account_id: pack.account?.id || null, linked_opportunity_id: pack.opportunity?.id || null,
-    provider_used: result.provider, model_used: result.model,
-    fallback_used: result.fallbackUsed, latency_ms: result.latencyMs,
+    user_id: userId,
+    thread_id: threadId,
+    workflow_run_id: run.id,
+    output_type: workflowTypeToOutputType(workflowType),
+    title: outputTitle,
+    content_json: structuredData,
+    rendered_text: renderedText,
+    linked_account_id: pack.account?.id || null,
+    linked_opportunity_id: pack.opportunity?.id || null,
+    provider_used: result.provider,
+    model_used: result.model,
+    fallback_used: result.fallbackUsed,
+    latency_ms: result.latencyMs,
   }).select().single();
 
   const { data: resultMsg } = await supabase.from("strategy_messages").insert({
-    thread_id: threadId, user_id: userId, role: "assistant", message_type: "workflow_result",
-    provider_used: result.provider, model_used: result.model,
-    fallback_used: result.fallbackUsed, latency_ms: result.latencyMs,
+    thread_id: threadId,
+    user_id: userId,
+    role: "assistant",
+    message_type: "workflow_result",
+    provider_used: result.provider,
+    model_used: result.model,
+    fallback_used: result.fallbackUsed,
+    latency_ms: result.latencyMs,
     content_json: {
-      text: renderedText, structured: structuredData, workflowType, runId: run.id,
-      outputId: output?.id || null, sources_used: pack.sourceCount,
-      retrieval_meta: pack.retrievalMeta, model_used: result.model,
-      provider_used: result.provider, fallback_used: result.fallbackUsed,
+      text: renderedText,
+      structured: structuredData,
+      workflowType,
+      runId: run.id,
+      outputId: output?.id || null,
+      sources_used: pack.sourceCount,
+      retrieval_meta: pack.retrievalMeta,
+      model_used: result.model,
+      provider_used: result.provider,
+      fallback_used: result.fallbackUsed,
       citations: result.citations,
     },
   }).select().single();
 
   await supabase.from("strategy_threads").update({
     updated_at: new Date().toISOString(),
-    summary: (structuredData.summary || structuredData.executive_summary || renderedText || "").slice(0, 200),
+    summary: (structuredData.summary || structuredData.executive_summary ||
+      renderedText || "").slice(0, 200),
   }).eq("id", threadId);
 
-  console.log(`[workflow] ${workflowType} completed. provider=${result.provider} model=${result.model} fallback=${result.fallbackUsed} latency=${result.latencyMs}ms output=${output?.id}`);
+  console.log(
+    `[workflow] ${workflowType} completed. provider=${result.provider} model=${result.model} fallback=${result.fallbackUsed} latency=${result.latencyMs}ms output=${output?.id}`,
+  );
   triggerRollupAsync(supabase, threadId, userId);
 
-  return new Response(JSON.stringify({
-    resultMessage: resultMsg, output, workflowRun: run, structured: structuredData,
-    sourceCount: pack.sourceCount, retrievalMeta: pack.retrievalMeta,
-    modelUsed: result.model, providerUsed: result.provider, fallbackUsed: result.fallbackUsed,
-  }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  return new Response(
+    JSON.stringify({
+      resultMessage: resultMsg,
+      output,
+      workflowRun: run,
+      structured: structuredData,
+      sourceCount: pack.sourceCount,
+      retrievalMeta: pack.retrievalMeta,
+      modelUsed: result.model,
+      providerUsed: result.provider,
+      fallbackUsed: result.fallbackUsed,
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
 }
 
 // ── Rollup Handler ────────────────────────────────────────
-async function handleRollup(supabase: any, threadId: string, userId: string, pack?: ContextPack) {
+async function handleRollup(
+  supabase: any,
+  threadId: string,
+  userId: string,
+  pack?: ContextPack,
+) {
   if (!pack) pack = await buildContextPack(supabase, threadId, userId);
   if (pack.recentMessages.length < 3) {
-    return new Response(JSON.stringify({ rollup: null, reason: "Not enough messages" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ rollup: null, reason: "Not enough messages" }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 
-  const conversationText = pack.recentMessages.map((m) => `${m.role}: ${m.text}`).join("\n").slice(0, 8000);
+  const conversationText = pack.recentMessages.map((m) =>
+    `${m.role}: ${m.text}`
+  ).join("\n").slice(0, 8000);
   let memoryContext = "";
   if (pack.memories.length > 0) {
-    memoryContext = "\n\nExisting memory (avoid duplicating):\n" + pack.memories.slice(0, 10).map(m => `- [${m.memory_type}] ${m.content.slice(0, 100)}`).join("\n");
+    memoryContext = "\n\nExisting memory (avoid duplicating):\n" +
+      pack.memories.slice(0, 10).map((m) =>
+        `- [${m.memory_type}] ${m.content.slice(0, 100)}`
+      ).join("\n");
   }
 
   const route = resolveLLMRoute("rollup");
   const result = await callWithFallback("rollup", {
     messages: [
-      { role: "system", content: `You are analyzing a strategy conversation thread. Summarize the key points, identify hypotheses, risks, open questions, and next steps. Also suggest memory entries that should be saved. Only suggest memories with confidence >= 0.6. Do NOT suggest memories that duplicate existing ones.${memoryContext}` },
+      {
+        role: "system",
+        content:
+          `You are analyzing a strategy conversation thread. Summarize the key points, identify hypotheses, risks, open questions, and next steps. Also suggest memory entries that should be saved. Only suggest memories with confidence >= 0.6. Do NOT suggest memories that duplicate existing ones.${memoryContext}`,
+      },
       { role: "user", content: conversationText },
     ],
     tools: [ROLLUP_TOOL],
@@ -1720,29 +2853,48 @@ async function handleRollup(supabase: any, threadId: string, userId: string, pac
     rollup.model_used = result.model;
 
     if (rollup.memory_suggestions) {
-      const existingContents = new Set(pack.memories.map((m: any) => m.content.toLowerCase().trim()));
+      const existingContents = new Set(
+        pack.memories.map((m: any) => m.content.toLowerCase().trim()),
+      );
       rollup.memory_suggestions = rollup.memory_suggestions
         .filter((s: any) => (s.confidence ?? 0) >= 0.6)
         .filter((s: any) => {
           const normalized = s.content.toLowerCase().trim();
           for (const existing of existingContents) {
-            if (existing.includes(normalized) || normalized.includes(existing)) return false;
+            if (
+              existing.includes(normalized) || normalized.includes(existing)
+            ) return false;
           }
           return true;
         });
     }
 
-    await supabase.from("strategy_threads").update({ latest_rollup: rollup, updated_at: new Date().toISOString() }).eq("id", threadId);
+    await supabase.from("strategy_threads").update({
+      latest_rollup: rollup,
+      updated_at: new Date().toISOString(),
+    }).eq("id", threadId);
     await supabase.from("strategy_rollups").insert({
-      object_type: "thread", object_id: threadId, rollup_type: "summary",
-      content_json: rollup, generated_from_thread_ids: [threadId], user_id: userId,
+      object_type: "thread",
+      object_id: threadId,
+      rollup_type: "summary",
+      content_json: rollup,
+      generated_from_thread_ids: [threadId],
+      user_id: userId,
     });
-    console.log(`[rollup] saved. provider=${result.provider} suggestions=${rollup.memory_suggestions?.length || 0}`);
+    console.log(
+      `[rollup] saved. provider=${result.provider} suggestions=${
+        rollup.memory_suggestions?.length || 0
+      }`,
+    );
   }
 
-  return new Response(JSON.stringify({ rollup }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  return new Response(JSON.stringify({ rollup }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 function triggerRollupAsync(supabase: any, threadId: string, userId: string) {
-  handleRollup(supabase, threadId, userId).catch((e) => console.error("[auto-rollup] failed:", e));
+  handleRollup(supabase, threadId, userId).catch((e) =>
+    console.error("[auto-rollup] failed:", e)
+  );
 }
