@@ -109,6 +109,7 @@ function buildTitleIndex(hits: CitationAuditHit[]): {
 export function auditResourceCitations(
   assistantText: string,
   hits: CitationAuditHit[],
+  options: CitationAuditOptions = {},
 ): CitationAuditResult {
   const text = assistantText ?? "";
   if (!text.trim()) {
@@ -116,6 +117,7 @@ export function auditResourceCitations(
   }
 
   const { titles, idShorts } = buildTitleIndex(hits);
+  const closedSet = options.closedSet === true && hits.length > 0;
 
   const verified: string[] = [];
   const unverified: string[] = [];
