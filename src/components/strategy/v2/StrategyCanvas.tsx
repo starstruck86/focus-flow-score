@@ -32,7 +32,20 @@ export function StrategyCanvas({ messages, isLoading, isSending }: Props) {
         className="mx-auto px-6 pt-12 pb-32"
         style={{ maxWidth: 760 }}
       >
-        {isLoading && messages.length === 0 ? null : null}
+        {!isLoading && messages.length === 0 && !isSending && (
+          <div
+            className="select-none"
+            style={{
+              fontFamily: 'var(--sv-serif)',
+              color: 'hsl(var(--sv-muted))',
+              fontSize: 17,
+              lineHeight: 1.5,
+              paddingTop: '20vh',
+            }}
+          >
+            What are you thinking about?
+          </div>
+        )}
         {messages.map((m, i) => (
           <div key={m.id} style={{ marginTop: i === 0 ? 0 : 32 }}>
             <StrategyMessage message={m} />
