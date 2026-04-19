@@ -2342,14 +2342,20 @@ TRUST RULES (enforced server-side — pretending will be downgraded):
 Omit any field that does not apply. If nothing changed materially, do NOT emit the block.
 The block is for system memory — be terse and factual. Do not narrate it.`;
 
-  const prompt = buildStrategyChatSystemPrompt({
+  const composedCorePrompt = buildStrategyChatSystemPrompt({
     depth,
     contextSection,
     accountContext: assembled?.contextBlock || "",
     libraryContext: library?.contextString || "",
     workingThesisBlock,
     resourceContextBlock: resources?.contextBlock || "",
-  }) + "\n\n" + persistenceContract;
+  });
+
+  // Prepend the MODE LOCK so it's the FIRST thing the model reads,
+  // before Strategy Core identity / thinking order / output contract.
+  // This binds asset-type selection regardless of how rich the rest of
+  // the system prompt becomes.
+  const prompt = `${modeLockBlock}\n\n${composedCorePrompt}\n\n${persistenceContract}`;
 
   const resourceHits = (resources?.hits || []).map((h) => ({
     id: h.id,
