@@ -14,6 +14,7 @@ import { ArrowUp } from 'lucide-react';
 interface Props {
   disabled?: boolean;
   placeholder?: string;
+  serifPlaceholder?: boolean;
   onSend: (text: string) => void;
 }
 
@@ -22,7 +23,7 @@ export interface StrategyComposerHandle {
 }
 
 export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function StrategyComposer(
-  { disabled, placeholder = 'Message…', onSend }, ref
+  { disabled, placeholder = 'Message…', serifPlaceholder = false, onSend }, ref
 ) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState('');
