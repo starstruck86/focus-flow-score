@@ -22,11 +22,14 @@ interface Props {
   onChipClick: () => void;
   /** Ref to the chip button so the shell can anchor LinkPicker to it. */
   chipRef?: React.RefObject<HTMLButtonElement>;
+  /** Phase 1.5: create a new thread immediately (no modal). */
+  onNewThread: () => void;
 }
 
 export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function StrategyTopBar({
   title, onTitleChange, entityName, trustState,
   unresolvedProposalCount, onOpenSwitcher, onOpenInspector, onChipClick, chipRef,
+  onNewThread,
 }, _ref) {
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
@@ -94,12 +97,21 @@ export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function Strateg
 
         {/* Keyboard verbs */}
         <button
+          onClick={onNewThread}
+          className="h-7 px-2 rounded-[4px] sv-hover-bg text-[14px] leading-none"
+          style={{ color: 'hsl(var(--sv-muted))' }}
+          title="New thread (⌘⇧N)"
+          aria-label="New thread"
+        >
+          +
+        </button>
+        <button
           onClick={onOpenSwitcher}
           className="h-7 px-2 rounded-[4px] sv-hover-bg text-[12px] font-mono"
           style={{ color: 'hsl(var(--sv-muted))' }}
           title="Open switcher (⌘K)"
         >
-          ⌘K
+          Go ⌘K
         </button>
         <button
           onClick={onOpenInspector}

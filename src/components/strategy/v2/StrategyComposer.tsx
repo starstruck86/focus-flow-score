@@ -25,6 +25,8 @@ interface Props {
   onSlashChange?: (query: string | null) => void;
   /** Called with the wrapper rect whenever it changes (for anchoring SlashMenu). */
   onRectChange?: (rect: DOMRect | null) => void;
+  /** Phase 1.5: open the file picker (same as /upload). */
+  onAttachFiles?: () => void;
 }
 
 export interface StrategyComposerHandle {
@@ -33,7 +35,7 @@ export interface StrategyComposerHandle {
 }
 
 export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function StrategyComposer(
-  { disabled, placeholder = 'Message…', serifPlaceholder = false, onSend, onSlashChange, onRectChange }, ref
+  { disabled, placeholder = 'Message…', serifPlaceholder = false, onSend, onSlashChange, onRectChange, onAttachFiles }, ref
 ) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -132,6 +134,24 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
             maxHeight: 240,
           }}
         />
+        {/* Phase 1.5: muted "+ Add files" affordance — disappears once typing begins */}
+        {onAttachFiles && !value && (
+          <button
+            type="button"
+            onClick={onAttachFiles}
+            disabled={disabled}
+            className="absolute text-[12px] sv-hover-bg rounded-[3px] px-1.5 py-0.5"
+            style={{
+              left: 14,
+              bottom: 12,
+              color: 'hsl(var(--sv-muted))',
+              opacity: 0.7,
+            }}
+            title="Attach files"
+          >
+            + Add files
+          </button>
+        )}
         <button
           type="button"
           onClick={handleSend}
