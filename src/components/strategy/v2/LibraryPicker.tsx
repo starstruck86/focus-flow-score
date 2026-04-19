@@ -214,20 +214,35 @@ export function LibraryPicker({ query, anchorRect, onPick, onClose }: Props) {
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      // Helper — fully consume the key so it never reaches the composer's
+      // textarea handler (which would otherwise treat Enter as "send").
+      const consume = () => {
         e.preventDefault();
+        e.stopPropagation();
+        // Critical: stop OTHER capture-phase listeners on this same event
+        // (e.g. the composer's onKeyDown) from firing. Without this, Enter
+        // both inserts the picker reference AND submits the message.
+        e.stopImmediatePropagation();
+      };
+      if (e.key === 'Escape') {
+        consume();
         onClose();
         return;
       }
-      if (flat.length === 0) return;
+      if (flat.length === 0) {
+        // Even with no results, swallow Enter so it doesn't submit a stray
+        // `/library …` message while the picker is open.
+        if (e.key === 'Enter') consume();
+        return;
+      }
       if (e.key === 'ArrowDown') {
-        e.preventDefault();
+        consume();
         setActiveIdx((i) => Math.min(flat.length - 1, i + 1));
       } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
+        consume();
         setActiveIdx((i) => Math.max(0, i - 1));
       } else if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
+        consume();
         const it = flat[activeIdx];
         if (it) onPick(it);
       }
