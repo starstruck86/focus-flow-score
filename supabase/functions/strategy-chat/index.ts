@@ -1778,7 +1778,13 @@ serve(async (req) => {
       workflowType,
       depth,
       force_primary_failure,
+      pickedResourceIds,
     } = body;
+    // Sidecar: explicit resource IDs the user picked from /library this turn.
+    // Validated to a clean string[] before being passed downstream.
+    const cleanPickedResourceIds: string[] = Array.isArray(pickedResourceIds)
+      ? pickedResourceIds.filter((s: unknown) => typeof s === 'string' && /^[0-9a-f-]{16,}$/i.test(s))
+      : [];
 
     // ── Debug: OpenAI key health check ──────────────────────
     // Phase 0 acceptance gate. Returns 200 only when the key is shaped
@@ -1947,6 +1953,7 @@ serve(async (req) => {
       contextSection,
       contextPack,
       forceFallback,
+      cleanPickedResourceIds,
     );
   } catch (e) {
     console.error("strategy-chat error:", e);
@@ -2957,6 +2964,8 @@ async function buildChatSystemPrompt(args: {
   contextSection: string;
   pack: ContextPack;
   userContent: string;
+  /** Sidecar: resource IDs the user explicitly picked from /library this turn. */
+  pickedResourceIds?: string[];
 }): Promise<{
   prompt: string;
   workingThesis: WorkingThesisState | null;
@@ -2972,6 +2981,7 @@ async function buildChatSystemPrompt(args: {
     contextSection,
     pack,
     userContent,
+    pickedResourceIds = [],
   } = args;
   const accountId: string | null = pack.account?.id ?? null;
   const opportunityId: string | null = pack.opportunity?.id ?? null;
@@ -3156,6 +3166,7 @@ async function handleChat(
   contextSection: string,
   pack: ContextPack,
   forceFallback?: boolean,
+  pickedResourceIds: string[] = [],
 ) {
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
@@ -3181,6 +3192,7 @@ async function handleChat(
     contextSection,
     pack,
     userContent: content,
+    pickedResourceIds,
   });
   const accountId: string | null = pack.account?.id ?? null;
 
