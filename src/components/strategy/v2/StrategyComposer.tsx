@@ -130,8 +130,10 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           style={{
             color: 'hsl(var(--sv-ink))',
             fontFamily: serifPlaceholder && !value ? 'var(--sv-serif)' : 'var(--sv-sans)',
+            paddingLeft: onAttachFiles && !value ? 88 : 0,
             paddingRight: 40,
             maxHeight: 240,
+            transition: 'padding-left 120ms ease',
           }}
         />
         {/* Phase 1.5: muted "+ Add files" affordance — disappears once typing begins */}
@@ -143,7 +145,8 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
             className="absolute text-[12px] sv-hover-bg rounded-[3px] px-1.5 py-0.5"
             style={{
               left: 14,
-              bottom: 12,
+              top: '50%',
+              transform: 'translateY(-50%)',
               color: 'hsl(var(--sv-muted))',
               opacity: 0.7,
             }}
