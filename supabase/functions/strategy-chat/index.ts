@@ -2532,7 +2532,7 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     id: h.id,
     title: h.title,
   }));
-  return { prompt, workingThesis, resourceHits };
+  return { prompt, workingThesis, resourceHits, intent, modeLockBlock };
 }
 
 // Extract a fenced ```thesis_update { ... }``` block emitted by the
