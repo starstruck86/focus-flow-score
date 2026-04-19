@@ -14,6 +14,12 @@ export interface StrategyThread {
   is_pinned: boolean;
   created_at: string;
   updated_at: string;
+  // Phase 1 — durable trust state from compute_thread_trust_state()
+  trust_state?: 'safe' | 'warning' | 'blocked' | null;
+  trust_state_reason?: string | null;
+  entity_signals?: unknown | null;
+  trust_checked_at?: string | null;
+  cloned_from_thread_id?: string | null;
 }
 
 export interface StrategyMessage {
