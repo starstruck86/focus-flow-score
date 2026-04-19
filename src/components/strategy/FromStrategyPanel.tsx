@@ -81,15 +81,22 @@ export function FromStrategyPanel({ scope, recordId }: Props) {
       const memTable = scope === 'account' ? 'account_strategy_memory' : 'opportunity_strategy_memory';
 
       const [resR, memR, conR, txR] = await Promise.all([
-        // Resources promoted from Strategy artifacts/uploads
+        // Resources promoted from Strategy artifacts/uploads.
+        // Quarantine filter: hide rows whose source thread was later flagged as
+        // identity-conflicted (per trust gate doctrine). The DB row stays for
+        // audit; the consumer surface treats it as not-truth.
         (supabase as any).from('resources')
           .select('id, title, resource_type, promotion_scope, source_strategy_thread_id, promoted_at, is_template, content')
           .eq(idCol, recordId).eq('source', 'strategy')
+          .is('quarantined_at', null)
           .order('promoted_at', { ascending: false }).limit(20),
-        // Memory items that originated in a Strategy thread
+        // Memory items that originated in a Strategy thread.
+        // Skip rows marked is_irrelevant — these are contaminated rows neutralized
+        // after the source thread was flagged as identity-conflicted.
         (supabase as any).from(memTable)
           .select('id, memory_type, content, source_thread_id, created_at')
           .eq(idCol, recordId)
+          .eq('is_irrelevant', false)
           .not('source_thread_id', 'is', null)
           .order('created_at', { ascending: false }).limit(20),
         // Contacts only exist at account scope

@@ -41,10 +41,14 @@ export function useLinkedObjectContext(thread: StrategyThread | null) {
         .maybeSingle();
       ctx.account = acct;
 
+      // Trust gate: never hydrate a thread with memory rows that were flagged
+      // as contaminated (is_irrelevant=true). Otherwise a Lima One-derived
+      // memory could feed back into an Adore Me thread context.
       const { data: mem } = await supabase
         .from('account_strategy_memory')
         .select('memory_type, content, is_pinned')
         .eq('account_id', thread.linked_account_id)
+        .eq('is_irrelevant', false)
         .order('created_at', { ascending: false })
         .limit(20);
       if (mem) ctx.memories = mem;
@@ -62,6 +66,7 @@ export function useLinkedObjectContext(thread: StrategyThread | null) {
         .from('opportunity_strategy_memory')
         .select('memory_type, content, is_pinned')
         .eq('opportunity_id', thread.linked_opportunity_id)
+        .eq('is_irrelevant', false)
         .order('created_at', { ascending: false })
         .limit(20);
       if (mem) ctx.memories = [...ctx.memories, ...mem];
