@@ -53,8 +53,11 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
         onSlashChange?.(null);
       };
       // Replace any in-progress slash query with `text` and refocus.
+      // Normalize trailing whitespace so library insertion leaves exactly
+      // one trailing space — never zero, never two.
       ta.insertText = (text: string) => {
-        setValue(text);
+        const normalized = text.replace(/\s+$/, '') + ' ';
+        setValue(normalized);
         onSlashChange?.(null);
         // Focus + place caret at end after React commits the new value.
         requestAnimationFrame(() => {
