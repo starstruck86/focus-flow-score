@@ -202,6 +202,7 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
           border: '1px solid hsl(var(--sv-hairline))',
           background: 'hsl(var(--sv-paper))',
           overflow: 'hidden',
+          pointerEvents: 'auto',
         }}
       >
         <input
