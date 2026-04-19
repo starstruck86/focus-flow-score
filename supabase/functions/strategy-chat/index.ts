@@ -3254,10 +3254,15 @@ async function handleChat(
     }
     const visible = subst.text;
     // Citation audit: catch any fabricated RESOURCE[…] references.
-    const audit = auditResourceCitations(visible, resourceHits);
+    // Closed-set mode is enabled when the user picked a resource via
+    // /library — this prevents adjacent-variant hallucinations
+    // (e.g. "Q3" when they picked "Q2").
+    const audit = auditResourceCitations(visible, resourceHits, {
+      closedSet: pickedResourceIds.length > 0,
+    });
     if (audit.modified) {
       console.log(
-        `[citation-audit] non-stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged`,
+        `[citation-audit] non-stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
       );
     }
     const auditedVisible = audit.text;
