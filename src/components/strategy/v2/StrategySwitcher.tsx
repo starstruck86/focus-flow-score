@@ -181,11 +181,11 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
   if (!open) return null;
 
   return createPortal(
-    <div className="strategy-v2" style={{ position: 'fixed', inset: 0, zIndex: 70 }}>
+    <div className="strategy-v2" style={{ position: 'fixed', inset: 0, zIndex: 70, background: 'transparent', pointerEvents: 'none' }}>
       {/* No veil. Canvas remains 100% visible. Click-catcher is fully transparent. */}
       <div
         onClick={onClose}
-        style={{ position: 'absolute', inset: 0, background: 'transparent' }}
+        style={{ position: 'absolute', inset: 0, background: 'transparent', pointerEvents: 'auto' }}
       />
       <div
         role="dialog"
@@ -202,6 +202,7 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
           border: '1px solid hsl(var(--sv-hairline))',
           background: 'hsl(var(--sv-paper))',
           overflow: 'hidden',
+          pointerEvents: 'auto',
         }}
       >
         <input
