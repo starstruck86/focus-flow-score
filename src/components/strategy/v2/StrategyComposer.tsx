@@ -57,8 +57,6 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
         style={{
           maxWidth: 760,
           minHeight: 56,
-          borderRadius: 'var(--sv-radius-composer)',
-          border: '1px solid hsl(var(--sv-hairline))',
           background: 'hsl(var(--sv-paper))',
           display: 'flex',
           alignItems: 'flex-end',
