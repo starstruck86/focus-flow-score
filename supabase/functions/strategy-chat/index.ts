@@ -2598,6 +2598,42 @@ function enforceModeLock(
         );
       }
 
+      // ── HEDGE / SOFT-LANGUAGE GUARD (ELITE OPERATOR STANDARD) ──
+      // Rewrites timid hedge phrases into confident mechanism-driven language.
+      // Only the clearest hedge patterns are rewritten so we don't change
+      // the substance of a real claim.
+      const HEDGE_REWRITES: Array<{ re: RegExp; to: string; tag: string }> = [
+        { re: /\bmay\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_may_will" },
+        { re: /\bmight\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_might_will" },
+        { re: /\bcould\s+(?:potentially\s+)?(delay|slow|reduce|impact|affect|cause|create|introduce|insert|add|push|risk|require|trigger|force|extend|disrupt|shift)\b/gi, to: "will $1", tag: "hedge_could_will" },
+        { re: /\bpotentially\s+/gi, to: "", tag: "hedge_potentially" },
+        { re: /\bpossibly\s+/gi, to: "", tag: "hedge_possibly" },
+        { re: /\bperhaps\s+/gi, to: "", tag: "hedge_perhaps" },
+        { re: /\bit'?s\s+possible\s+that\s+/gi, to: "", tag: "hedge_its_possible" },
+        { re: /\bthere'?s\s+a\s+chance\s+(?:that\s+)?/gi, to: "", tag: "hedge_chance" },
+        { re: /\bthis\s+suggests\s+that\s+/gi, to: "", tag: "hedge_suggests" },
+        { re: /\bthis\s+indicates\s+that\s+/gi, to: "", tag: "hedge_indicates" },
+        { re: /\bit'?s\s+worth\s+noting\s+that\s+/gi, to: "", tag: "hedge_worth_noting" },
+        { re: /\bin\s+general,?\s+/gi, to: "", tag: "hedge_in_general" },
+        { re: /\btends\s+to\s+/gi, to: "will ", tag: "hedge_tends_to" },
+      ];
+      let hedgeHits = 0;
+      for (const { re, to, tag } of HEDGE_REWRITES) {
+        const before = text;
+        text = text.replace(re, to);
+        if (text !== before) {
+          hedgeHits += 1;
+          violations.push(`stripped_${tag}`);
+        }
+      }
+      if (hedgeHits > 0) {
+        text = text
+          .replace(/[ \t]{2,}/g, " ")
+          .replace(/(^|[\.\?!]\s+)([a-z])/g, (_m, p, c) => p + c.toUpperCase());
+        modified = true;
+        console.log(`[mode-lock] analysis_hedges_rewritten count=${hedgeHits}`);
+      }
+
       // Shape check: must have an Account thesis line. If not, flag for
       // regeneration unless the response is clearly an honest missing-fact
       // ask (already produced by the placeholder guard).
