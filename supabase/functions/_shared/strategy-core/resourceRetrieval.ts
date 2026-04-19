@@ -70,6 +70,15 @@ export interface RetrievedResource {
    * scaffold. Never populated for incidental hits — keeps prompt budgets honest.
    */
   bodyExcerpt?: string;
+  /**
+   * Heuristic shape of the picked resource's body. Drives whether the
+   * model mirrors a real structure ("structured") or extracts reusable
+   * patterns from prose ("unstructured"). Undefined for non-picked hits
+   * or when no body is available.
+   */
+  sourceShape?: "structured" | "unstructured" | "empty";
+  /** Short evidence string for sourceShape — surfaced in the prompt. */
+  sourceShapeReason?: string;
 }
 
 export interface ResourceRetrievalResult {
