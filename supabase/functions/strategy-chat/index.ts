@@ -2996,7 +2996,10 @@ async function buildChatSystemPrompt(args: {
   const modeLockBlock = buildModeLockBlock(intent);
 
   // No account, no thread context → don't force Strategy Core onto small talk.
-  if (!accountId && (!contextSection || contextSection.length < 200)) {
+  // EXCEPTION: when the user explicitly picked a library resource this turn
+  // (sidecar pickedResourceIds), we MUST run the resource pipeline so the
+  // assistant grounds in that resource — even on a freeform thread.
+  if (!accountId && (!contextSection || contextSection.length < 200) && pickedResourceIds.length === 0) {
     return {
       prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
       workingThesis: null,
@@ -3050,6 +3053,7 @@ async function buildChatSystemPrompt(args: {
       accountId,
       opportunityId,
       threadId,
+      pickedResourceIds,
     }).catch((e) => {
       console.warn(
         "[strategy-chat] retrieveResourceContext failed:",
@@ -3066,7 +3070,7 @@ async function buildChatSystemPrompt(args: {
     hasAccount: !!accountId,
     libraryCounts: library?.counts,
     contextSectionLength: contextSection?.length ?? 0,
-  }) || !!resources?.userAskedForResource;
+  }) || !!resources?.userAskedForResource || pickedResourceIds.length > 0;
 
   if (!useCore) {
     return {
