@@ -3,39 +3,37 @@
  *
  *   [Thread Title] [● Entity Chip] ............ [⌘K] [⌘I+count]
  *
- * - 44px height
- * - Title is inline-editable (single click to edit)
- * - Entity chip is the only persistent chip; trust dot lives inside it
- * - Max 5 controls. No icons beyond the keyboard-glyph buttons.
- * - Mobile (<768px): collapses to [Title] [⌘K] [⌘I]; the entity chip moves
- *   beneath the title at 11px to preserve the locked control count.
+ * Phase 3: chip click is hoisted to the shell so it can also be summoned by ⌘L.
  */
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import type { TrustState } from '@/hooks/strategy/useThreadTrustState';
 import { EntityChip } from './EntityChip';
-import type { LinkPickerSelection } from './LinkPicker';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface Props {
   title: string;
   onTitleChange: (next: string) => void;
   entityName: string | null;
-  entityKind: 'account' | 'opportunity' | null;
   trustState: TrustState;
   unresolvedProposalCount: number;
   onOpenSwitcher: () => void;
   onOpenInspector: () => void;
-  onPickEntity: (sel: LinkPickerSelection) => void;
+  /** Called when chip is clicked. Shell decides what to do (open LinkPicker). */
+  onChipClick: () => void;
+  /** Ref to the chip button so the shell can anchor LinkPicker to it. */
+  chipRef?: React.RefObject<HTMLButtonElement>;
 }
 
-export function StrategyTopBar({
-  title, onTitleChange, entityName, entityKind, trustState,
-  unresolvedProposalCount, onOpenSwitcher, onOpenInspector, onPickEntity,
-}: Props) {
+export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function StrategyTopBar({
+  title, onTitleChange, entityName, trustState,
+  unresolvedProposalCount, onOpenSwitcher, onOpenInspector, onChipClick, chipRef,
+}, _ref) {
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
   const inputRef = useRef<HTMLInputElement>(null);
+  const internalChipRef = useRef<HTMLButtonElement>(null);
+  const effectiveChipRef = chipRef ?? internalChipRef;
 
   useEffect(() => { setDraft(title); }, [title]);
   useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
@@ -85,10 +83,10 @@ export function StrategyTopBar({
         {/* Entity chip — desktop only here */}
         {!isMobile && (
           <EntityChip
+            ref={effectiveChipRef}
             entityName={entityName}
-            entityKind={entityKind}
             trustState={trustState}
-            onPick={onPickEntity}
+            onClick={onChipClick}
           />
         )}
 
@@ -113,17 +111,17 @@ export function StrategyTopBar({
         </button>
       </div>
 
-      {/* Mobile entity chip — sits beneath title row, 11px, no icons */}
+      {/* Mobile entity chip — sits beneath title row */}
       {isMobile && (
         <div className="px-4 pb-1">
           <EntityChip
+            ref={effectiveChipRef}
             entityName={entityName}
-            entityKind={entityKind}
             trustState={trustState}
-            onPick={onPickEntity}
+            onClick={onChipClick}
           />
         </div>
       )}
     </div>
   );
-}
+});

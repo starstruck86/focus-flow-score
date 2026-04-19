@@ -1,18 +1,28 @@
 /**
- * StrategyShell — Phase 1 two-region shell.
+ * StrategyShell — Phase 1+2+3 two-region shell.
  *
  *   ┌─ TopBar ────────────────────────────────┐  44px
  *   ├─ Canvas (messages) ─────────────────────┤  flex-1, scrolls
  *   └─ Composer (or BlockedComposer) ─────────┘  shrink-0
  *
- * Summoned surfaces (Switcher, Inspector) are rendered as portals — they do
- * NOT shift the canvas layout under any circumstance.
+ * Summoned surfaces (Switcher, Inspector, LinkPicker, ScopePicker,
+ * PromotionsInbox, SelectionActionBar, SlashMenu, SaveToast) are rendered
+ * as portals — they NEVER shift the canvas layout.
  *
- * All backend wiring (threads, messages, uploads, memory, artifacts, trust,
- * proposals) is preserved by passing through the existing hooks unchanged.
+ * Phase 3 keyboard spine wired here:
+ *   ⌘K Switcher · ⌘I Inspector · ⌘. Inbox · ⌘L LinkPicker
+ *   ⌘S save · ⌘⇧S pick scope · ⌘⇧P promote
+ *   ⌘B branch (selection or thread) · ⌘⇧O open Account · ⌘⇧D open Opp
+ *   ⌘⇧N new thread · / slash-menu in composer · Esc dismiss
+ *
+ * Dev-only proof hooks (no production effect):
+ *   ?devOpen=switcher|linkpicker|inbox|inspector|slash
+ *   ?devAction=newThread|branch|openAccount|openOpportunity
+ *   ?devSelect=<text>   (pre-existing)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useStrategyThreads } from '@/hooks/strategy/useStrategyThreads';
 import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyMemory } from '@/hooks/strategy/useStrategyMemory';
@@ -38,7 +48,8 @@ import { SelectionActionBar, type ActionKey } from './SelectionActionBar';
 import { ScopePicker, type ScopePick } from './ScopePicker';
 import { PromotionsInbox } from './PromotionsInbox';
 import { SaveToast, type SaveToastState } from './SaveToast';
-import type { LinkPickerSelection } from './LinkPicker';
+import { LinkPicker, type LinkPickerSelection } from './LinkPicker';
+import { SlashMenu, type SlashVerb } from './SlashMenu';
 
 import '@/styles/strategy-v2.css';
 
@@ -48,13 +59,17 @@ export function StrategyShell() {
 
   const { threads, activeThread, setActiveThreadId, updateThread } = useStrategyThreads();
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const chipRef = useRef<HTMLButtonElement>(null);
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [scopePickerOpen, setScopePickerOpen] = useState(false);
   const [pendingPick, setPendingPick] = useState<{ scope: SaveScope } | null>(null);
-  const [toast, setToast] = useState<SaveToastState | null>(null);
+  const [toastState, setToastState] = useState<SaveToastState | null>(null);
+  const [slashQuery, setSlashQuery] = useState<string | null>(null);
+  const [composerRect, setComposerRect] = useState<DOMRect | null>(null);
 
   const threadId = activeThread?.id ?? null;
 
@@ -80,13 +95,12 @@ export function StrategyShell() {
   const { selection, clear: clearSelection } = useStrategySelection();
   const { save } = useStrategySaveGesture();
 
-  // Unresolved proposals = anything not in a terminal state ("promoted" or "rejected")
   const unresolvedProposalCount = useMemo(
     () => proposals.filter(p => p.status !== 'promoted' && p.status !== 'rejected').length,
     [proposals],
   );
 
-  const showToast = useCallback((t: SaveToastState) => setToast(t), []);
+  const showSaveToast = useCallback((t: SaveToastState) => setToastState(t), []);
 
   const performSave = useCallback(async (
     scope: SaveScope,
@@ -95,7 +109,6 @@ export function StrategyShell() {
     if (!selection || !activeThread) return;
     const text = selection.text;
     const sourceMessageId = selection.sourceMessageId;
-    // Clear selection visually but keep doing the save
     const result = await save({
       selectionText: text,
       sourceMessageId,
@@ -104,7 +117,7 @@ export function StrategyShell() {
       targetAccountId: overrides?.targetAccountId,
       targetOpportunityId: overrides?.targetOpportunityId,
     });
-    showToast({
+    showSaveToast({
       id: crypto.randomUUID(),
       message: result.message,
       openPath: result.openPath,
@@ -112,7 +125,7 @@ export function StrategyShell() {
       isError: !result.ok,
     });
     if (result.ok) clearSelection();
-  }, [selection, activeThread, save, showToast, clearSelection]);
+  }, [selection, activeThread, save, showSaveToast, clearSelection]);
 
   const handleSelectionAction = useCallback((key: ActionKey) => {
     if (key === 'pick_scope') {
@@ -134,6 +147,139 @@ export function StrategyShell() {
     setPendingPick(null);
   }, [pendingPick, performSave]);
 
+  // ---------- Phase 3 verbs ----------
+
+  const handleNewThread = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('strategy_threads')
+      .insert({
+        user_id: user.id,
+        title: 'Untitled thread',
+        lane: 'strategy',
+        thread_type: 'freeform',
+      } as any)
+      .select()
+      .single();
+    if (data?.id) {
+      setActiveThreadId(data.id);
+      setTimeout(() => composerRef.current?.focus(), 0);
+    }
+  }, [user, setActiveThreadId]);
+
+  /** Branch from selection (if any) or current thread state. Provenance preserved via cloned_from_thread_id. */
+  const handleBranch = useCallback(async () => {
+    if (!user || !activeThread) return;
+    const seedText = selection?.text ?? null;
+    const baseTitle = activeThread.title || 'Thread';
+    const newTitle = seedText
+      ? `${baseTitle.slice(0, 40)} — branch`
+      : `${baseTitle.slice(0, 40)} — branch`;
+
+    const { data: newThread } = await supabase
+      .from('strategy_threads')
+      .insert({
+        user_id: user.id,
+        title: newTitle,
+        lane: activeThread.lane,
+        thread_type: activeThread.thread_type,
+        linked_account_id: activeThread.linked_account_id,
+        linked_opportunity_id: activeThread.linked_opportunity_id,
+        cloned_from_thread_id: activeThread.id,
+      } as any)
+      .select()
+      .single();
+
+    if (newThread?.id) {
+      // If branching from a selection, seed the new thread with a system message
+      // capturing the original line of thought as provenance.
+      if (seedText) {
+        await (supabase as any).from('strategy_messages').insert({
+          thread_id: newThread.id,
+          user_id: user.id,
+          role: 'system',
+          message_type: 'chat',
+          content_json: {
+            text: `Branched from "${baseTitle}":\n\n> ${seedText}`,
+          },
+        });
+      }
+      setActiveThreadId(newThread.id);
+      clearSelection();
+    }
+  }, [user, activeThread, selection, setActiveThreadId, clearSelection]);
+
+  const handleOpenLinkedAccount = useCallback(() => {
+    const id = activeThread?.linked_account_id;
+    if (!id) {
+      toast('No linked account on this thread');
+      return;
+    }
+    navigate(`/accounts/${id}`);
+  }, [activeThread, navigate]);
+
+  const handleOpenLinkedOpportunity = useCallback(() => {
+    const id = activeThread?.linked_opportunity_id;
+    if (!id) {
+      toast('No linked opportunity on this thread');
+      return;
+    }
+    navigate(`/opportunities/${id}`);
+  }, [activeThread, navigate]);
+
+  // Slash verb routing
+  const handleSlashPick = useCallback((verb: SlashVerb) => {
+    setSlashQuery(null);
+    const ta = composerRef.current as (HTMLTextAreaElement & { clearSlash?: () => void }) | null;
+    ta?.clearSlash?.();
+
+    switch (verb) {
+      case 'link':
+        setLinkPickerOpen(true);
+        break;
+      case 'branch':
+        handleBranch();
+        break;
+      case 'promote-last': {
+        // Pick the last assistant message and route through ⌘⇧P semantics
+        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+        if (!lastAssistant) {
+          toast('No assistant message to save yet');
+          break;
+        }
+        const text = (lastAssistant.content_json as any)?.text
+          ?? (lastAssistant.content_json as any)?.content
+          ?? '';
+        if (!text) { toast('Nothing to save in the last message'); break; }
+        // Save as research by default — safest scope
+        save({
+          selectionText: String(text).slice(0, 800),
+          sourceMessageId: lastAssistant.id,
+          thread: activeThread!,
+          scope: 'research',
+        }).then(result => {
+          showSaveToast({
+            id: crypto.randomUUID(),
+            message: result.message,
+            openPath: result.openPath,
+            undo: result.undo,
+            isError: !result.ok,
+          });
+        });
+        break;
+      }
+      case 'upload':
+        toast('Drag a file onto the canvas to upload');
+        break;
+      case 'artifact':
+        toast('Artifact builder — coming next');
+        break;
+      case 'scan':
+        toast('Account scan — coming next');
+        break;
+    }
+  }, [handleBranch, messages, activeThread, save, showSaveToast]);
+
   // Hotkeys
   useStrategyHotkeys({
     onToggleSwitcher: () => setSwitcherOpen(o => !o),
@@ -145,7 +291,6 @@ export function StrategyShell() {
         ? 'opportunity'
         : activeThread.linked_account_id ? 'account' : 'research';
       if (primary === 'research') {
-        // No linkage — open scope picker for ⌘S as well
         setPendingPick({ scope: 'account' });
         setScopePickerOpen(true);
         return;
@@ -161,8 +306,20 @@ export function StrategyShell() {
       if (!selection) return;
       performSave('crm_contact');
     },
+    onOpenLinkPicker: () => setLinkPickerOpen(o => !o),
+    onBranch: () => handleBranch(),
+    onOpenLinkedAccount: () => handleOpenLinkedAccount(),
+    onOpenLinkedOpportunity: () => handleOpenLinkedOpportunity(),
+    onNewThread: () => handleNewThread(),
     onEscape: () => {
+      if (slashQuery !== null) {
+        setSlashQuery(null);
+        const ta = composerRef.current as (HTMLTextAreaElement & { clearSlash?: () => void }) | null;
+        ta?.clearSlash?.();
+        return;
+      }
       if (scopePickerOpen) { setScopePickerOpen(false); return; }
+      if (linkPickerOpen) { setLinkPickerOpen(false); return; }
       if (inboxOpen) { setInboxOpen(false); return; }
       if (switcherOpen) { setSwitcherOpen(false); return; }
       if (inspectorOpen) { setInspectorOpen(false); return; }
@@ -171,7 +328,51 @@ export function StrategyShell() {
     composerRef,
   });
 
-  // Auto-detect trust state when switching threads (debounced by useThreadTrustState's own logic)
+  // ---------- Dev-only proof hooks ----------
+  // Reads ?devOpen= and ?devAction= once on mount and applies to state.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const devOpen = params.get('devOpen');
+    const devAction = params.get('devAction');
+
+    if (devOpen) {
+      // Wait one tick so state is mounted, then summon
+      const t = setTimeout(() => {
+        if (devOpen === 'switcher') setSwitcherOpen(true);
+        else if (devOpen === 'inspector') setInspectorOpen(true);
+        else if (devOpen === 'inbox') setInboxOpen(true);
+        else if (devOpen === 'linkpicker') setLinkPickerOpen(true);
+        else if (devOpen === 'slash') {
+          composerRef.current?.focus();
+          // Inject a slash query so the menu shows up
+          setSlashQuery('/');
+          // Also reflect the slash in the textarea visually
+          if (composerRef.current) {
+            const ta = composerRef.current as HTMLTextAreaElement;
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+            setter?.call(ta, '/');
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
+      }, 200);
+      return () => clearTimeout(t);
+    }
+
+    if (devAction) {
+      const t = setTimeout(() => {
+        if (devAction === 'newThread') handleNewThread();
+        else if (devAction === 'branch') handleBranch();
+        else if (devAction === 'openAccount') handleOpenLinkedAccount();
+        else if (devAction === 'openOpportunity') handleOpenLinkedOpportunity();
+      }, 400);
+      return () => clearTimeout(t);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-detect trust state when switching threads
   useEffect(() => {
     if (!threadId) return;
     runDetect().catch(() => { /* swallow */ });
@@ -179,7 +380,6 @@ export function StrategyShell() {
 
   const handleSend = useCallback((text: string) => {
     if (!threadId) {
-      // Auto-create a freeform thread if none active
       (async () => {
         if (!user) return;
         const { data } = await supabase.from('strategy_threads').insert({
@@ -187,7 +387,6 @@ export function StrategyShell() {
         } as any).select().single();
         if (data?.id) {
           setActiveThreadId(data.id);
-          // give state a tick before sending; useStrategyMessages will pick up the new threadId
           setTimeout(() => sendMessage(text), 0);
         }
       })();
@@ -197,6 +396,7 @@ export function StrategyShell() {
   }, [threadId, sendMessage, user, setActiveThreadId]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
+    setLinkPickerOpen(false);
     if (!activeThread) return;
     const updates: Partial<StrategyThread> = sel.kind === 'freeform'
       ? { linked_account_id: null, linked_opportunity_id: null, thread_type: 'freeform' }
@@ -204,16 +404,13 @@ export function StrategyShell() {
         ? { linked_account_id: sel.id ?? null, linked_opportunity_id: null, thread_type: 'account_linked' }
         : { linked_account_id: null, linked_opportunity_id: sel.id ?? null, thread_type: 'opportunity_linked' };
     await updateThread(activeThread.id, updates);
-    // Re-run trust detection with new linkage
     runDetect().catch(() => { /* swallow */ });
   }, [activeThread, updateThread, runDetect]);
 
   const handleClone = useCallback(async () => {
-    // Detect the entity name the system thinks the thread is really about.
     const detectedName = conflicts.find(c => c.detected_account_name)?.detected_account_name ?? null;
     if (!user || !activeThread) return;
 
-    // Try to resolve detected name → existing account
     let targetAccountId: string | null = null;
     if (detectedName) {
       const { data: match } = await supabase
@@ -227,7 +424,6 @@ export function StrategyShell() {
       targetAccountId = match?.id ?? null;
     }
 
-    // Create a clean clone — re-link to detected account if found, otherwise freeform
     const { data: newThread } = await supabase.from('strategy_threads').insert({
       user_id: user.id,
       title: detectedName ? `${detectedName} — strategy` : `${activeThread.title} (clone)`,
@@ -274,12 +470,12 @@ export function StrategyShell() {
         title={activeThread?.title ?? 'Untitled thread'}
         onTitleChange={(next) => activeThread && updateThread(activeThread.id, { title: next })}
         entityName={entityName}
-        entityKind={entityKind}
         trustState={trustState}
         unresolvedProposalCount={unresolvedProposalCount}
         onOpenSwitcher={() => setSwitcherOpen(true)}
         onOpenInspector={() => setInspectorOpen(true)}
-        onPickEntity={handlePickEntity}
+        onChipClick={() => setLinkPickerOpen(true)}
+        chipRef={chipRef}
       />
 
       <StrategyCanvas
@@ -308,6 +504,8 @@ export function StrategyShell() {
           }
           serifPlaceholder={messages.length === 0}
           onSend={handleSend}
+          onSlashChange={setSlashQuery}
+          onRectChange={setComposerRect}
         />
       )}
 
@@ -327,8 +525,25 @@ export function StrategyShell() {
         uploads={uploads}
         artifacts={artifacts}
       />
+      <LinkPicker
+        open={linkPickerOpen}
+        anchorRef={chipRef}
+        currentEntityKind={entityKind}
+        onClose={() => setLinkPickerOpen(false)}
+        onPick={handlePickEntity}
+      />
+      <SlashMenu
+        query={slashQuery}
+        anchorRect={composerRect}
+        onPick={handleSlashPick}
+        onClose={() => {
+          setSlashQuery(null);
+          const ta = composerRef.current as (HTMLTextAreaElement & { clearSlash?: () => void }) | null;
+          ta?.clearSlash?.();
+        }}
+      />
 
-      {/* Phase 2 — gesture surfaces. All portals; never shift layout. */}
+      {/* Phase 2 — gesture surfaces */}
       <SelectionActionBar
         selection={scopePickerOpen ? null : selection}
         hasOpportunity={!!activeThread?.linked_opportunity_id}
@@ -347,9 +562,9 @@ export function StrategyShell() {
         onClose={() => setInboxOpen(false)}
       />
       <SaveToast
-        toast={toast}
-        onDismiss={() => setToast(null)}
-        onOpen={(path) => { setToast(null); navigate(path); }}
+        toast={toastState}
+        onDismiss={() => setToastState(null)}
+        onOpen={(path) => { setToastState(null); navigate(path); }}
       />
     </div>
   );
