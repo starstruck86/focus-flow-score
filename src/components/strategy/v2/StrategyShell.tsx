@@ -54,6 +54,7 @@ import { PromotionsInbox } from './PromotionsInbox';
 import { SaveToast, type SaveToastState } from './SaveToast';
 import { LinkPicker, type LinkPickerSelection } from './LinkPicker';
 import { SlashMenu, type SlashVerb } from './SlashMenu';
+import { LibraryPicker, type LibraryItem } from './LibraryPicker';
 
 import '@/styles/strategy-v2.css';
 
