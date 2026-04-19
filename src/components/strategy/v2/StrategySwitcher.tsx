@@ -215,6 +215,7 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
             borderBottom: '1px solid hsl(var(--sv-hairline))',
             boxShadow: 'none',
           }}
+          onFocus={e => { e.currentTarget.style.outline = 'none'; }}
         />
         <div style={{ maxHeight: '54vh', overflowY: 'auto' }}>
           {grouped.length === 0 && (
