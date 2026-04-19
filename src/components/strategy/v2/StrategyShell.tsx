@@ -84,6 +84,7 @@ export function StrategyShell() {
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
   const [composerRect, setComposerRect] = useState<DOMRect | null>(null);
   const [pendingThreadId, setPendingThreadId] = useState<string | null>(null);
+  const [isCreatingThread, setIsCreatingThread] = useState(false);
 
   const threadId = activeThread?.id ?? null;
 
@@ -164,18 +165,21 @@ export function StrategyShell() {
   // ---------- Phase 3 verbs ----------
 
   const handleNewThread = useCallback(async () => {
-    if (!user || pendingThreadId) return;
+    if (!user || pendingThreadId || isCreatingThread) return;
+    setIsCreatingThread(true);
     const newId = await createThread('Untitled thread', 'strategy', 'freeform');
     if (newId) {
       setPendingThreadId(newId);
       return;
     }
+    setIsCreatingThread(false);
     toast.error('Failed to create thread');
-  }, [user, pendingThreadId, createThread]);
+  }, [user, pendingThreadId, isCreatingThread, createThread]);
 
   useEffect(() => {
     if (!pendingThreadId || activeThread?.id !== pendingThreadId) return;
     setPendingThreadId(null);
+    setIsCreatingThread(false);
     const queued = queuedInitialMessageRef.current;
     queuedInitialMessageRef.current = null;
     requestAnimationFrame(() => composerRef.current?.focus());
@@ -421,22 +425,24 @@ export function StrategyShell() {
   }, [threadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSend = useCallback((text: string) => {
-    if (pendingThreadId || isSending) return;
+    if (pendingThreadId || isCreatingThread || isSending) return;
     if (!threadId) {
       (async () => {
         if (!user) return;
+        setIsCreatingThread(true);
         const newId = await createThread('Untitled thread', 'strategy', 'freeform');
         if (newId) {
           queuedInitialMessageRef.current = text;
           setPendingThreadId(newId);
         } else {
+          setIsCreatingThread(false);
           toast.error('Failed to create thread');
         }
       })();
       return;
     }
     sendMessage(text);
-  }, [pendingThreadId, isSending, threadId, sendMessage, user, createThread]);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
@@ -540,7 +546,7 @@ export function StrategyShell() {
       ) : (
         <StrategyComposer
           ref={composerRef}
-          disabled={isSending || !!pendingThreadId}
+          disabled={isSending || !!pendingThreadId || isCreatingThread}
           placeholder={
             messages.length === 0
               ? 'What are you thinking about?'
