@@ -2120,17 +2120,32 @@ function buildModeLockBlock(intent: IntentResult): string {
   // Banned-phrase list applied to EVERY mode. These are the soft-AE
   // patterns we keep seeing: "I hope this finds you well", "just
   // checking in", "let me know if", etc. Top reps don't write this way.
-  const substanceContract =
-    `\n- SUBSTANCE CONTRACT: NEVER use any of these phrases — "I hope this finds you well", "I hope this email finds you well", "I hope you're doing well", "I hope all is well", "just checking in", "circling back", "touching base", "reaching out to see", "let me know if", "let me know your thoughts", "I wanted to", "I just wanted to", "happy to chat", "happy to discuss", "would love to", "I'd love to", "I look forward to hearing", "thoughts?", "any thoughts", "feel free to", "at your earliest convenience", "as per", "kindly", "warm regards". They make you sound like a junior SDR.
-- VERB FLOOR: lead sentences with strong, specific verbs. Replace "follow up on X" → "ask Y to confirm Z by [date]". Replace "check in on the deal" → "ask [name] for the [decision/signature/intro]". Replace "learn more about needs" → "confirm the [specific constraint, budget, timeline]".
-- SPECIFICITY FLOOR: every concrete reference (person, number, date, system, dollar amount) you have in context MUST appear in the output. If a placeholder is the only honest option, use [BRACKETED_PLACEHOLDER] — never vague nouns like "the team", "your needs", "the opportunity".`;
+  //
+  // PLACEHOLDER POLICY:
+  //   - template mode REQUIRES [BRACKETED] placeholders (it's a fill-in form).
+  //   - every other mode FORBIDS placeholder cosplay. If a fact is missing,
+  //     state what's missing in one short line and stop. Never fabricate
+  //     specifics, never emit [BRACKETED_*], $[BRACKETED_*], [Client],
+  //     [specific date], [Contact Name], etc.
+  const isTemplateMode = kind === "template";
+  const placeholderPolicy = isTemplateMode
+    ? `\n- SPECIFICITY FLOOR: every concrete reference you have in context MUST appear. Where a fact is genuinely unknown, use [BRACKETED_PLACEHOLDER] — that is the contract for template mode.`
+    : `\n- ZERO-PLACEHOLDER RULE (HARD): you are NOT in template mode. You are FORBIDDEN from emitting any placeholder token of any kind: no [BRACKETED_*], no $[BRACKETED_*], no %[BRACKETED_*], no [Client], no [Customer], no [Contact Name], no [specific date], no [date], no [name] except for a name that's actually in context. If you do not have a fact, do ONE of these: (a) use only the facts that ARE in the thread/account context, (b) say in ONE short line exactly what's missing (e.g. "I can make this CFO-ready once you give me the savings estimate and deadline."), or (c) write a directional sentence with no fake specifics (e.g. "If we delay this, we risk pushing the project into next quarter and missing the current implementation window."). Bracket-placeholder cosplay will be STRIPPED by the server-side guard and you will be marked incorrect.
+- SUBSTANCE CONTRACT: NEVER use any of these phrases — "I hope this finds you well", "I hope this email finds you well", "I hope you're doing well", "I hope all is well", "just checking in", "circling back", "touching base", "reaching out to see", "let me know if", "let me know your thoughts", "I wanted to", "I just wanted to", "happy to chat", "happy to discuss", "would love to", "I'd love to", "I look forward to hearing", "thoughts?", "any thoughts", "feel free to", "at your earliest convenience", "as per", "kindly", "warm regards". They make you sound like a junior SDR.
+- VERB FLOOR: lead sentences with strong, specific verbs. Replace "follow up on X" → "ask Y to confirm Z". Replace "check in on the deal" → "ask the named person for the decision/signature/intro you actually need".`;
+  const substanceContract = isTemplateMode
+    ? `\n- SUBSTANCE CONTRACT: NEVER use any of these phrases — "I hope this finds you well", "I hope this email finds you well", "I hope you're doing well", "I hope all is well", "just checking in", "circling back", "touching base", "reaching out to see", "let me know if", "let me know your thoughts", "I wanted to", "I just wanted to", "happy to chat", "happy to discuss", "would love to", "I'd love to", "I look forward to hearing", "thoughts?", "any thoughts", "feel free to", "at your earliest convenience", "as per", "kindly", "warm regards". They make you sound like a junior SDR.
+- VERB FLOOR: lead sentences with strong, specific verbs.${placeholderPolicy}`
+    : placeholderPolicy;
 
   // Economic pressure injection — fires for pitch + next_steps + analysis +
   // any business-case template + any CFO-audience ask.
   const economicPressureRequired = isBusinessCase || isCFO ||
     kind === "pitch" || kind === "analysis";
   const economicLayer = economicPressureRequired
-    ? `\n- ECONOMIC PRESSURE LAYER (REQUIRED): Anchor the output in money + time. Include AT LEAST ONE concrete economic element: cost of inaction (\$/quarter or % loss), urgency trigger (compliance deadline, contract date, market window), tradeoff (what they give up by waiting). If you don't have a number, use [BRACKETED_NUMBER] so the rep fills it in. No vague phrases like "significant savings" or "improved efficiency".`
+    ? (isTemplateMode
+      ? `\n- ECONOMIC PRESSURE LAYER (REQUIRED): Anchor the output in money + time. Include AT LEAST ONE concrete economic element: cost of inaction (\$/quarter or % loss), urgency trigger (compliance deadline, contract date, market window), tradeoff (what they give up by waiting). Where a number is unknown, use [BRACKETED_NUMBER] (template mode). No vague phrases like "significant savings" or "improved efficiency".`
+      : `\n- ECONOMIC PRESSURE LAYER (REQUIRED): Anchor the output in money + time. If you have a real number/date in context, use it. If you don't, write a directional sentence WITHOUT placeholders (e.g. "Delaying this risks pushing implementation into next quarter and missing the current budget window") OR call out exactly what number/date you'd need from the rep in one short line. NEVER emit [BRACKETED_NUMBER], $[…], %[…] in this mode.`)
     : "";
 
   switch (kind) {
