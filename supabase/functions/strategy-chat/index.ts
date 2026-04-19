@@ -2049,7 +2049,7 @@ function classifyChatIntent(userContent: string): IntentResult {
   // "what source is this", "what is this based on", "how do you know this",
   // "why do you think/say", "source(s)?".
   const PROVENANCE_RE =
-    /\b(where (is|are|did|does|do) (this|that|it|they|you)|where('?s| is) (this|that|it) (from|pulled|coming|based|sourced|getting)|where (is|are) (this|that|it|you|i) (being\s+)?(pulled|sourced|getting|coming|drawing|reading|reading from)|what('?s| is) (this|that|it) based on|what('?s| is) (the|your) (source|basis)|source(s)?\??$|how (do|did) you know (this|that)?|why (do|did) you (think|say|believe)|what(?:'?s| is) the (source|basis|reference)|pulled from)\b/;
+    /\b(where (is|are|did|does|do) (this|that|it|they|you)|where('?s| is) (this|that|it) (from|pulled|coming|based|sourced|getting)|where (is|are) (this|that|it|you|i) (being\s+)?(pulled|sourced|getting|coming|drawing|reading|reading from)|what('?s| is) (this|that|it) based on|what('?s| is) (the|your) (source|basis)|what (source|sources) (is|are) (this|that|it)|source(s)?\??$|how (do|did) you know (this|that)?|why (do|did) you (think|say|believe)|what(?:'?s| is) the (source|basis|reference)|pulled from)\b/;
   if (PROVENANCE_RE.test(text)) {
     console.log(
       `[mode-lock] intent_forced_provenance text="${text.slice(0, 80)}"`,
