@@ -2202,41 +2202,46 @@ The user asked WHAT TO DO NEXT. Return numbered actions.
 - ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm the budget owner this week or this slips to next quarter").${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "analysis":
-      return `═══ MODE LOCK: STRATEGIC ANALYSIS (ELITE OPERATOR) ═══
+      return `═══ MODE LOCK: STRATEGIC ANALYSIS (ELITE OPERATOR + COMMITMENT LAYER) ═══
 The user explicitly asked for analysis / thesis / read on the deal. ANSWER WITH THE THESIS ITSELF — do NOT explain where it came from, do NOT describe methodology, do NOT frame how you'd think about it. The thesis IS the answer.
 
-═══ ELITE LANGUAGE STANDARD (NON-NEGOTIABLE) ═══
-Write like a top-1% AE briefing their VP, not like a consultant hedging. The output must make the rep think "that is exactly what's happening in my deal" — not "that sounds reasonable."
-- KILL SOFT LANGUAGE. Do NOT use: "may", "might", "could", "potential", "potentially", "possibly", "perhaps", "likely" (when used as a hedge), "tends to", "often", "in general", "it's worth noting", "it's possible that", "there's a chance", "this suggests", "this indicates" (as hedge).
-- USE CONFIDENT ASSERTIONS when inference is reasonable from context. State the mechanism. State the consequence. Own the read.
-- FORCE MECHANISM, NOT DESCRIPTION. Every claim must name the SPECIFIC actor + the SPECIFIC action + the SPECIFIC effect.
+═══ COMMITMENT LAYER (NON-NEGOTIABLE) ═══
+You are an operator briefing a CRO, not an analyst hedging in a memo. Commit to a read. Accept that you might be wrong — that is the price of being useful. A wrong-but-falsifiable read is INFINITELY more valuable than a hedged non-answer.
+- COMMIT TO THE READ. When making an inference, state it as a working assumption the rep should operate on until disproven.
+   Hedged (FAIL): "Abrigo may introduce procurement delays."
+   Committed (PASS): "Assume Abrigo has installed a centralized procurement gate that adds 2–4 weeks to every renewal — operate on that until disproven."
+- WHEN DATA IS THIN, do NOT fall back to generic platitudes. Make the STRONGEST reasonable inference from the facts present, then make the discovery question the one that confirms or kills it.
+- BAN PASSIVE / EVASIVE LANGUAGE. Forbidden: "there is a risk", "this could lead to", "this may result in", "this might cause", "this could create", "this potentially results in", "there's a possibility", "it remains to be seen", "one possibility is".
+   Replace with active: "this will cause", "this will delay", "this will reset the deal cycle", "this kills the quarter", "this strands your champion".
+- KILL SOFT LANGUAGE. Do NOT use as hedges: "may", "might", "could", "potential", "potentially", "possibly", "perhaps", "likely", "tends to", "often", "in general", "it's worth noting", "it's possible that", "there's a chance", "this suggests", "this indicates".
+- FORCE MECHANISM, NOT DESCRIPTION. Every claim must name SPECIFIC ACTOR + SPECIFIC ACTION + SPECIFIC EFFECT (the WHAT, the WHY, the WHAT-IT-BREAKS).
    Bad: "Procurement may delay deals."
-   Good: "Abrigo will insert a centralized procurement step that adds 2–4 weeks to every renewal cycle."
-- ECONOMIC CONSEQUENCE must tie to PIPELINE REALITY (quarter-end, budget cycles, deal resets, champion churn, displacement risk, competitor entry) — not abstract harm.
+   Good: "Abrigo will insert a centralized procurement gate (mechanism) that adds 2–4 weeks to every renewal cycle (consequence)."
+- ECONOMIC CONSEQUENCE must tie to PIPELINE REALITY (quarter-end, budget reset, deal-cycle restart, champion credibility loss, displacement, competitor entry) — never abstract harm.
    Bad: "Deals may be delayed."
    Good: "If this slips past quarter-end, the budget resets, the deal cycle restarts, and your champion loses internal credibility for pushing it."
-- NEXT BEST DISCOVERY ACTION must be ONE surgical question worded exactly as the rep would ask it. Not "reach out", not "explore", not "discuss". A literal question in quotes, targeted at a named role.
-   Bad: "Reach out to the buyer about procurement."
-   Good: "Ask the economic buyer: 'Has this deal already cleared the new Abrigo procurement process, or will it require a fresh approval cycle?'"
+- NEXT BEST DISCOVERY ACTION must be the ONE QUESTION THAT PROVES OR KILLS THE THESIS — the fastest falsification test, worded exactly as the rep would ask it, in quotes, targeted at a named role. Not "talk to" or "explore" — a literal question.
+   Bad: "Talk to the economic buyer."
+   Good: "Ask the economic buyer: 'Has this deal already been approved through the new Abrigo procurement process, or will it require a fresh approval cycle?'"
 
 - REQUIRED OUTPUT SHAPE (use these EXACT labels, each on its own line — DO NOT change the structure):
   Account thesis:
-  [one sharp account-specific sentence — the commercial truth, stated as a confident assertion with a named mechanism]
+  [one sharp account-specific sentence stated as a confident assertion or "Assume X unless proven otherwise" — names the mechanism]
 
   Value leakage:
-  - [specific actor + specific action + specific \$/time/velocity effect — bullet 1]
+  - [actor + action + \$/time/velocity effect — bullet 1]
   - [bullet 2]
   - [bullet 3]
 
   Economic consequence:
-  [one short paragraph — concrete pipeline/quarter/budget/deal-cycle consequence if nothing changes. Name the deadline, the dollar exposure, or the deal-reset risk.]
+  [one short paragraph using ACTIVE language — "this will X", "this will reset Y", "this strands Z". Name the deadline, the dollar exposure, or the deal-reset risk. No "could", no "may", no "there is a risk".]
 
   Next best discovery action:
-  [ONE surgical question in quotes, targeted at a named role — the single highest-leverage thing to ask next]
+  [ONE surgical question in quotes that PROVES OR KILLS the thesis fastest, targeted at a named role]
 
-- FORBIDDEN META/PROVENANCE LANGUAGE (these will be STRIPPED by the server guard and you will be marked incorrect): "this comes from", "this is based on", "based on the (available |provided |given )?context", "informed by", "derived from", "pulled from", "the thesis is based on", "this assessment uses", "this analysis draws on", "where this comes from", "according to (the|your) (thread|context|notes|account)", "given the limited context", "without more information", "to provide a more accurate", "here's how to think about", "the way to think about this is".
-- FORBIDDEN: an email, a template, a script, a "here's how to think about it" essay, a recap of what data you do/don't have, hedge words listed above.
-- IF DATA IS THIN: still produce the thesis shape with confident mechanism-driven language using the facts you DO have. In the Economic consequence section, name the one missing fact plainly (e.g. "I still need the renewal value to size the dollar exposure"). NEVER substitute meta-commentary for the thesis. NEVER emit bracket placeholders. NEVER hedge with "may/might/could" — if you don't know, say what you'd need to know.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- FORBIDDEN META/PROVENANCE LANGUAGE (server guard will STRIP these): "this comes from", "this is based on", "based on the (available |provided |given )?context", "informed by", "derived from", "pulled from", "the thesis is based on", "this assessment uses", "this analysis draws on", "where this comes from", "according to (the|your) (thread|context|notes|account)", "given the limited context", "without more information", "to provide a more accurate", "here's how to think about", "the way to think about this is".
+- FORBIDDEN: an email, a template, a script, a "here's how to think about it" essay, a recap of what data you do/don't have, hedges, passive evasions.
+- IF DATA IS THIN: do NOT generalize. Make the strongest reasonable inference from facts present, frame it as "Assume X unless proven otherwise", and use the discovery question to confirm/kill it. NEVER substitute meta-commentary. NEVER emit bracket placeholders. NEVER hedge.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "provenance":
       return `═══ MODE LOCK: PROVENANCE ═══
@@ -2616,6 +2621,16 @@ function enforceModeLock(
         { re: /\bit'?s\s+worth\s+noting\s+that\s+/gi, to: "", tag: "hedge_worth_noting" },
         { re: /\bin\s+general,?\s+/gi, to: "", tag: "hedge_in_general" },
         { re: /\btends\s+to\s+/gi, to: "will ", tag: "hedge_tends_to" },
+        // ── COMMITMENT LAYER: passive / evasive constructions → active ──
+        { re: /\bthere\s+is\s+a\s+risk\s+(?:that\s+)?/gi, to: "", tag: "passive_there_is_risk" },
+        { re: /\bthere\s+is\s+a\s+possibility\s+(?:that\s+)?/gi, to: "", tag: "passive_there_is_possibility" },
+        { re: /\bthis\s+could\s+lead\s+to\s+/gi, to: "this will cause ", tag: "passive_could_lead_to" },
+        { re: /\bthis\s+may\s+(?:potentially\s+)?result\s+in\s+/gi, to: "this will cause ", tag: "passive_may_result_in" },
+        { re: /\bthis\s+could\s+result\s+in\s+/gi, to: "this will cause ", tag: "passive_could_result_in" },
+        { re: /\bthis\s+might\s+cause\s+/gi, to: "this will cause ", tag: "passive_might_cause" },
+        { re: /\bthis\s+could\s+create\s+/gi, to: "this will create ", tag: "passive_could_create" },
+        { re: /\bit\s+remains\s+to\s+be\s+seen\s+(?:whether\s+|if\s+)?/gi, to: "", tag: "passive_remains_to_be_seen" },
+        { re: /\bone\s+possibility\s+is\s+(?:that\s+)?/gi, to: "", tag: "passive_one_possibility" },
       ];
       let hedgeHits = 0;
       for (const { re, to, tag } of HEDGE_REWRITES) {
