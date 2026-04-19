@@ -1,19 +1,18 @@
 import { useState, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { performSoftRefresh } from '@/lib/softRefresh';
 
 /**
- * Global refresh button — uses performSoftRefresh().
- * ⛔ NEVER replace this with window.location.reload().
- * See src/lib/softRefresh.ts for the invariant contract.
+ * Global refresh button — performs a HARD reload.
+ * User explicitly requested hard reload (2026-04-19) because soft refresh
+ * was not surfacing the latest deployed app version reliably.
+ *
+ * Clears service worker registrations + caches before reloading so the
+ * browser fetches the freshest assets.
  */
 export function GlobalRefreshButton() {
-  const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -21,15 +20,26 @@ export function GlobalRefreshButton() {
     setIsRefreshing(true);
 
     try {
-      await performSoftRefresh(queryClient);
-      toast.success('Data refreshed');
-    } catch (e) {
-      console.error('[GlobalRefresh] Error:', e);
-      toast.error('Refresh failed');
+      // Clear SW + caches so the next load grabs the latest build
+      if ('serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((r) => r.unregister()));
+        } catch (e) {
+          console.warn('[GlobalRefresh] SW unregister failed:', e);
+        }
+        try {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        } catch (e) {
+          console.warn('[GlobalRefresh] Cache clear failed:', e);
+        }
+      }
     } finally {
-      setIsRefreshing(false);
+      // Hard reload — bypass cache
+      window.location.reload();
     }
-  }, [queryClient, isRefreshing]);
+  }, [isRefreshing]);
 
   return (
     <Tooltip>
@@ -44,7 +54,7 @@ export function GlobalRefreshButton() {
           <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Refresh Data</TooltipContent>
+      <TooltipContent>Hard refresh (reload latest version)</TooltipContent>
     </Tooltip>
   );
 }
