@@ -38,7 +38,7 @@ export function ContextInspector({
 
   const items = useMemo(() => {
     if (tab === 'memory') return memories.map(m => ({ id: m.id, primary: m.content, secondary: null as string | null }));
-    if (tab === 'uploads') return uploads.map(u => ({ id: u.id, primary: u.title || u.original_filename, secondary: null as string | null }));
+    if (tab === 'uploads') return uploads.map(u => ({ id: u.id, primary: u.file_name, secondary: u.summary }));
     return artifacts.map(a => ({ id: a.id, primary: a.title, secondary: a.artifact_type }));
   }, [tab, memories, uploads, artifacts]);
 

@@ -66,7 +66,7 @@ export function StrategyShell() {
 
   // Unresolved proposals = anything not in a terminal state ("promoted" or "rejected")
   const unresolvedProposalCount = useMemo(
-    () => proposals.filter(p => p.state !== 'promoted' && p.state !== 'rejected').length,
+    () => proposals.filter(p => p.status !== 'promoted' && p.status !== 'rejected').length,
     [proposals],
   );
 
