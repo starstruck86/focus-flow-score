@@ -2277,15 +2277,49 @@ function enforceModeLock(
   // is FORBIDDEN. We aggressively strip / collapse / replace so the UI never
   // ships [BRACKETED_*], $[…], [Client], [Contact Name], [specific date], etc.
   if (intent.intent !== "template") {
-    const PLACEHOLDER_RE =
-      /(?:\$|%)?\[(?:BRACKETED_[A-Z_]+|Bracketed_[A-Za-z_]+|Client(?:'s)?(?:\s+[A-Z][A-Za-z]+)*|Customer(?:'s)?(?:\s+[A-Z][A-Za-z]+)*|Contact(?:\s+Name)?|Account(?:\s+Name)?|Company(?:\s+Name)?|Champion(?:\s+Name)?|CFO\s+Name|Buyer(?:\s+Name)?|specific\s+date|specific\s+deadline|specific\s+number|specific\s+amount|specific\s+metric[^\]]*|specific\s+constraint[^\]]*|specific\s+issue[^\]]*|date|deadline|number|amount|percentage|name|insert[^\]]*|placeholder|fill[^\]]*|TBD|TBC|XXX+|\.\.\.|Department|Finance\s+Department|Legal\s+Team|Marketing\s+Team|Sales\s+Team|Solution(?:\/Product)?\s+Name|Project\/Initiative\s+Name|Product\s+Name|COMPLIANCE_DATE|DATE|NUMBER|PERCENTAGE)\]%?/gi;
-    if (PLACEHOLDER_RE.test(text)) {
-      // Reset the regex stateful index since /g + .test interacts.
-      PLACEHOLDER_RE.lastIndex = 0;
-      const stripped = text.replace(PLACEHOLDER_RE, "").replace(/\s{2,}/g, " ");
-      // Also strip any sentence that became hollow (e.g. "Investing in our solution will drive a  reduction in operational costs, translating to /year.")
-      // Heuristic: collapse leftover empty $/% markers and orphaned punctuation.
-      const cleaned = stripped
+    // Broad detector: any [...] block that looks like a fill-in placeholder.
+    // Two complementary patterns:
+    //   1) Anything wrapped in $[…] or %[…] or [...]% / [...]/year / etc — prefixed/suffixed sigils signal a quantitative slot.
+    //   2) [...] whose interior contains placeholder-marker tokens: BRACKETED_,
+    //      uppercase_with_underscores, "specific X", "Client", "Customer",
+    //      "Contact Name", "Champion", "Buyer", "Account Name", "Date",
+    //      "Deadline", "Number", "Amount", "Percentage", "Insert", "Fill",
+    //      "TBD", "XXX", "Department", "Team", "Name", "Solution/Product",
+    //      "Project/Initiative", "Product", standalone uppercase words like
+    //      DATE / NUMBER / PERCENTAGE.
+    const PLACEHOLDER_MARKERS = [
+      /BRACKETED[_\s]/i,
+      /^[A-Z][A-Z0-9_%]*$/, // ALLCAPS_TOKEN like COMPLIANCE_DATE, NUMBER, %_DELTA
+      /\b(specific|insert|fill|placeholder|enter)\b/i,
+      /\bClient(?:'s|\u2019s)?\b/i,
+      /\bCustomer(?:'s|\u2019s)?\b/i,
+      /\bContact\b/i,
+      /\bChampion\b/i,
+      /\bAccount\s+Name\b/i,
+      /\bCompany\s+Name\b/i,
+      /\bBuyer\b/i,
+      /\bCFO\s+Name\b/i,
+      /\b(date|deadline|number|amount|percentage|name|metric|constraint|issue|target)\b/i,
+      /\b(Department|Team|Solution|Product|Project|Initiative)\b/i,
+      /\bTBD\b|\bTBC\b|XXX/,
+    ];
+    const BRACKET_BLOCK_RE = /(?:\$|%)?\[([^\]\n]{1,80})\]\s*(?:%|\/(?:year|month|quarter|week|day|hour|qtr|yr|mo))?/g;
+    let placeholderHits = 0;
+    const cleanedText = text.replace(BRACKET_BLOCK_RE, (full, inner) => {
+      const innerTrim = (inner || "").trim();
+      // Skip obvious non-placeholder content (e.g. citation refs like [S1]).
+      if (/^S\d+$/i.test(innerTrim)) return full;
+      // Skip resource refs like RESOURCE[…] handled elsewhere.
+      const isPlaceholder = PLACEHOLDER_MARKERS.some((re) => re.test(innerTrim));
+      if (isPlaceholder) {
+        placeholderHits += 1;
+        return "";
+      }
+      return full;
+    });
+    if (placeholderHits > 0) {
+      // Collapse leftover sigils, orphan punctuation, double spaces.
+      const cleaned = cleanedText
         .replace(/\$\s*(?=[\/\.\,\;\)\s])/g, "")
         .replace(/%\s*(?=[\/\.\,\;\)\s])/g, "")
         .replace(/\(\s*\)/g, "")
@@ -2293,20 +2327,15 @@ function enforceModeLock(
         .replace(/[ \t]{2,}/g, " ")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
-      // If stripping mangled the output (very short or near-empty), replace
-      // with an honest "missing variable" line per mode.
-      const usable = cleaned.length >= 30;
+      const usable = cleaned.length >= 30 && /[a-zA-Z]{12,}/.test(cleaned);
       if (usable) {
         text = cleaned;
         modified = true;
         violations.push("placeholder_blocked_non_template");
         console.log(
-          `[mode-lock] placeholder_blocked_non_template intent=${intent.intent} stripped_count=${
-            (rawText.match(PLACEHOLDER_RE) || []).length
-          }`,
+          `[mode-lock] placeholder_blocked_non_template intent=${intent.intent} stripped_count=${placeholderHits}`,
         );
       } else {
-        // Too damaged — replace entire response with an honest ask.
         const askMap: Record<string, string> = {
           email:
             "Send this:\nI need a real fact (decision date, budget, owner name) before I can write this email — what's the one specific you want me to anchor it on?",
@@ -2327,7 +2356,7 @@ function enforceModeLock(
         modified = true;
         violations.push("placeholder_blocked_replaced_with_ask");
         console.log(
-          `[mode-lock] placeholder_blocked_replaced_with_ask intent=${intent.intent}`,
+          `[mode-lock] placeholder_blocked_replaced_with_ask intent=${intent.intent} stripped_count=${placeholderHits}`,
         );
       }
     }
