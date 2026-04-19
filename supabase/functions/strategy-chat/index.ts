@@ -2203,9 +2203,24 @@ The user asked WHAT TO DO NEXT. Return numbered actions.
 
     case "analysis":
       return `═══ MODE LOCK: STRATEGIC ANALYSIS ═══
-The user explicitly asked for analysis / thesis / read on the deal. Use the strategic frame.
-- REQUIRED: Lead with the ACCOUNT THESIS in one line. Then VALUE LEAKAGE (where money leaks today, in \$ or % terms). Then ECONOMIC CONSEQUENCE (in \$/margin/retention/velocity terms). End with ONE NEXT BEST DISCOVERY ACTION (named person, specific question).
-- FORBIDDEN: an email, a template, a script, a generic "here's how to think about it" essay.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+The user explicitly asked for analysis / thesis / read on the deal. ANSWER WITH THE THESIS ITSELF — do NOT explain where it came from, do NOT describe methodology, do NOT frame how you'd think about it. The thesis IS the answer.
+- REQUIRED OUTPUT SHAPE (use these EXACT labels, each on its own line):
+  Account thesis:
+  [one sharp account-specific sentence — the commercial truth]
+
+  Value leakage:
+  - [where money / margin / velocity / retention is leaking — bullet 1]
+  - [bullet 2]
+  - [bullet 3]
+
+  Economic consequence:
+  [one short paragraph — what it costs them in \$ / margin / retention / velocity if nothing changes]
+
+  Next best discovery action:
+  [one concrete move — named role + specific question/ask]
+- FORBIDDEN META/PROVENANCE LANGUAGE (these will be STRIPPED by the server guard and you will be marked incorrect): "this comes from", "this is based on", "based on the (available |provided |given )?context", "informed by", "derived from", "pulled from", "the thesis is based on", "this assessment uses", "this analysis draws on", "where this comes from", "according to (the|your) (thread|context|notes|account)", "given the limited context", "without more information", "to provide a more accurate", "here's how to think about", "the way to think about this is".
+- FORBIDDEN: an email, a template, a script, a "here's how to think about it" essay, a recap of what data you do/don't have.
+- IF DATA IS THIN: still produce the thesis shape. Write the actual commercial read using the facts you DO have, then in the Economic consequence section, name the one missing fact in plain English (e.g. "I still need the renewal value to size the downside"). NEVER substitute meta-commentary for the thesis. NEVER emit bracket placeholders.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "provenance":
       return `═══ MODE LOCK: PROVENANCE ═══
@@ -2532,6 +2547,62 @@ function enforceModeLock(
       if (/^\s*\d+[.)]\s/m.test(text)) {
         violations.push("pitch_contains_list");
         shouldRegenerate = true;
+      }
+      break;
+    }
+
+    case "analysis": {
+      // ── ANTI-META GUARD ──
+      // Strip provenance/methodology phrases that flatten the thesis into a
+      // recap of "where this comes from". The thesis IS the answer; meta
+      // commentary about where the thesis came from is forbidden in analysis
+      // mode (the user can ask a separate provenance question for that).
+      const META_LINE_RES: Array<{ re: RegExp; tag: string }> = [
+        { re: /^[^\n]*\bthis (analysis|thesis|assessment|read|take) (comes from|is based on|is informed by|is derived from|draws (on|from)|uses|is grounded in|reflects|is built on)\b[^\n]*\n?/gim, tag: "meta_thesis_basis" },
+        { re: /^[^\n]*\b(based on|drawn from|derived from|informed by|pulled from|grounded in|sourced from) (the\s+)?(available|provided|given|limited|current|linked)?\s*(context|account context|thread|prior thread|notes|conversation|uploaded|account data|operator reasoning)\b[^\n]*\n?/gim, tag: "meta_basis_context" },
+        { re: /^[^\n]*\bwhere (this|the thesis|the analysis) (comes from|is from|is pulled from)\b[^\n]*\n?/gim, tag: "meta_where_from" },
+        { re: /^[^\n]*\b(here'?s how to think about|the way to think about this is|to think about this account)\b[^\n]*\n?/gim, tag: "meta_how_to_think" },
+        { re: /^[^\n]*\b(without (more|additional) (information|context|data)|given (the )?limited (context|information|data)|to provide a more accurate)\b[^\n]*\n?/gim, tag: "meta_thin_data_disclaimer" },
+        { re: /^[^\n]*\baccording to (the|your) (thread|context|notes|account|prior)\b[^\n]*\n?/gim, tag: "meta_according_to" },
+      ];
+      let metaHits = 0;
+      for (const { re, tag } of META_LINE_RES) {
+        const before = text;
+        text = text.replace(re, "");
+        if (text !== before) {
+          metaHits += 1;
+          violations.push(`stripped_${tag}`);
+        }
+      }
+      if (metaHits > 0) {
+        text = text.replace(/\n{3,}/g, "\n\n").trim();
+        modified = true;
+        console.log(
+          `[mode-lock] analysis_meta_stripped count=${metaHits}`,
+        );
+      }
+
+      // Shape check: must have an Account thesis line. If not, flag for
+      // regeneration unless the response is clearly an honest missing-fact
+      // ask (already produced by the placeholder guard).
+      const hasThesisLabel = /\baccount\s+thesis\s*:/i.test(text);
+      const hasLeakageLabel = /\bvalue\s+leakage\s*:/i.test(text);
+      const looksLikeAsk = /^I (don'?t|do not) have/i.test(text.trim());
+      if (!hasThesisLabel && !looksLikeAsk) {
+        violations.push("analysis_missing_thesis_label");
+        shouldRegenerate = true;
+      } else if (hasThesisLabel && !hasLeakageLabel && !looksLikeAsk) {
+        violations.push("analysis_missing_leakage_label");
+      }
+
+      // If after stripping meta lines we have almost nothing left, replace
+      // with an honest missing-fact thesis instead of shipping a stub.
+      if (text.length < 60) {
+        text =
+          "Account thesis:\nI don't have enough account-specific facts in this thread to write a real thesis without inventing numbers.\n\nValue leakage:\n- Unknown without the renewal value, named economic buyer, or current usage data.\n\nEconomic consequence:\nI can't size the downside cleanly without one of: ARR, decision date, or current spend. Give me one and I'll quantify it.\n\nNext best discovery action:\nTell me the named buyer and the renewal value (or current ARR) and I'll produce the real thesis.";
+        modified = true;
+        violations.push("analysis_replaced_with_honest_ask");
+        console.log(`[mode-lock] analysis_replaced_with_honest_ask`);
       }
       break;
     }
