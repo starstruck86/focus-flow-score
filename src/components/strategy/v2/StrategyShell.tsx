@@ -192,19 +192,18 @@ export function StrategyShell() {
       .single();
 
     if (newThread?.id) {
-      // If branching from a selection, seed the new thread with a system message
-      // capturing the original line of thought as provenance.
-      if (seedText) {
-        await (supabase as any).from('strategy_messages').insert({
-          thread_id: newThread.id,
-          user_id: user.id,
-          role: 'system',
-          message_type: 'chat',
-          content_json: {
-            text: `Branched from "${baseTitle}":\n\n> ${seedText}`,
-          },
-        });
-      }
+      // Always seed a provenance system message so the user can instantly tell
+      // they are in a branch — even when no selection seeded the fork.
+      const provenanceText = seedText
+        ? `Branched from "${baseTitle}":\n\n> ${seedText}`
+        : `Branched from "${baseTitle}". Original thread preserved.`;
+      await (supabase as any).from('strategy_messages').insert({
+        thread_id: newThread.id,
+        user_id: user.id,
+        role: 'system',
+        message_type: 'chat',
+        content_json: { text: provenanceText },
+      });
       // Push into local state synchronously so activeThread resolves immediately
       // — otherwise topbar would briefly show fallback while threads list refetches.
       upsertThreadLocal(newThread as StrategyThread);
