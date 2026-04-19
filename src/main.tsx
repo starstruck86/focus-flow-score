@@ -7,6 +7,27 @@ import "./index.css";
 // Initialize crash sentinel BEFORE React renders
 initCrashSentinel();
 
+// Strip cache-buster query param left behind by GlobalRefreshButton (?_r=...)
+// so the URL stays clean after a hard refresh.
+try {
+  const url = new URL(window.location.href);
+  if (url.searchParams.has('_r')) {
+    url.searchParams.delete('_r');
+    const cleaned = url.pathname + (url.searchParams.toString() ? `?${url.searchParams}` : '') + url.hash;
+    window.history.replaceState(null, '', cleaned);
+  }
+} catch (e) {
+  console.warn('[main] cache-buster cleanup failed:', e);
+}
+
+// bfcache guard — if Safari restores a frozen page snapshot, force a reload
+// so the user always sees the live app version.
+window.addEventListener('pageshow', (e) => {
+  if ((e as PageTransitionEvent).persisted) {
+    window.location.reload();
+  }
+});
+
 console.log('[main] App module loaded successfully');
 
 function renderFatalFallback(err: unknown) {
