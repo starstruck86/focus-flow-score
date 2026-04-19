@@ -2223,10 +2223,17 @@ async function buildChatSystemPrompt(args: {
   const accountId: string | null = pack.account?.id ?? null;
   const opportunityId: string | null = pack.opportunity?.id ?? null;
 
+  // Classify the user's intent up front so every prompt path receives
+  // a binding MODE LOCK block. This is the single biggest lever against
+  // the production drift pattern (e.g. asking for a template and getting
+  // an email back).
+  const intent = classifyChatIntent(userContent);
+  const modeLockBlock = buildModeLockBlock(intent);
+
   // No account, no thread context → don't force Strategy Core onto small talk.
   if (!accountId && (!contextSection || contextSection.length < 200)) {
     return {
-      prompt: buildGenericChatSystemPrompt(depth, contextSection),
+      prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
       workingThesis: null,
       resourceHits: [],
     };
