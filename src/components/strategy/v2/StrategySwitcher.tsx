@@ -182,11 +182,11 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
 
   return createPortal(
     <div className="strategy-v2" style={{ position: 'fixed', inset: 0, zIndex: 70 }}>
-      {/* dim overlay — no blur */}
+      {/* Quiet veil — paper-tone, low opacity. Page remains perceptible. No blur. */}
       <div
         onClick={onClose}
         className="sv-overlay-enter"
-        style={{ position: 'absolute', inset: 0, background: 'hsl(40 10% 20% / 0.40)' }}
+        style={{ position: 'absolute', inset: 0, background: 'hsl(40 12% 98% / 0.55)' }}
       />
       <div
         role="dialog"
@@ -194,13 +194,14 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
         className="sv-e1 sv-enter-fade"
         style={{
           position: 'absolute',
-          top: '15vh',
+          top: '14vh',
           left: '50%',
           transform: 'translateX(-50%)',
           width: 560,
           maxWidth: 'calc(100vw - 32px)',
           borderRadius: 'var(--sv-radius-surface)',
           border: '1px solid hsl(var(--sv-hairline))',
+          background: 'hsl(var(--sv-paper))',
           overflow: 'hidden',
         }}
       >
