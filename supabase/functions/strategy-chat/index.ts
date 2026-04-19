@@ -2043,11 +2043,17 @@ function classifyChatIntent(userContent: string): IntentResult {
     /\b(cfo|chief\s+financial|finance\s+(team|leader|chief)|controller|treasur(er|y)|economic\s+buyer)\b/.test(text);
 
 
-  // 1. Provenance — "where is this from", "how do you know", "source"
-  if (
-    /\b(where (is|are|did) (this|that|it|they)|where('?s| is) (this|that) (from|pulled|coming)|source(s)?\??$|how (do|did) you know|why (do|did) you (think|say)|what('?s| is) the source)\b/
-      .test(text)
-  ) {
+  // 1. Provenance — ALWAYS WINS. Outranks analysis even in account-linked
+  // threads. Patterns: "where is this from", "where did it come from",
+  // "where are you pulling this from", "where is this being pulled from",
+  // "what source is this", "what is this based on", "how do you know this",
+  // "why do you think/say", "source(s)?".
+  const PROVENANCE_RE =
+    /\b(where (is|are|did|does|do) (this|that|it|they|you)|where('?s| is) (this|that|it) (from|pulled|coming|based|sourced|getting)|where (is|are) (this|that|it|you|i) (being\s+)?(pulled|sourced|getting|coming|drawing|reading|reading from)|what('?s| is) (this|that|it) based on|what('?s| is) (the|your) (source|basis)|what (source|sources) (is|are) (this|that|it)|source(s)?\??$|how (do|did) you know (this|that)?|why (do|did) you (think|say|believe)|what(?:'?s| is) the (source|basis|reference)|pulled from)\b/;
+  if (PROVENANCE_RE.test(text)) {
+    console.log(
+      `[mode-lock] intent_forced_provenance text="${text.slice(0, 80)}"`,
+    );
     return { intent: "provenance" };
   }
 
@@ -2120,17 +2126,32 @@ function buildModeLockBlock(intent: IntentResult): string {
   // Banned-phrase list applied to EVERY mode. These are the soft-AE
   // patterns we keep seeing: "I hope this finds you well", "just
   // checking in", "let me know if", etc. Top reps don't write this way.
-  const substanceContract =
-    `\n- SUBSTANCE CONTRACT: NEVER use any of these phrases — "I hope this finds you well", "I hope this email finds you well", "I hope you're doing well", "I hope all is well", "just checking in", "circling back", "touching base", "reaching out to see", "let me know if", "let me know your thoughts", "I wanted to", "I just wanted to", "happy to chat", "happy to discuss", "would love to", "I'd love to", "I look forward to hearing", "thoughts?", "any thoughts", "feel free to", "at your earliest convenience", "as per", "kindly", "warm regards". They make you sound like a junior SDR.
-- VERB FLOOR: lead sentences with strong, specific verbs. Replace "follow up on X" → "ask Y to confirm Z by [date]". Replace "check in on the deal" → "ask [name] for the [decision/signature/intro]". Replace "learn more about needs" → "confirm the [specific constraint, budget, timeline]".
-- SPECIFICITY FLOOR: every concrete reference (person, number, date, system, dollar amount) you have in context MUST appear in the output. If a placeholder is the only honest option, use [BRACKETED_PLACEHOLDER] — never vague nouns like "the team", "your needs", "the opportunity".`;
+  //
+  // PLACEHOLDER POLICY:
+  //   - template mode REQUIRES [BRACKETED] placeholders (it's a fill-in form).
+  //   - every other mode FORBIDS placeholder cosplay. If a fact is missing,
+  //     state what's missing in one short line and stop. Never fabricate
+  //     specifics, never emit [BRACKETED_*], $[BRACKETED_*], [Client],
+  //     [specific date], [Contact Name], etc.
+  const isTemplateMode = kind === "template";
+  const placeholderPolicy = isTemplateMode
+    ? `\n- SPECIFICITY FLOOR: every concrete reference you have in context MUST appear. Where a fact is genuinely unknown, use [BRACKETED_PLACEHOLDER] — that is the contract for template mode.`
+    : `\n- ZERO-PLACEHOLDER RULE (HARD): you are NOT in template mode. You are FORBIDDEN from emitting any placeholder token of any kind: no [BRACKETED_*], no $[BRACKETED_*], no %[BRACKETED_*], no [Client], no [Customer], no [Contact Name], no [specific date], no [date], no [name] except for a name that's actually in context. If you do not have a fact, do ONE of these: (a) use only the facts that ARE in the thread/account context, (b) say in ONE short line exactly what's missing (e.g. "I can make this CFO-ready once you give me the savings estimate and deadline."), or (c) write a directional sentence with no fake specifics (e.g. "If we delay this, we risk pushing the project into next quarter and missing the current implementation window."). Bracket-placeholder cosplay will be STRIPPED by the server-side guard and you will be marked incorrect.
+- SUBSTANCE CONTRACT: NEVER use any of these phrases — "I hope this finds you well", "I hope this email finds you well", "I hope you're doing well", "I hope all is well", "just checking in", "circling back", "touching base", "reaching out to see", "let me know if", "let me know your thoughts", "I wanted to", "I just wanted to", "happy to chat", "happy to discuss", "would love to", "I'd love to", "I look forward to hearing", "thoughts?", "any thoughts", "feel free to", "at your earliest convenience", "as per", "kindly", "warm regards". They make you sound like a junior SDR.
+- VERB FLOOR: lead sentences with strong, specific verbs. Replace "follow up on X" → "ask Y to confirm Z". Replace "check in on the deal" → "ask the named person for the decision/signature/intro you actually need".`;
+  const substanceContract = isTemplateMode
+    ? `\n- SUBSTANCE CONTRACT: NEVER use any of these phrases — "I hope this finds you well", "I hope this email finds you well", "I hope you're doing well", "I hope all is well", "just checking in", "circling back", "touching base", "reaching out to see", "let me know if", "let me know your thoughts", "I wanted to", "I just wanted to", "happy to chat", "happy to discuss", "would love to", "I'd love to", "I look forward to hearing", "thoughts?", "any thoughts", "feel free to", "at your earliest convenience", "as per", "kindly", "warm regards". They make you sound like a junior SDR.
+- VERB FLOOR: lead sentences with strong, specific verbs.${placeholderPolicy}`
+    : placeholderPolicy;
 
   // Economic pressure injection — fires for pitch + next_steps + analysis +
   // any business-case template + any CFO-audience ask.
   const economicPressureRequired = isBusinessCase || isCFO ||
     kind === "pitch" || kind === "analysis";
   const economicLayer = economicPressureRequired
-    ? `\n- ECONOMIC PRESSURE LAYER (REQUIRED): Anchor the output in money + time. Include AT LEAST ONE concrete economic element: cost of inaction (\$/quarter or % loss), urgency trigger (compliance deadline, contract date, market window), tradeoff (what they give up by waiting). If you don't have a number, use [BRACKETED_NUMBER] so the rep fills it in. No vague phrases like "significant savings" or "improved efficiency".`
+    ? (isTemplateMode
+      ? `\n- ECONOMIC PRESSURE LAYER (REQUIRED): Anchor the output in money + time. Include AT LEAST ONE concrete economic element: cost of inaction (\$/quarter or % loss), urgency trigger (compliance deadline, contract date, market window), tradeoff (what they give up by waiting). Where a number is unknown, use [BRACKETED_NUMBER] (template mode). No vague phrases like "significant savings" or "improved efficiency".`
+      : `\n- ECONOMIC PRESSURE LAYER (REQUIRED): Anchor the output in money + time. If you have a real number/date in context, use it. If you don't, write a directional sentence WITHOUT placeholders (e.g. "Delaying this risks pushing implementation into next quarter and missing the current budget window") OR call out exactly what number/date you'd need from the rep in one short line. NEVER emit [BRACKETED_NUMBER], $[…], %[…] in this mode.`)
     : "";
 
   switch (kind) {
@@ -2169,7 +2190,7 @@ The user asked how to PITCH or POSITION something. Give the exact words to say.
 - FORBIDDEN: a plan, a framework, a methodology, a numbered list of considerations, "Subject:", "Hi [name]", a generic prospecting opener, "I wanted to share…".
 - REQUIRED: Start with "Say this:" then the exact pitch (1–4 sentences). Nothing else. No upgrade line.${
         isCFO
-          ? `\n- CFO AUDIENCE: lead with money. Frame on cost of inaction, payback period, or risk-adjusted return. Use \$ figures or % deltas (placeholders OK). No SDR-style "want to learn about your priorities" openings — CFOs hate it.`
+          ? `\n- CFO AUDIENCE: lead with money. Frame on cost of inaction, payback period, or risk-adjusted return. Use real \$ figures or % deltas IF they exist in context. If they don't, write a directional sentence with NO bracket placeholders. No SDR-style "want to learn about your priorities" openings — CFOs hate it.`
           : ""
       }${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
@@ -2177,8 +2198,8 @@ The user asked how to PITCH or POSITION something. Give the exact words to say.
       return `═══ MODE LOCK: NEXT STEPS ═══
 The user asked WHAT TO DO NEXT. Return numbered actions.
 - FORBIDDEN: a cold email (no "Subject:", no "Hi"), a script, a pitch, a thesis, a framework, a "here's how to think about this" preface.
-- REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with the verb first AND a named target AND an outcome ("Call [name] to confirm [decision] by [date]", "Send the MAP to [econ buyer] with [signature ask]", "Lock 30 min with the CFO on [ROI question]"). No commentary between items. No trailing upgrade line.
-- ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm budget owner before [date] or this slips to next quarter").${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with a strong verb first AND a real named target from context AND a concrete outcome. Use ONLY names/dates/numbers that actually appear in the thread/account context. If you don't have a name, write the role ("the economic buyer", "the CFO") — never "[name]" or "[Client]". No commentary between items. No trailing upgrade line.
+- ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm the budget owner this week or this slips to next quarter").${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "analysis":
       return `═══ MODE LOCK: STRATEGIC ANALYSIS ═══
@@ -2249,6 +2270,96 @@ function enforceModeLock(
     text = text.replace(TAIL_LINE_REGEX, "").trim();
     modified = true;
     violations.push("stripped_trailing_upgrade_line");
+  }
+
+  // ── ZERO-PLACEHOLDER GUARD (non-template modes) ──
+  // Bracket-placeholder cosplay is fake precision. Outside template mode it
+  // is FORBIDDEN. We aggressively strip / collapse / replace so the UI never
+  // ships [BRACKETED_*], $[…], [Client], [Contact Name], [specific date], etc.
+  if (intent.intent !== "template") {
+    // Broad detector: any [...] block that looks like a fill-in placeholder.
+    // Two complementary patterns:
+    //   1) Anything wrapped in $[…] or %[…] or [...]% / [...]/year / etc — prefixed/suffixed sigils signal a quantitative slot.
+    //   2) [...] whose interior contains placeholder-marker tokens: BRACKETED_,
+    //      uppercase_with_underscores, "specific X", "Client", "Customer",
+    //      "Contact Name", "Champion", "Buyer", "Account Name", "Date",
+    //      "Deadline", "Number", "Amount", "Percentage", "Insert", "Fill",
+    //      "TBD", "XXX", "Department", "Team", "Name", "Solution/Product",
+    //      "Project/Initiative", "Product", standalone uppercase words like
+    //      DATE / NUMBER / PERCENTAGE.
+    const PLACEHOLDER_MARKERS = [
+      /BRACKETED[_\s]/i,
+      /^[A-Z][A-Z0-9_%]*$/, // ALLCAPS_TOKEN like COMPLIANCE_DATE, NUMBER, %_DELTA
+      /\b(specific|insert|fill|placeholder|enter)\b/i,
+      /\bClient(?:'s|\u2019s)?\b/i,
+      /\bCustomer(?:'s|\u2019s)?\b/i,
+      /\bContact\b/i,
+      /\bChampion\b/i,
+      /\bAccount\s+Name\b/i,
+      /\bCompany\s+Name\b/i,
+      /\bBuyer\b/i,
+      /\bCFO\s+Name\b/i,
+      /\b(date|deadline|number|amount|percentage|name|metric|constraint|issue|target)\b/i,
+      /\b(Department|Team|Solution|Product|Project|Initiative)\b/i,
+      /\bTBD\b|\bTBC\b|XXX/,
+    ];
+    const BRACKET_BLOCK_RE = /(?:\$|%)?\[([^\]\n]{1,80})\]\s*(?:%|\/(?:year|month|quarter|week|day|hour|qtr|yr|mo))?/g;
+    let placeholderHits = 0;
+    const cleanedText = text.replace(BRACKET_BLOCK_RE, (full, inner) => {
+      const innerTrim = (inner || "").trim();
+      // Skip obvious non-placeholder content (e.g. citation refs like [S1]).
+      if (/^S\d+$/i.test(innerTrim)) return full;
+      // Skip resource refs like RESOURCE[…] handled elsewhere.
+      const isPlaceholder = PLACEHOLDER_MARKERS.some((re) => re.test(innerTrim));
+      if (isPlaceholder) {
+        placeholderHits += 1;
+        return "";
+      }
+      return full;
+    });
+    if (placeholderHits > 0) {
+      // Collapse leftover sigils, orphan punctuation, double spaces.
+      const cleaned = cleanedText
+        .replace(/\$\s*(?=[\/\.\,\;\)\s])/g, "")
+        .replace(/%\s*(?=[\/\.\,\;\)\s])/g, "")
+        .replace(/\(\s*\)/g, "")
+        .replace(/\s+([\.\,\;\:\!\?])/g, "$1")
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      const usable = cleaned.length >= 30 && /[a-zA-Z]{12,}/.test(cleaned);
+      if (usable) {
+        text = cleaned;
+        modified = true;
+        violations.push("placeholder_blocked_non_template");
+        console.log(
+          `[mode-lock] placeholder_blocked_non_template intent=${intent.intent} stripped_count=${placeholderHits}`,
+        );
+      } else {
+        const askMap: Record<string, string> = {
+          email:
+            "Send this:\nI need a real fact (decision date, budget, owner name) before I can write this email — what's the one specific you want me to anchor it on?",
+          pitch:
+            "Say this: I'd rather not pitch this without one real number — give me the savings figure or the decision deadline and I'll tighten this for the CFO.",
+          next_steps:
+            "Do this next:\n1. Tell me the named buyer, the decision date, and the dollar figure that matter on this deal so I can give you steps grounded in this account, not a generic checklist.",
+          analysis:
+            "I don't have enough account-specific data in this thread to write a real thesis without inventing numbers. Give me the ARR, the decision date, or the named economic buyer and I'll produce the leakage map and economic consequence with real anchors.",
+          provenance:
+            "I can't ground this in a specific source in the current thread. Treat this as operator reasoning, not a cited internal source.",
+          message:
+            "Say this: I need one real specific (name, date, or number) before I write the script — what should I anchor it on?",
+          freeform:
+            "I don't have a real specific to anchor this on. Give me the one fact that matters (name, number, or date) and I'll produce the output without placeholders.",
+        };
+        text = askMap[intent.intent] || askMap.freeform;
+        modified = true;
+        violations.push("placeholder_blocked_replaced_with_ask");
+        console.log(
+          `[mode-lock] placeholder_blocked_replaced_with_ask intent=${intent.intent} stripped_count=${placeholderHits}`,
+        );
+      }
+    }
   }
 
   switch (intent.intent) {
