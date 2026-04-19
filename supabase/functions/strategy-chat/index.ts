@@ -2018,8 +2018,33 @@ interface IntentResult {
   isCFO?: boolean;
 }
 
-function classifyChatIntent(userContent: string): IntentResult {
+function classifyChatIntent(
+  userContent: string,
+  ctx?: { hasAccountContext?: boolean },
+): IntentResult {
   const text = (userContent || "").toLowerCase().trim();
+  const hasAccountContext = ctx?.hasAccountContext === true;
+
+  // 0. BOOTSTRAP — fires BEFORE all other intents.
+  // Trigger: vague/orienting prompt AND no account context.
+  // Goal: orient the user (capabilities + one guiding question), never refuse.
+  // We deliberately keep this list tight — anything that mentions a real
+  // task verb (write, draft, plan, analyze, send, build, etc.) skips bootstrap
+  // and falls through to the normal classifier so we never hijack a real ask.
+  if (!hasAccountContext) {
+    const isEmptyOrTiny = !text || text.length < 4;
+    const VAGUE_OPENERS_RE =
+      /^(hi|hello|hey|yo|sup|hola|howdy|test|testing|ping|\?)[\s\.\?!]*$/;
+    const HELP_RE =
+      /^(help( me)?|what (can|do) you do|what is this|what('?s| is) this( for)?|what should i (use|do with) (this|you)( for)?|how (do|does) (this|it|you) work|how (can|do) i (use|start) (this|you)|where (do|should) i start|what now|what next|what should i ask|getting started|onboard(ing)?|who are you|what are you)[\s\.\?!]*$/;
+    if (isEmptyOrTiny || VAGUE_OPENERS_RE.test(text) || HELP_RE.test(text)) {
+      console.log(
+        `[mode-lock] intent_forced_bootstrap text="${text.slice(0, 80)}"`,
+      );
+      return { intent: "bootstrap" };
+    }
+  }
+
   if (!text) return { intent: "freeform" };
 
   // Numeric constraint: "3 sentence", "two sentences", "5 bullets", etc.
