@@ -2876,7 +2876,16 @@ async function handleChat(
         } modified=${guarded.modified}`,
       );
     }
-    const visible = guarded.text;
+    // Substance enforcer SECOND — strip filler/banned phrases, flag weak verbs.
+    const subst = enforceSubstance(guarded.text, intent);
+    if (subst.modified || subst.violations.length) {
+      console.log(
+        `[substance] non-stream intent=${intent.intent} violations=${
+          JSON.stringify(subst.violations)
+        } modified=${subst.modified}`,
+      );
+    }
+    const visible = subst.text;
     // Citation audit: catch any fabricated RESOURCE[…] references.
     const audit = auditResourceCitations(visible, resourceHits);
     if (audit.modified) {
@@ -3069,7 +3078,16 @@ async function handleChat(
             } modified=${guarded.modified}`,
           );
         }
-        const visible = guarded.text;
+        // Step 2b: SUBSTANCE ENFORCER — strip filler/banned phrases.
+        const subst = enforceSubstance(guarded.text, intent);
+        if (subst.modified || subst.violations.length) {
+          console.log(
+            `[substance] stream intent=${intent.intent} violations=${
+              JSON.stringify(subst.violations)
+            } modified=${subst.modified}`,
+          );
+        }
+        const visible = subst.text;
 
         // Step 3: citation audit on the GUARDED text (so banner
         // attaches to the same body that's persisted).
