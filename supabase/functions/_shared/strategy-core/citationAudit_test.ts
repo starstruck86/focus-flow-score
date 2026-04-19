@@ -136,8 +136,9 @@ Deno.test("auditResourceCitations closed-set: flags sibling variant inside RESOU
 
 Deno.test("auditResourceCitations closed-set off: bare quoted variant is left alone (no artifact word)", () => {
   // Without closedSet=true the legacy behavior is preserved — bare
-  // quoted strings without an artifact word are not annotated.
-  const text = `Adapting the approach: see "FTD Q3 Business Case" for the full structure.`;
+  // quoted strings without an artifact word are not annotated. Use a
+  // phrase that does NOT contain any artifact words like "business case".
+  const text = `Adapting the approach: see "FTD Q3 Initiative" for the full structure.`;
   const out = auditResourceCitations(text, PICKED_HITS);
   assertEquals(out.modified, false);
 });
