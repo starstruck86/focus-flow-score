@@ -346,8 +346,10 @@ export function StrategyShell() {
     const devAction = params.get('devAction');
 
     // If devThread is supplied and we're not on it yet, switch and wait for the
-    // next render cycle to fire the rest.
-    if (devThread && activeThread?.id !== devThread) {
+    // next render cycle to fire the rest. CRITICAL: stop snapping back once the
+    // devAction has already fired — otherwise actions like branch (which switch
+    // to a new thread id) would get clobbered.
+    if (devThread && activeThread?.id !== devThread && !devActionFiredRef.current) {
       setActiveThreadId(devThread);
       return;
     }
