@@ -352,6 +352,25 @@ export function StrategyMainPanel({
         </div>
       )}
 
+      {/* ── TRUST / CONFLICT BANNER — non-dismissible when blocked ── */}
+      <ThreadTrustBanner
+        trustState={trustState}
+        trustReason={trustReason}
+        conflicts={conflicts}
+        isLinked={!!(thread.linked_account_id || thread.linked_opportunity_id)}
+        isDetecting={isDetecting}
+        onRecheck={() => runDetect()}
+        onUnlink={async () => {
+          await onUpdateThread(thread.id, {
+            linked_account_id: null,
+            linked_opportunity_id: null,
+            thread_type: 'freeform',
+          } as Partial<StrategyThread>);
+          await runDetect();
+        }}
+        onClone={() => setLinkDialogOpen(true)}
+      />
+
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
         <div className="px-3 pt-1 pb-0">
@@ -558,13 +577,26 @@ export function StrategyMainPanel({
         linkedContext={linkedContext}
       />
 
-      {/* ── Link Thread Dialog — explicit account/opportunity linkage ── */}
-      <LinkThreadDialog
+      {/* ── Safe Relink Dialog — clone-by-default for cross-entity changes ── */}
+      <SafeRelinkDialog
         open={linkDialogOpen}
         onOpenChange={setLinkDialogOpen}
         thread={thread}
-        onApply={async (updates) => {
+        trustState={trustState}
+        hasMeaningfulContent={hasMeaningfulContent}
+        onApplyInPlace={async (updates) => {
           await onUpdateThread(thread.id, updates);
+        }}
+        onClonedSwitchTo={(newId) => {
+          onSwitchToThread?.(newId);
+        }}
+        onUnlinkToFreeform={async () => {
+          await onUpdateThread(thread.id, {
+            linked_account_id: null,
+            linked_opportunity_id: null,
+            thread_type: 'freeform',
+          } as Partial<StrategyThread>);
+          await runDetect();
         }}
       />
     </div>
