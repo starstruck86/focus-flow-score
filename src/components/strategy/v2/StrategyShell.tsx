@@ -315,9 +315,14 @@ export function StrategyShell() {
   const isLibraryQuery = !!slashQuery && /^\/library\b/i.test(slashQuery);
 
   const handleLibraryPick = useCallback((item: LibraryItem) => {
-    // Insert a short reference token the assistant already understands as
-    // a citation. Composer takes focus so the rep can keep typing context.
-    const token = `RESOURCE[${item.id}] "${item.title}" `;
+    // Insert a clean, human-readable reference. The backend's resource
+    // retrieval pipeline (resourceRetrieval.ts) extracts quoted phrases
+    // from the user message and ILIKE-matches them back to resources by
+    // title — so the quoted title alone is enough to ground the answer.
+    // We deliberately do NOT insert RESOURCE[id] tokens: those are an
+    // assistant *output* citation form and leak backend chrome into the
+    // user's writing surface.
+    const token = `"${item.title}" `;
     const ta = composerRef.current as
       (HTMLTextAreaElement & { insertText?: (t: string) => void; clearSlash?: () => void })
       | null;
