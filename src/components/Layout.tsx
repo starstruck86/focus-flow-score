@@ -364,7 +364,15 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
       )}
 
       {location.pathname !== '/strategy' && <Breadcrumbs />}
-      <main data-testid="main-content" className={`flex-1 overflow-x-hidden overflow-y-auto ${SHELL.main.bottomPad}`}>
+      <main
+        data-testid="main-content"
+        className={cn(
+          'flex-1 overflow-x-hidden',
+          location.pathname === '/strategy'
+            ? 'flex flex-col min-h-0 overflow-hidden pb-[calc(var(--shell-nav-height)*1px+env(safe-area-inset-bottom))]'
+            : `overflow-y-auto ${SHELL.main.bottomPad}`,
+        )}
+      >
         {children}
       </main>
 
