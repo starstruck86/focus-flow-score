@@ -362,6 +362,24 @@ export async function retrieveResourceContext(
     return (start > 0 ? "…" : "") + slice + (end < hay.length ? "…" : "");
   };
 
+  // ── 0. Picked resources (sidecar IDs from /library) ───────────
+  // Resolved by ID first so grounding never depends on title coincidence.
+  // Scoped to the requesting user so a hostile client can't pull rows
+  // belonging to another seller.
+  if (pickedIds.length > 0) {
+    try {
+      const { data } = await supabase
+        .from("resources")
+        .select(SAFE_FIELDS)
+        .eq("user_id", userId)
+        .in("id", pickedIds.slice(0, HARD_LIMIT))
+        .limit(HARD_LIMIT);
+      push(data, "picked", () => `User picked from /library this turn`);
+    } catch (e) {
+      console.warn("[resourceRetrieval] picked-id resolve failed:", (e as Error).message);
+    }
+  }
+
   // ── 1. Exact title (case-insensitive) for each phrase ─────────
   for (const phrase of phrases) {
     if (all.length >= HARD_LIMIT) break;
