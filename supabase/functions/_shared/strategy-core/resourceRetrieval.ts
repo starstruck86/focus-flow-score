@@ -70,6 +70,15 @@ export interface RetrievedResource {
    * scaffold. Never populated for incidental hits — keeps prompt budgets honest.
    */
   bodyExcerpt?: string;
+  /**
+   * Heuristic shape of the picked resource's body. Drives whether the
+   * model mirrors a real structure ("structured") or extracts reusable
+   * patterns from prose ("unstructured"). Undefined for non-picked hits
+   * or when no body is available.
+   */
+  sourceShape?: "structured" | "unstructured" | "empty";
+  /** Short evidence string for sourceShape — surfaced in the prompt. */
+  sourceShapeReason?: string;
 }
 
 export interface ResourceRetrievalResult {
@@ -280,6 +289,78 @@ function escapeIlike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+// ── Source-shape detection ────────────────────────────────────────
+// Bifurcate the model's response pattern by source shape. Without this
+// the model collapses transcripts into "give me one fact to anchor on"
+// and over-imposes a generic business-case scaffold onto loose prose.
+//
+// Heuristics, deliberately simple and fully testable:
+//   • structured: markdown headings, numbered/bulleted scaffolds,
+//     labelled sections (Situation/Ask/Value), slide/template framing.
+//     `is_template=true` + presentation/framework resource_types are
+//     structured by default.
+//   • unstructured: long prose with dialogue markers ("Host:",
+//     "Speaker 1:"), timestamps, or transcript/podcast resource_types.
+//     Reusable IDEAS but no scaffold to mirror — model must EXTRACT.
+//   • empty: no body. Model can only adapt at the structural level
+//     (we already had a NOTE for this case).
+export function detectSourceShape(
+  raw: string,
+  meta?: { resource_type?: string | null; is_template?: boolean | null },
+): { shape: "structured" | "unstructured" | "empty"; reason: string } {
+  const text = (raw || "").trim();
+  if (!text) return { shape: "empty", reason: "no body content stored" };
+
+  const rt = (meta?.resource_type || "").toLowerCase();
+  const isTemplate = meta?.is_template === true;
+
+  // Strong unstructured signals first — transcripts/podcasts dominate
+  // the live library and we never want to mis-classify them as structured.
+  const dialogueMarkers = (text.match(
+    /^(?:host|guest|speaker\s*\d+|interviewer|interviewee|[A-Z][a-z]+):/gim,
+  ) || []).length;
+  const timestampMarkers = (text.match(/\[?\b\d{1,2}:\d{2}(?::\d{2})?\b\]?/g) || []).length;
+  if (rt === "transcript" || rt === "podcast" || dialogueMarkers >= 4 || timestampMarkers >= 6) {
+    return {
+      shape: "unstructured",
+      reason: rt === "transcript" || rt === "podcast"
+        ? `resource_type=${rt}`
+        : `${dialogueMarkers} dialogue markers, ${timestampMarkers} timestamps`,
+    };
+  }
+
+  // Structured signals.
+  const mdHeadings = (text.match(/^\s{0,3}#{1,4}\s+\S/gm) || []).length;
+  const numberedSections = (text.match(/^\s{0,3}\d+[.)]\s+\S/gm) || []).length;
+  const bulletLines = (text.match(/^\s{0,3}[-*•]\s+\S/gm) || []).length;
+  const allCapsHeadings = (text.match(/^\s{0,3}[A-Z][A-Z0-9 \/&-]{3,40}:?\s*$/gm) || []).length;
+  const slideMarkers = (text.match(/^(?:slide|section|step|phase)\s+\d+/gim) || []).length;
+  const labelLines = (text.match(
+    /^\s{0,3}(?:situation|ask|value|outcome|owner|next steps|impact|risk|metric|kpi|stakeholders?|timeline|budget|investment|roi|payback|context|problem|solution|why now|why us)\s*[:\-—]/gim,
+  ) || []).length;
+
+  const structureScore =
+    mdHeadings + numberedSections + slideMarkers + labelLines +
+    Math.min(allCapsHeadings, 4) + Math.floor(bulletLines / 4);
+
+  if (isTemplate || rt === "presentation" || rt === "framework" || structureScore >= 4) {
+    const evid: string[] = [];
+    if (isTemplate) evid.push("is_template=true");
+    if (rt === "presentation" || rt === "framework") evid.push(`resource_type=${rt}`);
+    if (mdHeadings) evid.push(`${mdHeadings} md-headings`);
+    if (numberedSections) evid.push(`${numberedSections} numbered sections`);
+    if (labelLines) evid.push(`${labelLines} labeled-section lines`);
+    if (slideMarkers) evid.push(`${slideMarkers} slide/step markers`);
+    return { shape: "structured", reason: evid.join(", ") || `structure score ${structureScore}` };
+  }
+
+  // Default: prose-heavy → unstructured.
+  return {
+    shape: "unstructured",
+    reason: `prose-dominant (no clear scaffold; structure score ${structureScore})`,
+  };
+}
+
 // ── Main retrieval ────────────────────────────────────────────────
 
 const SAFE_FIELDS =
@@ -354,6 +435,8 @@ export async function retrieveResourceContext(
         matchReason: reason(r),
         matchSnippet: snippetFor ? snippetFor(r) : undefined,
         bodyExcerpt: typeof r._bodyExcerpt === "string" ? r._bodyExcerpt : undefined,
+        sourceShape: r._sourceShape,
+        sourceShapeReason: r._sourceShapeReason,
       });
     }
   };
@@ -386,8 +469,9 @@ export async function retrieveResourceContext(
         .eq("user_id", userId)
         .in("id", pickedIds.slice(0, HARD_LIMIT))
         .limit(HARD_LIMIT);
-      // Build a body excerpt per row before pushing — the push() helper
-      // will pick it up via the _bodyExcerpt sidecar field.
+      // Build a body excerpt + source-shape per row before pushing — the
+      // push() helper picks them up via the _bodyExcerpt / _sourceShape
+      // sidecar fields.
       const enriched = (data || []).map((r: any) => {
         const raw = typeof r.content === "string" ? r.content : "";
         // Collapse whitespace, cap at ~2500 chars. Keep enough surface for
@@ -396,9 +480,21 @@ export async function retrieveResourceContext(
         const _bodyExcerpt = trimmed
           ? trimmed.slice(0, 2500) + (trimmed.length > 2500 ? "…" : "")
           : undefined;
+        // Detect on the FULL raw body (not the trimmed excerpt) so we don't
+        // misread a transcript as "structured" just because the first 2.5KB
+        // happens to contain a heading.
+        const shape = detectSourceShape(raw, {
+          resource_type: r.resource_type,
+          is_template: r.is_template,
+        });
         // Strip the heavy content blob before handing back to push().
         const { content: _drop, ...rest } = r;
-        return { ...rest, _bodyExcerpt };
+        return {
+          ...rest,
+          _bodyExcerpt,
+          _sourceShape: shape.shape,
+          _sourceShapeReason: shape.reason,
+        };
       });
       push(enriched, "picked", () => `User picked from /library this turn`);
     } catch (e) {
@@ -724,6 +820,13 @@ export function renderResourceContextBlock(args: {
     if (withBody && h.bodyExcerpt) {
       // Render the body excerpt as a fenced block so the model treats it
       // as source material to mirror, not as a description to summarize.
+      // Surface the detected shape so the model knows whether to mirror
+      // a real scaffold or extract reusable patterns from prose.
+      if (h.sourceShape) {
+        lines.push(
+          `    source-shape: ${h.sourceShape}${h.sourceShapeReason ? ` (${h.sourceShapeReason})` : ""}`,
+        );
+      }
       lines.push(`    --- BODY EXCERPT (verbatim from this resource) ---`);
       lines.push(h.bodyExcerpt);
       lines.push(`    --- END BODY EXCERPT ---`);
@@ -761,28 +864,53 @@ export function renderResourceContextBlock(args: {
         `INTERPRETATION: If the user says "this", "adapt this", "use this", or similar without naming another resource, "this" refers to "${t}". Default to phrasing like: Using "${t}"… / Based on "${t}"…`,
       );
     }
-    // ── NEW: grounding-depth rules ──
+    // ── Source-shape-aware grounding contract ──
+    // The model now sees a `source-shape:` tag per picked resource and
+    // MUST follow the matching response pattern. This kills the failure
+    // mode where the model collapses every picked resource into a
+    // one-line refusal ("give me one fact to anchor on").
+    const shapes = new Set(pickedHits.map((h) => h.sourceShape || "empty"));
+    const hasStructured = shapes.has("structured");
+    const hasUnstructured = shapes.has("unstructured");
+    const hasEmpty = shapes.has("empty");
+
+    lines.push(`GROUNDING DEPTH (mandatory when adapting a picked resource):`);
     lines.push(
-      `GROUNDING DEPTH (mandatory when adapting a picked resource):`,
+      `  Universal: never invent metrics, dates, customer names, ROI numbers, or quotes that are not in the BODY EXCERPT. Mark genuinely missing deal-specific facts as [TBD: <what's needed>] — never as a substitute for reading the source.`,
     );
-    lines.push(
-      `  1. Read the BODY EXCERPT above first. Extract its actual section structure (headings, ordering) and mirror it in your answer when relevant — do NOT impose a generic business-case scaffold.`,
-    );
-    lines.push(
-      `  2. Reuse the resource's language patterns, framings, and phrasings where they fit the user's deal. The user picked this asset because they want THIS voice and THIS structure adapted.`,
-    );
-    lines.push(
-      `  3. You may ONLY restate concrete claims (metrics, dates, customer names, ROI numbers, percentages, quotes) that are actually present in the BODY EXCERPT. Do NOT invent metrics. Do NOT invent dates. Do NOT invent outcomes.`,
-    );
-    lines.push(
-      `  4. If the BODY EXCERPT lacks a section the user implicitly needs (e.g. they ask to "adapt this for my deal" and the source has no implementation timeline), say so plainly — e.g. "The source doesn't include X — want me to draft that fresh?" — instead of filling with generic boilerplate.`,
-    );
-    lines.push(
-      `  5. If the BODY EXCERPT is missing or empty, say so plainly: "I can see this resource exists but its body isn't loaded — I can only adapt at the structural level." Do NOT invent its contents.`,
-    );
-    lines.push(
-      `  6. Adapt to the current deal AFTER mirroring the source — swap names, numbers, and context the user has provided in this thread, but only where you have real values. Mark unknowns as [TBD: <what's needed>] rather than fabricating.`,
-    );
+
+    if (hasStructured) {
+      lines.push(``);
+      lines.push(`  STRUCTURED SOURCE (source-shape: structured) — required response shape:`);
+      lines.push(`    1. Open with: Using "<exact title>" as the base… (one short line, no preamble).`);
+      lines.push(`    2. Mirror the source's actual section structure — reuse its headings, ordering, and labels verbatim where they appear (e.g. Situation / Ask / Value / Outcome). Do NOT impose a generic business-case scaffold the source does not contain.`);
+      lines.push(`    3. Reuse the source's language, framings, and any concrete numbers it actually contains. Substitute deal-specific values the user has provided in this thread; mark missing fields as [TBD: …].`);
+      lines.push(`    4. End with ONE short missing-anchor question (account, deal size, timing, champion name) — only ONE, after the scaffold is rendered, never instead of it.`);
+      lines.push(`    5. NEVER respond with only a question. The scaffold MUST appear first.`);
+    }
+
+    if (hasUnstructured) {
+      lines.push(``);
+      lines.push(`  UNSTRUCTURED SOURCE (source-shape: unstructured — transcript / podcast / loose prose) — required response shape:`);
+      lines.push(`    1. Open with: Using "<exact title>" as the source… (one short line, no preamble).`);
+      lines.push(`    2. Do NOT pretend it is a ready-made template. EXTRACT the reusable substance from the BODY EXCERPT — pick what the source actually contains:`);
+      lines.push(`         • key questions to ask`);
+      lines.push(`         • discovery checklist items`);
+      lines.push(`         • talk-track lines or framings`);
+      lines.push(`         • objection responses`);
+      lines.push(`         • business-case angles or value framings`);
+      lines.push(`         • numbered method/steps`);
+      lines.push(`       Convert what's there into a seller-ready scaffold the user can use right now. Quote or near-quote the source for any specific phrasings — do not paraphrase into generic advice.`);
+      lines.push(`    3. After the scaffold, add one short note naming what the source does NOT cover for this use case (e.g. "the source doesn't include pricing framing — want me to draft that fresh?").`);
+      lines.push(`    4. End with ONE short missing-anchor question — only ONE, after the scaffold is rendered, never instead of it.`);
+      lines.push(`    5. NEVER answer only with "I need a fact to anchor this on." If the BODY EXCERPT contains reusable material, you MUST produce a scaffold first.`);
+    }
+
+    if (hasEmpty) {
+      lines.push(``);
+      lines.push(`  EMPTY SOURCE (source-shape: empty) — body is not loaded:`);
+      lines.push(`    Say so plainly: "I can see <title> in your library, but its body isn't loaded — I can only adapt at the structural level." Then offer to (a) work from the title's apparent topic with a generic scaffold the user can edit, or (b) wait for them to upload/paste the body. Do NOT invent the contents.`);
+    }
   }
   lines.push(`RULES (mandatory):`);
   lines.push(
