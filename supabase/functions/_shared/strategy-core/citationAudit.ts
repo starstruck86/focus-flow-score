@@ -168,6 +168,28 @@ export function auditResourceCitations(
   // we don't spuriously annotate seller quotes from a transcript.
   // We also skip anything already wrapped by RESOURCE[…] / UNVERIFIED[…]
   // (handled by step 1) to avoid double-flagging.
+  //
+  // CLOSED-SET MODE: when the user explicitly picked a resource, the
+  // artifact-word requirement is relaxed — any quoted phrase that
+  // shares ≥2 significant tokens with a known/picked title is treated
+  // as an attempted resource reference and must be verified. This is
+  // what catches "FTD Q3 Business Case" when the picked title was
+  // "FTD Q2 Business Case".
+  const STOP = new Set(["the","a","an","of","for","to","and","or","my","our","your","this","that"]);
+  const sigTokens = (s: string) =>
+    normalize(s).split(/\s+/).filter((t) => t.length >= 2 && !STOP.has(t));
+  const knownTokenSets = Array.from(titles).map((t) => new Set(sigTokens(t)));
+  const sharesTokensWithKnown = (inner: string): boolean => {
+    const innerToks = sigTokens(inner);
+    if (innerToks.length < 2) return false;
+    for (const set of knownTokenSets) {
+      let shared = 0;
+      for (const tok of innerToks) if (set.has(tok)) shared++;
+      if (shared >= 2) return true;
+    }
+    return false;
+  };
+
   const quotedRe = /["“]([A-Z][^"“”]{2,80})["”]/g;
   out = out.replace(quotedRe, (full, inner: string, offset: number) => {
     // Skip if this quoted string is the value of a RESOURCE[…] or
@@ -177,7 +199,8 @@ export function auditResourceCitations(
 
     const window = out.slice(Math.max(0, offset - 60), Math.min(out.length, offset + full.length + 60)).toLowerCase();
     const looksLikeArtifact = ARTIFACT_WORDS.some((w) => window.includes(w));
-    if (!looksLikeArtifact) return full;
+    const closedSetTrigger = closedSet && sharesTokensWithKnown(inner);
+    if (!looksLikeArtifact && !closedSetTrigger) return full;
 
     const norm = normalize(inner);
     let hit = titles.has(norm);
@@ -195,7 +218,10 @@ export function auditResourceCitations(
     }
     unverified.push(inner);
     modified = true;
-    return `${full} [⚠ not in your library]`;
+    const tag = closedSetTrigger
+      ? `[⚠ not in your library — only the picked resource may be cited]`
+      : `[⚠ not in your library]`;
+    return `${full} ${tag}`;
   });
 
   if (modified) {
