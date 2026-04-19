@@ -14,21 +14,27 @@ interface Props {
 }
 
 export function TrustDot({ state, title }: Props) {
-  const color =
-    state === 'blocked' ? 'hsl(var(--sv-clay))'
-    : state === 'warning' ? 'hsl(var(--sv-amber))'
-    : 'transparent';
+  // Three distinct, calm marks — distinguishable at a glance, no fill noise.
+  //   safe    → quiet neutral hairline ring (no fill)
+  //   warning → solid amber dot
+  //   blocked → hollow clay ring (1.5px), visibly different shape from warning
+  const isBlocked = state === 'blocked';
+  const isWarning = state === 'warning';
 
   return (
     <span
       aria-label={`Trust state: ${state}`}
       title={title ?? `Trust: ${state}`}
       style={{
-        width: 6,
-        height: 6,
+        width: isBlocked ? 8 : 6,
+        height: isBlocked ? 8 : 6,
         borderRadius: 999,
-        background: color,
-        border: state === 'safe' ? '1px solid hsl(var(--sv-hairline))' : 'none',
+        background: isWarning ? 'hsl(var(--sv-amber))' : 'transparent',
+        border: isBlocked
+          ? '1.5px solid hsl(var(--sv-clay))'
+          : isWarning
+            ? 'none'
+            : '1px solid hsl(var(--sv-hairline))',
         display: 'inline-block',
         flexShrink: 0,
       }}
