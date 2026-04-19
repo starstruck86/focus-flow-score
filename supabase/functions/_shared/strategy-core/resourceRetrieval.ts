@@ -695,11 +695,22 @@ export function renderResourceContextBlock(args: {
   }
 
   lines.push("");
-  const hasPicked = hits.some((h) => h.matchKind === "picked");
+  const pickedHits = hits.filter((h) => h.matchKind === "picked");
+  const hasPicked = pickedHits.length > 0;
   if (hasPicked) {
+    const pickedTitles = pickedHits.map((h) => `"${h.title}"`).join(", ");
     lines.push(
       `PRIORITY: One or more resources are flagged USER-PICKED above — the user explicitly selected them this turn. Your answer MUST be grounded in those resources. Cite them by exact title. Do not pivot to a different resource unless the user's question is unrelated.`,
     );
+    lines.push(
+      `CLOSED RESOURCE SET: The user picked ${pickedTitles} this turn. You may ONLY name resources that appear in the PICKED or RETRIEVED list above. Do NOT infer adjacent versions, quarters (Q1/Q2/Q3/Q4), editions, years, or similarly named assets. Do NOT rename the picked asset. Do NOT invent sibling playbooks or "related" documents. If unsure, cite ONLY the exact picked title verbatim.`,
+    );
+    if (pickedHits.length === 1) {
+      const t = pickedHits[0].title;
+      lines.push(
+        `INTERPRETATION: If the user says "this", "adapt this", "use this", or similar without naming another resource, "this" refers to "${t}". Default to phrasing like: Using "${t}"… / Based on "${t}"…`,
+      );
+    }
   }
   lines.push(`RULES (mandatory):`);
   lines.push(
