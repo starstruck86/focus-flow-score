@@ -13,6 +13,13 @@
  *   ⌘⇧P          → promote actions for current selection
  *   ⌘. / Ctrl+.  → toggle PromotionsInbox
  *
+ * Phase 3 (keyboard spine):
+ *   ⌘L           → open Link Picker (link / relink thread)
+ *   ⌘B           → branch from selection if any, else from current thread
+ *   ⌘⇧O          → open linked Account
+ *   ⌘⇧D          → open linked Opportunity
+ *   ⌘⇧N          → new thread
+ *
  * The hook is presentation-agnostic — it only flips state and routes saves.
  */
 import { useEffect } from 'react';
@@ -24,6 +31,11 @@ interface Opts {
   onSavePrimary: () => void;
   onSavePick: () => void;
   onPromote: () => void;
+  onOpenLinkPicker: () => void;
+  onBranch: () => void;
+  onOpenLinkedAccount: () => void;
+  onOpenLinkedOpportunity: () => void;
+  onNewThread: () => void;
   onEscape: () => void;
   composerRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement>;
 }
@@ -41,6 +53,11 @@ export function useStrategyHotkeys({
   onSavePrimary,
   onSavePick,
   onPromote,
+  onOpenLinkPicker,
+  onBranch,
+  onOpenLinkedAccount,
+  onOpenLinkedOpportunity,
+  onNewThread,
   onEscape,
   composerRef,
 }: Opts) {
@@ -67,6 +84,41 @@ export function useStrategyHotkeys({
       if (meta && !shift && e.key === '.') {
         e.preventDefault();
         onToggleInbox();
+        return;
+      }
+
+      // ⌘L — Link Picker
+      if (meta && !shift && (e.key === 'l' || e.key === 'L')) {
+        e.preventDefault();
+        onOpenLinkPicker();
+        return;
+      }
+
+      // ⌘B — Branch
+      if (meta && !shift && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault();
+        onBranch();
+        return;
+      }
+
+      // ⌘⇧O — Open linked Account
+      if (meta && shift && (e.key === 'o' || e.key === 'O')) {
+        e.preventDefault();
+        onOpenLinkedAccount();
+        return;
+      }
+
+      // ⌘⇧D — Open linked Opportunity
+      if (meta && shift && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        onOpenLinkedOpportunity();
+        return;
+      }
+
+      // ⌘⇧N — New thread
+      if (meta && shift && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault();
+        onNewThread();
         return;
       }
 
@@ -109,6 +161,8 @@ export function useStrategyHotkeys({
     return () => window.removeEventListener('keydown', onKey);
   }, [
     onToggleSwitcher, onToggleInspector, onToggleInbox,
-    onSavePrimary, onSavePick, onPromote, onEscape, composerRef,
+    onSavePrimary, onSavePick, onPromote,
+    onOpenLinkPicker, onBranch, onOpenLinkedAccount, onOpenLinkedOpportunity, onNewThread,
+    onEscape, composerRef,
   ]);
 }
