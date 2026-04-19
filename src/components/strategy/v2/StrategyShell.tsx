@@ -251,6 +251,17 @@ export function StrategyShell() {
 
   // Slash verb routing
   const handleSlashPick = useCallback((verb: SlashVerb) => {
+    if (verb === 'library') {
+      // Don't clear slash — pivot the composer query to `/library ` so the
+      // LibraryPicker takes over and the user can keep typing the search.
+      setSlashQuery('/library ');
+      const ta = composerRef.current as
+        (HTMLTextAreaElement & { insertText?: (t: string) => void })
+        | null;
+      ta?.insertText?.('/library ');
+      return;
+    }
+
     setSlashQuery(null);
     const ta = composerRef.current as (HTMLTextAreaElement & { clearSlash?: () => void }) | null;
     ta?.clearSlash?.();
