@@ -66,26 +66,34 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
     return () => { cancelled = true; };
   }, [open, user, entities.accounts.length, entities.opportunities.length]);
 
-  // Build the ranked list
+  // Build the ranked list — universal: threads + accounts + opportunities
+  // in one surface, both at rest (empty query) and on search.
   const rows = useMemo((): Row[] => {
     const needle = q.trim().toLowerCase();
     const sortedThreads = [...threads].sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at));
-
     const pinned = sortedThreads.filter(t => t.is_pinned);
-    const recent = sortedThreads.filter(t => !t.is_pinned).slice(0, 12);
-
-    const matchesThread = (t: StrategyThread) => !needle || t.title.toLowerCase().includes(needle);
+    const recent = sortedThreads.filter(t => !t.is_pinned);
 
     const list: Row[] = [];
 
     if (!needle) {
-      // Default: Recent then Pinned
-      recent.forEach(t => list.push({ id: t.id, title: t.title, group: 'recent', kind: 'thread' }));
-      pinned.forEach(t => list.push({ id: t.id, title: t.title, group: 'pinned', kind: 'thread' }));
-    } else {
-      sortedThreads.filter(matchesThread).slice(0, 8).forEach(t => list.push({
-        id: t.id, title: t.title, group: t.is_pinned ? 'pinned' : 'recent', kind: 'thread',
+      // Default surface — recent threads first, then pinned, then a slice of
+      // accounts and opportunities so the operator can see the universe at a glance.
+      recent.slice(0, 6).forEach(t => list.push({ id: t.id, title: t.title, group: 'recent', kind: 'thread' }));
+      pinned.slice(0, 4).forEach(t => list.push({ id: t.id, title: t.title, group: 'pinned', kind: 'thread' }));
+      entities.accounts.slice(0, 5).forEach(a => list.push({
+        id: `acct-${a.id}`, title: a.name, group: 'accounts', kind: 'account', entityId: a.id,
       }));
+      entities.opportunities.slice(0, 5).forEach(o => list.push({
+        id: `opp-${o.id}`, title: o.name, group: 'opportunities', kind: 'opportunity', entityId: o.id,
+      }));
+    } else {
+      sortedThreads
+        .filter(t => t.title.toLowerCase().includes(needle))
+        .slice(0, 8)
+        .forEach(t => list.push({
+          id: t.id, title: t.title, group: t.is_pinned ? 'pinned' : 'recent', kind: 'thread',
+        }));
       entities.accounts
         .filter(a => a.name.toLowerCase().includes(needle))
         .slice(0, 6)
@@ -236,6 +244,9 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
                 {g.items.map((r, i) => {
                   const idx = baseIdx + i;
                   const active = idx === activeIdx;
+                  const trail = r.kind === 'account' ? 'Account'
+                    : r.kind === 'opportunity' ? 'Opportunity'
+                    : null;
                   return (
                     <button
                       key={r.id}
@@ -249,6 +260,11 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
                       <span className="text-[14px] truncate" style={{ color: 'hsl(var(--sv-ink))' }}>
                         {r.title}
                       </span>
+                      {trail && (
+                        <span className="text-[11px] shrink-0" style={{ color: 'hsl(var(--sv-muted))' }}>
+                          {trail}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
