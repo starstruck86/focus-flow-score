@@ -472,7 +472,16 @@ async function callWithFallback(
   }
 }
 
-// Streaming call (OpenAI direct only, with fallback to non-streaming)
+// Streaming call (OpenAI direct only).
+//
+// Phase 0 contract: chat MUST run on the intended model (OpenAI). Silent
+// fallback to Gemini was producing wrong outputs (cold emails for everything)
+// because the fallback model ignores the elite-operator prompt. We now fail
+// loud — handleChat surfaces "Assistant temporarily unavailable" instead.
+//
+// Workflow tasks (structured tool-calling) keep their own fallback in
+// callWithFallback because they need a working JSON path even if OpenAI
+// degrades; that lives outside this function.
 async function callStreaming(
   taskType: string,
   adapterReq: Omit<AdapterRequest, "model" | "stream">,
@@ -482,59 +491,53 @@ async function callStreaming(
   const timeout = setTimeout(() => controller.abort(), 55000);
 
   try {
-    // SMOKE TEST MODE: skip primary if forced fail
+    // SMOKE TEST MODE: explicitly fail to exercise the error path.
     if (route._smokeTestForceFail) {
-      console.log(`[routing] SMOKE_TEST_MODE: forcing stream primary failure for task=${taskType}`);
-      console.warn(`[routing] stream primary failed: SMOKE_TEST_MODE forced. Falling back to ${route.fallbackProvider} (non-stream)`);
-      clearTimeout(timeout);
-      const fbController = new AbortController();
-      const fbTimeout = setTimeout(() => fbController.abort(), 55000);
-      try {
-        const fbAdapter = ADAPTERS[route.fallbackProvider];
-        const fbResult = await fbAdapter({ ...adapterReq, model: route.fallbackModel }, fbController.signal);
-        fbResult.fallbackUsed = true;
-        console.log(`[routing] stream fallback task=${taskType} provider=${fbResult.provider} model=${fbResult.model} latency=${fbResult.latencyMs}ms`);
-        return fbResult;
-      } finally { clearTimeout(fbTimeout); }
+      console.warn(`[routing] stream task=${taskType} SMOKE_TEST forced primary failure — no fallback (chat is fail-loud)`);
+      return {
+        text: "", provider: "openai", model: route.model, latencyMs: 0, fallbackUsed: false,
+        error: { type: "smoke_test_forced", message: "SMOKE_TEST_MODE: forced primary failure" },
+      };
     }
 
-    console.log(`[routing] stream task=${taskType} provider=${route.primaryProvider} model=${route.model}`);
+    console.log(JSON.stringify({
+      _type: "routing.stream.start",
+      task: taskType, provider: route.primaryProvider, model: route.model, fallback: false,
+    }));
     const result = await openaiAdapter({ ...adapterReq, model: route.model, stream: true }, controller.signal);
     if (result.error) {
-      console.warn(`[routing] stream primary failed: ${result.error.message}. Falling back to ${route.fallbackProvider} (non-stream)`);
-      clearTimeout(timeout);
-      const fbController = new AbortController();
-      const fbTimeout = setTimeout(() => fbController.abort(), 55000);
-      try {
-        const fbAdapter = ADAPTERS[route.fallbackProvider];
-        const fbResult = await fbAdapter({ ...adapterReq, model: route.fallbackModel }, fbController.signal);
-        fbResult.fallbackUsed = true;
-        console.log(`[routing] stream fallback task=${taskType} provider=${fbResult.provider} model=${fbResult.model} latency=${fbResult.latencyMs}ms`);
-        return fbResult;
-      } finally { clearTimeout(fbTimeout); }
+      console.error(JSON.stringify({
+        _type: "routing.stream.fail",
+        task: taskType, model: route.model, fallback: false,
+        reason: result.error.message,
+      }));
+      return result; // surface error — no silent fallback
     }
+    console.log(JSON.stringify({
+      _type: "routing.stream.ok",
+      task: taskType, provider: result.provider, model: result.model,
+      path: "openai-direct", fallback: false,
+    }));
     return result;
   } catch (e: any) {
     if (e.name === "AbortError") {
-      console.warn(`[routing] stream timed out for task=${taskType}. Trying fallback=${route.fallbackProvider} (non-stream)`);
-      clearTimeout(timeout);
-      const fbController = new AbortController();
-      const fbTimeout = setTimeout(() => fbController.abort(), 55000);
-      try {
-        const fbAdapter = ADAPTERS[route.fallbackProvider];
-        const fbResult = await fbAdapter({ ...adapterReq, model: route.fallbackModel }, fbController.signal);
-        fbResult.fallbackUsed = true;
-        console.log(`[routing] stream fallback-after-timeout task=${taskType} provider=${fbResult.provider} latency=${fbResult.latencyMs}ms`);
-        return fbResult;
-      } catch (fe: any) {
-        if (fe.name === "AbortError") {
-          return { text: "", provider: route.fallbackProvider, model: route.fallbackModel, latencyMs: 55000, fallbackUsed: true,
-            error: { type: "timeout", message: "Both stream primary and fallback timed out" } };
-        }
-        throw fe;
-      } finally { clearTimeout(fbTimeout); }
+      console.error(JSON.stringify({
+        _type: "routing.stream.timeout",
+        task: taskType, model: route.model, fallback: false, timeout_ms: 55000,
+      }));
+      return {
+        text: "", provider: "openai", model: route.model, latencyMs: 55000, fallbackUsed: false,
+        error: { type: "timeout", message: "OpenAI stream timed out" },
+      };
     }
-    throw e;
+    console.error(JSON.stringify({
+      _type: "routing.stream.error",
+      task: taskType, model: route.model, fallback: false, message: String(e?.message || e),
+    }));
+    return {
+      text: "", provider: "openai", model: route.model, latencyMs: Date.now(), fallbackUsed: false,
+      error: { type: "exception", message: String(e?.message || e) },
+    };
   } finally {
     clearTimeout(timeout);
   }
