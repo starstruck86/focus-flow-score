@@ -4,7 +4,9 @@ import {
   FileText, Send, Paperclip, Upload, Loader2, Zap, Database,
   Building2, MessageSquare, ClipboardList, Link2, Link2Off,
 } from 'lucide-react';
-import { LinkThreadDialog } from './LinkThreadDialog';
+import { SafeRelinkDialog } from './SafeRelinkDialog';
+import { ThreadTrustBanner } from './ThreadTrustBanner';
+import { useThreadTrustState } from '@/hooks/strategy/useThreadTrustState';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -101,7 +103,8 @@ export function StrategyMainPanel({
   rightRailCollapsed, onToggleRightRail, linkedContext,
   onSaveMemory, onWorkflowComplete, onBranchThread,
   onTransformOutput, isTransforming, onAssistantComplete,
-}: Props) {
+  onSwitchToThread,
+}: Props & { onSwitchToThread?: (id: string) => void }) {
   const isMobile = useIsMobile();
   const { messages, sendMessage, runWorkflow, isLoading, isSending } = useStrategyMessages(
     thread?.id ?? null,
@@ -109,6 +112,7 @@ export function StrategyMainPanel({
   );
   const { uploads, uploadFiles, isUploading } = useStrategyUploads(thread?.id ?? null);
   const { isRunning: isTaskRunning, progressLabel: taskProgressLabel, result: taskResult, runDiscoveryPrep, applyRedline, rejectRedline, reset: resetTask } = useTaskExecution();
+  const { trustState, trustReason, conflicts, isDetecting, runDetect, refetch: refetchTrust } = useThreadTrustState(thread?.id ?? null);
   const [input, setInput] = useState('');
   const [depth, setDepth] = useState<typeof DEPTH_OPTIONS[number]>('Standard');
   
@@ -123,6 +127,19 @@ export function StrategyMainPanel({
   const suggestedPrompts = useMemo(() => getSuggestedPrompts(thread, linkedContext), [thread?.id, linkedContext]);
   const recommendedWorkflows = useMemo(() => getRecommendedWorkflows(thread), [thread?.id]);
   const safeTaskResult = useMemo(() => sanitizeTaskRunResult(taskResult), [taskResult]);
+
+  // Auto-run conflict detector when a thread becomes active and has not been
+  // recently checked. Keeps trust_state fresh without spamming the function.
+  useEffect(() => {
+    if (!thread?.id) return;
+    const lastChecked = thread.trust_checked_at ? new Date(thread.trust_checked_at).getTime() : 0;
+    const isStale = !lastChecked || Date.now() - lastChecked > 5 * 60 * 1000; // 5 min
+    if (isStale) {
+      runDetect().catch(() => { /* swallow — banner stays at last-known state */ });
+    }
+  }, [thread?.id]);
+
+  const hasMeaningfulContent = (messages?.length ?? 0) > 1 || (uploads?.length ?? 0) > 0;
 
   // Split workflows into visible (recommended) and overflow (rest)
   const visibleWorkflows = useMemo(() =>
@@ -335,6 +352,25 @@ export function StrategyMainPanel({
         </div>
       )}
 
+      {/* ── TRUST / CONFLICT BANNER — non-dismissible when blocked ── */}
+      <ThreadTrustBanner
+        trustState={trustState}
+        trustReason={trustReason}
+        conflicts={conflicts}
+        isLinked={!!(thread.linked_account_id || thread.linked_opportunity_id)}
+        isDetecting={isDetecting}
+        onRecheck={() => runDetect()}
+        onUnlink={async () => {
+          await onUpdateThread(thread.id, {
+            linked_account_id: null,
+            linked_opportunity_id: null,
+            thread_type: 'freeform',
+          } as Partial<StrategyThread>);
+          await runDetect();
+        }}
+        onClone={() => setLinkDialogOpen(true)}
+      />
+
       {/* ── SCROLLABLE CONVERSATION ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
         <div className="px-3 pt-1 pb-0">
@@ -541,13 +577,26 @@ export function StrategyMainPanel({
         linkedContext={linkedContext}
       />
 
-      {/* ── Link Thread Dialog — explicit account/opportunity linkage ── */}
-      <LinkThreadDialog
+      {/* ── Safe Relink Dialog — clone-by-default for cross-entity changes ── */}
+      <SafeRelinkDialog
         open={linkDialogOpen}
         onOpenChange={setLinkDialogOpen}
         thread={thread}
-        onApply={async (updates) => {
+        trustState={trustState}
+        hasMeaningfulContent={hasMeaningfulContent}
+        onApplyInPlace={async (updates) => {
           await onUpdateThread(thread.id, updates);
+        }}
+        onClonedSwitchTo={(newId) => {
+          onSwitchToThread?.(newId);
+        }}
+        onUnlinkToFreeform={async () => {
+          await onUpdateThread(thread.id, {
+            linked_account_id: null,
+            linked_opportunity_id: null,
+            thread_type: 'freeform',
+          } as Partial<StrategyThread>);
+          await runDetect();
         }}
       />
     </div>
