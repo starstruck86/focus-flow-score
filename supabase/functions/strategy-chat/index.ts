@@ -2105,7 +2105,7 @@ function classifyChatIntent(userContent: string): IntentResult {
 }
 
 function buildModeLockBlock(intent: IntentResult): string {
-  const { intent: kind, sentenceCap, rawConstraint } = intent;
+  const { intent: kind, sentenceCap, rawConstraint, isBusinessCase, isCFO } = intent;
 
   const constraintLine = sentenceCap
     ? `\n- HARD CONSTRAINT: Output EXACTLY ${sentenceCap} sentence${sentenceCap === 1 ? "" : "s"} (the user said "${rawConstraint}"). No more. No less. Count them before you finish.`
@@ -2116,6 +2116,23 @@ function buildModeLockBlock(intent: IntentResult): string {
   const bindingClause =
     `\n- BINDING: If you produce ANY content outside this mode, your answer is incorrect. Server-side guards will TRUNCATE or REJECT it.`;
 
+  // ── SUBSTANCE CONTRACT ──
+  // Banned-phrase list applied to EVERY mode. These are the soft-AE
+  // patterns we keep seeing: "I hope this finds you well", "just
+  // checking in", "let me know if", etc. Top reps don't write this way.
+  const substanceContract =
+    `\n- SUBSTANCE CONTRACT: NEVER use any of these phrases — "I hope this finds you well", "I hope this email finds you well", "I hope you're doing well", "I hope all is well", "just checking in", "circling back", "touching base", "reaching out to see", "let me know if", "let me know your thoughts", "I wanted to", "I just wanted to", "happy to chat", "happy to discuss", "would love to", "I'd love to", "I look forward to hearing", "thoughts?", "any thoughts", "feel free to", "at your earliest convenience", "as per", "kindly", "warm regards". They make you sound like a junior SDR.
+- VERB FLOOR: lead sentences with strong, specific verbs. Replace "follow up on X" → "ask Y to confirm Z by [date]". Replace "check in on the deal" → "ask [name] for the [decision/signature/intro]". Replace "learn more about needs" → "confirm the [specific constraint, budget, timeline]".
+- SPECIFICITY FLOOR: every concrete reference (person, number, date, system, dollar amount) you have in context MUST appear in the output. If a placeholder is the only honest option, use [BRACKETED_PLACEHOLDER] — never vague nouns like "the team", "your needs", "the opportunity".`;
+
+  // Economic pressure injection — fires for pitch + next_steps + analysis +
+  // any business-case template + any CFO-audience ask.
+  const economicPressureRequired = isBusinessCase || isCFO ||
+    kind === "pitch" || kind === "analysis";
+  const economicLayer = economicPressureRequired
+    ? `\n- ECONOMIC PRESSURE LAYER (REQUIRED): Anchor the output in money + time. Include AT LEAST ONE concrete economic element: cost of inaction (\$/quarter or % loss), urgency trigger (compliance deadline, contract date, market window), tradeoff (what they give up by waiting). If you don't have a number, use [BRACKETED_NUMBER] so the rep fills it in. No vague phrases like "significant savings" or "improved efficiency".`
+    : "";
+
   switch (kind) {
     case "template":
       return `═══ MODE LOCK: TEMPLATE ═══
@@ -2123,7 +2140,11 @@ The user asked for a TEMPLATE. You MUST return a structured, fill-in-the-blank t
 - FORBIDDEN: returning an email draft (no "Subject:", no "Hi [name]"), a follow-up note, a voicemail, a framework explanation, or any other asset type.
 - FORBIDDEN: explaining what a template is, how to think about it, or why it matters.
 - REQUIRED: First line names the template (e.g. "Use this Business Case template:"). Then the template itself with clear section headers and [BRACKETED] placeholders.
-- One short upgrade line at the end is allowed (e.g. "Want me to fill this in for [account]?"). Nothing else.${constraintLine}${bindingClause}`;
+- One short upgrade line at the end is allowed (e.g. "Want me to fill this in for [account]?"). Nothing else.${
+        isBusinessCase
+          ? `\n- BUSINESS CASE REQUIRED SECTIONS: must include "CURRENT COST OF INACTION", "PROJECTED ROI / PAYBACK", "RISK OF DELAY", "DECISION DEADLINE". Use \$/% placeholders, not adjectives.`
+          : ""
+      }${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "email":
       return `═══ MODE LOCK: EMAIL (BODY-ONLY) ═══
@@ -2133,37 +2154,43 @@ The user asked for an EMAIL. Return ONLY the email BODY in body-only format.
 - FORBIDDEN: a plan, bullets, numbered lists, multiple versions, a voicemail, a script, commentary, or pre-amble.
 - FORBIDDEN: a "here's how I'd think about this" preface. FORBIDDEN: "Do this next:". FORBIDDEN: trailing "Want me to tailor this..." line.
 - The body is the message itself — direct sentences a rep can paste into a thread mid-conversation. No envelope, no salutation, no sign-off.
-- Only add a Subject, greeting, or signoff if the user EXPLICITLY asks for one.${constraintLine}${bindingClause}`;
+- DIRECT-ASK RULE: the email MUST contain ONE clear ask anchored to a decision, date, or named artifact (e.g. "Are we aligned to move forward on the [pricing we discussed] by [date], or is there a blocker I should address?"). No vague "checking in" energy.
+- Only add a Subject, greeting, or signoff if the user EXPLICITLY asks for one.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "message":
       return `═══ MODE LOCK: MESSAGE / SCRIPT ═══
 The user asked for exact wording (voicemail, SMS, LinkedIn note, script, DM).
 - FORBIDDEN: an email, a plan, a framework, multiple versions unless asked.
-- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${constraintLine}${bindingClause}`;
+- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "pitch":
       return `═══ MODE LOCK: PITCH (exact words) ═══
 The user asked how to PITCH or POSITION something. Give the exact words to say.
-- FORBIDDEN: a plan, a framework, a methodology, a numbered list of considerations, "Subject:", "Hi [name]".
-- REQUIRED: Start with "Say this:" then the exact pitch (1–4 sentences). Nothing else. No upgrade line.${constraintLine}${bindingClause}`;
+- FORBIDDEN: a plan, a framework, a methodology, a numbered list of considerations, "Subject:", "Hi [name]", a generic prospecting opener, "I wanted to share…".
+- REQUIRED: Start with "Say this:" then the exact pitch (1–4 sentences). Nothing else. No upgrade line.${
+        isCFO
+          ? `\n- CFO AUDIENCE: lead with money. Frame on cost of inaction, payback period, or risk-adjusted return. Use \$ figures or % deltas (placeholders OK). No SDR-style "want to learn about your priorities" openings — CFOs hate it.`
+          : ""
+      }${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "next_steps":
       return `═══ MODE LOCK: NEXT STEPS ═══
 The user asked WHAT TO DO NEXT. Return numbered actions.
 - FORBIDDEN: a cold email (no "Subject:", no "Hi"), a script, a pitch, a thesis, a framework, a "here's how to think about this" preface.
-- REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with the verb first ("Call X to confirm Y", "Send the MAP to Z", "Lock 30 min with the CFO"). No commentary between items. No trailing upgrade line.${constraintLine}${bindingClause}`;
+- REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with the verb first AND a named target AND an outcome ("Call [name] to confirm [decision] by [date]", "Send the MAP to [econ buyer] with [signature ask]", "Lock 30 min with the CFO on [ROI question]"). No commentary between items. No trailing upgrade line.
+- ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm budget owner before [date] or this slips to next quarter").${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "analysis":
       return `═══ MODE LOCK: STRATEGIC ANALYSIS ═══
 The user explicitly asked for analysis / thesis / read on the deal. Use the strategic frame.
-- REQUIRED: Lead with the ACCOUNT THESIS in one line. Then VALUE LEAKAGE (where money leaks today). Then ECONOMIC CONSEQUENCE (in $/margin/retention/velocity terms). End with ONE NEXT BEST DISCOVERY ACTION.
-- FORBIDDEN: an email, a template, a script, a generic "here's how to think about it" essay.${constraintLine}${bindingClause}`;
+- REQUIRED: Lead with the ACCOUNT THESIS in one line. Then VALUE LEAKAGE (where money leaks today, in \$ or % terms). Then ECONOMIC CONSEQUENCE (in \$/margin/retention/velocity terms). End with ONE NEXT BEST DISCOVERY ACTION (named person, specific question).
+- FORBIDDEN: an email, a template, a script, a generic "here's how to think about it" essay.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "provenance":
       return `═══ MODE LOCK: PROVENANCE ═══
 The user asked WHERE the information came from. Answer in plain English in 1–3 sentences MAX.
 - REQUIRED: Name the source(s) directly — linked account, uploaded file, internal KI/Playbook by short id, prior thread message, or "operator pattern (no internal source)".
-- FORBIDDEN: defensive language, methodology theater, robotic disclaimers, a new asset, restating the question, "Subject:", "Hi", any email structure, numbered lists, trailing upgrade line ("Want me to…").${constraintLine}${bindingClause}`;
+- FORBIDDEN: defensive language, methodology theater, robotic disclaimers, a new asset, restating the question, "Subject:", "Hi", any email structure, numbered lists, trailing upgrade line ("Want me to…").${constraintLine}${substanceContract}${bindingClause}`;
 
     case "freeform":
     default:
@@ -2171,7 +2198,7 @@ The user asked WHERE the information came from. Answer in plain English in 1–3
 The user's intent isn't a clear asset request. Pick the SMALLEST useful output that answers the literal question.
 - FORBIDDEN: defaulting to an email or a generic template just because that's easy.
 - FORBIDDEN: a strategic-thesis essay unless they explicitly asked for analysis.
-- REQUIRED: First line answers the question directly. If an asset is the right answer, give it. If a one-line answer is the right answer, give that and stop.${constraintLine}${bindingClause}`;
+- REQUIRED: First line answers the question directly. If an asset is the right answer, give it. If a one-line answer is the right answer, give that and stop.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
   }
 }
 
