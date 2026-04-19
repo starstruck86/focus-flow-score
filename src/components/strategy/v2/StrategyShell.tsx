@@ -388,6 +388,16 @@ export function StrategyShell() {
         else if (devAction === 'branch') handleBranch();
         else if (devAction === 'openAccount') handleOpenLinkedAccount();
         else if (devAction === 'openOpportunity') handleOpenLinkedOpportunity();
+        else if (devAction === 'upload') {
+          // Dev-safe upload proof: synthesize a small File and feed it to the
+          // real upload pipeline. Proves product behavior end-to-end without
+          // requiring an OS file picker (which browser automation cannot drive).
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const body = `dev-upload proof @ ${stamp}\nThis file was synthesized via ?devAction=upload to prove post-upload product behavior.\n`;
+          const file = new File([body], `dev-upload-${stamp}.txt`, { type: 'text/plain' });
+          uploadFiles([file]);
+          setInspectorOpen(true); // open inspector so the new upload row is visible
+        }
       }, 250);
       return () => clearTimeout(t);
     }
