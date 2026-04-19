@@ -25,6 +25,8 @@ interface Props {
   onSlashChange?: (query: string | null) => void;
   /** Called with the wrapper rect whenever it changes (for anchoring SlashMenu). */
   onRectChange?: (rect: DOMRect | null) => void;
+  /** Phase 1.5: open the file picker (same as /upload). */
+  onAttachFiles?: () => void;
 }
 
 export interface StrategyComposerHandle {
@@ -33,7 +35,7 @@ export interface StrategyComposerHandle {
 }
 
 export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function StrategyComposer(
-  { disabled, placeholder = 'Message…', serifPlaceholder = false, onSend, onSlashChange, onRectChange }, ref
+  { disabled, placeholder = 'Message…', serifPlaceholder = false, onSend, onSlashChange, onRectChange, onAttachFiles }, ref
 ) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
