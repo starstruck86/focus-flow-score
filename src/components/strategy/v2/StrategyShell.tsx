@@ -54,6 +54,7 @@ import { PromotionsInbox } from './PromotionsInbox';
 import { SaveToast, type SaveToastState } from './SaveToast';
 import { LinkPicker, type LinkPickerSelection } from './LinkPicker';
 import { SlashMenu, type SlashVerb } from './SlashMenu';
+import { LibraryPicker, type LibraryItem } from './LibraryPicker';
 
 import '@/styles/strategy-v2.css';
 
@@ -250,6 +251,17 @@ export function StrategyShell() {
 
   // Slash verb routing
   const handleSlashPick = useCallback((verb: SlashVerb) => {
+    if (verb === 'library') {
+      // Don't clear slash — pivot the composer query to `/library ` so the
+      // LibraryPicker takes over and the user can keep typing the search.
+      setSlashQuery('/library ');
+      const ta = composerRef.current as
+        (HTMLTextAreaElement & { insertText?: (t: string) => void })
+        | null;
+      ta?.insertText?.('/library ');
+      return;
+    }
+
     setSlashQuery(null);
     const ta = composerRef.current as (HTMLTextAreaElement & { clearSlash?: () => void }) | null;
     ta?.clearSlash?.();
@@ -296,6 +308,27 @@ export function StrategyShell() {
         break;
     }
   }, [handleBranch, messages, activeThread, save, showSaveToast]);
+
+  // ---------- /library slash command ----------
+  // Active whenever the slash query starts with `/library`. While active,
+  // the regular SlashMenu is suppressed so only one surface is visible.
+  const isLibraryQuery = !!slashQuery && /^\/library\b/i.test(slashQuery);
+
+  const handleLibraryPick = useCallback((item: LibraryItem) => {
+    // Insert a short reference token the assistant already understands as
+    // a citation. Composer takes focus so the rep can keep typing context.
+    const token = `RESOURCE[${item.id}] "${item.title}" `;
+    const ta = composerRef.current as
+      (HTMLTextAreaElement & { insertText?: (t: string) => void; clearSlash?: () => void })
+      | null;
+    if (ta?.insertText) {
+      ta.insertText(token);
+    } else {
+      // Fallback: at least clear the slash query so we don't leave the picker hanging.
+      ta?.clearSlash?.();
+    }
+    setSlashQuery(null);
+  }, []);
 
   // Hotkeys
   useStrategyHotkeys({
@@ -584,9 +617,19 @@ export function StrategyShell() {
         onPick={handlePickEntity}
       />
       <SlashMenu
-        query={slashQuery}
+        query={isLibraryQuery ? null : slashQuery}
         anchorRect={composerRect}
         onPick={handleSlashPick}
+        onClose={() => {
+          setSlashQuery(null);
+          const ta = composerRef.current as (HTMLTextAreaElement & { clearSlash?: () => void }) | null;
+          ta?.clearSlash?.();
+        }}
+      />
+      <LibraryPicker
+        query={isLibraryQuery ? slashQuery : null}
+        anchorRect={composerRect}
+        onPick={handleLibraryPick}
         onClose={() => {
           setSlashQuery(null);
           const ta = composerRef.current as (HTMLTextAreaElement & { clearSlash?: () => void }) | null;

@@ -32,6 +32,7 @@ interface Props {
 export interface StrategyComposerHandle {
   focus: () => void;
   clearSlash: () => void;
+  insertText: (text: string) => void;
 }
 
 export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function StrategyComposer(
@@ -42,11 +43,27 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
   const [value, setValue] = useState('');
 
   useImperativeHandle(ref, () => {
-    const ta = taRef.current as HTMLTextAreaElement & { clearSlash?: () => void };
+    const ta = taRef.current as HTMLTextAreaElement & {
+      clearSlash?: () => void;
+      insertText?: (text: string) => void;
+    };
     if (ta) {
       ta.clearSlash = () => {
         setValue('');
         onSlashChange?.(null);
+      };
+      // Replace any in-progress slash query with `text` and refocus.
+      ta.insertText = (text: string) => {
+        setValue(text);
+        onSlashChange?.(null);
+        // Focus + place caret at end after React commits the new value.
+        requestAnimationFrame(() => {
+          const el = taRef.current;
+          if (!el) return;
+          el.focus();
+          const end = el.value.length;
+          try { el.setSelectionRange(end, end); } catch { /* ignore */ }
+        });
       };
     }
     return ta;

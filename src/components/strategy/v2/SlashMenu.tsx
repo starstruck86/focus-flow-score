@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export type SlashVerb =
+  | 'library'
   | 'upload'
   | 'branch'
   | 'link'
@@ -25,6 +26,7 @@ interface VerbDef {
 }
 
 const VERBS: VerbDef[] = [
+  { key: 'library',      label: 'Browse library',    shortcut: '/library' },
   { key: 'upload',       label: 'Upload file',       shortcut: '⌘U' },
   { key: 'branch',       label: 'Branch thought',    shortcut: '⌘B' },
   { key: 'link',         label: 'Link to account',   shortcut: '⌘L' },
