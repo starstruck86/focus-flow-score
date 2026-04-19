@@ -286,52 +286,35 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
 
   return (
     <div data-testid="app-layout" className={`min-h-screen bg-background flex flex-col w-full ${SHELL.top.safeArea}`}>
-      <header
-        data-testid="app-header"
-        className={cn(
-          "flex items-center gap-2 px-3 border-b sticky top-[env(safe-area-inset-top)] z-40 bg-background/95 backdrop-blur-md",
-          location.pathname === '/strategy' ? 'py-1' : 'py-2'
-        )}
-        style={headerAccentStyle}
-      >
-        {location.pathname === '/strategy' ? (
-          <>
-            <Compass className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
-            <GlobalSearch className="flex-1 min-w-0 max-w-[140px] opacity-60" />
-            <div className="flex items-center gap-0.5 shrink-0">
-              {!isReviewMode && (
-                <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/30" onClick={signOut}>
-                  <LogOut className="h-2.5 w-2.5" />
-                </Button>
-              )}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-1 shrink-0">
-              <Compass className="h-5 w-5 shrink-0" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
-              <span className="font-display text-sm font-bold hidden lg:inline">Quota CoPilot</span>
-              <SaveIndicator />
-            </div>
-            <GlobalSearch className="flex-1 min-w-0 max-w-xs sm:max-w-sm lg:max-w-md" />
-            <div className="flex items-center gap-1 shrink-0">
-              <BostonClock className="hidden sm:inline" />
-              <GlobalRefreshButton />
-              <TerritoryCopilot />
-              {!isReviewMode && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={signOut}>
-                      <LogOut className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Sign Out</TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-          </>
-        )}
-      </header>
+      {location.pathname !== '/strategy' && (
+        <header
+          data-testid="app-header"
+          className="flex items-center gap-2 px-3 py-2 border-b sticky top-[env(safe-area-inset-top)] z-40 bg-background/95 backdrop-blur-md"
+          style={headerAccentStyle}
+        >
+          <div className="flex items-center gap-1 shrink-0">
+            <Compass className="h-5 w-5 shrink-0" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
+            <span className="font-display text-sm font-bold hidden lg:inline">Quota CoPilot</span>
+            <SaveIndicator />
+          </div>
+          <GlobalSearch className="flex-1 min-w-0 max-w-xs sm:max-w-sm lg:max-w-md" />
+          <div className="flex items-center gap-1 shrink-0">
+            <BostonClock className="hidden sm:inline" />
+            <GlobalRefreshButton />
+            <TerritoryCopilot />
+            {!isReviewMode && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={signOut}>
+                    <LogOut className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Sign Out</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </header>
+      )}
 
       {/*
         ═══════════════════════════════════════════════════════════
