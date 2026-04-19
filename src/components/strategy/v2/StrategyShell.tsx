@@ -12,6 +12,7 @@
  * proposals) is preserved by passing through the existing hooks unchanged.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStrategyThreads } from '@/hooks/strategy/useStrategyThreads';
 import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyMemory } from '@/hooks/strategy/useStrategyMemory';
@@ -21,6 +22,8 @@ import { useStrategyProposals } from '@/hooks/strategy/useStrategyProposals';
 import { useLinkedObjectContext } from '@/hooks/strategy/useLinkedObjectContext';
 import { useThreadTrustState } from '@/hooks/strategy/useThreadTrustState';
 import { useStrategyHotkeys } from '@/hooks/strategy/useStrategyHotkeys';
+import { useStrategySelection } from '@/hooks/strategy/useStrategySelection';
+import { useStrategySaveGesture, type SaveScope } from '@/hooks/strategy/useStrategySaveGesture';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { StrategyThread } from '@/types/strategy';
@@ -31,6 +34,10 @@ import { StrategyComposer } from './StrategyComposer';
 import { BlockedComposer } from './BlockedComposer';
 import { StrategySwitcher } from './StrategySwitcher';
 import { ContextInspector } from './ContextInspector';
+import { SelectionActionBar, type ActionKey } from './SelectionActionBar';
+import { ScopePicker, type ScopePick } from './ScopePicker';
+import { PromotionsInbox } from './PromotionsInbox';
+import { SaveToast, type SaveToastState } from './SaveToast';
 import type { LinkPickerSelection } from './LinkPicker';
 
 import '@/styles/strategy-v2.css';
