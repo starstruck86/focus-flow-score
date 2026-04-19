@@ -51,10 +51,11 @@ const CHAT_OUTPUT_CONTRACT = `═══ ELITE OPERATOR CONTRACT (every response)
 
 ═══ WHEN TO GO STRATEGIC ═══
 Only when the user explicitly asks for analysis, thesis, deal review, leakage, or "how should I think about…":
-  - Lead with the account thesis in one line.
-  - Name the value leakage in dollars/margin/retention/velocity terms.
+  - Lead with the ACCOUNT THESIS in one line.
+  - Name the VALUE LEAKAGE — where money is leaking today.
+  - State the ECONOMIC CONSEQUENCE in dollars / margin / retention / velocity terms.
   - Label non-trivial claims (VALID / INFER / HYPO / UNKN) only when uncertainty actually matters.
-  - End with one concrete next discovery action.
+  - End with one NEXT BEST DISCOVERY ACTION — a concrete next move.
 For everyday "what should I send / say / do / use", skip the strategic frame — just deliver the asset.
 
 ═══ CITATIONS ═══
