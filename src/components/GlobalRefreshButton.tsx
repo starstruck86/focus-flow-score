@@ -35,9 +35,18 @@ export function GlobalRefreshButton() {
           console.warn('[GlobalRefresh] Cache clear failed:', e);
         }
       }
+      // Give Safari a beat to fully tear down the SW before navigation
+      await new Promise((r) => setTimeout(r, 150));
     } finally {
-      // Hard reload — bypass cache
-      window.location.reload();
+      // Cache-busted navigation — Safari ignores location.reload() cache hints,
+      // but a fresh URL forces a real network fetch and bypasses bfcache.
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('_r', Date.now().toString());
+        window.location.replace(url.toString());
+      } catch {
+        window.location.reload();
+      }
     }
   }, [isRefreshing]);
 

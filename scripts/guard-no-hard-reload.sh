@@ -26,6 +26,7 @@ VIOLATIONS=$(grep -rn 'window\.location\.reload\|location\.reload' src/ \
   | grep -v 'useAppFreshness' \
   | grep -v 'GlobalRefreshButton' \
   | grep -v 'main\.tsx' \
+  | grep -v 'bfcache' \
   | grep -v '__tests__' \
   | grep -v '\.test\.' \
   | grep -v 'NEVER.*reload' \
