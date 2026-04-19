@@ -190,6 +190,7 @@ export default function Strategy() {
           onTransformOutput={handleTransformOutput}
           isTransforming={isTransforming}
           onAssistantComplete={handleAssistantComplete}
+          onSwitchToThread={setActiveThreadId}
         />
 
         {!isMobile && !rightRailCollapsed && activeThread && hasRailContent && (
