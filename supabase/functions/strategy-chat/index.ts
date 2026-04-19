@@ -2184,7 +2184,7 @@ The user asked how to PITCH or POSITION something. Give the exact words to say.
 - FORBIDDEN: a plan, a framework, a methodology, a numbered list of considerations, "Subject:", "Hi [name]", a generic prospecting opener, "I wanted to share…".
 - REQUIRED: Start with "Say this:" then the exact pitch (1–4 sentences). Nothing else. No upgrade line.${
         isCFO
-          ? `\n- CFO AUDIENCE: lead with money. Frame on cost of inaction, payback period, or risk-adjusted return. Use \$ figures or % deltas (placeholders OK). No SDR-style "want to learn about your priorities" openings — CFOs hate it.`
+          ? `\n- CFO AUDIENCE: lead with money. Frame on cost of inaction, payback period, or risk-adjusted return. Use real \$ figures or % deltas IF they exist in context. If they don't, write a directional sentence with NO bracket placeholders. No SDR-style "want to learn about your priorities" openings — CFOs hate it.`
           : ""
       }${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
@@ -2192,8 +2192,8 @@ The user asked how to PITCH or POSITION something. Give the exact words to say.
       return `═══ MODE LOCK: NEXT STEPS ═══
 The user asked WHAT TO DO NEXT. Return numbered actions.
 - FORBIDDEN: a cold email (no "Subject:", no "Hi"), a script, a pitch, a thesis, a framework, a "here's how to think about this" preface.
-- REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with the verb first AND a named target AND an outcome ("Call [name] to confirm [decision] by [date]", "Send the MAP to [econ buyer] with [signature ask]", "Lock 30 min with the CFO on [ROI question]"). No commentary between items. No trailing upgrade line.
-- ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm budget owner before [date] or this slips to next quarter").${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with a strong verb first AND a real named target from context AND a concrete outcome. Use ONLY names/dates/numbers that actually appear in the thread/account context. If you don't have a name, write the role ("the economic buyer", "the CFO") — never "[name]" or "[Client]". No commentary between items. No trailing upgrade line.
+- ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm the budget owner this week or this slips to next quarter").${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
     case "analysis":
       return `═══ MODE LOCK: STRATEGIC ANALYSIS ═══
