@@ -2978,7 +2978,9 @@ async function buildChatSystemPrompt(args: {
   // a binding MODE LOCK block. This is the single biggest lever against
   // the production drift pattern (e.g. asking for a template and getting
   // an email back).
-  const intent = classifyChatIntent(userContent);
+  const intent = classifyChatIntent(userContent, {
+    hasAccountContext: !!accountId || (!!contextSection && contextSection.length >= 200),
+  });
   const modeLockBlock = buildModeLockBlock(intent);
 
   // No account, no thread context → don't force Strategy Core onto small talk.
