@@ -188,8 +188,14 @@ export function StrategyShell() {
     const queued = queuedInitialMessageRef.current;
     queuedInitialMessageRef.current = null;
     requestAnimationFrame(() => composerRef.current?.focus());
-    if (queued) requestAnimationFrame(() => sendMessage(queued));
-  }, [pendingThreadId, activeThread?.id, sendMessage]);
+    if (queued) {
+      // Pull the sidecar IDs (if any) and clear synchronously so they
+      // ride this send and only this send.
+      const sidecar = pendingResourceIds.length > 0 ? pendingResourceIds : undefined;
+      if (sidecar) setPendingResourceIds([]);
+      requestAnimationFrame(() => sendMessage(queued, sidecar ? { pickedResourceIds: sidecar } : undefined));
+    }
+  }, [pendingThreadId, activeThread?.id, sendMessage, pendingResourceIds]);
 
   /** Branch from selection (if any) or current thread state. Provenance preserved via cloned_from_thread_id. */
   const handleBranch = useCallback(async () => {
