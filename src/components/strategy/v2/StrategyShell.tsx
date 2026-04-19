@@ -86,6 +86,10 @@ export function StrategyShell() {
   const [composerRect, setComposerRect] = useState<DOMRect | null>(null);
   const [pendingThreadId, setPendingThreadId] = useState<string | null>(null);
   const [isCreatingThread, setIsCreatingThread] = useState(false);
+  // Sidecar: resource IDs the user picked from /library this turn. Sent
+  // out-of-band on the next sendMessage and cleared after. Never visible
+  // in the composer (the composer only ever shows the human title).
+  const [pendingResourceIds, setPendingResourceIds] = useState<string[]>([]);
 
   const threadId = activeThread?.id ?? null;
 
@@ -315,13 +319,11 @@ export function StrategyShell() {
   const isLibraryQuery = !!slashQuery && /^\/library\b/i.test(slashQuery);
 
   const handleLibraryPick = useCallback((item: LibraryItem) => {
-    // Insert a clean, human-readable reference. The backend's resource
-    // retrieval pipeline (resourceRetrieval.ts) extracts quoted phrases
-    // from the user message and ILIKE-matches them back to resources by
-    // title — so the quoted title alone is enough to ground the answer.
-    // We deliberately do NOT insert RESOURCE[id] tokens: those are an
-    // assistant *output* citation form and leak backend chrome into the
-    // user's writing surface.
+    // Insert ONLY the clean human-readable title into the composer.
+    // The stable resource ID rides out-of-band in `pendingResourceIds`
+    // and is sent as a sidecar on the next sendMessage. The backend
+    // resolves IDs first, so grounding never depends on quoted-title
+    // ILIKE coincidence.
     const token = `"${item.title}" `;
     const ta = composerRef.current as
       (HTMLTextAreaElement & { insertText?: (t: string) => void; clearSlash?: () => void })
@@ -329,9 +331,9 @@ export function StrategyShell() {
     if (ta?.insertText) {
       ta.insertText(token);
     } else {
-      // Fallback: at least clear the slash query so we don't leave the picker hanging.
       ta?.clearSlash?.();
     }
+    setPendingResourceIds(prev => prev.includes(item.id) ? prev : [...prev, item.id]);
     setSlashQuery(null);
   }, []);
 
@@ -464,6 +466,10 @@ export function StrategyShell() {
 
   const handleSend = useCallback((text: string) => {
     if (pendingThreadId || isCreatingThread || isSending) return;
+    // Snapshot + clear sidecar IDs synchronously so a second send can't
+    // accidentally re-attach the same picked resource.
+    const sidecar = pendingResourceIds.length > 0 ? pendingResourceIds : undefined;
+    if (sidecar) setPendingResourceIds([]);
     if (!threadId) {
       (async () => {
         if (!user) return;
@@ -471,6 +477,8 @@ export function StrategyShell() {
         const newId = await createThread('Untitled thread', 'strategy', 'freeform');
         if (newId) {
           queuedInitialMessageRef.current = text;
+          // Re-stash so the queued send (after thread mounts) still sees them.
+          if (sidecar) setPendingResourceIds(sidecar);
           setPendingThreadId(newId);
         } else {
           setIsCreatingThread(false);
@@ -479,8 +487,8 @@ export function StrategyShell() {
       })();
       return;
     }
-    sendMessage(text);
-  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread]);
+    sendMessage(text, sidecar ? { pickedResourceIds: sidecar } : undefined);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
