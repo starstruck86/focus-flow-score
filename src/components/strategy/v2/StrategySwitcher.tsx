@@ -182,11 +182,10 @@ export function StrategySwitcher({ open, threads, onClose, onSelectThread }: Pro
 
   return createPortal(
     <div className="strategy-v2" style={{ position: 'fixed', inset: 0, zIndex: 70 }}>
-      {/* Whisper-thin veil — page behind stays clearly legible. No takeover. */}
+      {/* No veil. Canvas remains 100% visible. Click-catcher is fully transparent. */}
       <div
         onClick={onClose}
-        className="sv-overlay-enter"
-        style={{ position: 'absolute', inset: 0, background: 'hsl(40 12% 92% / 0.18)' }}
+        style={{ position: 'absolute', inset: 0, background: 'transparent' }}
       />
       <div
         role="dialog"
