@@ -22,11 +22,14 @@ interface Props {
   onChipClick: () => void;
   /** Ref to the chip button so the shell can anchor LinkPicker to it. */
   chipRef?: React.RefObject<HTMLButtonElement>;
+  /** Phase 1.5: create a new thread immediately (no modal). */
+  onNewThread: () => void;
 }
 
 export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function StrategyTopBar({
   title, onTitleChange, entityName, trustState,
   unresolvedProposalCount, onOpenSwitcher, onOpenInspector, onChipClick, chipRef,
+  onNewThread,
 }, _ref) {
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
