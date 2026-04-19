@@ -60,6 +60,7 @@ export function StrategyShell() {
   const { threads, activeThread, setActiveThreadId, updateThread } = useStrategyThreads();
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const chipRef = useRef<HTMLButtonElement>(null);
+  const slashFileInputRef = useRef<HTMLInputElement>(null);
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -87,7 +88,7 @@ export function StrategyShell() {
     || null;
 
   const { memories } = useStrategyMemory(memoryObjectType, memoryObjectId);
-  const { uploads } = useStrategyUploads(threadId);
+  const { uploads, uploadFiles } = useStrategyUploads(threadId);
   const { artifacts } = useStrategyArtifacts(threadId);
   const { proposals } = useStrategyProposals(threadId);
 
