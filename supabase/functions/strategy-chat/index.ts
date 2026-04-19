@@ -1996,6 +1996,7 @@ function deriveLibraryScopes(account: any, userContent: string): string[] {
 // We classify by intent verbs/nouns in the user's question, not by
 // account context. Order matters — earliest match wins.
 type ChatIntent =
+  | "bootstrap" // vague ask + no account context — orient the user
   | "template"
   | "email"
   | "message" // SMS/LinkedIn/Slack/voicemail/script
