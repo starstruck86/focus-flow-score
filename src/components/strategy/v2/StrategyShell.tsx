@@ -298,6 +298,27 @@ export function StrategyShell() {
     }
   }, [handleBranch, messages, activeThread, save, showSaveToast]);
 
+  // ---------- /library slash command ----------
+  // Active whenever the slash query starts with `/library`. While active,
+  // the regular SlashMenu is suppressed so only one surface is visible.
+  const isLibraryQuery = !!slashQuery && /^\/library\b/i.test(slashQuery);
+
+  const handleLibraryPick = useCallback((item: LibraryItem) => {
+    // Insert a short reference token the assistant already understands as
+    // a citation. Composer takes focus so the rep can keep typing context.
+    const token = `RESOURCE[${item.id}] "${item.title}" `;
+    const ta = composerRef.current as
+      (HTMLTextAreaElement & { insertText?: (t: string) => void; clearSlash?: () => void })
+      | null;
+    if (ta?.insertText) {
+      ta.insertText(token);
+    } else {
+      // Fallback: at least clear the slash query so we don't leave the picker hanging.
+      ta?.clearSlash?.();
+    }
+    setSlashQuery(null);
+  }, []);
+
   // Hotkeys
   useStrategyHotkeys({
     onToggleSwitcher: () => setSwitcherOpen(o => !o),
