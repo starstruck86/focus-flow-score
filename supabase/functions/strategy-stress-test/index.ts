@@ -313,6 +313,8 @@ serve(async (req) => {
           .maybeSingle();
 
         const finalText: string = persisted?.content_json?.text ?? streamedText ?? "";
+        const routingDecision = persisted?.content_json?.routing_decision ?? null;
+        const retrievalDebug = routingDecision?.retrieval_debug ?? null;
         const appendix = parseAppendix(finalText);
         const violations: string[] = [];
         // Lightweight post-hoc violation tagging (the real guards run
