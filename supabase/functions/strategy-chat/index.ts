@@ -2893,6 +2893,85 @@ function enforceModeLock(
       }
       break;
     }
+
+    case "synthesis": {
+      // FAILURE CONDITION: <2 resources retrieved → replace with honest ask.
+      // This is the strongest guard: even if the model produced a generic
+      // framework, we override it because by definition no real derivation
+      // could have happened.
+      if (resourceHits.length < 2) {
+        text =
+          "I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly.";
+        modified = true;
+        violations.push("synthesis_insufficient_resources");
+        console.log(
+          `[mode-lock] synthesis_insufficient_resources hits=${resourceHits.length}`,
+        );
+        break;
+      }
+
+      // Strip forbidden generic-fallback phrases. These signal the model
+      // bailed out of derivation and is hand-waving with industry boilerplate.
+      const FORBIDDEN_GENERIC: Array<{ re: RegExp; tag: string }> = [
+        { re: /\bbased on (the |your )?resources( provided)?\b[,.]?\s*/gi, tag: "synth_based_on_resources" },
+        { re: /\bin general,?\s+/gi, tag: "synth_in_general" },
+        { re: /\b(industry\s+)?best\s+practices?\b[,.]?\s*/gi, tag: "synth_best_practice" },
+        { re: /\bindustry\s+standard\b[,.]?\s*/gi, tag: "synth_industry_standard" },
+        { re: /\bas a general rule,?\s+/gi, tag: "synth_general_rule" },
+        { re: /\bgenerally speaking,?\s+/gi, tag: "synth_generally_speaking" },
+        { re: /\btypically,?\s+/gi, tag: "synth_typically" },
+      ];
+      let genericHits = 0;
+      for (const { re, tag } of FORBIDDEN_GENERIC) {
+        const before = text;
+        text = text.replace(re, "");
+        if (text !== before) {
+          genericHits += 1;
+          violations.push(`stripped_${tag}`);
+        }
+      }
+      if (genericHits > 0) {
+        text = text.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+        modified = true;
+      }
+
+      // STRUCTURAL GUARD: require all 5 sections + a table + cited sources.
+      // If any are missing, flag for one strict regeneration.
+      const hasPattern = /\bpattern\s+extraction\b/i.test(text);
+      const hasDimensions = /\bdimensions?\b/i.test(text) && /\|.*\|.*\|/.test(text);
+      const hasWeighting = /\bweight(ing)?\s+rationale\b/i.test(text);
+      const hasExample = /\bexample\s+scoring\b/i.test(text);
+      const hasAttribution = /\bsource\s+attribution\b/i.test(text);
+      const hasCitations = /(KI\[[a-z0-9_-]+\]|PLAYBOOK\[[a-z0-9_-]+\]|RESOURCE\[[a-z0-9_-]+\])/i.test(text);
+
+      if (!hasPattern) { violations.push("synthesis_missing_pattern_extraction"); shouldRegenerate = true; }
+      if (!hasDimensions) { violations.push("synthesis_missing_dimensions_table"); shouldRegenerate = true; }
+      if (!hasWeighting) { violations.push("synthesis_missing_weighting_rationale"); shouldRegenerate = true; }
+      if (!hasExample) { violations.push("synthesis_missing_example_scoring"); shouldRegenerate = true; }
+      if (!hasAttribution) { violations.push("synthesis_missing_source_attribution"); shouldRegenerate = true; }
+      if (!hasCitations) { violations.push("synthesis_missing_source_citations"); shouldRegenerate = true; }
+
+      // Equal-weight detector: extract weight cells from the table and flag
+      // if all weights are identical (e.g. all 20% across 5 dims).
+      const weightMatches = Array.from(text.matchAll(/\|\s*(\d{1,3})\s*%\s*\|/g)).map((m) => parseInt(m[1], 10));
+      if (weightMatches.length >= 3) {
+        const allEqual = weightMatches.every((w) => w === weightMatches[0]);
+        if (allEqual) {
+          violations.push("synthesis_equal_weights");
+          shouldRegenerate = true;
+          console.log(`[mode-lock] synthesis_equal_weights weights=${JSON.stringify(weightMatches)}`);
+        }
+      }
+
+      // Generic-framework fingerprint: if the model fell back to opener/
+      // pitch/close stages, that's a generic-LLM tell. Flag for regen.
+      if (/\b(opener|pitch|close)\s*\/\s*(opener|pitch|close)\s*\/\s*(opener|pitch|close)\b/i.test(text) ||
+          /\b(discovery|demo|close)\s*\/\s*(discovery|demo|close)\s*\/\s*(discovery|demo|close)\b/i.test(text)) {
+        violations.push("synthesis_generic_stage_scaffold");
+        shouldRegenerate = true;
+      }
+      break;
+    }
   }
 
   return { text, modified, violations, shouldRegenerate };
