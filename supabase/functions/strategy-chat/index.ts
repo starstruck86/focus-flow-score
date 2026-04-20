@@ -2893,6 +2893,102 @@ function stripApplicationAppendix(text: string): string {
   return text.slice(0, m.index);
 }
 
+// ── OPERATOR-GRADE REASONING GUARD ─────────────────────────────
+// Detects book-smart fingerprints in synthesis/creation/evaluation outputs.
+// Returns a list of violations; caller decides whether to regen.
+//
+// What we look for (any 2+ failures → regen with strict reasoning preamble):
+//   1. No CONSEQUENCE vocabulary — outcome must tie to pipeline / velocity /
+//      win rate / churn / expansion / ACV / payback / cost-of-inaction.
+//   2. No DECISION LOGIC — no IF/THEN, "if X then Y", "when X, do Y".
+//   3. BEHAVIORAL FLUFF — "ask better questions", "build trust", "be authentic".
+//   4. NO TRADEOFF LANGUAGE — no "vs", "instead of", "ignore", "deprioritize",
+//      "table stakes", "noise", "matters more", "matters less".
+//   5. NO POV COMMITMENT — no "the dominant", "the highest-leverage",
+//      "the one thing", "the biggest", "what actually matters".
+function auditOperatorReasoning(body: string): {
+  violations: string[];
+  shouldRegenerate: boolean;
+} {
+  const violations: string[] = [];
+  const wc = body.trim().split(/\s+/).filter(Boolean).length;
+  if (wc < 120) return { violations, shouldRegenerate: false };
+
+  const lower = body.toLowerCase();
+
+  // 1. Consequence vocabulary — must hit ≥2 distinct outcome anchors.
+  const CONSEQUENCE_RE = [
+    /\bpipeline\b/, /\bvelocity\b/, /\bwin\s*rate\b/, /\bchurn\b/,
+    /\bexpansion\b/, /\bacv\b/, /\barr\b/, /\bpayback\b/,
+    /\bcost\s+of\s+inaction\b/, /\bdeal\s+(stalls?|slips?|dies?|breaks?)\b/,
+    /\btime[-\s]to[-\s](revenue|close|value)\b/, /\bforecast\b/,
+    /\bconversion\s+rate\b/, /\bquota\b/, /\battainment\b/,
+  ];
+  const consequenceHits = CONSEQUENCE_RE.filter((re) => re.test(lower)).length;
+  if (consequenceHits < 2) {
+    violations.push("operator_no_consequence_framing");
+  }
+
+  // 2. Decision logic — IF/THEN sequence required.
+  const DECISION_RE = [
+    /\bif\b[^.!?\n]{2,80}\b(then|do|run|use|skip|prioritize|deprioritize|switch|move)\b/i,
+    /\bwhen\b[^.!?\n]{2,80}\b(then|do|run|use|skip|prioritize|switch)\b/i,
+    /\bdominant\s+move\b/i, /\bnext\s+move\b/i, /\bplaybook:\s/i,
+  ];
+  const hasDecisionLogic = DECISION_RE.some((re) => re.test(body));
+  if (!hasDecisionLogic) {
+    violations.push("operator_no_decision_logic");
+  }
+
+  // 3. Behavioral fluff — banned phrases that signal generic-LLM output.
+  const FLUFF_RE = [
+    /\bask\s+better\s+questions\b/i,
+    /\bbuild\s+(trust|rapport)\b/i,
+    /\bbe\s+(authentic|curious|confident|genuine)\b/i,
+    /\bobserve\s+tone\b/i,
+    /\bactive\s+listening\b/i,
+    /\bbe\s+a\s+good\s+listener\b/i,
+    /\bstay\s+curious\b/i,
+    /\bshow\s+empathy\b/i,
+    /\bmirror\s+(their|the)\s+(language|tone)\b/i,
+  ];
+  const fluffHits = FLUFF_RE.filter((re) => re.test(body)).length;
+  if (fluffHits >= 1) {
+    violations.push("operator_behavioral_fluff");
+  }
+
+  // 4. Tradeoff language — POV must include what to ignore / weight differently.
+  const TRADEOFF_RE = [
+    /\binstead\s+of\b/i, /\bnot\s+because\b/i, /\bdeprioritize\b/i,
+    /\btable\s+stakes\b/i, /\bnoise\b/i, /\bmatters?\s+(more|most|less|least)\b/i,
+    /\bweight(ed|s)?\s+(higher|lower|more|less)\b/i, /\bignore\b/i,
+    /\bovervalued?\b/i, /\bunderrated?\b/i, /\btradeoff\b/i,
+  ];
+  const tradeoffHits = TRADEOFF_RE.filter((re) => re.test(body)).length;
+  if (tradeoffHits < 2) {
+    violations.push("operator_no_tradeoffs");
+  }
+
+  // 5. POV commitment — "the dominant", "the one thing", etc.
+  const POV_RE = [
+    /\bthe\s+dominant\b/i, /\bthe\s+highest[-\s]leverage\b/i,
+    /\bthe\s+one\s+thing\b/i, /\bthe\s+biggest\b/i,
+    /\bwhat\s+actually\s+matters\b/i, /\bthe\s+real\s+(issue|driver|lever)\b/i,
+    /\bthe\s+single\s+(biggest|most|highest)\b/i, /\bthe\s+core\b/i,
+  ];
+  const hasPOV = POV_RE.some((re) => re.test(body));
+  if (!hasPOV) {
+    violations.push("operator_no_pov_commitment");
+  }
+
+  // Regen threshold: 2+ violations means the output is book-smart.
+  const shouldRegenerate = violations.length >= 2;
+  if (shouldRegenerate) {
+    console.log(`[operator-reasoning] violations=${JSON.stringify(violations)} body_words=${wc}`);
+  }
+  return { violations, shouldRegenerate };
+}
+
 // Audience → required vocabulary signals. Match is case-insensitive,
 // word-boundary, ≥2 distinct hits required.
 const AUDIENCE_VOCAB: Array<{ key: RegExp; signals: RegExp[] }> = [
