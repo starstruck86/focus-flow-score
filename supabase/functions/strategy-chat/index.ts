@@ -4397,12 +4397,26 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     effectiveSystemPrompt = `${systemPrompt}${preamble}`;
   }
 
+  // Turn-binding fix: pack.recentMessages was built BEFORE the current user
+  // message was inserted, so it does NOT contain the current ask. We must
+  // append the current user content explicitly, otherwise the model answers
+  // the previous turn's last user message and produces a one-turn offset
+  // (see hostile run b9613d44 — every turn answered turn N-1's prompt).
+  const priorMessages = pack.recentMessages
+    .filter((m) => (m.text || "").trim().length > 0)
+    // Defensive: drop any tail entry that is identical to the current user
+    // content (in case recentMessages was refreshed mid-flight and already
+    // contains it). Prevents accidental double-injection.
+    .filter((m, idx, arr) =>
+      !(idx === arr.length - 1 && m.role === "user" && m.text === content)
+    );
   const messages = [
     { role: "system" as const, content: effectiveSystemPrompt },
-    ...pack.recentMessages.map((m) => ({
+    ...priorMessages.map((m) => ({
       role: m.role === "user" ? "user" as const : "assistant" as const,
       content: m.text,
     })),
+    { role: "user" as const, content },
   ];
 
   const startTime = Date.now();
