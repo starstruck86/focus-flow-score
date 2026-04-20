@@ -4258,6 +4258,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           actual_model: result.model,
           fallback_used: result.fallbackUsed,
           routing_reason: route._routingReason,
+          retrieval_debug: retrievalDebug ?? null,
         },
       },
     });
