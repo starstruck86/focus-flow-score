@@ -3397,7 +3397,7 @@ async function handleChat(
     // Non-streaming fallback
     const { patch, visible: rawVisible } = extractThesisUpdate(result.text || "");
     // Mode-lock guard FIRST — strip drift / forbidden tail / hard-truncate.
-    const guarded = enforceModeLock(rawVisible, intent);
+    const guarded = enforceModeLock(rawVisible, intent, { resourceHits });
     if (guarded.modified || guarded.violations.length) {
       console.log(
         `[mode-lock] non-stream intent=${intent.intent} violations=${
