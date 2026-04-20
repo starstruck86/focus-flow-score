@@ -2004,6 +2004,7 @@ function deriveLibraryScopes(account: any, userContent: string): string[] {
 // account context. Order matters — earliest match wins.
 type ChatIntent =
   | "bootstrap" // vague ask + no account context — orient the user
+  | "synthesis" // derive a framework/scoring/rubric FROM the user's library
   | "template"
   | "email"
   | "message" // SMS/LinkedIn/Slack/voicemail/script
