@@ -313,6 +313,8 @@ serve(async (req) => {
           .maybeSingle();
 
         const finalText: string = persisted?.content_json?.text ?? streamedText ?? "";
+        const routingDecision = persisted?.content_json?.routing_decision ?? null;
+        const retrievalDebug = routingDecision?.retrieval_debug ?? null;
         const appendix = parseAppendix(finalText);
         const violations: string[] = [];
         // Lightweight post-hoc violation tagging (the real guards run
@@ -329,9 +331,11 @@ serve(async (req) => {
           .update({
             output: finalText.slice(0, 8000),
             output_chars: finalText.length,
-            actual_provider: persisted?.provider_used ?? null,
-            actual_model: persisted?.model_used ?? null,
-            fallback_used: persisted?.fallback_used ?? null,
+            actual_provider: persisted?.provider_used ?? routingDecision?.actual_provider ?? null,
+            actual_model: persisted?.model_used ?? routingDecision?.actual_model ?? null,
+            intended_provider: routingDecision?.intended_provider ?? null,
+            intended_model: routingDecision?.intended_model ?? null,
+            fallback_used: persisted?.fallback_used ?? routingDecision?.fallback_used ?? null,
             latency_ms: persisted?.latency_ms ?? elapsed,
             status_code: status,
             violations,
@@ -341,6 +345,11 @@ serve(async (req) => {
             appendix_industry: appendix.industry ?? null,
             citation_audit: persisted?.citations_json ?? null,
             assistant_message_id: persisted?.id ?? null,
+            routing_decision: routingDecision,
+            retrieval_debug: retrievalDebug,
+            error: status >= 400
+              ? (finalText && finalText.length < 4000 ? finalText : `HTTP ${status}`)
+              : null,
             finished_at: new Date().toISOString(),
           })
           .eq("id", turnRow!.id);
@@ -348,10 +357,15 @@ serve(async (req) => {
         if (status >= 200 && status < 300) succeeded++; else failed++;
       } catch (e: any) {
         failed++;
+        const errBody = [
+          e?.message ?? String(e),
+          e?.stack ? `\n--- stack ---\n${e.stack}` : "",
+          e?.cause ? `\n--- cause ---\n${JSON.stringify(e.cause)}` : "",
+        ].join("");
         await admin
           .from("strategy_stress_turns")
           .update({
-            error: e?.message ?? String(e),
+            error: errBody.slice(0, 8000),
             finished_at: new Date().toISOString(),
           })
           .eq("id", turnRow!.id);
