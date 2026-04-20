@@ -953,6 +953,28 @@ async function callStreaming(
       route: routeName,
     }));
 
+    if (route.primaryProvider === "anthropic") {
+      // Claude path: non-streaming. The downstream !rawStream branch in
+      // handleChat handles persistence + SSE wrapping for us. This is
+      // what makes mode=partial / creation-intent traffic actually land
+      // on Claude instead of crashing with misconfigured_route.
+      const result = await anthropicAdapter({
+        ...adapterReq,
+        model: route.model,
+      }, controller.signal);
+      console.log(JSON.stringify({
+        _type: result.error ? "routing.stream.fail" : "routing.stream.ok",
+        task: taskType,
+        actual_provider: result.provider,
+        actual_model: result.model,
+        route: "anthropic-direct",
+        fallback_used: false,
+        status: result.error ? (result.error.status ?? 502) : 200,
+        reason: result.error?.message,
+      }));
+      return result;
+    }
+
     if (route.primaryProvider !== "openai") {
       const misconfig = {
         text: "",
@@ -963,7 +985,7 @@ async function callStreaming(
         error: {
           type: "misconfigured_route",
           message:
-            `Chat route must use OpenAI direct, got ${route.primaryProvider}`,
+            `Chat route must use OpenAI or Anthropic, got ${route.primaryProvider}`,
           status: 500,
         },
       } satisfies NormalizedResponse;
