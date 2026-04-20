@@ -3145,7 +3145,8 @@ async function buildChatSystemPrompt(args: {
     hasAccount: !!accountId,
     libraryCounts: library?.counts,
     contextSectionLength: contextSection?.length ?? 0,
-  }) || !!resources?.userAskedForResource || pickedResourceIds.length > 0;
+  }) || !!resources?.userAskedForResource || pickedResourceIds.length > 0
+    || intent.intent === "synthesis";
 
   if (!useCore) {
     return {
