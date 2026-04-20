@@ -51,14 +51,18 @@ serve(async (req) => {
     });
   }
   const provided = req.headers.get("x-strategy-validation-key") ?? "";
-  if (provided !== VALIDATION_KEY) {
+  const auth = req.headers.get("authorization") ?? "";
+  const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7) : "";
+  const okByValKey = provided === VALIDATION_KEY;
+  const okByServiceRole = !!SERVICE_ROLE_KEY && bearer === SERVICE_ROLE_KEY;
+  if (!okByValKey && !okByServiceRole) {
     return new Response(JSON.stringify({ error: "invalid validation key" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  let body: Body;
+  let body: any;
   try {
     body = await req.json();
   } catch {
@@ -67,6 +71,23 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+
+  // Probe mode: skip impersonation, call the retrieval probe directly.
+  if (body?.mode === "probe") {
+    if (!body?.userId || !Array.isArray(body?.prompts)) {
+      return new Response(JSON.stringify({ error: "userId and prompts[] required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const probe = await fetch(`${SUPABASE_URL}/functions/v1/strategy-retrieval-probe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-strategy-validation-key": VALIDATION_KEY },
+      body: JSON.stringify({ userId: body.userId, prompts: body.prompts }),
+    });
+    const text = await probe.text();
+    return new Response(text, { status: probe.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
   if (!body?.as_user_id || !body?.thread_id || !body?.label || !Array.isArray(body?.prompts)) {
     return new Response(JSON.stringify({
       error: "as_user_id, thread_id, label, prompts[] required",
