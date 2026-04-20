@@ -4096,6 +4096,8 @@ async function handleChat(
     prompt: systemPrompt,
     workingThesis: priorThesis,
     resourceHits,
+    kiHits: kiHitList,
+    retrievalDebug,
     intent,
   } = await buildChatSystemPrompt({
     supabase,
@@ -4118,7 +4120,8 @@ async function handleChat(
   const groundingPhraseRe =
     /\b(using|use|from|based on|leveraging|across|grounded in|pulling from)\s+(my|the|these|those|our)\b/i;
   const hasGroundingPhrase = groundingPhraseRe.test(content || "");
-  const kiHits = (pack as any)?.retrievalMeta?.ki_count ?? 0;
+  // REAL KI count from retrieveResourceContext — not the empty placeholder.
+  const kiHits = kiHitList.length;
   const { mode, reason: modeReason } = classifyLibraryMode({
     intent: intent.intent,
     resourceHits: resourceHits.length,
