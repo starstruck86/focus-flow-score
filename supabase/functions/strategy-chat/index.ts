@@ -3856,6 +3856,8 @@ async function buildChatSystemPrompt(args: {
   prompt: string;
   workingThesis: WorkingThesisState | null;
   resourceHits: Array<{ id: string; title: string }>;
+  kiHits: Array<{ id: string; title: string; chapter: string | null }>;
+  retrievalDebug: any | null;
   intent: IntentResult;
   modeLockBlock: string;
 }> {
