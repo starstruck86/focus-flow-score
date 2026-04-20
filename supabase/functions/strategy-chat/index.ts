@@ -2434,11 +2434,13 @@ function countSentences(text: string): number {
 function enforceModeLock(
   rawText: string,
   intent: IntentResult,
+  opts: { resourceHits?: Array<{ id: string; title: string }> } = {},
 ): GuardResult {
   let text = rawText.trim();
   const violations: string[] = [];
   let modified = false;
   let shouldRegenerate = false;
+  const resourceHits = opts.resourceHits ?? [];
 
   if (!text) {
     return { text, modified: false, violations: ["empty"], shouldRegenerate: true };
