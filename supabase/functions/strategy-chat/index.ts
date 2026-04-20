@@ -760,7 +760,7 @@ function resolveLLMRouteForMode(
   const isCreation = intent === "creation";
   const wantsClaude = mode === "partial" || isCreation;
 
-  if (wantsClaude && PROVIDER_HEALTH.anthropic !== false) {
+  if (wantsClaude && PROVIDER_HEALTH.anthropicDirect) {
     // Swap primary↔fallback so Claude leads, OpenAI catches
     return {
       ...base,
