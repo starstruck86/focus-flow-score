@@ -2756,11 +2756,37 @@ const SITUATION_SHAPE: Array<{ key: RegExp; check: (body: string) => string | nu
   },
   {
     key: /\brenewal\b/i,
+    // Renewal passes if EITHER:
+    //   Path A — ≥2 explicit renewal/retention vocabulary hits, OR
+    //   Path B — ≥1 renewal-shape hit AND ≥2 economic-consequence signals
+    //            (CFO-native renewal framing: payback, ROI, cost of inaction,
+    //             $-figures, exposure, savings, etc.)
+    // This prevents false-positives on strong CFO+Renewal answers without
+    // weakening the appendix-theater protection (generic prose has neither).
     check: (body) => {
-      const hasRetention = /\b(retention|renew|expansion|upsell|churn|risk|consequence|usage|adoption|value realized)\b/i;
-      const hits = (body.match(new RegExp(hasRetention.source, "gi")) || []).length;
-      if (hits < 2) return "renewal_missing_retention_framing";
-      return null;
+      const retentionRe = /\b(retention|renew|expansion|upsell|churn|risk|consequence|usage|adoption|value realized)\b/gi;
+      const retentionHits = (body.match(retentionRe) || []).length;
+      if (retentionHits >= 2) return null;
+
+      const econSignals: RegExp[] = [
+        /\broi\b/i,
+        /\bpayback\b/i,
+        /\bcost of inaction\b/i,
+        /\bbudget\b/i,
+        /\bdownside\b/i,
+        /\bfinancial impact\b/i,
+        /\bmargin\b/i,
+        /\bcash\b/i,
+        /\b\$[\d,]/,
+        /\b(risk|compliance|revenue)\s+exposure\b/i,
+        /\brevenue at risk\b/i,
+        /\bcost\s+(reduction|avoid|avoidance|saving|savings)\b/i,
+        /\bnet\s+(savings|cost|new arr)\b/i,
+      ];
+      const econHits = econSignals.reduce((n, re) => n + (re.test(body) ? 1 : 0), 0);
+      // Path B: at least 1 renewal-shape hit + ≥2 economic-consequence signals.
+      if (retentionHits >= 1 && econHits >= 2) return null;
+      return "renewal_missing_retention_framing";
     },
   },
   {
