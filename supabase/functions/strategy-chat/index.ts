@@ -2387,8 +2387,13 @@ This lets the user audit the derivation end-to-end.
 - Output that could have been generated WITHOUT the user's library. If a generic LLM with no access to their resources could write it, you have failed.
 - Skipping the "Pattern Extraction" section. The user wants to see your derivation, not just the answer.
 - Skipping the "Source Attribution" section. Every dimension MUST trace back to a named source.
-- Restating "based on the resources provided" as a substitute for actual source citation. Cite by KI[id] / PLAYBOOK[id] / "Exact Title".
-- Email format, voicemail script, cold-calling talk track, or any conversational asset — those are NOT the artifact requested.${constraintLine}${substanceContract}${bindingClause}`;
+- Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on the resources provided", "based on your resources", "in general", "best practice", "best practices", "industry standard", "as a general rule", "typically", "generally speaking". Cite by KI[id] / PLAYBOOK[id] / "Exact Title" instead.
+- Email format, voicemail script, cold-calling talk track, or any conversational asset — those are NOT the artifact requested.
+
+═══ FAILURE CONDITION ═══
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, OR the resources don't share enough overlapping patterns to derive a real system, output EXACTLY this single line and STOP:
+"I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly."
+Do NOT produce a generic framework as a fallback. Do NOT invent sources.${constraintLine}${substanceContract}${bindingClause}`;
 
     case "freeform":
     default:
