@@ -4224,6 +4224,19 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             verified: audit.verifiedTitles,
           }
           : undefined,
+        routing_decision: {
+          mode,
+          mode_reason: modeReason,
+          intent: intent.intent,
+          resource_hits: resourceHits.length,
+          ki_hits: kiHits,
+          intended_provider: route.primaryProvider,
+          intended_model: route.model,
+          actual_provider: result.provider,
+          actual_model: result.model,
+          fallback_used: result.fallbackUsed,
+          routing_reason: route._routingReason,
+        },
       },
     });
     // Cross-thread resource memory: persist VERIFIED citations only.
@@ -4441,6 +4454,19 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 verified: audit.verifiedTitles,
               }
               : undefined,
+            routing_decision: {
+              mode,
+              mode_reason: modeReason,
+              intent: intent.intent,
+              resource_hits: resourceHits.length,
+              ki_hits: kiHits,
+              intended_provider: route.primaryProvider,
+              intended_model: route.model,
+              actual_provider: result.provider,
+              actual_model: result.model,
+              fallback_used: false,
+              routing_reason: route._routingReason,
+            },
           },
         });
         await supabase.from("strategy_threads").update({
