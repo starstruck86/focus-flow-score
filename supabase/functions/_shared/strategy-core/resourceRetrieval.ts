@@ -779,7 +779,186 @@ export async function retrieveResourceContext(
     }
   }
 
-  // ── Rank: exact > near_exact > prior_use > entity_linked > category ──
+  // ── 6. TOPIC-SCOPE retrieval ─────────────────────────────────
+  // Natural-language asks like "use my cold-call resources" or
+  // "biotech M&A" never produce a quoted phrase or a Capitalized
+  // span, so the prior branches saw zero hits against a 700+
+  // resource library. Topic inference resolves the gap by mapping
+  // the message onto canonical scope keys, then querying:
+  //   • resources.tags  (e.g. `skill:cold_calling`, `context:cold_call`)
+  //   • resources.title (substring match)
+  //   • resources.content (last-resort, narrowly capped)
+  // Tag matches are the strongest signal — they're curated.
+  const topics = inferTopicScopes(userMessage);
+  const askedForTopic = topics.length > 0;
+  if (askedForTopic && all.length < HARD_LIMIT) {
+    // Build the tag candidates we expect on resources for these topics.
+    // Both `skill:<topic>` and `context:<topic>` patterns exist in prod.
+    const tagCandidates: string[] = [];
+    for (const t of topics) {
+      tagCandidates.push(`skill:${t}`);
+      tagCandidates.push(`context:${t}`);
+      tagCandidates.push(`industry_${t}`);
+      tagCandidates.push(t);
+    }
+    try {
+      const { data } = await supabase
+        .from("resources")
+        .select(SAFE_FIELDS)
+        .eq("user_id", userId)
+        .overlaps("tags", tagCandidates)
+        .order("updated_at", { ascending: false })
+        .limit(6);
+      push(
+        data,
+        "topic_tag",
+        (r: any) => {
+          const matched = (r.tags || []).filter((tag: string) =>
+            tagCandidates.includes(tag)
+          );
+          return `Tagged ${
+            matched.slice(0, 3).join(", ") || topics.slice(0, 2).join(", ")
+          }`;
+        },
+      );
+    } catch (e) {
+      console.warn("[resourceRetrieval] topic tag query failed:", (e as Error).message);
+    }
+
+    // Title substring on each topic word (cold_calling → "cold call").
+    for (const topic of topics) {
+      if (all.length >= HARD_LIMIT) break;
+      const human = topic.replace(/_/g, " ");
+      try {
+        const { data } = await supabase
+          .from("resources")
+          .select(SAFE_FIELDS)
+          .eq("user_id", userId)
+          .ilike("title", `%${escapeIlike(human)}%`)
+          .order("updated_at", { ascending: false })
+          .limit(4);
+        push(data, "topic_title", () => `Title contains "${human}"`);
+      } catch (e) {
+        console.warn("[resourceRetrieval] topic title query failed:", (e as Error).message);
+      }
+    }
+
+    // Body fallback: only if we still have very few hits, search content.
+    if (all.length < 3) {
+      for (const topic of topics) {
+        if (all.length >= HARD_LIMIT) break;
+        const human = topic.replace(/_/g, " ");
+        const escaped = `%${escapeIlike(human)}%`;
+        try {
+          const { data } = await supabase
+            .from("resources")
+            .select(SAFE_FIELDS + ",content")
+            .eq("user_id", userId)
+            .ilike("content", escaped)
+            .limit(3);
+          const lean = (data || []).map((r: any) => {
+            const snip = snippetAround(r.content, human);
+            const { content: _drop, ...rest } = r;
+            return { ...rest, _snip: snip };
+          });
+          push(
+            lean,
+            "topic_content",
+            () => `Topic "${human}" appears in body`,
+            (r: any) => r._snip,
+          );
+        } catch (e) {
+          console.warn("[resourceRetrieval] topic content query failed:", (e as Error).message);
+        }
+      }
+    }
+  }
+
+  // ── 7. Knowledge Item retrieval (topic chapter + tag + title) ─
+  // KIs are the second pillar of grounding. We pull a small,
+  // ranked set keyed on the same inferred topics so the model sees
+  // both resource hits and tactical KIs and can derive from both.
+  const kiAll: RetrievedKI[] = [];
+  const kiSeen = new Set<string>();
+  const pushKI = (
+    rows: any[] | null | undefined,
+    kind: RetrievedKI["matchKind"],
+    reason: (r: any) => string,
+  ) => {
+    if (!rows) return;
+    for (const r of rows) {
+      if (!r?.id || kiSeen.has(r.id)) continue;
+      kiSeen.add(r.id);
+      kiAll.push({
+        id: r.id,
+        title: r.title || "",
+        chapter: r.chapter ?? null,
+        knowledge_type: r.knowledge_type ?? null,
+        tactic_summary: r.tactic_summary ?? null,
+        matchKind: kind,
+        matchReason: reason(r),
+      });
+    }
+  };
+
+  if (askedForTopic) {
+    // Chapter match — strongest KI signal because chapters are canonical.
+    try {
+      const { data } = await supabase
+        .from("knowledge_items")
+        .select("id,title,chapter,knowledge_type,tactic_summary,tags")
+        .eq("user_id", userId)
+        .in("chapter", topics)
+        .order("confidence_score", { ascending: false })
+        .limit(8);
+      pushKI(data, "topic_chapter", (r: any) => `Chapter ${r.chapter}`);
+    } catch (e) {
+      console.warn("[resourceRetrieval] KI chapter query failed:", (e as Error).message);
+    }
+
+    // Tag match — KI tags use the same vocabulary as resource tags.
+    if (kiAll.length < 8) {
+      const tagCandidates: string[] = [];
+      for (const t of topics) {
+        tagCandidates.push(`skill:${t}`, `context:${t}`, t);
+      }
+      try {
+        const { data } = await supabase
+          .from("knowledge_items")
+          .select("id,title,chapter,knowledge_type,tactic_summary,tags")
+          .eq("user_id", userId)
+          .overlaps("tags", tagCandidates)
+          .order("confidence_score", { ascending: false })
+          .limit(6);
+        pushKI(data, "topic_tag", (r: any) => `Tagged ${topics.slice(0, 2).join(", ")}`);
+      } catch (e) {
+        console.warn("[resourceRetrieval] KI tag query failed:", (e as Error).message);
+      }
+    }
+
+    // Title fallback — last resort, very narrow.
+    if (kiAll.length < 4) {
+      for (const topic of topics) {
+        if (kiAll.length >= 8) break;
+        const human = topic.replace(/_/g, " ");
+        try {
+          const { data } = await supabase
+            .from("knowledge_items")
+            .select("id,title,chapter,knowledge_type,tactic_summary")
+            .eq("user_id", userId)
+            .ilike("title", `%${escapeIlike(human)}%`)
+            .limit(3);
+          pushKI(data, "topic_title", () => `Title contains "${human}"`);
+        } catch (e) {
+          console.warn("[resourceRetrieval] KI title query failed:", (e as Error).message);
+        }
+      }
+    }
+  }
+
+  const kiHits = kiAll.slice(0, 10);
+
+  // ── Rank: exact > near_exact > prior_use > entity_linked > topic_tag > category ──
   // Inside each tier, prefer rows whose resource_type matches the
   // user's inferred category. This is the fix for "executive business
   // case template" returning transcripts ahead of the actual template.
@@ -795,8 +974,11 @@ export async function retrieveResourceContext(
     opportunity_linked: 4,
     phrase_in_title: 5,
     description_match: 6,
+    topic_tag: 6,
+    topic_title: 7,
     content_match: 7,
-    category_intent: 8,
+    topic_content: 8,
+    category_intent: 9,
   };
   // Map inferred categories → resource_type values that should be boosted.
   const CATEGORY_TYPE_BOOST: Record<string, string[]> = {
@@ -824,17 +1006,45 @@ export async function retrieveResourceContext(
 
   const hits = all.slice(0, HARD_LIMIT);
 
-  return {
+  const contextBlock = renderResourceContextBlock({
     hits,
+    kiHits,
     userAskedForResource: askedFor,
+    userAskedForTopic: askedForTopic,
     extractedPhrases: phrases,
     inferredCategories: categories,
-    contextBlock: renderResourceContextBlock({
-      hits,
-      userAskedForResource: askedFor,
-      extractedPhrases: phrases,
-      inferredCategories: categories,
-    }),
+    inferredTopics: topics,
+  });
+
+  const debug = {
+    extractedPhrases: phrases,
+    inferredCategories: categories,
+    inferredTopics: topics,
+    resourceHits: hits.map((h) => ({
+      id: h.id,
+      title: h.title,
+      matchKind: h.matchKind,
+      matchReason: h.matchReason,
+    })),
+    kiHits: kiHits.map((k) => ({
+      id: k.id,
+      title: k.title,
+      chapter: k.chapter,
+      matchKind: k.matchKind,
+      matchReason: k.matchReason,
+    })),
+  };
+
+  return {
+    hits,
+    kiHits,
+    userAskedForResource: askedFor,
+    userAskedForTopic: askedForTopic,
+    extractedPhrases: phrases,
+    inferredCategories: categories,
+    inferredTopics: topics,
+    contextBlock,
+    debug,
   };
 }
 
@@ -851,40 +1061,67 @@ export async function retrieveResourceContext(
  */
 export function renderResourceContextBlock(args: {
   hits: RetrievedResource[];
+  /** New: KI hits to surface alongside resource hits. */
+  kiHits?: RetrievedKI[];
   userAskedForResource: boolean;
+  /** New: signals that a topic-scope ask drove retrieval (cold call, biotech…). */
+  userAskedForTopic?: boolean;
   extractedPhrases: string[];
   inferredCategories: string[];
+  /** New: canonical topic scopes that drove retrieval. */
+  inferredTopics?: string[];
 }): string {
-  const { hits, userAskedForResource: asked, extractedPhrases, inferredCategories } = args;
+  const {
+    hits,
+    kiHits = [],
+    userAskedForResource: asked,
+    userAskedForTopic: askedTopic = false,
+    extractedPhrases,
+    inferredCategories,
+    inferredTopics = [],
+  } = args;
 
-  if (!asked && hits.length === 0) return "";
+  // Emit a block whenever the user asked for a resource OR a topic OR
+  // we returned any hits / KIs at all. Otherwise stay silent.
+  const haveAnything = hits.length > 0 || kiHits.length > 0;
+  if (!asked && !askedTopic && !haveAnything) return "";
 
   const header = "=== LIBRARY RESOURCES (resources table — exact retrievals only) ===";
 
-  if (hits.length === 0) {
+  if (!haveAnything) {
     const search = [
       ...extractedPhrases.map((p) => `"${p}"`),
       ...inferredCategories.map((c) => `category:${c}`),
+      ...inferredTopics.map((t) => `topic:${t}`),
     ].join(", ") || "(no specific phrase extracted)";
     return [
       header,
-      `No matching resource was found in the user's library.`,
+      `No matching resource or KI was found in the user's library for this topic.`,
       `Searched for: ${search}.`,
       ``,
-      `RULES (mandatory):`,
-      `- Do NOT invent a template, calculator, example, playbook, or framework that was not retrieved here.`,
-      `- Tell the user explicitly: "I don't see a matching resource in your library."`,
-      `- Then offer to either (a) build one from scratch with them, or (b) search a different name they have in mind.`,
-      `- Do NOT pretend a resource exists. Do NOT cite a title that is not listed above.`,
+      `BEHAVIOR (mandatory — do NOT refuse):`,
+      `- Open with ONE short line stating what was searched and that nothing matched (e.g. "I scanned your library for ${
+        inferredTopics[0] ? inferredTopics[0].replace(/_/g, " ") : "this topic"
+      } — nothing came back.").`,
+      `- Then produce your best first-pass answer using general operator reasoning. Mark assumptions clearly.`,
+      `- Do NOT invent a specific template/calculator/playbook by name.`,
+      `- End with ONE short clarifying question only if it would materially sharpen the next pass.`,
     ].join("\n");
   }
 
   const lines: string[] = [header];
   lines.push(
-    `Retrieved ${hits.length} resource${hits.length === 1 ? "" : "s"} from the user's library. ` +
-      `Cite them by EXACT title in the form RESOURCE["<title>"] when you reference them. ` +
+    `Retrieved ${hits.length} resource${hits.length === 1 ? "" : "s"}${
+      kiHits.length > 0 ? ` and ${kiHits.length} KI${kiHits.length === 1 ? "" : "s"}` : ""
+    } from the user's library. ` +
+      `Cite resources by EXACT title in the form RESOURCE["<title>"]; cite KIs as KI[<short id>]. ` +
       `Do NOT invent additional titles.`,
   );
+  if (inferredTopics.length > 0) {
+    lines.push(
+      `Topic scope inferred from the user's message: ${inferredTopics.join(", ")}.`,
+    );
+  }
   lines.push("");
 
   const pickedHits = hits.filter((h) => h.matchKind === "picked");
@@ -943,6 +1180,21 @@ export function renderResourceContextBlock(args: {
   if (otherHits.length > 0) {
     if (hasPicked) lines.push(`### Other retrieved (secondary — for context only, do NOT pivot to these)`);
     for (const h of otherHits) renderHit(h, false);
+    lines.push("");
+  }
+
+  // ── Knowledge Items block ──
+  if (kiHits.length > 0) {
+    lines.push(`### KNOWLEDGE ITEMS (KIs — tactical patterns from your library)`);
+    for (const k of kiHits) {
+      const idShort = k.id.slice(0, 8);
+      const chap = k.chapter ? ` [${k.chapter}]` : "";
+      lines.push(`- KI[${idShort}]${chap} "${k.title}" — ${k.matchReason}`);
+      if (k.tactic_summary) {
+        const t = k.tactic_summary.replace(/\s+/g, " ").trim().slice(0, 220);
+        if (t) lines.push(`    ${t}`);
+      }
+    }
     lines.push("");
   }
 
