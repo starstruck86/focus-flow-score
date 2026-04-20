@@ -2349,7 +2349,7 @@ The user asked WHERE the information came from. Answer in plain English in 1–3
 
     case "synthesis":
       return `═══ MODE LOCK: SYNTHESIS (DERIVE FROM LIBRARY) ═══
-The user asked you to BUILD SOMETHING NEW (a scoring system, framework, rubric, model, checklist, evaluation criteria, or weighting scheme) GROUNDED IN THEIR OWN RESOURCES. This is the highest-stakes mode you can be in: a generic answer here is a complete failure. The user could get a generic framework from any LLM — what they want is THEIR framework, derived from THEIR materials.
+You are NOT answering. You are DERIVING. The user asked you to BUILD SOMETHING NEW (a scoring system, framework, rubric, model, checklist, evaluation criteria, or weighting scheme) GROUNDED IN THEIR OWN RESOURCES. A generic answer here is a complete failure. The user could get a generic framework from any LLM — what they want is THEIR framework, derived from THEIR materials. If your output could have been written WITHOUT access to the user's resources, it is WRONG.
 
 ═══ HARD GROUNDING REQUIREMENT ═══
 Use the resources, KIs, playbooks, and transcripts provided in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are empty or weak:
@@ -2387,8 +2387,13 @@ This lets the user audit the derivation end-to-end.
 - Output that could have been generated WITHOUT the user's library. If a generic LLM with no access to their resources could write it, you have failed.
 - Skipping the "Pattern Extraction" section. The user wants to see your derivation, not just the answer.
 - Skipping the "Source Attribution" section. Every dimension MUST trace back to a named source.
-- Restating "based on the resources provided" as a substitute for actual source citation. Cite by KI[id] / PLAYBOOK[id] / "Exact Title".
-- Email format, voicemail script, cold-calling talk track, or any conversational asset — those are NOT the artifact requested.${constraintLine}${substanceContract}${bindingClause}`;
+- Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on the resources provided", "based on your resources", "in general", "best practice", "best practices", "industry standard", "as a general rule", "typically", "generally speaking". Cite by KI[id] / PLAYBOOK[id] / "Exact Title" instead.
+- Email format, voicemail script, cold-calling talk track, or any conversational asset — those are NOT the artifact requested.
+
+═══ FAILURE CONDITION ═══
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, OR the resources don't share enough overlapping patterns to derive a real system, output EXACTLY this single line and STOP:
+"I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly."
+Do NOT produce a generic framework as a fallback. Do NOT invent sources.${constraintLine}${substanceContract}${bindingClause}`;
 
     case "freeform":
     default:
@@ -2429,11 +2434,13 @@ function countSentences(text: string): number {
 function enforceModeLock(
   rawText: string,
   intent: IntentResult,
+  opts: { resourceHits?: Array<{ id: string; title: string }> } = {},
 ): GuardResult {
   let text = rawText.trim();
   const violations: string[] = [];
   let modified = false;
   let shouldRegenerate = false;
+  const resourceHits = opts.resourceHits ?? [];
 
   if (!text) {
     return { text, modified: false, violations: ["empty"], shouldRegenerate: true };
@@ -2886,6 +2893,85 @@ function enforceModeLock(
       }
       break;
     }
+
+    case "synthesis": {
+      // FAILURE CONDITION: <2 resources retrieved → replace with honest ask.
+      // This is the strongest guard: even if the model produced a generic
+      // framework, we override it because by definition no real derivation
+      // could have happened.
+      if (resourceHits.length < 2) {
+        text =
+          "I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly.";
+        modified = true;
+        violations.push("synthesis_insufficient_resources");
+        console.log(
+          `[mode-lock] synthesis_insufficient_resources hits=${resourceHits.length}`,
+        );
+        break;
+      }
+
+      // Strip forbidden generic-fallback phrases. These signal the model
+      // bailed out of derivation and is hand-waving with industry boilerplate.
+      const FORBIDDEN_GENERIC: Array<{ re: RegExp; tag: string }> = [
+        { re: /\bbased on (the |your )?resources( provided)?\b[,.]?\s*/gi, tag: "synth_based_on_resources" },
+        { re: /\bin general,?\s+/gi, tag: "synth_in_general" },
+        { re: /\b(industry\s+)?best\s+practices?\b[,.]?\s*/gi, tag: "synth_best_practice" },
+        { re: /\bindustry\s+standard\b[,.]?\s*/gi, tag: "synth_industry_standard" },
+        { re: /\bas a general rule,?\s+/gi, tag: "synth_general_rule" },
+        { re: /\bgenerally speaking,?\s+/gi, tag: "synth_generally_speaking" },
+        { re: /\btypically,?\s+/gi, tag: "synth_typically" },
+      ];
+      let genericHits = 0;
+      for (const { re, tag } of FORBIDDEN_GENERIC) {
+        const before = text;
+        text = text.replace(re, "");
+        if (text !== before) {
+          genericHits += 1;
+          violations.push(`stripped_${tag}`);
+        }
+      }
+      if (genericHits > 0) {
+        text = text.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+        modified = true;
+      }
+
+      // STRUCTURAL GUARD: require all 5 sections + a table + cited sources.
+      // If any are missing, flag for one strict regeneration.
+      const hasPattern = /\bpattern\s+extraction\b/i.test(text);
+      const hasDimensions = /\bdimensions?\b/i.test(text) && /\|.*\|.*\|/.test(text);
+      const hasWeighting = /\bweight(ing)?\s+rationale\b/i.test(text);
+      const hasExample = /\bexample\s+scoring\b/i.test(text);
+      const hasAttribution = /\bsource\s+attribution\b/i.test(text);
+      const hasCitations = /(KI\[[a-z0-9_-]+\]|PLAYBOOK\[[a-z0-9_-]+\]|RESOURCE\[[a-z0-9_-]+\])/i.test(text);
+
+      if (!hasPattern) { violations.push("synthesis_missing_pattern_extraction"); shouldRegenerate = true; }
+      if (!hasDimensions) { violations.push("synthesis_missing_dimensions_table"); shouldRegenerate = true; }
+      if (!hasWeighting) { violations.push("synthesis_missing_weighting_rationale"); shouldRegenerate = true; }
+      if (!hasExample) { violations.push("synthesis_missing_example_scoring"); shouldRegenerate = true; }
+      if (!hasAttribution) { violations.push("synthesis_missing_source_attribution"); shouldRegenerate = true; }
+      if (!hasCitations) { violations.push("synthesis_missing_source_citations"); shouldRegenerate = true; }
+
+      // Equal-weight detector: extract weight cells from the table and flag
+      // if all weights are identical (e.g. all 20% across 5 dims).
+      const weightMatches = Array.from(text.matchAll(/\|\s*(\d{1,3})\s*%\s*\|/g)).map((m) => parseInt(m[1], 10));
+      if (weightMatches.length >= 3) {
+        const allEqual = weightMatches.every((w) => w === weightMatches[0]);
+        if (allEqual) {
+          violations.push("synthesis_equal_weights");
+          shouldRegenerate = true;
+          console.log(`[mode-lock] synthesis_equal_weights weights=${JSON.stringify(weightMatches)}`);
+        }
+      }
+
+      // Generic-framework fingerprint: if the model fell back to opener/
+      // pitch/close stages, that's a generic-LLM tell. Flag for regen.
+      if (/\b(opener|pitch|close)\s*\/\s*(opener|pitch|close)\s*\/\s*(opener|pitch|close)\b/i.test(text) ||
+          /\b(discovery|demo|close)\s*\/\s*(discovery|demo|close)\s*\/\s*(discovery|demo|close)\b/i.test(text)) {
+        violations.push("synthesis_generic_stage_scaffold");
+        shouldRegenerate = true;
+      }
+      break;
+    }
   }
 
   return { text, modified, violations, shouldRegenerate };
@@ -3276,6 +3362,47 @@ async function handleChat(
   });
   const accountId: string | null = pack.account?.id ?? null;
 
+  // ── SYNTHESIS PRE-GEN SHORT-CIRCUIT ──
+  // If the user asked us to derive a system from their library but we
+  // retrieved fewer than 2 usable resources, do NOT call the LLM. By
+  // definition no real derivation is possible, and any output we'd
+  // generate would be a generic-LLM fallback (the exact failure mode
+  // we're protecting against). Persist + return the canned ask.
+  if (intent.intent === "synthesis" && resourceHits.length < 2) {
+    const cannedText =
+      "I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly.";
+    console.log(
+      `[synthesis] pre-gen short-circuit: hits=${resourceHits.length} — skipping LLM call`,
+    );
+    await supabase.from("strategy_messages").insert({
+      thread_id: threadId,
+      user_id: userId,
+      role: "assistant",
+      message_type: "chat",
+      provider_used: "synthesis-guard",
+      model_used: "synthesis-guard",
+      fallback_used: false,
+      latency_ms: 0,
+      content_json: {
+        text: cannedText,
+        sources_used: pack.sourceCount,
+        retrieval_meta: pack.retrievalMeta,
+        model_used: "synthesis-guard",
+        provider_used: "synthesis-guard",
+        fallback_used: false,
+        synthesis_short_circuit: { reason: "insufficient_resources", hits: resourceHits.length },
+      },
+    });
+    return new Response(
+      JSON.stringify({
+        text: cannedText,
+        provider: "synthesis-guard",
+        model: "synthesis-guard",
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
   const messages = [
     { role: "system" as const, content: systemPrompt },
     ...pack.recentMessages.map((m) => ({
@@ -3311,7 +3438,7 @@ async function handleChat(
     // Non-streaming fallback
     const { patch, visible: rawVisible } = extractThesisUpdate(result.text || "");
     // Mode-lock guard FIRST — strip drift / forbidden tail / hard-truncate.
-    const guarded = enforceModeLock(rawVisible, intent);
+    const guarded = enforceModeLock(rawVisible, intent, { resourceHits });
     if (guarded.modified || guarded.violations.length) {
       console.log(
         `[mode-lock] non-stream intent=${intent.intent} violations=${
@@ -3518,7 +3645,7 @@ async function handleChat(
         // Step 2: MODE-LOCK GUARD — strip forbidden tails, truncate
         // sentence-cap violations, prepend missing sentinels. This
         // happens BEFORE the user sees a single character.
-        const guarded = enforceModeLock(rawVisible, intent);
+        const guarded = enforceModeLock(rawVisible, intent, { resourceHits });
         if (guarded.modified || guarded.violations.length) {
           console.log(
             `[mode-lock] stream intent=${intent.intent} violations=${
