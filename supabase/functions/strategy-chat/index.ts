@@ -4339,11 +4339,12 @@ async function handleChat(
   const hasGroundingPhrase = groundingPhraseRe.test(content || "");
   // REAL KI count from retrieveResourceContext — not the empty placeholder.
   const kiHits = kiHitList.length;
-  const { mode, reason: modeReason } = classifyLibraryMode({
+  const { mode, reason: modeReason, shortFormKind } = classifyLibraryMode({
     intent: intent.intent,
     resourceHits: resourceHits.length,
     kiHits,
     hasGroundingPhrase,
+    userText: content || "",
   });
 
   // Mode-aware re-routing
@@ -4351,14 +4352,36 @@ async function handleChat(
   if (forceFallback) modeRoute._smokeTestForceFail = true;
   route = modeRoute;
   console.log(
-    `[mode] intent=${intent.intent} mode=${mode} reason=${modeReason} provider=${route.primaryProvider} model=${route.model} routing=${modeRoute._routingReason}`,
+    `[mode] intent=${intent.intent} mode=${mode} reason=${modeReason} provider=${route.primaryProvider} model=${route.model} routing=${modeRoute._routingReason}${shortFormKind ? ` sf_kind=${shortFormKind}` : ""}`,
   );
 
   // Inject a small thinking-path preamble into the system prompt for grounded
   // modes so the assistant opens with what it found and what it's extending.
   // The preamble is appended; the model must obey the original mode-lock too.
   let effectiveSystemPrompt = systemPrompt;
-  if (mode === "strong" || mode === "partial" || mode === "thin") {
+  if (mode === "short_form") {
+    // SHORT-FORM mode-lock: tight output shape, no synthesis scaffolding.
+    const shapeRule = shortFormKind === "subject_lines"
+      ? "Return 8–12 subject lines, numbered, one per line. Group only if it materially helps. NO long explanation block. NO generic filler. Each subject line ≤ 70 chars."
+      : shortFormKind === "opener"
+      ? "Return 3–5 opener options, numbered. Each opener ≤ 2 sentences. After each, ONE-LINE rationale (≤ 18 words). NO long preamble, NO synthesis sections."
+      : shortFormKind === "hook_lines"
+      ? "Return 5–8 hook lines, numbered. Each ≤ 1 sentence. NO preamble, NO closing summary."
+      : shortFormKind === "voicemail"
+      ? "Return 2–3 voicemail scripts, numbered. Each ≤ 25 seconds spoken (~60 words). One-line rationale per option."
+      : shortFormKind === "talk_track_snippet"
+      ? "Return 2–3 short talk-track options, numbered. Each ≤ 3 sentences. One-line rationale per option."
+      : "Return 3–5 short options, numbered. Each ≤ 2 sentences. One-line rationale per option.";
+    const preamble = `
+
+═══ SHORT-FORM MODE (kind=${shortFormKind}) ═══
+You found ${resourceHits.length} resource hit(s) and ${kiHits} KI hit(s).
+USE the library voice/angles for grounding, but DO NOT produce a long synthesis structure.
+${shapeRule}
+If grounded vs extended distinction is material, tag each option [Grounded] or [Extended].
+Forbidden: long preambles, multi-section frameworks, "let me walk you through" openers.`;
+    effectiveSystemPrompt = `${systemPrompt}${preamble}`;
+  } else if (mode === "strong" || mode === "partial" || mode === "thin") {
     const preamble = `
 
 ═══ LIBRARY-AWARENESS PROTOCOL (mode=${mode.toUpperCase()}) ═══
