@@ -4502,6 +4502,14 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           fallback_used: result.fallbackUsed,
           routing_reason: route._routingReason,
           retrieval_debug: retrievalDebug ?? null,
+          short_form_diagnostics: mode === "short_form" ? {
+            kind: shortFormKind ?? null,
+            prompt_chars: (content || "").length,
+            system_prompt_chars: effectiveSystemPrompt.length,
+            max_tokens_cap: route.maxTokens,
+            output_chars: (auditedVisible || "").length,
+            latency_ms: result.latencyMs,
+          } : null,
         },
       },
     });
