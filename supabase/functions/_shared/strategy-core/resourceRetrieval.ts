@@ -1183,6 +1183,21 @@ export function renderResourceContextBlock(args: {
     lines.push("");
   }
 
+  // ── Knowledge Items block ──
+  if (kiHits.length > 0) {
+    lines.push(`### KNOWLEDGE ITEMS (KIs — tactical patterns from your library)`);
+    for (const k of kiHits) {
+      const idShort = k.id.slice(0, 8);
+      const chap = k.chapter ? ` [${k.chapter}]` : "";
+      lines.push(`- KI[${idShort}]${chap} "${k.title}" — ${k.matchReason}`);
+      if (k.tactic_summary) {
+        const t = k.tactic_summary.replace(/\s+/g, " ").trim().slice(0, 220);
+        if (t) lines.push(`    ${t}`);
+      }
+    }
+    lines.push("");
+  }
+
   if (hasPicked) {
     const pickedTitles = pickedHits.map((h) => `"${h.title}"`).join(", ");
     lines.push(
