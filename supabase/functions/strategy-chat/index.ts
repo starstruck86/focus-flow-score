@@ -2260,6 +2260,49 @@ function buildModeLockBlock(intent: IntentResult): string {
       : `\n- ECONOMIC PRESSURE LAYER (REQUIRED): Anchor the output in money + time. If you have a real number/date in context, use it. If you don't, write a directional sentence WITHOUT placeholders (e.g. "Delaying this risks pushing implementation into next quarter and missing the current budget window") OR call out exactly what number/date you'd need from the rep in one short line. NEVER emit [BRACKETED_NUMBER], $[…], %[…] in this mode.`)
     : "";
 
+  // ── APPLICATION LAYER (mandatory after synthesis / creation / evaluation) ──
+  // The output is not "done" when it's correct — it must be adapted to the
+  // real-world situation, audience, and industry. We append this block to
+  // every grounded mode and a post-gen guard verifies the appendix exists.
+  const isGroundedMode = kind === "synthesis" || kind === "creation" || kind === "evaluation";
+  const applicationLayer = isGroundedMode
+    ? `
+
+═══ APPLICATION LAYER (MANDATORY — RUNS AFTER YOUR PRIMARY OUTPUT) ═══
+After your locked-mode output is complete, you MUST adapt it to the real-world context. A correct-but-unusable answer is a FAILURE.
+
+STEP 1 — DETECT CONTEXT (infer from the thread, account, and the user's message):
+- Situation: cold call | discovery | renewal | objection | pricing pushback | exec meeting | internal alignment | board prep | champion enablement | other
+- Audience (WHO the output is FOR — not the user): CFO | VP Sales | Champion | Procurement | Technical buyer | Founder | Board | End user | other
+- Industry: SaaS | Healthcare | Manufacturing | Financial Services | Retail | other
+
+STEP 2 — ADAPT THE PRIMARY OUTPUT to that audience/situation/industry. The asset/system/critique above MUST already reflect this adaptation (audience-appropriate language, situation-appropriate structure, industry-appropriate stakes). Audience adaptation is the highest priority:
+- CFO → ROI, cost of inaction, payback period, budget timing, risk
+- VP Sales → pipeline impact, conversion, forecast, velocity
+- Champion → internal selling angles, political cover, proof points they can forward
+- Procurement → pricing structure, contract terms, vendor risk
+- Technical buyer → feasibility, integration risk, implementation effort
+- Founder → narrative, differentiation, strategic leverage
+- Board → outcomes in dollars, strategic risk, decision clarity
+
+STEP 3 — APPEND THIS EXACT APPENDIX at the very end of your response (use this header verbatim):
+
+**Application**
+- Situation: <one short phrase>
+- Audience: <role + why this audience changes the output>
+- Industry: <industry + the language/stakes that come with it>
+
+Then 2–4 concrete bullets explaining HOW the output above was adapted:
+- How the audience shaped tone, framing, and which proof points landed
+- How the situation shaped structure, length, or sequence
+- How the industry shaped vocabulary and stakes
+
+Rules:
+- Be CONCRETE. "Adapted for a CFO" is not enough — say WHAT changed (e.g. "Led with payback period instead of features because CFOs decide on cash, not capability").
+- The appendix is REQUIRED on every synthesis / creation / evaluation response. Server-side guard will FLAG missing appendices for regeneration.
+- If you genuinely cannot infer the audience from context, ask the user in ONE short line at the very end (e.g. "Who is this going to — CFO or VP Sales? I'll re-tune.") instead of guessing.`
+    : "";
+
   switch (kind) {
     case "bootstrap":
       return `═══ MODE LOCK: BOOTSTRAP (ORIENTATION) ═══
@@ -2434,7 +2477,7 @@ This lets the user audit the derivation end-to-end.
 ═══ FAILURE CONDITION ═══
 If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, OR the resources don't share enough overlapping patterns to derive a real system, output EXACTLY this single line and STOP:
 "I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly."
-Do NOT produce a generic framework as a fallback. Do NOT invent sources.${constraintLine}${substanceContract}${bindingClause}`;
+Do NOT produce a generic framework as a fallback. Do NOT invent sources.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
 
     case "creation":
@@ -2472,7 +2515,7 @@ The actual usable output the user can paste. Render it cleanly (no commentary mi
 
 ═══ FAILURE CONDITION ═══
 If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain ZERO usable resources, output EXACTLY this single line and STOP:
-"I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly."${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+"I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly."${economicLayer}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "evaluation":
       return `═══ MODE LOCK: EVALUATION (COACH USING LIBRARY) ═══
@@ -2520,7 +2563,7 @@ Bulleted map of each cited source → which dimension(s) / improvement(s) it inf
 ═══ FAILURE CONDITION ═══
 If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, output EXACTLY this single line and STOP:
 "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly."
-Do NOT produce a generic critique as a fallback.${constraintLine}${substanceContract}${bindingClause}`;
+Do NOT produce a generic critique as a fallback.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "freeform":
     default:
@@ -2556,6 +2599,19 @@ function countSentences(text: string): number {
   const matches = trimmed.match(/[^.!?]+[.!?]+(?:\s|$)/g);
   if (!matches) return 1; // a single line without terminator
   return matches.length;
+}
+
+// Detects the mandatory **Application** appendix (Situation/Audience/Industry).
+// Required at the tail of every grounded mode (synthesis/creation/evaluation).
+function hasApplicationAppendix(text: string): boolean {
+  // Look in the last ~1500 chars where the appendix should live.
+  const tail = text.slice(-1800);
+  if (!/\*{0,2}Application\*{0,2}/i.test(tail)) return false;
+  // Require all three context labels.
+  const hasSituation = /\bSituation\s*:/i.test(tail);
+  const hasAudience = /\bAudience\s*:/i.test(tail);
+  const hasIndustry = /\bIndustry\s*:/i.test(tail);
+  return hasSituation && hasAudience && hasIndustry;
 }
 
 function enforceModeLock(
@@ -3097,6 +3153,12 @@ function enforceModeLock(
         violations.push("synthesis_generic_stage_scaffold");
         shouldRegenerate = true;
       }
+
+      // APPLICATION LAYER GUARD: appendix must include Situation/Audience/Industry.
+      if (!hasApplicationAppendix(text)) {
+        violations.push("synthesis_missing_application_appendix");
+        shouldRegenerate = true;
+      }
       break;
     }
 
@@ -3141,6 +3203,10 @@ function enforceModeLock(
       if (!hasSourceBasis) { violations.push("creation_missing_source_basis"); shouldRegenerate = true; }
       if (!hasReusedCreated) { violations.push("creation_missing_reused_vs_created"); shouldRegenerate = true; }
       if (!hasCitationsC) { violations.push("creation_missing_source_citations"); shouldRegenerate = true; }
+      if (!hasApplicationAppendix(text)) {
+        violations.push("creation_missing_application_appendix");
+        shouldRegenerate = true;
+      }
       break;
     }
 
@@ -3191,6 +3257,10 @@ function enforceModeLock(
       // Vague-critique fingerprint.
       if (/\b(be more concise|stronger cta|improve (the )?tone|good start|with some polish|nice work)\b/i.test(text)) {
         violations.push("evaluation_vague_critique");
+        shouldRegenerate = true;
+      }
+      if (!hasApplicationAppendix(text)) {
+        violations.push("evaluation_missing_application_appendix");
         shouldRegenerate = true;
       }
       break;
