@@ -2091,6 +2091,37 @@ function classifyChatIntent(
     return { intent: "provenance" };
   }
 
+  // 1.5 SYNTHESIS — user is asking the model to DERIVE a new artifact
+  // (scoring system, framework, rubric, model, checklist, evaluation
+  // criteria) FROM their library/resources. This MUST win over template/
+  // email/pitch so the model doesn't fall back to a generic script when
+  // the user explicitly asked it to build something from their materials.
+  //
+  // Two halves:
+  //   (a) RESOURCE GROUNDING signal — "using my resources / library /
+  //       playbooks / KIs", "based on", "from my <noun>", "from these".
+  //   (b) DERIVATION signal — "come up with", "derive", "build a
+  //       framework/rubric/scoring/model", "how did you determine",
+  //       "score(ing system)", "rubric", "criteria", "weighting".
+  // Either side alone is too weak. Together they reliably indicate a
+  // synthesis ask. We also fire on the explicit "how did you determine"
+  // follow-up because it's the audit half of a prior synthesis.
+  const SYNTH_GROUNDING_RE =
+    /\b(using|use|based on|from|leveraging|drawing on|pulling from|grounded in|across)\s+(my|the|these|those|our)\s+(resource|resources|library|libraries|playbook|playbooks|kis?|knowledge\s+items?|materials?|notes|transcripts?|recordings?|content|docs?|documents?|files?|uploads?)\b/;
+  const SYNTH_DERIVE_RE =
+    /\b(come up with|derive|construct|build (?:me )?(?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system|method|methodology|criteria|checklist|evaluation|grading|ranking|weighting|index|maturity\s+model)|create (?:me )?(?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system|method|methodology|criteria|checklist|evaluation|grading|ranking|weighting|index|maturity\s+model)|design (?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system)|how (?:did|do) you (?:determine|decide|score|weight|rank|come up|derive)|extract (?:patterns|signals|themes)|synthesi[sz]e|put together (?:a |an )?(?:framework|rubric|scoring|score|model|system))\b/;
+  const SYNTH_NOUN_HINT_RE =
+    /\b(scoring system|score card|scorecard|rubric|framework|maturity model|evaluation criteria|grading system|ranking system|weighting|prioriti[sz]ation framework)\b/;
+  const hasGrounding = SYNTH_GROUNDING_RE.test(text);
+  const hasDerive = SYNTH_DERIVE_RE.test(text);
+  const hasSynthNoun = SYNTH_NOUN_HINT_RE.test(text);
+  if ((hasGrounding && (hasDerive || hasSynthNoun)) || (hasDerive && hasSynthNoun)) {
+    console.log(
+      `[mode-lock] intent_forced_synthesis text="${text.slice(0, 80)}" grounding=${hasGrounding} derive=${hasDerive} noun=${hasSynthNoun}`,
+    );
+    return { intent: "synthesis", isBusinessCase, isCFO };
+  }
+
   // 2. Template — "what template", "give me a template", "template for"
   if (
     /\btemplate(s)?\b/.test(text) &&
