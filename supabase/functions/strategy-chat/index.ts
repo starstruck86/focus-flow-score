@@ -3892,6 +3892,8 @@ async function buildChatSystemPrompt(args: {
       prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
       workingThesis: null,
       resourceHits: [],
+      kiHits: [],
+      retrievalDebug: null,
       intent,
       modeLockBlock,
     };
@@ -3968,6 +3970,8 @@ async function buildChatSystemPrompt(args: {
       prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
       workingThesis: null,
       resourceHits: [],
+      kiHits: [],
+      retrievalDebug: resources?.debug ?? null,
       intent,
       modeLockBlock,
     };
@@ -4025,7 +4029,20 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     id: h.id,
     title: h.title,
   }));
-  return { prompt, workingThesis, resourceHits, intent, modeLockBlock };
+  const kiHits = (resources?.kiHits || []).map((k) => ({
+    id: k.id,
+    title: k.title,
+    chapter: k.chapter,
+  }));
+  return {
+    prompt,
+    workingThesis,
+    resourceHits,
+    kiHits,
+    retrievalDebug: resources?.debug ?? null,
+    intent,
+    modeLockBlock,
+  };
 }
 
 // Extract a fenced ```thesis_update { ... }``` block emitted by the
