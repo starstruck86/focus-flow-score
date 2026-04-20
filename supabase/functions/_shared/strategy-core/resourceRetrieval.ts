@@ -1061,40 +1061,67 @@ export async function retrieveResourceContext(
  */
 export function renderResourceContextBlock(args: {
   hits: RetrievedResource[];
+  /** New: KI hits to surface alongside resource hits. */
+  kiHits?: RetrievedKI[];
   userAskedForResource: boolean;
+  /** New: signals that a topic-scope ask drove retrieval (cold call, biotech…). */
+  userAskedForTopic?: boolean;
   extractedPhrases: string[];
   inferredCategories: string[];
+  /** New: canonical topic scopes that drove retrieval. */
+  inferredTopics?: string[];
 }): string {
-  const { hits, userAskedForResource: asked, extractedPhrases, inferredCategories } = args;
+  const {
+    hits,
+    kiHits = [],
+    userAskedForResource: asked,
+    userAskedForTopic: askedTopic = false,
+    extractedPhrases,
+    inferredCategories,
+    inferredTopics = [],
+  } = args;
 
-  if (!asked && hits.length === 0) return "";
+  // Emit a block whenever the user asked for a resource OR a topic OR
+  // we returned any hits / KIs at all. Otherwise stay silent.
+  const haveAnything = hits.length > 0 || kiHits.length > 0;
+  if (!asked && !askedTopic && !haveAnything) return "";
 
   const header = "=== LIBRARY RESOURCES (resources table — exact retrievals only) ===";
 
-  if (hits.length === 0) {
+  if (!haveAnything) {
     const search = [
       ...extractedPhrases.map((p) => `"${p}"`),
       ...inferredCategories.map((c) => `category:${c}`),
+      ...inferredTopics.map((t) => `topic:${t}`),
     ].join(", ") || "(no specific phrase extracted)";
     return [
       header,
-      `No matching resource was found in the user's library.`,
+      `No matching resource or KI was found in the user's library for this topic.`,
       `Searched for: ${search}.`,
       ``,
-      `RULES (mandatory):`,
-      `- Do NOT invent a template, calculator, example, playbook, or framework that was not retrieved here.`,
-      `- Tell the user explicitly: "I don't see a matching resource in your library."`,
-      `- Then offer to either (a) build one from scratch with them, or (b) search a different name they have in mind.`,
-      `- Do NOT pretend a resource exists. Do NOT cite a title that is not listed above.`,
+      `BEHAVIOR (mandatory — do NOT refuse):`,
+      `- Open with ONE short line stating what was searched and that nothing matched (e.g. "I scanned your library for ${
+        inferredTopics[0] ? inferredTopics[0].replace(/_/g, " ") : "this topic"
+      } — nothing came back.").`,
+      `- Then produce your best first-pass answer using general operator reasoning. Mark assumptions clearly.`,
+      `- Do NOT invent a specific template/calculator/playbook by name.`,
+      `- End with ONE short clarifying question only if it would materially sharpen the next pass.`,
     ].join("\n");
   }
 
   const lines: string[] = [header];
   lines.push(
-    `Retrieved ${hits.length} resource${hits.length === 1 ? "" : "s"} from the user's library. ` +
-      `Cite them by EXACT title in the form RESOURCE["<title>"] when you reference them. ` +
+    `Retrieved ${hits.length} resource${hits.length === 1 ? "" : "s"}${
+      kiHits.length > 0 ? ` and ${kiHits.length} KI${kiHits.length === 1 ? "" : "s"}` : ""
+    } from the user's library. ` +
+      `Cite resources by EXACT title in the form RESOURCE["<title>"]; cite KIs as KI[<short id>]. ` +
       `Do NOT invent additional titles.`,
   );
+  if (inferredTopics.length > 0) {
+    lines.push(
+      `Topic scope inferred from the user's message: ${inferredTopics.join(", ")}.`,
+    );
+  }
   lines.push("");
 
   const pickedHits = hits.filter((h) => h.matchKind === "picked");
