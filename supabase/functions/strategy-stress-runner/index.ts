@@ -51,7 +51,11 @@ serve(async (req) => {
     });
   }
   const provided = req.headers.get("x-strategy-validation-key") ?? "";
-  if (provided !== VALIDATION_KEY) {
+  const auth = req.headers.get("authorization") ?? "";
+  const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7) : "";
+  const okByValKey = provided === VALIDATION_KEY;
+  const okByServiceRole = !!SERVICE_ROLE_KEY && bearer === SERVICE_ROLE_KEY;
+  if (!okByValKey && !okByServiceRole) {
     return new Response(JSON.stringify({ error: "invalid validation key" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
