@@ -2601,6 +2601,19 @@ function countSentences(text: string): number {
   return matches.length;
 }
 
+// Detects the mandatory **Application** appendix (Situation/Audience/Industry).
+// Required at the tail of every grounded mode (synthesis/creation/evaluation).
+function hasApplicationAppendix(text: string): boolean {
+  // Look in the last ~1500 chars where the appendix should live.
+  const tail = text.slice(-1800);
+  if (!/\*{0,2}Application\*{0,2}/i.test(tail)) return false;
+  // Require all three context labels.
+  const hasSituation = /\bSituation\s*:/i.test(tail);
+  const hasAudience = /\bAudience\s*:/i.test(tail);
+  const hasIndustry = /\bIndustry\s*:/i.test(tail);
+  return hasSituation && hasAudience && hasIndustry;
+}
+
 function enforceModeLock(
   rawText: string,
   intent: IntentResult,
