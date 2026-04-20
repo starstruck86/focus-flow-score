@@ -6,6 +6,7 @@ import {
   buildStrategyChatSystemPrompt,
   emptyWorkingThesisState,
   extractThesisPatchFromProse,
+  inferTopicScopes,
   loadWorkingThesisState,
   mergeWorkingThesisState,
   recordResourceUsage,
@@ -15,6 +16,7 @@ import {
   saveWorkingThesisState,
   shouldUseStrategyCorePrompt,
   type ThesisStatePatch,
+  userAskedForResource,
   validateWorkingThesisState,
   type WorkingThesisState,
 } from "../_shared/strategy-core/index.ts";

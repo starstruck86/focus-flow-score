@@ -47,11 +47,13 @@ export {
 export {
   extractCandidatePhrases,
   inferResourceCategories,
+  inferTopicScopes,
   recordResourceUsage,
   renderResourceContextBlock,
   retrieveResourceContext,
   userAskedForPriorUse,
   userAskedForResource,
+  userAskedForTopic,
   type ResourceRetrievalResult,
   type RetrievedResource,
 } from "./resourceRetrieval.ts";
