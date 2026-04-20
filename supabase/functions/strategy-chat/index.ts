@@ -3362,6 +3362,47 @@ async function handleChat(
   });
   const accountId: string | null = pack.account?.id ?? null;
 
+  // ── SYNTHESIS PRE-GEN SHORT-CIRCUIT ──
+  // If the user asked us to derive a system from their library but we
+  // retrieved fewer than 2 usable resources, do NOT call the LLM. By
+  // definition no real derivation is possible, and any output we'd
+  // generate would be a generic-LLM fallback (the exact failure mode
+  // we're protecting against). Persist + return the canned ask.
+  if (intent.intent === "synthesis" && resourceHits.length < 2) {
+    const cannedText =
+      "I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly.";
+    console.log(
+      `[synthesis] pre-gen short-circuit: hits=${resourceHits.length} — skipping LLM call`,
+    );
+    await supabase.from("strategy_messages").insert({
+      thread_id: threadId,
+      user_id: userId,
+      role: "assistant",
+      message_type: "chat",
+      provider_used: "synthesis-guard",
+      model_used: "synthesis-guard",
+      fallback_used: false,
+      latency_ms: 0,
+      content_json: {
+        text: cannedText,
+        sources_used: pack.sourceCount,
+        retrieval_meta: pack.retrievalMeta,
+        model_used: "synthesis-guard",
+        provider_used: "synthesis-guard",
+        fallback_used: false,
+        synthesis_short_circuit: { reason: "insufficient_resources", hits: resourceHits.length },
+      },
+    });
+    return new Response(
+      JSON.stringify({
+        text: cannedText,
+        provider: "synthesis-guard",
+        model: "synthesis-guard",
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
   const messages = [
     { role: "system" as const, content: systemPrompt },
     ...pack.recentMessages.map((m) => ({
