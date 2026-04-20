@@ -357,10 +357,15 @@ serve(async (req) => {
         if (status >= 200 && status < 300) succeeded++; else failed++;
       } catch (e: any) {
         failed++;
+        const errBody = [
+          e?.message ?? String(e),
+          e?.stack ? `\n--- stack ---\n${e.stack}` : "",
+          e?.cause ? `\n--- cause ---\n${JSON.stringify(e.cause)}` : "",
+        ].join("");
         await admin
           .from("strategy_stress_turns")
           .update({
-            error: e?.message ?? String(e),
+            error: errBody.slice(0, 8000),
             finished_at: new Date().toISOString(),
           })
           .eq("id", turnRow!.id);
