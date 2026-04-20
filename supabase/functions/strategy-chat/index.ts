@@ -2764,7 +2764,7 @@ const SITUATION_SHAPE: Array<{ key: RegExp; check: (body: string) => string | nu
     // This prevents false-positives on strong CFO+Renewal answers without
     // weakening the appendix-theater protection (generic prose has neither).
     check: (body) => {
-      const retentionRe = /\b(retention|renew|expansion|upsell|churn|risk|consequence|usage|adoption|value realized)\b/gi;
+      const retentionRe = /\b(retention|renew(al|als|ed|ing)?|expansion|expand(ed|ing)?|upsell|churn|risk|consequence|usage|adoption|value realized)\b/gi;
       const retentionHits = (body.match(retentionRe) || []).length;
       if (retentionHits >= 2) return null;
 
