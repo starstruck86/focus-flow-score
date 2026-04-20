@@ -59,7 +59,10 @@ export interface RetrievedResource {
     | "opportunity_linked"
     | "description_match"
     | "content_match"
-    | "category_intent";
+    | "category_intent"
+    | "topic_tag"
+    | "topic_title"
+    | "topic_content";
   /** Short snippet of the matched body, when matchKind is description/content. */
   matchSnippet?: string;
   /** Human-readable reason — surfaced in the prompt block. */
@@ -81,17 +84,52 @@ export interface RetrievedResource {
   sourceShapeReason?: string;
 }
 
+export interface RetrievedKI {
+  id: string;
+  title: string;
+  chapter: string | null;
+  knowledge_type: string | null;
+  tactic_summary: string | null;
+  matchKind: "topic_chapter" | "topic_tag" | "topic_title";
+  matchReason: string;
+}
+
 export interface ResourceRetrievalResult {
-  /** All hits, deduped, ranked best → worst. */
+  /** All resource hits, deduped, ranked best → worst. */
   hits: RetrievedResource[];
+  /** Knowledge Item hits selected by topic/tag/chapter inference. */
+  kiHits: RetrievedKI[];
   /** True if the user clearly asked for a named/templated artifact. */
   userAskedForResource: boolean;
+  /** True when use-case/topic intent was detected (e.g. "my cold-call resources"). */
+  userAskedForTopic: boolean;
   /** Phrases we extracted from the user's message and searched for. */
   extractedPhrases: string[];
   /** Categories we inferred from the user's message ("template", "calculator", …). */
   inferredCategories: string[];
+  /** Topic scopes inferred from the message (e.g. "cold_calling", "discovery"). */
+  inferredTopics: string[];
   /** Prompt-ready block. Always non-empty when userAskedForResource is true. */
   contextBlock: string;
+  /** Auditable per-hit debug info — persisted alongside routing_decision. */
+  debug: {
+    extractedPhrases: string[];
+    inferredCategories: string[];
+    inferredTopics: string[];
+    resourceHits: Array<{
+      id: string;
+      title: string;
+      matchKind: string;
+      matchReason: string;
+    }>;
+    kiHits: Array<{
+      id: string;
+      title: string;
+      chapter: string | null;
+      matchKind: string;
+      matchReason: string;
+    }>;
+  };
 }
 
 interface SupabaseLike {
@@ -266,6 +304,64 @@ export function inferResourceCategories(text: string): string[] {
   if (/\bchecklist(s)?\b/.test(lower)) found.add("checklist");
   if (/\broi\b/.test(lower)) found.add("roi");
   return [...found];
+}
+
+// ── Topic / use-case inference ────────────────────────────────────
+// Maps natural-language phrases ("cold call", "discovery", "renewal",
+// "biotech", "M&A"…) onto the canonical scope vocabulary that the
+// resources.tags column and knowledge_items.chapter column already use.
+//
+// This is the single biggest unlock for "use my cold-call resources"
+// style asks — without it the retriever sees zero hits because no
+// quoted phrase or Capitalized span is present.
+//
+// Each entry: { test: regex on lowercase text, topics: scope keys }
+// Scope keys match BOTH:
+//   - the strings used as `skill:<topic>` / `context:<topic>` tags on
+//     resources (e.g. `skill:cold_calling`, `context:discovery_call`)
+//   - the canonical knowledge_items.chapter values
+//     (cold_calling, discovery, objection_handling, negotiation,
+//     closing, follow_up, demo, stakeholder_navigation, messaging,
+//     pipeline_management, expansion, coaching, general)
+const TOPIC_RULES: Array<{ test: RegExp; topics: string[]; raw: string }> = [
+  { raw: "cold call",        test: /\bcold[\s-]*call(s|ing)?\b/i,                                 topics: ["cold_calling", "cold_call"] },
+  { raw: "discovery",        test: /\bdiscover(y|ies)\b/i,                                        topics: ["discovery", "discovery_call"] },
+  { raw: "objection",        test: /\bobjection(s|\s+handling)?\b/i,                              topics: ["objection_handling", "objection_response"] },
+  { raw: "negotiation",      test: /\bnegotiat(e|ion|ing)\b/i,                                    topics: ["negotiation"] },
+  { raw: "closing",          test: /\bclos(e|ing)\s+(deals?|the\s+deal|techniques?)\b|\bcloser?s?\b/i, topics: ["closing"] },
+  { raw: "follow-up",        test: /\bfollow[\s-]*up(s)?\b/i,                                     topics: ["follow_up", "follow_up_email"] },
+  { raw: "demo",             test: /\bdemo(s|ing)?\b/i,                                           topics: ["demo"] },
+  { raw: "stakeholder",      test: /\bstakeholder(s|\s+navigation|\s+map)\b/i,                    topics: ["stakeholder_navigation"] },
+  { raw: "messaging",        test: /\bmessaging\b|\bemail\s+writing\b/i,                          topics: ["messaging"] },
+  { raw: "pipeline",         test: /\bpipeline\s+(management|review|hygiene|forecasting)\b/i,     topics: ["pipeline_management"] },
+  { raw: "expansion",        test: /\b(upsell|cross[\s-]*sell|expansion|account\s+growth)\b/i,    topics: ["expansion"] },
+  { raw: "renewal",          test: /\brenewal(s)?\b|\brenew(ing)?\b/i,                            topics: ["renewal", "expansion"] },
+  { raw: "executive / CFO",  test: /\b(c[- ]?level|executive|ceo|cfo|coo|cto|cmo|board)\b/i,      topics: ["executive", "stakeholder_navigation"] },
+  { raw: "biotech",          test: /\bbiotech(nology)?\b/i,                                       topics: ["biotech", "industry_biotech"] },
+  { raw: "healthcare",       test: /\bhealthcare\b|\bhospital(s)?\b|\bpayer(s)?\b/i,              topics: ["healthcare", "industry_healthcare"] },
+  { raw: "manufacturing",    test: /\bmanufactur(ing|er(s)?)\b|\bindustrial\b/i,                  topics: ["manufacturing", "industry_manufacturing"] },
+  { raw: "M&A",              test: /\bm\s*&\s*a\b|\bmerger(s)?\b|\bacquisition(s)?\b/i,           topics: ["m_and_a"] },
+  { raw: "talk track",       test: /\btalk[\s-]*track(s)?\b/i,                                    topics: ["messaging", "cold_calling"] },
+  { raw: "scoring rubric",   test: /\b(scor(e|ing)|rubric|grading|evaluation)\s+(system|framework|criteria|rubric)?\b/i, topics: ["coaching", "general"] },
+  { raw: "discovery prep",   test: /\b(discovery|account)\s+(prep|preparation|planning)\b/i,      topics: ["discovery", "discovery_call"] },
+  { raw: "VP Sales",         test: /\b(vp|vice\s+president)\s+(of\s+)?sales\b/i,                  topics: ["stakeholder_navigation", "executive"] },
+];
+
+/** Infer canonical topic scopes from a free-text user message. */
+export function inferTopicScopes(text: string): string[] {
+  if (!text) return [];
+  const seen = new Set<string>();
+  for (const rule of TOPIC_RULES) {
+    if (rule.test.test(text)) {
+      for (const t of rule.topics) seen.add(t);
+    }
+  }
+  return [...seen];
+}
+
+/** True when the user's message references at least one canonical topic. */
+export function userAskedForTopic(text: string): boolean {
+  return inferTopicScopes(text).length > 0;
 }
 
 /** Combine quoted + capitalized spans, dedupe case-insensitively. */

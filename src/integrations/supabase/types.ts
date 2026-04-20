@@ -6681,6 +6681,8 @@ export type Database = {
           output: string | null
           output_chars: number | null
           prompt: string
+          retrieval_debug: Json | null
+          routing_decision: Json | null
           run_id: string
           started_at: string
           status_code: number | null
@@ -6709,6 +6711,8 @@ export type Database = {
           output?: string | null
           output_chars?: number | null
           prompt: string
+          retrieval_debug?: Json | null
+          routing_decision?: Json | null
           run_id: string
           started_at?: string
           status_code?: number | null
@@ -6737,6 +6741,8 @@ export type Database = {
           output?: string | null
           output_chars?: number | null
           prompt?: string
+          retrieval_debug?: Json | null
+          routing_decision?: Json | null
           run_id?: string
           started_at?: string
           status_code?: number | null
