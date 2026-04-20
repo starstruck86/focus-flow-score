@@ -705,19 +705,56 @@ const ROUTES: Record<TaskType, LLMRoute> = {
 // Mode is persisted on every assistant message in content_json.routing_decision
 // so we can audit provider distribution and prove no silent dominance.
 // ═══════════════════════════════════════════════════════════
-type LibraryMode = "strong" | "partial" | "general" | "thin";
+type LibraryMode = "strong" | "partial" | "general" | "thin" | "short_form";
+
+// SHORT-FORM detector: openers, subject lines, hook lines, voicemails,
+// short talk-track snippets. These are NOT long-form synthesis artifacts
+// and must NOT ride the heavy Claude path. They route to fast OpenAI with
+// tight maxTokens to avoid the ~56s gateway timeout we saw on Turn 0/2.
+function detectShortFormGrounded(text: string): { match: boolean; kind: string | null } {
+  const t = (text || "").toLowerCase();
+  // Length gate: short-form asks are short prompts (<= 320 chars typical).
+  // Longer prompts asking for an opener inside a broader synthesis still go through.
+  if (t.length > 320) return { match: false, kind: null };
+  if (/\bsubject\s+lines?\b/.test(t)) return { match: true, kind: "subject_lines" };
+  if (/\b(cold[- ]?call\s+)?opener[s]?\b/.test(t)) return { match: true, kind: "opener" };
+  if (/\bhook\s+lines?\b/.test(t)) return { match: true, kind: "hook_lines" };
+  if (/\bvoicemail[s]?\b/.test(t) && /(draft|write|give|leave|build)/.test(t)) {
+    return { match: true, kind: "voicemail" };
+  }
+  if (/\b(talk[- ]?track|talking\s+points?)\b/.test(t) && t.length <= 220) {
+    return { match: true, kind: "talk_track_snippet" };
+  }
+  if (/\b(one[- ]?liner|tagline|elevator\s+pitch)\b/.test(t)) {
+    return { match: true, kind: "one_liner" };
+  }
+  return { match: false, kind: null };
+}
 
 function classifyLibraryMode(args: {
   intent: string;
   resourceHits: number;
   kiHits: number;
   hasGroundingPhrase: boolean;
-}): { mode: LibraryMode; reason: string } {
-  const { intent, resourceHits, kiHits, hasGroundingPhrase } = args;
+  userText?: string;
+}): { mode: LibraryMode; reason: string; shortFormKind?: string | null } {
+  const { intent, resourceHits, kiHits, hasGroundingPhrase, userText } = args;
   const groundedIntent =
     intent === "synthesis" || intent === "evaluation" || intent === "creation";
   const isCreation = intent === "creation";
   const totalSignal = resourceHits + Math.min(kiHits, 4); // cap KI weight
+
+  // SHORT-FORM short-circuit: openers, subject lines, hooks, voicemails.
+  // Fires whether or not the user attached a grounding phrase — the form
+  // is the routing signal. Skips Claude/long-synthesis path entirely.
+  const sf = userText ? detectShortFormGrounded(userText) : { match: false, kind: null };
+  if (sf.match && (groundedIntent || hasGroundingPhrase || totalSignal >= 1)) {
+    return {
+      mode: "short_form",
+      reason: `short_form_${sf.kind}_resources=${resourceHits}_kis=${kiHits}`,
+      shortFormKind: sf.kind,
+    };
+  }
 
   // GENERAL: non-grounded, non-creation chat — model just answers
   if (!groundedIntent && !hasGroundingPhrase) {
@@ -769,6 +806,24 @@ function resolveLLMRouteForMode(
   }
 
   const isCreation = intent === "creation";
+
+  // SHORT-FORM short-circuit: openers, subject lines, hooks, voicemails.
+  // ALWAYS OpenAI/gpt-4o, NEVER Claude. Cap maxTokens hard so the
+  // gateway-side timeout (~60s) cannot be reached even on cold paths.
+  // This overrides creation→Claude routing for short-form artifacts.
+  if (mode === "short_form") {
+    return {
+      ...base,
+      primaryProvider: "openai",
+      model: "gpt-4o",
+      fallbackProvider: "openai",
+      fallbackModel: "gpt-4o-mini",
+      maxTokens: 700,
+      temperature: 0.65,
+      _routingReason: `short_form_${intent}_openai_fast`,
+    };
+  }
+
   const wantsClaude = mode === "partial" || isCreation;
 
   if (wantsClaude && PROVIDER_HEALTH.anthropicDirect) {
@@ -4284,11 +4339,12 @@ async function handleChat(
   const hasGroundingPhrase = groundingPhraseRe.test(content || "");
   // REAL KI count from retrieveResourceContext — not the empty placeholder.
   const kiHits = kiHitList.length;
-  const { mode, reason: modeReason } = classifyLibraryMode({
+  const { mode, reason: modeReason, shortFormKind } = classifyLibraryMode({
     intent: intent.intent,
     resourceHits: resourceHits.length,
     kiHits,
     hasGroundingPhrase,
+    userText: content || "",
   });
 
   // Mode-aware re-routing
@@ -4296,14 +4352,36 @@ async function handleChat(
   if (forceFallback) modeRoute._smokeTestForceFail = true;
   route = modeRoute;
   console.log(
-    `[mode] intent=${intent.intent} mode=${mode} reason=${modeReason} provider=${route.primaryProvider} model=${route.model} routing=${modeRoute._routingReason}`,
+    `[mode] intent=${intent.intent} mode=${mode} reason=${modeReason} provider=${route.primaryProvider} model=${route.model} routing=${modeRoute._routingReason}${shortFormKind ? ` sf_kind=${shortFormKind}` : ""}`,
   );
 
   // Inject a small thinking-path preamble into the system prompt for grounded
   // modes so the assistant opens with what it found and what it's extending.
   // The preamble is appended; the model must obey the original mode-lock too.
   let effectiveSystemPrompt = systemPrompt;
-  if (mode === "strong" || mode === "partial" || mode === "thin") {
+  if (mode === "short_form") {
+    // SHORT-FORM mode-lock: tight output shape, no synthesis scaffolding.
+    const shapeRule = shortFormKind === "subject_lines"
+      ? "Return 8–12 subject lines, numbered, one per line. Group only if it materially helps. NO long explanation block. NO generic filler. Each subject line ≤ 70 chars."
+      : shortFormKind === "opener"
+      ? "Return 3–5 opener options, numbered. Each opener ≤ 2 sentences. After each, ONE-LINE rationale (≤ 18 words). NO long preamble, NO synthesis sections."
+      : shortFormKind === "hook_lines"
+      ? "Return 5–8 hook lines, numbered. Each ≤ 1 sentence. NO preamble, NO closing summary."
+      : shortFormKind === "voicemail"
+      ? "Return 2–3 voicemail scripts, numbered. Each ≤ 25 seconds spoken (~60 words). One-line rationale per option."
+      : shortFormKind === "talk_track_snippet"
+      ? "Return 2–3 short talk-track options, numbered. Each ≤ 3 sentences. One-line rationale per option."
+      : "Return 3–5 short options, numbered. Each ≤ 2 sentences. One-line rationale per option.";
+    const preamble = `
+
+═══ SHORT-FORM MODE (kind=${shortFormKind}) ═══
+You found ${resourceHits.length} resource hit(s) and ${kiHits} KI hit(s).
+USE the library voice/angles for grounding, but DO NOT produce a long synthesis structure.
+${shapeRule}
+If grounded vs extended distinction is material, tag each option [Grounded] or [Extended].
+Forbidden: long preambles, multi-section frameworks, "let me walk you through" openers.`;
+    effectiveSystemPrompt = `${systemPrompt}${preamble}`;
+  } else if (mode === "strong" || mode === "partial" || mode === "thin") {
     const preamble = `
 
 ═══ LIBRARY-AWARENESS PROTOCOL (mode=${mode.toUpperCase()}) ═══
@@ -4424,6 +4502,14 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           fallback_used: result.fallbackUsed,
           routing_reason: route._routingReason,
           retrieval_debug: retrievalDebug ?? null,
+          short_form_diagnostics: mode === "short_form" ? {
+            kind: shortFormKind ?? null,
+            prompt_chars: (content || "").length,
+            system_prompt_chars: effectiveSystemPrompt.length,
+            max_tokens_cap: route.maxTokens,
+            output_chars: (auditedVisible || "").length,
+            latency_ms: result.latencyMs,
+          } : null,
         },
       },
     });
@@ -4664,6 +4750,14 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
               fallback_used: false,
               routing_reason: route._routingReason,
               retrieval_debug: retrievalDebug ?? null,
+              short_form_diagnostics: mode === "short_form" ? {
+                kind: shortFormKind ?? null,
+                prompt_chars: (content || "").length,
+                system_prompt_chars: effectiveSystemPrompt.length,
+                max_tokens_cap: route.maxTokens,
+                output_chars: (auditedVisible || "").length,
+                latency_ms: result.latencyMs,
+              } : null,
             },
           },
         });
