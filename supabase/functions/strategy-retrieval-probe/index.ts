@@ -12,9 +12,15 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const key = req.headers.get("x-strategy-validation-key");
-  const expected = Deno.env.get("STRATEGY_VALIDATION_KEY");
-  if (!expected || key !== expected) {
+  // Auth: accept either the validation key OR a bearer token equal to the
+  // service role key (so other edge functions can call us with no plumbing).
+  const valKey = req.headers.get("x-strategy-validation-key");
+  const auth = req.headers.get("authorization") ?? "";
+  const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7) : "";
+  const expectedVal = Deno.env.get("STRATEGY_VALIDATION_KEY") ?? "";
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const ok = (expectedVal && valKey === expectedVal) || (serviceRole && bearer === serviceRole);
+  if (!ok) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
