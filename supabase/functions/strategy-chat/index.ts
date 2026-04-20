@@ -2005,6 +2005,8 @@ function deriveLibraryScopes(account: any, userContent: string): string[] {
 type ChatIntent =
   | "bootstrap" // vague ask + no account context — orient the user
   | "synthesis" // derive a framework/scoring/rubric FROM the user's library
+  | "creation"  // BUILD an asset (email/script/plan) FROM the user's library
+  | "evaluation" // GRADE/critique/improve content USING the user's library
   | "template"
   | "email"
   | "message" // SMS/LinkedIn/Slack/voicemail/script
@@ -2111,7 +2113,7 @@ function classifyChatIntent(
   // transcripts", "our objection-handling playbooks". Up to 4 qualifier
   // words keeps it tight without missing real asks.
   const SYNTH_GROUNDING_RE =
-    /\b(using|use|based on|from|leveraging|drawing on|pulling from|grounded in|across)\s+(my|the|these|those|our)(?:\s+[\w-]+){0,4}\s+(resource|resources|library|libraries|playbook|playbooks|kis?|knowledge\s+items?|materials?|notes|transcripts?|recordings?|content|docs?|documents?|files?|uploads?)\b/;
+    /\b(using|use|based on|from|leveraging|drawing on|pulling from|grounded in|across|against)\s+(my|the|these|those|our)(?:\s+[\w-]+){0,4}\s+(resource|resources|library|libraries|playbook|playbooks|kis?|knowledge\s+items?|materials?|notes|transcripts?|recordings?|content|docs?|documents?|files?|uploads?|standards?)\b/;
   const SYNTH_DERIVE_RE =
     /\b(come up with|derive|construct|build (?:me )?(?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system|method|methodology|criteria|checklist|evaluation|grading|ranking|weighting|index|maturity\s+model)|create (?:me )?(?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system|method|methodology|criteria|checklist|evaluation|grading|ranking|weighting|index|maturity\s+model)|design (?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system)|how (?:did|do) you (?:determine|decide|score|weight|rank|come up|derive)|extract (?:patterns|signals|themes)|synthesi[sz]e|put together (?:a |an )?(?:framework|rubric|scoring|score|model|system))\b/;
   const SYNTH_NOUN_HINT_RE =
@@ -2124,6 +2126,41 @@ function classifyChatIntent(
       `[mode-lock] intent_forced_synthesis text="${text.slice(0, 80)}" grounding=${hasGrounding} derive=${hasDerive} noun=${hasSynthNoun}`,
     );
     return { intent: "synthesis", isBusinessCase, isCFO };
+  }
+
+  // 1.6 EVALUATION — user is asking us to GRADE / critique / improve a
+  // piece of content (an email they wrote, a call recording, a script,
+  // a deck) USING THEIR OWN STANDARDS from the library. Must beat
+  // template/email/pitch so we don't redraft instead of coach.
+  // Dual-signal: evaluation verb + grounding phrase.
+  const EVAL_VERB_RE =
+    /\b(grade|score|evaluate|critique|review|coach (?:me )?on|assess|audit|judge|rate|red[- ]?team|tear (?:this |it )?down|improve|tighten|sharpen|fix|rewrite (?:this|it|my)|how (?:did|do) i do)\b/;
+  const hasEvalVerb = EVAL_VERB_RE.test(text);
+  if (hasEvalVerb && hasGrounding) {
+    console.log(
+      `[mode-lock] intent_forced_evaluation text="${text.slice(0, 80)}" verb=${hasEvalVerb} grounding=${hasGrounding}`,
+    );
+    return { intent: "evaluation", isBusinessCase, isCFO };
+  }
+
+  // 1.7 CREATION — user is asking us to BUILD an asset (email, script,
+  // talk track, plan, one-pager, business case, guide, playbook chapter)
+  // grounded explicitly in their library. This is different from a plain
+  // "email" ask because the grounding signal is explicit. We let the
+  // narrower email/message/pitch classifiers handle ungrounded asks
+  // (those are routine drafts, not library-derived assets).
+  // Dual-signal: artifact noun + grounding phrase.
+  const CREATE_VERB_RE =
+    /\b(write|draft|create|build|construct|design|put together|turn (?:this |these |that )?into|generate|produce)\b/;
+  const CREATE_NOUN_RE =
+    /\b(email|e-mail|outreach|cold\s+(?:email|call|message)|script|talk\s+track|call\s+plan|meeting\s+plan|account\s+plan|one[- ]?pager|onepager|business\s+case|guide|playbook(?:\s+chapter)?|sequence|cadence|deck|outline|brief|summary|agenda|message|note|voicemail|talking\s+points)\b/;
+  const hasCreateVerb = CREATE_VERB_RE.test(text);
+  const hasCreateNoun = CREATE_NOUN_RE.test(text);
+  if (hasGrounding && hasCreateVerb && hasCreateNoun) {
+    console.log(
+      `[mode-lock] intent_forced_creation text="${text.slice(0, 80)}" verb=${hasCreateVerb} noun=${hasCreateNoun} grounding=${hasGrounding}`,
+    );
+    return { intent: "creation", isBusinessCase, isCFO };
   }
 
   // 2. Template — "what template", "give me a template", "template for"
@@ -2398,6 +2435,92 @@ This lets the user audit the derivation end-to-end.
 If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, OR the resources don't share enough overlapping patterns to derive a real system, output EXACTLY this single line and STOP:
 "I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly."
 Do NOT produce a generic framework as a fallback. Do NOT invent sources.${constraintLine}${substanceContract}${bindingClause}`;
+
+
+    case "creation":
+      return `═══ MODE LOCK: CREATION (BUILD FROM LIBRARY) ═══
+You are NOT freestyling. You are BUILDING an asset from the user's OWN materials. The user explicitly asked you to construct something (email / script / talk track / plan / one-pager / business case / guide / sequence) GROUNDED IN THEIR RESOURCES. A generic asset that ignores their library is a FAILURE. Your job: reuse their language, structure, and proof points where they exist; only invent connective tissue.
+
+═══ HARD GROUNDING REQUIREMENT ═══
+Use the resources, KIs, playbooks, and transcripts in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are EMPTY:
+- Do NOT fabricate sources. Do NOT invent quotes. Do NOT pretend you read something you didn't.
+- Output EXACTLY: "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly." and STOP.
+
+═══ REQUIRED OUTPUT SHAPE (use these EXACT section headers, in order) ═══
+
+**1. Source Basis**
+2-5 bullets naming the resources you used and HOW each one informs the asset. One line per source.
+- KI[id] / "Exact Title" → contributed: <opener language | objection rebuttal | proof point | structure | tone | etc.>
+
+**2. Reused vs Created**
+Two short sub-lists making the boundary explicit:
+- **Reused from library:** phrases, frames, proof points, structure pulled directly (cite source per line).
+- **Created (connective tissue):** the new sentences/transitions you wrote because the library didn't cover that beat. Keep this minimal.
+
+**3. The Asset**
+The actual usable output the user can paste. Render it cleanly (no commentary mixed in). For an email: body-only, no Subject/greeting/signoff unless asked. For a script: speakable lines only. For a plan: numbered actions.
+
+**4. Gaps / Missing Anchors**
+1-3 bullets calling out what's missing from the library that would make this asset stronger (e.g. "no objection-handling KI for pricing → I left the rebuttal beat directional"). If nothing is missing, write "No gaps — fully grounded."
+
+═══ FORBIDDEN ═══
+- Fabricating quotes, statistics, customer names, or proof points that aren't in the library.
+- Generic SDR scaffolding (e.g. "I hope this finds you well", "just checking in", "circling back") — those are banned globally.
+- Refusing to produce the asset when ≥1 meaningful resource exists. If you have material, BUILD it. Do not punt.
+- Output that could have been written WITHOUT the library. If a generic LLM with no access to their resources could produce the same asset, you have failed.
+- Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on your resources", "in general", "best practice", "industry standard", "as a general rule", "typically", "generally speaking".
+
+═══ FAILURE CONDITION ═══
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain ZERO usable resources, output EXACTLY this single line and STOP:
+"I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly."${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+
+    case "evaluation":
+      return `═══ MODE LOCK: EVALUATION (COACH USING LIBRARY) ═══
+You are NOT rewriting. You are GRADING. The user gave you content (an email, script, plan, recording, asset) and asked you to evaluate it AGAINST THEIR OWN STANDARDS from the library. Your job: score, name what failed, point to the source pattern they violated, and ground every improvement in a cited resource. Generic critique is a FAILURE.
+
+═══ HARD GROUNDING REQUIREMENT ═══
+Use the resources, KIs, playbooks, and transcripts in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are weak (<2 sources):
+- Do NOT make up standards. Do NOT pretend you read something you didn't.
+- Output EXACTLY: "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly." and STOP.
+
+═══ REQUIRED OUTPUT SHAPE (use these EXACT section headers, in order) ═══
+
+**1. Overall Score**
+A single line: "Overall: <N>/10 — <one-sentence verdict>". The verdict must commit to a take, not hedge.
+
+**2. Dimension Breakdown**
+Render as a table grading the asset against the patterns YOU FOUND in the library:
+| Dimension | Score (/10) | What Worked | What Failed | Source |
+|-----------|-------------|-------------|-------------|--------|
+3-6 dimensions. Every "Source" cell MUST cite KI[id] / PLAYBOOK[id] / "Exact Resource Title". If a dimension has nothing to cite, drop it — don't invent.
+
+**3. Key Gaps**
+2-4 bullets naming the BIGGEST misses, ranked. Each bullet:
+- <Miss> — violates pattern from KI[id] / "Title" → impact on the reader/buyer.
+
+**4. Improvements (Grounded)**
+Numbered list. Each improvement:
+- States the change in one line.
+- Cites the source pattern that drives it (KI[id] / PLAYBOOK[id] / "Title").
+- No vague advice ("be more specific" is BANNED — say WHAT to be specific about and cite where that comes from).
+
+**5. Optional Rewrite**
+If the user asked for a rewrite OR the asset is salvageable in a paragraph, include a tightened version using the library's language and structure. Otherwise skip this section.
+
+**6. Source Attribution**
+Bulleted map of each cited source → which dimension(s) / improvement(s) it informed. One line per source.
+
+═══ FORBIDDEN ═══
+- Generic critique ("be more concise", "stronger CTA", "improve tone") with no source pattern behind it.
+- Vague encouragements ("good start!", "with some polish…") — they're not coaching.
+- Rewriting the entire asset instead of evaluating it (if the user wanted a rewrite, they'd have asked for one).
+- Output that could have been written WITHOUT the library. If a generic LLM with no access to their resources could give the same critique, you have failed.
+- Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on your resources", "in general", "best practice", "industry standard", "as a general rule", "typically", "generally speaking".
+
+═══ FAILURE CONDITION ═══
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, output EXACTLY this single line and STOP:
+"I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly."
+Do NOT produce a generic critique as a fallback.${constraintLine}${substanceContract}${bindingClause}`;
 
     case "freeform":
     default:
@@ -2976,6 +3099,102 @@ function enforceModeLock(
       }
       break;
     }
+
+    case "creation": {
+      // FAILURE CONDITION: 0 resources retrieved → replace with honest ask.
+      // Creation needs ≥1 meaningful resource (looser than synthesis).
+      if (resourceHits.length < 1) {
+        text =
+          "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly.";
+        modified = true;
+        violations.push("creation_insufficient_resources");
+        console.log(`[mode-lock] creation_insufficient_resources hits=0`);
+        break;
+      }
+
+      // Strip the same forbidden generic-fallback phrases as synthesis.
+      const FORBIDDEN_GENERIC_C: Array<{ re: RegExp; tag: string }> = [
+        { re: /\bbased on (the |your )?resources( provided)?\b[,.]?\s*/gi, tag: "create_based_on_resources" },
+        { re: /\bin general,?\s+/gi, tag: "create_in_general" },
+        { re: /\b(industry\s+)?best\s+practices?\b[,.]?\s*/gi, tag: "create_best_practice" },
+        { re: /\bindustry\s+standard\b[,.]?\s*/gi, tag: "create_industry_standard" },
+        { re: /\bas a general rule,?\s+/gi, tag: "create_general_rule" },
+        { re: /\bgenerally speaking,?\s+/gi, tag: "create_generally_speaking" },
+        { re: /\btypically,?\s+/gi, tag: "create_typically" },
+      ];
+      let cHits = 0;
+      for (const { re, tag } of FORBIDDEN_GENERIC_C) {
+        const before = text;
+        text = text.replace(re, "");
+        if (text !== before) { cHits += 1; violations.push(`stripped_${tag}`); }
+      }
+      if (cHits > 0) {
+        text = text.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+        modified = true;
+      }
+
+      // STRUCTURAL GUARD: require Source Basis + Reused vs Created sections + citations.
+      const hasSourceBasis = /\bsource\s+basis\b/i.test(text);
+      const hasReusedCreated = /\breused\s+vs\s+created\b/i.test(text) ||
+        (/\breused\b/i.test(text) && /\bcreated\b/i.test(text));
+      const hasCitationsC = /(KI\[[a-z0-9_-]+\]|PLAYBOOK\[[a-z0-9_-]+\]|RESOURCE\[[a-z0-9_-]+\])/i.test(text);
+      if (!hasSourceBasis) { violations.push("creation_missing_source_basis"); shouldRegenerate = true; }
+      if (!hasReusedCreated) { violations.push("creation_missing_reused_vs_created"); shouldRegenerate = true; }
+      if (!hasCitationsC) { violations.push("creation_missing_source_citations"); shouldRegenerate = true; }
+      break;
+    }
+
+    case "evaluation": {
+      // FAILURE CONDITION: <2 resources → user's STANDARDS need triangulation.
+      if (resourceHits.length < 2) {
+        text =
+          "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly.";
+        modified = true;
+        violations.push("evaluation_insufficient_resources");
+        console.log(`[mode-lock] evaluation_insufficient_resources hits=${resourceHits.length}`);
+        break;
+      }
+
+      const FORBIDDEN_GENERIC_E: Array<{ re: RegExp; tag: string }> = [
+        { re: /\bbased on (the |your )?resources( provided)?\b[,.]?\s*/gi, tag: "eval_based_on_resources" },
+        { re: /\bin general,?\s+/gi, tag: "eval_in_general" },
+        { re: /\b(industry\s+)?best\s+practices?\b[,.]?\s*/gi, tag: "eval_best_practice" },
+        { re: /\bindustry\s+standard\b[,.]?\s*/gi, tag: "eval_industry_standard" },
+        { re: /\bas a general rule,?\s+/gi, tag: "eval_general_rule" },
+        { re: /\bgenerally speaking,?\s+/gi, tag: "eval_generally_speaking" },
+        { re: /\btypically,?\s+/gi, tag: "eval_typically" },
+      ];
+      let eHits = 0;
+      for (const { re, tag } of FORBIDDEN_GENERIC_E) {
+        const before = text;
+        text = text.replace(re, "");
+        if (text !== before) { eHits += 1; violations.push(`stripped_${tag}`); }
+      }
+      if (eHits > 0) {
+        text = text.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+        modified = true;
+      }
+
+      // STRUCTURAL GUARD.
+      const hasOverallScore = /\boverall\b[\s:]*\d{1,2}\s*\/\s*10/i.test(text) ||
+        /\boverall\s+score\b/i.test(text);
+      const hasBreakdownTable = /\|.*\|.*\|/.test(text);
+      const hasImprovements = /\bimprovements?\b/i.test(text);
+      const hasAttributionE = /\bsource\s+attribution\b/i.test(text);
+      const hasCitationsE = /(KI\[[a-z0-9_-]+\]|PLAYBOOK\[[a-z0-9_-]+\]|RESOURCE\[[a-z0-9_-]+\])/i.test(text);
+      if (!hasOverallScore) { violations.push("evaluation_missing_overall_score"); shouldRegenerate = true; }
+      if (!hasBreakdownTable) { violations.push("evaluation_missing_breakdown_table"); shouldRegenerate = true; }
+      if (!hasImprovements) { violations.push("evaluation_missing_improvements"); shouldRegenerate = true; }
+      if (!hasAttributionE) { violations.push("evaluation_missing_source_attribution"); shouldRegenerate = true; }
+      if (!hasCitationsE) { violations.push("evaluation_missing_source_citations"); shouldRegenerate = true; }
+
+      // Vague-critique fingerprint.
+      if (/\b(be more concise|stronger cta|improve (the )?tone|good start|with some polish|nice work)\b/i.test(text)) {
+        violations.push("evaluation_vague_critique");
+        shouldRegenerate = true;
+      }
+      break;
+    }
   }
 
   return { text, modified, violations, shouldRegenerate };
@@ -3236,7 +3455,9 @@ async function buildChatSystemPrompt(args: {
     libraryCounts: library?.counts,
     contextSectionLength: contextSection?.length ?? 0,
   }) || !!resources?.userAskedForResource || pickedResourceIds.length > 0
-    || intent.intent === "synthesis";
+    || intent.intent === "synthesis"
+    || intent.intent === "creation"
+    || intent.intent === "evaluation";
 
   if (!useCore) {
     return {
@@ -3366,42 +3587,56 @@ async function handleChat(
   });
   const accountId: string | null = pack.account?.id ?? null;
 
-  // ── SYNTHESIS PRE-GEN SHORT-CIRCUIT ──
-  // If the user asked us to derive a system from their library but we
-  // retrieved fewer than 2 usable resources, do NOT call the LLM. By
-  // definition no real derivation is possible, and any output we'd
-  // generate would be a generic-LLM fallback (the exact failure mode
-  // we're protecting against). Persist + return the canned ask.
-  if (intent.intent === "synthesis" && resourceHits.length < 2) {
+  // ── LIBRARY-GROUNDED PRE-GEN SHORT-CIRCUIT ──
+  // synthesis  → needs ≥2 resources (deriving a system requires triangulation)
+  // evaluation → needs ≥2 resources (grading needs the user's STANDARDS)
+  // creation   → needs ≥1 resource  (building reuses material; one good source is enough)
+  // If the threshold isn't met we DO NOT call the LLM — any output would be a
+  // generic-LLM fallback (the exact failure we're protecting against).
+  const groundedIntent =
+    intent.intent === "synthesis" ||
+    intent.intent === "creation" ||
+    intent.intent === "evaluation";
+  const minHits =
+    intent.intent === "creation" ? 1 : 2;
+  if (groundedIntent && resourceHits.length < minHits) {
     const cannedText =
-      "I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly.";
+      intent.intent === "synthesis"
+        ? "I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly."
+        : "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly.";
+    const guardLabel = `${intent.intent}-guard`;
     console.log(
-      `[synthesis] pre-gen short-circuit: hits=${resourceHits.length} — skipping LLM call`,
+      `[${intent.intent}] pre-gen short-circuit: hits=${resourceHits.length} (min=${minHits}) — skipping LLM call`,
     );
     await supabase.from("strategy_messages").insert({
       thread_id: threadId,
       user_id: userId,
       role: "assistant",
       message_type: "chat",
-      provider_used: "synthesis-guard",
-      model_used: "synthesis-guard",
+      provider_used: guardLabel,
+      model_used: guardLabel,
       fallback_used: false,
       latency_ms: 0,
       content_json: {
         text: cannedText,
         sources_used: pack.sourceCount,
         retrieval_meta: pack.retrievalMeta,
-        model_used: "synthesis-guard",
-        provider_used: "synthesis-guard",
+        model_used: guardLabel,
+        provider_used: guardLabel,
         fallback_used: false,
-        synthesis_short_circuit: { reason: "insufficient_resources", hits: resourceHits.length },
+        library_short_circuit: {
+          intent: intent.intent,
+          reason: "insufficient_resources",
+          hits: resourceHits.length,
+          min_required: minHits,
+        },
       },
     });
     return new Response(
       JSON.stringify({
         text: cannedText,
-        provider: "synthesis-guard",
-        model: "synthesis-guard",
+        provider: guardLabel,
+        model: guardLabel,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
