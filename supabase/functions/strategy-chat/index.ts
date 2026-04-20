@@ -3140,10 +3140,14 @@ function enforceModeLock(
         violations.push("synthesis_generic_stage_scaffold");
         shouldRegenerate = true;
       }
+
+      // APPLICATION LAYER GUARD: appendix must include Situation/Audience/Industry.
+      if (!hasApplicationAppendix(text)) {
+        violations.push("synthesis_missing_application_appendix");
+        shouldRegenerate = true;
+      }
       break;
     }
-
-    case "creation": {
       // FAILURE CONDITION: 0 resources retrieved → replace with honest ask.
       // Creation needs ≥1 meaningful resource (looser than synthesis).
       if (resourceHits.length < 1) {
