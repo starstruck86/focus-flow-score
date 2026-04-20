@@ -2477,7 +2477,7 @@ This lets the user audit the derivation end-to-end.
 ═══ FAILURE CONDITION ═══
 If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, OR the resources don't share enough overlapping patterns to derive a real system, output EXACTLY this single line and STOP:
 "I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly."
-Do NOT produce a generic framework as a fallback. Do NOT invent sources.${constraintLine}${substanceContract}${bindingClause}`;
+Do NOT produce a generic framework as a fallback. Do NOT invent sources.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
 
     case "creation":
@@ -2515,7 +2515,7 @@ The actual usable output the user can paste. Render it cleanly (no commentary mi
 
 ═══ FAILURE CONDITION ═══
 If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain ZERO usable resources, output EXACTLY this single line and STOP:
-"I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly."${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+"I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly."${economicLayer}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "evaluation":
       return `═══ MODE LOCK: EVALUATION (COACH USING LIBRARY) ═══
@@ -2563,7 +2563,7 @@ Bulleted map of each cited source → which dimension(s) / improvement(s) it inf
 ═══ FAILURE CONDITION ═══
 If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, output EXACTLY this single line and STOP:
 "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly."
-Do NOT produce a generic critique as a fallback.${constraintLine}${substanceContract}${bindingClause}`;
+Do NOT produce a generic critique as a fallback.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "freeform":
     default:
