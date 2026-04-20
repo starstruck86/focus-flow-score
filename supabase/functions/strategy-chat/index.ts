@@ -3604,7 +3604,7 @@ async function handleChat(
         // Step 2: MODE-LOCK GUARD — strip forbidden tails, truncate
         // sentence-cap violations, prepend missing sentinels. This
         // happens BEFORE the user sees a single character.
-        const guarded = enforceModeLock(rawVisible, intent);
+        const guarded = enforceModeLock(rawVisible, intent, { resourceHits });
         if (guarded.modified || guarded.violations.length) {
           console.log(
             `[mode-lock] stream intent=${intent.intent} violations=${
