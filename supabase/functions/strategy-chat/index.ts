@@ -2708,7 +2708,7 @@ If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable
 1. Open with ONE honest line: "I found N resource(s) and M KI(s) related to this — not enough to fully derive from your library, so here is a best first-pass system using general operator reasoning."
 2. Then produce the full required output shape using your reasoning. Mark each section as **Grounded** (when citing a real source) or **Extended** (when reasoning).
 3. End with ONE clarifying question only if it would materially sharpen the next pass (e.g. "Point me to your top 2 cold-call calls and I'll re-weight against those.").
-NEVER refuse. NEVER output a one-line stop. NEVER invent sources.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+NEVER refuse. NEVER output a one-line stop. NEVER invent sources.${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
 
     case "creation":
@@ -2745,7 +2745,7 @@ The actual usable output the user can paste. Render it cleanly (no commentary mi
 - Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on your resources", "in general", "best practice", "industry standard", "as a general rule", "typically", "generally speaking".
 
 ═══ THIN-MODE CONTRACT (when grounding is weak) ═══
-If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain ZERO usable resources, you MUST still produce the asset using general operator reasoning. Open with one honest line stating what was searched and that nothing matched, then deliver the full asset under the required headers above. Mark every line under "Reused vs Created" as **Created (extended)** since the library could not anchor it. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${economicLayer}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain ZERO usable resources, you MUST still produce the asset using general operator reasoning. Open with one honest line stating what was searched and that nothing matched, then deliver the full asset under the required headers above. Mark every line under "Reused vs Created" as **Created (extended)** since the library could not anchor it. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${operatorReasoningContract}${economicLayer}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "evaluation":
       return `═══ MODE LOCK: EVALUATION (COACH USING LIBRARY) ═══
@@ -2791,7 +2791,7 @@ Bulleted map of each cited source → which dimension(s) / improvement(s) it inf
 - Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on your resources", "in general", "best practice", "industry standard", "as a general rule", "typically", "generally speaking".
 
 ═══ THIN-MODE CONTRACT (when grounding is weak) ═══
-If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, you MUST still grade the asset. Open with one honest line stating that the library couldn't anchor the standards, then proceed with the full required output shape using general operator reasoning. Mark each "Source" cell as "Operator pattern" when no internal source exists. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, you MUST still grade the asset. Open with one honest line stating that the library couldn't anchor the standards, then proceed with the full required output shape using general operator reasoning. Mark each "Source" cell as "Operator pattern" when no internal source exists. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "freeform":
     default:
