@@ -51,21 +51,21 @@ const RESEARCH_TASKS: ReadonlySet<StrategyTaskType> = new Set([
 
 const STRATEGY_MODEL_ROUTES: Record<StrategyTaskType, StrategyModelRoute> = {
   // ── OpenAI = DEFAULT ENGINE ───────────────────────────────────
-  chat_general:         { provider: 'openai', model: 'gpt-4o',  temperature: 0.7, maxTokens: 4096,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
-  email_evaluation:     { provider: 'openai', model: 'gpt-4o',  temperature: 0.4, maxTokens: 4096,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
-  territory_tiering:    { provider: 'openai', model: 'gpt-4o',  temperature: 0.2, maxTokens: 8192,  reasoning: { effort: 'medium' }, fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
-  account_plan:         { provider: 'openai', model: 'gpt-4o',  temperature: 0.5, maxTokens: 8192,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
-  opportunity_strategy: { provider: 'openai', model: 'gpt-4o',  temperature: 0.5, maxTokens: 8192,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
-  brainstorm:           { provider: 'openai', model: 'gpt-4o',  temperature: 0.9, maxTokens: 4096,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
-  rollup:               { provider: 'openai', model: 'gpt-4o',  temperature: 0.3, maxTokens: 4096,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-20250514' },
+  chat_general:         { provider: 'openai', model: 'gpt-4o',  temperature: 0.7, maxTokens: 4096,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-5-20250929' },
+  email_evaluation:     { provider: 'openai', model: 'gpt-4o',  temperature: 0.4, maxTokens: 4096,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-5-20250929' },
+  territory_tiering:    { provider: 'openai', model: 'gpt-4o',  temperature: 0.2, maxTokens: 8192,  reasoning: { effort: 'medium' }, fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-5-20250929' },
+  account_plan:         { provider: 'openai', model: 'gpt-4o',  temperature: 0.5, maxTokens: 8192,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-5-20250929' },
+  opportunity_strategy: { provider: 'openai', model: 'gpt-4o',  temperature: 0.5, maxTokens: 8192,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-5-20250929' },
+  brainstorm:           { provider: 'openai', model: 'gpt-4o',  temperature: 0.9, maxTokens: 4096,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-5-20250929' },
+  rollup:               { provider: 'openai', model: 'gpt-4o',  temperature: 0.3, maxTokens: 4096,  fallbackProvider: 'anthropic', fallbackModel: 'claude-sonnet-4-5-20250929' },
 
   // ── Perplexity = RESEARCH ENGINE (explicit only) ──────────────
   deep_research:        { provider: 'perplexity', model: 'sonar-pro', temperature: 0.3, maxTokens: 8192, fallbackProvider: 'openai', fallbackModel: 'gpt-4o' },
 
   // ── Claude = ARTIFACT ENGINE ──────────────────────────────────
-  transform_output:     { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.5, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'gpt-4o' },
-  regenerate_artifact:  { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.5, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'gpt-4o' },
-  refine_artifact:      { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.5, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'gpt-4o' },
+  transform_output:     { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', temperature: 0.5, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'gpt-4o' },
+  regenerate_artifact:  { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', temperature: 0.5, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'gpt-4o' },
+  refine_artifact:      { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', temperature: 0.5, maxTokens: 4096, fallbackProvider: 'openai', fallbackModel: 'gpt-4o' },
 };
 
 /**
@@ -107,7 +107,7 @@ export function isResearchTask(taskType: StrategyTaskType): boolean {
 export function getModelDisplayName(model: string): string {
   const names: Record<string, string> = {
     'gpt-4o': 'GPT-4o',
-    'claude-sonnet-4-20250514': 'Claude Sonnet 4',
+    'claude-sonnet-4-5-20250929': 'Claude Sonnet 4',
     'sonar-pro': 'Sonar Pro',
   };
   return names[model] || model;

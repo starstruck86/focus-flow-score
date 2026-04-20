@@ -609,7 +609,7 @@ const ROUTES: Record<TaskType, LLMRoute> = {
     primaryProvider: "openai",
     model: "gpt-4o",
     fallbackProvider: "anthropic",
-    fallbackModel: "claude-sonnet-4-20250514",
+    fallbackModel: "claude-sonnet-4-5-20250929",
     temperature: 0.7,
     maxTokens: 4096,
     useTools: false,
@@ -627,7 +627,7 @@ const ROUTES: Record<TaskType, LLMRoute> = {
     primaryProvider: "openai",
     model: "gpt-4o",
     fallbackProvider: "anthropic",
-    fallbackModel: "claude-sonnet-4-20250514",
+    fallbackModel: "claude-sonnet-4-5-20250929",
     temperature: 0.4,
     maxTokens: 4096,
     useTools: true,
@@ -636,7 +636,7 @@ const ROUTES: Record<TaskType, LLMRoute> = {
     primaryProvider: "openai",
     model: "gpt-4o",
     fallbackProvider: "anthropic",
-    fallbackModel: "claude-sonnet-4-20250514",
+    fallbackModel: "claude-sonnet-4-5-20250929",
     temperature: 0.2,
     maxTokens: 8192,
     useTools: true,
@@ -646,7 +646,7 @@ const ROUTES: Record<TaskType, LLMRoute> = {
     primaryProvider: "openai",
     model: "gpt-4o",
     fallbackProvider: "anthropic",
-    fallbackModel: "claude-sonnet-4-20250514",
+    fallbackModel: "claude-sonnet-4-5-20250929",
     temperature: 0.5,
     maxTokens: 8192,
     useTools: true,
@@ -655,7 +655,7 @@ const ROUTES: Record<TaskType, LLMRoute> = {
     primaryProvider: "openai",
     model: "gpt-4o",
     fallbackProvider: "anthropic",
-    fallbackModel: "claude-sonnet-4-20250514",
+    fallbackModel: "claude-sonnet-4-5-20250929",
     temperature: 0.5,
     maxTokens: 8192,
     useTools: true,
@@ -664,7 +664,7 @@ const ROUTES: Record<TaskType, LLMRoute> = {
     primaryProvider: "openai",
     model: "gpt-4o",
     fallbackProvider: "anthropic",
-    fallbackModel: "claude-sonnet-4-20250514",
+    fallbackModel: "claude-sonnet-4-5-20250929",
     temperature: 0.9,
     maxTokens: 4096,
     useTools: true,
@@ -673,12 +673,109 @@ const ROUTES: Record<TaskType, LLMRoute> = {
     primaryProvider: "openai",
     model: "gpt-4o",
     fallbackProvider: "anthropic",
-    fallbackModel: "claude-sonnet-4-20250514",
+    fallbackModel: "claude-sonnet-4-5-20250929",
     temperature: 0.3,
     maxTokens: 4096,
     useTools: true,
   },
 };
+
+// ═══════════════════════════════════════════════════════════
+// 4-MODE LIBRARY DECISION MODEL (replaces binary refusal gate)
+//
+// MODE A — STRONG    : ≥2 hits + grounded intent (synthesis/eval) → OpenAI precision
+// MODE B — PARTIAL   : 1 hit OR weak coverage → Claude (extension/narrative)
+// MODE C — GENERAL   : non-library question, no grounding signal → OpenAI
+// MODE D — THIN      : 0 hits on grounded ask → OpenAI + honest gap framing
+//
+// CREATION intent (any mode) → Claude (artifact voice)
+// EVALUATION/SYNTHESIS with strong grounding → OpenAI (precision)
+//
+// Mode is persisted on every assistant message in content_json.routing_decision
+// so we can audit provider distribution and prove no silent dominance.
+// ═══════════════════════════════════════════════════════════
+type LibraryMode = "strong" | "partial" | "general" | "thin";
+
+function classifyLibraryMode(args: {
+  intent: string;
+  resourceHits: number;
+  kiHits: number;
+  hasGroundingPhrase: boolean;
+}): { mode: LibraryMode; reason: string } {
+  const { intent, resourceHits, kiHits, hasGroundingPhrase } = args;
+  const groundedIntent =
+    intent === "synthesis" || intent === "evaluation" || intent === "creation";
+  const isCreation = intent === "creation";
+  const totalSignal = resourceHits + Math.min(kiHits, 4); // cap KI weight
+
+  // GENERAL: non-grounded, non-creation chat — model just answers
+  if (!groundedIntent && !hasGroundingPhrase) {
+    return { mode: "general", reason: `intent=${intent}_no_grounding_phrase` };
+  }
+
+  // THIN: user explicitly asked the library to ground the answer but it can't
+  if (groundedIntent && resourceHits === 0 && kiHits === 0) {
+    return { mode: "thin", reason: "grounded_ask_zero_signal" };
+  }
+
+  // STRONG: ≥2 resources OR (1 resource + ≥2 KIs) for grounded asks
+  if (groundedIntent && (resourceHits >= 2 || (resourceHits >= 1 && kiHits >= 2))) {
+    // Creation always goes to Claude even with strong grounding (artifact voice)
+    if (isCreation) {
+      return { mode: "partial", reason: "creation_intent_routes_to_claude" };
+    }
+    return { mode: "strong", reason: `resources=${resourceHits}_kis=${kiHits}` };
+  }
+
+  // PARTIAL: some signal exists, model must extend
+  if (totalSignal >= 1 || hasGroundingPhrase) {
+    return { mode: "partial", reason: `partial_signal_resources=${resourceHits}_kis=${kiHits}` };
+  }
+
+  // Fallback: treat as general
+  return { mode: "general", reason: "fallback_no_match" };
+}
+
+/**
+ * Mode-aware route resolver. Implements the locked routing table:
+ *   Mode A (strong) + synthesis/evaluation → OpenAI (precision)
+ *   Mode B (partial) → Claude (extension)
+ *   Creation intent (any mode) → Claude (voice)
+ *   Mode C (general) → OpenAI
+ *   Mode D (thin) → OpenAI (honest gap)
+ *   deep_research → Perplexity (unchanged)
+ */
+function resolveLLMRouteForMode(
+  taskType: string,
+  intent: string,
+  mode: LibraryMode,
+): LLMRoute & { _routingReason: string } {
+  const base = resolveLLMRoute(taskType);
+
+  // Research path is sacred — never override
+  if (taskType === "deep_research") {
+    return { ...base, _routingReason: "deep_research_perplexity" };
+  }
+
+  const isCreation = intent === "creation";
+  const wantsClaude = mode === "partial" || isCreation;
+
+  if (wantsClaude && PROVIDER_HEALTH.anthropicDirect) {
+    // Swap primary↔fallback so Claude leads, OpenAI catches
+    return {
+      ...base,
+      primaryProvider: "anthropic",
+      model: "claude-sonnet-4-5-20250929",
+      fallbackProvider: "openai",
+      fallbackModel: "gpt-4o",
+      _routingReason: isCreation
+        ? `creation_intent_mode_${mode}`
+        : `mode_${mode}_extension`,
+    };
+  }
+
+  return { ...base, _routingReason: `mode_${mode}_${intent}_openai_precision` };
+}
 
 function resolveLLMRoute(taskType: string): LLMRoute {
   const route = { ...(ROUTES[taskType as TaskType] || ROUTES.chat_general) };
@@ -3972,7 +4069,8 @@ async function handleChat(
     content_json: { text: content },
   });
 
-  const route = resolveLLMRoute("chat_general");
+  // Initial route is provisional — replaced below once we know the mode.
+  let route = resolveLLMRoute("chat_general");
   if (forceFallback) route._smokeTestForceFail = true;
 
   const {
@@ -3992,63 +4090,53 @@ async function handleChat(
   });
   const accountId: string | null = pack.account?.id ?? null;
 
-  // ── LIBRARY-GROUNDED PRE-GEN SHORT-CIRCUIT ──
-  // synthesis  → needs ≥2 resources (deriving a system requires triangulation)
-  // evaluation → needs ≥2 resources (grading needs the user's STANDARDS)
-  // creation   → needs ≥1 resource  (building reuses material; one good source is enough)
-  // If the threshold isn't met we DO NOT call the LLM — any output would be a
-  // generic-LLM fallback (the exact failure we're protecting against).
-  const groundedIntent =
-    intent.intent === "synthesis" ||
-    intent.intent === "creation" ||
-    intent.intent === "evaluation";
-  const minHits =
-    intent.intent === "creation" ? 1 : 2;
-  if (groundedIntent && resourceHits.length < minHits) {
-    const cannedText =
-      intent.intent === "synthesis"
-        ? "I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly."
-        : "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly.";
-    const guardLabel = `${intent.intent}-guard`;
-    console.log(
-      `[${intent.intent}] pre-gen short-circuit: hits=${resourceHits.length} (min=${minHits}) — skipping LLM call`,
-    );
-    await supabase.from("strategy_messages").insert({
-      thread_id: threadId,
-      user_id: userId,
-      role: "assistant",
-      message_type: "chat",
-      provider_used: guardLabel,
-      model_used: guardLabel,
-      fallback_used: false,
-      latency_ms: 0,
-      content_json: {
-        text: cannedText,
-        sources_used: pack.sourceCount,
-        retrieval_meta: pack.retrievalMeta,
-        model_used: guardLabel,
-        provider_used: guardLabel,
-        fallback_used: false,
-        library_short_circuit: {
-          intent: intent.intent,
-          reason: "insufficient_resources",
-          hits: resourceHits.length,
-          min_required: minHits,
-        },
-      },
-    });
-    return new Response(
-      JSON.stringify({
-        text: cannedText,
-        provider: guardLabel,
-        model: guardLabel,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+  // ── 4-MODE LIBRARY DECISION (replaces binary refusal gate) ──
+  // Library is a foundation, not a gate. Always produce output.
+  // - Strong  → OpenAI precision
+  // - Partial → Claude (extension)
+  // - General → OpenAI
+  // - Thin    → OpenAI + honest gap framing in the prompt
+  const groundingPhraseRe =
+    /\b(using|use|from|based on|leveraging|across|grounded in|pulling from)\s+(my|the|these|those|our)\b/i;
+  const hasGroundingPhrase = groundingPhraseRe.test(content || "");
+  const kiHits = (pack as any)?.retrievalMeta?.ki_count ?? 0;
+  const { mode, reason: modeReason } = classifyLibraryMode({
+    intent: intent.intent,
+    resourceHits: resourceHits.length,
+    kiHits,
+    hasGroundingPhrase,
+  });
+
+  // Mode-aware re-routing
+  const modeRoute = resolveLLMRouteForMode("chat_general", intent.intent, mode);
+  if (forceFallback) modeRoute._smokeTestForceFail = true;
+  route = modeRoute;
+  console.log(
+    `[mode] intent=${intent.intent} mode=${mode} reason=${modeReason} provider=${route.primaryProvider} model=${route.model} routing=${modeRoute._routingReason}`,
+  );
+
+  // Inject a small thinking-path preamble into the system prompt for grounded
+  // modes so the assistant opens with what it found and what it's extending.
+  // The preamble is appended; the model must obey the original mode-lock too.
+  let effectiveSystemPrompt = systemPrompt;
+  if (mode === "strong" || mode === "partial" || mode === "thin") {
+    const preamble = `
+
+═══ LIBRARY-AWARENESS PROTOCOL (mode=${mode.toUpperCase()}) ═══
+You found ${resourceHits.length} resource hit(s) and ${kiHits} KI hit(s) for this ask.
+${
+  mode === "strong"
+    ? "STRONG grounding: derive primarily from the cited resources/KIs. Cite explicitly. Do NOT drift into generic reasoning."
+    : mode === "partial"
+    ? "PARTIAL grounding: USE what exists, then EXTEND with reasoning. Mark sections as **Grounded** (from library) vs **Extended** (your reasoning). Never refuse — produce a first-pass answer."
+    : "THIN grounding: open with one honest line stating what was found (e.g. 'Found 1 weakly related resource and no supporting KIs'). Then proceed using general reasoning. Mark assumptions. Offer one specific clarifying question at the end if it would materially sharpen the output. NEVER refuse, NEVER produce a one-line stop."
+}
+Forbidden: canned refusals like "I don't have enough signal" without ALSO producing the best first-pass answer you can.`;
+    effectiveSystemPrompt = `${systemPrompt}${preamble}`;
   }
 
   const messages = [
-    { role: "system" as const, content: systemPrompt },
+    { role: "system" as const, content: effectiveSystemPrompt },
     ...pack.recentMessages.map((m) => ({
       role: m.role === "user" ? "user" as const : "assistant" as const,
       content: m.text,
@@ -4136,6 +4224,19 @@ async function handleChat(
             verified: audit.verifiedTitles,
           }
           : undefined,
+        routing_decision: {
+          mode,
+          mode_reason: modeReason,
+          intent: intent.intent,
+          resource_hits: resourceHits.length,
+          ki_hits: kiHits,
+          intended_provider: route.primaryProvider,
+          intended_model: route.model,
+          actual_provider: result.provider,
+          actual_model: result.model,
+          fallback_used: result.fallbackUsed,
+          routing_reason: route._routingReason,
+        },
       },
     });
     // Cross-thread resource memory: persist VERIFIED citations only.
@@ -4353,6 +4454,19 @@ async function handleChat(
                 verified: audit.verifiedTitles,
               }
               : undefined,
+            routing_decision: {
+              mode,
+              mode_reason: modeReason,
+              intent: intent.intent,
+              resource_hits: resourceHits.length,
+              ki_hits: kiHits,
+              intended_provider: route.primaryProvider,
+              intended_model: route.model,
+              actual_provider: result.provider,
+              actual_model: result.model,
+              fallback_used: false,
+              routing_reason: route._routingReason,
+            },
           },
         });
         await supabase.from("strategy_threads").update({
