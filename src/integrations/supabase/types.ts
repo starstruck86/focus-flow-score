@@ -6607,6 +6607,154 @@ export type Database = {
         }
         Relationships: []
       }
+      strategy_stress_runs: {
+        Row: {
+          created_at: string
+          failed: number
+          finished_at: string | null
+          id: string
+          label: string
+          notes: string | null
+          started_at: string
+          status: string
+          succeeded: number
+          thread_id: string
+          total_prompts: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          label: string
+          notes?: string | null
+          started_at?: string
+          status?: string
+          succeeded?: number
+          thread_id: string
+          total_prompts?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          label?: string
+          notes?: string | null
+          started_at?: string
+          status?: string
+          succeeded?: number
+          thread_id?: string
+          total_prompts?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_stress_runs_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      strategy_stress_turns: {
+        Row: {
+          actual_model: string | null
+          actual_provider: string | null
+          appendix_audience: string | null
+          appendix_industry: string | null
+          appendix_present: boolean | null
+          appendix_situation: string | null
+          assistant_message_id: string | null
+          citation_audit: Json | null
+          error: string | null
+          fallback_used: boolean | null
+          finished_at: string | null
+          id: string
+          intended_model: string | null
+          intended_provider: string | null
+          intent: string | null
+          latency_ms: number | null
+          output: string | null
+          output_chars: number | null
+          prompt: string
+          run_id: string
+          started_at: string
+          status_code: number | null
+          thread_id: string
+          turn_index: number
+          user_id: string
+          violations: Json | null
+        }
+        Insert: {
+          actual_model?: string | null
+          actual_provider?: string | null
+          appendix_audience?: string | null
+          appendix_industry?: string | null
+          appendix_present?: boolean | null
+          appendix_situation?: string | null
+          assistant_message_id?: string | null
+          citation_audit?: Json | null
+          error?: string | null
+          fallback_used?: boolean | null
+          finished_at?: string | null
+          id?: string
+          intended_model?: string | null
+          intended_provider?: string | null
+          intent?: string | null
+          latency_ms?: number | null
+          output?: string | null
+          output_chars?: number | null
+          prompt: string
+          run_id: string
+          started_at?: string
+          status_code?: number | null
+          thread_id: string
+          turn_index: number
+          user_id: string
+          violations?: Json | null
+        }
+        Update: {
+          actual_model?: string | null
+          actual_provider?: string | null
+          appendix_audience?: string | null
+          appendix_industry?: string | null
+          appendix_present?: boolean | null
+          appendix_situation?: string | null
+          assistant_message_id?: string | null
+          citation_audit?: Json | null
+          error?: string | null
+          fallback_used?: boolean | null
+          finished_at?: string | null
+          id?: string
+          intended_model?: string | null
+          intended_provider?: string | null
+          intent?: string | null
+          latency_ms?: number | null
+          output?: string | null
+          output_chars?: number | null
+          prompt?: string
+          run_id?: string
+          started_at?: string
+          status_code?: number | null
+          thread_id?: string
+          turn_index?: number
+          user_id?: string
+          violations?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_stress_turns_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_stress_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       strategy_thread_conflicts: {
         Row: {
           conflict_kind: string
