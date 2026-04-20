@@ -2005,6 +2005,8 @@ function deriveLibraryScopes(account: any, userContent: string): string[] {
 type ChatIntent =
   | "bootstrap" // vague ask + no account context — orient the user
   | "synthesis" // derive a framework/scoring/rubric FROM the user's library
+  | "creation"  // BUILD an asset (email/script/plan) FROM the user's library
+  | "evaluation" // GRADE/critique/improve content USING the user's library
   | "template"
   | "email"
   | "message" // SMS/LinkedIn/Slack/voicemail/script
