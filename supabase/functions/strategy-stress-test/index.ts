@@ -130,7 +130,9 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // Auth: require a real user JWT (RLS enforces ownership)
+  // Auth: accept either a real user JWT (normal path) OR the service-role key
+  // with `x-as-user-id` header (admin/validation path used to drive the
+  // hostile-validation suite from the sandbox without browser interaction).
   const authHeader = req.headers.get("authorization") ?? "";
   if (!authHeader.startsWith("Bearer ")) {
     return new Response(JSON.stringify({ error: "missing auth" }), {
@@ -138,21 +140,68 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  const userJwt = authHeader.slice(7);
-
-  const userClient = createClient(SUPABASE_URL, ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-  });
+  const bearer = authHeader.slice(7);
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-  const { data: userResult, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userResult?.user) {
-    return new Response(JSON.stringify({ error: "invalid auth" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+  let user: { id: string; email?: string | null } | null = null;
+  let userJwt: string = bearer;
+  const isServiceRole = bearer === SERVICE_ROLE_KEY;
+  const asUserHeader = req.headers.get("x-as-user-id") ?? "";
+
+  if (isServiceRole && asUserHeader) {
+    // Admin path: look up the target user, then mint a short-lived access
+    // token for them so the downstream strategy-chat call sees a real user.
+    const { data: targetUser, error: targetErr } = await admin.auth.admin
+      .getUserById(asUserHeader);
+    if (targetErr || !targetUser?.user) {
+      return new Response(JSON.stringify({ error: "as_user_id not found" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Generate a magiclink → exchange the embedded token_hash for a session.
+    const { data: linkData, error: linkErr } = await admin.auth.admin
+      .generateLink({
+        type: "magiclink",
+        email: targetUser.user.email!,
+      });
+    if (linkErr || !linkData?.properties?.hashed_token) {
+      return new Response(JSON.stringify({
+        error: "could not mint impersonation token",
+        detail: linkErr?.message,
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: verifyData, error: verifyErr } = await admin.auth.verifyOtp({
+      type: "magiclink",
+      token_hash: linkData.properties.hashed_token,
     });
+    if (verifyErr || !verifyData?.session?.access_token) {
+      return new Response(JSON.stringify({
+        error: "could not exchange token",
+        detail: verifyErr?.message,
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    user = { id: targetUser.user.id, email: targetUser.user.email };
+    userJwt = verifyData.session.access_token;
+  } else {
+    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: userResult, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !userResult?.user) {
+      return new Response(JSON.stringify({ error: "invalid auth" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    user = { id: userResult.user.id, email: userResult.user.email };
   }
-  const user = userResult.user;
 
   // ── GET: list runs or fetch one ───────────────────────────────
   if (req.method === "GET") {
