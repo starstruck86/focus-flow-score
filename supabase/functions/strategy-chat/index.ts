@@ -4006,10 +4006,14 @@ async function buildChatSystemPrompt(args: {
   const modeLockBlock = buildModeLockBlock(intent);
 
   // No account, no thread context → don't force Strategy Core onto small talk.
-  // EXCEPTION: when the user explicitly picked a library resource this turn
-  // (sidecar pickedResourceIds), we MUST run the resource pipeline so the
-  // assistant grounds in that resource — even on a freeform thread.
-  if (!accountId && (!contextSection || contextSection.length < 200) && pickedResourceIds.length === 0) {
+  // EXCEPTIONS: explicit library picks OR grounded asks ("using my resources",
+  // topic/resource intent) must still run retrieval on freeform threads.
+  const freeformGroundingRe = /\b(using|use|from|based on|leveraging|across|grounded in|pulling from)\s+(my|the|these|those|our)\b/i;
+  const groundedAsk =
+    freeformGroundingRe.test(userContent || "") ||
+    userAskedForResource(userContent) ||
+    inferTopicScopes(userContent).length > 0;
+  if (!accountId && (!contextSection || contextSection.length < 200) && pickedResourceIds.length === 0 && !groundedAsk) {
     return {
       prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
       workingThesis: null,
