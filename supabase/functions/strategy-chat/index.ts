@@ -3448,6 +3448,13 @@ function enforceModeLock(
       if (!hasApplicationAppendix(text)) {
         violations.push("synthesis_missing_application_appendix");
         shouldRegenerate = true;
+      } else {
+        // BODY ↔ APPENDIX CONSISTENCY: kill appendix theater.
+        const cons = enforceApplicationConsistency(text);
+        if (cons.violations.length) {
+          violations.push(...cons.violations);
+          if (cons.shouldRegenerate) shouldRegenerate = true;
+        }
       }
       break;
     }
@@ -3496,6 +3503,12 @@ function enforceModeLock(
       if (!hasApplicationAppendix(text)) {
         violations.push("creation_missing_application_appendix");
         shouldRegenerate = true;
+      } else {
+        const cons = enforceApplicationConsistency(text);
+        if (cons.violations.length) {
+          violations.push(...cons.violations);
+          if (cons.shouldRegenerate) shouldRegenerate = true;
+        }
       }
       break;
     }
@@ -3552,6 +3565,12 @@ function enforceModeLock(
       if (!hasApplicationAppendix(text)) {
         violations.push("evaluation_missing_application_appendix");
         shouldRegenerate = true;
+      } else {
+        const cons = enforceApplicationConsistency(text);
+        if (cons.violations.length) {
+          violations.push(...cons.violations);
+          if (cons.shouldRegenerate) shouldRegenerate = true;
+        }
       }
       break;
     }
