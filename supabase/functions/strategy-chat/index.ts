@@ -3494,15 +3494,16 @@ function enforceModeLock(
       // This is the strongest guard: even if the model produced a generic
       // framework, we override it because by definition no real derivation
       // could have happened.
+      // THIN-MODE: when <2 resources, do NOT overwrite. The model was
+      // already instructed (via the THIN-MODE CONTRACT in the system
+      // prompt + the LIBRARY-AWARENESS PROTOCOL preamble) to produce a
+      // best first-pass derivation with honest gap framing. Trust the
+      // model output; just record the signal for audit.
       if (resourceHits.length < 2) {
-        text =
-          "I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly.";
-        modified = true;
-        violations.push("synthesis_insufficient_resources");
+        violations.push("synthesis_thin_grounding_allowed");
         console.log(
-          `[mode-lock] synthesis_insufficient_resources hits=${resourceHits.length}`,
+          `[mode-lock] synthesis_thin_grounding_allowed hits=${resourceHits.length} (no overwrite)`,
         );
-        break;
       }
 
       // Strip forbidden generic-fallback phrases. These signal the model
@@ -3584,13 +3585,12 @@ function enforceModeLock(
     case "creation": {
       // FAILURE CONDITION: 0 resources retrieved → replace with honest ask.
       // Creation needs ≥1 meaningful resource (looser than synthesis).
+      // THIN-MODE: when 0 resources, do NOT overwrite. System prompt +
+      // preamble already instruct the model to produce the asset using
+      // operator reasoning with explicit "Created (extended)" tagging.
       if (resourceHits.length < 1) {
-        text =
-          "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly.";
-        modified = true;
-        violations.push("creation_insufficient_resources");
-        console.log(`[mode-lock] creation_insufficient_resources hits=0`);
-        break;
+        violations.push("creation_thin_grounding_allowed");
+        console.log(`[mode-lock] creation_thin_grounding_allowed hits=0 (no overwrite)`);
       }
 
       // Strip the same forbidden generic-fallback phrases as synthesis.
@@ -3637,13 +3637,11 @@ function enforceModeLock(
 
     case "evaluation": {
       // FAILURE CONDITION: <2 resources → user's STANDARDS need triangulation.
+      // THIN-MODE: when <2 resources, do NOT overwrite. The model was
+      // already told to grade with operator-pattern source tagging.
       if (resourceHits.length < 2) {
-        text =
-          "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly.";
-        modified = true;
-        violations.push("evaluation_insufficient_resources");
-        console.log(`[mode-lock] evaluation_insufficient_resources hits=${resourceHits.length}`);
-        break;
+        violations.push("evaluation_thin_grounding_allowed");
+        console.log(`[mode-lock] evaluation_thin_grounding_allowed hits=${resourceHits.length} (no overwrite)`);
       }
 
       const FORBIDDEN_GENERIC_E: Array<{ re: RegExp; tag: string }> = [
