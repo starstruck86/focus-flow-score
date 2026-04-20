@@ -3455,7 +3455,9 @@ async function buildChatSystemPrompt(args: {
     libraryCounts: library?.counts,
     contextSectionLength: contextSection?.length ?? 0,
   }) || !!resources?.userAskedForResource || pickedResourceIds.length > 0
-    || intent.intent === "synthesis";
+    || intent.intent === "synthesis"
+    || intent.intent === "creation"
+    || intent.intent === "evaluation";
 
   if (!useCore) {
     return {
