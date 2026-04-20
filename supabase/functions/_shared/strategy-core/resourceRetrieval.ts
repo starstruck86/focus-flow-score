@@ -974,8 +974,11 @@ export async function retrieveResourceContext(
     opportunity_linked: 4,
     phrase_in_title: 5,
     description_match: 6,
+    topic_tag: 6,
+    topic_title: 7,
     content_match: 7,
-    category_intent: 8,
+    topic_content: 8,
+    category_intent: 9,
   };
   // Map inferred categories → resource_type values that should be boosted.
   const CATEGORY_TYPE_BOOST: Record<string, string[]> = {
@@ -1003,17 +1006,45 @@ export async function retrieveResourceContext(
 
   const hits = all.slice(0, HARD_LIMIT);
 
-  return {
+  const contextBlock = renderResourceContextBlock({
     hits,
+    kiHits,
     userAskedForResource: askedFor,
+    userAskedForTopic: askedForTopic,
     extractedPhrases: phrases,
     inferredCategories: categories,
-    contextBlock: renderResourceContextBlock({
-      hits,
-      userAskedForResource: askedFor,
-      extractedPhrases: phrases,
-      inferredCategories: categories,
-    }),
+    inferredTopics: topics,
+  });
+
+  const debug = {
+    extractedPhrases: phrases,
+    inferredCategories: categories,
+    inferredTopics: topics,
+    resourceHits: hits.map((h) => ({
+      id: h.id,
+      title: h.title,
+      matchKind: h.matchKind,
+      matchReason: h.matchReason,
+    })),
+    kiHits: kiHits.map((k) => ({
+      id: k.id,
+      title: k.title,
+      chapter: k.chapter,
+      matchKind: k.matchKind,
+      matchReason: k.matchReason,
+    })),
+  };
+
+  return {
+    hits,
+    kiHits,
+    userAskedForResource: askedFor,
+    userAskedForTopic: askedForTopic,
+    extractedPhrases: phrases,
+    inferredCategories: categories,
+    inferredTopics: topics,
+    contextBlock,
+    debug,
   };
 }
 
