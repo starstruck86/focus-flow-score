@@ -680,6 +680,103 @@ const ROUTES: Record<TaskType, LLMRoute> = {
   },
 };
 
+// ═══════════════════════════════════════════════════════════
+// 4-MODE LIBRARY DECISION MODEL (replaces binary refusal gate)
+//
+// MODE A — STRONG    : ≥2 hits + grounded intent (synthesis/eval) → OpenAI precision
+// MODE B — PARTIAL   : 1 hit OR weak coverage → Claude (extension/narrative)
+// MODE C — GENERAL   : non-library question, no grounding signal → OpenAI
+// MODE D — THIN      : 0 hits on grounded ask → OpenAI + honest gap framing
+//
+// CREATION intent (any mode) → Claude (artifact voice)
+// EVALUATION/SYNTHESIS with strong grounding → OpenAI (precision)
+//
+// Mode is persisted on every assistant message in content_json.routing_decision
+// so we can audit provider distribution and prove no silent dominance.
+// ═══════════════════════════════════════════════════════════
+type LibraryMode = "strong" | "partial" | "general" | "thin";
+
+function classifyLibraryMode(args: {
+  intent: string;
+  resourceHits: number;
+  kiHits: number;
+  hasGroundingPhrase: boolean;
+}): { mode: LibraryMode; reason: string } {
+  const { intent, resourceHits, kiHits, hasGroundingPhrase } = args;
+  const groundedIntent =
+    intent === "synthesis" || intent === "evaluation" || intent === "creation";
+  const isCreation = intent === "creation";
+  const totalSignal = resourceHits + Math.min(kiHits, 4); // cap KI weight
+
+  // GENERAL: non-grounded, non-creation chat — model just answers
+  if (!groundedIntent && !hasGroundingPhrase) {
+    return { mode: "general", reason: `intent=${intent}_no_grounding_phrase` };
+  }
+
+  // THIN: user explicitly asked the library to ground the answer but it can't
+  if (groundedIntent && resourceHits === 0 && kiHits === 0) {
+    return { mode: "thin", reason: "grounded_ask_zero_signal" };
+  }
+
+  // STRONG: ≥2 resources OR (1 resource + ≥2 KIs) for grounded asks
+  if (groundedIntent && (resourceHits >= 2 || (resourceHits >= 1 && kiHits >= 2))) {
+    // Creation always goes to Claude even with strong grounding (artifact voice)
+    if (isCreation) {
+      return { mode: "partial", reason: "creation_intent_routes_to_claude" };
+    }
+    return { mode: "strong", reason: `resources=${resourceHits}_kis=${kiHits}` };
+  }
+
+  // PARTIAL: some signal exists, model must extend
+  if (totalSignal >= 1 || hasGroundingPhrase) {
+    return { mode: "partial", reason: `partial_signal_resources=${resourceHits}_kis=${kiHits}` };
+  }
+
+  // Fallback: treat as general
+  return { mode: "general", reason: "fallback_no_match" };
+}
+
+/**
+ * Mode-aware route resolver. Implements the locked routing table:
+ *   Mode A (strong) + synthesis/evaluation → OpenAI (precision)
+ *   Mode B (partial) → Claude (extension)
+ *   Creation intent (any mode) → Claude (voice)
+ *   Mode C (general) → OpenAI
+ *   Mode D (thin) → OpenAI (honest gap)
+ *   deep_research → Perplexity (unchanged)
+ */
+function resolveLLMRouteForMode(
+  taskType: string,
+  intent: string,
+  mode: LibraryMode,
+): LLMRoute & { _routingReason: string } {
+  const base = resolveLLMRoute(taskType);
+
+  // Research path is sacred — never override
+  if (taskType === "deep_research") {
+    return { ...base, _routingReason: "deep_research_perplexity" };
+  }
+
+  const isCreation = intent === "creation";
+  const wantsClaude = mode === "partial" || isCreation;
+
+  if (wantsClaude && PROVIDER_HEALTH.anthropic !== false) {
+    // Swap primary↔fallback so Claude leads, OpenAI catches
+    return {
+      ...base,
+      primaryProvider: "anthropic",
+      model: "claude-sonnet-4-5-20250929",
+      fallbackProvider: "openai",
+      fallbackModel: "gpt-4o",
+      _routingReason: isCreation
+        ? `creation_intent_mode_${mode}`
+        : `mode_${mode}_extension`,
+    };
+  }
+
+  return { ...base, _routingReason: `mode_${mode}_${intent}_openai_precision` };
+}
+
 function resolveLLMRoute(taskType: string): LLMRoute {
   const route = { ...(ROUTES[taskType as TaskType] || ROUTES.chat_general) };
 
