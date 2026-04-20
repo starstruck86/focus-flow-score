@@ -806,6 +806,24 @@ function resolveLLMRouteForMode(
   }
 
   const isCreation = intent === "creation";
+
+  // SHORT-FORM short-circuit: openers, subject lines, hooks, voicemails.
+  // ALWAYS OpenAI/gpt-4o, NEVER Claude. Cap maxTokens hard so the
+  // gateway-side timeout (~60s) cannot be reached even on cold paths.
+  // This overrides creation→Claude routing for short-form artifacts.
+  if (mode === "short_form") {
+    return {
+      ...base,
+      primaryProvider: "openai",
+      model: "gpt-4o",
+      fallbackProvider: "openai",
+      fallbackModel: "gpt-4o-mini",
+      maxTokens: 700,
+      temperature: 0.65,
+      _routingReason: `short_form_${intent}_openai_fast`,
+    };
+  }
+
   const wantsClaude = mode === "partial" || isCreation;
 
   if (wantsClaude && PROVIDER_HEALTH.anthropicDirect) {
