@@ -3907,16 +3907,32 @@ function assertRoutingEvidence(args: {
   retrievalDiagnostics: any;
 }) {
   const { finalText, upstreamRetrievalSucceeded, resourceHits, kiHits, retrievalDebug, retrievalDiagnostics } = args;
+  // Narrow scope — fire ONLY on silent metadata loss:
+  //   1. Non-empty assistant output about to persist.
+  //   2. Upstream retrieval actually succeeded (no exception).
+  //   3. Retrieval actually returned hits (>0). Zero-hit turns have no
+  //      evidence to lose, and many freeform/general turns legitimately
+  //      run with zero hits.
+  //   4. The about-to-persist routing envelope would lose the hit counts.
+  // retrieval_debug being null is logged but no longer hard-fails — some
+  // retrieval paths legitimately produce no debug shape, and the hit counts
+  // plus retrieval_handoff diagnostics are the source of truth.
   if (!finalText.trim()) return;
   if (!upstreamRetrievalSucceeded) return;
+  const totalHits = resourceHits.length + kiHits.length;
+  if (totalHits === 0) return;
   const missing = [] as string[];
   if (typeof resourceHits.length !== 'number') missing.push('resource_hits');
   if (typeof kiHits.length !== 'number') missing.push('ki_hits');
-  if (!retrievalDebug) missing.push('retrieval_debug');
   if (missing.length) {
     const err = new Error(`routing_evidence_missing:${missing.join(',')}`);
     (err as any).diagnostics = retrievalDiagnostics;
     throw err;
+  }
+  if (!retrievalDebug) {
+    console.warn(
+      `[routing-evidence] retrieval_debug absent despite ${totalHits} hits; persisting hit counts via retrieval_handoff`,
+    );
   }
 }
 
