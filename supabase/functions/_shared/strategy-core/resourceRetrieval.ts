@@ -59,7 +59,10 @@ export interface RetrievedResource {
     | "opportunity_linked"
     | "description_match"
     | "content_match"
-    | "category_intent";
+    | "category_intent"
+    | "topic_tag"
+    | "topic_title"
+    | "topic_content";
   /** Short snippet of the matched body, when matchKind is description/content. */
   matchSnippet?: string;
   /** Human-readable reason — surfaced in the prompt block. */
@@ -81,17 +84,52 @@ export interface RetrievedResource {
   sourceShapeReason?: string;
 }
 
+export interface RetrievedKI {
+  id: string;
+  title: string;
+  chapter: string | null;
+  knowledge_type: string | null;
+  tactic_summary: string | null;
+  matchKind: "topic_chapter" | "topic_tag" | "topic_title";
+  matchReason: string;
+}
+
 export interface ResourceRetrievalResult {
-  /** All hits, deduped, ranked best → worst. */
+  /** All resource hits, deduped, ranked best → worst. */
   hits: RetrievedResource[];
+  /** Knowledge Item hits selected by topic/tag/chapter inference. */
+  kiHits: RetrievedKI[];
   /** True if the user clearly asked for a named/templated artifact. */
   userAskedForResource: boolean;
+  /** True when use-case/topic intent was detected (e.g. "my cold-call resources"). */
+  userAskedForTopic: boolean;
   /** Phrases we extracted from the user's message and searched for. */
   extractedPhrases: string[];
   /** Categories we inferred from the user's message ("template", "calculator", …). */
   inferredCategories: string[];
+  /** Topic scopes inferred from the message (e.g. "cold_calling", "discovery"). */
+  inferredTopics: string[];
   /** Prompt-ready block. Always non-empty when userAskedForResource is true. */
   contextBlock: string;
+  /** Auditable per-hit debug info — persisted alongside routing_decision. */
+  debug: {
+    extractedPhrases: string[];
+    inferredCategories: string[];
+    inferredTopics: string[];
+    resourceHits: Array<{
+      id: string;
+      title: string;
+      matchKind: string;
+      matchReason: string;
+    }>;
+    kiHits: Array<{
+      id: string;
+      title: string;
+      chapter: string | null;
+      matchKind: string;
+      matchReason: string;
+    }>;
+  };
 }
 
 interface SupabaseLike {
