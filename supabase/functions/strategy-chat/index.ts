@@ -705,19 +705,56 @@ const ROUTES: Record<TaskType, LLMRoute> = {
 // Mode is persisted on every assistant message in content_json.routing_decision
 // so we can audit provider distribution and prove no silent dominance.
 // ═══════════════════════════════════════════════════════════
-type LibraryMode = "strong" | "partial" | "general" | "thin";
+type LibraryMode = "strong" | "partial" | "general" | "thin" | "short_form";
+
+// SHORT-FORM detector: openers, subject lines, hook lines, voicemails,
+// short talk-track snippets. These are NOT long-form synthesis artifacts
+// and must NOT ride the heavy Claude path. They route to fast OpenAI with
+// tight maxTokens to avoid the ~56s gateway timeout we saw on Turn 0/2.
+function detectShortFormGrounded(text: string): { match: boolean; kind: string | null } {
+  const t = (text || "").toLowerCase();
+  // Length gate: short-form asks are short prompts (<= 320 chars typical).
+  // Longer prompts asking for an opener inside a broader synthesis still go through.
+  if (t.length > 320) return { match: false, kind: null };
+  if (/\bsubject\s+lines?\b/.test(t)) return { match: true, kind: "subject_lines" };
+  if (/\b(cold[- ]?call\s+)?opener[s]?\b/.test(t)) return { match: true, kind: "opener" };
+  if (/\bhook\s+lines?\b/.test(t)) return { match: true, kind: "hook_lines" };
+  if (/\bvoicemail[s]?\b/.test(t) && /(draft|write|give|leave|build)/.test(t)) {
+    return { match: true, kind: "voicemail" };
+  }
+  if (/\b(talk[- ]?track|talking\s+points?)\b/.test(t) && t.length <= 220) {
+    return { match: true, kind: "talk_track_snippet" };
+  }
+  if (/\b(one[- ]?liner|tagline|elevator\s+pitch)\b/.test(t)) {
+    return { match: true, kind: "one_liner" };
+  }
+  return { match: false, kind: null };
+}
 
 function classifyLibraryMode(args: {
   intent: string;
   resourceHits: number;
   kiHits: number;
   hasGroundingPhrase: boolean;
-}): { mode: LibraryMode; reason: string } {
-  const { intent, resourceHits, kiHits, hasGroundingPhrase } = args;
+  userText?: string;
+}): { mode: LibraryMode; reason: string; shortFormKind?: string | null } {
+  const { intent, resourceHits, kiHits, hasGroundingPhrase, userText } = args;
   const groundedIntent =
     intent === "synthesis" || intent === "evaluation" || intent === "creation";
   const isCreation = intent === "creation";
   const totalSignal = resourceHits + Math.min(kiHits, 4); // cap KI weight
+
+  // SHORT-FORM short-circuit: openers, subject lines, hooks, voicemails.
+  // Fires whether or not the user attached a grounding phrase — the form
+  // is the routing signal. Skips Claude/long-synthesis path entirely.
+  const sf = userText ? detectShortFormGrounded(userText) : { match: false, kind: null };
+  if (sf.match && (groundedIntent || hasGroundingPhrase || totalSignal >= 1)) {
+    return {
+      mode: "short_form",
+      reason: `short_form_${sf.kind}_resources=${resourceHits}_kis=${kiHits}`,
+      shortFormKind: sf.kind,
+    };
+  }
 
   // GENERAL: non-grounded, non-creation chat — model just answers
   if (!groundedIntent && !hasGroundingPhrase) {
