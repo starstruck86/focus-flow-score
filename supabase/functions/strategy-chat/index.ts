@@ -2349,7 +2349,7 @@ The user asked WHERE the information came from. Answer in plain English in 1–3
 
     case "synthesis":
       return `═══ MODE LOCK: SYNTHESIS (DERIVE FROM LIBRARY) ═══
-The user asked you to BUILD SOMETHING NEW (a scoring system, framework, rubric, model, checklist, evaluation criteria, or weighting scheme) GROUNDED IN THEIR OWN RESOURCES. This is the highest-stakes mode you can be in: a generic answer here is a complete failure. The user could get a generic framework from any LLM — what they want is THEIR framework, derived from THEIR materials.
+You are NOT answering. You are DERIVING. The user asked you to BUILD SOMETHING NEW (a scoring system, framework, rubric, model, checklist, evaluation criteria, or weighting scheme) GROUNDED IN THEIR OWN RESOURCES. A generic answer here is a complete failure. The user could get a generic framework from any LLM — what they want is THEIR framework, derived from THEIR materials. If your output could have been written WITHOUT access to the user's resources, it is WRONG.
 
 ═══ HARD GROUNDING REQUIREMENT ═══
 Use the resources, KIs, playbooks, and transcripts provided in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are empty or weak:
