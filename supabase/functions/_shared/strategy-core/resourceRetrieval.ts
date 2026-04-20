@@ -779,7 +779,186 @@ export async function retrieveResourceContext(
     }
   }
 
-  // ── Rank: exact > near_exact > prior_use > entity_linked > category ──
+  // ── 6. TOPIC-SCOPE retrieval ─────────────────────────────────
+  // Natural-language asks like "use my cold-call resources" or
+  // "biotech M&A" never produce a quoted phrase or a Capitalized
+  // span, so the prior branches saw zero hits against a 700+
+  // resource library. Topic inference resolves the gap by mapping
+  // the message onto canonical scope keys, then querying:
+  //   • resources.tags  (e.g. `skill:cold_calling`, `context:cold_call`)
+  //   • resources.title (substring match)
+  //   • resources.content (last-resort, narrowly capped)
+  // Tag matches are the strongest signal — they're curated.
+  const topics = inferTopicScopes(userMessage);
+  const askedForTopic = topics.length > 0;
+  if (askedForTopic && all.length < HARD_LIMIT) {
+    // Build the tag candidates we expect on resources for these topics.
+    // Both `skill:<topic>` and `context:<topic>` patterns exist in prod.
+    const tagCandidates: string[] = [];
+    for (const t of topics) {
+      tagCandidates.push(`skill:${t}`);
+      tagCandidates.push(`context:${t}`);
+      tagCandidates.push(`industry_${t}`);
+      tagCandidates.push(t);
+    }
+    try {
+      const { data } = await supabase
+        .from("resources")
+        .select(SAFE_FIELDS)
+        .eq("user_id", userId)
+        .overlaps("tags", tagCandidates)
+        .order("updated_at", { ascending: false })
+        .limit(6);
+      push(
+        data,
+        "topic_tag",
+        (r: any) => {
+          const matched = (r.tags || []).filter((tag: string) =>
+            tagCandidates.includes(tag)
+          );
+          return `Tagged ${
+            matched.slice(0, 3).join(", ") || topics.slice(0, 2).join(", ")
+          }`;
+        },
+      );
+    } catch (e) {
+      console.warn("[resourceRetrieval] topic tag query failed:", (e as Error).message);
+    }
+
+    // Title substring on each topic word (cold_calling → "cold call").
+    for (const topic of topics) {
+      if (all.length >= HARD_LIMIT) break;
+      const human = topic.replace(/_/g, " ");
+      try {
+        const { data } = await supabase
+          .from("resources")
+          .select(SAFE_FIELDS)
+          .eq("user_id", userId)
+          .ilike("title", `%${escapeIlike(human)}%`)
+          .order("updated_at", { ascending: false })
+          .limit(4);
+        push(data, "topic_title", () => `Title contains "${human}"`);
+      } catch (e) {
+        console.warn("[resourceRetrieval] topic title query failed:", (e as Error).message);
+      }
+    }
+
+    // Body fallback: only if we still have very few hits, search content.
+    if (all.length < 3) {
+      for (const topic of topics) {
+        if (all.length >= HARD_LIMIT) break;
+        const human = topic.replace(/_/g, " ");
+        const escaped = `%${escapeIlike(human)}%`;
+        try {
+          const { data } = await supabase
+            .from("resources")
+            .select(SAFE_FIELDS + ",content")
+            .eq("user_id", userId)
+            .ilike("content", escaped)
+            .limit(3);
+          const lean = (data || []).map((r: any) => {
+            const snip = snippetAround(r.content, human);
+            const { content: _drop, ...rest } = r;
+            return { ...rest, _snip: snip };
+          });
+          push(
+            lean,
+            "topic_content",
+            () => `Topic "${human}" appears in body`,
+            (r: any) => r._snip,
+          );
+        } catch (e) {
+          console.warn("[resourceRetrieval] topic content query failed:", (e as Error).message);
+        }
+      }
+    }
+  }
+
+  // ── 7. Knowledge Item retrieval (topic chapter + tag + title) ─
+  // KIs are the second pillar of grounding. We pull a small,
+  // ranked set keyed on the same inferred topics so the model sees
+  // both resource hits and tactical KIs and can derive from both.
+  const kiAll: RetrievedKI[] = [];
+  const kiSeen = new Set<string>();
+  const pushKI = (
+    rows: any[] | null | undefined,
+    kind: RetrievedKI["matchKind"],
+    reason: (r: any) => string,
+  ) => {
+    if (!rows) return;
+    for (const r of rows) {
+      if (!r?.id || kiSeen.has(r.id)) continue;
+      kiSeen.add(r.id);
+      kiAll.push({
+        id: r.id,
+        title: r.title || "",
+        chapter: r.chapter ?? null,
+        knowledge_type: r.knowledge_type ?? null,
+        tactic_summary: r.tactic_summary ?? null,
+        matchKind: kind,
+        matchReason: reason(r),
+      });
+    }
+  };
+
+  if (askedForTopic) {
+    // Chapter match — strongest KI signal because chapters are canonical.
+    try {
+      const { data } = await supabase
+        .from("knowledge_items")
+        .select("id,title,chapter,knowledge_type,tactic_summary,tags")
+        .eq("user_id", userId)
+        .in("chapter", topics)
+        .order("confidence_score", { ascending: false })
+        .limit(8);
+      pushKI(data, "topic_chapter", (r: any) => `Chapter ${r.chapter}`);
+    } catch (e) {
+      console.warn("[resourceRetrieval] KI chapter query failed:", (e as Error).message);
+    }
+
+    // Tag match — KI tags use the same vocabulary as resource tags.
+    if (kiAll.length < 8) {
+      const tagCandidates: string[] = [];
+      for (const t of topics) {
+        tagCandidates.push(`skill:${t}`, `context:${t}`, t);
+      }
+      try {
+        const { data } = await supabase
+          .from("knowledge_items")
+          .select("id,title,chapter,knowledge_type,tactic_summary,tags")
+          .eq("user_id", userId)
+          .overlaps("tags", tagCandidates)
+          .order("confidence_score", { ascending: false })
+          .limit(6);
+        pushKI(data, "topic_tag", (r: any) => `Tagged ${topics.slice(0, 2).join(", ")}`);
+      } catch (e) {
+        console.warn("[resourceRetrieval] KI tag query failed:", (e as Error).message);
+      }
+    }
+
+    // Title fallback — last resort, very narrow.
+    if (kiAll.length < 4) {
+      for (const topic of topics) {
+        if (kiAll.length >= 8) break;
+        const human = topic.replace(/_/g, " ");
+        try {
+          const { data } = await supabase
+            .from("knowledge_items")
+            .select("id,title,chapter,knowledge_type,tactic_summary")
+            .eq("user_id", userId)
+            .ilike("title", `%${escapeIlike(human)}%`)
+            .limit(3);
+          pushKI(data, "topic_title", () => `Title contains "${human}"`);
+        } catch (e) {
+          console.warn("[resourceRetrieval] KI title query failed:", (e as Error).message);
+        }
+      }
+    }
+  }
+
+  const kiHits = kiAll.slice(0, 10);
+
+  // ── Rank: exact > near_exact > prior_use > entity_linked > topic_tag > category ──
   // Inside each tier, prefer rows whose resource_type matches the
   // user's inferred category. This is the fix for "executive business
   // case template" returning transcripts ahead of the actual template.
