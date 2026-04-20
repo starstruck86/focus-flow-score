@@ -2445,11 +2445,55 @@ function buildModeLockBlock(intent: IntentResult): string {
       : `\n- ECONOMIC PRESSURE LAYER (REQUIRED): Anchor the output in money + time. If you have a real number/date in context, use it. If you don't, write a directional sentence WITHOUT placeholders (e.g. "Delaying this risks pushing implementation into next quarter and missing the current budget window") OR call out exactly what number/date you'd need from the rep in one short line. NEVER emit [BRACKETED_NUMBER], $[…], %[…] in this mode.`)
     : "";
 
+  // ── OPERATOR REASONING CONTRACT (mandatory for synthesis/creation/evaluation) ──
+  // The thinking layer. Forces pattern extraction → POV → weighting → decision
+  // logic → consequence framing. Without this, the model produces book-smart
+  // summaries instead of operator-grade synthesis.
+  const isGroundedMode = kind === "synthesis" || kind === "creation" || kind === "evaluation";
+  const operatorReasoningContract = isGroundedMode
+    ? `
+
+═══ OPERATOR REASONING CONTRACT (NON-NEGOTIABLE — THINKING LAYER) ═══
+You are not a summarizer. You are not a librarian. You are an operator with a P&L. Before you write the locked output below, you MUST think through this sequence. Skipping any step is a hard failure that the server-side guard will flag and force a regeneration.
+
+STEP 1 — PATTERN EXTRACTION (across sources, not within one)
+- What shows up REPEATEDLY across the resources/KIs/playbooks?
+- What CORRELATES with wins vs losses, opens vs ignores, expansion vs churn?
+- Where do the sources DISAGREE? Disagreement is signal, not noise.
+- Patterns must be BEHAVIORAL or STRUCTURAL — not vibes ("be confident", "build rapport" → BANNED).
+
+STEP 2 — POINT OF VIEW (commit to what matters most)
+- Of the patterns you extracted, which 2-3 actually drive the outcome? Name them.
+- Which ones are noise / table stakes / overrated? Name those too.
+- A POV without a "what we ignore" list is not a POV — it's a checklist.
+
+STEP 3 — WEIGHTED MODEL (no equal weights, ever)
+- Assign UNEQUAL weights that reflect real tradeoffs.
+- For each weight, state WHY it carries that weight, citing the pattern + source.
+- If you find yourself splitting weight evenly, you have not done the work — restart.
+
+STEP 4 — DECISION LOGIC (how to use this in a live deal)
+- Translate the model into a 2-4 step IF/THEN sequence the rep can run mid-call or mid-deal.
+- Example shape: "IF dimension X scores below N, the dominant move is Y because of pattern Z."
+- This must be EXECUTABLE, not aspirational.
+
+STEP 5 — CONSEQUENCE FRAMING (what happens if you get this wrong)
+- Tie outcomes to one or more of: pipeline created, deal velocity, win rate, ACV, expansion, churn, time-to-revenue.
+- Each major dimension/recommendation needs a concrete downside if ignored. Not "this could matter" — say WHAT breaks (e.g. "If you skip cost-of-inaction framing on a CFO ask, the deal stalls in legal because no one can defend the urgency to procurement.").
+
+VALIDATION RULE (the model self-checks before sending):
+- If the output could have been written WITHOUT access to the user's library → FAIL, restart.
+- If every dimension carries equal weight → FAIL, restart.
+- If recommendations are behavioral fluff ("ask better questions", "build trust", "observe tone", "be a good listener", "stay curious", "be authentic") → FAIL, restart.
+- If no recommendation ties to a measurable outcome (pipeline / velocity / win rate / expansion / churn / ACV) → FAIL, restart.
+
+This contract overrides the urge to be polite, balanced, or comprehensive. Be opinionated, weighted, and consequential.`
+    : "";
+
   // ── APPLICATION LAYER (mandatory after synthesis / creation / evaluation) ──
   // The output is not "done" when it's correct — it must be adapted to the
   // real-world situation, audience, and industry. We append this block to
   // every grounded mode and a post-gen guard verifies the appendix exists.
-  const isGroundedMode = kind === "synthesis" || kind === "creation" || kind === "evaluation";
   const applicationLayer = isGroundedMode
     ? `
 
