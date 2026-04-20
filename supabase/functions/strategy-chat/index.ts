@@ -39,7 +39,7 @@ interface NormalizedResponse {
   model: string;
   latencyMs: number;
   fallbackUsed: boolean;
-  error?: { type: string; message: string; status?: number };
+  error?: { type: string; message: string; status?: number; rawBody?: string; stage?: string };
   rawStream?: Response;
 }
 
@@ -161,7 +161,7 @@ async function openaiAdapter(
       model: req.model,
       latencyMs: Date.now() - start,
       fallbackUsed: false,
-      error: { type: `http_${resp.status}`, message, status: resp.status },
+      error: { type: `http_${resp.status}`, message, status: resp.status, rawBody: errText.slice(0, 4000), stage: 'adapter_call' },
     };
   }
 
@@ -333,6 +333,9 @@ async function anthropicAdapter(
       error: {
         type: `http_${resp.status}`,
         message: `Anthropic error: ${resp.status}`,
+        status: resp.status,
+        rawBody: errText.slice(0, 4000),
+        stage: 'adapter_call',
       },
     };
   }
@@ -425,6 +428,9 @@ async function perplexityAdapter(
       error: {
         type: `http_${resp.status}`,
         message: `Perplexity error: ${resp.status}`,
+        status: resp.status,
+        rawBody: errText.slice(0, 4000),
+        stage: 'adapter_call',
       },
     };
   }
@@ -500,6 +506,9 @@ async function lovableAdapter(
       error: {
         type: `http_${resp.status}`,
         message: `Lovable gateway error: ${resp.status}`,
+        status: resp.status,
+        rawBody: errText.slice(0, 4000),
+        stage: 'adapter_call',
       },
     };
   }
@@ -3819,6 +3828,98 @@ function enforceSubstance(
 }
 
 
+function safeJson(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '"[unserializable]"';
+  }
+}
+
+function toRetrievalDebugShape(resources: any) {
+  return resources?.debug ?? null;
+}
+
+function buildRetrievalDiagnostics(args: {
+  userContent: string;
+  resources: any;
+  retrievalError: { message: string; stack?: string | null; stage?: string } | null;
+  intent: IntentResult;
+}) {
+  const { userContent, resources, retrievalError, intent } = args;
+  const resourceHits = (resources?.hits || []).map((h: any) => ({
+    id: h.id,
+    title: h.title,
+    matchKind: h.matchKind,
+    matchReason: h.matchReason,
+  }));
+  const kiHits = (resources?.kiHits || []).map((k: any) => ({
+    id: k.id,
+    title: k.title,
+    chapter: k.chapter ?? null,
+    matchKind: k.matchKind,
+    matchReason: k.matchReason,
+  }));
+  return {
+    upstream_status: retrievalError ? 'failed' : 'ok',
+    exception: retrievalError,
+    raw_result: resources
+      ? {
+        userAskedForResource: !!resources.userAskedForResource,
+        userAskedForTopic: !!resources.userAskedForTopic,
+        inferredTopics: resources.inferredTopics || [],
+        inferredCategories: resources.inferredCategories || [],
+        extractedPhrases: resources.extractedPhrases || [],
+        resource_hits: resourceHits.length,
+        ki_hits: kiHits.length,
+        matched_resources: resourceHits,
+        matched_kis: kiHits,
+      }
+      : null,
+    build_chat_system_prompt_received: resources
+      ? {
+        resource_hits: resourceHits.length,
+        ki_hits: kiHits.length,
+        retrieval_debug: toRetrievalDebugShape(resources),
+      }
+      : null,
+    mode_classifier_input: {
+      intent: intent.intent,
+      resource_hits: resourceHits.length,
+      ki_hits: kiHits.length,
+      retrieval_debug_present: !!toRetrievalDebugShape(resources),
+      user_message: userContent,
+    },
+    routing_decision_candidate: {
+      resource_hits: resourceHits.length,
+      ki_hits: kiHits.length,
+      retrieval_debug: toRetrievalDebugShape(resources),
+    },
+  };
+}
+
+function assertRoutingEvidence(args: {
+  finalText: string;
+  upstreamRetrievalSucceeded: boolean;
+  resourceHits: Array<{ id: string; title: string }>;
+  kiHits: Array<{ id: string; title: string; chapter: string | null }>;
+  retrievalDebug: any | null;
+  retrievalDiagnostics: any;
+}) {
+  const { finalText, upstreamRetrievalSucceeded, resourceHits, kiHits, retrievalDebug, retrievalDiagnostics } = args;
+  if (!finalText.trim()) return;
+  if (!upstreamRetrievalSucceeded) return;
+  const missing = [] as string[];
+  if (typeof resourceHits.length !== 'number') missing.push('resource_hits');
+  if (typeof kiHits.length !== 'number') missing.push('ki_hits');
+  if (!retrievalDebug) missing.push('retrieval_debug');
+  if (missing.length) {
+    const err = new Error(`routing_evidence_missing:${missing.join(',')}`);
+    (err as any).diagnostics = retrievalDiagnostics;
+    throw err;
+  }
+}
+
 function buildGenericChatSystemPrompt(
   depth: string,
   contextSection: string,
@@ -3877,6 +3978,8 @@ async function buildChatSystemPrompt(args: {
   resourceHits: Array<{ id: string; title: string }>;
   kiHits: Array<{ id: string; title: string; chapter: string | null }>;
   retrievalDebug: any | null;
+  retrievalDiagnostics: any;
+  retrievalSucceeded: boolean;
   intent: IntentResult;
   modeLockBlock: string;
 }> {
@@ -3903,16 +4006,22 @@ async function buildChatSystemPrompt(args: {
   const modeLockBlock = buildModeLockBlock(intent);
 
   // No account, no thread context → don't force Strategy Core onto small talk.
-  // EXCEPTION: when the user explicitly picked a library resource this turn
-  // (sidecar pickedResourceIds), we MUST run the resource pipeline so the
-  // assistant grounds in that resource — even on a freeform thread.
-  if (!accountId && (!contextSection || contextSection.length < 200) && pickedResourceIds.length === 0) {
+  // EXCEPTIONS: explicit library picks OR grounded asks ("using my resources",
+  // topic/resource intent) must still run retrieval on freeform threads.
+  const freeformGroundingRe = /\b(using|use|from|based on|leveraging|across|grounded in|pulling from)\s+(my|the|these|those|our)\b/i;
+  const groundedAsk =
+    freeformGroundingRe.test(userContent || "") ||
+    userAskedForResource(userContent) ||
+    inferTopicScopes(userContent).length > 0;
+  if (!accountId && (!contextSection || contextSection.length < 200) && pickedResourceIds.length === 0 && !groundedAsk) {
     return {
       prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
       retrievalDebug: null,
+      retrievalDiagnostics: buildRetrievalDiagnostics({ userContent, resources: null, retrievalError: null, intent }),
+      retrievalSucceeded: false,
       intent,
       modeLockBlock,
     };
@@ -3923,6 +4032,7 @@ async function buildChatSystemPrompt(args: {
   // newly-added resource retrieval (exact / near-exact title + entity
   // links + category backstop).
   const scopes = deriveLibraryScopes(pack.account, userContent);
+  let retrievalError: { message: string; stack?: string | null; stage?: string } | null = null;
   const [assembled, library, workingThesis, resources] = await Promise.all([
     accountId
       ? assembleStrategyContext({ supabase, userId, accountId }).catch((e) => {
@@ -3964,13 +4074,22 @@ async function buildChatSystemPrompt(args: {
       threadId,
       pickedResourceIds,
     }).catch((e) => {
-      console.warn(
-        "[strategy-chat] retrieveResourceContext failed:",
-        (e as Error).message,
-      );
+      retrievalError = {
+        message: (e as Error).message,
+        stack: (e as Error).stack ?? null,
+        stage: 'retrieveResourceContext',
+      };
+      console.error('[strategy-chat] retrieveResourceContext failed:', safeJson(retrievalError));
       return null;
     }),
   ]);
+  const retrievalDiagnostics = buildRetrievalDiagnostics({
+    userContent,
+    resources,
+    retrievalError,
+    intent,
+  });
+  console.log('[strategy-chat] retrieval.handoff', safeJson(retrievalDiagnostics));
 
   // Force Strategy Core whenever the user asked for a named resource —
   // even on otherwise-small contexts — so the admit-absence contract
@@ -3990,7 +4109,9 @@ async function buildChatSystemPrompt(args: {
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
-      retrievalDebug: resources?.debug ?? null,
+      retrievalDebug: toRetrievalDebugShape(resources),
+      retrievalDiagnostics,
+      retrievalSucceeded: !!resources && !retrievalError,
       intent,
       modeLockBlock,
     };
@@ -4058,7 +4179,9 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     workingThesis,
     resourceHits,
     kiHits,
-    retrievalDebug: resources?.debug ?? null,
+    retrievalDebug: toRetrievalDebugShape(resources),
+    retrievalDiagnostics,
+    retrievalSucceeded: !!resources && !retrievalError,
     intent,
     modeLockBlock,
   };
@@ -4117,6 +4240,8 @@ async function handleChat(
     resourceHits,
     kiHits: kiHitList,
     retrievalDebug,
+    retrievalDiagnostics,
+    retrievalSucceeded,
     intent,
   } = await buildChatSystemPrompt({
     supabase,
@@ -4198,6 +4323,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         errorType: result.error.type,
         model: route.model,
         route: "openai-direct",
+        provider: route.primaryProvider,
+        raw_error: result.error.rawBody ?? null,
+        error_stage: result.error.stage ?? 'adapter_call',
       }),
       {
         status: result.error.status ??
@@ -4464,6 +4592,14 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           );
         }
         const auditedVisible = audit.text;
+        assertRoutingEvidence({
+          finalText: auditedVisible,
+          upstreamRetrievalSucceeded: retrievalSucceeded,
+          resourceHits,
+          kiHits: kiHitList,
+          retrievalDebug,
+          retrievalDiagnostics,
+        });
 
         // Step 4: emit the entire guarded+audited text in ONE SSE
         // delta, then [DONE]. Client renders this atomically — no
@@ -4486,6 +4622,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             text: auditedVisible,
             sources_used: pack.sourceCount,
             retrieval_meta: pack.retrievalMeta,
+            retrieval_handoff: retrievalDiagnostics,
             model_used: result.model,
             provider_used: result.provider,
             fallback_used: false,
