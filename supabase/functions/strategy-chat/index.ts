@@ -3148,6 +3148,8 @@ function enforceModeLock(
       }
       break;
     }
+
+    case "creation": {
       // FAILURE CONDITION: 0 resources retrieved → replace with honest ask.
       // Creation needs ≥1 meaningful resource (looser than synthesis).
       if (resourceHits.length < 1) {
@@ -3188,6 +3190,10 @@ function enforceModeLock(
       if (!hasSourceBasis) { violations.push("creation_missing_source_basis"); shouldRegenerate = true; }
       if (!hasReusedCreated) { violations.push("creation_missing_reused_vs_created"); shouldRegenerate = true; }
       if (!hasCitationsC) { violations.push("creation_missing_source_citations"); shouldRegenerate = true; }
+      if (!hasApplicationAppendix(text)) {
+        violations.push("creation_missing_application_appendix");
+        shouldRegenerate = true;
+      }
       break;
     }
 
@@ -3238,6 +3244,10 @@ function enforceModeLock(
       // Vague-critique fingerprint.
       if (/\b(be more concise|stronger cta|improve (the )?tone|good start|with some polish|nice work)\b/i.test(text)) {
         violations.push("evaluation_vague_critique");
+        shouldRegenerate = true;
+      }
+      if (!hasApplicationAppendix(text)) {
+        violations.push("evaluation_missing_application_appendix");
         shouldRegenerate = true;
       }
       break;
