@@ -3807,6 +3807,15 @@ function enforceModeLock(
           if (cons.shouldRegenerate) shouldRegenerate = true;
         }
       }
+      // OPERATOR REASONING AUDIT: catch book-smart fingerprints.
+      {
+        const body = stripApplicationAppendix(text);
+        const op = auditOperatorReasoning(body);
+        if (op.violations.length) {
+          violations.push(...op.violations.map((v) => `synthesis_${v}`));
+          if (op.shouldRegenerate) shouldRegenerate = true;
+        }
+      }
       break;
     }
 
@@ -3858,6 +3867,15 @@ function enforceModeLock(
         if (cons.violations.length) {
           violations.push(...cons.violations);
           if (cons.shouldRegenerate) shouldRegenerate = true;
+        }
+      }
+      // OPERATOR REASONING AUDIT.
+      {
+        const body = stripApplicationAppendix(text);
+        const op = auditOperatorReasoning(body);
+        if (op.violations.length) {
+          violations.push(...op.violations.map((v) => `creation_${v}`));
+          if (op.shouldRegenerate) shouldRegenerate = true;
         }
       }
       break;
@@ -3918,6 +3936,15 @@ function enforceModeLock(
         if (cons.violations.length) {
           violations.push(...cons.violations);
           if (cons.shouldRegenerate) shouldRegenerate = true;
+        }
+      }
+      // OPERATOR REASONING AUDIT.
+      {
+        const body = stripApplicationAppendix(text);
+        const op = auditOperatorReasoning(body);
+        if (op.violations.length) {
+          violations.push(...op.violations.map((v) => `evaluation_${v}`));
+          if (op.shouldRegenerate) shouldRegenerate = true;
         }
       }
       break;
