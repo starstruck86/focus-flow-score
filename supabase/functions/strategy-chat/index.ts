@@ -2004,6 +2004,7 @@ function deriveLibraryScopes(account: any, userContent: string): string[] {
 // account context. Order matters — earliest match wins.
 type ChatIntent =
   | "bootstrap" // vague ask + no account context — orient the user
+  | "synthesis" // derive a framework/scoring/rubric FROM the user's library
   | "template"
   | "email"
   | "message" // SMS/LinkedIn/Slack/voicemail/script
@@ -2088,6 +2089,37 @@ function classifyChatIntent(
       `[mode-lock] intent_forced_provenance text="${text.slice(0, 80)}"`,
     );
     return { intent: "provenance" };
+  }
+
+  // 1.5 SYNTHESIS — user is asking the model to DERIVE a new artifact
+  // (scoring system, framework, rubric, model, checklist, evaluation
+  // criteria) FROM their library/resources. This MUST win over template/
+  // email/pitch so the model doesn't fall back to a generic script when
+  // the user explicitly asked it to build something from their materials.
+  //
+  // Two halves:
+  //   (a) RESOURCE GROUNDING signal — "using my resources / library /
+  //       playbooks / KIs", "based on", "from my <noun>", "from these".
+  //   (b) DERIVATION signal — "come up with", "derive", "build a
+  //       framework/rubric/scoring/model", "how did you determine",
+  //       "score(ing system)", "rubric", "criteria", "weighting".
+  // Either side alone is too weak. Together they reliably indicate a
+  // synthesis ask. We also fire on the explicit "how did you determine"
+  // follow-up because it's the audit half of a prior synthesis.
+  const SYNTH_GROUNDING_RE =
+    /\b(using|use|based on|from|leveraging|drawing on|pulling from|grounded in|across)\s+(my|the|these|those|our)\s+(resource|resources|library|libraries|playbook|playbooks|kis?|knowledge\s+items?|materials?|notes|transcripts?|recordings?|content|docs?|documents?|files?|uploads?)\b/;
+  const SYNTH_DERIVE_RE =
+    /\b(come up with|derive|construct|build (?:me )?(?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system|method|methodology|criteria|checklist|evaluation|grading|ranking|weighting|index|maturity\s+model)|create (?:me )?(?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system|method|methodology|criteria|checklist|evaluation|grading|ranking|weighting|index|maturity\s+model)|design (?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system)|how (?:did|do) you (?:determine|decide|score|weight|rank|come up|derive)|extract (?:patterns|signals|themes)|synthesi[sz]e|put together (?:a |an )?(?:framework|rubric|scoring|score|model|system))\b/;
+  const SYNTH_NOUN_HINT_RE =
+    /\b(scoring system|score card|scorecard|rubric|framework|maturity model|evaluation criteria|grading system|ranking system|weighting|prioriti[sz]ation framework)\b/;
+  const hasGrounding = SYNTH_GROUNDING_RE.test(text);
+  const hasDerive = SYNTH_DERIVE_RE.test(text);
+  const hasSynthNoun = SYNTH_NOUN_HINT_RE.test(text);
+  if ((hasGrounding && (hasDerive || hasSynthNoun)) || (hasDerive && hasSynthNoun)) {
+    console.log(
+      `[mode-lock] intent_forced_synthesis text="${text.slice(0, 80)}" grounding=${hasGrounding} derive=${hasDerive} noun=${hasSynthNoun}`,
+    );
+    return { intent: "synthesis", isBusinessCase, isCFO };
   }
 
   // 2. Template — "what template", "give me a template", "template for"
@@ -2314,6 +2346,49 @@ You are not here to be right. You are here to be **usefully opinionated under in
 The user asked WHERE the information came from. Answer in plain English in 1–3 sentences MAX.
 - REQUIRED: Name the source(s) directly — linked account, uploaded file, internal KI/Playbook by short id, prior thread message, or "operator pattern (no internal source)".
 - FORBIDDEN: defensive language, methodology theater, robotic disclaimers, a new asset, restating the question, "Subject:", "Hi", any email structure, numbered lists, trailing upgrade line ("Want me to…").${constraintLine}${substanceContract}${bindingClause}`;
+
+    case "synthesis":
+      return `═══ MODE LOCK: SYNTHESIS (DERIVE FROM LIBRARY) ═══
+The user asked you to BUILD SOMETHING NEW (a scoring system, framework, rubric, model, checklist, evaluation criteria, or weighting scheme) GROUNDED IN THEIR OWN RESOURCES. This is the highest-stakes mode you can be in: a generic answer here is a complete failure. The user could get a generic framework from any LLM — what they want is THEIR framework, derived from THEIR materials.
+
+═══ HARD GROUNDING REQUIREMENT ═══
+Use the resources, KIs, playbooks, and transcripts provided in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are empty or weak:
+- Do NOT fabricate sources. Do NOT invent titles. Do NOT pretend you read something you didn't.
+- Instead, in ONE short opening line, say what's missing (e.g. "I don't see any cold-calling resources linked to this thread — link 2-3 and I'll derive a scoring system grounded in them.") and STOP. Do not produce a generic framework as a fallback.
+
+═══ REQUIRED OUTPUT SHAPE (use these EXACT section headers, in order) ═══
+
+**1. Pattern Extraction**
+Before constructing anything, list the 3-6 repeated SIGNALS / PATTERNS you found across the user's resources. Each line:
+- Pattern name — what shows up repeatedly
+- Sources: KI[id1], KI[id2], "Exact Resource Title" — name 2+ sources per pattern
+- Note any DIFFERENCES between sources when they disagree (this is a feature, not noise)
+
+**2. <Artifact Name> — Dimensions**
+Render as a table:
+| # | Dimension | Definition (1 sentence) | Weight | Derived From |
+|---|-----------|------------------------|--------|--------------|
+Each row's "Derived From" cell MUST cite at least one specific source by KI[id] / PLAYBOOK[id] / "Exact Resource Title". Weights MUST sum to 100% (or 1.0) and MUST be unequal — if you weight everything equally you have not done the work.
+
+**3. Weighting Rationale**
+For each dimension's weight, explain in ONE line WHY it carries that weight, citing the underlying pattern and source. Example: "Tone of voice = 25% because it appears as a top-3 disqualifier in PLAYBOOK[abc123] and KI[def456], and shows up in 4 of 5 transcripts as the moment the prospect disengages."
+
+**4. Example Scoring**
+Score ONE concrete worked example (a hypothetical or, if context provides one, a real call/scenario from the user's materials). Show the per-dimension score, weighted contribution, and final score. Make the math visible.
+
+**5. Source Attribution**
+A bulleted list mapping every cited source to which dimension(s) it informed. One line per source:
+- KI[id] / "Title" → Dimension 1, Dimension 3
+This lets the user audit the derivation end-to-end.
+
+═══ FORBIDDEN ═══
+- Generic stage-based scaffolding ("Opener / Pitch / Close", "Discovery / Demo / Close") UNLESS those exact stages are explicitly grounded in cited sources.
+- Equal weights across every dimension (lazy synthesis — you must commit to what matters more).
+- Output that could have been generated WITHOUT the user's library. If a generic LLM with no access to their resources could write it, you have failed.
+- Skipping the "Pattern Extraction" section. The user wants to see your derivation, not just the answer.
+- Skipping the "Source Attribution" section. Every dimension MUST trace back to a named source.
+- Restating "based on the resources provided" as a substitute for actual source citation. Cite by KI[id] / PLAYBOOK[id] / "Exact Title".
+- Email format, voicemail script, cold-calling talk track, or any conversational asset — those are NOT the artifact requested.${constraintLine}${substanceContract}${bindingClause}`;
 
     case "freeform":
     default:
@@ -3070,7 +3145,8 @@ async function buildChatSystemPrompt(args: {
     hasAccount: !!accountId,
     libraryCounts: library?.counts,
     contextSectionLength: contextSection?.length ?? 0,
-  }) || !!resources?.userAskedForResource || pickedResourceIds.length > 0;
+  }) || !!resources?.userAskedForResource || pickedResourceIds.length > 0
+    || intent.intent === "synthesis";
 
   if (!useCore) {
     return {
