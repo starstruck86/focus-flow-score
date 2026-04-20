@@ -2535,7 +2535,7 @@ You are NOT answering. You are DERIVING. The user asked you to BUILD SOMETHING N
 ═══ HARD GROUNDING REQUIREMENT ═══
 Use the resources, KIs, playbooks, and transcripts provided in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are empty or weak:
 - Do NOT fabricate sources. Do NOT invent titles. Do NOT pretend you read something you didn't.
-- Instead, in ONE short opening line, say what's missing (e.g. "I don't see any cold-calling resources linked to this thread — link 2-3 and I'll derive a scoring system grounded in them.") and STOP. Do not produce a generic framework as a fallback.
+- DO produce a best first-pass derivation using general operator reasoning. Open with ONE short line stating what was searched and that nothing matched (e.g. "I scanned your library for cold-calling resources — nothing came back; here is the best first-pass scoring system anyway."), then deliver the full required output shape below using your reasoning. Mark assumptions clearly. Never refuse, never produce a one-line stop.
 
 ═══ REQUIRED OUTPUT SHAPE (use these EXACT section headers, in order) ═══
 
@@ -2571,10 +2571,12 @@ This lets the user audit the derivation end-to-end.
 - Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on the resources provided", "based on your resources", "in general", "best practice", "best practices", "industry standard", "as a general rule", "typically", "generally speaking". Cite by KI[id] / PLAYBOOK[id] / "Exact Title" instead.
 - Email format, voicemail script, cold-calling talk track, or any conversational asset — those are NOT the artifact requested.
 
-═══ FAILURE CONDITION ═══
-If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, OR the resources don't share enough overlapping patterns to derive a real system, output EXACTLY this single line and STOP:
-"I don't have enough signal in your resources to derive a real system. Point me to 2–3 specific assets and I'll build this properly."
-Do NOT produce a generic framework as a fallback. Do NOT invent sources.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+═══ THIN-MODE CONTRACT (when grounding is weak) ═══
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources or the resources don't share enough overlapping patterns, you MUST still deliver value:
+1. Open with ONE honest line: "I found N resource(s) and M KI(s) related to this — not enough to fully derive from your library, so here is a best first-pass system using general operator reasoning."
+2. Then produce the full required output shape using your reasoning. Mark each section as **Grounded** (when citing a real source) or **Extended** (when reasoning).
+3. End with ONE clarifying question only if it would materially sharpen the next pass (e.g. "Point me to your top 2 cold-call calls and I'll re-weight against those.").
+NEVER refuse. NEVER output a one-line stop. NEVER invent sources.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
 
     case "creation":
@@ -2584,7 +2586,7 @@ You are NOT freestyling. You are BUILDING an asset from the user's OWN materials
 ═══ HARD GROUNDING REQUIREMENT ═══
 Use the resources, KIs, playbooks, and transcripts in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are EMPTY:
 - Do NOT fabricate sources. Do NOT invent quotes. Do NOT pretend you read something you didn't.
-- Output EXACTLY: "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly." and STOP.
+- DO build the asset anyway using general operator reasoning. Open with ONE honest line ("Library returned nothing related — building a first-pass asset from operator patterns; mark it as a draft until we anchor it."), then deliver the full required asset using your reasoning. Mark borrowed structure as **Extended** rather than **Reused**. Never refuse.
 
 ═══ REQUIRED OUTPUT SHAPE (use these EXACT section headers, in order) ═══
 
@@ -2610,9 +2612,8 @@ The actual usable output the user can paste. Render it cleanly (no commentary mi
 - Output that could have been written WITHOUT the library. If a generic LLM with no access to their resources could produce the same asset, you have failed.
 - Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on your resources", "in general", "best practice", "industry standard", "as a general rule", "typically", "generally speaking".
 
-═══ FAILURE CONDITION ═══
-If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain ZERO usable resources, output EXACTLY this single line and STOP:
-"I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly."${economicLayer}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+═══ THIN-MODE CONTRACT (when grounding is weak) ═══
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain ZERO usable resources, you MUST still produce the asset using general operator reasoning. Open with one honest line stating what was searched and that nothing matched, then deliver the full asset under the required headers above. Mark every line under "Reused vs Created" as **Created (extended)** since the library could not anchor it. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${economicLayer}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "evaluation":
       return `═══ MODE LOCK: EVALUATION (COACH USING LIBRARY) ═══
@@ -2621,7 +2622,7 @@ You are NOT rewriting. You are GRADING. The user gave you content (an email, scr
 ═══ HARD GROUNDING REQUIREMENT ═══
 Use the resources, KIs, playbooks, and transcripts in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are weak (<2 sources):
 - Do NOT make up standards. Do NOT pretend you read something you didn't.
-- Output EXACTLY: "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly." and STOP.
+- DO grade the asset anyway using general operator reasoning. Open with ONE honest line stating what was searched and that nothing matched, then deliver the full required output shape below. Mark each dimension's "Source" cell as "Operator pattern (no internal source)" when the library couldn't ground it. Never refuse, never output a one-line stop.
 
 ═══ REQUIRED OUTPUT SHAPE (use these EXACT section headers, in order) ═══
 
@@ -2657,10 +2658,8 @@ Bulleted map of each cited source → which dimension(s) / improvement(s) it inf
 - Output that could have been written WITHOUT the library. If a generic LLM with no access to their resources could give the same critique, you have failed.
 - Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on your resources", "in general", "best practice", "industry standard", "as a general rule", "typically", "generally speaking".
 
-═══ FAILURE CONDITION ═══
-If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, output EXACTLY this single line and STOP:
-"I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly."
-Do NOT produce a generic critique as a fallback.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+═══ THIN-MODE CONTRACT (when grounding is weak) ═══
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, you MUST still grade the asset. Open with one honest line stating that the library couldn't anchor the standards, then proceed with the full required output shape using general operator reasoning. Mark each "Source" cell as "Operator pattern" when no internal source exists. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "freeform":
     default:
