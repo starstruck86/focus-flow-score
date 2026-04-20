@@ -2128,6 +2128,41 @@ function classifyChatIntent(
     return { intent: "synthesis", isBusinessCase, isCFO };
   }
 
+  // 1.6 EVALUATION — user is asking us to GRADE / critique / improve a
+  // piece of content (an email they wrote, a call recording, a script,
+  // a deck) USING THEIR OWN STANDARDS from the library. Must beat
+  // template/email/pitch so we don't redraft instead of coach.
+  // Dual-signal: evaluation verb + grounding phrase.
+  const EVAL_VERB_RE =
+    /\b(grade|score|evaluate|critique|review|coach (?:me )?on|assess|audit|judge|rate|red[- ]?team|tear (?:this |it )?down|improve|tighten|sharpen|fix|rewrite (?:this|it|my)|how (?:did|do) i do)\b/;
+  const hasEvalVerb = EVAL_VERB_RE.test(text);
+  if (hasEvalVerb && hasGrounding) {
+    console.log(
+      `[mode-lock] intent_forced_evaluation text="${text.slice(0, 80)}" verb=${hasEvalVerb} grounding=${hasGrounding}`,
+    );
+    return { intent: "evaluation", isBusinessCase, isCFO };
+  }
+
+  // 1.7 CREATION — user is asking us to BUILD an asset (email, script,
+  // talk track, plan, one-pager, business case, guide, playbook chapter)
+  // grounded explicitly in their library. This is different from a plain
+  // "email" ask because the grounding signal is explicit. We let the
+  // narrower email/message/pitch classifiers handle ungrounded asks
+  // (those are routine drafts, not library-derived assets).
+  // Dual-signal: artifact noun + grounding phrase.
+  const CREATE_VERB_RE =
+    /\b(write|draft|create|build|construct|design|put together|turn (?:this |these |that )?into|generate|produce)\b/;
+  const CREATE_NOUN_RE =
+    /\b(email|e-mail|outreach|cold\s+(?:email|call|message)|script|talk\s+track|call\s+plan|meeting\s+plan|account\s+plan|one[- ]?pager|onepager|business\s+case|guide|playbook(?:\s+chapter)?|sequence|cadence|deck|outline|brief|summary|agenda|message|note|voicemail|talking\s+points)\b/;
+  const hasCreateVerb = CREATE_VERB_RE.test(text);
+  const hasCreateNoun = CREATE_NOUN_RE.test(text);
+  if (hasGrounding && hasCreateVerb && hasCreateNoun) {
+    console.log(
+      `[mode-lock] intent_forced_creation text="${text.slice(0, 80)}" verb=${hasCreateVerb} noun=${hasCreateNoun} grounding=${hasGrounding}`,
+    );
+    return { intent: "creation", isBusinessCase, isCFO };
+  }
+
   // 2. Template — "what template", "give me a template", "template for"
   if (
     /\btemplate(s)?\b/.test(text) &&
