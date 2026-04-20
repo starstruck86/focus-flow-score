@@ -19,24 +19,26 @@ Deno.serve(async (req) => {
   const expectedVal = Deno.env.get("STRATEGY_VALIDATION_KEY") ?? "";
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   let ok = (expectedVal && valKey === expectedVal) || (serviceRole && bearer === serviceRole);
+  const debugAuth: any = { hasBearer: !!bearer, bearerLen: bearer.length, hasValKey: !!valKey, valKeyMatch: !!(expectedVal && valKey === expectedVal), srMatch: !!(serviceRole && bearer === serviceRole) };
   if (!ok && bearer) {
-    // Fall back to approved-user JWT
     try {
       const adminClient = createClient(Deno.env.get("SUPABASE_URL")!, serviceRole, { auth: { persistSession: false } });
-      const { data: u } = await adminClient.auth.getUser(bearer);
+      const { data: u, error: uErr } = await adminClient.auth.getUser(bearer);
+      debugAuth.getUser = { hasUser: !!u?.user, userId: u?.user?.id, email: u?.user?.email, err: uErr?.message };
       if (u?.user) {
-        const { data: approved } = await adminClient
+        const { data: approved, error: aErr } = await adminClient
           .from("approved_users")
-          .select("id")
+          .select("id, user_id, email, is_active")
           .or(`user_id.eq.${u.user.id},email.eq.${u.user.email}`)
           .eq("is_active", true)
           .maybeSingle();
+        debugAuth.approved = { found: !!approved, row: approved, err: aErr?.message };
         if (approved) ok = true;
       }
-    } catch { /* ignore */ }
+    } catch (e) { debugAuth.exception = (e as Error).message; }
   }
   if (!ok) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
+    return new Response(JSON.stringify({ error: "unauthorized", debug: debugAuth }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
