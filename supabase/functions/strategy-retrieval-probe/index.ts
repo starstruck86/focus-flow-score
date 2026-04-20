@@ -12,14 +12,29 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // Auth: accept either the validation key OR a bearer token equal to the
-  // service role key (so other edge functions can call us with no plumbing).
+  // Auth: validation key OR service-role bearer OR approved-user JWT.
   const valKey = req.headers.get("x-strategy-validation-key");
   const auth = req.headers.get("authorization") ?? "";
   const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7) : "";
   const expectedVal = Deno.env.get("STRATEGY_VALIDATION_KEY") ?? "";
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const ok = (expectedVal && valKey === expectedVal) || (serviceRole && bearer === serviceRole);
+  let ok = (expectedVal && valKey === expectedVal) || (serviceRole && bearer === serviceRole);
+  if (!ok && bearer) {
+    // Fall back to approved-user JWT
+    try {
+      const adminClient = createClient(Deno.env.get("SUPABASE_URL")!, serviceRole, { auth: { persistSession: false } });
+      const { data: u } = await adminClient.auth.getUser(bearer);
+      if (u?.user) {
+        const { data: approved } = await adminClient
+          .from("approved_users")
+          .select("id")
+          .or(`user_id.eq.${u.user.id},email.eq.${u.user.email}`)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (approved) ok = true;
+      }
+    } catch { /* ignore */ }
+  }
   if (!ok) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
