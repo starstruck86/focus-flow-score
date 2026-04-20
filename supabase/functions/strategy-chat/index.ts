@@ -2113,7 +2113,7 @@ function classifyChatIntent(
   // transcripts", "our objection-handling playbooks". Up to 4 qualifier
   // words keeps it tight without missing real asks.
   const SYNTH_GROUNDING_RE =
-    /\b(using|use|based on|from|leveraging|drawing on|pulling from|grounded in|across)\s+(my|the|these|those|our)(?:\s+[\w-]+){0,4}\s+(resource|resources|library|libraries|playbook|playbooks|kis?|knowledge\s+items?|materials?|notes|transcripts?|recordings?|content|docs?|documents?|files?|uploads?)\b/;
+    /\b(using|use|based on|from|leveraging|drawing on|pulling from|grounded in|across|against)\s+(my|the|these|those|our)(?:\s+[\w-]+){0,4}\s+(resource|resources|library|libraries|playbook|playbooks|kis?|knowledge\s+items?|materials?|notes|transcripts?|recordings?|content|docs?|documents?|files?|uploads?|standards?)\b/;
   const SYNTH_DERIVE_RE =
     /\b(come up with|derive|construct|build (?:me )?(?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system|method|methodology|criteria|checklist|evaluation|grading|ranking|weighting|index|maturity\s+model)|create (?:me )?(?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system|method|methodology|criteria|checklist|evaluation|grading|ranking|weighting|index|maturity\s+model)|design (?:a |an )?(?:framework|rubric|scoring|score|scorecard|model|system)|how (?:did|do) you (?:determine|decide|score|weight|rank|come up|derive)|extract (?:patterns|signals|themes)|synthesi[sz]e|put together (?:a |an )?(?:framework|rubric|scoring|score|model|system))\b/;
   const SYNTH_NOUN_HINT_RE =
