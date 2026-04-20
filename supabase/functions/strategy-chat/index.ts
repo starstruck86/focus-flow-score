@@ -3099,6 +3099,102 @@ function enforceModeLock(
       }
       break;
     }
+
+    case "creation": {
+      // FAILURE CONDITION: 0 resources retrieved → replace with honest ask.
+      // Creation needs ≥1 meaningful resource (looser than synthesis).
+      if (resourceHits.length < 1) {
+        text =
+          "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly.";
+        modified = true;
+        violations.push("creation_insufficient_resources");
+        console.log(`[mode-lock] creation_insufficient_resources hits=0`);
+        break;
+      }
+
+      // Strip the same forbidden generic-fallback phrases as synthesis.
+      const FORBIDDEN_GENERIC_C: Array<{ re: RegExp; tag: string }> = [
+        { re: /\bbased on (the |your )?resources( provided)?\b[,.]?\s*/gi, tag: "create_based_on_resources" },
+        { re: /\bin general,?\s+/gi, tag: "create_in_general" },
+        { re: /\b(industry\s+)?best\s+practices?\b[,.]?\s*/gi, tag: "create_best_practice" },
+        { re: /\bindustry\s+standard\b[,.]?\s*/gi, tag: "create_industry_standard" },
+        { re: /\bas a general rule,?\s+/gi, tag: "create_general_rule" },
+        { re: /\bgenerally speaking,?\s+/gi, tag: "create_generally_speaking" },
+        { re: /\btypically,?\s+/gi, tag: "create_typically" },
+      ];
+      let cHits = 0;
+      for (const { re, tag } of FORBIDDEN_GENERIC_C) {
+        const before = text;
+        text = text.replace(re, "");
+        if (text !== before) { cHits += 1; violations.push(`stripped_${tag}`); }
+      }
+      if (cHits > 0) {
+        text = text.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+        modified = true;
+      }
+
+      // STRUCTURAL GUARD: require Source Basis + Reused vs Created sections + citations.
+      const hasSourceBasis = /\bsource\s+basis\b/i.test(text);
+      const hasReusedCreated = /\breused\s+vs\s+created\b/i.test(text) ||
+        (/\breused\b/i.test(text) && /\bcreated\b/i.test(text));
+      const hasCitationsC = /(KI\[[a-z0-9_-]+\]|PLAYBOOK\[[a-z0-9_-]+\]|RESOURCE\[[a-z0-9_-]+\])/i.test(text);
+      if (!hasSourceBasis) { violations.push("creation_missing_source_basis"); shouldRegenerate = true; }
+      if (!hasReusedCreated) { violations.push("creation_missing_reused_vs_created"); shouldRegenerate = true; }
+      if (!hasCitationsC) { violations.push("creation_missing_source_citations"); shouldRegenerate = true; }
+      break;
+    }
+
+    case "evaluation": {
+      // FAILURE CONDITION: <2 resources → user's STANDARDS need triangulation.
+      if (resourceHits.length < 2) {
+        text =
+          "I don't have enough signal in your resources to do this properly. Point me to specific assets and I'll build this correctly.";
+        modified = true;
+        violations.push("evaluation_insufficient_resources");
+        console.log(`[mode-lock] evaluation_insufficient_resources hits=${resourceHits.length}`);
+        break;
+      }
+
+      const FORBIDDEN_GENERIC_E: Array<{ re: RegExp; tag: string }> = [
+        { re: /\bbased on (the |your )?resources( provided)?\b[,.]?\s*/gi, tag: "eval_based_on_resources" },
+        { re: /\bin general,?\s+/gi, tag: "eval_in_general" },
+        { re: /\b(industry\s+)?best\s+practices?\b[,.]?\s*/gi, tag: "eval_best_practice" },
+        { re: /\bindustry\s+standard\b[,.]?\s*/gi, tag: "eval_industry_standard" },
+        { re: /\bas a general rule,?\s+/gi, tag: "eval_general_rule" },
+        { re: /\bgenerally speaking,?\s+/gi, tag: "eval_generally_speaking" },
+        { re: /\btypically,?\s+/gi, tag: "eval_typically" },
+      ];
+      let eHits = 0;
+      for (const { re, tag } of FORBIDDEN_GENERIC_E) {
+        const before = text;
+        text = text.replace(re, "");
+        if (text !== before) { eHits += 1; violations.push(`stripped_${tag}`); }
+      }
+      if (eHits > 0) {
+        text = text.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+        modified = true;
+      }
+
+      // STRUCTURAL GUARD.
+      const hasOverallScore = /\boverall\b[\s:]*\d{1,2}\s*\/\s*10/i.test(text) ||
+        /\boverall\s+score\b/i.test(text);
+      const hasBreakdownTable = /\|.*\|.*\|/.test(text);
+      const hasImprovements = /\bimprovements?\b/i.test(text);
+      const hasAttributionE = /\bsource\s+attribution\b/i.test(text);
+      const hasCitationsE = /(KI\[[a-z0-9_-]+\]|PLAYBOOK\[[a-z0-9_-]+\]|RESOURCE\[[a-z0-9_-]+\])/i.test(text);
+      if (!hasOverallScore) { violations.push("evaluation_missing_overall_score"); shouldRegenerate = true; }
+      if (!hasBreakdownTable) { violations.push("evaluation_missing_breakdown_table"); shouldRegenerate = true; }
+      if (!hasImprovements) { violations.push("evaluation_missing_improvements"); shouldRegenerate = true; }
+      if (!hasAttributionE) { violations.push("evaluation_missing_source_attribution"); shouldRegenerate = true; }
+      if (!hasCitationsE) { violations.push("evaluation_missing_source_citations"); shouldRegenerate = true; }
+
+      // Vague-critique fingerprint.
+      if (/\b(be more concise|stronger cta|improve (the )?tone|good start|with some polish|nice work)\b/i.test(text)) {
+        violations.push("evaluation_vague_critique");
+        shouldRegenerate = true;
+      }
+      break;
+    }
   }
 
   return { text, modified, violations, shouldRegenerate };
