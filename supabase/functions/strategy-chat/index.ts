@@ -2347,6 +2347,49 @@ The user asked WHERE the information came from. Answer in plain English in 1–3
 - REQUIRED: Name the source(s) directly — linked account, uploaded file, internal KI/Playbook by short id, prior thread message, or "operator pattern (no internal source)".
 - FORBIDDEN: defensive language, methodology theater, robotic disclaimers, a new asset, restating the question, "Subject:", "Hi", any email structure, numbered lists, trailing upgrade line ("Want me to…").${constraintLine}${substanceContract}${bindingClause}`;
 
+    case "synthesis":
+      return `═══ MODE LOCK: SYNTHESIS (DERIVE FROM LIBRARY) ═══
+The user asked you to BUILD SOMETHING NEW (a scoring system, framework, rubric, model, checklist, evaluation criteria, or weighting scheme) GROUNDED IN THEIR OWN RESOURCES. This is the highest-stakes mode you can be in: a generic answer here is a complete failure. The user could get a generic framework from any LLM — what they want is THEIR framework, derived from THEIR materials.
+
+═══ HARD GROUNDING REQUIREMENT ═══
+Use the resources, KIs, playbooks, and transcripts provided in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are empty or weak:
+- Do NOT fabricate sources. Do NOT invent titles. Do NOT pretend you read something you didn't.
+- Instead, in ONE short opening line, say what's missing (e.g. "I don't see any cold-calling resources linked to this thread — link 2-3 and I'll derive a scoring system grounded in them.") and STOP. Do not produce a generic framework as a fallback.
+
+═══ REQUIRED OUTPUT SHAPE (use these EXACT section headers, in order) ═══
+
+**1. Pattern Extraction**
+Before constructing anything, list the 3-6 repeated SIGNALS / PATTERNS you found across the user's resources. Each line:
+- Pattern name — what shows up repeatedly
+- Sources: KI[id1], KI[id2], "Exact Resource Title" — name 2+ sources per pattern
+- Note any DIFFERENCES between sources when they disagree (this is a feature, not noise)
+
+**2. <Artifact Name> — Dimensions**
+Render as a table:
+| # | Dimension | Definition (1 sentence) | Weight | Derived From |
+|---|-----------|------------------------|--------|--------------|
+Each row's "Derived From" cell MUST cite at least one specific source by KI[id] / PLAYBOOK[id] / "Exact Resource Title". Weights MUST sum to 100% (or 1.0) and MUST be unequal — if you weight everything equally you have not done the work.
+
+**3. Weighting Rationale**
+For each dimension's weight, explain in ONE line WHY it carries that weight, citing the underlying pattern and source. Example: "Tone of voice = 25% because it appears as a top-3 disqualifier in PLAYBOOK[abc123] and KI[def456], and shows up in 4 of 5 transcripts as the moment the prospect disengages."
+
+**4. Example Scoring**
+Score ONE concrete worked example (a hypothetical or, if context provides one, a real call/scenario from the user's materials). Show the per-dimension score, weighted contribution, and final score. Make the math visible.
+
+**5. Source Attribution**
+A bulleted list mapping every cited source to which dimension(s) it informed. One line per source:
+- KI[id] / "Title" → Dimension 1, Dimension 3
+This lets the user audit the derivation end-to-end.
+
+═══ FORBIDDEN ═══
+- Generic stage-based scaffolding ("Opener / Pitch / Close", "Discovery / Demo / Close") UNLESS those exact stages are explicitly grounded in cited sources.
+- Equal weights across every dimension (lazy synthesis — you must commit to what matters more).
+- Output that could have been generated WITHOUT the user's library. If a generic LLM with no access to their resources could write it, you have failed.
+- Skipping the "Pattern Extraction" section. The user wants to see your derivation, not just the answer.
+- Skipping the "Source Attribution" section. Every dimension MUST trace back to a named source.
+- Restating "based on the resources provided" as a substitute for actual source citation. Cite by KI[id] / PLAYBOOK[id] / "Exact Title".
+- Email format, voicemail script, cold-calling talk track, or any conversational asset — those are NOT the artifact requested.${constraintLine}${substanceContract}${bindingClause}`;
+
     case "freeform":
     default:
       return `═══ MODE LOCK: FREEFORM ═══
