@@ -2614,6 +2614,296 @@ function hasApplicationAppendix(text: string): boolean {
   return hasSituation && hasAudience && hasIndustry;
 }
 
+// ────────────────────────────────────────────────────────────────────
+// APPLICATION-LAYER CONSISTENCY GUARD
+// ────────────────────────────────────────────────────────────────────
+// Kills "appendix theater": output that declares Audience=CFO /
+// Situation=Cold Call / Industry=Healthcare in the appendix but whose
+// BODY shows none of the language or structural shape that audience /
+// situation / industry should produce. This is the difference between
+// real adaptation and decorative labeling.
+//
+// Heuristic, not LLM. We:
+//   1) Parse the appendix for declared Situation / Audience / Industry.
+//   2) Inspect the body ABOVE the appendix.
+//   3) Validate that the body shows:
+//        - audience-specific vocabulary signals (≥2 hits)
+//        - situation-specific structural shape
+//        - industry-specific vocabulary signals (≥2 hits)
+//   4) On mismatch, emit a typed violation tag and request regen.
+//
+// Keep the floor low enough that a strong CFO answer doesn't fail for
+// missing one keyword, but high enough that a generic body wrapped in
+// a CFO appendix cannot pass.
+
+interface AppendixDecl {
+  situation: string | null;
+  audience: string | null;
+  industry: string | null;
+}
+
+function parseApplicationDecl(text: string): AppendixDecl {
+  const tail = text.slice(-1800);
+  const grab = (label: string): string | null => {
+    const m = tail.match(new RegExp(`\\b${label}\\s*:\\s*([^\\n]+)`, "i"));
+    if (!m) return null;
+    return m[1].replace(/[*_`]/g, "").trim().toLowerCase() || null;
+  };
+  return {
+    situation: grab("Situation"),
+    audience: grab("Audience"),
+    industry: grab("Industry"),
+  };
+}
+
+// Strip the appendix region so we only score the body.
+function stripApplicationAppendix(text: string): string {
+  // Find last "Application" header and cut from there.
+  const re = /\n[ \t]*\*{0,2}Application\*{0,2}[ \t]*\n/i;
+  const m = text.match(re);
+  if (!m || m.index == null) return text;
+  return text.slice(0, m.index);
+}
+
+// Audience → required vocabulary signals. Match is case-insensitive,
+// word-boundary, ≥2 distinct hits required.
+const AUDIENCE_VOCAB: Array<{ key: RegExp; signals: RegExp[] }> = [
+  {
+    key: /\bcfo\b|chief financial|finance lead|finance leader/i,
+    signals: [
+      /\broi\b/i, /\bpayback\b/i, /\bcost of inaction\b/i, /\bbudget\b/i,
+      /\bmargin\b/i, /\bcash\b/i, /\bdownside\b/i, /\bfinancial impact\b/i,
+      /\b(net|gross)\s+(savings|cost)\b/i, /\b\$[\d,]/,
+      /\bcost\b.*\b(reduction|avoid|save|saving)\b/i,
+      /\bbusiness case\b/i, /\bnpv\b/i, /\birr\b/i,
+    ],
+  },
+  {
+    key: /\bchampion\b|internal champion|economic buyer's champion/i,
+    signals: [
+      /\binternal sell/i, /\bforward(able|ing)?\b/i, /\bproof point/i,
+      /\bnarrative\b/i, /\bbuy[- ]in\b/i, /\bcredibility\b/i,
+      /\bstakeholder alignment\b/i, /\bhelp(ing)? (you|them) sell/i,
+      /\bpolitical cover\b/i, /\btalk track\b/i,
+      /\bshare with\b.*\b(team|exec|leadership)\b/i,
+    ],
+  },
+  {
+    key: /\bvp sales\b|vp of sales|sales leader|cro\b|chief revenue/i,
+    signals: [
+      /\bpipeline\b/i, /\bconversion\b/i, /\bforecast\b/i, /\bvelocity\b/i,
+      /\bquota\b/i, /\bwin rate\b/i, /\bstage progression\b/i,
+      /\bramp\b/i, /\battainment\b/i, /\brep\b/i, /\bcoverage\b/i,
+    ],
+  },
+  {
+    key: /\bprocurement\b|purchasing|sourcing\b/i,
+    signals: [
+      /\bcontract\b/i, /\bpricing\b/i, /\bterms\b/i, /\bvendor risk\b/i,
+      /\bapprov(al|ed)\b/i, /\blegal\b/i, /\bcommercial process\b/i,
+      /\bmsa\b/i, /\bredline\b/i, /\bsla\b/i,
+    ],
+  },
+  {
+    key: /\btechnical buyer\b|engineer|architect|cto\b|head of (engineering|platform)/i,
+    signals: [
+      /\bintegration\b/i, /\bimplementation\b/i, /\barchitecture\b/i,
+      /\bfeasibility\b/i, /\bdeployment\b/i, /\btechnical risk\b/i,
+      /\bsystems?\b/i, /\bapi\b/i, /\bsso\b/i, /\binfrastructure\b/i,
+    ],
+  },
+  {
+    key: /\bfounder\b|ceo\b|chief executive/i,
+    signals: [
+      /\bnarrative\b/i, /\bdifferentiation\b/i, /\bstrategic leverage\b/i,
+      /\bmarket position/i, /\bmoat\b/i, /\bvision\b/i,
+    ],
+  },
+  {
+    key: /\bboard\b|board of directors/i,
+    signals: [
+      /\bgovernance\b/i, /\bstrategic\b/i, /\brisk\b/i, /\bmilestone\b/i,
+      /\boutcomes?\b/i, /\bcapital\b/i,
+    ],
+  },
+];
+
+// Situation → required structural shape.
+const SITUATION_SHAPE: Array<{ key: RegExp; check: (body: string) => string | null }> = [
+  {
+    key: /\bcold\s+call\b/i,
+    // Cold call: must be short and hook-first. We allow long IF first
+    // ~400 chars carry the hook ("reason for the call", curiosity, name).
+    check: (body) => {
+      const wordCount = body.trim().split(/\s+/).filter(Boolean).length;
+      if (wordCount > 350) {
+        const head = body.slice(0, 600).toLowerCase();
+        const hookHints = /(reason for|quick (call|second|ask)|won['’]t take|30 seconds|caught you|cold|interrupt)/i;
+        if (!hookHints.test(head)) return "cold_call_too_long_no_hook";
+      }
+      return null;
+    },
+  },
+  {
+    key: /\bdiscovery\b/i,
+    // Discovery: must lead with diagnostic questions / hypothesis.
+    check: (body) => {
+      const qCount = (body.match(/\?/g) || []).length;
+      const hasHypothesis = /\b(hypothesis|we (think|believe|suspect)|our take|what we['’]re seeing|i['’]?d expect)\b/i.test(body);
+      if (qCount < 2 && !hasHypothesis) return "discovery_no_questions_or_hypothesis";
+      return null;
+    },
+  },
+  {
+    key: /\brenewal\b/i,
+    check: (body) => {
+      const hasRetention = /\b(retention|renew|expansion|upsell|churn|risk|consequence|usage|adoption|value realized)\b/i;
+      const hits = (body.match(new RegExp(hasRetention.source, "gi")) || []).length;
+      if (hits < 2) return "renewal_missing_retention_framing";
+      return null;
+    },
+  },
+  {
+    key: /\bobjection( handling)?\b|pricing pushback/i,
+    check: (body) => {
+      const hasReframe = /\b(reframe|flip|pivot|push back|i hear you|that['’]s fair|here['’]s why|the reason)\b/i;
+      const hasRebuttal = /\b(actually|the data|in fact|consider|what we['’]ve seen)\b/i;
+      if (!hasReframe.test(body) && !hasRebuttal.test(body)) return "objection_missing_rebuttal_or_reframe";
+      return null;
+    },
+  },
+  {
+    key: /\bexec( meeting| conversation)?\b|board prep|executive/i,
+    check: (body) => {
+      const econ = /\b(\$[\d,]|roi|payback|outcome|consequence|p&l|margin|revenue|cost|risk)\b/i;
+      const hits = (body.match(new RegExp(econ.source, "gi")) || []).length;
+      if (hits < 2) return "exec_missing_economic_framing";
+      return null;
+    },
+  },
+];
+
+// Industry → required vocabulary signals (≥2 distinct hits).
+const INDUSTRY_VOCAB: Array<{ key: RegExp; signals: RegExp[]; antiSaaS?: boolean }> = [
+  {
+    key: /\bsaas\b|software as a service/i,
+    signals: [
+      /\barr\b/i, /\bchurn\b/i, /\bseats?\b/i, /\bexpansion\b/i,
+      /\bpayback\b/i, /\brenewal\b/i, /\badoption\b/i, /\bmrr\b/i,
+    ],
+  },
+  {
+    key: /\bhealth\s*care\b|healthcare|hospital|clinical/i,
+    signals: [
+      /\bcompliance\b/i, /\bpatient\b/i, /\bauditab/i, /\boperational burden\b/i,
+      /\bregulat/i, /\bgovernance\b/i, /\bhipaa\b/i, /\bclinical\b/i,
+    ],
+    antiSaaS: true,
+  },
+  {
+    key: /\bmanufactur/i,
+    signals: [
+      /\bthroughput\b/i, /\buptime\b/i, /\befficiency\b/i, /\bwaste\b/i,
+      /\bdowntime\b/i, /\boutput\b/i, /\boperational reliability\b/i,
+      /\byield\b/i, /\boee\b/i,
+    ],
+    antiSaaS: true,
+  },
+  {
+    key: /\bfinancial services\b|finserv|banking|insurance|capital markets/i,
+    signals: [
+      /\bcontrols?\b/i, /\bregulatory\b/i, /\brisk\b/i, /\bgovernance\b/i,
+      /\baudit trail\b/i, /\bcompliance\b/i, /\bsox\b/i, /\bbasel\b/i,
+    ],
+    antiSaaS: true,
+  },
+  {
+    key: /\bretail\b|ecommerce|e-commerce/i,
+    signals: [
+      /\bconversion\b/i, /\bbasket\b/i, /\baov\b/i, /\bsku\b/i,
+      /\binventory\b/i, /\bfootfall\b/i, /\bmargin\b/i, /\bgmv\b/i,
+    ],
+    antiSaaS: true,
+  },
+];
+
+const SAAS_LEAK_RE = /\b(arr|mrr|churn|seats?)\b/i;
+
+interface ConsistencyResult {
+  violations: string[];
+  shouldRegenerate: boolean;
+}
+
+function enforceApplicationConsistency(text: string): ConsistencyResult {
+  const violations: string[] = [];
+  let shouldRegenerate = false;
+
+  if (!hasApplicationAppendix(text)) {
+    // The mode-specific guard already flags missing-appendix; don't double-tag.
+    return { violations, shouldRegenerate };
+  }
+
+  const decl = parseApplicationDecl(text);
+  const body = stripApplicationAppendix(text);
+  const bodyLower = body.toLowerCase();
+  const wordCount = body.trim().split(/\s+/).filter(Boolean).length;
+
+  // ── Audience consistency ────────────────────────────────────
+  if (decl.audience) {
+    const match = AUDIENCE_VOCAB.find((a) => a.key.test(decl.audience!));
+    if (match) {
+      const hits = match.signals.reduce((n, re) => n + (re.test(body) ? 1 : 0), 0);
+      if (hits < 2) {
+        violations.push("application_body_audience_mismatch");
+        shouldRegenerate = true;
+        console.log(`[app-consistency] audience="${decl.audience}" hits=${hits}/2 required`);
+      }
+    }
+  }
+
+  // ── Situation consistency ───────────────────────────────────
+  if (decl.situation) {
+    const match = SITUATION_SHAPE.find((s) => s.key.test(decl.situation!));
+    if (match) {
+      const reason = match.check(body);
+      if (reason) {
+        violations.push("application_body_situation_mismatch");
+        shouldRegenerate = true;
+        console.log(`[app-consistency] situation="${decl.situation}" reason=${reason}`);
+      }
+    }
+  }
+
+  // ── Industry consistency ────────────────────────────────────
+  if (decl.industry) {
+    const match = INDUSTRY_VOCAB.find((i) => i.key.test(decl.industry!));
+    if (match) {
+      const hits = match.signals.reduce((n, re) => n + (re.test(body) ? 1 : 0), 0);
+      if (hits < 2) {
+        violations.push("application_body_industry_mismatch");
+        shouldRegenerate = true;
+        console.log(`[app-consistency] industry="${decl.industry}" hits=${hits}/2 required`);
+      }
+      // SaaS-leak: declared non-SaaS industry but body uses SaaS metrics.
+      if (match.antiSaaS && SAAS_LEAK_RE.test(bodyLower)) {
+        violations.push("application_body_industry_mismatch");
+        shouldRegenerate = true;
+        console.log(`[app-consistency] industry="${decl.industry}" SaaS vocabulary leaked into non-SaaS body`);
+      }
+    }
+  }
+
+  // ── Generic-despite-context floor ───────────────────────────
+  // If the body is meaningfully sized AND none of the declared
+  // dimensions (audience/situation/industry) actually shaped it,
+  // call it generic.
+  if (wordCount > 120 && violations.length >= 2) {
+    violations.push("application_body_generic_despite_context");
+  }
+
+  return { violations, shouldRegenerate };
+}
+
 function enforceModeLock(
   rawText: string,
   intent: IntentResult,
