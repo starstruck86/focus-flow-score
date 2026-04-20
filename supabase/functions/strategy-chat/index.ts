@@ -2445,11 +2445,55 @@ function buildModeLockBlock(intent: IntentResult): string {
       : `\n- ECONOMIC PRESSURE LAYER (REQUIRED): Anchor the output in money + time. If you have a real number/date in context, use it. If you don't, write a directional sentence WITHOUT placeholders (e.g. "Delaying this risks pushing implementation into next quarter and missing the current budget window") OR call out exactly what number/date you'd need from the rep in one short line. NEVER emit [BRACKETED_NUMBER], $[…], %[…] in this mode.`)
     : "";
 
+  // ── OPERATOR REASONING CONTRACT (mandatory for synthesis/creation/evaluation) ──
+  // The thinking layer. Forces pattern extraction → POV → weighting → decision
+  // logic → consequence framing. Without this, the model produces book-smart
+  // summaries instead of operator-grade synthesis.
+  const isGroundedMode = kind === "synthesis" || kind === "creation" || kind === "evaluation";
+  const operatorReasoningContract = isGroundedMode
+    ? `
+
+═══ OPERATOR REASONING CONTRACT (NON-NEGOTIABLE — THINKING LAYER) ═══
+You are not a summarizer. You are not a librarian. You are an operator with a P&L. Before you write the locked output below, you MUST think through this sequence. Skipping any step is a hard failure that the server-side guard will flag and force a regeneration.
+
+STEP 1 — PATTERN EXTRACTION (across sources, not within one)
+- What shows up REPEATEDLY across the resources/KIs/playbooks?
+- What CORRELATES with wins vs losses, opens vs ignores, expansion vs churn?
+- Where do the sources DISAGREE? Disagreement is signal, not noise.
+- Patterns must be BEHAVIORAL or STRUCTURAL — not vibes ("be confident", "build rapport" → BANNED).
+
+STEP 2 — POINT OF VIEW (commit to what matters most)
+- Of the patterns you extracted, which 2-3 actually drive the outcome? Name them.
+- Which ones are noise / table stakes / overrated? Name those too.
+- A POV without a "what we ignore" list is not a POV — it's a checklist.
+
+STEP 3 — WEIGHTED MODEL (no equal weights, ever)
+- Assign UNEQUAL weights that reflect real tradeoffs.
+- For each weight, state WHY it carries that weight, citing the pattern + source.
+- If you find yourself splitting weight evenly, you have not done the work — restart.
+
+STEP 4 — DECISION LOGIC (how to use this in a live deal)
+- Translate the model into a 2-4 step IF/THEN sequence the rep can run mid-call or mid-deal.
+- Example shape: "IF dimension X scores below N, the dominant move is Y because of pattern Z."
+- This must be EXECUTABLE, not aspirational.
+
+STEP 5 — CONSEQUENCE FRAMING (what happens if you get this wrong)
+- Tie outcomes to one or more of: pipeline created, deal velocity, win rate, ACV, expansion, churn, time-to-revenue.
+- Each major dimension/recommendation needs a concrete downside if ignored. Not "this could matter" — say WHAT breaks (e.g. "If you skip cost-of-inaction framing on a CFO ask, the deal stalls in legal because no one can defend the urgency to procurement.").
+
+VALIDATION RULE (the model self-checks before sending):
+- If the output could have been written WITHOUT access to the user's library → FAIL, restart.
+- If every dimension carries equal weight → FAIL, restart.
+- If recommendations are behavioral fluff ("ask better questions", "build trust", "observe tone", "be a good listener", "stay curious", "be authentic") → FAIL, restart.
+- If no recommendation ties to a measurable outcome (pipeline / velocity / win rate / expansion / churn / ACV) → FAIL, restart.
+
+This contract overrides the urge to be polite, balanced, or comprehensive. Be opinionated, weighted, and consequential.`
+    : "";
+
   // ── APPLICATION LAYER (mandatory after synthesis / creation / evaluation) ──
   // The output is not "done" when it's correct — it must be adapted to the
   // real-world situation, audience, and industry. We append this block to
   // every grounded mode and a post-gen guard verifies the appendix exists.
-  const isGroundedMode = kind === "synthesis" || kind === "creation" || kind === "evaluation";
   const applicationLayer = isGroundedMode
     ? `
 
@@ -2664,7 +2708,7 @@ If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable
 1. Open with ONE honest line: "I found N resource(s) and M KI(s) related to this — not enough to fully derive from your library, so here is a best first-pass system using general operator reasoning."
 2. Then produce the full required output shape using your reasoning. Mark each section as **Grounded** (when citing a real source) or **Extended** (when reasoning).
 3. End with ONE clarifying question only if it would materially sharpen the next pass (e.g. "Point me to your top 2 cold-call calls and I'll re-weight against those.").
-NEVER refuse. NEVER output a one-line stop. NEVER invent sources.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+NEVER refuse. NEVER output a one-line stop. NEVER invent sources.${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
 
     case "creation":
@@ -2701,7 +2745,7 @@ The actual usable output the user can paste. Render it cleanly (no commentary mi
 - Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on your resources", "in general", "best practice", "industry standard", "as a general rule", "typically", "generally speaking".
 
 ═══ THIN-MODE CONTRACT (when grounding is weak) ═══
-If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain ZERO usable resources, you MUST still produce the asset using general operator reasoning. Open with one honest line stating what was searched and that nothing matched, then deliver the full asset under the required headers above. Mark every line under "Reused vs Created" as **Created (extended)** since the library could not anchor it. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${economicLayer}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain ZERO usable resources, you MUST still produce the asset using general operator reasoning. Open with one honest line stating what was searched and that nothing matched, then deliver the full asset under the required headers above. Mark every line under "Reused vs Created" as **Created (extended)** since the library could not anchor it. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${operatorReasoningContract}${economicLayer}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "evaluation":
       return `═══ MODE LOCK: EVALUATION (COACH USING LIBRARY) ═══
@@ -2747,7 +2791,7 @@ Bulleted map of each cited source → which dimension(s) / improvement(s) it inf
 - Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on your resources", "in general", "best practice", "industry standard", "as a general rule", "typically", "generally speaking".
 
 ═══ THIN-MODE CONTRACT (when grounding is weak) ═══
-If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, you MUST still grade the asset. Open with one honest line stating that the library couldn't anchor the standards, then proceed with the full required output shape using general operator reasoning. Mark each "Source" cell as "Operator pattern" when no internal source exists. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, you MUST still grade the asset. Open with one honest line stating that the library couldn't anchor the standards, then proceed with the full required output shape using general operator reasoning. Mark each "Source" cell as "Operator pattern" when no internal source exists. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "freeform":
     default:
@@ -2847,6 +2891,102 @@ function stripApplicationAppendix(text: string): string {
   const m = text.match(re);
   if (!m || m.index == null) return text;
   return text.slice(0, m.index);
+}
+
+// ── OPERATOR-GRADE REASONING GUARD ─────────────────────────────
+// Detects book-smart fingerprints in synthesis/creation/evaluation outputs.
+// Returns a list of violations; caller decides whether to regen.
+//
+// What we look for (any 2+ failures → regen with strict reasoning preamble):
+//   1. No CONSEQUENCE vocabulary — outcome must tie to pipeline / velocity /
+//      win rate / churn / expansion / ACV / payback / cost-of-inaction.
+//   2. No DECISION LOGIC — no IF/THEN, "if X then Y", "when X, do Y".
+//   3. BEHAVIORAL FLUFF — "ask better questions", "build trust", "be authentic".
+//   4. NO TRADEOFF LANGUAGE — no "vs", "instead of", "ignore", "deprioritize",
+//      "table stakes", "noise", "matters more", "matters less".
+//   5. NO POV COMMITMENT — no "the dominant", "the highest-leverage",
+//      "the one thing", "the biggest", "what actually matters".
+function auditOperatorReasoning(body: string): {
+  violations: string[];
+  shouldRegenerate: boolean;
+} {
+  const violations: string[] = [];
+  const wc = body.trim().split(/\s+/).filter(Boolean).length;
+  if (wc < 120) return { violations, shouldRegenerate: false };
+
+  const lower = body.toLowerCase();
+
+  // 1. Consequence vocabulary — must hit ≥2 distinct outcome anchors.
+  const CONSEQUENCE_RE = [
+    /\bpipeline\b/, /\bvelocity\b/, /\bwin\s*rate\b/, /\bchurn\b/,
+    /\bexpansion\b/, /\bacv\b/, /\barr\b/, /\bpayback\b/,
+    /\bcost\s+of\s+inaction\b/, /\bdeal\s+(stalls?|slips?|dies?|breaks?)\b/,
+    /\btime[-\s]to[-\s](revenue|close|value)\b/, /\bforecast\b/,
+    /\bconversion\s+rate\b/, /\bquota\b/, /\battainment\b/,
+  ];
+  const consequenceHits = CONSEQUENCE_RE.filter((re) => re.test(lower)).length;
+  if (consequenceHits < 2) {
+    violations.push("operator_no_consequence_framing");
+  }
+
+  // 2. Decision logic — IF/THEN sequence required.
+  const DECISION_RE = [
+    /\bif\b[^.!?\n]{2,80}\b(then|do|run|use|skip|prioritize|deprioritize|switch|move)\b/i,
+    /\bwhen\b[^.!?\n]{2,80}\b(then|do|run|use|skip|prioritize|switch)\b/i,
+    /\bdominant\s+move\b/i, /\bnext\s+move\b/i, /\bplaybook:\s/i,
+  ];
+  const hasDecisionLogic = DECISION_RE.some((re) => re.test(body));
+  if (!hasDecisionLogic) {
+    violations.push("operator_no_decision_logic");
+  }
+
+  // 3. Behavioral fluff — banned phrases that signal generic-LLM output.
+  const FLUFF_RE = [
+    /\bask\s+better\s+questions\b/i,
+    /\bbuild\s+(trust|rapport)\b/i,
+    /\bbe\s+(authentic|curious|confident|genuine)\b/i,
+    /\bobserve\s+tone\b/i,
+    /\bactive\s+listening\b/i,
+    /\bbe\s+a\s+good\s+listener\b/i,
+    /\bstay\s+curious\b/i,
+    /\bshow\s+empathy\b/i,
+    /\bmirror\s+(their|the)\s+(language|tone)\b/i,
+  ];
+  const fluffHits = FLUFF_RE.filter((re) => re.test(body)).length;
+  if (fluffHits >= 1) {
+    violations.push("operator_behavioral_fluff");
+  }
+
+  // 4. Tradeoff language — POV must include what to ignore / weight differently.
+  const TRADEOFF_RE = [
+    /\binstead\s+of\b/i, /\bnot\s+because\b/i, /\bdeprioritize\b/i,
+    /\btable\s+stakes\b/i, /\bnoise\b/i, /\bmatters?\s+(more|most|less|least)\b/i,
+    /\bweight(ed|s)?\s+(higher|lower|more|less)\b/i, /\bignore\b/i,
+    /\bovervalued?\b/i, /\bunderrated?\b/i, /\btradeoff\b/i,
+  ];
+  const tradeoffHits = TRADEOFF_RE.filter((re) => re.test(body)).length;
+  if (tradeoffHits < 2) {
+    violations.push("operator_no_tradeoffs");
+  }
+
+  // 5. POV commitment — "the dominant", "the one thing", etc.
+  const POV_RE = [
+    /\bthe\s+dominant\b/i, /\bthe\s+highest[-\s]leverage\b/i,
+    /\bthe\s+one\s+thing\b/i, /\bthe\s+biggest\b/i,
+    /\bwhat\s+actually\s+matters\b/i, /\bthe\s+real\s+(issue|driver|lever)\b/i,
+    /\bthe\s+single\s+(biggest|most|highest)\b/i, /\bthe\s+core\b/i,
+  ];
+  const hasPOV = POV_RE.some((re) => re.test(body));
+  if (!hasPOV) {
+    violations.push("operator_no_pov_commitment");
+  }
+
+  // Regen threshold: 2+ violations means the output is book-smart.
+  const shouldRegenerate = violations.length >= 2;
+  if (shouldRegenerate) {
+    console.log(`[operator-reasoning] violations=${JSON.stringify(violations)} body_words=${wc}`);
+  }
+  return { violations, shouldRegenerate };
 }
 
 // Audience → required vocabulary signals. Match is case-insensitive,
@@ -3667,6 +3807,15 @@ function enforceModeLock(
           if (cons.shouldRegenerate) shouldRegenerate = true;
         }
       }
+      // OPERATOR REASONING AUDIT: catch book-smart fingerprints.
+      {
+        const body = stripApplicationAppendix(text);
+        const op = auditOperatorReasoning(body);
+        if (op.violations.length) {
+          violations.push(...op.violations.map((v) => `synthesis_${v}`));
+          if (op.shouldRegenerate) shouldRegenerate = true;
+        }
+      }
       break;
     }
 
@@ -3718,6 +3867,15 @@ function enforceModeLock(
         if (cons.violations.length) {
           violations.push(...cons.violations);
           if (cons.shouldRegenerate) shouldRegenerate = true;
+        }
+      }
+      // OPERATOR REASONING AUDIT.
+      {
+        const body = stripApplicationAppendix(text);
+        const op = auditOperatorReasoning(body);
+        if (op.violations.length) {
+          violations.push(...op.violations.map((v) => `creation_${v}`));
+          if (op.shouldRegenerate) shouldRegenerate = true;
         }
       }
       break;
@@ -3778,6 +3936,15 @@ function enforceModeLock(
         if (cons.violations.length) {
           violations.push(...cons.violations);
           if (cons.shouldRegenerate) shouldRegenerate = true;
+        }
+      }
+      // OPERATOR REASONING AUDIT.
+      {
+        const body = stripApplicationAppendix(text);
+        const op = auditOperatorReasoning(body);
+        if (op.violations.length) {
+          violations.push(...op.violations.map((v) => `evaluation_${v}`));
+          if (op.shouldRegenerate) shouldRegenerate = true;
         }
       }
       break;
