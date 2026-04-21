@@ -5625,7 +5625,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         }
         const auditedVisible = audit.text;
 
-        // ── HYBRID GUARD (diagnostic only) ──
+        // ── HYBRID GUARD (diagnostic) ──
         const hybridGuard = evaluateHybridGuard(intent.intent, auditedVisible);
         if (hybridGuard.checked) {
           try {
@@ -5640,8 +5640,33 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           } catch { /* never throw from telemetry */ }
         }
 
+        // ── HYBRID DETERMINISTIC REWRITE (single pass, no second LLM) ──
+        let finalVisible = auditedVisible;
+        let hybridRewriteApplied = false;
+        let hybridRewriteReason: string | null = null;
+        let hybridGuardAfter = hybridGuard;
+        if (hybridGuard.checked && !hybridGuard.passed) {
+          const rw = rewriteHybridOutput(intent.intent, auditedVisible);
+          if (rw.applied) {
+            finalVisible = rw.text;
+            hybridRewriteApplied = true;
+            hybridRewriteReason = rw.reason;
+            hybridGuardAfter = evaluateHybridGuard(intent.intent, finalVisible);
+            try {
+              console.log(JSON.stringify({
+                diag: "hybrid_rewrite_result",
+                intent: intent.intent,
+                rewrite_applied: true,
+                failures_before: hybridGuard.failure_reasons,
+                failures_after: hybridGuardAfter.failure_reasons,
+                output_head_after: (finalVisible || "").slice(0, 200),
+              }));
+            } catch { /* never throw */ }
+          }
+        }
+
         assertRoutingEvidence({
-          finalText: auditedVisible,
+          finalText: finalVisible,
           upstreamRetrievalSucceeded: retrievalSucceeded,
           resourceHits,
           kiHits: kiHitList,
@@ -5653,7 +5678,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         // delta, then [DONE]. Client renders this atomically — no
         // first-token-drop risk.
         const sseChunk = `data: ${
-          JSON.stringify({ choices: [{ delta: { content: auditedVisible } }] })
+          JSON.stringify({ choices: [{ delta: { content: finalVisible } }] })
         }\n\ndata: [DONE]\n\n`;
         controller.enqueue(new TextEncoder().encode(sseChunk));
         controller.close();
@@ -5667,7 +5692,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           fallback_used: false,
           latency_ms: latency,
           content_json: {
-            text: auditedVisible,
+            text: finalVisible,
             sources_used: pack.sourceCount,
             retrieval_meta: pack.retrievalMeta,
             retrieval_handoff: retrievalDiagnostics,
