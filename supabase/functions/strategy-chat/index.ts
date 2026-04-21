@@ -2634,7 +2634,9 @@ This contract overrides the urge to be polite, balanced, or comprehensive. Be op
   // The output is not "done" when it's correct — it must be adapted to the
   // real-world situation, audience, and industry. We append this block to
   // every grounded mode and a post-gen guard verifies the appendix exists.
-  const applicationLayer = isGroundedMode
+  // FIX B: Application layer also extends to analysis/next_steps/pitch/message
+  // so audience+situation+industry adaptation runs everywhere it matters.
+  const applicationLayer = isOperatorMode
     ? `
 
 ═══ APPLICATION LAYER (MANDATORY — RUNS AFTER YOUR PRIMARY OUTPUT) ═══
