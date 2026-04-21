@@ -405,6 +405,3 @@ export function scoreRubric(args: ScoreRubricInput): RubricScores {
     libraryLeverageStrict,
   };
 }
-    overall: clamp01(overall),
-  };
-}
