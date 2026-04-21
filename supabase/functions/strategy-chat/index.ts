@@ -2727,7 +2727,7 @@ The user asked for an EMAIL. Return ONLY the email BODY in body-only format.
       return `═══ MODE LOCK: MESSAGE / SCRIPT ═══
 The user asked for exact wording (voicemail, SMS, LinkedIn note, script, DM).
 - FORBIDDEN: an email, a plan, a framework, multiple versions unless asked.
-- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "pitch":
       return `═══ MODE LOCK: PITCH (exact words) ═══
@@ -2737,14 +2737,14 @@ The user asked how to PITCH or POSITION something. Give the exact words to say.
         isCFO
           ? `\n- CFO AUDIENCE: lead with money. Frame on cost of inaction, payback period, or risk-adjusted return. Use real \$ figures or % deltas IF they exist in context. If they don't, write a directional sentence with NO bracket placeholders. No SDR-style "want to learn about your priorities" openings — CFOs hate it.`
           : ""
-      }${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+      }${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "next_steps":
       return `═══ MODE LOCK: NEXT STEPS ═══
 The user asked WHAT TO DO NEXT. Return numbered actions.
 - FORBIDDEN: a cold email (no "Subject:", no "Hi"), a script, a pitch, a thesis, a framework, a "here's how to think about this" preface.
 - REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with a strong verb first AND a real named target from context AND a concrete outcome. Use ONLY names/dates/numbers that actually appear in the thread/account context. If you don't have a name, write the role ("the economic buyer", "the CFO") — never "[name]" or "[Client]". No commentary between items. No trailing upgrade line.
-- ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm the budget owner this week or this slips to next quarter").${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm the budget owner this week or this slips to next quarter").${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "analysis":
       return `═══ MODE LOCK: STRATEGIC ANALYSIS (DECISION FORCE LAYER) ═══
@@ -2794,7 +2794,7 @@ You are not here to be right. You are here to be **usefully opinionated under in
 
 - FORBIDDEN META/PROVENANCE LANGUAGE (server guard will STRIP): "this comes from", "this is based on", "based on the (available |provided |given )?context", "informed by", "derived from", "pulled from", "the thesis is based on", "this assessment uses", "this analysis draws on", "where this comes from", "according to (the|your) (thread|context|notes|account)", "given the limited context", "without more information", "to provide a more accurate", "here's how to think about", "the way to think about this is".
 - FORBIDDEN: an email, a template, a script, a "here's how to think about it" essay, a recap of what data you do/don't have, hedges, passive evasions, multiple scenarios, branching options.
-- IF DATA IS THIN: do NOT generalize, do NOT list possibilities. Make the SINGLE strongest reasonable inference, frame it as "Assume X — this deal will Y unless Z", and use the discovery question to confirm/kill it. NEVER substitute meta-commentary. NEVER emit bracket placeholders. NEVER hedge. NEVER branch.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- IF DATA IS THIN: do NOT generalize, do NOT list possibilities. Make the SINGLE strongest reasonable inference, frame it as "Assume X — this deal will Y unless Z", and use the discovery question to confirm/kill it. NEVER substitute meta-commentary. NEVER emit bracket placeholders. NEVER hedge. NEVER branch.${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "provenance":
       return `═══ MODE LOCK: PROVENANCE ═══
