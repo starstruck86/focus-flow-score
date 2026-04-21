@@ -4808,6 +4808,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 decision: v2EvidenceBase.decision,
                 body: auditedVisible || "",
                 hadLibraryHits: (resourceHits.length + kiHits) > 0,
+                resourceTitles: v2EvidenceBase.resourceTitles,
+                kiIds: v2EvidenceBase.kiIds,
+                kiTitles: v2EvidenceBase.kiTitles,
               });
               base.v2 = v2AssembleEvidence({
                 decision: v2EvidenceBase.decision,
@@ -5084,6 +5087,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                     decision: v2EvidenceBase.decision,
                     body: auditedVisible || "",
                     hadLibraryHits: (resourceHits.length + kiHits) > 0,
+                    resourceTitles: v2EvidenceBase.resourceTitles,
+                    kiIds: v2EvidenceBase.kiIds,
+                    kiTitles: v2EvidenceBase.kiTitles,
                   });
                   base.v2 = v2AssembleEvidence({
                     decision: v2EvidenceBase.decision,
