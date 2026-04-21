@@ -706,6 +706,55 @@ async function handleFailure(supabase: any, item: any, errorMessage: string, fai
   console.log(`[${item.id}] ${newStatus} (attempt ${newAttempts}/${MAX_ATTEMPTS}) — ${errorMessage}`);
 }
 
+async function recoverStaleKiGeneration(supabase: any): Promise<number> {
+  const staleCutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { data: staleItems, error } = await supabase
+    .from("podcast_import_queue")
+    .select("id, resource_id, batch_id, error_message")
+    .eq("status", "processing")
+    .eq("pipeline_stage", "generating_kis")
+    .not("resource_id", "is", null)
+    .lt("updated_at", staleCutoff)
+    .limit(25);
+
+  if (error) {
+    console.warn(`Failed stale KI recovery lookup: ${error.message}`);
+    return 0;
+  }
+
+  let recovered = 0;
+  const batchIds = new Set<string>();
+  for (const item of staleItems || []) {
+    const { count } = await supabase
+      .from("knowledge_items")
+      .select("id", { count: "exact", head: true })
+      .eq("source_resource_id", item.resource_id);
+
+    const kiCount = count || 0;
+    await supabase.from("podcast_import_queue").update({
+      status: "complete",
+      pipeline_stage: "complete",
+      processed_at: now(),
+      ki_status: kiCount > 0 ? "extracted" : "ready_for_review",
+      ki_count: kiCount,
+      error_message: item.error_message || (kiCount > 0
+        ? "Recovered after stale KI generation; KIs were already saved."
+        : "Recovered after stale KI generation timeout; ready for manual KI generation."),
+      updated_at: now(),
+    }).eq("id", item.id);
+
+    if (item.batch_id) batchIds.add(item.batch_id);
+    recovered++;
+  }
+
+  for (const batchId of batchIds) {
+    await updateBatchRollup(supabase, batchId);
+  }
+
+  if (recovered > 0) console.log(`Recovered ${recovered} stale podcast KI generation item(s)`);
+  return recovered;
+}
+
 async function updateBatchRollup(supabase: any, batchId: string) {
   try {
     // Count statuses for this batch
