@@ -570,13 +570,21 @@ Deno.serve(async (req) => {
 
   try {
     // ── Early exit: nothing to process ──
+    // Include stale processing rows so claim_podcast_queue_items can run its watchdog
+    // and re-queue items stuck after an edge timeout / interrupted KI generation.
+    const staleCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { count: queuedCount } = await supabase
       .from("podcast_import_queue")
       .select("id", { count: "exact", head: true })
       .eq("status", "queued");
+    const { count: staleProcessingCount } = await supabase
+      .from("podcast_import_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "processing")
+      .lt("updated_at", staleCutoff);
 
-    if (!queuedCount || queuedCount === 0) {
-      return json({ message: "No queued items", processed: 0 });
+    if ((!queuedCount || queuedCount === 0) && (!staleProcessingCount || staleProcessingCount === 0)) {
+      return json({ message: "No queued or stale processing items", processed: 0 });
     }
 
     // ── Circuit breaker ──
