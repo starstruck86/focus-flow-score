@@ -5723,12 +5723,16 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 hybrid_guard_checked: hybridGuard.checked,
                 hybrid_guard_passed: hybridGuard.passed,
                 hybrid_guard_failure_reasons: hybridGuard.failure_reasons,
+                hybrid_rewrite_applied: hybridRewriteApplied,
+                hybrid_rewrite_reason: hybridRewriteReason,
+                hybrid_rewrite_failures_before: hybridRewriteApplied ? hybridGuard.failure_reasons : [],
+                hybrid_rewrite_failures_after: hybridRewriteApplied ? hybridGuardAfter.failure_reasons : [],
                 short_form_diagnostics: mode === "short_form" ? {
                   kind: shortFormKind ?? null,
                   prompt_chars: (content || "").length,
                   system_prompt_chars: effectiveSystemPrompt.length,
                   max_tokens_cap: route.maxTokens,
-                  output_chars: (auditedVisible || "").length,
+                  output_chars: (finalVisible || "").length,
                   latency_ms: result.latencyMs,
                 } : null,
               };
@@ -5736,12 +5740,12 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 try {
                   const wq = v2ValidateResponse({
                     userPrompt: content || "",
-                    responseBody: auditedVisible || "",
+                    responseBody: finalVisible || "",
                     priorTurnPrompt: v2EvidenceBase.priorTurnPrompt,
                   });
                   const aud = v2AuditResponse({
                     decision: v2EvidenceBase.decision,
-                    body: auditedVisible || "",
+                    body: finalVisible || "",
                     hadLibraryHits: (resourceHits.length + kiHits) > 0,
                     resourceTitles: v2EvidenceBase.resourceTitles,
                     kiIds: v2EvidenceBase.kiIds,
