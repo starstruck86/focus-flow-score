@@ -108,6 +108,11 @@ export interface RubricScores {
   libraryLeverage: number;
   audienceFit: number;
   overall: number; // weighted average across applicable dims
+  // Phase 3 dual-logging variants — strict definitions kept alongside the
+  // relaxed ones so we can compare for ~1 week before retiring the strict
+  // versions. NOT used for the overall score.
+  decisionLogicStrict?: number;
+  libraryLeverageStrict?: number;
 }
 
 const COMMERCIAL_TERMS = [
@@ -130,7 +135,10 @@ const POV_PHRASES = [
   "the call is", "my call", "commit to",
 ];
 
-const DECISION_LOGIC_MARKERS = [
+// Phase 3: STRICT decision-logic markers (the original Phase 2 set)
+// Logged side-by-side with the relaxed set for 1 week so we can verify
+// the relaxation isn't masking real failures.
+const DECISION_LOGIC_MARKERS_STRICT = [
   /\bif\b[^.]{3,80}\bthen\b/i,
   /\bwhen\b[^.]{3,80}\bthen\b/i,
   /\bnext move\b/i,
@@ -140,6 +148,24 @@ const DECISION_LOGIC_MARKERS = [
   /\bstep\s+\d+\b/i,
   /\bthis week\b/i,
   /\bby (?:monday|tuesday|wednesday|thursday|friday|end of week|eow)\b/i,
+];
+
+// Phase 3 RELAXED set: recognize numbered action sequences and prioritized
+// playbooks as valid decision logic — not just if/then phrasing. Numbered
+// imperatives ("1. Send X to Y by Wednesday…") and prioritization phrasing
+// ("first do X, then Y, finally Z" / "lead with X, deprioritize Y") count.
+const DECISION_LOGIC_MARKERS = [
+  ...DECISION_LOGIC_MARKERS_STRICT,
+  // Numbered action sequence — imperative verb at the start of a numbered item
+  /^\s*\d+\.\s+(?:Do|Run|Send|Open|Stop|Skip|Ask|Call|Email|Book|Confirm|Quantify|Anchor|Lead|Validate|Prioritize|Disqualify|Multi-?thread|Forecast|Inspect|Build|Draft|Map|Tighten|Cut)\b/im,
+  // Sequenced playbook — first/then/next/finally + action verb
+  /\b(?:first|then|next|finally|step\s+one|step\s+two)\b[^.]{0,80}\b(?:do|run|send|focus|ask|call|email|prioritize|deprioriti[sz]e|lead|cut|skip)\b/i,
+  // Lead-with / deprioritize pairing
+  /\blead\s+with\b[^.]{1,80}\bdeprioriti[sz]e\b/i,
+  // Prioritized list ("priority 1: …, priority 2: …")
+  /\bpriority\s*\d\s*[:.\-—]/i,
+  // Run X by EOW / before Friday
+  /\b(?:run|send|book|confirm|quantify)\b[^.]{1,60}\b(?:before|by)\s+(?:eow|monday|tuesday|wednesday|thursday|friday|end of week)\b/i,
 ];
 
 const FLUFF_PHRASES = [
@@ -253,12 +279,18 @@ export function scoreRubric(args: ScoreRubricInput): RubricScores {
     vaguePOVPenalty,
   );
 
-  // decisionLogic — Phase 2: needs 2+ markers for full credit, numbered list strongly weighted
+  // decisionLogic — Phase 3: relaxed set drives the score; strict count is
+  // also computed and surfaced for dual-logging (1-week observation window).
   let decisionHits = 0;
   for (const re of DECISION_LOGIC_MARKERS) {
     if (re.test(text)) decisionHits++;
   }
+  let decisionHitsStrict = 0;
+  for (const re of DECISION_LOGIC_MARKERS_STRICT) {
+    if (re.test(text)) decisionHitsStrict++;
+  }
   const decisionLogic = clamp01(decisionHits / 3);
+  const decisionLogicStrict = clamp01(decisionHitsStrict / 3);
 
   // libraryLeverage — Phase 2.5: literal RESOURCE[…] / KI[id] citations are the only thing that counts when strong hits exist
   let libraryLeverage: number;
