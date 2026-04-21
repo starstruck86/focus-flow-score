@@ -4248,6 +4248,11 @@ async function buildChatSystemPrompt(args: {
   retrievalSucceeded: boolean;
   intent: IntentResult;
   modeLockBlock: string;
+  /** Raw context blocks — surfaced so V2 can reuse the same retrieval. */
+  rawAccountContext?: string;
+  rawLibraryContext?: string;
+  rawResourceContextBlock?: string;
+  rawWorkingThesisBlock?: string;
 }> {
   const {
     supabase,
