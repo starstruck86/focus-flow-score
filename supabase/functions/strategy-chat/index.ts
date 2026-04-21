@@ -5007,28 +5007,56 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 verified: audit.verifiedTitles,
               }
               : undefined,
-            routing_decision: {
-              mode,
-              mode_reason: modeReason,
-              intent: intent.intent,
-              resource_hits: resourceHits.length,
-              ki_hits: kiHits,
-              intended_provider: route.primaryProvider,
-              intended_model: route.model,
-              actual_provider: result.provider,
-              actual_model: result.model,
-              fallback_used: false,
-              routing_reason: route._routingReason,
-              retrieval_debug: retrievalDebug ?? null,
-              short_form_diagnostics: mode === "short_form" ? {
-                kind: shortFormKind ?? null,
-                prompt_chars: (content || "").length,
-                system_prompt_chars: effectiveSystemPrompt.length,
-                max_tokens_cap: route.maxTokens,
-                output_chars: (auditedVisible || "").length,
-                latency_ms: result.latencyMs,
-              } : null,
-            },
+            routing_decision: (() => {
+              const base: any = {
+                mode,
+                mode_reason: modeReason,
+                intent: intent.intent,
+                resource_hits: resourceHits.length,
+                ki_hits: kiHits,
+                intended_provider: route.primaryProvider,
+                intended_model: route.model,
+                actual_provider: result.provider,
+                actual_model: result.model,
+                fallback_used: false,
+                routing_reason: route._routingReason,
+                retrieval_debug: retrievalDebug ?? null,
+                short_form_diagnostics: mode === "short_form" ? {
+                  kind: shortFormKind ?? null,
+                  prompt_chars: (content || "").length,
+                  system_prompt_chars: effectiveSystemPrompt.length,
+                  max_tokens_cap: route.maxTokens,
+                  output_chars: (auditedVisible || "").length,
+                  latency_ms: result.latencyMs,
+                } : null,
+              };
+              if (v2Active && v2EvidenceBase) {
+                try {
+                  const wq = v2ValidateResponse({
+                    userPrompt: content || "",
+                    responseBody: auditedVisible || "",
+                    priorTurnPrompt: v2EvidenceBase.priorTurnPrompt,
+                  });
+                  const aud = v2AuditResponse({
+                    decision: v2EvidenceBase.decision,
+                    body: auditedVisible || "",
+                    hadLibraryHits: (resourceHits.length + kiHits) > 0,
+                  });
+                  base.v2 = v2AssembleEvidence({
+                    decision: v2EvidenceBase.decision,
+                    signals: v2EvidenceBase.signals,
+                    wrongQuestion: wq,
+                    audit: aud,
+                    provider: result.provider,
+                    model: result.model,
+                    regenCount: 0,
+                  });
+                } catch (e) {
+                  base.v2_error = (e as Error).message;
+                }
+              }
+              return base;
+            })(),
           },
         });
         await supabase.from("strategy_threads").update({
