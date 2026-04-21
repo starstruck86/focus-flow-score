@@ -141,6 +141,47 @@ When you reason beyond what the library actually contains, end your response wit
    *Extended beyond your library on: [specific topic]. Add a resource on this to ground next time.*
 Skip this line entirely if your reasoning stayed within the library or if there was no library to lean on (Mode D handles that differently).`;
 
+// ═══ Strong-signal citation discipline ═══
+// When the library has real signal (≥5 resource hits OR strong synthesis ask),
+// vague references like "your KI on discovery" or "from your library" are a
+// FAILURE. The model MUST name actual titles and KI ids.
+function buildCitationDisciplineBlock(args: {
+  resourceTitles?: string[];
+  kiIds?: string[];
+  kiTitles?: string[];
+}): string {
+  const titles = (args.resourceTitles || []).filter((t) => t && t.trim().length > 0);
+  const kis = (args.kiIds || []).filter((k) => k && k.trim().length > 0);
+  const kiTitles = (args.kiTitles || []).filter((t) => t && t.trim().length > 0);
+  if (titles.length === 0 && kis.length === 0) return "";
+
+  const titleList = titles.slice(0, 12).map((t) => `   • ${t}`).join("\n");
+  const kiList = kis.slice(0, 8).map((id, i) => `   • KI[${id.slice(0, 8)}]${kiTitles[i] ? ` ${kiTitles[i]}` : ""}`).join("\n");
+
+  return `═══ CITATION DISCIPLINE — STRONG SIGNAL ═══
+Your library returned ${titles.length} resource hit(s) and ${kis.length} KI hit(s) for this ask. Strong signal = strict citation rules.
+
+WHEN YOU REFERENCE A SOURCE, NAME IT LITERALLY.
+PASS:
+   - "From RESOURCE[\"Discovery Masterclass: Everything You Need…\"]: …"
+   - "Per KI[abcd1234] on quantifying pain: …"
+   - "RESOURCE[\"30-60-90 Plan Template\"] argues that …"
+FAIL (treat these as failures, do NOT use):
+   - "your KI on discovery"
+   - "your library suggests"
+   - "from your playbook"
+   - "your resources show"
+   - any vague gesture toward the library without naming a title or KI id
+
+LITERAL TITLES AVAILABLE THIS TURN:
+${titleList || "   (none)"}
+
+KI IDS AVAILABLE THIS TURN:
+${kiList || "   (none)"}
+
+When you cite, use the EXACT title (substring matches are tolerated by the auditor — quote enough of the title to be unambiguous). When you reference a KI, use the 8-char id form KI[xxxxxxxx]. Citing fabricated titles is worse than not citing — only cite from the lists above.`;
+}
+
 // ═══ Public builder ═══
 export function buildV2SystemPrompt(args: {
   decision: DispatchDecision;
@@ -149,6 +190,9 @@ export function buildV2SystemPrompt(args: {
   resourceContextBlock?: string;
   workingThesisBlock?: string;
   audienceMentioned: boolean;
+  resourceTitles?: string[];
+  kiIds?: string[];
+  kiTitles?: string[];
 }): string {
   const { decision, accountContext, libraryContext, resourceContextBlock, workingThesisBlock } = args;
 
@@ -164,6 +208,20 @@ export function buildV2SystemPrompt(args: {
   // Mode C and short-form skip the extension rule entirely
   if (decision.mode !== "C_general" && decision.askShape !== "short_form") {
     parts.push(EXTENSION_RULE);
+  }
+
+  // Strong-signal citation discipline — only when there's real library to cite.
+  // Triggered by Mode A/B with ≥3 resource hits, OR by synthesis_framework with any hits.
+  const totalHits = (args.resourceTitles?.length || 0) + (args.kiIds?.length || 0);
+  const isStrongSynth = decision.askShape === "synthesis_framework" && totalHits >= 3;
+  const isStrongMode = (decision.mode === "A_strong" || decision.mode === "B_partial") && (args.resourceTitles?.length || 0) >= 3;
+  if (isStrongSynth || isStrongMode) {
+    const block = buildCitationDisciplineBlock({
+      resourceTitles: args.resourceTitles,
+      kiIds: args.kiIds,
+      kiTitles: args.kiTitles,
+    });
+    if (block) parts.push(block);
   }
 
   // Rubric — mode-aware
