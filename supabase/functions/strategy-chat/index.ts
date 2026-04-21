@@ -1014,8 +1014,19 @@ async function callStreaming(
   adapterReq: Omit<AdapterRequest, "model" | "stream">,
   route: LLMRoute,
 ): Promise<NormalizedResponse> {
+  // Phase 3 timeout envelope: edge gateway window ≈ 60s. Claude must finish
+  // (or fail) with enough headroom for the OpenAI fallback to run AND for
+  // the routing_decision row to persist. Budget:
+  //   Claude attempt:        40s  (was 55s — too close to gateway edge)
+  //   OpenAI fallback room:  ~15s
+  //   Persistence room:      ~5s
+  const CLAUDE_TIMEOUT_MS = 40_000;
+  const OPENAI_TIMEOUT_MS = 55_000;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 55000);
+  const initialTimeoutMs = route.primaryProvider === "anthropic"
+    ? CLAUDE_TIMEOUT_MS
+    : OPENAI_TIMEOUT_MS;
+  const timeout = setTimeout(() => controller.abort(), initialTimeoutMs);
   const routeName = "openai-direct";
 
   try {
@@ -1025,28 +1036,110 @@ async function callStreaming(
       intended_provider: route.primaryProvider,
       intended_model: route.model,
       route: routeName,
+      timeout_ms: initialTimeoutMs,
     }));
 
     if (route.primaryProvider === "anthropic") {
       // Claude path: non-streaming. The downstream !rawStream branch in
-      // handleChat handles persistence + SSE wrapping for us. This is
-      // what makes mode=partial / creation-intent traffic actually land
-      // on Claude instead of crashing with misconfigured_route.
-      const result = await anthropicAdapter({
-        ...adapterReq,
-        model: route.model,
-      }, controller.signal);
-      console.log(JSON.stringify({
-        _type: result.error ? "routing.stream.fail" : "routing.stream.ok",
+      // handleChat handles persistence + SSE wrapping for us.
+      const claudeStarted = Date.now();
+      let result: NormalizedResponse;
+      try {
+        result = await anthropicAdapter({
+          ...adapterReq,
+          model: route.model,
+        }, controller.signal);
+      } catch (e: any) {
+        const isAbort = e?.name === "AbortError";
+        result = {
+          text: "",
+          provider: "anthropic",
+          model: route.model,
+          latencyMs: Date.now() - claudeStarted,
+          fallbackUsed: false,
+          error: {
+            type: isAbort ? "timeout" : "fetch_error",
+            message: isAbort
+              ? `Claude timeout after ${CLAUDE_TIMEOUT_MS}ms`
+              : (e?.message || String(e)),
+            status: isAbort ? 504 : 502,
+          },
+        };
+      }
+      const claudeOk = !result.error && (result.text || "").trim().length > 0;
+      if (claudeOk) {
+        clearTimeout(timeout);
+        console.log(JSON.stringify({
+          _type: "routing.stream.ok",
+          task: taskType,
+          actual_provider: result.provider,
+          actual_model: result.model,
+          route: "anthropic-direct",
+          fallback_used: false,
+          status: 200,
+          latency_ms: result.latencyMs,
+        }));
+        return result;
+      }
+
+      // ── Phase 3: explicit OpenAI fallback ──
+      // Claude failed (timeout, http_xxx, empty). Reset the abort controller
+      // so the fallback gets its own clean budget, then route to OpenAI gpt-4o.
+      // NEVER silent — claude_fallback gets stamped onto routing_decision by
+      // the caller because result.fallbackUsed=true.
+      clearTimeout(timeout);
+      const claudeReason = result.error?.type ?? "empty_response";
+      const claudeMessage = result.error?.message ?? "Claude returned empty";
+      console.warn(JSON.stringify({
+        _type: "routing.claude.failed",
         task: taskType,
-        actual_provider: result.provider,
-        actual_model: result.model,
-        route: "anthropic-direct",
-        fallback_used: false,
-        status: result.error ? (result.error.status ?? 502) : 200,
-        reason: result.error?.message,
+        intended_model: route.model,
+        reason: claudeReason,
+        message: claudeMessage,
+        latency_ms: result.latencyMs,
+        will_fallback: PROVIDER_HEALTH.openaiDirect,
       }));
-      return result;
+
+      if (!PROVIDER_HEALTH.openaiDirect) {
+        // No fallback available — return original Claude error so caller
+        // surfaces "Assistant temporarily unavailable".
+        return result;
+      }
+
+      const fbController = new AbortController();
+      const fbTimeout = setTimeout(() => fbController.abort(), OPENAI_TIMEOUT_MS);
+      const fbModel = route.fallbackModel || "gpt-4o";
+      try {
+        console.log(JSON.stringify({
+          _type: "routing.fallback.start",
+          task: taskType,
+          intended_provider: "anthropic",
+          intended_model: route.model,
+          fallback_provider: "openai",
+          fallback_model: fbModel,
+          reason: claudeReason,
+        }));
+        const fbResult = await openaiAdapter({
+          ...adapterReq,
+          model: fbModel,
+          stream: true,
+        }, fbController.signal);
+        // Mark explicit fallback so routing_decision.v2.claude_fallback fires.
+        fbResult.fallbackUsed = true;
+        fbResult.fallbackReason = `claude_${claudeReason}: ${claudeMessage}`;
+        console.log(JSON.stringify({
+          _type: fbResult.error ? "routing.fallback.fail" : "routing.fallback.ok",
+          task: taskType,
+          actual_provider: fbResult.provider,
+          actual_model: fbResult.model,
+          fallback_used: true,
+          status: fbResult.error ? (fbResult.error.status ?? 502) : 200,
+          reason: fbResult.error?.message ?? claudeReason,
+        }));
+        return fbResult;
+      } finally {
+        clearTimeout(fbTimeout);
+      }
     }
 
     if (route.primaryProvider !== "openai") {
