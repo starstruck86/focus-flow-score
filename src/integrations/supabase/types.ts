@@ -6254,13 +6254,19 @@ export type Database = {
           account_name: string | null
           ask_count: number
           baseline_mode: string
+          completed_asks: number
+          completed_at: string | null
           created_at: string
+          current_step: string | null
+          error: string | null
           failures: Json
           id: string
           judge_mode: string
           markdown: string
           payload: Json
+          status: string
           summary: Json
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -6268,13 +6274,19 @@ export type Database = {
           account_name?: string | null
           ask_count: number
           baseline_mode: string
+          completed_asks?: number
+          completed_at?: string | null
           created_at?: string
+          current_step?: string | null
+          error?: string | null
           failures?: Json
           id?: string
           judge_mode: string
-          markdown: string
-          payload: Json
+          markdown?: string
+          payload?: Json
+          status?: string
           summary?: Json
+          updated_at?: string
           user_id: string
         }
         Update: {
@@ -6282,13 +6294,19 @@ export type Database = {
           account_name?: string | null
           ask_count?: number
           baseline_mode?: string
+          completed_asks?: number
+          completed_at?: string | null
           created_at?: string
+          current_step?: string | null
+          error?: string | null
           failures?: Json
           id?: string
           judge_mode?: string
           markdown?: string
           payload?: Json
+          status?: string
           summary?: Json
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
