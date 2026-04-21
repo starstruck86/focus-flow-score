@@ -4471,6 +4471,7 @@ async function handleChat(
   pack: ContextPack,
   forceFallback?: boolean,
   pickedResourceIds: string[] = [],
+  v2RequestOverride: boolean = false,
 ) {
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
@@ -4582,7 +4583,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
   // ═══════════════════════════════════════════════════════════════
   let v2Decision: any = null;
   let v2EvidenceBase: any = null;
-  const v2Active = isV2Enabled();
+  const v2Active = isV2Enabled({ userOverride: v2RequestOverride });
   if (v2Active) {
     try {
       const priorTurnPrompt = (() => {
