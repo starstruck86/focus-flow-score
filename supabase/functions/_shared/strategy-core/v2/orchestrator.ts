@@ -71,6 +71,9 @@ export function buildV2Prompt(args: {
   libraryContext?: string;
   resourceContextBlock?: string;
   workingThesisBlock?: string;
+  resourceTitles?: string[];
+  kiIds?: string[];
+  kiTitles?: string[];
 }): V2OrchestratorPrompt {
   const decision = dispatch({
     rawUserText: args.rawUserText,
@@ -89,6 +92,9 @@ export function buildV2Prompt(args: {
     resourceContextBlock: args.resourceContextBlock,
     workingThesisBlock: args.workingThesisBlock,
     audienceMentioned,
+    resourceTitles: args.resourceTitles,
+    kiIds: args.kiIds,
+    kiTitles: args.kiTitles,
   });
 
   return {
@@ -112,6 +118,9 @@ export function auditResponse(args: {
   decision: DispatchDecision;
   body: string;
   hadLibraryHits: boolean;
+  resourceTitles?: string[];
+  kiIds?: string[];
+  kiTitles?: string[];
 }): QualityAuditResult {
   const audienceMentioned =
     /\b(cfo|ceo|coo|cto|vp|director|champion|economic\s+buyer|technical\s+buyer|healthcare|fintech|retail|saas|manufacturing)\b/i
@@ -123,6 +132,9 @@ export function auditResponse(args: {
     askShape: args.decision.askShape,
     hadLibraryHits: args.hadLibraryHits,
     audienceMentioned,
+    resourceTitles: args.resourceTitles,
+    kiIds: args.kiIds,
+    kiTitles: args.kiTitles,
   });
 }
 
