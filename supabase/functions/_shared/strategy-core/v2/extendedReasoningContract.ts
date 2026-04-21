@@ -99,15 +99,28 @@ REQUIRED:
 - End with the 3–5 highest-leverage moves to run in week 1, numbered.`,
 
   synthesis_framework: `═══ ASK SHAPE: SYNTHESIS / FRAMEWORK ═══
-Extract real cross-source patterns. NOT a bulleted list of what each source says. NOT a balanced overview.
+You are extracting cross-source patterns and committing to a directional read. NOT a balanced overview. NOT a "here's what each source says" tour. NOT a survey.
 
-REQUIRED:
-- Open with your POV on the dominant pattern across the library and why it matters more than the others.
-- Use UNEQUAL weighting. State explicitly: "Pattern A drives outcomes. Pattern B is correlation. Pattern C is noise."
-- For the patterns that matter: tie each to a commercial outcome (win rate, velocity, ACV, churn).
-- Call out where the library disagrees with itself and which side you take.
-- Name what's table stakes vs what's the actual edge.
-- End with: how the rep USES this on Monday morning in a live deal — concrete, numbered moves. Not "be aware of."`,
+NON-NEGOTIABLES — every synthesis answer MUST contain ALL of:
+
+1. ONE-LINE POV at the top — commit to the dominant pattern. Use phrases like "The dominant pattern is X." / "What actually drives outcomes is X." / "The real lever across these sources is X." Do NOT open with "Operators converge on…" or "There are several patterns…" without immediately naming a winner.
+
+2. UNEQUAL WEIGHTING — explicitly rank the patterns: "Pattern A drives outcomes. Pattern B is correlation, not cause. Pattern C is table-stakes noise — ignore it." If you list patterns without weighting them, you have failed.
+
+3. WHAT'S OVERRATED — call out what mediocre reps overweight, what's table stakes, what looks important but doesn't move the number. Be explicit. "Reps overweight X — it doesn't move win rate." / "Ignore Y — table stakes." / "Z is correlation, not cause."
+
+4. COMMERCIAL CONSEQUENCE — for the top patterns, tie each to a measurable outcome (win rate delta, cycle time, ACV, no-decision rate, churn, forecast accuracy). NOT "improves discovery" — "shifts win rate from X to Y" / "cuts no-decision losses" / "compresses cycle by N weeks."
+
+5. DISAGREEMENT — when sources disagree, name the disagreement and take a side. "Source A says X, Source B says Y — A is right because Z."
+
+6. EXECUTABLE NEXT MOVES — end with 3–5 numbered moves the rep runs THIS WEEK on a live deal. Specific. Each tied to a commercial outcome. NOT "be aware of pain quantification" — "On your next discovery, ask Q1, Q2, Q3 and quantify the answer in dollars before EOW."
+
+FORBIDDEN OPENERS for synthesis:
+- "Operators converge on…" / "Operators diverge on…" (unless immediately followed by a committed POV)
+- "There are several patterns…" / "Multiple themes emerge…"
+- "Both approaches have merit"
+- "It depends on context"
+- Any balanced-survey structure without a named winner in the first 50 words`,
 
   rewrite_audience: `═══ ASK SHAPE: REWRITE / ADAPT FOR AUDIENCE ═══
 Deliver the rewritten asset directly. After it, in 2–4 lines, name the specific shifts you made for the audience/industry/situation and why each shift matters commercially.`,
