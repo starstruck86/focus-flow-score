@@ -4571,6 +4571,60 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     effectiveSystemPrompt = `${systemPrompt}${preamble}`;
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // V2 REASONING BRANCH — gated by STRATEGY_V2_REASONING flag.
+  // When ON: replace effectiveSystemPrompt with the V2 operator-grade
+  // prompt built by the dispatcher. V1 mode-lock preamble above is
+  // overwritten (not deleted) so V1 path stays intact when flag is off.
+  // ═══════════════════════════════════════════════════════════════
+  let v2Decision: any = null;
+  let v2EvidenceBase: any = null;
+  const v2Active = isV2Enabled();
+  if (v2Active) {
+    try {
+      const priorTurnPrompt = (() => {
+        const userMsgs = (pack.recentMessages || []).filter((m) => m.role === "user" && (m.text || "").trim().length > 0);
+        // Last user message in pack is the PREVIOUS turn (current isn't in pack yet).
+        return userMsgs.length > 0 ? userMsgs[userMsgs.length - 1].text : undefined;
+      })();
+      const v2 = buildV2Prompt({
+        rawUserText: content || "",
+        signals: {
+          strongResourceHits: resourceHits.length,
+          strongKiHits: kiHits,
+          totalHits: resourceHits.length + kiHits,
+          hasEntityContext: !!accountId,
+          mentionsKnownEntity: !!(pack.account?.name && new RegExp(`\\b${pack.account.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(content || "")),
+        },
+        accountContext: contextSection || undefined,
+        libraryContext: undefined,
+        resourceContextBlock: undefined,
+        workingThesisBlock: priorThesis ? JSON.stringify(priorThesis) : undefined,
+      });
+      v2Decision = v2.decision;
+      effectiveSystemPrompt = v2.systemPrompt;
+      // Stash prior turn for wrong-question check later.
+      v2EvidenceBase = {
+        decision: v2.decision,
+        signals: {
+          strongResourceHits: resourceHits.length,
+          strongKiHits: kiHits,
+          totalHits: resourceHits.length + kiHits,
+          hasEntityContext: !!accountId,
+          mentionsKnownEntity: false,
+        },
+        priorTurnPrompt,
+      };
+      console.log(
+        `[v2] mode=${v2.decision.mode} ask_shape=${v2.decision.askShape} signal=${v2.decision.signalScore} override=${v2.decision.override ?? "none"}`,
+      );
+    } catch (e) {
+      console.error(`[v2] dispatch failed, falling back to V1: ${(e as Error).message}`);
+      v2Decision = null;
+      v2EvidenceBase = null;
+    }
+  }
+
   // Turn-binding fix: pack.recentMessages was built BEFORE the current user
   // message was inserted, so it does NOT contain the current ask. We must
   // append the current user content explicitly, otherwise the model answers
@@ -4677,28 +4731,56 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             verified: audit.verifiedTitles,
           }
           : undefined,
-        routing_decision: {
-          mode,
-          mode_reason: modeReason,
-          intent: intent.intent,
-          resource_hits: resourceHits.length,
-          ki_hits: kiHits,
-          intended_provider: route.primaryProvider,
-          intended_model: route.model,
-          actual_provider: result.provider,
-          actual_model: result.model,
-          fallback_used: result.fallbackUsed,
-          routing_reason: route._routingReason,
-          retrieval_debug: retrievalDebug ?? null,
-          short_form_diagnostics: mode === "short_form" ? {
-            kind: shortFormKind ?? null,
-            prompt_chars: (content || "").length,
-            system_prompt_chars: effectiveSystemPrompt.length,
-            max_tokens_cap: route.maxTokens,
-            output_chars: (auditedVisible || "").length,
-            latency_ms: result.latencyMs,
-          } : null,
-        },
+        routing_decision: (() => {
+          const base: any = {
+            mode,
+            mode_reason: modeReason,
+            intent: intent.intent,
+            resource_hits: resourceHits.length,
+            ki_hits: kiHits,
+            intended_provider: route.primaryProvider,
+            intended_model: route.model,
+            actual_provider: result.provider,
+            actual_model: result.model,
+            fallback_used: result.fallbackUsed,
+            routing_reason: route._routingReason,
+            retrieval_debug: retrievalDebug ?? null,
+            short_form_diagnostics: mode === "short_form" ? {
+              kind: shortFormKind ?? null,
+              prompt_chars: (content || "").length,
+              system_prompt_chars: effectiveSystemPrompt.length,
+              max_tokens_cap: route.maxTokens,
+              output_chars: (auditedVisible || "").length,
+              latency_ms: result.latencyMs,
+            } : null,
+          };
+          if (v2Active && v2EvidenceBase) {
+            try {
+              const wq = v2ValidateResponse({
+                userPrompt: content || "",
+                responseBody: auditedVisible || "",
+                priorTurnPrompt: v2EvidenceBase.priorTurnPrompt,
+              });
+              const aud = v2AuditResponse({
+                decision: v2EvidenceBase.decision,
+                body: auditedVisible || "",
+                hadLibraryHits: (resourceHits.length + kiHits) > 0,
+              });
+              base.v2 = v2AssembleEvidence({
+                decision: v2EvidenceBase.decision,
+                signals: v2EvidenceBase.signals,
+                wrongQuestion: wq,
+                audit: aud,
+                provider: result.provider,
+                model: result.model,
+                regenCount: 0,
+              });
+            } catch (e) {
+              base.v2_error = (e as Error).message;
+            }
+          }
+          return base;
+        })(),
       },
     });
     // Cross-thread resource memory: persist VERIFIED citations only.
@@ -4925,28 +5007,56 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 verified: audit.verifiedTitles,
               }
               : undefined,
-            routing_decision: {
-              mode,
-              mode_reason: modeReason,
-              intent: intent.intent,
-              resource_hits: resourceHits.length,
-              ki_hits: kiHits,
-              intended_provider: route.primaryProvider,
-              intended_model: route.model,
-              actual_provider: result.provider,
-              actual_model: result.model,
-              fallback_used: false,
-              routing_reason: route._routingReason,
-              retrieval_debug: retrievalDebug ?? null,
-              short_form_diagnostics: mode === "short_form" ? {
-                kind: shortFormKind ?? null,
-                prompt_chars: (content || "").length,
-                system_prompt_chars: effectiveSystemPrompt.length,
-                max_tokens_cap: route.maxTokens,
-                output_chars: (auditedVisible || "").length,
-                latency_ms: result.latencyMs,
-              } : null,
-            },
+            routing_decision: (() => {
+              const base: any = {
+                mode,
+                mode_reason: modeReason,
+                intent: intent.intent,
+                resource_hits: resourceHits.length,
+                ki_hits: kiHits,
+                intended_provider: route.primaryProvider,
+                intended_model: route.model,
+                actual_provider: result.provider,
+                actual_model: result.model,
+                fallback_used: false,
+                routing_reason: route._routingReason,
+                retrieval_debug: retrievalDebug ?? null,
+                short_form_diagnostics: mode === "short_form" ? {
+                  kind: shortFormKind ?? null,
+                  prompt_chars: (content || "").length,
+                  system_prompt_chars: effectiveSystemPrompt.length,
+                  max_tokens_cap: route.maxTokens,
+                  output_chars: (auditedVisible || "").length,
+                  latency_ms: result.latencyMs,
+                } : null,
+              };
+              if (v2Active && v2EvidenceBase) {
+                try {
+                  const wq = v2ValidateResponse({
+                    userPrompt: content || "",
+                    responseBody: auditedVisible || "",
+                    priorTurnPrompt: v2EvidenceBase.priorTurnPrompt,
+                  });
+                  const aud = v2AuditResponse({
+                    decision: v2EvidenceBase.decision,
+                    body: auditedVisible || "",
+                    hadLibraryHits: (resourceHits.length + kiHits) > 0,
+                  });
+                  base.v2 = v2AssembleEvidence({
+                    decision: v2EvidenceBase.decision,
+                    signals: v2EvidenceBase.signals,
+                    wrongQuestion: wq,
+                    audit: aud,
+                    provider: result.provider,
+                    model: result.model,
+                    regenCount: 0,
+                  });
+                } catch (e) {
+                  base.v2_error = (e as Error).message;
+                }
+              }
+              return base;
+            })(),
           },
         });
         await supabase.from("strategy_threads").update({
