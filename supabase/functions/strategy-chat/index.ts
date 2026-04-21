@@ -4455,6 +4455,10 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     retrievalSucceeded: !!resources && !retrievalError,
     intent,
     modeLockBlock,
+    rawAccountContext: assembled?.contextBlock || "",
+    rawLibraryContext: library?.contextString || "",
+    rawResourceContextBlock: resources?.contextBlock || "",
+    rawWorkingThesisBlock: workingThesisBlock || "",
   };
 }
 
