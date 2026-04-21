@@ -2571,7 +2571,7 @@ function classifyChatIntent(
 }
 
 function buildModeLockBlock(intent: IntentResult): string {
-  const { intent: kind, sentenceCap, rawConstraint, isBusinessCase, isCFO } = intent;
+  const { intent: kind, sentenceCap, rawConstraint, isBusinessCase, isCFO, subIntent } = intent;
 
   const constraintLine = sentenceCap
     ? `\n- HARD CONSTRAINT: Output EXACTLY ${sentenceCap} sentence${sentenceCap === 1 ? "" : "s"} (the user said "${rawConstraint}"). No more. No less. Count them before you finish.`
