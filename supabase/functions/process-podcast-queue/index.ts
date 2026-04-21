@@ -584,7 +584,11 @@ Deno.serve(async (req) => {
       .lt("updated_at", staleCutoff);
 
     if ((!queuedCount || queuedCount === 0) && (!staleProcessingCount || staleProcessingCount === 0)) {
-      return json({ message: "No queued or stale processing items", processed: 0 });
+      return json({
+        message: recoveredStaleKis > 0 ? "Recovered stale KI generation items" : "No queued or stale processing items",
+        processed: recoveredStaleKis,
+        recoveredStaleKis,
+      });
     }
 
     // ── Circuit breaker ──
