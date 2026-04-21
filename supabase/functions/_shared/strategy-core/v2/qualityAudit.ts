@@ -58,9 +58,7 @@ export function auditQuality(args: {
   const totalStrong = resourceHitCount + kiHitCount;
 
   if (scores.operatorPOV < 0.5) flags.push("low_operator_pov");
-  if (scores.decisionLogic < 0.5 && args.askShape !== "short_form" && args.mode !== "C_general") {
-    flags.push("missing_decision_logic");
-  }
+  // missing_decision_logic (strict + relaxed) is emitted in the Phase 3 block below.
   if (
     scores.commercialSharpness < 0.5 &&
     args.askShape !== "short_form" &&
