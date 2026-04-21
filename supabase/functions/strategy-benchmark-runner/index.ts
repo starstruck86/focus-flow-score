@@ -551,6 +551,135 @@ async function judgeWithClaude(admin: any, runId: string, askIndex: number, ask:
   };
 }
 
+// ─── Diagnostics: contract compliance + decision-logic signals ──
+// Pure-text inspectors. NO behavior change. Persisted into payload
+// alongside each Strategy result for offline analysis.
+const FORBIDDEN_OPENING_PHRASES = [
+  "Commercial POV:",
+  "Buying Motion:",
+  "Stakeholder Map:",
+  "Top Risks:",
+  "Lead Angle:",
+  "The dominant lever",
+  "The dominant move",
+  "The real lever",
+  "What actually matters",
+  "The key motion",
+];
+
+function detectForbiddenOpening(text: string): { found: boolean; phrase: string | null } {
+  const head = (text || "").trimStart().slice(0, 400);
+  for (const p of FORBIDDEN_OPENING_PHRASES) {
+    if (head.toLowerCase().includes(p.toLowerCase())) return { found: true, phrase: p };
+  }
+  return { found: false, phrase: null };
+}
+
+function extractSectionHeaders(text: string): string[] {
+  const out: string[] = [];
+  for (const line of (text || "").split(/\r?\n/)) {
+    const m = line.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*$/);
+    if (m) out.push(`${m[1]} ${m[2].trim()}`);
+  }
+  return out;
+}
+
+function startsWithHeader(text: string, header: string): boolean {
+  const t = (text || "").replace(/^\uFEFF/, "").trimStart();
+  return t.toLowerCase().startsWith(header.toLowerCase());
+}
+
+function buildContractCompliance(
+  classifiedIntent: string | null,
+  text: string,
+): Record<string, unknown> | null {
+  if (!classifiedIntent) return null;
+  if (classifiedIntent !== "account_brief" && classifiedIntent !== "ninety_day_plan") return null;
+
+  const opening_excerpt = (text || "").slice(0, 220);
+  const section_headers_detected = extractSectionHeaders(text);
+  const numbered_list_count = (text.match(/^\s{0,3}\d+\.\s+/gm) || []).length;
+  const bullet_count = (text.match(/^\s{0,3}[-*]\s+/gm) || []).length;
+  const forbidden = detectForbiddenOpening(text);
+  const lower = (text || "").toLowerCase();
+
+  if (classifiedIntent === "account_brief") {
+    const first_header_expected = "## Company Snapshot";
+    return {
+      mode: "account_brief",
+      first_header_expected,
+      starts_with_expected_header: startsWithHeader(text, first_header_expected),
+      contains_company_snapshot_header: /^##\s+company snapshot/im.test(text),
+      contains_stakeholders_header: /^##\s+stakeholders/im.test(text),
+      contains_operator_read_header: /^##\s+operator read/im.test(text),
+      contains_next_moves_header: /^##\s+next moves/im.test(text),
+      forbidden_opening_phrase_found: forbidden.found,
+      forbidden_opening_phrase: forbidden.phrase,
+      opening_excerpt,
+      section_headers_detected,
+      numbered_list_count,
+      bullet_count,
+    };
+  }
+
+  // ninety_day_plan
+  const first_header_expected = "## Account Context";
+  return {
+    mode: "ninety_day_plan",
+    first_header_expected,
+    starts_with_expected_header: startsWithHeader(text, first_header_expected),
+    contains_account_context_header: /^##\s+account context/im.test(text),
+    contains_days_1_30_header: /^##\s+days?\s*1\s*[–-]\s*30/im.test(text),
+    contains_days_31_60_header: /^##\s+days?\s*31\s*[–-]\s*60/im.test(text),
+    contains_days_61_90_header: /^##\s+days?\s*61\s*[–-]\s*90/im.test(text),
+    contains_operator_read_header: /^##\s+operator read/im.test(text),
+    forbidden_opening_phrase_found: forbidden.found,
+    forbidden_opening_phrase: forbidden.phrase,
+    opening_excerpt,
+    section_headers_detected,
+    numbered_list_count,
+    bullet_count,
+  };
+}
+
+function buildDecisionLogicDiagnostics(text: string): Record<string, unknown> {
+  const t = text || "";
+  const lower = t.toLowerCase();
+  const matched: string[] = [];
+  const regs: Array<{ name: string; re: RegExp }> = [
+    { name: "if_then", re: /\bif\b[^.\n]{1,80}\bthen\b/i },
+    { name: "because", re: /\bbecause\b/i },
+    { name: "numbered_steps", re: /^\s{0,3}\d+\.\s+/m },
+    { name: "time_phases", re: /\bdays?\s*\d{1,3}\s*[–-]\s*\d{1,3}\b/i },
+    { name: "explicit_tradeoff", re: /\b(trade[- ]?off|tradeoff|vs\.?|versus|instead of|rather than)\b/i },
+    { name: "next_move", re: /\b(next move|next step|this week|by (mon|tue|wed|thu|fri|monday|tuesday|wednesday|thursday|friday)|do this|recommend(ed)?:?)\b/i },
+  ];
+  for (const r of regs) if (r.re.test(t)) matched.push(r.name);
+
+  return {
+    contains_if_then: matched.includes("if_then"),
+    contains_because: matched.includes("because"),
+    contains_numbered_steps: matched.includes("numbered_steps"),
+    contains_time_phases: matched.includes("time_phases"),
+    contains_explicit_tradeoff: matched.includes("explicit_tradeoff"),
+    contains_next_move_language: matched.includes("next_move"),
+    matched_decision_regexes: matched,
+  };
+}
+
+// Lightweight intent inference for diagnostic tagging only. Does not
+// affect routing; mirrors the patterns already used by strategy-chat
+// so we can label persisted evidence even if the classified intent is
+// not echoed back from runStrategy. NEVER changes product behavior.
+function inferIntentForDiagnostics(prompt: string): string | null {
+  const p = (prompt || "").toLowerCase();
+  if (/\b(90[-\s]?day|ninety[-\s]?day)\b.*\b(plan|ramp|playbook)\b/.test(p) ||
+      /\bplan\b.*\b(90|ninety)[-\s]?day/.test(p) ||
+      /\b(as a new ae|new ae on this account)\b/.test(p)) return "ninety_day_plan";
+  if (/\b(tell me about|brief me on|what do (you|we) know about|account brief|company brief)\b/.test(p)) return "account_brief";
+  return null;
+}
+
 function classifyStrategyFailure(ask: BenchmarkAsk, strategyOut: SystemOutput, heur: HeuristicScore, judge: JudgeScore, accountName: string): StrategyFailureMode {
   if (judge.winner === "strategy") return "none";
   const text = strategyOut.text || ""; const lower = text.toLowerCase();
@@ -734,6 +863,23 @@ async function runBenchmarkInBackground(
       const failure = classifyStrategyFailure(ask, strategyOut, heur.strategy, judge, account.name);
       results.push({ ask, outputs, heur, judge, failure });
 
+      // ─── Diagnostic-only enrichment (no behavior change) ───
+      // We don't have classified_intent surfaced from runStrategy here,
+      // so we infer from the prompt for tagging purposes only. The
+      // strategy-chat function continues to do the real classification.
+      const _diagIntent = inferIntentForDiagnostics(ask.prompt);
+      const contract_compliance = buildContractCompliance(_diagIntent, strategyOut.text || "");
+      const decision_logic_diagnostics = buildDecisionLogicDiagnostics(strategyOut.text || "");
+      try {
+        console.log(JSON.stringify({
+          diag: "strategy_output_diagnostics",
+          ask_index: ask.index,
+          inferred_intent: _diagIntent,
+          contract_compliance,
+          decision_logic_diagnostics,
+        }));
+      } catch { /* logging best-effort */ }
+
       const outputs_meta = outputs.map((o) => ({
         system: o.system, latency_ms_total: o.latency_ms_total, attempts: o.attempts, error: o.error,
         http_status: o.http_status, response_length: o.response_length, provider: o.provider, model: o.model,
@@ -744,6 +890,7 @@ async function runBenchmarkInBackground(
         ask_index: ask.index, prompt: ask.prompt, category: ask.category,
         completed_at: new Date().toISOString(),
         outputs_meta, heuristics: heur, judge, failure_mode: failure,
+        contract_compliance, decision_logic_diagnostics,
       });
       persistedResults.push({
         ask,
@@ -751,6 +898,7 @@ async function runBenchmarkInBackground(
           ? outputs
           : outputs.map((o) => ({ system: o.system, latency_ms_total: o.latency_ms_total, attempts: o.attempts, error: o.error, http_status: o.http_status, response_length: o.response_length, provider: o.provider, model: o.model, timing_breakdown: o.timing_breakdown })),
         heur, judge, failure,
+        contract_compliance, decision_logic_diagnostics,
       });
 
       const summarySoFar = results.reduce((acc: any, r) => { acc[r.judge.winner] = (acc[r.judge.winner] ?? 0) + 1; return acc; }, { strategy: 0, claude: 0, gpt: 0, tie: 0 });
