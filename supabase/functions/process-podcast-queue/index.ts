@@ -569,7 +569,7 @@ Deno.serve(async (req) => {
   logServiceRoleUsage('process-podcast-queue', 'multi_user', { reason: 'queue_processing' });
 
   try {
-    // ── Early exit: nothing to process ──
+    const recoveredStaleKis = await recoverStaleKiGeneration(supabase);
     // Include stale processing rows so claim_podcast_queue_items can run its watchdog
     // and re-queue items stuck after an edge timeout / interrupted KI generation.
     const staleCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
