@@ -2450,23 +2450,36 @@ function classifyChatIntent(
   }
 
   // 1.7 CREATION — user is asking us to BUILD an asset (email, script,
-  // talk track, plan, one-pager, business case, guide, playbook chapter)
-  // grounded explicitly in their library. This is different from a plain
-  // "email" ask because the grounding signal is explicit. We let the
-  // narrower email/message/pitch classifiers handle ungrounded asks
-  // (those are routine drafts, not library-derived assets).
-  // Dual-signal: artifact noun + grounding phrase.
+  // talk track, plan, one-pager, business case, guide, playbook chapter,
+  // 90-day plan, renewal memo, account brief, etc).
+  // FIX A: when account context is present, drop the hard grounding-phrase
+  // requirement — real operators say "give me a 90-day plan as a new AE
+  // at <account>" without ever begging the model to use the library.
   const CREATE_VERB_RE =
-    /\b(write|draft|create|build|construct|design|put together|turn (?:this |these |that )?into|generate|produce)\b/;
+    /\b(write|draft|create|build|construct|design|put together|turn (?:this |these |that )?into|generate|produce|give me|need)\b/;
   const CREATE_NOUN_RE =
-    /\b(email|e-mail|outreach|cold\s+(?:email|call|message)|script|talk\s+track|call\s+plan|meeting\s+plan|account\s+plan|one[- ]?pager|onepager|business\s+case|guide|playbook(?:\s+chapter)?|sequence|cadence|deck|outline|brief|summary|agenda|message|note|voicemail|talking\s+points)\b/;
+    /\b(email|e-mail|outreach|cold\s+(?:email|call|message)|script|talk\s+track|call\s+plan|meeting\s+plan|account\s+plan|one[- ]?pager|onepager|business\s+case|guide|playbook(?:\s+chapter)?|sequence|cadence|deck|outline|brief|summary|agenda|message|note|voicemail|talking\s+points|(?:30|60|90|120)[- ]?day\s+plan|onboarding\s+plan|ramp\s+plan|renewal\s+memo|renewal\s+brief|account\s+brief|deal\s+memo|deal\s+brief)\b/;
   const hasCreateVerb = CREATE_VERB_RE.test(text);
   const hasCreateNoun = CREATE_NOUN_RE.test(text);
-  if (hasGrounding && hasCreateVerb && hasCreateNoun) {
+  if ((hasGrounding || hasAccountContext) && hasCreateVerb && hasCreateNoun) {
     console.log(
-      `[mode-lock] intent_forced_creation text="${text.slice(0, 80)}" verb=${hasCreateVerb} noun=${hasCreateNoun} grounding=${hasGrounding}`,
+      `[mode-lock] intent_forced_creation text="${text.slice(0, 80)}" verb=${hasCreateVerb} noun=${hasCreateNoun} grounding=${hasGrounding} accountCtx=${hasAccountContext}`,
     );
     return { intent: "creation", isBusinessCase, isCFO };
+  }
+
+  // 1.8 ACCOUNT BRIEF (FIX A) — "tell me about / brief me on / walk me
+  // through / who is / give me the rundown on <X>" with account context
+  // is an analysis ask, not freeform. Same for "what do you know about".
+  // Without this, "Tell me about this account" falls all the way to
+  // freeform and the operator contract never composes.
+  const ACCOUNT_BRIEF_RE =
+    /\b(tell me about|brief me (?:on|about)|walk me through|give me (?:the )?(?:rundown|overview|background|context|summary) (?:on|of|about)|who (?:is|are) (?:they|this|the (?:account|company|customer|prospect|client))|what do (?:i|we|you) know about|fill me in on|catch me up on|prep me on|background on|context on|update me on)\b/;
+  if (hasAccountContext && ACCOUNT_BRIEF_RE.test(text)) {
+    console.log(
+      `[mode-lock] intent_forced_analysis_account_brief text="${text.slice(0, 80)}"`,
+    );
+    return { intent: "analysis", isBusinessCase, isCFO };
   }
 
   // 2. Template — "what template", "give me a template", "template for"
