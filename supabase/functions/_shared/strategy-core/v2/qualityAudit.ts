@@ -29,19 +29,19 @@ export function auditQuality(args: {
   const scores = scoreRubric(args);
   const flags: string[] = [];
 
-  if (scores.operatorPOV < 0.3) flags.push("low_operator_pov");
-  if (scores.decisionLogic < 0.3 && args.askShape !== "short_form" && args.mode !== "C_general") {
+  if (scores.operatorPOV < 0.5) flags.push("low_operator_pov");
+  if (scores.decisionLogic < 0.5 && args.askShape !== "short_form" && args.mode !== "C_general") {
     flags.push("missing_decision_logic");
   }
   if (
-    scores.commercialSharpness < 0.3 &&
+    scores.commercialSharpness < 0.5 &&
     args.askShape !== "short_form" &&
     args.askShape !== "general" &&
     args.mode !== "C_general"
   ) {
     flags.push("low_commercial_framing");
   }
-  if (args.hadLibraryHits && scores.libraryLeverage < 0.3) {
+  if (args.hadLibraryHits && scores.libraryLeverage < 0.5) {
     flags.push("library_underused");
   }
   if (!args.hadLibraryHits && args.mode === "D_thin" && scores.libraryLeverage < 0.5) {
@@ -51,6 +51,6 @@ export function auditQuality(args: {
   return {
     scores,
     flags,
-    passed: scores.overall >= 0.5,
+    passed: scores.overall >= 0.6,
   };
 }
