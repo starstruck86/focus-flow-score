@@ -2810,11 +2810,24 @@ The user asked for an EMAIL. Return ONLY the email BODY in body-only format.
 - DIRECT-ASK RULE: the email MUST contain ONE clear ask anchored to a decision, date, or named artifact (e.g. "Are we aligned to move forward on the [pricing we discussed] by [date], or is there a blocker I should address?"). No vague "checking in" energy.
 - Only add a Subject, greeting, or signoff if the user EXPLICITLY asks for one.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
-    case "message":
+    case "message": {
+      const rewriteLine = subIntent === "rewrite_audience"
+        ? `\n- AUDIENCE REWRITE: Output ONLY the rewritten text first (no preamble, no "here's the rewrite", no "Say this:" prefix for this sub-mode). Then a single "**Why this lands:**" header followed by 2–3 short bullets naming the specific shifts you made and which audience priority each maps to (e.g. "Replaced 'great product' with 'reduces CAC by X%' — CFOs decide on cash, not capability").`
+        : "";
       return `═══ MODE LOCK: MESSAGE / SCRIPT ═══
-The user asked for exact wording (voicemail, SMS, LinkedIn note, script, DM).
+The user asked for exact wording (voicemail, SMS, LinkedIn note, script, DM, rewrite).
 - FORBIDDEN: an email, a plan, a framework, multiple versions unless asked.
-- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${rewriteLine}${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+    }
+
+    case "account_brief":
+      return `═══ MODE LOCK: ACCOUNT BRIEF (HYBRID — FACTS FIRST) ═══
+The user asked for an account brief / overview / "tell me about this account". This is NOT a thesis. The structural answer (Company Snapshot → Stakeholders → Operator Read → Next Moves) comes first; the operator interpretation comes second.${hybridBriefContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+
+    case "ninety_day_plan":
+      return `═══ MODE LOCK: 30/60/90 DAY PLAN (HYBRID — TIMELINE FIRST) ═══
+The user asked for a ramp / 90-day plan. This is NOT a thesis. The literal Days 1–30 / 31–60 / 61–90 timeline comes first; the operator read comes after.${hybridBriefContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+
 
     case "pitch":
       return `═══ MODE LOCK: PITCH (exact words) ═══
