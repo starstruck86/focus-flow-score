@@ -4835,6 +4835,21 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 kiIds: v2EvidenceBase.kiIds,
                 kiTitles: v2EvidenceBase.kiTitles,
               });
+              // Phase 3: contract-drift sentinel (logged, never blocks).
+              // Only meaningful for strong-signal synthesis turns.
+              let drift: { missing: string[] } | null = null;
+              if (
+                v2EvidenceBase.decision.askShape === "synthesis_framework" &&
+                v2EvidenceBase.decision.mode === "A_strong"
+              ) {
+                const check = assertSynthesisContractIntact(effectiveSystemPrompt);
+                if (!check.intact) {
+                  drift = { missing: check.missing };
+                  console.warn(
+                    `[v2] contract_drift: synthesis non-negotiables missing: ${check.missing.join(",")}`,
+                  );
+                }
+              }
               base.v2 = v2AssembleEvidence({
                 decision: v2EvidenceBase.decision,
                 signals: v2EvidenceBase.signals,
@@ -4843,7 +4858,15 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 provider: result.provider,
                 model: result.model,
                 regenCount: 0,
+                intendedProvider: route.primaryProvider,
+                fallbackUsed: result.fallbackUsed === true,
+                contractDrift: drift,
               });
+              if (base.v2.claude_fallback) {
+                console.warn(
+                  `[v2] claude_fallback=true intended=${route.primaryProvider} actual=${result.provider}`,
+                );
+              }
             } catch (e) {
               base.v2_error = (e as Error).message;
             }
