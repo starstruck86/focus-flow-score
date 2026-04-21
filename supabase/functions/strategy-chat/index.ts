@@ -2319,6 +2319,8 @@ type ChatIntent =
   | "pitch" // exact wording for a moment
   | "next_steps"
   | "analysis"
+  | "account_brief" // hybrid: facts-first account summary + operator read
+  | "ninety_day_plan" // hybrid: literal 30/60/90 timeline + operator read
   | "provenance"
   | "freeform";
 
@@ -2332,6 +2334,8 @@ interface IntentResult {
   isBusinessCase?: boolean;
   /** Sub-flag: this is a CFO/finance audience ask. */
   isCFO?: boolean;
+  /** Sub-flag for message mode: this is an audience rewrite ask. */
+  subIntent?: "rewrite_audience";
 }
 
 function classifyChatIntent(
