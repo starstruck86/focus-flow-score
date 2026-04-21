@@ -18,9 +18,34 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 3;                    // attempts for hard/content failures
+const MAX_ATTEMPTS_TRANSIENT = 5;          // attempts for provider-transient (504/546/502/500/503/429) failures
 const CONCURRENCY = 3;
-const CIRCUIT_BREAKER_THRESHOLD = 10;
+const CIRCUIT_BREAKER_THRESHOLD = 25;      // raised from 10 — was too trigger-happy on transient provider blips
+const TRANSIENT_HTTP_CODES = [500, 502, 503, 504, 524, 546, 429];
+
+// Failure types that should be treated as transient infra/provider issues,
+// NOT as evidence the content itself is unfetchable. The breaker ignores these
+// when computing "consecutive same-error" runs.
+const TRANSIENT_FAILURE_TYPES = new Set([
+  "transcript_provider_transient",
+  "transcription_timeout",
+  "transcription_resource_limit",
+  "transcription_network_error",
+]);
+
+function classifyTranscriptionError(message: string): string {
+  // Prefer transient classification for known infra signals so the breaker
+  // and retry logic can treat them differently from real content failures.
+  const m = (message || "").toLowerCase();
+  const httpMatch = m.match(/http\s+(\d{3})/);
+  const code = httpMatch ? parseInt(httpMatch[1], 10) : null;
+  if (code && TRANSIENT_HTTP_CODES.includes(code)) return "transcript_provider_transient";
+  if (m.includes("idle_timeout") || m.includes("timeout")) return "transcript_provider_transient";
+  if (m.includes("worker_resource_limit") || m.includes("resource_limit")) return "transcript_provider_transient";
+  if (m.includes("network connection lost") || m.includes("econnreset") || m.includes("fetch failed")) return "transcript_provider_transient";
+  return "transcript_unavailable_from_link";
+}
 
 // ── Content validation patterns ──
 const HTML_PATTERNS = /<(div|meta|style|script|span|link|head|body|html|nav|footer|header|iframe)\b/i;
