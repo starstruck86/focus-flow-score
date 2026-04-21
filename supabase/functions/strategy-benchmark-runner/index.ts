@@ -919,13 +919,19 @@ async function runBenchmarkInBackground(
       // so we infer from the prompt for tagging purposes only. The
       // strategy-chat function continues to do the real classification.
       const _diagIntent = inferIntentForDiagnostics(ask.prompt);
-      const contract_compliance = buildContractCompliance(_diagIntent, strategyOut.text || "");
-      const decision_logic_diagnostics = buildDecisionLogicDiagnostics(strategyOut.text || "");
+      // Strategy output arrives as an SSE stream; the runner accumulates
+      // the wrapper text. For diagnostics we need the *visible* answer.
+      const _strategyVisible = extractVisibleStrategyText(strategyOut.text || "");
+      const _strategyTextForDiag = _strategyVisible.text;
+      const contract_compliance = buildContractCompliance(_diagIntent, _strategyTextForDiag);
+      const decision_logic_diagnostics = buildDecisionLogicDiagnostics(_strategyTextForDiag);
+      const strategy_text_source = _strategyVisible.source;
       try {
         console.log(JSON.stringify({
           diag: "strategy_output_diagnostics",
           ask_index: ask.index,
           inferred_intent: _diagIntent,
+          strategy_text_source,
           contract_compliance,
           decision_logic_diagnostics,
         }));
@@ -941,15 +947,23 @@ async function runBenchmarkInBackground(
         ask_index: ask.index, prompt: ask.prompt, category: ask.category,
         completed_at: new Date().toISOString(),
         outputs_meta, heuristics: heur, judge, failure_mode: failure,
-        contract_compliance, decision_logic_diagnostics,
+        contract_compliance, decision_logic_diagnostics, strategy_text_source,
       });
+      // When saveOutputs is true, also surface the parsed visible Strategy
+      // text alongside the raw stream so downstream tooling can inspect
+      // the actual answer without re-parsing SSE frames.
+      const persistedOutputs = saveOutputs
+        ? outputs.map((o) =>
+            o.system === "strategy"
+              ? { ...o, visible_text: _strategyTextForDiag, text_source: strategy_text_source }
+              : o,
+          )
+        : outputs.map((o) => ({ system: o.system, latency_ms_total: o.latency_ms_total, attempts: o.attempts, error: o.error, http_status: o.http_status, response_length: o.response_length, provider: o.provider, model: o.model, timing_breakdown: o.timing_breakdown }));
       persistedResults.push({
         ask,
-        outputs: saveOutputs
-          ? outputs
-          : outputs.map((o) => ({ system: o.system, latency_ms_total: o.latency_ms_total, attempts: o.attempts, error: o.error, http_status: o.http_status, response_length: o.response_length, provider: o.provider, model: o.model, timing_breakdown: o.timing_breakdown })),
+        outputs: persistedOutputs,
         heur, judge, failure,
-        contract_compliance, decision_logic_diagnostics,
+        contract_compliance, decision_logic_diagnostics, strategy_text_source,
       });
 
       const summarySoFar = results.reduce((acc: any, r) => { acc[r.judge.winner] = (acc[r.judge.winner] ?? 0) + 1; return acc; }, { strategy: 0, claude: 0, gpt: 0, tie: 0 });
