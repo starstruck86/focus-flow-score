@@ -235,7 +235,7 @@ async function runWithSmartRetry(
     const success = !errMsg && status !== undefined && status < 400;
     if (success) {
       attempts_detail.push(detail);
-      audit(admin, runId, "provider_call_success", {
+      await audit(admin, runId, "provider_call_success", {
         ask_index: askIndex, system, provider, model,
         message: `${label} ok in ${detail.duration_ms}ms (attempt ${attempt})`,
         details: { duration_ms: detail.duration_ms, http_status: status },
@@ -251,7 +251,7 @@ async function runWithSmartRetry(
       const wait = Math.min(backoffMs(attempt, cfg.retry_base_ms, cfg.retry_max_ms, retry_after_ms), budgetLeft);
       detail.retry_wait_ms = wait;
       attempts_detail.push(detail);
-      audit(admin, runId, "retry_scheduled", {
+      await audit(admin, runId, "retry_scheduled", {
         level: "warn", ask_index: askIndex, system, provider, model,
         message: `${label} retry ${attempt + 1}/${cfg.retry_max} in ${wait}ms (status=${status ?? "n/a"})`,
         details: { http_status: status, error: errMsg, wait_ms: wait, retry_after_ms },
@@ -264,7 +264,7 @@ async function runWithSmartRetry(
 
     attempts_detail.push(detail);
     lastErr = errMsg ?? `HTTP ${status}`;
-    audit(admin, runId, retryable ? "retry_exhausted" : "provider_call_failure", {
+    await audit(admin, runId, retryable ? "retry_exhausted" : "provider_call_failure", {
       level: "error", ask_index: askIndex, system, provider, model,
       message: `${label} failed: ${lastErr}`,
       details: { http_status: status, error: errMsg, attempts: attempt },
@@ -411,7 +411,7 @@ function buildSystemOutput(
 }
 
 async function runStrategy(admin: any, runId: string, askIndex: number, userJwt: string, threadId: string, prompt: string, cfg: RetryConfig): Promise<SystemOutput> {
-  audit(admin, runId, "provider_call_start", { ask_index: askIndex, system: "strategy", provider: "internal", model: "strategy-v2", message: "strategy start" });
+  await audit(admin, runId, "provider_call_start", { ask_index: askIndex, system: "strategy", provider: "internal", model: "strategy-v2", message: "strategy start" });
   const t0 = Date.now();
   const result = await runWithSmartRetry(admin, "strategy", "internal", "strategy-v2",
     () => strategyCall(userJwt, threadId, prompt),
@@ -426,7 +426,7 @@ async function runClaude(admin: any, runId: string, askIndex: number, prompt: st
       timing_breakdown: { queue_ms: null, request_ms: 0, parse_ms: 0, retry_wait_ms_total: 0, attempts_detail: [] } };
   }
   const sys = `You are a sales strategist. The account is "${accountName}". ${extraContext ?? "You have no internal library or CRM access — answer from general knowledge only."}`;
-  audit(admin, runId, "provider_call_start", { ask_index: askIndex, system: "claude", provider: "anthropic", model: CLAUDE_MODEL, message: "claude start" });
+  await audit(admin, runId, "provider_call_start", { ask_index: askIndex, system: "claude", provider: "anthropic", model: CLAUDE_MODEL, message: "claude start" });
   const t0 = Date.now();
   const result = await runWithSmartRetry(admin, "claude", "anthropic", CLAUDE_MODEL,
     () => claudeCall(prompt, sys),
@@ -441,7 +441,7 @@ async function runGpt(admin: any, runId: string, askIndex: number, prompt: strin
       timing_breakdown: { queue_ms: null, request_ms: 0, parse_ms: 0, retry_wait_ms_total: 0, attempts_detail: [] } };
   }
   const sys = `You are a sales strategist. The account is "${accountName}". ${extraContext ?? "You have no internal library or CRM access — answer from general knowledge only."}`;
-  audit(admin, runId, "provider_call_start", { ask_index: askIndex, system: "gpt", provider: "openai", model: GPT_MODEL, message: "gpt start" });
+  await audit(admin, runId, "provider_call_start", { ask_index: askIndex, system: "gpt", provider: "openai", model: GPT_MODEL, message: "gpt start" });
   const t0 = Date.now();
   const result = await runWithSmartRetry(admin, "gpt", "openai", GPT_MODEL,
     () => gptCall(prompt, sys),
@@ -512,7 +512,7 @@ async function judgeWithClaude(admin: any, runId: string, askIndex: number, ask:
   if (!ANTHROPIC_KEY) {
     return { strategy: 0, claude: 0, gpt: 0, winner: "tie", rationale: "ANTHROPIC_API_KEY missing", attempts: 0 };
   }
-  audit(admin, runId, "judge_start", { ask_index: askIndex, system: "judge", provider: "anthropic", model: JUDGE_MODEL });
+  await audit(admin, runId, "judge_start", { ask_index: askIndex, system: "judge", provider: "anthropic", model: JUDGE_MODEL });
   const t0 = Date.now();
   const result = await runWithSmartRetry(admin, "judge", "anthropic", JUDGE_MODEL,
     () => judgeOnce(ask, outputs, accountName),
@@ -520,16 +520,16 @@ async function judgeWithClaude(admin: any, runId: string, askIndex: number, ask:
     runId, askIndex, "judge");
   const total_ms = Date.now() - t0;
   if (!result.value) {
-    audit(admin, runId, "judge_failure", { level: "error", ask_index: askIndex, system: "judge", message: result.error });
+    await audit(admin, runId, "judge_failure", { level: "error", ask_index: askIndex, system: "judge", message: result.error });
     return { strategy: 0, claude: 0, gpt: 0, winner: "tie", rationale: result.error ?? "judge failed", attempts: result.attempts, error: result.error,
       timing_breakdown: { queue_ms: null, request_ms: result.request_ms_last, parse_ms: result.parse_ms_last, judge_ms: total_ms, retry_wait_ms_total: result.retry_wait_ms_total, attempts_detail: result.attempts_detail } };
   }
   let p: any = {};
   try { p = JSON.parse(result.value.text); } catch (e: any) {
-    audit(admin, runId, "judge_failure", { level: "error", ask_index: askIndex, system: "judge", message: `parse fail: ${e?.message}` });
+    await audit(admin, runId, "judge_failure", { level: "error", ask_index: askIndex, system: "judge", message: `parse fail: ${e?.message}` });
     return { strategy: 0, claude: 0, gpt: 0, winner: "tie", rationale: "judge JSON parse failed", attempts: result.attempts, error: e?.message };
   }
-  audit(admin, runId, "judge_success", { ask_index: askIndex, system: "judge", message: `winner=${p.winner}` });
+  await audit(admin, runId, "judge_success", { ask_index: askIndex, system: "judge", message: `winner=${p.winner}` });
   return {
     strategy: Number(p.strategy ?? 0), claude: Number(p.claude ?? 0), gpt: Number(p.gpt ?? 0),
     winner: (p.winner ?? "tie") as JudgeScore["winner"], rationale: String(p.rationale ?? "").slice(0, 600),
@@ -665,11 +665,11 @@ async function runBenchmarkInBackground(
   };
 
   try {
-    audit(admin, runId, "background_started", { message: `background work started in waitUntil for user ${asUserId}` });
-    audit(admin, runId, "kickoff", { message: `run started for user ${asUserId}` });
+    await audit(admin, runId, "background_started", { message: `background work started in waitUntil for user ${asUserId}` });
+    await audit(admin, runId, "kickoff", { message: `run started for user ${asUserId}` });
     await updateRow({ current_step: "selecting_account" });
     const account = await selectBestAccount(admin, asUserId, body?.account_id);
-    audit(admin, runId, "account_selection", { message: `selected ${account.name}`, details: { account_id: account.id, signal: account._signal, reason: account._selection_reason } });
+    await audit(admin, runId, "account_selection", { message: `selected ${account.name}`, details: { account_id: account.id, signal: account._signal, reason: account._selection_reason } });
 
     const recentMsg = await getRecentMessage(admin, asUserId, account.id);
     const asks: BenchmarkAsk[] = customAsks?.length
@@ -682,7 +682,7 @@ async function runBenchmarkInBackground(
     });
     const userJwt = await mintUserJwt(admin, asUserId);
     const threadId = await createScratchThread(admin, asUserId, account.id);
-    audit(admin, runId, "thread_created", { message: `thread ${threadId}`, details: { thread_id: threadId } });
+    await audit(admin, runId, "thread_created", { message: `thread ${threadId}`, details: { thread_id: threadId } });
 
     const sameContextBlock = baselineMode === "raw_only" ? null : await buildSameContextBlock(admin, asUserId, account.id, account.name);
 
@@ -692,7 +692,7 @@ async function runBenchmarkInBackground(
 
     for (const ask of asks) {
       const stepLabel = `ask_${ask.index}_of_${asks.length}`;
-      audit(admin, runId, "ask_start", { ask_index: ask.index, message: ask.prompt.slice(0, 120) });
+      await audit(admin, runId, "ask_start", { ask_index: ask.index, message: ask.prompt.slice(0, 120) });
       await updateRow({ current_step: `${stepLabel}:providers` });
       const rawContext = (baselineMode === "same_context" || baselineMode === "both") && sameContextBlock ? sameContextBlock : undefined;
 
@@ -749,7 +749,7 @@ async function runBenchmarkInBackground(
         summary: summarySoFar, failures: failuresSoFar,
         payload: { account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason }, thread_id: threadId, save_outputs: saveOutputs, checkpoints, results: persistedResults },
       });
-      audit(admin, runId, "checkpoint_persisted", { ask_index: ask.index, message: `cp ${results.length}/${asks.length}` });
+      await audit(admin, runId, "checkpoint_persisted", { ask_index: ask.index, message: `cp ${results.length}/${asks.length}` });
     }
 
     // Aggregate retry summary
@@ -778,11 +778,11 @@ async function runBenchmarkInBackground(
       completed_at: new Date().toISOString(),
       payload: { account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason }, thread_id: threadId, save_outputs: saveOutputs, checkpoints, results: persistedResults, retry_summary },
     });
-    audit(admin, runId, "run_completed", { message: `${results.length} asks done in ${(Date.now() - startedAt) / 1000}s` });
+    await audit(admin, runId, "run_completed", { message: `${results.length} asks done in ${(Date.now() - startedAt) / 1000}s` });
   } catch (e: any) {
     const msg = e?.message || String(e);
     console.error(`[benchmark] run ${runId} fatal:`, msg, e?.stack);
-    audit(admin, runId, "run_failed", { level: "error", message: msg });
+    await audit(admin, runId, "run_failed", { level: "error", message: msg });
     await updateRow({ status: "failed", current_step: "failed", error: msg, completed_at: new Date().toISOString() });
   }
 }
@@ -943,9 +943,9 @@ async function kickoff(
   if (insErr || !inserted) return jsonErr(500, `persist_failed_at_kickoff: ${insErr?.message ?? "unknown"}`);
 
   const runId = inserted.id;
-  audit(admin, runId, "kickoff_persisted", { message: `run row inserted, scheduling background work` });
+  await audit(admin, runId, "kickoff_persisted", { message: `run row inserted, scheduling background work` });
   if (meta.replayed_from_run_id) {
-    audit(admin, runId, "replay_started", { message: `replayed from ${meta.replayed_from_run_id}`, details: { source_run_id: meta.replayed_from_run_id, reason: meta.replay_reason } });
+    await audit(admin, runId, "replay_started", { message: `replayed from ${meta.replayed_from_run_id}`, details: { source_run_id: meta.replayed_from_run_id, reason: meta.replay_reason } });
   }
 
   const work = runBenchmarkInBackground(admin, runId, asUserId, body, baselineMode, judgeMode, saveOutputs, customAsks, retryCfg, meta.replayed_from_run_id);
