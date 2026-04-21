@@ -6,6 +6,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { fetchAllPages } from '@/lib/supabasePagination';
 
 export interface ResourceAuditRow {
   resource_id: string;
@@ -97,11 +98,15 @@ export function useKnowledgeCoverageAudit() {
     queryKey: ['knowledge-coverage-audit', user?.id],
     queryFn: async () => {
       const PAGE_SIZE = 1000;
-      const { data: resources, error: rErr } = await supabase
-        .from('resources' as any)
-        .select('id, title, resource_type, enrichment_status, active_job_status, extraction_batch_status, extraction_batches_completed, extraction_batch_total, extraction_is_resumable, content_length, extraction_attempt_count, extraction_mode, extraction_passes_run, raw_candidate_counts, merged_candidate_count, kis_per_1k_chars, extraction_depth_bucket, under_extracted_flag, last_extraction_summary, extraction_method, last_extraction_run_id, last_extraction_run_status, last_extraction_returned_ki_count, last_extraction_deduped_ki_count, last_extraction_validated_ki_count, last_extraction_saved_ki_count, last_extraction_error, last_extraction_duration_ms, last_extraction_model, current_resource_ki_count, current_resource_kis_per_1k, extraction_failure_type, active_job_type, active_job_step_label, active_job_progress_current, active_job_progress_total, active_job_progress_pct, active_job_updated_at')
-        .order('content_length', { ascending: false });
-      if (rErr) throw rErr;
+      // Paginate the resources query so audits beyond 1000 rows aren't truncated.
+      const resources = await fetchAllPages<any>((from, to) =>
+        supabase
+          .from('resources' as any)
+          .select('id, title, resource_type, enrichment_status, active_job_status, extraction_batch_status, extraction_batches_completed, extraction_batch_total, extraction_is_resumable, content_length, extraction_attempt_count, extraction_mode, extraction_passes_run, raw_candidate_counts, merged_candidate_count, kis_per_1k_chars, extraction_depth_bucket, under_extracted_flag, last_extraction_summary, extraction_method, last_extraction_run_id, last_extraction_run_status, last_extraction_returned_ki_count, last_extraction_deduped_ki_count, last_extraction_validated_ki_count, last_extraction_saved_ki_count, last_extraction_error, last_extraction_duration_ms, last_extraction_model, current_resource_ki_count, current_resource_kis_per_1k, extraction_failure_type, active_job_type, active_job_step_label, active_job_progress_current, active_job_progress_total, active_job_progress_pct, active_job_updated_at')
+          .order('content_length', { ascending: false })
+          .range(from, to) as any,
+        PAGE_SIZE,
+      );
 
       let allRuns: any[] = [];
       let runsFrom = 0;

@@ -14,6 +14,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { createLogger } from './logger';
 import { auditImpossibleExtractionStates, recordReconciliationMetrics } from './postExtractionReconciliation';
+import { fetchAllPages } from './supabasePagination';
 
 const log = createLogger('CanonicalLifecycle');
 
@@ -268,13 +269,18 @@ export function deriveBlockedReason(
 // ── Main audit function ────────────────────────────────────
 
 export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
-  // Fetch resource metadata (without full content to avoid 17MB+ payloads)
-  const { data: resources, error: rErr } = await supabase
-    .from('resources')
-    .select('id, title, content_length, enrichment_status, tags, updated_at, manual_content_present, manual_input_required, recovery_queue_bucket, failure_reason, resource_type, file_url, active_job_status')
-    .order('updated_at', { ascending: false });
-
-  if (rErr || !resources) {
+  // Fetch resource metadata (without full content to avoid 17MB+ payloads).
+  // Paginated so libraries above the 1000-row PostgREST cap are not silently truncated.
+  let resources: any[];
+  try {
+    resources = await fetchAllPages<any>((from, to) =>
+      supabase
+        .from('resources')
+        .select('id, title, content_length, enrichment_status, tags, updated_at, manual_content_present, manual_input_required, recovery_queue_bucket, failure_reason, resource_type, file_url, active_job_status')
+        .order('updated_at', { ascending: false })
+        .range(from, to),
+    );
+  } catch (rErr) {
     log.error('Canonical lifecycle query failed', { error: rErr });
     return emptySummary();
   }
