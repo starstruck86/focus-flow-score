@@ -2583,8 +2583,14 @@ function buildModeLockBlock(intent: IntentResult): string {
   // The thinking layer. Forces pattern extraction → POV → weighting → decision
   // logic → consequence framing. Without this, the model produces book-smart
   // summaries instead of operator-grade synthesis.
+  // FIX B: Operator contract + application layer must compose into the
+  // everyday operator modes too — analysis, next_steps, pitch, message.
+  // Without this, "what should I do next?" and "tell me about this account"
+  // (which routes to analysis via Fix A) get no decision logic, no
+  // weighting, no consequence framing — just book-smart prose.
   const isGroundedMode = kind === "synthesis" || kind === "creation" || kind === "evaluation";
-  const operatorReasoningContract = isGroundedMode
+  const isOperatorMode = isGroundedMode || kind === "analysis" || kind === "next_steps" || kind === "pitch" || kind === "message";
+  const operatorReasoningContract = isOperatorMode
     ? `
 
 ═══ OPERATOR REASONING CONTRACT (NON-NEGOTIABLE — THINKING LAYER) ═══
