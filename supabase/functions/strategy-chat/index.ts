@@ -49,6 +49,7 @@ interface NormalizedResponse {
   model: string;
   latencyMs: number;
   fallbackUsed: boolean;
+  fallbackReason?: string;
   error?: { type: string; message: string; status?: number; rawBody?: string; stage?: string };
   rawStream?: Response;
 }
