@@ -1955,14 +1955,30 @@ serve(async (req) => {
       );
       userId = user?.id ?? null;
     }
+
+    const body = await req.json();
+
+    // ── Validation-only bypass ────────────────────────────────
+    // Tightly scoped: requires the STRATEGY_VALIDATION_KEY header AND
+    // an explicit `as_user_id` in the body. Used exclusively by the
+    // V2 smoke-test harness. Does not affect normal user auth or V1.
+    const valKeyHeader = req.headers.get("x-strategy-validation-key") ?? "";
+    const expectedValKey = Deno.env.get("STRATEGY_VALIDATION_KEY") ?? "";
+    const asUserId = typeof body?.as_user_id === "string" ? body.as_user_id : null;
+    if (!userId && expectedValKey && valKeyHeader === expectedValKey && asUserId) {
+      const { data: u } = await supabase.auth.admin.getUserById(asUserId);
+      if (u?.user?.id) {
+        userId = u.user.id;
+        console.log(`[validation-bypass] impersonating user ${userId} for smoke test`);
+      }
+    }
+
     if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const body = await req.json();
     const {
       action,
       threadId,
