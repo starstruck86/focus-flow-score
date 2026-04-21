@@ -554,6 +554,57 @@ async function judgeWithClaude(admin: any, runId: string, askIndex: number, ask:
 // ─── Diagnostics: contract compliance + decision-logic signals ──
 // Pure-text inspectors. NO behavior change. Persisted into payload
 // alongside each Strategy result for offline analysis.
+
+// strategy-chat returns its answer as an SSE stream (lines like
+// `data: {"choices":[{"delta":{"content":"..."}}]}` plus a final
+// `data: [DONE]`). The benchmark runner accumulates the raw stream
+// into `strategyOut.text`, so naive header/regex checks were running
+// against the wrapper, not the visible answer. This helper extracts
+// the actual visible Strategy text. If the input is not SSE-shaped it
+// returns the raw text unchanged.
+function extractVisibleStrategyText(raw: string): { text: string; source: "parsed_sse" | "raw_text" } {
+  const input = raw ?? "";
+  if (!input) return { text: "", source: "raw_text" };
+  // Quick sniff — only treat as SSE if we see at least one data: frame
+  // that looks like JSON. Avoids false positives on plain markdown that
+  // happens to mention "data:".
+  const looksLikeSse = /(^|\n)\s*data:\s*[{\[]/.test(input) || /(^|\n)\s*data:\s*\[DONE\]/.test(input);
+  if (!looksLikeSse) return { text: input, source: "raw_text" };
+
+  let out = "";
+  // Split on newlines; SSE frames are separated by blank lines but each
+  // data line is independently parseable.
+  for (const lineRaw of input.split(/\r?\n/)) {
+    const line = lineRaw.trimEnd();
+    if (!line.startsWith("data:")) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    let obj: any;
+    try { obj = JSON.parse(payload); } catch { continue; }
+    // OpenAI/Lovable AI streaming shape
+    const choices = obj?.choices;
+    if (Array.isArray(choices)) {
+      for (const c of choices) {
+        const delta = c?.delta?.content ?? c?.message?.content;
+        if (typeof delta === "string") out += delta;
+      }
+      continue;
+    }
+    // Anthropic-style streaming
+    if (obj?.type === "content_block_delta" && typeof obj?.delta?.text === "string") {
+      out += obj.delta.text;
+      continue;
+    }
+    // Generic fallbacks
+    if (typeof obj?.delta?.content === "string") out += obj.delta.content;
+    else if (typeof obj?.content === "string") out += obj.content;
+    else if (typeof obj?.text === "string") out += obj.text;
+  }
+
+  // If parsing produced nothing meaningful, fall back to raw.
+  if (!out.trim()) return { text: input, source: "raw_text" };
+  return { text: out, source: "parsed_sse" };
+}
 const FORBIDDEN_OPENING_PHRASES = [
   "Commercial POV:",
   "Buying Motion:",
