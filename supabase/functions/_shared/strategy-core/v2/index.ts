@@ -37,6 +37,8 @@ export {
   type V2Override,
 } from "./operatorDispatcher.ts";
 
+export { assertSynthesisContractIntact } from "./extendedReasoningContract.ts";
+
 export {
   type QualityAuditResult,
 } from "./qualityAudit.ts";

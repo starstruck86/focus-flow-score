@@ -291,3 +291,31 @@ Write the synthesis now. POV first. Commit.`);
 
   return parts.join("\n\n");
 }
+
+// ════════════════════════════════════════════════════════════════
+// Phase 3 — Synthesis contract drift sentinel
+//
+// Scans an assembled system prompt for the 5 non-negotiables that the
+// Phase 2.6 strong-signal synthesis tail block MUST contain. Logs only,
+// never blocks. Used by strategy-chat to populate
+// routing_decision.v2.contract_drift when the assembled prompt has been
+// inadvertently weakened by a refactor.
+// ════════════════════════════════════════════════════════════════
+const SYNTHESIS_NON_NEGOTIABLES: Array<{ key: string; re: RegExp }> = [
+  { key: "pov_first_opener", re: /OPEN WITH POV/i },
+  { key: "unequal_weighting", re: /UNEQUAL WEIGHTING/i },
+  { key: "literal_citations", re: /CITE LITERAL TITLES INLINE/i },
+  { key: "what_is_overrated", re: /WHAT'S OVERRATED/i },
+  { key: "commercial_consequence", re: /COMMERCIAL CONSEQUENCE/i },
+  { key: "executable_next_moves", re: /EXECUTABLE NEXT MOVES/i },
+];
+
+export function assertSynthesisContractIntact(
+  systemPrompt: string,
+): { intact: boolean; missing: string[] } {
+  const missing: string[] = [];
+  for (const n of SYNTHESIS_NON_NEGOTIABLES) {
+    if (!n.re.test(systemPrompt)) missing.push(n.key);
+  }
+  return { intact: missing.length === 0, missing };
+}
