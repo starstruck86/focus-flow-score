@@ -137,7 +137,8 @@ const SHAPE_MATCHERS: ShapeMatcher[] = [
       /\b(against\s+(?:my|the)\s+(?:standards|library|framework|playbook)|how\s+would\s+you\s+rate)\b/i
         .test(t),
   },
-  // Synthesis / framework / patterns
+  // Synthesis / framework / patterns — Phase 2.6: tightened so high-signal
+  // synthesis asks no longer escape into "general".
   {
     shape: "synthesis_framework",
     test: (t) =>
@@ -145,9 +146,15 @@ const SHAPE_MATCHERS: ShapeMatcher[] = [
         .test(t) ||
       /\b(what\s+(?:are|do\s+you\s+see)|how\s+should\s+i\s+think\s+about|recurring\s+failure\s+modes|build\s+me\s+a\s+(?:framework|model))\b/i
         .test(t) ||
-      /\b(prioritize|tradeoffs?|weighted)\b.*\b(across|between|among)\b/i.test(
-        t,
-      ),
+      /\b(prioritize|tradeoffs?|weighted)\b.*\b(across|between|among)\b/i.test(t) ||
+      // Phase 2.6 additions — these phrasings were collapsing into "general"
+      /\bwhat\s+do\s+(?:the\s+)?best\b.*\bhave\s+in\s+common\b/i.test(t) ||
+      /\bwhat\s+do\s+mediocre\b.*\b(?:overweight|miss|get\s+wrong)\b/i.test(t) ||
+      /\bwhat\s+patterns?\s+(?:do\s+you\s+see|emerge|show\s+up)\b/i.test(t) ||
+      /\b(?:where|how)\s+do\s+operators?\s+(?:converge|diverge|differ|agree|disagree)\b/i.test(t) ||
+      /\bwhat\s+actually\s+matters\b/i.test(t) ||
+      /\bbuild\s+me\s+a\s+(?:framework|model|playbook|rubric|mental\s+model)\b/i.test(t) ||
+      /\b(?:cite|citing|with\s+citations?)\b.*\b(?:specific\s+)?resources?\b/i.test(t),
   },
   // Short-form: openers, subject lines, snippets, hooks
   {
