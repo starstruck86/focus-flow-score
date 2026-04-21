@@ -151,13 +151,16 @@ const FLUFF_PHRASES = [
   "tell a story", "be human",
 ];
 
-// Phase 2: detect balanced-survey patterns (operatorPOV killer)
+// Phase 2.5: detect balanced-survey patterns harder (operatorPOV killer)
 const BALANCED_SURVEY_MARKERS = [
   /\bon (?:the )?one hand\b[^.]{0,200}\bon the other hand\b/i,
   /\bboth approaches have merit\b/i,
   /\bdepends on (?:your |the )?context\b/i,
   /\bit depends\b/i,
-  /\bthere are (?:several|many|multiple) (?:ways|approaches|options)\b/i,
+  /\bthere are (?:several|many|multiple) (?:ways|approaches|options|patterns|themes)\b/i,
+  /\bmultiple (?:themes|patterns) emerge\b/i,
+  /\boperators? (?:converge|diverge) on\b/i, // Phase 2.5 — flagged as survey unless POV follows in same paragraph
+  /\bcommon (?:threads|themes) (?:include|are)\b/i,
 ];
 
 const EXTENSION_FLAG_RE =
@@ -173,7 +176,25 @@ const WHAT_DOESNT_MATTER_MARKERS = [
   /\bdon't (?:focus|spend|waste)\b/i,
   /\bdoesn't move (?:the |your )?(?:number|deal|needle)\b/i,
   /\bnot worth\b/i,
+  /\boverrated\b/i,
+  /\boverweight(?:ed)?\b/i,
+  /\bcorrelation,? not cause\b/i,
 ];
+
+// Phase 2.5: vague library-reference patterns (FAIL when strong hits exist)
+const VAGUE_LIBRARY_REFERENCE_MARKERS = [
+  /\byour\s+(?:KI|ki)\s+on\s+\w+/i,
+  /\byour\s+library\s+(?:suggests|shows|argues|says|has|on)/i,
+  /\bfrom\s+your\s+library\b/i,
+  /\byour\s+playbook\s+(?:suggests|shows|argues|says)/i,
+  /\byour\s+resources?\s+(?:show|suggest|argue|say)/i,
+  /\bthe\s+library\s+(?:suggests|shows|argues)/i,
+  /\bper\s+your\s+(?:notes|materials)\b/i,
+];
+
+// Phase 2.5: literal citation patterns (PASS markers when strong hits exist)
+const LITERAL_RESOURCE_CITATION_RE = /RESOURCE\[\s*"?[^\]"]+"?\s*\]/g;
+const LITERAL_KI_CITATION_RE = /KI\[\s*[a-f0-9]{6,}\s*\]/gi;
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
