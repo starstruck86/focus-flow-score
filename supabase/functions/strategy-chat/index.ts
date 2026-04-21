@@ -2453,6 +2453,20 @@ function classifyChatIntent(
     return { intent: "evaluation", isBusinessCase, isCFO };
   }
 
+  // 1.65 NINETY-DAY PLAN (HYBRID) — must beat the generic CREATION block
+  // below. Triggers on "30/60/90 day plan", "ninety day plan", or
+  // "new AE/rep/seller … plan/ramp". This mode produces a literal
+  // Days 1–30 / 31–60 / 61–90 timeline first, then the operator read —
+  // not a "dominant lever" thesis with bullets.
+  const NINETY_DAY_PLAN_RE =
+    /\b((30|60|90|ninety)[\s-]?day\s+(plan|ramp|onboarding)|(new|first)\s+(ae|rep|seller|sales(person|\s+rep)?)\b[^.?!]{0,60}\b(plan|ramp))\b/;
+  if (NINETY_DAY_PLAN_RE.test(text)) {
+    console.log(
+      `[mode-lock] intent_forced_ninety_day_plan text="${text.slice(0, 80)}"`,
+    );
+    return { intent: "ninety_day_plan", isBusinessCase, isCFO };
+  }
+
   // 1.7 CREATION — user is asking us to BUILD an asset (email, script,
   // talk track, plan, one-pager, business case, guide, playbook chapter,
   // 90-day plan, renewal memo, account brief, etc).
@@ -2472,18 +2486,35 @@ function classifyChatIntent(
     return { intent: "creation", isBusinessCase, isCFO };
   }
 
-  // 1.8 ACCOUNT BRIEF (FIX A) — "tell me about / brief me on / walk me
+  // 1.75 REWRITE AUDIENCE (FIX D) — "rewrite this for a CFO", "tighten
+  // this for the board", "tailor this for procurement". Routes into
+  // message mode with a rewrite_audience sub-intent so the operator
+  // contract composes and we don't fall to freeform. Must beat the
+  // ACCOUNT_BRIEF / ANALYSIS regex by sitting after creation but before
+  // them — neither matches rewrite phrasing anyway.
+  const REWRITE_AUDIENCE_RE =
+    /\b(rewrite|reword|rephrase|tighten|punch\s+up|sharpen|tailor|adapt|translate)\s+(this|that|the\s+(following|below|above)|it)\b[^.?!]{0,80}\b(for|to|as)\s+(a|an|the)?\s*(cfo|ceo|coo|cmo|cio|cto|cro|cso|chro|vp|svp|evp|director|manager|exec(utive)?|board|customer|prospect|champion|economic\s+buyer|technical\s+buyer|end\s+user|engineer|developer|finance|procurement|legal|it|operations|hr)/;
+  const SHORT_REWRITE_RE = /^(rewrite|reword|rephrase|tighten|punch\s+up|sharpen)\b/;
+  if (REWRITE_AUDIENCE_RE.test(text) || SHORT_REWRITE_RE.test(text)) {
+    console.log(
+      `[mode-lock] intent_forced_message_rewrite_audience text="${text.slice(0, 80)}"`,
+    );
+    return { intent: "message", subIntent: "rewrite_audience", isBusinessCase, isCFO };
+  }
+
+  // 1.8 ACCOUNT BRIEF (HYBRID) — "tell me about / brief me on / walk me
   // through / who is / give me the rundown on <X>" with account context
-  // is an analysis ask, not freeform. Same for "what do you know about".
-  // Without this, "Tell me about this account" falls all the way to
-  // freeform and the operator contract never composes.
+  // routes to a dedicated facts-first hybrid mode (not generic analysis).
+  // The hybrid contract requires Company Snapshot → Stakeholders →
+  // Operator Read → Next Moves so the encyclopedia answer comes first
+  // and the operator angle comes second.
   const ACCOUNT_BRIEF_RE =
     /\b(tell me about|brief me (?:on|about)|walk me through|give me (?:the )?(?:rundown|overview|background|context|summary) (?:on|of|about)|who (?:is|are) (?:they|this|the (?:account|company|customer|prospect|client))|what do (?:i|we|you) know about|fill me in on|catch me up on|prep me on|background on|context on|update me on)\b/;
   if (hasAccountContext && ACCOUNT_BRIEF_RE.test(text)) {
     console.log(
-      `[mode-lock] intent_forced_analysis_account_brief text="${text.slice(0, 80)}"`,
+      `[mode-lock] intent_forced_account_brief text="${text.slice(0, 80)}"`,
     );
-    return { intent: "analysis", isBusinessCase, isCFO };
+    return { intent: "account_brief", isBusinessCase, isCFO };
   }
 
   // 2. Template — "what template", "give me a template", "template for"
