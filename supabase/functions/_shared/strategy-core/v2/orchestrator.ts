@@ -61,6 +61,13 @@ export interface V2RoutingDecisionEvidence {
   provider?: string;
   model?: string;
   regen_count?: number;
+  // Phase 3: explicit Claude fallback flag — fires when synthesis_framework+
+  // A_strong was routed to Claude but the call fell back to OpenAI. NEVER
+  // silent. Treated as a risk in validation reports.
+  claude_fallback?: boolean;
+  // Phase 3: contract-drift sentinel — assembled prompt was missing one or
+  // more of the 5 non-negotiables for strong-signal synthesis. Logged only.
+  contract_drift?: { missing: string[] } | null;
 }
 
 // ═══ Step 1: Build prompt ═══
