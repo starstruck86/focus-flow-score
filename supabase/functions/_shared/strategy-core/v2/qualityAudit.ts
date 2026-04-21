@@ -58,9 +58,7 @@ export function auditQuality(args: {
   const totalStrong = resourceHitCount + kiHitCount;
 
   if (scores.operatorPOV < 0.5) flags.push("low_operator_pov");
-  if (scores.decisionLogic < 0.5 && args.askShape !== "short_form" && args.mode !== "C_general") {
-    flags.push("missing_decision_logic");
-  }
+  // missing_decision_logic (strict + relaxed) is emitted in the Phase 3 block below.
   if (
     scores.commercialSharpness < 0.5 &&
     args.askShape !== "short_form" &&
@@ -76,16 +74,38 @@ export function auditQuality(args: {
     flags.push("missing_extension_flag");
   }
 
-  // Phase 2.5: vague-library-references flag — fires when there's strong signal
-  // and the model used vague refs like "your KI on…" instead of literal titles.
-  if (totalStrong >= 5 && VAGUE_LIBRARY_RE.test(text)) {
+  // Phase 3: vague_library_references — STRICT (any vague ref under strong
+  // signal) is logged side-by-side with the RELAXED rule (vague refs only
+  // flagged when they dominate or substitute for literal citations). The
+  // strict variant lets us verify we're improving signal, not hiding fails.
+  const vagueRefCount = (text.match(/\b(?:your\s+(?:KI|ki)\s+on\s+\w+|your\s+library\s+(?:suggests|shows|argues|on)|from\s+your\s+library|your\s+playbook\s+(?:suggests|shows)|your\s+resources?\s+(?:show|suggest))\b/gi) || []).length;
+  const literalCiteCount =
+    (text.match(/RESOURCE\[\s*"?[^\]"]+"?\s*\]/g) || []).length +
+    (text.match(/KI\[\s*[a-f0-9]{6,}\s*\]/gi) || []).length;
+  if (totalStrong >= 5 && vagueRefCount >= 1) {
+    flags.push("vague_library_references_strict");
+  }
+  // Relaxed: only fire when vague refs dominate the citation surface OR when
+  // literal discipline collapses (<2 literals while >=5 hits available).
+  const vagueDominates = vagueRefCount >= literalCiteCount;
+  const literalsTooFew = literalCiteCount < 2;
+  if (totalStrong >= 5 && vagueRefCount >= 1 && (vagueDominates || literalsTooFew)) {
     flags.push("vague_library_references");
   }
 
-  // Phase 2.5: descriptive survey flag — fires when balanced-survey markers
-  // appear without a strong POV phrase nearby.
-  if (SURVEY_RE.test(text) && !POV_QUICK_RE.test(text)) {
-    flags.push("descriptive_survey_no_pov");
+  // Phase 3: missing_decision_logic — STRICT only fires on if/then absence;
+  // RELAXED also accepts numbered action sequences and prioritized playbooks.
+  // Implemented in scoreRubric (decisionLogicStrict vs decisionLogic). We
+  // surface them as flags here for the audit log.
+  if (
+    args.askShape !== "short_form" &&
+    args.askShape !== "general" &&
+    args.mode !== "C_general"
+  ) {
+    if (scores.decisionLogic < 0.5) flags.push("missing_decision_logic");
+    if ((scores.decisionLogicStrict ?? scores.decisionLogic) < 0.5) {
+      flags.push("missing_decision_logic_strict");
+    }
   }
 
   // Phase 2.5: STRONG-SIGNAL SYNTHESIS STOP-RULE
