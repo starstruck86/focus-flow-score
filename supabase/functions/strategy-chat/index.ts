@@ -1971,7 +1971,9 @@ serve(async (req) => {
       depth,
       force_primary_failure,
       pickedResourceIds,
+      _v2,
     } = body;
+    const v2RequestOverride = _v2 === true;
     // Sidecar: explicit resource IDs the user picked from /library this turn.
     // Validated to a clean string[] before being passed downstream.
     const cleanPickedResourceIds: string[] = Array.isArray(pickedResourceIds)
@@ -2146,6 +2148,7 @@ serve(async (req) => {
       contextPack,
       forceFallback,
       cleanPickedResourceIds,
+      v2RequestOverride,
     );
   } catch (e) {
     console.error("strategy-chat error:", e);
