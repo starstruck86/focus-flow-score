@@ -6248,6 +6248,56 @@ export type Database = {
           },
         ]
       }
+      strategy_benchmark_audit_logs: {
+        Row: {
+          ask_index: number | null
+          created_at: string
+          details: Json
+          event_level: string
+          event_type: string
+          id: string
+          message: string
+          model: string | null
+          provider: string | null
+          run_id: string
+          system: string | null
+        }
+        Insert: {
+          ask_index?: number | null
+          created_at?: string
+          details?: Json
+          event_level?: string
+          event_type: string
+          id?: string
+          message?: string
+          model?: string | null
+          provider?: string | null
+          run_id: string
+          system?: string | null
+        }
+        Update: {
+          ask_index?: number | null
+          created_at?: string
+          details?: Json
+          event_level?: string
+          event_type?: string
+          id?: string
+          message?: string
+          model?: string | null
+          provider?: string | null
+          run_id?: string
+          system?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_benchmark_audit_logs_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_benchmark_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       strategy_benchmark_runs: {
         Row: {
           account_id: string
@@ -6256,6 +6306,7 @@ export type Database = {
           baseline_mode: string
           completed_asks: number
           completed_at: string | null
+          config_snapshot: Json
           created_at: string
           current_step: string | null
           error: string | null
@@ -6264,6 +6315,8 @@ export type Database = {
           judge_mode: string
           markdown: string
           payload: Json
+          replay_reason: string | null
+          replayed_from_run_id: string | null
           status: string
           summary: Json
           updated_at: string
@@ -6276,6 +6329,7 @@ export type Database = {
           baseline_mode: string
           completed_asks?: number
           completed_at?: string | null
+          config_snapshot?: Json
           created_at?: string
           current_step?: string | null
           error?: string | null
@@ -6284,6 +6338,8 @@ export type Database = {
           judge_mode: string
           markdown?: string
           payload?: Json
+          replay_reason?: string | null
+          replayed_from_run_id?: string | null
           status?: string
           summary?: Json
           updated_at?: string
@@ -6296,6 +6352,7 @@ export type Database = {
           baseline_mode?: string
           completed_asks?: number
           completed_at?: string | null
+          config_snapshot?: Json
           created_at?: string
           current_step?: string | null
           error?: string | null
@@ -6304,12 +6361,22 @@ export type Database = {
           judge_mode?: string
           markdown?: string
           payload?: Json
+          replay_reason?: string | null
+          replayed_from_run_id?: string | null
           status?: string
           summary?: Json
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "strategy_benchmark_runs_replayed_from_run_id_fkey"
+            columns: ["replayed_from_run_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_benchmark_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       strategy_messages: {
         Row: {
