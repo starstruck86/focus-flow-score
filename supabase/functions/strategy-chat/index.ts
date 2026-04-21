@@ -4808,11 +4808,149 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
   ];
 
   const startTime = Date.now();
+
+  // ── Phase 3: provisional routing-evidence persistence ──
+  // For synthesis_framework + A_strong (the path routed to Claude), insert
+  // a provisional strategy_messages row BEFORE the model call so the routing
+  // evidence survives even if the request dies (timeout, edge gateway kill,
+  // network drop). On success/failure, we update this row instead of
+  // inserting a new one.
+  let provisionalMessageId: string | null = null;
+  const isClaudeSynthesisPath =
+    route.primaryProvider === "anthropic" &&
+    v2Active &&
+    v2EvidenceBase &&
+    v2EvidenceBase.decision.askShape === "synthesis_framework" &&
+    v2EvidenceBase.decision.mode === "A_strong";
+  if (isClaudeSynthesisPath) {
+    try {
+      const { data: prov } = await supabase
+        .from("strategy_messages")
+        .insert({
+          thread_id: threadId,
+          user_id: userId,
+          role: "assistant",
+          message_type: "chat",
+          provider_used: route.primaryProvider,
+          model_used: route.model,
+          fallback_used: false,
+          latency_ms: 0,
+          content_json: {
+            text: "",
+            provisional: true,
+            routing_decision: {
+              status: "pending",
+              mode,
+              mode_reason: modeReason,
+              intent: intent.intent,
+              resource_hits: resourceHits.length,
+              ki_hits: kiHits,
+              intended_provider: route.primaryProvider,
+              intended_model: route.model,
+              routing_reason: route._routingReason,
+              v2: {
+                version: "v2",
+                mode: v2EvidenceBase!.decision.mode,
+                ask_shape: v2EvidenceBase!.decision.askShape,
+                signal_score: v2EvidenceBase!.decision.signalScore,
+                retrieval: {
+                  strong_resource_hits: v2EvidenceBase!.signals.strongResourceHits,
+                  strong_ki_hits: v2EvidenceBase!.signals.strongKiHits,
+                  total_hits: v2EvidenceBase!.signals.totalHits,
+                  has_entity_context: v2EvidenceBase!.signals.hasEntityContext,
+                  mentions_known_entity: v2EvidenceBase!.signals.mentionsKnownEntity,
+                },
+              },
+              created_at: new Date().toISOString(),
+            },
+          },
+        })
+        .select("id")
+        .single();
+      provisionalMessageId = prov?.id ?? null;
+      console.log(`[v2] provisional routing row persisted id=${provisionalMessageId}`);
+    } catch (e) {
+      console.warn(`[v2] provisional persist failed: ${(e as Error).message}`);
+    }
+  }
+
   const result = await callStreaming("chat_general", {
     messages,
     temperature: route.temperature,
     maxTokens: route.maxTokens,
   }, route);
+
+  // If the model call returned a hard error and we have a provisional row,
+  // stamp the failure evidence so we have an audit trail even when the
+  // request would otherwise die with no row.
+  if (result.error && provisionalMessageId) {
+    try {
+      await supabase
+        .from("strategy_messages")
+        .update({
+          content_json: {
+            text: "",
+            provisional: false,
+            error: result.error,
+            routing_decision: {
+              status: "failed",
+              mode,
+              mode_reason: modeReason,
+              intent: intent.intent,
+              resource_hits: resourceHits.length,
+              ki_hits: kiHits,
+              intended_provider: route.primaryProvider,
+              intended_model: route.model,
+              actual_provider: result.provider,
+              actual_model: result.model,
+              fallback_used: result.fallbackUsed,
+              fallback_reason: result.fallbackReason ?? null,
+              error_type: result.error.type,
+              error_message: result.error.message,
+              routing_reason: route._routingReason,
+              v2: v2EvidenceBase
+                ? {
+                  ...v2EvidenceBase.decision && {},
+                  version: "v2",
+                  mode: v2EvidenceBase.decision.mode,
+                  ask_shape: v2EvidenceBase.decision.askShape,
+                  signal_score: v2EvidenceBase.decision.signalScore,
+                  claude_fallback: route.primaryProvider === "anthropic" &&
+                    result.provider !== "anthropic",
+                  retrieval: {
+                    strong_resource_hits: v2EvidenceBase.signals.strongResourceHits,
+                    strong_ki_hits: v2EvidenceBase.signals.strongKiHits,
+                    total_hits: v2EvidenceBase.signals.totalHits,
+                    has_entity_context: v2EvidenceBase.signals.hasEntityContext,
+                    mentions_known_entity: v2EvidenceBase.signals.mentionsKnownEntity,
+                  },
+                }
+                : null,
+              finalized_at: new Date().toISOString(),
+            },
+          },
+          provider_used: result.provider,
+          model_used: result.model,
+          fallback_used: result.fallbackUsed === true,
+          latency_ms: result.latencyMs,
+        })
+        .eq("id", provisionalMessageId);
+      console.warn(`[v2] provisional row finalized as failure id=${provisionalMessageId} reason=${result.error.type}`);
+    } catch (e) {
+      console.error(`[v2] failed to finalize provisional row: ${(e as Error).message}`);
+    }
+  }
+
+  // If the call succeeded but we have a provisional row, delete it so the
+  // success-path insert below doesn't produce a duplicate. (Cheaper than
+  // refactoring the whole success path to update-in-place.)
+  if (!result.error && provisionalMessageId) {
+    try {
+      await supabase.from("strategy_messages").delete().eq("id", provisionalMessageId);
+    } catch (e) {
+      console.warn(`[v2] failed to clean provisional row on success: ${(e as Error).message}`);
+    }
+  }
 
   if (result.error) {
     return new Response(
