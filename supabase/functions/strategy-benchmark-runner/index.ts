@@ -1,23 +1,8 @@
 // ════════════════════════════════════════════════════════════════
-// strategy-benchmark-runner — HEADLESS DIAGNOSTIC HARNESS
+// strategy-benchmark-runner — HEADLESS DIAGNOSTIC HARNESS (v2)
 //
-// NOT a product feature. NOT wired to any UI.
-// Runs N hardcoded asks against three systems for ONE rich account:
-//   1. Strategy (V2 pipeline via /strategy-chat with _v2:true)
-//   2. Raw Anthropic Claude Sonnet 4.5 (no library, no context)
-//   3. Raw OpenAI GPT (no library, no context)
-//
-// AUTH: requires `x-strategy-validation-key` header. Service-role gated.
-//
-// REQUEST BODY:
-//   {
-//     as_user_id: string                       // required
-//     account_id?: string                      // optional override
-//     asks?: string[]                          // optional override list of prompts
-//     baseline_mode?: "raw_only"|"same_context"|"both"   default "both"
-//     judge_mode?:    "heuristics_only"|"llm_only"|"both" default "both"
-//     save_outputs?:  boolean                  default true
-//   }
+// Async kickoff + status polling + list + replay + audit logging.
+// Provider timing breakdown + smart 429 backoff with jitter.
 // ════════════════════════════════════════════════════════════════
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -40,119 +25,261 @@ const CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
 const GPT_MODEL = "gpt-5";
 const JUDGE_MODEL = "claude-sonnet-4-5-20250929";
 
-// Per-call hardening
+// Env-backed defaults (overridable per-request)
+const DEF_RETRY_MAX = parseInt(Deno.env.get("BENCHMARK_RETRY_MAX") ?? "3", 10);
+const DEF_RETRY_BASE_MS = parseInt(Deno.env.get("BENCHMARK_RETRY_BASE_MS") ?? "750", 10);
+const DEF_RETRY_MAX_MS = parseInt(Deno.env.get("BENCHMARK_RETRY_MAX_MS") ?? "20000", 10);
+const DEF_PROVIDER_TIMEOUT_MS = parseInt(Deno.env.get("BENCHMARK_PROVIDER_TIMEOUT_MS") ?? "45000", 10);
+const DEF_JUDGE_TIMEOUT_MS = parseInt(Deno.env.get("BENCHMARK_JUDGE_TIMEOUT_MS") ?? "30000", 10);
 const TIMEOUT_STRATEGY_MS = 60_000;
-const TIMEOUT_RAW_MS = 45_000;
-const TIMEOUT_JUDGE_MS = 30_000;
+const TOTAL_RETRY_BUDGET_MS = 60_000;
 
 // ─── Types ──────────────────────────────────────────────────────
-interface BenchmarkAsk {
-  index: number;
-  prompt: string;
-  category: string;
+interface BenchmarkAsk { index: number; prompt: string; category: string; }
+
+interface AttemptDetail {
+  attempt_number: number;
+  started_at: string;
+  ended_at: string;
+  duration_ms: number;
+  status: "ok" | "error" | "timeout" | "rate_limited" | "http_error";
+  http_status?: number;
+  error?: string;
+  provider?: string;
+  model?: string;
+  retry_wait_ms?: number;
+}
+interface TimingBreakdown {
+  queue_ms: number | null;
+  request_ms: number;
+  parse_ms: number;
+  judge_ms?: number;
+  retry_wait_ms_total: number;
+  attempts_detail: AttemptDetail[];
 }
 interface SystemOutput {
   system: "strategy" | "claude" | "gpt";
   text: string;
-  latencyMs: number;
+  latency_ms_total: number;
   attempts: number;
   error?: string;
-  meta?: Record<string, any>;
+  http_status?: number;
+  response_length: number;
+  provider?: string;
+  model?: string;
+  timing_breakdown: TimingBreakdown;
 }
 interface HeuristicScore {
-  operator_pov: number;
-  decision_logic: number;
-  commercial_sharpness: number;
-  library_leverage: number;
-  audience_fit: number;
-  correctness: number;
-  total: number;
+  operator_pov: number; decision_logic: number; commercial_sharpness: number;
+  library_leverage: number; audience_fit: number; correctness: number; total: number;
 }
 interface JudgeScore {
-  strategy: number;
-  claude: number;
-  gpt: number;
+  strategy: number; claude: number; gpt: number;
   winner: "strategy" | "claude" | "gpt" | "tie";
-  rationale: string;
-  attempts?: number;
-  error?: string;
+  rationale: string; attempts?: number; error?: string;
+  timing_breakdown?: TimingBreakdown;
 }
 type StrategyFailureMode =
-  | "reasoning"
-  | "retrieval"
-  | "routing"
-  | "orchestration"
-  | "shallow"
-  | "wrong_question"
-  | "none";
-
+  | "reasoning" | "retrieval" | "routing" | "orchestration"
+  | "shallow" | "wrong_question" | "none";
 type BaselineMode = "raw_only" | "same_context" | "both";
 type JudgeMode = "heuristics_only" | "llm_only" | "both";
 
-// ─── Generic timeout/retry helper ───────────────────────────────
+interface RetryConfig {
+  retry_max: number;
+  retry_base_ms: number;
+  retry_max_ms: number;
+  provider_timeout_ms: number;
+  judge_timeout_ms: number;
+}
+
+// ─── Audit logger (best-effort) ─────────────────────────────────
+let _admin: any = null;
+async function audit(
+  runId: string,
+  event_type: string,
+  opts: {
+    level?: "info" | "warn" | "error";
+    ask_index?: number | null;
+    system?: string | null;
+    provider?: string | null;
+    model?: string | null;
+    message?: string;
+    details?: Record<string, any>;
+  } = {},
+) {
+  if (!_admin) return;
+  try {
+    const { error } = await _admin.from("strategy_benchmark_audit_logs").insert({
+      run_id: runId,
+      ask_index: opts.ask_index ?? null,
+      event_type,
+      event_level: opts.level ?? "info",
+      system: opts.system ?? null,
+      provider: opts.provider ?? null,
+      model: opts.model ?? null,
+      message: opts.message ?? "",
+      details: opts.details ?? {},
+    });
+    if (error) console.error("[audit] insert err:", error.message);
+  } catch (e: any) {
+    console.error("[audit] exception:", e?.message || e);
+  }
+}
+
+// ─── Timeout helper ─────────────────────────────────────────────
 async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return await new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms);
+    const timer = setTimeout(() => reject(new Error(`${label}_timeout_${ms}ms`)), ms);
     p.then((v) => { clearTimeout(timer); resolve(v); },
            (e) => { clearTimeout(timer); reject(e); });
   });
 }
 
-interface RetryOpts {
-  retries: number; // additional attempts beyond the first
-  timeoutMs: number;
-  shouldRetry?: (err: unknown, status?: number) => boolean;
+// ─── Smart retry: exponential backoff w/ jitter, 429-aware ─────
+interface CallOnceResult { text: string; http_status: number; raw?: any; parse_ms?: number; }
+interface RetryRunResult {
+  value: CallOnceResult | null;
+  attempts: number;
+  attempts_detail: AttemptDetail[];
+  retry_wait_ms_total: number;
+  request_ms_last: number;
+  parse_ms_last: number;
+  error?: string;
 }
-async function runWithRetry<T>(
+function isRetryable(status?: number, errMsg?: string): boolean {
+  if (status === 429) return true;
+  if (status && status >= 500) return true;
+  if (errMsg && /timeout|rate.?limit|429|ECONNRESET|fetch failed|network/i.test(errMsg)) return true;
+  return false;
+}
+function classifyAttemptStatus(status?: number, errMsg?: string): AttemptDetail["status"] {
+  if (errMsg && /timeout/i.test(errMsg)) return "timeout";
+  if (status === 429) return "rate_limited";
+  if (status && status >= 400) return "http_error";
+  if (errMsg) return "error";
+  return "ok";
+}
+function backoffMs(attempt: number, base: number, max: number, retryAfter?: number): number {
+  if (retryAfter && retryAfter > 0) return Math.min(retryAfter, max);
+  const exp = base * Math.pow(2, attempt - 1);
+  const jitter = Math.random() * base;
+  return Math.min(Math.floor(exp + jitter), max);
+}
+function parseRetryAfter(headerVal: string | null): number | undefined {
+  if (!headerVal) return undefined;
+  const n = parseInt(headerVal, 10);
+  if (!isNaN(n)) return n * 1000;
+  return undefined;
+}
+
+async function runWithSmartRetry(
   label: string,
-  fn: () => Promise<{ value: T; status?: number }>,
-  opts: RetryOpts,
-): Promise<{ value: T | null; attempts: number; error?: string }> {
-  let attempts = 0;
-  let lastErr: unknown;
-  for (let i = 0; i <= opts.retries; i++) {
-    attempts++;
+  provider: string,
+  model: string,
+  fn: () => Promise<CallOnceResult & { retry_after_ms?: number }>,
+  cfg: { retry_max: number; retry_base_ms: number; retry_max_ms: number; timeout_ms: number },
+  runId: string,
+  askIndex: number | null,
+  system: string,
+): Promise<RetryRunResult> {
+  const attempts_detail: AttemptDetail[] = [];
+  let attempt = 0;
+  let retry_wait_ms_total = 0;
+  let request_ms_last = 0;
+  let parse_ms_last = 0;
+  let lastErr: string | undefined;
+  const startedTotal = Date.now();
+
+  while (attempt < cfg.retry_max) {
+    attempt++;
+    const startedIso = new Date().toISOString();
+    const t0 = Date.now();
+    let status: number | undefined;
+    let errMsg: string | undefined;
+    let retry_after_ms: number | undefined;
+    let value: CallOnceResult | null = null;
+
     try {
-      const { value, status } = await withTimeout(fn(), opts.timeoutMs, label);
-      // status-based retry decision (e.g. 5xx)
-      if (status && status >= 500 && i < opts.retries && (opts.shouldRetry?.(null, status) ?? true)) {
-        lastErr = new Error(`HTTP ${status}`);
-        continue;
-      }
-      return { value, attempts };
-    } catch (e) {
-      lastErr = e;
-      if (i >= opts.retries) break;
-      if (opts.shouldRetry && !opts.shouldRetry(e)) break;
+      const v = await withTimeout(fn(), cfg.timeout_ms, label);
+      status = v.http_status;
+      value = v;
+      retry_after_ms = (v as any).retry_after_ms;
+      request_ms_last = Date.now() - t0;
+      parse_ms_last = v.parse_ms ?? 0;
+    } catch (e: any) {
+      errMsg = e?.message || String(e);
+      request_ms_last = Date.now() - t0;
     }
+
+    const ended = Date.now();
+    const detail: AttemptDetail = {
+      attempt_number: attempt,
+      started_at: startedIso,
+      ended_at: new Date(ended).toISOString(),
+      duration_ms: ended - t0,
+      status: classifyAttemptStatus(status, errMsg),
+      http_status: status,
+      error: errMsg,
+      provider, model,
+    };
+
+    const success = !errMsg && status !== undefined && status < 400;
+    if (success) {
+      attempts_detail.push(detail);
+      audit(runId, "provider_call_success", {
+        ask_index: askIndex, system, provider, model,
+        message: `${label} ok in ${detail.duration_ms}ms (attempt ${attempt})`,
+        details: { duration_ms: detail.duration_ms, http_status: status },
+      });
+      return { value, attempts: attempt, attempts_detail, retry_wait_ms_total, request_ms_last, parse_ms_last };
+    }
+
+    const retryable = isRetryable(status, errMsg);
+    const budgetLeft = TOTAL_RETRY_BUDGET_MS - (Date.now() - startedTotal);
+    const canRetry = attempt < cfg.retry_max && retryable && budgetLeft > 100;
+
+    if (canRetry) {
+      const wait = Math.min(backoffMs(attempt, cfg.retry_base_ms, cfg.retry_max_ms, retry_after_ms), budgetLeft);
+      detail.retry_wait_ms = wait;
+      attempts_detail.push(detail);
+      audit(runId, "retry_scheduled", {
+        level: "warn", ask_index: askIndex, system, provider, model,
+        message: `${label} retry ${attempt + 1}/${cfg.retry_max} in ${wait}ms (status=${status ?? "n/a"})`,
+        details: { http_status: status, error: errMsg, wait_ms: wait, retry_after_ms },
+      });
+      retry_wait_ms_total += wait;
+      lastErr = errMsg ?? `HTTP ${status}`;
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+
+    attempts_detail.push(detail);
+    lastErr = errMsg ?? `HTTP ${status}`;
+    audit(runId, retryable ? "retry_exhausted" : "provider_call_failure", {
+      level: "error", ask_index: askIndex, system, provider, model,
+      message: `${label} failed: ${lastErr}`,
+      details: { http_status: status, error: errMsg, attempts: attempt },
+    });
+    return { value: null, attempts: attempt, attempts_detail, retry_wait_ms_total, request_ms_last, parse_ms_last, error: lastErr };
   }
-  return { value: null, attempts, error: lastErr instanceof Error ? lastErr.message : String(lastErr) };
+  return { value: null, attempts: attempt, attempts_detail, retry_wait_ms_total, request_ms_last, parse_ms_last, error: lastErr ?? "exhausted" };
 }
 
 // ─── Account auto-selection ─────────────────────────────────────
 async function selectBestAccount(admin: any, userId: string, override?: string) {
   if (override) {
-    const { data } = await admin
-      .from("accounts")
+    const { data } = await admin.from("accounts")
       .select("id, name, website, industry, notes, tier, account_status")
-      .eq("id", override)
-      .eq("user_id", userId)
-      .is("deleted_at", null)
-      .maybeSingle();
+      .eq("id", override).eq("user_id", userId).is("deleted_at", null).maybeSingle();
     if (!data) throw new Error(`account ${override} not found for user`);
-    // still pull signal counts so the report explains the pick
     const sig = await accountSignal(admin, userId, data.id);
     return { ...data, _signal: sig, _selection_reason: "explicit account_id override" };
   }
-
-  const { data: accounts } = await admin
-    .from("accounts")
+  const { data: accounts } = await admin.from("accounts")
     .select("id, name, website, industry, notes, tier, account_status, updated_at")
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .limit(200);
+    .eq("user_id", userId).is("deleted_at", null).limit(200);
   if (!accounts?.length) throw new Error("user has no active accounts");
-
   const ids = accounts.map((a: any) => a.id);
   const [contactsRes, oppsRes, callsRes, memRes] = await Promise.all([
     admin.from("contacts").select("account_id").in("account_id", ids).eq("user_id", userId),
@@ -160,41 +287,25 @@ async function selectBestAccount(admin: any, userId: string, override?: string) 
     admin.from("call_transcripts").select("account_id, call_date").in("account_id", ids).eq("user_id", userId),
     admin.from("account_strategy_memory").select("account_id").in("account_id", ids).eq("user_id", userId),
   ]);
-
   const tally = (rows: any[] | null) => {
     const m = new Map<string, number>();
     for (const r of rows ?? []) m.set(r.account_id, (m.get(r.account_id) ?? 0) + 1);
     return m;
   };
-  const cMap = tally(contactsRes.data);
-  const oMap = tally(oppsRes.data);
-  const tMap = tally(callsRes.data);
-  const mMap = tally(memRes.data);
-
-  let best: any = null;
-  let bestScore = -1;
+  const cMap = tally(contactsRes.data), oMap = tally(oppsRes.data), tMap = tally(callsRes.data), mMap = tally(memRes.data);
+  let best: any = null; let bestScore = -1;
   for (const a of accounts) {
-    const contacts = cMap.get(a.id) ?? 0;
-    const opps = oMap.get(a.id) ?? 0;
-    const calls = tMap.get(a.id) ?? 0;
-    const mems = mMap.get(a.id) ?? 0;
+    const contacts = cMap.get(a.id) ?? 0, opps = oMap.get(a.id) ?? 0, calls = tMap.get(a.id) ?? 0, mems = mMap.get(a.id) ?? 0;
     const notesLen = (a.notes ?? "").length;
-    const score =
-      contacts * 3 + opps * 5 + calls * 4 + mems * 2 + Math.min(notesLen / 200, 5);
+    const score = contacts * 3 + opps * 5 + calls * 4 + mems * 2 + Math.min(notesLen / 200, 5);
     if (score > bestScore) {
       bestScore = score;
-      best = {
-        ...a,
-        _signal: { contacts, opps, calls, mems, notesLen, score: +score.toFixed(2) },
-        _selection_reason:
-          `auto-selected: highest signal density across ${accounts.length} active accounts ` +
-          `(contacts*3 + opps*5 + calls*4 + memory*2 + notesChars/200, capped at 5)`,
-      };
+      best = { ...a, _signal: { contacts, opps, calls, mems, notesLen, score: +score.toFixed(2) },
+        _selection_reason: `auto-selected: highest signal density across ${accounts.length} active accounts` };
     }
   }
   return best;
 }
-
 async function accountSignal(admin: any, userId: string, accountId: string) {
   const [c, o, t, m, a] = await Promise.all([
     admin.from("contacts").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("account_id", accountId),
@@ -209,15 +320,15 @@ async function accountSignal(admin: any, userId: string, accountId: string) {
   return { contacts, opps, calls, mems, notesLen, score: +score.toFixed(2) };
 }
 
-// ─── Default benchmark asks ─────────────────────────────────────
+// ─── Default asks ───────────────────────────────────────────────
 function buildDefaultAsks(accountName: string, recentMessage: string): BenchmarkAsk[] {
   return [
-    { index: 1, category: "account_brief",    prompt: `Tell me about ${accountName}` },
-    { index: 2, category: "ramp_plan",        prompt: `Give me a 90 day plan as a new AE on ${accountName}` },
+    { index: 1, category: "account_brief", prompt: `Tell me about ${accountName}` },
+    { index: 2, category: "ramp_plan", prompt: `Give me a 90 day plan as a new AE on ${accountName}` },
     { index: 3, category: "audience_rewrite", prompt: `Rewrite this for a CFO: ${recentMessage}` },
-    { index: 4, category: "next_step",        prompt: `What should I do next on ${accountName}?` },
-    { index: 5, category: "discovery",        prompt: `Build me a discovery framework for ${accountName}` },
-    { index: 6, category: "renewal_memo",     prompt: `Draft a renewal memo for ${accountName}` },
+    { index: 4, category: "next_step", prompt: `What should I do next on ${accountName}?` },
+    { index: 5, category: "discovery", prompt: `Build me a discovery framework for ${accountName}` },
+    { index: 6, category: "renewal_memo", prompt: `Draft a renewal memo for ${accountName}` },
   ];
 }
 function categorizeCustomAsk(p: string): string {
@@ -230,253 +341,198 @@ function categorizeCustomAsk(p: string): string {
   return "account_brief";
 }
 
-// ─── Provider calls ─────────────────────────────────────────────
-async function callStrategyOnce(
-  userJwt: string,
-  threadId: string,
-  prompt: string,
-): Promise<{ value: { text: string; httpStatus: number }; status?: number }> {
+// ─── Provider calls (each returns text + http_status + raw + parse_ms) ─
+async function strategyCall(userJwt: string, threadId: string, prompt: string): Promise<CallOnceResult> {
   const resp = await fetch(`${SUPABASE_URL}/functions/v1/strategy-chat`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${userJwt}`,
-      apikey: ANON_KEY,
-    },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${userJwt}`, apikey: ANON_KEY },
     body: JSON.stringify({ action: "chat", threadId, content: prompt, _v2: true }),
   });
   let text = "";
+  const t1 = Date.now();
   if (resp.body) {
-    const reader = resp.body.getReader();
-    const dec = new TextDecoder();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      text += dec.decode(value, { stream: true });
-    }
+    const reader = resp.body.getReader(); const dec = new TextDecoder();
+    while (true) { const { done, value } = await reader.read(); if (done) break; text += dec.decode(value, { stream: true }); }
   }
-  return { value: { text, httpStatus: resp.status }, status: resp.status };
+  return { text, http_status: resp.status, parse_ms: Date.now() - t1 };
 }
-
-async function callStrategy(userJwt: string, threadId: string, prompt: string): Promise<SystemOutput> {
-  const t0 = Date.now();
-  const result = await runWithRetry(
-    "strategy",
-    () => callStrategyOnce(userJwt, threadId, prompt),
-    { retries: 0, timeoutMs: TIMEOUT_STRATEGY_MS },
-  );
-  const v = result.value;
-  return {
-    system: "strategy",
-    text: v?.text ?? "",
-    latencyMs: Date.now() - t0,
-    attempts: result.attempts,
-    meta: { http: v?.httpStatus },
-    error: result.error ?? (v && v.httpStatus >= 400 ? `HTTP ${v.httpStatus}` : undefined),
-  };
-}
-
-async function callClaudeOnce(
-  prompt: string,
-  systemPrompt: string,
-): Promise<{ value: { text: string; httpStatus: number; raw: any }; status?: number }> {
+async function claudeCall(prompt: string, systemPrompt: string): Promise<CallOnceResult & { retry_after_ms?: number }> {
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: {
-      "x-api-key": ANTHROPIC_KEY,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: CLAUDE_MODEL,
-      max_tokens: 2000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: prompt }],
-    }),
+    headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+    body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 2000, system: systemPrompt, messages: [{ role: "user", content: prompt }] }),
   });
+  const t1 = Date.now();
   const data = await resp.json();
-  const text = (data?.content ?? [])
-    .filter((b: any) => b.type === "text")
-    .map((b: any) => b.text)
-    .join("\n");
-  return { value: { text, httpStatus: resp.status, raw: data }, status: resp.status };
+  const text = (data?.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+  return { text, http_status: resp.status, raw: data, parse_ms: Date.now() - t1, retry_after_ms: parseRetryAfter(resp.headers.get("retry-after")) };
 }
-
-async function callClaudeRaw(prompt: string, accountName: string, extraContext?: string): Promise<SystemOutput> {
-  const t0 = Date.now();
-  if (!ANTHROPIC_KEY) {
-    return { system: "claude", text: "", latencyMs: 0, attempts: 0, error: "ANTHROPIC_API_KEY missing" };
-  }
-  const sys = `You are a sales strategist. The account in question is "${accountName}". ${
-    extraContext ?? "You have no internal library or CRM access — answer from general knowledge only."
-  }`;
-  const result = await runWithRetry(
-    "claude",
-    () => callClaudeOnce(prompt, sys),
-    { retries: 1, timeoutMs: TIMEOUT_RAW_MS, shouldRetry: (_e, status) => !status || status >= 500 },
-  );
-  const v = result.value;
-  return {
-    system: "claude",
-    text: v?.text ?? "",
-    latencyMs: Date.now() - t0,
-    attempts: result.attempts,
-    meta: { model: CLAUDE_MODEL, http: v?.httpStatus },
-    error: result.error ?? (v && v.httpStatus >= 400
-      ? `HTTP ${v.httpStatus}: ${JSON.stringify(v.raw).slice(0, 300)}`
-      : undefined),
-  };
-}
-
-async function callGptOnce(
-  prompt: string,
-  systemPrompt: string,
-): Promise<{ value: { text: string; httpStatus: number; raw: any }; status?: number }> {
+async function gptCall(prompt: string, systemPrompt: string): Promise<CallOnceResult & { retry_after_ms?: number }> {
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${OPENAI_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: GPT_MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      max_completion_tokens: 2000,
-    }),
+    body: JSON.stringify({ model: GPT_MODEL, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }], max_completion_tokens: 2000 }),
   });
+  const t1 = Date.now();
   const data = await resp.json();
   const text = data?.choices?.[0]?.message?.content ?? "";
-  return { value: { text, httpStatus: resp.status, raw: data }, status: resp.status };
+  return { text, http_status: resp.status, raw: data, parse_ms: Date.now() - t1, retry_after_ms: parseRetryAfter(resp.headers.get("retry-after")) };
 }
 
-async function callGptRaw(prompt: string, accountName: string, extraContext?: string): Promise<SystemOutput> {
-  const t0 = Date.now();
-  if (!OPENAI_KEY) {
-    return { system: "gpt", text: "", latencyMs: 0, attempts: 0, error: "OPENAI_API_KEY missing" };
-  }
-  const sys = `You are a sales strategist. The account in question is "${accountName}". ${
-    extraContext ?? "You have no internal library or CRM access — answer from general knowledge only."
-  }`;
-  const result = await runWithRetry(
-    "gpt",
-    () => callGptOnce(prompt, sys),
-    { retries: 1, timeoutMs: TIMEOUT_RAW_MS, shouldRetry: (_e, status) => !status || status >= 500 },
-  );
-  const v = result.value;
+function buildSystemOutput(
+  system: SystemOutput["system"], provider: string, model: string,
+  result: RetryRunResult, total_ms: number,
+): SystemOutput {
+  const text = result.value?.text ?? "";
   return {
-    system: "gpt",
-    text: v?.text ?? "",
-    latencyMs: Date.now() - t0,
+    system, text,
+    latency_ms_total: total_ms,
     attempts: result.attempts,
-    meta: { model: GPT_MODEL, http: v?.httpStatus },
-    error: result.error ?? (v && v.httpStatus >= 400
-      ? `HTTP ${v.httpStatus}: ${JSON.stringify(v.raw).slice(0, 300)}`
-      : undefined),
+    error: result.error,
+    http_status: result.attempts_detail[result.attempts_detail.length - 1]?.http_status,
+    response_length: text.length,
+    provider, model,
+    timing_breakdown: {
+      queue_ms: null,
+      request_ms: result.request_ms_last,
+      parse_ms: result.parse_ms_last,
+      retry_wait_ms_total: result.retry_wait_ms_total,
+      attempts_detail: result.attempts_detail,
+    },
   };
 }
 
-// ─── Heuristic scoring ──────────────────────────────────────────
+async function runStrategy(runId: string, askIndex: number, userJwt: string, threadId: string, prompt: string, cfg: RetryConfig): Promise<SystemOutput> {
+  audit(runId, "provider_call_start", { ask_index: askIndex, system: "strategy", provider: "internal", model: "strategy-v2", message: "strategy start" });
+  const t0 = Date.now();
+  const result = await runWithSmartRetry("strategy", "internal", "strategy-v2",
+    () => strategyCall(userJwt, threadId, prompt),
+    { retry_max: 1, retry_base_ms: cfg.retry_base_ms, retry_max_ms: cfg.retry_max_ms, timeout_ms: TIMEOUT_STRATEGY_MS },
+    runId, askIndex, "strategy");
+  return buildSystemOutput("strategy", "internal", "strategy-v2", result, Date.now() - t0);
+}
+async function runClaude(runId: string, askIndex: number, prompt: string, accountName: string, extraContext: string | undefined, cfg: RetryConfig): Promise<SystemOutput> {
+  if (!ANTHROPIC_KEY) {
+    return { system: "claude", text: "", latency_ms_total: 0, attempts: 0, error: "ANTHROPIC_API_KEY missing",
+      response_length: 0, provider: "anthropic", model: CLAUDE_MODEL,
+      timing_breakdown: { queue_ms: null, request_ms: 0, parse_ms: 0, retry_wait_ms_total: 0, attempts_detail: [] } };
+  }
+  const sys = `You are a sales strategist. The account is "${accountName}". ${extraContext ?? "You have no internal library or CRM access — answer from general knowledge only."}`;
+  audit(runId, "provider_call_start", { ask_index: askIndex, system: "claude", provider: "anthropic", model: CLAUDE_MODEL, message: "claude start" });
+  const t0 = Date.now();
+  const result = await runWithSmartRetry("claude", "anthropic", CLAUDE_MODEL,
+    () => claudeCall(prompt, sys),
+    { retry_max: cfg.retry_max, retry_base_ms: cfg.retry_base_ms, retry_max_ms: cfg.retry_max_ms, timeout_ms: cfg.provider_timeout_ms },
+    runId, askIndex, "claude");
+  return buildSystemOutput("claude", "anthropic", CLAUDE_MODEL, result, Date.now() - t0);
+}
+async function runGpt(runId: string, askIndex: number, prompt: string, accountName: string, extraContext: string | undefined, cfg: RetryConfig): Promise<SystemOutput> {
+  if (!OPENAI_KEY) {
+    return { system: "gpt", text: "", latency_ms_total: 0, attempts: 0, error: "OPENAI_API_KEY missing",
+      response_length: 0, provider: "openai", model: GPT_MODEL,
+      timing_breakdown: { queue_ms: null, request_ms: 0, parse_ms: 0, retry_wait_ms_total: 0, attempts_detail: [] } };
+  }
+  const sys = `You are a sales strategist. The account is "${accountName}". ${extraContext ?? "You have no internal library or CRM access — answer from general knowledge only."}`;
+  audit(runId, "provider_call_start", { ask_index: askIndex, system: "gpt", provider: "openai", model: GPT_MODEL, message: "gpt start" });
+  const t0 = Date.now();
+  const result = await runWithSmartRetry("gpt", "openai", GPT_MODEL,
+    () => gptCall(prompt, sys),
+    { retry_max: cfg.retry_max, retry_base_ms: cfg.retry_base_ms, retry_max_ms: cfg.retry_max_ms, timeout_ms: cfg.provider_timeout_ms },
+    runId, askIndex, "gpt");
+  return buildSystemOutput("gpt", "openai", GPT_MODEL, result, Date.now() - t0);
+}
+
+// ─── Heuristics ─────────────────────────────────────────────────
 function scoreHeuristic(text: string, ask: BenchmarkAsk, accountName: string): HeuristicScore {
-  const t = (text ?? "").trim();
-  const lower = t.toLowerCase();
-  const len = t.length;
+  const t = (text ?? "").trim(); const lower = t.toLowerCase(); const len = t.length;
   const hasNumbers = /\b\d+(\.\d+)?%?\b/.test(t);
   const hasBullets = /(^|\n)\s*([-*•]|\d+[.)])\s+/.test(t);
   const hasHeadings = /(^|\n)#{1,4}\s+\S/.test(t) || /(^|\n)\*\*[A-Z][^*]+\*\*/.test(t);
   const mentionsAccount = lower.includes(accountName.toLowerCase());
   const hasResourceCitations = /RESOURCE\[[^\]]+\]|KI\[[^\]]+\]|PLAYBOOK\[[^\]]+\]/i.test(t);
-  const hasInternalLeverage =
-    /\b(playbook|knowledge item|our (data|library|notes)|previous call|account memory)\b/i.test(t);
-  const hasCommercialTerms =
-    /\b(arr|ACV|pipeline|quota|close rate|win rate|expansion|renewal|MEDDIC|MEDDPICC|champion|economic buyer|stakeholder map)\b/i.test(t);
-  const hasDecisionLogic =
-    /\b(if|because|therefore|so that|the risk is|trade-?off|prioriti[sz]e|first|then|next)\b/i.test(t);
-  const hasOperatorPOV =
-    /\b(I would|do this|start by|book a meeting|send a|call|today|this week|next 7 days|first move)\b/i.test(t);
-  const audienceMatch =
-    ask.category === "audience_rewrite"
-      ? /\b(CFO|cost of capital|payback|ROI|margin|cash|EBITDA|TCO|board|finance)\b/i.test(t)
-      : true;
-  const tooShort = len < 400;
-  const wallOfText = !hasBullets && !hasHeadings && len > 1200;
-
+  const hasInternalLeverage = /\b(playbook|knowledge item|our (data|library|notes)|previous call|account memory)\b/i.test(t);
+  const hasCommercialTerms = /\b(arr|ACV|pipeline|quota|close rate|win rate|expansion|renewal|MEDDIC|MEDDPICC|champion|economic buyer|stakeholder map)\b/i.test(t);
+  const hasDecisionLogic = /\b(if|because|therefore|so that|the risk is|trade-?off|prioriti[sz]e|first|then|next)\b/i.test(t);
+  const hasOperatorPOV = /\b(I would|do this|start by|book a meeting|send a|call|today|this week|next 7 days|first move)\b/i.test(t);
+  const audienceMatch = ask.category === "audience_rewrite"
+    ? /\b(CFO|cost of capital|payback|ROI|margin|cash|EBITDA|TCO|board|finance)\b/i.test(t) : true;
+  const tooShort = len < 400; const wallOfText = !hasBullets && !hasHeadings && len > 1200;
   const operator_pov = clamp10((hasOperatorPOV ? 6 : 2) + (mentionsAccount ? 2 : 0) + (hasBullets ? 2 : 0) - (tooShort ? 4 : 0));
   const decision_logic = clamp10((hasDecisionLogic ? 5 : 1) + (hasHeadings ? 3 : 0) + (hasBullets ? 2 : 0) - (wallOfText ? 3 : 0));
   const commercial_sharpness = clamp10((hasCommercialTerms ? 5 : 1) + (hasNumbers ? 3 : 0) + (mentionsAccount ? 2 : 0));
   const library_leverage = clamp10((hasResourceCitations ? 7 : 0) + (hasInternalLeverage ? 3 : 0));
   const audience_fit = clamp10((audienceMatch ? 7 : 2) + (ask.category === "audience_rewrite" && /\b(CFO|finance)\b/i.test(t) ? 3 : 0));
-  const correctness = clamp10(
-    (len > 200 ? 5 : 0) + (mentionsAccount ? 2 : 0) + (hasHeadings || hasBullets ? 2 : 0) +
-    (tooShort ? -3 : 0) + (text && !text.toLowerCase().includes("i don't have") ? 1 : 0),
-  );
-  const total = +(
-    (operator_pov + decision_logic + commercial_sharpness + library_leverage + audience_fit + correctness) / 6
-  ).toFixed(2);
+  const correctness = clamp10((len > 200 ? 5 : 0) + (mentionsAccount ? 2 : 0) + (hasHeadings || hasBullets ? 2 : 0) +
+    (tooShort ? -3 : 0) + (text && !text.toLowerCase().includes("i don't have") ? 1 : 0));
+  const total = +((operator_pov + decision_logic + commercial_sharpness + library_leverage + audience_fit + correctness) / 6).toFixed(2);
   return { operator_pov, decision_logic, commercial_sharpness, library_leverage, audience_fit, correctness, total };
 }
 function clamp10(n: number) { return Math.max(0, Math.min(10, Math.round(n))); }
+function emptyHeur(): HeuristicScore {
+  return { operator_pov: 0, decision_logic: 0, commercial_sharpness: 0, library_leverage: 0, audience_fit: 0, correctness: 0, total: 0 };
+}
+function heuristicWinnerAsJudge(heur: Record<string, HeuristicScore>): JudgeScore {
+  const s = heur.strategy.total, c = heur.claude.total, g = heur.gpt.total;
+  let winner: JudgeScore["winner"] = "tie";
+  const max = Math.max(s, c, g);
+  if (max === s && s > c && s > g) winner = "strategy";
+  else if (max === c && c > s && c > g) winner = "claude";
+  else if (max === g && g > s && g > c) winner = "gpt";
+  return { strategy: s, claude: c, gpt: g, winner, rationale: "heuristics_only mode — no LLM judge", attempts: 0 };
+}
 
-// ─── LLM-as-judge ───────────────────────────────────────────────
-async function judgeOnce(ask: BenchmarkAsk, outputs: SystemOutput[], accountName: string) {
+// ─── Judge ──────────────────────────────────────────────────────
+async function judgeOnce(ask: BenchmarkAsk, outputs: SystemOutput[], accountName: string): Promise<CallOnceResult & { retry_after_ms?: number }> {
   const truncate = (s: string) => (s.length > 6000 ? s.slice(0, 6000) + "\n…[truncated]" : s);
   const findOut = (sys: string) => outputs.find((o) => o.system === sys);
-  const system = `You are a brutally honest sales-execution evaluator. Score three responses to the same prompt. Account: "${accountName}". Score each 0-10 on overall usefulness to a working AE. Pick a single winner. Be terse and specific. Return STRICT JSON only, no prose: {"strategy":N,"claude":N,"gpt":N,"winner":"strategy|claude|gpt|tie","rationale":"<=400 chars"}`;
-  const user = `PROMPT:
-${ask.prompt}
-
-=== STRATEGY OUTPUT ===
-${truncate(findOut("strategy")?.text || "(empty)")}
-
-=== CLAUDE RAW OUTPUT ===
-${truncate(findOut("claude")?.text || "(empty)")}
-
-=== GPT RAW OUTPUT ===
-${truncate(findOut("gpt")?.text || "(empty)")}
-
-Return JSON now.`;
+  const system = `You are a brutally honest sales-execution evaluator. Score three responses 0-10. Account: "${accountName}". Return STRICT JSON only: {"strategy":N,"claude":N,"gpt":N,"winner":"strategy|claude|gpt|tie","rationale":"<=400 chars"}`;
+  const user = `PROMPT:\n${ask.prompt}\n\n=== STRATEGY ===\n${truncate(findOut("strategy")?.text || "(empty)")}\n\n=== CLAUDE ===\n${truncate(findOut("claude")?.text || "(empty)")}\n\n=== GPT ===\n${truncate(findOut("gpt")?.text || "(empty)")}\n\nReturn JSON now.`;
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
     body: JSON.stringify({ model: JUDGE_MODEL, max_tokens: 800, system, messages: [{ role: "user", content: user }] }),
   });
+  const t1 = Date.now();
   const data = await resp.json();
   const raw = (data?.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
   const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error(`judge no-json: ${raw.slice(0, 200)}`);
-  const parsed = JSON.parse(m[0]);
-  return { value: parsed, status: resp.status };
+  if (!m) throw new Error(`judge_no_json: ${raw.slice(0, 200)}`);
+  // We return raw text (the JSON match) — JSON.parse happens at caller
+  return { text: m[0], http_status: resp.status, raw: data, parse_ms: Date.now() - t1, retry_after_ms: parseRetryAfter(resp.headers.get("retry-after")) };
 }
-
-async function judgeWithClaude(ask: BenchmarkAsk, outputs: SystemOutput[], accountName: string): Promise<JudgeScore> {
+async function judgeWithClaude(runId: string, askIndex: number, ask: BenchmarkAsk, outputs: SystemOutput[], accountName: string, cfg: RetryConfig): Promise<JudgeScore> {
   if (!ANTHROPIC_KEY) {
     return { strategy: 0, claude: 0, gpt: 0, winner: "tie", rationale: "ANTHROPIC_API_KEY missing", attempts: 0 };
   }
-  const result = await runWithRetry(
-    "judge",
+  audit(runId, "judge_start", { ask_index: askIndex, system: "judge", provider: "anthropic", model: JUDGE_MODEL });
+  const t0 = Date.now();
+  const result = await runWithSmartRetry("judge", "anthropic", JUDGE_MODEL,
     () => judgeOnce(ask, outputs, accountName),
-    { retries: 1, timeoutMs: TIMEOUT_JUDGE_MS, shouldRetry: (e) => /no-json|JSON|parse/i.test(String((e as any)?.message || e)) },
-  );
+    { retry_max: cfg.retry_max, retry_base_ms: cfg.retry_base_ms, retry_max_ms: cfg.retry_max_ms, timeout_ms: cfg.judge_timeout_ms },
+    runId, askIndex, "judge");
+  const total_ms = Date.now() - t0;
   if (!result.value) {
-    return { strategy: 0, claude: 0, gpt: 0, winner: "tie", rationale: result.error ?? "judge failed", attempts: result.attempts, error: result.error };
+    audit(runId, "judge_failure", { level: "error", ask_index: askIndex, system: "judge", message: result.error });
+    return { strategy: 0, claude: 0, gpt: 0, winner: "tie", rationale: result.error ?? "judge failed", attempts: result.attempts, error: result.error,
+      timing_breakdown: { queue_ms: null, request_ms: result.request_ms_last, parse_ms: result.parse_ms_last, judge_ms: total_ms, retry_wait_ms_total: result.retry_wait_ms_total, attempts_detail: result.attempts_detail } };
   }
-  const p = result.value;
+  let p: any = {};
+  try { p = JSON.parse(result.value.text); } catch (e: any) {
+    audit(runId, "judge_failure", { level: "error", ask_index: askIndex, system: "judge", message: `parse fail: ${e?.message}` });
+    return { strategy: 0, claude: 0, gpt: 0, winner: "tie", rationale: "judge JSON parse failed", attempts: result.attempts, error: e?.message };
+  }
+  audit(runId, "judge_success", { ask_index: askIndex, system: "judge", message: `winner=${p.winner}` });
   return {
-    strategy: Number(p.strategy ?? 0),
-    claude: Number(p.claude ?? 0),
-    gpt: Number(p.gpt ?? 0),
-    winner: (p.winner ?? "tie") as JudgeScore["winner"],
-    rationale: String(p.rationale ?? "").slice(0, 600),
+    strategy: Number(p.strategy ?? 0), claude: Number(p.claude ?? 0), gpt: Number(p.gpt ?? 0),
+    winner: (p.winner ?? "tie") as JudgeScore["winner"], rationale: String(p.rationale ?? "").slice(0, 600),
     attempts: result.attempts,
+    timing_breakdown: { queue_ms: null, request_ms: result.request_ms_last, parse_ms: result.parse_ms_last, judge_ms: total_ms, retry_wait_ms_total: result.retry_wait_ms_total, attempts_detail: result.attempts_detail },
   };
 }
 
-// ─── Strategy failure classification ────────────────────────────
-function classifyStrategyFailure(
-  ask: BenchmarkAsk, strategyOut: SystemOutput, heur: HeuristicScore, judge: JudgeScore, accountName: string,
-): StrategyFailureMode {
+function classifyStrategyFailure(ask: BenchmarkAsk, strategyOut: SystemOutput, heur: HeuristicScore, judge: JudgeScore, accountName: string): StrategyFailureMode {
   if (judge.winner === "strategy") return "none";
-  const text = strategyOut.text || "";
-  const lower = text.toLowerCase();
+  const text = strategyOut.text || ""; const lower = text.toLowerCase();
   if (strategyOut.error || !text.trim()) return "orchestration";
   if (text.length < 500) return "shallow";
   if (heur.library_leverage <= 1 && /no (relevant )?(library|resources|knowledge)/i.test(text)) return "retrieval";
@@ -492,163 +548,83 @@ function buildMarkdown(
   account: any,
   results: Array<{ ask: BenchmarkAsk; outputs: SystemOutput[]; heur: Record<string, HeuristicScore>; judge: JudgeScore; failure: StrategyFailureMode }>,
   baselineMode: BaselineMode, judgeMode: JudgeMode,
+  meta: { total_runtime_ms: number; save_outputs: boolean; replayed_from_run_id?: string | null; retry_summary: any },
 ): string {
   const tally = { strategy: 0, claude: 0, gpt: 0, tie: 0 };
   for (const r of results) (tally as any)[r.judge.winner] = ((tally as any)[r.judge.winner] ?? 0) + 1;
   const failureCounts: Record<string, number> = {};
   for (const r of results) if (r.failure !== "none") failureCounts[r.failure] = (failureCounts[r.failure] ?? 0) + 1;
 
-  const dimSums: Record<string, number> = {
-    operator_pov: 0, decision_logic: 0, commercial_sharpness: 0, library_leverage: 0, audience_fit: 0, correctness: 0,
-  };
-  for (const r of results) {
-    const h = r.heur.strategy;
-    if (!h) continue;
-    for (const k of Object.keys(dimSums)) dimSums[k] += (h as any)[k];
+  const providerTimingAgg: Record<string, { total_ms: number; calls: number; retries: number }> = {};
+  for (const r of results) for (const o of r.outputs) {
+    const k = o.system; if (!providerTimingAgg[k]) providerTimingAgg[k] = { total_ms: 0, calls: 0, retries: 0 };
+    providerTimingAgg[k].total_ms += o.latency_ms_total; providerTimingAgg[k].calls++;
+    providerTimingAgg[k].retries += Math.max(0, o.attempts - 1);
   }
-  const weakDims = Object.entries(dimSums).sort((a, b) => a[1] - b[1]).slice(0, 3);
-
-  const fixes: string[] = [];
-  const sortedFailures = Object.entries(failureCounts).sort((a, b) => b[1] - a[1]);
-  for (const [mode, count] of sortedFailures) fixes.push(`**${mode}** failure in ${count}/${results.length} asks → ${fixHint(mode)}`);
-  for (const [dim, sum] of weakDims) fixes.push(`Weak heuristic dimension **${dim}** (cumulative ${sum}/${results.length * 10}) → ${dimFixHint(dim)}`);
 
   const lines: string[] = [];
   lines.push(`# Strategy Benchmark Report`);
   lines.push("");
-  lines.push(`**Account:** ${account.name}  `);
-  lines.push(`**Selection:** ${account._selection_reason ?? "n/a"}  `);
-  if (account._signal) {
-    lines.push(`**Signal density:** contacts=${account._signal.contacts}, opps=${account._signal.opps}, calls=${account._signal.calls}, memory=${account._signal.mems}, notesChars=${account._signal.notesLen}, **score=${account._signal.score}**`);
-  }
-  lines.push(`**Baseline mode:** ${baselineMode}  `);
-  lines.push(`**Judge mode:** ${judgeMode}  `);
-  lines.push(`**Run timestamp:** ${new Date().toISOString()}`);
-  lines.push("");
-  lines.push("---");
+  lines.push(`## Execution Summary`);
+  lines.push(`- **Total runtime:** ${(meta.total_runtime_ms / 1000).toFixed(1)}s`);
+  lines.push(`- **Account:** ${account.name} — _${account._selection_reason ?? "n/a"}_`);
+  if (account._signal) lines.push(`- **Signal density:** contacts=${account._signal.contacts}, opps=${account._signal.opps}, calls=${account._signal.calls}, memory=${account._signal.mems}, score=${account._signal.score}`);
+  lines.push(`- **Config:** baseline=\`${baselineMode}\`, judge=\`${judgeMode}\`, asks=${results.length}`);
+  lines.push(`- **Wins:** strategy=${tally.strategy}, claude=${tally.claude}, gpt=${tally.gpt}, tie=${tally.tie}`);
+  lines.push(`- **Failure modes:** ${Object.keys(failureCounts).length ? Object.entries(failureCounts).map(([k, v]) => `${k}=${v}`).join(", ") : "(none)"}`);
+  lines.push(`- **Provider timing:** ${Object.entries(providerTimingAgg).map(([k, v]) => `${k}=${(v.total_ms / Math.max(1, v.calls) / 1000).toFixed(1)}s avg, ${v.retries} retries`).join(" • ")}`);
+  lines.push(`- **Retry summary:** ${meta.retry_summary.total_retries} total retries, ${meta.retry_summary.total_wait_ms}ms total wait`);
+  lines.push(`- **Raw outputs stored:** ${meta.save_outputs ? "yes" : "no"}`);
+  if (meta.replayed_from_run_id) lines.push(`- **Replayed from:** \`${meta.replayed_from_run_id}\``);
+  lines.push(""); lines.push("---");
 
   for (const r of results) {
     lines.push(`## Ask ${r.ask.index}: ${r.ask.prompt}`);
     lines.push(`*Category:* ${r.ask.category}`);
     lines.push("");
-    for (const sys of ["strategy", "claude", "gpt"] as const) {
-      const o = r.outputs.find((x) => x.system === sys)!;
-      lines.push(`### ${sys.toUpperCase()}  _(latency ${o.latencyMs}ms, attempts ${o.attempts}${o.error ? `, ERROR: ${o.error}` : ""})_`);
-      const t = (o.text || "_(empty)_").trim();
-      lines.push(t.length > 4000 ? t.slice(0, 4000) + "\n…[truncated]" : t);
-      lines.push("");
-    }
-    lines.push(`### Scores`);
-    lines.push("| System | Op POV | Decision | Commercial | Library | Audience | Correct | Total | Judge |");
+    lines.push("| System | Latency | Attempts | Retry Wait | HTTP | Length | Heur Total | Judge | Winner |");
     lines.push("|---|---|---|---|---|---|---|---|---|");
     for (const sys of ["strategy", "claude", "gpt"] as const) {
-      const h = r.heur[sys];
-      const judgeScore = (r.judge as any)[sys];
-      lines.push(`| ${sys} | ${h.operator_pov} | ${h.decision_logic} | ${h.commercial_sharpness} | ${h.library_leverage} | ${h.audience_fit} | ${h.correctness} | **${h.total}** | ${judgeScore} |`);
+      const o = r.outputs.find((x) => x.system === sys)!; const h = r.heur[sys]; const j = (r.judge as any)[sys];
+      const winner = r.judge.winner === sys ? "🏆" : "";
+      lines.push(`| ${sys} | ${o.latency_ms_total}ms | ${o.attempts} | ${o.timing_breakdown.retry_wait_ms_total}ms | ${o.http_status ?? "—"} | ${o.response_length} | ${h.total} | ${j} | ${winner} |`);
     }
     lines.push("");
-    lines.push(`**Judge winner:** ${r.judge.winner.toUpperCase()}`);
-    lines.push(`**Judge rationale:** ${r.judge.rationale}`);
+    lines.push(`**Judge:** ${r.judge.winner.toUpperCase()} — ${r.judge.rationale}`);
     if (r.failure !== "none") lines.push(`**Strategy failure mode:** \`${r.failure}\``);
-    lines.push("");
-    lines.push("---");
+    lines.push(""); lines.push("---");
   }
-
-  lines.push(`## SUMMARY`);
-  lines.push(`- Strategy wins: **${tally.strategy} / ${results.length}**`);
-  lines.push(`- Claude wins:   **${tally.claude} / ${results.length}**`);
-  lines.push(`- GPT wins:      **${tally.gpt} / ${results.length}**`);
-  lines.push(`- Ties:          **${tally.tie} / ${results.length}**`);
-  lines.push("");
-  if (Object.keys(failureCounts).length) {
-    lines.push(`### Strategy failure modes`);
-    for (const [mode, n] of sortedFailures) lines.push(`- \`${mode}\`: ${n}`);
-    lines.push("");
-  }
-  lines.push(`## RANKED FIX LIST`);
-  if (!fixes.length) lines.push("_(none — Strategy won every ask)_");
-  fixes.slice(0, 5).forEach((f, i) => lines.push(`${i + 1}. ${f}`));
-
   return lines.join("\n");
 }
-function fixHint(mode: string): string {
-  switch (mode) {
-    case "retrieval": return "Retrieval is missing relevant KIs/playbooks/resources for the user's prompt. Audit `libraryRetrieval.ts` scope inference and scoring; verify embeddings/keyword matches actually fire on these prompts.";
-    case "reasoning": return "Outputs are structurally weak. Reasoning prompt likely under-constrains operator POV and decision logic — tighten the synthesis system prompt to demand 'first move / why / risk' framing.";
-    case "routing": return "Wrong provider/path selected for the intent. Audit `resolveLLMRoute` against these prompts.";
-    case "orchestration": return "Pipeline crashed or returned empty. Inspect strategy-chat logs for this turn — likely fallback or audit gate kill.";
-    case "shallow": return "Output is on-topic but generic vs raw models. Strategy is failing to leverage internal context — verify library context is actually injected into the prompt, not just retrieved.";
-    case "wrong_question": return "Strategy answered something other than what was asked. Audit intent classifier and prompt assembly.";
-    default: return "Investigate.";
-  }
-}
-function dimFixHint(dim: string): string {
-  const map: Record<string, string> = {
-    operator_pov: "Force outputs to lead with concrete first-person operator moves ('this week, I would…').",
-    decision_logic: "Require explicit if/then reasoning + risk callouts in the synthesis contract.",
-    commercial_sharpness: "Inject ARR/ACV/pipeline/MEDDIC vocabulary requirements into the system prompt.",
-    library_leverage: "Surface RESOURCE[]/KI[]/PLAYBOOK[] citations as a hard contract in the appendix.",
-    audience_fit: "Strengthen audience-rewrite branch — detect persona keywords and rewrite tone/metrics accordingly.",
-    correctness: "Check for empty/hedging outputs; raise minimum body length and tighten gating.",
-  };
-  return map[dim] ?? "Investigate.";
-}
 
-// ─── Auth helper: mint user JWT (stress-runner pattern) ─────────
+// ─── Auth + thread + context helpers ────────────────────────────
 async function mintUserJwt(admin: any, asUserId: string): Promise<string> {
   const { data: targetUser, error: e1 } = await admin.auth.admin.getUserById(asUserId);
   if (e1 || !targetUser?.user) throw new Error(`as_user_id not found: ${e1?.message}`);
-  const { data: linkData, error: e2 } = await admin.auth.admin.generateLink({
-    type: "magiclink", email: targetUser.user.email!,
-  });
+  const { data: linkData, error: e2 } = await admin.auth.admin.generateLink({ type: "magiclink", email: targetUser.user.email! });
   if (e2 || !linkData?.properties?.hashed_token) throw new Error(`generateLink failed: ${e2?.message}`);
-  const { data: verifyData, error: e3 } = await admin.auth.verifyOtp({
-    type: "magiclink", token_hash: linkData.properties.hashed_token,
-  });
+  const { data: verifyData, error: e3 } = await admin.auth.verifyOtp({ type: "magiclink", token_hash: linkData.properties.hashed_token });
   if (e3 || !verifyData?.session?.access_token) throw new Error(`verifyOtp failed: ${e3?.message}`);
   return verifyData.session.access_token;
 }
-
 async function getRecentMessage(admin: any, userId: string, accountId: string): Promise<string> {
-  const { data: threads } = await admin
-    .from("strategy_threads")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("linked_account_id", accountId)
-    .limit(5);
+  const { data: threads } = await admin.from("strategy_threads").select("id").eq("user_id", userId).eq("linked_account_id", accountId).limit(5);
   const ids = (threads ?? []).map((t: any) => t.id);
   if (ids.length) {
-    const { data: msgs } = await admin
-      .from("strategy_messages")
-      .select("content_json, role, created_at")
-      .in("thread_id", ids)
-      .eq("role", "user")
-      .order("created_at", { ascending: false })
-      .limit(1);
+    const { data: msgs } = await admin.from("strategy_messages").select("content_json, role, created_at").in("thread_id", ids).eq("role", "user").order("created_at", { ascending: false }).limit(1);
     const txt = msgs?.[0]?.content_json?.text;
     if (txt && typeof txt === "string" && txt.length > 40) return txt.slice(0, 800);
   }
-  return "Hey team — wanted to share a quick update on where we are: the pilot is going well, we've seen a 12% lift in conversion on the test cohort, and the buying committee is asking about expansion timeline. I think we have a real shot at locking in Q4. Let me know your thoughts on next steps.";
+  return "Hey team — pilot is going well, 12% lift in conversion on the test cohort, buying committee asking about expansion timeline. I think we have a real shot at locking in Q4. Thoughts on next steps?";
 }
-
 async function createScratchThread(admin: any, userId: string, accountId: string): Promise<string> {
-  const { data, error } = await admin
-    .from("strategy_threads")
-    .insert({
-      user_id: userId,
-      title: `[benchmark] ${new Date().toISOString().slice(0, 19)}`,
-      thread_type: "general",
-      lane: "general",
-      linked_account_id: accountId,
-      status: "active",
-    })
-    .select("id")
-    .single();
+  const { data, error } = await admin.from("strategy_threads").insert({
+    user_id: userId, title: `[benchmark] ${new Date().toISOString().slice(0, 19)}`,
+    thread_type: "general", lane: "general", linked_account_id: accountId, status: "active",
+  }).select("id").single();
   if (error) throw new Error(`create thread failed: ${error.message}`);
   return data.id;
 }
-
-// Build "same context" baseline: fetch a small slice of account context to feed raw models.
 async function buildSameContextBlock(admin: any, userId: string, accountId: string, accountName: string): Promise<string> {
   const [contactsR, oppsR, callsR, memR] = await Promise.all([
     admin.from("contacts").select("name, title, email").eq("user_id", userId).eq("account_id", accountId).limit(8),
@@ -666,65 +642,40 @@ async function buildSameContextBlock(admin: any, userId: string, accountId: stri
 
 // ─── Async background execution ─────────────────────────────────
 async function runBenchmarkInBackground(
-  admin: any,
-  runId: string,
-  asUserId: string,
-  body: any,
-  baselineMode: BaselineMode,
-  judgeMode: JudgeMode,
-  saveOutputs: boolean,
-  customAsks: string[] | undefined,
+  admin: any, runId: string, asUserId: string, body: any,
+  baselineMode: BaselineMode, judgeMode: JudgeMode, saveOutputs: boolean,
+  customAsks: string[] | undefined, retryCfg: RetryConfig,
+  replayedFromRunId: string | null,
 ) {
+  const startedAt = Date.now();
   const updateRow = async (patch: Record<string, any>) => {
     try {
-      const { error } = await admin
-        .from("strategy_benchmark_runs")
-        .update({ ...patch, updated_at: new Date().toISOString() })
-        .eq("id", runId);
+      const { error } = await admin.from("strategy_benchmark_runs")
+        .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", runId);
       if (error) console.error("[benchmark] update err:", error.message);
-    } catch (e: any) {
-      console.error("[benchmark] update exception:", e?.message || e);
-    }
+    } catch (e: any) { console.error("[benchmark] update exception:", e?.message || e); }
   };
 
   try {
+    audit(runId, "kickoff", { message: `run started for user ${asUserId}` });
     await updateRow({ current_step: "selecting_account" });
     const account = await selectBestAccount(admin, asUserId, body?.account_id);
+    audit(runId, "account_selection", { message: `selected ${account.name}`, details: { account_id: account.id, signal: account._signal, reason: account._selection_reason } });
+
     const recentMsg = await getRecentMessage(admin, asUserId, account.id);
     const asks: BenchmarkAsk[] = customAsks?.length
       ? customAsks.map((p, i) => ({ index: i + 1, prompt: p, category: categorizeCustomAsk(p) }))
       : buildDefaultAsks(account.name, recentMsg);
 
     await updateRow({
-      current_step: "minting_jwt",
-      account_id: account.id,
-      account_name: account.name,
-      ask_count: asks.length,
-      payload: {
-        account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
-        save_outputs: saveOutputs,
-        checkpoints: [],
-        results: [],
-      },
+      current_step: "minting_jwt", account_id: account.id, account_name: account.name, ask_count: asks.length,
+      payload: { account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason }, save_outputs: saveOutputs, checkpoints: [], results: [] },
     });
-
     const userJwt = await mintUserJwt(admin, asUserId);
     const threadId = await createScratchThread(admin, asUserId, account.id);
+    audit(runId, "thread_created", { message: `thread ${threadId}`, details: { thread_id: threadId } });
 
-    const sameContextBlock = baselineMode === "raw_only"
-      ? null
-      : await buildSameContextBlock(admin, asUserId, account.id, account.name);
-
-    await updateRow({
-      current_step: `ready:thread_${threadId.slice(0, 8)}`,
-      payload: {
-        account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
-        thread_id: threadId,
-        save_outputs: saveOutputs,
-        checkpoints: [],
-        results: [],
-      },
-    });
+    const sameContextBlock = baselineMode === "raw_only" ? null : await buildSameContextBlock(admin, asUserId, account.id, account.name);
 
     const results: Array<{ ask: BenchmarkAsk; outputs: SystemOutput[]; heur: Record<string, HeuristicScore>; judge: JudgeScore; failure: StrategyFailureMode }> = [];
     const checkpoints: any[] = [];
@@ -732,120 +683,97 @@ async function runBenchmarkInBackground(
 
     for (const ask of asks) {
       const stepLabel = `ask_${ask.index}_of_${asks.length}`;
-      console.log(`[benchmark] ${stepLabel}: ${ask.prompt.slice(0, 80)}`);
+      audit(runId, "ask_start", { ask_index: ask.index, message: ask.prompt.slice(0, 120) });
       await updateRow({ current_step: `${stepLabel}:providers` });
+      const rawContext = (baselineMode === "same_context" || baselineMode === "both") && sameContextBlock ? sameContextBlock : undefined;
 
-      const rawContext = (baselineMode === "same_context" || baselineMode === "both") && sameContextBlock
-        ? sameContextBlock
-        : undefined;
-
-      // PARALLEL provider calls — Promise.allSettled so one failure does not kill the ask
       const settled = await Promise.allSettled([
-        callStrategy(userJwt, threadId, ask.prompt),
-        callClaudeRaw(ask.prompt, account.name, rawContext),
-        callGptRaw(ask.prompt, account.name, rawContext),
+        runStrategy(runId, ask.index, userJwt, threadId, ask.prompt, retryCfg),
+        runClaude(runId, ask.index, ask.prompt, account.name, rawContext, retryCfg),
+        runGpt(runId, ask.index, ask.prompt, account.name, rawContext, retryCfg),
       ]);
       const emptyOut = (sys: SystemOutput["system"], err: string): SystemOutput =>
-        ({ system: sys, text: "", latencyMs: 0, attempts: 0, error: err });
+        ({ system: sys, text: "", latency_ms_total: 0, attempts: 0, error: err, response_length: 0,
+           timing_breakdown: { queue_ms: null, request_ms: 0, parse_ms: 0, retry_wait_ms_total: 0, attempts_detail: [] } });
       const strategyOut = settled[0].status === "fulfilled" ? settled[0].value : emptyOut("strategy", String((settled[0] as any).reason?.message ?? (settled[0] as any).reason));
-      const claudeOut   = settled[1].status === "fulfilled" ? settled[1].value : emptyOut("claude",   String((settled[1] as any).reason?.message ?? (settled[1] as any).reason));
-      const gptOut      = settled[2].status === "fulfilled" ? settled[2].value : emptyOut("gpt",      String((settled[2] as any).reason?.message ?? (settled[2] as any).reason));
+      const claudeOut = settled[1].status === "fulfilled" ? settled[1].value : emptyOut("claude", String((settled[1] as any).reason?.message ?? (settled[1] as any).reason));
+      const gptOut = settled[2].status === "fulfilled" ? settled[2].value : emptyOut("gpt", String((settled[2] as any).reason?.message ?? (settled[2] as any).reason));
       const outputs = [strategyOut, claudeOut, gptOut];
 
       const heur = (judgeMode === "llm_only")
         ? { strategy: emptyHeur(), claude: emptyHeur(), gpt: emptyHeur() }
-        : {
-            strategy: scoreHeuristic(strategyOut.text, ask, account.name),
-            claude: scoreHeuristic(claudeOut.text, ask, account.name),
-            gpt: scoreHeuristic(gptOut.text, ask, account.name),
-          };
+        : { strategy: scoreHeuristic(strategyOut.text, ask, account.name), claude: scoreHeuristic(claudeOut.text, ask, account.name), gpt: scoreHeuristic(gptOut.text, ask, account.name) };
 
       await updateRow({ current_step: `${stepLabel}:judge` });
       const judge = (judgeMode === "heuristics_only")
         ? heuristicWinnerAsJudge(heur)
-        : await judgeWithClaude(ask, outputs, account.name);
+        : await judgeWithClaude(runId, ask.index, ask, outputs, account.name, retryCfg);
 
       const failure = classifyStrategyFailure(ask, strategyOut, heur.strategy, judge, account.name);
       results.push({ ask, outputs, heur, judge, failure });
 
-      const outputsMeta = outputs.map((o) => ({
-        system: o.system, latencyMs: o.latencyMs, attempts: o.attempts, error: o.error,
-        httpStatus: o.meta?.http, length: (o.text ?? "").length,
+      const outputs_meta = outputs.map((o) => ({
+        system: o.system, latency_ms_total: o.latency_ms_total, attempts: o.attempts, error: o.error,
+        http_status: o.http_status, response_length: o.response_length, provider: o.provider, model: o.model,
+        timing_breakdown: o.timing_breakdown,
       }));
       checkpoints.push({
-        ask_index: ask.index,
-        prompt: ask.prompt,
-        category: ask.category,
+        ask_index: ask.index, prompt: ask.prompt, category: ask.category,
         completed_at: new Date().toISOString(),
-        outputs_meta: outputsMeta,
-        heuristics: heur,
-        judge,
-        failure_mode: failure,
+        outputs_meta, heuristics: heur, judge, failure_mode: failure,
       });
       persistedResults.push({
         ask,
         outputs: saveOutputs
           ? outputs
-          : outputs.map((o) => ({
-              system: o.system, latencyMs: o.latencyMs, attempts: o.attempts,
-              error: o.error, httpStatus: o.meta?.http, length: (o.text ?? "").length,
-            })),
+          : outputs.map((o) => ({ system: o.system, latency_ms_total: o.latency_ms_total, attempts: o.attempts, error: o.error, http_status: o.http_status, response_length: o.response_length, provider: o.provider, model: o.model, timing_breakdown: o.timing_breakdown })),
         heur, judge, failure,
       });
 
-      // Recompute summary + failures so far
-      const summarySoFar = results.reduce((acc: any, r) => { acc[r.judge.winner] = (acc[r.judge.winner] ?? 0) + 1; return acc; },
-        { strategy: 0, claude: 0, gpt: 0, tie: 0 });
+      const summarySoFar = results.reduce((acc: any, r) => { acc[r.judge.winner] = (acc[r.judge.winner] ?? 0) + 1; return acc; }, { strategy: 0, claude: 0, gpt: 0, tie: 0 });
       const failuresSoFar: Record<string, number> = {};
       for (const r of results) if (r.failure !== "none") failuresSoFar[r.failure] = (failuresSoFar[r.failure] ?? 0) + 1;
 
       await updateRow({
-        completed_asks: results.length,
-        current_step: `${stepLabel}:done`,
-        summary: summarySoFar,
-        failures: failuresSoFar,
-        payload: {
-          account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
-          thread_id: threadId,
-          save_outputs: saveOutputs,
-          checkpoints,
-          results: persistedResults,
-        },
+        completed_asks: results.length, current_step: `${stepLabel}:done`,
+        summary: summarySoFar, failures: failuresSoFar,
+        payload: { account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason }, thread_id: threadId, save_outputs: saveOutputs, checkpoints, results: persistedResults },
       });
+      audit(runId, "checkpoint_persisted", { ask_index: ask.index, message: `cp ${results.length}/${asks.length}` });
     }
 
-    const markdown = buildMarkdown(account, results, baselineMode, judgeMode);
-    const summary = results.reduce((acc: any, r) => { acc[r.judge.winner] = (acc[r.judge.winner] ?? 0) + 1; return acc; },
-      { strategy: 0, claude: 0, gpt: 0, tie: 0 });
+    // Aggregate retry summary
+    let total_retries = 0, total_wait_ms = 0;
+    for (const r of results) for (const o of r.outputs) {
+      total_retries += Math.max(0, o.attempts - 1);
+      total_wait_ms += o.timing_breakdown.retry_wait_ms_total;
+    }
+    const retry_summary = { total_retries, total_wait_ms };
+
+    let markdown = "";
+    try {
+      markdown = buildMarkdown(account, results, baselineMode, judgeMode, {
+        total_runtime_ms: Date.now() - startedAt, save_outputs: saveOutputs,
+        replayed_from_run_id: replayedFromRunId, retry_summary,
+      });
+    } catch (e: any) { console.error("[benchmark] markdown build failed:", e?.message); markdown = `# Benchmark Report\nMarkdown generation failed: ${e?.message}`; }
+
+    const summary = results.reduce((acc: any, r) => { acc[r.judge.winner] = (acc[r.judge.winner] ?? 0) + 1; return acc; }, { strategy: 0, claude: 0, gpt: 0, tie: 0 });
     const failureCounts: Record<string, number> = {};
     for (const r of results) if (r.failure !== "none") failureCounts[r.failure] = (failureCounts[r.failure] ?? 0) + 1;
 
     await updateRow({
-      status: "completed",
-      current_step: "completed",
-      completed_asks: results.length,
-      summary,
-      failures: failureCounts,
-      markdown,
+      status: "completed", current_step: "completed", completed_asks: results.length,
+      summary: { ...summary, retry_summary }, failures: failureCounts, markdown,
       completed_at: new Date().toISOString(),
-      payload: {
-        account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
-        thread_id: threadId,
-        save_outputs: saveOutputs,
-        checkpoints,
-        results: persistedResults,
-      },
+      payload: { account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason }, thread_id: threadId, save_outputs: saveOutputs, checkpoints, results: persistedResults, retry_summary },
     });
-    console.log(`[benchmark] run ${runId} completed`);
+    audit(runId, "run_completed", { message: `${results.length} asks done in ${(Date.now() - startedAt) / 1000}s` });
   } catch (e: any) {
     const msg = e?.message || String(e);
     console.error(`[benchmark] run ${runId} fatal:`, msg, e?.stack);
-    await updateRow({
-      status: "failed",
-      current_step: "failed",
-      error: msg,
-      completed_at: new Date().toISOString(),
-    });
+    audit(runId, "run_failed", { level: "error", message: msg });
+    await updateRow({ status: "failed", current_step: "failed", error: msg, completed_at: new Date().toISOString() });
   }
 }
 
@@ -854,17 +782,15 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   if (!VALIDATION_KEY) {
-    return new Response(JSON.stringify({ error: "STRATEGY_VALIDATION_KEY not configured" }), {
-      status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ error: "STRATEGY_VALIDATION_KEY not configured" }),
+      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
   const provided = req.headers.get("x-strategy-validation-key") ?? "";
   const auth = req.headers.get("authorization") ?? "";
   const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7) : "";
   if (provided !== VALIDATION_KEY && bearer !== SERVICE_ROLE_KEY) {
-    return new Response(JSON.stringify({ error: "invalid validation key" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ error: "invalid validation key" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   let body: any;
@@ -873,167 +799,165 @@ serve(async (req) => {
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  _admin = admin; // for audit logger
   const action: string = body?.action ?? "run";
 
-  // ── STATUS endpoint ──
+  // ── STATUS ──
   if (action === "status") {
     const runId = body?.run_id;
-    if (!runId) {
-      return new Response(JSON.stringify({ error: "run_id required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const { data, error } = await admin
-      .from("strategy_benchmark_runs")
-      .select("*")
-      .eq("id", runId)
-      .maybeSingle();
-    if (error || !data) {
-      return new Response(JSON.stringify({ error: error?.message || "run not found" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!runId) return jsonErr(400, "run_id required");
+    const { data, error } = await admin.from("strategy_benchmark_runs").select("*").eq("id", runId).maybeSingle();
+    if (error || !data) return jsonErr(404, error?.message || "run not found");
     const checkpoints = (data.payload as any)?.checkpoints ?? [];
-    return new Response(JSON.stringify({
-      ok: true,
-      run_id: data.id,
-      status: data.status,
-      current_step: data.current_step,
-      completed_asks: data.completed_asks,
-      total_asks: data.ask_count,
-      summary: data.summary,
-      failures: data.failures,
-      error: data.error,
-      updated_at: data.updated_at,
-      created_at: data.created_at,
-      completed_at: data.completed_at,
+    const includeAuditLogs = body?.include_audit_logs === true;
+    const { count: auditCount } = await admin.from("strategy_benchmark_audit_logs")
+      .select("id", { count: "exact", head: true }).eq("run_id", runId);
+    let audit_logs: any[] | undefined;
+    if (includeAuditLogs) {
+      const { data: logs } = await admin.from("strategy_benchmark_audit_logs")
+        .select("*").eq("run_id", runId).order("created_at", { ascending: true }).limit(500);
+      audit_logs = logs ?? [];
+    }
+    return json(200, {
+      ok: true, run_id: data.id, status: data.status, current_step: data.current_step,
+      completed_asks: data.completed_asks, total_asks: data.ask_count,
+      summary: data.summary, failures: data.failures, error: data.error,
+      updated_at: data.updated_at, created_at: data.created_at, completed_at: data.completed_at,
       account: { id: data.account_id, name: data.account_name },
-      checkpoints_count: checkpoints.length,
-      checkpoints,
-      ...(data.status === "completed"
-        ? { markdown: data.markdown, results: (data.payload as any)?.results ?? [] }
-        : {}),
-    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      checkpoints_count: checkpoints.length, checkpoints,
+      audit_log_count: auditCount ?? 0,
+      ...(audit_logs ? { audit_logs } : {}),
+      ...(data.replayed_from_run_id ? { replayed_from_run_id: data.replayed_from_run_id, replay_reason: data.replay_reason } : {}),
+      ...(data.status === "completed" ? { markdown: data.markdown, results: (data.payload as any)?.results ?? [] } : {}),
+    });
   }
 
-  // ── KICKOFF ──
-  const asUserId: string | undefined = body?.as_user_id;
-  if (!asUserId) {
-    return new Response(JSON.stringify({ error: "as_user_id required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  // ── LIST ──
+  if (action === "list") {
+    const limit = Math.min(Math.max(parseInt(body?.limit ?? 25, 10), 1), 100);
+    const offset = Math.max(parseInt(body?.offset ?? 0, 10), 0);
+    const includeMd = body?.include_markdown === true;
+    const includePayload = body?.include_payload === true;
+
+    const cols = ["id", "user_id", "account_id", "account_name", "status", "baseline_mode", "judge_mode",
+      "ask_count", "completed_asks", "summary", "failures", "current_step", "error",
+      "created_at", "updated_at", "completed_at", "replayed_from_run_id", "replay_reason"];
+    if (includeMd) cols.push("markdown");
+    if (includePayload) cols.push("payload", "config_snapshot");
+
+    let q = admin.from("strategy_benchmark_runs").select(cols.join(","), { count: "exact" });
+    if (body?.user_id) q = q.eq("user_id", body.user_id);
+    if (body?.account_id) q = q.eq("account_id", body.account_id);
+    if (body?.status) q = q.eq("status", body.status);
+    if (body?.baseline_mode) q = q.eq("baseline_mode", body.baseline_mode);
+    if (body?.judge_mode) q = q.eq("judge_mode", body.judge_mode);
+    if (body?.created_after) q = q.gte("created_at", body.created_after);
+    if (body?.created_before) q = q.lte("created_at", body.created_before);
+
+    const { data, error, count } = await q.order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+    if (error) return jsonErr(500, error.message);
+    return json(200, { ok: true, runs: data ?? [], total: count ?? 0, limit, offset });
   }
+
+  // ── REPLAY ──
+  if (action === "replay") {
+    const sourceId = body?.run_id;
+    if (!sourceId) return jsonErr(400, "run_id required for replay");
+    const { data: src, error: srcErr } = await admin.from("strategy_benchmark_runs").select("*").eq("id", sourceId).maybeSingle();
+    if (srcErr || !src) return jsonErr(404, srcErr?.message || "source run not found");
+
+    const origReq = (src.payload as any)?.request_body ?? {};
+    const replayBody = {
+      as_user_id: src.user_id,
+      account_id: body?.account_id ?? origReq.account_id ?? src.account_id,
+      asks: body?.asks ?? origReq.asks ?? null,
+      baseline_mode: body?.baseline_mode ?? src.baseline_mode,
+      judge_mode: body?.judge_mode ?? src.judge_mode,
+      save_outputs: body?.save_outputs ?? origReq.save_outputs ?? true,
+    };
+    return await kickoff(admin, replayBody, { replayed_from_run_id: sourceId, replay_reason: body?.replay_reason ?? null });
+  }
+
+  // ── KICKOFF (default) ──
+  return await kickoff(admin, body, { replayed_from_run_id: null, replay_reason: null });
+});
+
+async function kickoff(
+  admin: any, body: any,
+  meta: { replayed_from_run_id: string | null; replay_reason: string | null },
+): Promise<Response> {
+  const asUserId: string | undefined = body?.as_user_id;
+  if (!asUserId) return jsonErr(400, "as_user_id required");
+
   const baselineMode: BaselineMode = (body?.baseline_mode ?? "both") as BaselineMode;
   const judgeMode: JudgeMode = (body?.judge_mode ?? "both") as JudgeMode;
   const saveOutputs: boolean = body?.save_outputs !== false;
   const customAsks: string[] | undefined = Array.isArray(body?.asks) ? body.asks : undefined;
 
-  // Pre-select account so kickoff response carries the picked account + signal.
+  const retryCfg: RetryConfig = {
+    retry_max: Math.max(1, Math.min(parseInt(body?.retry_max ?? DEF_RETRY_MAX, 10), 6)),
+    retry_base_ms: Math.max(100, parseInt(body?.retry_base_ms ?? DEF_RETRY_BASE_MS, 10)),
+    retry_max_ms: Math.max(500, parseInt(body?.retry_max_ms ?? DEF_RETRY_MAX_MS, 10)),
+    provider_timeout_ms: DEF_PROVIDER_TIMEOUT_MS,
+    judge_timeout_ms: DEF_JUDGE_TIMEOUT_MS,
+  };
+
   let account: any;
-  try {
-    account = await selectBestAccount(admin, asUserId, body?.account_id);
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: `account selection failed: ${e?.message || String(e)}` }), {
-      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  try { account = await selectBestAccount(admin, asUserId, body?.account_id); }
+  catch (e: any) { return jsonErr(400, `account selection failed: ${e?.message || String(e)}`); }
 
   const askCount = customAsks?.length || 6;
 
-  // Insert run row UP FRONT (status=running) so caller can poll immediately.
-  const { data: inserted, error: insErr } = await admin
-    .from("strategy_benchmark_runs")
-    .insert({
-      user_id: asUserId,
-      account_id: account.id,
-      account_name: account.name,
-      baseline_mode: baselineMode,
-      judge_mode: judgeMode,
-      ask_count: askCount,
-      status: "running",
-      current_step: "queued",
-      completed_asks: 0,
-      summary: {},
-      failures: {},
-      payload: {
-        account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
-        save_outputs: saveOutputs,
-        checkpoints: [],
-        results: [],
-        request_body: {
-          as_user_id: asUserId,
-          account_id: body?.account_id ?? null,
-          asks: customAsks ?? null,
-          baseline_mode: baselineMode,
-          judge_mode: judgeMode,
-          save_outputs: saveOutputs,
-        },
-      },
-      markdown: "",
-    })
-    .select("id")
-    .single();
-
-  if (insErr || !inserted) {
-    return new Response(JSON.stringify({
-      error: "persist_failed_at_kickoff",
-      persist_error: insErr?.message || "unknown",
-    }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
+  const { data: inserted, error: insErr } = await admin.from("strategy_benchmark_runs").insert({
+    user_id: asUserId, account_id: account.id, account_name: account.name,
+    baseline_mode: baselineMode, judge_mode: judgeMode, ask_count: askCount,
+    status: "running", current_step: "queued", completed_asks: 0,
+    summary: {}, failures: {},
+    replayed_from_run_id: meta.replayed_from_run_id, replay_reason: meta.replay_reason,
+    config_snapshot: {
+      retry: retryCfg, baseline_mode: baselineMode, judge_mode: judgeMode,
+      save_outputs: saveOutputs, asks: customAsks ?? null, account_id_override: body?.account_id ?? null,
+    },
+    payload: {
+      account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
+      save_outputs: saveOutputs, checkpoints: [], results: [],
+      request_body: { as_user_id: asUserId, account_id: body?.account_id ?? null, asks: customAsks ?? null,
+        baseline_mode: baselineMode, judge_mode: judgeMode, save_outputs: saveOutputs },
+    },
+    markdown: "",
+  }).select("id").single();
+  if (insErr || !inserted) return jsonErr(500, `persist_failed_at_kickoff: ${insErr?.message ?? "unknown"}`);
 
   const runId = inserted.id;
+  if (meta.replayed_from_run_id) {
+    audit(runId, "replay_started", { message: `replayed from ${meta.replayed_from_run_id}`, details: { source_run_id: meta.replayed_from_run_id, reason: meta.replay_reason } });
+  }
 
-  // Detach the actual benchmark work — survive client disconnect.
-  const work = runBenchmarkInBackground(admin, runId, asUserId, body, baselineMode, judgeMode, saveOutputs, customAsks);
-  // @ts-ignore EdgeRuntime is provided by Supabase edge runtime
+  const work = runBenchmarkInBackground(admin, runId, asUserId, body, baselineMode, judgeMode, saveOutputs, customAsks, retryCfg, meta.replayed_from_run_id);
+  // @ts-ignore
   if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
     // @ts-ignore
     EdgeRuntime.waitUntil(work);
-  } else {
-    // local fallback (won't be used in production)
-    work.catch((e) => console.error("[benchmark] background error:", e));
-  }
+  } else { work.catch((e) => console.error("[benchmark] background error:", e)); }
 
-  return new Response(JSON.stringify({
-    ok: true,
-    run_id: runId,
-    status: "running",
-    account: {
-      id: account.id, name: account.name,
-      signal: account._signal,
-      selection_reason: account._selection_reason,
-      selected_account_signal: account._signal,
-      selected_account_reason: account._selection_reason,
-    },
-    selection_reason: account._selection_reason,
-    signal: account._signal,
-    config: { baseline_mode: baselineMode, judge_mode: judgeMode, save_outputs: saveOutputs, ask_count: askCount },
-    request_body_used: {
-      as_user_id: asUserId,
-      account_id: body?.account_id ?? null,
-      asks: customAsks ?? null,
-      baseline_mode: baselineMode,
-      judge_mode: judgeMode,
-      save_outputs: saveOutputs,
-    },
+  return json(202, {
+    ok: true, run_id: runId, status: "running",
+    account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
+    selection_reason: account._selection_reason, signal: account._signal,
+    config: { baseline_mode: baselineMode, judge_mode: judgeMode, save_outputs: saveOutputs, ask_count: askCount, retry: retryCfg },
+    ...(meta.replayed_from_run_id ? { replayed_from_run_id: meta.replayed_from_run_id, replay_reason: meta.replay_reason } : {}),
     poll_instructions: {
-      method: "POST",
-      path: "/functions/v1/strategy-benchmark-runner",
+      method: "POST", path: "/functions/v1/strategy-benchmark-runner",
       headers: { "x-strategy-validation-key": "<key>", "Content-Type": "application/json" },
-      body: { action: "status", run_id: runId },
-      poll_every_ms: 5000,
+      body: { action: "status", run_id: runId }, poll_every_ms: 5000,
       terminal_states: ["completed", "failed"],
     },
-  }), { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-});
-
-function emptyHeur(): HeuristicScore {
-  return { operator_pov: 0, decision_logic: 0, commercial_sharpness: 0, library_leverage: 0, audience_fit: 0, correctness: 0, total: 0 };
+  });
 }
-function heuristicWinnerAsJudge(heur: Record<string, HeuristicScore>): JudgeScore {
-  const s = heur.strategy.total, c = heur.claude.total, g = heur.gpt.total;
-  let winner: JudgeScore["winner"] = "tie";
-  const max = Math.max(s, c, g);
-  if (max === s && s > c && s > g) winner = "strategy";
-  else if (max === c && c > s && c > g) winner = "claude";
-  else if (max === g && g > s && g > c) winner = "gpt";
-  return { strategy: s, claude: c, gpt: g, winner, rationale: "heuristics_only mode — no LLM judge", attempts: 0 };
+
+function json(status: number, body: any): Response {
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+function jsonErr(status: number, message: string): Response {
+  return new Response(JSON.stringify({ error: message }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
