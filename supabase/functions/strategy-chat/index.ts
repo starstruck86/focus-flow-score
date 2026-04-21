@@ -5590,6 +5590,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 fallback_used: false,
                 routing_reason: route._routingReason,
                 retrieval_debug: retrievalDebug ?? null,
+                hybrid_guard_checked: hybridGuard.checked,
+                hybrid_guard_passed: hybridGuard.passed,
+                hybrid_guard_failure_reasons: hybridGuard.failure_reasons,
                 short_form_diagnostics: mode === "short_form" ? {
                   kind: shortFormKind ?? null,
                   prompt_chars: (content || "").length,
