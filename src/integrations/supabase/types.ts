@@ -6248,6 +6248,51 @@ export type Database = {
           },
         ]
       }
+      strategy_benchmark_runs: {
+        Row: {
+          account_id: string
+          account_name: string | null
+          ask_count: number
+          baseline_mode: string
+          created_at: string
+          failures: Json
+          id: string
+          judge_mode: string
+          markdown: string
+          payload: Json
+          summary: Json
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          account_name?: string | null
+          ask_count: number
+          baseline_mode: string
+          created_at?: string
+          failures?: Json
+          id?: string
+          judge_mode: string
+          markdown: string
+          payload: Json
+          summary?: Json
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          account_name?: string | null
+          ask_count?: number
+          baseline_mode?: string
+          created_at?: string
+          failures?: Json
+          id?: string
+          judge_mode?: string
+          markdown?: string
+          payload?: Json
+          summary?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       strategy_messages: {
         Row: {
           citations_json: Json | null
