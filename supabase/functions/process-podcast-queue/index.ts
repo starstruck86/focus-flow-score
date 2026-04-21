@@ -18,9 +18,34 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 3;                    // attempts for hard/content failures
+const MAX_ATTEMPTS_TRANSIENT = 5;          // attempts for provider-transient (504/546/502/500/503/429) failures
 const CONCURRENCY = 3;
-const CIRCUIT_BREAKER_THRESHOLD = 10;
+const CIRCUIT_BREAKER_THRESHOLD = 25;      // raised from 10 — was too trigger-happy on transient provider blips
+const TRANSIENT_HTTP_CODES = [500, 502, 503, 504, 524, 546, 429];
+
+// Failure types that should be treated as transient infra/provider issues,
+// NOT as evidence the content itself is unfetchable. The breaker ignores these
+// when computing "consecutive same-error" runs.
+const TRANSIENT_FAILURE_TYPES = new Set([
+  "transcript_provider_transient",
+  "transcription_timeout",
+  "transcription_resource_limit",
+  "transcription_network_error",
+]);
+
+function classifyTranscriptionError(message: string): string {
+  // Prefer transient classification for known infra signals so the breaker
+  // and retry logic can treat them differently from real content failures.
+  const m = (message || "").toLowerCase();
+  const httpMatch = m.match(/http\s+(\d{3})/);
+  const code = httpMatch ? parseInt(httpMatch[1], 10) : null;
+  if (code && TRANSIENT_HTTP_CODES.includes(code)) return "transcript_provider_transient";
+  if (m.includes("idle_timeout") || m.includes("timeout")) return "transcript_provider_transient";
+  if (m.includes("worker_resource_limit") || m.includes("resource_limit")) return "transcript_provider_transient";
+  if (m.includes("network connection lost") || m.includes("econnreset") || m.includes("fetch failed")) return "transcript_provider_transient";
+  return "transcript_unavailable_from_link";
+}
 
 // ── Content validation patterns ──
 const HTML_PATTERNS = /<(div|meta|style|script|span|link|head|body|html|nav|footer|header|iframe)\b/i;
@@ -309,8 +334,10 @@ async function processItem(
         const transcribeResult = await transcribeResp.json();
         transcriptText = transcribeResult?.transcript || transcribeResult?.text || "";
       } catch (err) {
-        await handleFailure(supabase, queueItem, `Transcription failed: ${err.message}`, "transcript_unavailable_from_link");
-        return { result: "failed", error: err.message };
+        const errMsg = err?.message || String(err);
+        const failureType = classifyTranscriptionError(errMsg);
+        await handleFailure(supabase, queueItem, `Transcription failed: ${errMsg}`, failureType);
+        return { result: "failed", error: errMsg };
       }
     }
 
@@ -591,7 +618,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Circuit breaker ──
+    // ── Circuit breaker (pause-only, never mass-fail) ──
+    // Look at the most recent failures. If we see THRESHOLD consecutive failures
+    // of the *same hard* failure type (transient infra failures excluded), pause
+    // this invocation — but leave queued items as `queued` so they remain
+    // retryable on the next cron tick without manual cleanup.
     const { data: recentFailed } = await supabase
       .from("podcast_import_queue")
       .select("failure_type, processed_at")
@@ -600,25 +631,36 @@ Deno.serve(async (req) => {
       .limit(CIRCUIT_BREAKER_THRESHOLD);
 
     if (recentFailed && recentFailed.length >= CIRCUIT_BREAKER_THRESHOLD) {
-      const sameError = recentFailed.every((r: any) => r.failure_type === recentFailed[0].failure_type);
+      // Ignore transient infra failures when judging "same error" runs.
+      const hardFailures = recentFailed.filter(
+        (r: any) => r.failure_type && !TRANSIENT_FAILURE_TYPES.has(r.failure_type),
+      );
+      const sameError =
+        hardFailures.length >= CIRCUIT_BREAKER_THRESHOLD &&
+        hardFailures.every((r: any) => r.failure_type === hardFailures[0].failure_type);
+
       if (sameError) {
         const { count: successAfter } = await supabase
           .from("podcast_import_queue")
           .select("id", { count: "exact", head: true })
-          .eq("status", "completed")
-          .gt("processed_at", recentFailed[recentFailed.length - 1].processed_at || "1970-01-01");
+          .eq("status", "complete")
+          .gt("processed_at", hardFailures[hardFailures.length - 1].processed_at || "1970-01-01");
 
         if (!successAfter || successAfter === 0) {
-          const failureReason = recentFailed[0].failure_type;
-          console.error(`CIRCUIT BREAKER: ${CIRCUIT_BREAKER_THRESHOLD} consecutive "${failureReason}" failures. Pausing remaining queued items.`);
-
-          await supabase.from("podcast_import_queue").update({
-            status: "failed", pipeline_stage: "failed",
-            error_message: `Circuit breaker: ${CIRCUIT_BREAKER_THRESHOLD}+ consecutive "${failureReason}" failures. Queue paused.`,
-            failure_type: "circuit_breaker", processed_at: now(), updated_at: now(),
-          }).eq("status", "queued");
-
-          return json({ message: "Circuit breaker triggered", failure_type: failureReason, paused_remaining: true });
+          const failureReason = hardFailures[0].failure_type;
+          // Exponential backoff between breaker-triggered pauses.
+          // We park this invocation and rely on the cron to retry later.
+          // Items stay `queued` and will be picked up on the next tick.
+          console.error(
+            `CIRCUIT BREAKER (pause-only): ${CIRCUIT_BREAKER_THRESHOLD} consecutive "${failureReason}" hard failures. ` +
+            `Skipping this tick. Queued items left intact for retry.`,
+          );
+          return json({
+            message: "Circuit breaker paused this tick — queued items preserved",
+            failure_type: failureReason,
+            paused_remaining: false,
+            mass_failed: false,
+          });
         }
       }
     }
@@ -694,7 +736,9 @@ async function handleFailure(supabase: any, item: any, errorMessage: string, fai
   const newAttempts = (item.attempts || 0) + 1;
   const terminalTypes = ["content_invalid", "content_invalid_html", "content_invalid_css", "content_bot_or_login_wall", "content_ui_fragments", "preprocess_invalid"];
   const isTerminal = failureType && terminalTypes.includes(failureType);
-  const newStatus = isTerminal || newAttempts >= MAX_ATTEMPTS ? "failed" : "queued";
+  const isTransient = failureType && TRANSIENT_FAILURE_TYPES.has(failureType);
+  const attemptCap = isTransient ? MAX_ATTEMPTS_TRANSIENT : MAX_ATTEMPTS;
+  const newStatus = isTerminal || newAttempts >= attemptCap ? "failed" : "queued";
 
   await supabase.from("podcast_import_queue").update({
     status: newStatus,
@@ -702,12 +746,13 @@ async function handleFailure(supabase: any, item: any, errorMessage: string, fai
     attempts: newAttempts,
     error_message: errorMessage,
     failure_type: failureType || null,
-    transcript_status: newStatus === "failed" ? "transcript_failed" : "pending",
-    ...(newStatus === "failed" ? { processed_at: now() } : {}),
+    processed_at: now(),
     updated_at: now(),
   }).eq("id", item.id);
 
-  console.log(`[${item.id}] ${newStatus} (attempt ${newAttempts}/${MAX_ATTEMPTS}) — ${errorMessage}`);
+  console.log(
+    `[${item.id}] ${newStatus} (attempt ${newAttempts}/${attemptCap}${isTransient ? " — transient" : ""}) — ${errorMessage}`,
+  );
 }
 
 async function recoverStaleKiGeneration(supabase: any): Promise<number> {
