@@ -111,11 +111,34 @@ export function auditQuality(args: {
     if (missing.length > 0) {
       flags.push(`synthesis_strong_fail:${missing.join(",")}`);
     }
+
+    // Phase 2.6: descriptive_synthesis_despite_citations
+    // Even if literal citations are present, if the structure is still a
+    // balanced survey (no committed POV, or survey markers dominate),
+    // flag it. Citations alone don't make it operator-grade.
+    if (hasLiteralCitation) {
+      const surveyMarkerCount = (text.match(SURVEY_RE) || []).length;
+      const povMarkerCount = (text.match(POV_QUICK_RE) || []).length;
+      const tradeoffCount = (text.match(TRADEOFF_RE) || []).length;
+      // Descriptive-survey-despite-citations: survey language present AND
+      // (no POV OR survey markers > POV markers OR no tradeoff calls).
+      if (
+        surveyMarkerCount >= 1 &&
+        (!hasPOV || surveyMarkerCount >= povMarkerCount || tradeoffCount === 0)
+      ) {
+        flags.push("descriptive_synthesis_despite_citations");
+      }
+    }
   }
 
   return {
     scores,
     flags,
-    passed: scores.overall >= 0.6 && !flags.some((f) => f.startsWith("synthesis_strong_fail")),
+    passed:
+      scores.overall >= 0.6 &&
+      !flags.some((f) =>
+        f.startsWith("synthesis_strong_fail") ||
+        f === "descriptive_synthesis_despite_citations"
+      ),
   };
 }
