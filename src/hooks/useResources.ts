@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { useCallback } from 'react';
 import type { EnrichmentStatus } from '@/lib/resourceEligibility';
 import { autoOperationalizeResource } from '@/lib/autoOperationalize';
+import { fetchAllPages } from '@/lib/supabasePagination';
 
 export type ResourceFolder = {
   id: string;
@@ -113,15 +114,21 @@ export function useResources(folderId?: string | null) {
   return useQuery({
     queryKey: ['resources', user?.id, folderId],
     queryFn: async () => {
-      let query = supabase.from('resources').select('*').order('updated_at', { ascending: false });
-      if (folderId === null) {
-        query = query.is('folder_id', null);
-      } else if (folderId) {
-        query = query.eq('folder_id', folderId);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as Resource[];
+      // Paginate so libraries beyond the 1000-row PostgREST cap return fully.
+      const rows = await fetchAllPages<Resource>((from, to) => {
+        let query = supabase
+          .from('resources')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .range(from, to);
+        if (folderId === null) {
+          query = query.is('folder_id', null);
+        } else if (folderId) {
+          query = query.eq('folder_id', folderId);
+        }
+        return query as any;
+      });
+      return rows;
     },
     enabled: !!user,
   });
@@ -132,12 +139,15 @@ export function useAllResources() {
   return useQuery({
     queryKey: ['resources', user?.id, 'all'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('resources')
-        .select('*')
-        .order('updated_at', { ascending: false });
-      if (error) throw error;
-      return data as Resource[];
+      // Paginate to surface every resource regardless of library size.
+      const rows = await fetchAllPages<Resource>((from, to) =>
+        supabase
+          .from('resources')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .range(from, to) as any,
+      );
+      return rows;
     },
     enabled: !!user,
   });
