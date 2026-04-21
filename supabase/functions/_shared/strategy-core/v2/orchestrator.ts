@@ -154,6 +154,10 @@ export function assembleRoutingEvidence(args: {
   provider?: string;
   model?: string;
   regenCount?: number;
+  // Phase 3 additions
+  intendedProvider?: string;
+  fallbackUsed?: boolean;
+  contractDrift?: { missing: string[] } | null;
 }): V2RoutingDecisionEvidence {
   const { decision, signals } = args;
   const evidence: V2RoutingDecisionEvidence = {
@@ -182,15 +186,28 @@ export function assembleRoutingEvidence(args: {
     evidence.quality_score = args.audit.scores.overall;
     evidence.quality_flags = args.audit.flags;
     evidence.quality_passed = args.audit.passed;
-    evidence.extension_flag =
-      /\b(extended\s+(?:beyond|reasoning)|limited\s+library\s+signal|extended\s+—|extended\s+—)\b/i
-        .test(args.audit.scores ? "" : "") ||
-      undefined;
   }
 
   if (args.provider) evidence.provider = args.provider;
   if (args.model) evidence.model = args.model;
   if (typeof args.regenCount === "number") evidence.regen_count = args.regenCount;
+
+  // Phase 3: explicit Claude fallback flag. Fires when synthesis_framework +
+  // A_strong was intended-routed to Claude (anthropic) but the actual provider
+  // ended up being something else. NEVER silent — surfaces as a risk in
+  // routing_decision.v2.claude_fallback.
+  const intendedClaude =
+    args.intendedProvider === "anthropic" &&
+    decision.askShape === "synthesis_framework" &&
+    decision.mode === "A_strong";
+  if (intendedClaude && (args.fallbackUsed === true || (args.provider && args.provider !== "anthropic"))) {
+    evidence.claude_fallback = true;
+  }
+
+  // Phase 3: contract-drift sentinel
+  if (args.contractDrift && args.contractDrift.missing.length > 0) {
+    evidence.contract_drift = args.contractDrift;
+  }
 
   return evidence;
 }
