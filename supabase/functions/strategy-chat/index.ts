@@ -2567,6 +2567,13 @@ function classifyChatIntent(
     return { intent: "analysis", isBusinessCase, isCFO };
   }
 
+  // 8. Discovery questions — route to grounded operator mode (next_steps), not freeform
+  const DISCOVERY_QUESTIONS_RE =
+    /\b(discovery questions?|what discovery questions?|which discovery questions?|questions matter most|questions should i ask|what should i ask in discovery|discovery framework)\b/i;
+  if (DISCOVERY_QUESTIONS_RE.test(text)) {
+    return { intent: "next_steps", isBusinessCase, isCFO };
+  }
+
   return { intent: "freeform", sentenceCap, rawConstraint, isBusinessCase, isCFO };
 }
 
@@ -2718,6 +2725,28 @@ Rules:
   // contract for these two modes; do not compose both.
   const hybridBriefContract = (kind === "account_brief" || kind === "ninety_day_plan")
     ? `
+
+═══ OUTPUT SHAPE IS NON-NEGOTIABLE ═══
+You must follow the exact section order below.
+Use the exact section headers exactly as written.
+Do not rename headers.
+Do not add any section before section 1.
+Do not open with a thesis, POV, lever, motion, risk, or recommendation.
+If you violate the section order, your answer is wrong.
+
+FORBIDDEN OPENING PATTERNS (do not use these in the first paragraph or as the first section):
+- "Commercial POV:"
+- "Buying Motion:"
+- "Stakeholder Map:"
+- "Top Risks:"
+- "Lead Angle:"
+- "The dominant lever"
+- "The dominant move"
+- "The real lever"
+- "What actually matters"
+- "The key motion"
+
+${kind === "account_brief" ? `The first characters of the answer must be exactly: "## Company Snapshot"` : ""}${kind === "ninety_day_plan" ? `The first characters of the answer must be exactly: "## Account Context"` : ""}
 
 ═══ HYBRID ANSWER CONTRACT — FACTS FIRST, OPERATOR SECOND ═══
 This ask requires a baseline answer shape BEFORE operator framing. Do NOT lead with "the dominant move", "the dominant lever", "the real lever", or "what actually matters". Do NOT skip the obvious answer to jump straight to a thesis. The structural sections come first; the operator read comes after.
