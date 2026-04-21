@@ -756,49 +756,52 @@ serve(async (req) => {
     const failureCounts: Record<string, number> = {};
     for (const r of results) if (r.failure !== "none") failureCounts[r.failure] = (failureCounts[r.failure] ?? 0) + 1;
 
-    // ── Persistence ──
+    // ── Persistence (always; save_outputs only controls whether raw text is stored) ──
+    const persistedResults = results.map((r) => ({
+      ask: r.ask,
+      outputs: r.outputs.map((o) => saveOutputs
+        ? o
+        : { system: o.system, latencyMs: o.latencyMs, attempts: o.attempts, error: o.error, length: o.text.length }),
+      heur: r.heur,
+      judge: r.judge,
+      failure: r.failure,
+    }));
+
     let runId: string | null = null;
     let persisted = false;
     let persistError: string | null = null;
-    if (saveOutputs) {
-      try {
-        const ins = await admin
-          .from("strategy_benchmark_runs")
-          .insert({
-            user_id: asUserId,
-            account_id: account.id,
-            account_name: account.name,
-            baseline_mode: baselineMode,
-            judge_mode: judgeMode,
-            ask_count: results.length,
-            summary,
-            failures: failureCounts,
-            payload: {
-              account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
-              thread_id: threadId,
-              results: results.map((r) => ({
-                ask: r.ask,
-                outputs: r.outputs,
-                heur: r.heur,
-                judge: r.judge,
-                failure: r.failure,
-              })),
-            },
-            markdown,
-          })
-          .select("id")
-          .single();
-        if (ins.error) {
-          persistError = ins.error.message;
-          console.error("[benchmark] persist error:", ins.error);
-        } else {
-          runId = ins.data.id;
-          persisted = true;
-        }
-      } catch (e: any) {
-        persistError = e?.message || String(e);
-        console.error("[benchmark] persist exception:", e);
+    try {
+      const ins = await admin
+        .from("strategy_benchmark_runs")
+        .insert({
+          user_id: asUserId,
+          account_id: account.id,
+          account_name: account.name,
+          baseline_mode: baselineMode,
+          judge_mode: judgeMode,
+          ask_count: results.length,
+          summary,
+          failures: failureCounts,
+          payload: {
+            account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
+            thread_id: threadId,
+            save_outputs: saveOutputs,
+            results: persistedResults,
+          },
+          markdown,
+        })
+        .select("id")
+        .single();
+      if (ins.error) {
+        persistError = ins.error.message;
+        console.error("[benchmark] persist error:", ins.error);
+      } else {
+        runId = ins.data.id;
+        persisted = true;
       }
+    } catch (e: any) {
+      persistError = e?.message || String(e);
+      console.error("[benchmark] persist exception:", e);
     }
 
     return new Response(
@@ -808,11 +811,24 @@ serve(async (req) => {
         persisted,
         persist_error: persistError,
         persisted_table: persisted ? "strategy_benchmark_runs" : null,
+        request_body_used: {
+          as_user_id: asUserId,
+          account_id: body?.account_id ?? null,
+          asks: customAsks ?? null,
+          baseline_mode: baselineMode,
+          judge_mode: judgeMode,
+          save_outputs: saveOutputs,
+        },
         config: { baseline_mode: baselineMode, judge_mode: judgeMode, save_outputs: saveOutputs, ask_count: asks.length },
+        baseline_mode: baselineMode,
+        judge_mode: judgeMode,
+        save_outputs: saveOutputs,
         account: {
           id: account.id, name: account.name,
           signal: account._signal,
+          selected_account_signal: account._signal,
           selection_reason: account._selection_reason,
+          selected_account_reason: account._selection_reason,
         },
         thread_id: threadId,
         summary,
