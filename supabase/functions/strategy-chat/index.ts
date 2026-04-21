@@ -22,6 +22,7 @@ import {
 } from "../_shared/strategy-core/index.ts";
 import {
   assembleRoutingEvidence as v2AssembleEvidence,
+  assertSynthesisContractIntact,
   auditResponse as v2AuditResponse,
   buildV2Prompt,
   isV2Enabled,
