@@ -49,6 +49,7 @@ interface NormalizedResponse {
   model: string;
   latencyMs: number;
   fallbackUsed: boolean;
+  fallbackReason?: string;
   error?: { type: string; message: string; status?: number; rawBody?: string; stage?: string };
   rawStream?: Response;
 }
@@ -1014,8 +1015,19 @@ async function callStreaming(
   adapterReq: Omit<AdapterRequest, "model" | "stream">,
   route: LLMRoute,
 ): Promise<NormalizedResponse> {
+  // Phase 3 timeout envelope: edge gateway window ≈ 60s. Claude must finish
+  // (or fail) with enough headroom for the OpenAI fallback to run AND for
+  // the routing_decision row to persist. Budget:
+  //   Claude attempt:        40s  (was 55s — too close to gateway edge)
+  //   OpenAI fallback room:  ~15s
+  //   Persistence room:      ~5s
+  const CLAUDE_TIMEOUT_MS = 40_000;
+  const OPENAI_TIMEOUT_MS = 55_000;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 55000);
+  const initialTimeoutMs = route.primaryProvider === "anthropic"
+    ? CLAUDE_TIMEOUT_MS
+    : OPENAI_TIMEOUT_MS;
+  const timeout = setTimeout(() => controller.abort(), initialTimeoutMs);
   const routeName = "openai-direct";
 
   try {
@@ -1025,28 +1037,110 @@ async function callStreaming(
       intended_provider: route.primaryProvider,
       intended_model: route.model,
       route: routeName,
+      timeout_ms: initialTimeoutMs,
     }));
 
     if (route.primaryProvider === "anthropic") {
       // Claude path: non-streaming. The downstream !rawStream branch in
-      // handleChat handles persistence + SSE wrapping for us. This is
-      // what makes mode=partial / creation-intent traffic actually land
-      // on Claude instead of crashing with misconfigured_route.
-      const result = await anthropicAdapter({
-        ...adapterReq,
-        model: route.model,
-      }, controller.signal);
-      console.log(JSON.stringify({
-        _type: result.error ? "routing.stream.fail" : "routing.stream.ok",
+      // handleChat handles persistence + SSE wrapping for us.
+      const claudeStarted = Date.now();
+      let result: NormalizedResponse;
+      try {
+        result = await anthropicAdapter({
+          ...adapterReq,
+          model: route.model,
+        }, controller.signal);
+      } catch (e: any) {
+        const isAbort = e?.name === "AbortError";
+        result = {
+          text: "",
+          provider: "anthropic",
+          model: route.model,
+          latencyMs: Date.now() - claudeStarted,
+          fallbackUsed: false,
+          error: {
+            type: isAbort ? "timeout" : "fetch_error",
+            message: isAbort
+              ? `Claude timeout after ${CLAUDE_TIMEOUT_MS}ms`
+              : (e?.message || String(e)),
+            status: isAbort ? 504 : 502,
+          },
+        };
+      }
+      const claudeOk = !result.error && (result.text || "").trim().length > 0;
+      if (claudeOk) {
+        clearTimeout(timeout);
+        console.log(JSON.stringify({
+          _type: "routing.stream.ok",
+          task: taskType,
+          actual_provider: result.provider,
+          actual_model: result.model,
+          route: "anthropic-direct",
+          fallback_used: false,
+          status: 200,
+          latency_ms: result.latencyMs,
+        }));
+        return result;
+      }
+
+      // ── Phase 3: explicit OpenAI fallback ──
+      // Claude failed (timeout, http_xxx, empty). Reset the abort controller
+      // so the fallback gets its own clean budget, then route to OpenAI gpt-4o.
+      // NEVER silent — claude_fallback gets stamped onto routing_decision by
+      // the caller because result.fallbackUsed=true.
+      clearTimeout(timeout);
+      const claudeReason = result.error?.type ?? "empty_response";
+      const claudeMessage = result.error?.message ?? "Claude returned empty";
+      console.warn(JSON.stringify({
+        _type: "routing.claude.failed",
         task: taskType,
-        actual_provider: result.provider,
-        actual_model: result.model,
-        route: "anthropic-direct",
-        fallback_used: false,
-        status: result.error ? (result.error.status ?? 502) : 200,
-        reason: result.error?.message,
+        intended_model: route.model,
+        reason: claudeReason,
+        message: claudeMessage,
+        latency_ms: result.latencyMs,
+        will_fallback: PROVIDER_HEALTH.openaiDirect,
       }));
-      return result;
+
+      if (!PROVIDER_HEALTH.openaiDirect) {
+        // No fallback available — return original Claude error so caller
+        // surfaces "Assistant temporarily unavailable".
+        return result;
+      }
+
+      const fbController = new AbortController();
+      const fbTimeout = setTimeout(() => fbController.abort(), OPENAI_TIMEOUT_MS);
+      const fbModel = route.fallbackModel || "gpt-4o";
+      try {
+        console.log(JSON.stringify({
+          _type: "routing.fallback.start",
+          task: taskType,
+          intended_provider: "anthropic",
+          intended_model: route.model,
+          fallback_provider: "openai",
+          fallback_model: fbModel,
+          reason: claudeReason,
+        }));
+        const fbResult = await openaiAdapter({
+          ...adapterReq,
+          model: fbModel,
+          stream: true,
+        }, fbController.signal);
+        // Mark explicit fallback so routing_decision.v2.claude_fallback fires.
+        fbResult.fallbackUsed = true;
+        fbResult.fallbackReason = `claude_${claudeReason}: ${claudeMessage}`;
+        console.log(JSON.stringify({
+          _type: fbResult.error ? "routing.fallback.fail" : "routing.fallback.ok",
+          task: taskType,
+          actual_provider: fbResult.provider,
+          actual_model: fbResult.model,
+          fallback_used: true,
+          status: fbResult.error ? (fbResult.error.status ?? 502) : 200,
+          reason: fbResult.error?.message ?? claudeReason,
+        }));
+        return fbResult;
+      } finally {
+        clearTimeout(fbTimeout);
+      }
     }
 
     if (route.primaryProvider !== "openai") {
@@ -4714,11 +4808,149 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
   ];
 
   const startTime = Date.now();
+
+  // ── Phase 3: provisional routing-evidence persistence ──
+  // For synthesis_framework + A_strong (the path routed to Claude), insert
+  // a provisional strategy_messages row BEFORE the model call so the routing
+  // evidence survives even if the request dies (timeout, edge gateway kill,
+  // network drop). On success/failure, we update this row instead of
+  // inserting a new one.
+  let provisionalMessageId: string | null = null;
+  const isClaudeSynthesisPath =
+    route.primaryProvider === "anthropic" &&
+    v2Active &&
+    v2EvidenceBase &&
+    v2EvidenceBase.decision.askShape === "synthesis_framework" &&
+    v2EvidenceBase.decision.mode === "A_strong";
+  if (isClaudeSynthesisPath) {
+    try {
+      const { data: prov } = await supabase
+        .from("strategy_messages")
+        .insert({
+          thread_id: threadId,
+          user_id: userId,
+          role: "assistant",
+          message_type: "chat",
+          provider_used: route.primaryProvider,
+          model_used: route.model,
+          fallback_used: false,
+          latency_ms: 0,
+          content_json: {
+            text: "",
+            provisional: true,
+            routing_decision: {
+              status: "pending",
+              mode,
+              mode_reason: modeReason,
+              intent: intent.intent,
+              resource_hits: resourceHits.length,
+              ki_hits: kiHits,
+              intended_provider: route.primaryProvider,
+              intended_model: route.model,
+              routing_reason: route._routingReason,
+              v2: {
+                version: "v2",
+                mode: v2EvidenceBase!.decision.mode,
+                ask_shape: v2EvidenceBase!.decision.askShape,
+                signal_score: v2EvidenceBase!.decision.signalScore,
+                retrieval: {
+                  strong_resource_hits: v2EvidenceBase!.signals.strongResourceHits,
+                  strong_ki_hits: v2EvidenceBase!.signals.strongKiHits,
+                  total_hits: v2EvidenceBase!.signals.totalHits,
+                  has_entity_context: v2EvidenceBase!.signals.hasEntityContext,
+                  mentions_known_entity: v2EvidenceBase!.signals.mentionsKnownEntity,
+                },
+              },
+              created_at: new Date().toISOString(),
+            },
+          },
+        })
+        .select("id")
+        .single();
+      provisionalMessageId = prov?.id ?? null;
+      console.log(`[v2] provisional routing row persisted id=${provisionalMessageId}`);
+    } catch (e) {
+      console.warn(`[v2] provisional persist failed: ${(e as Error).message}`);
+    }
+  }
+
   const result = await callStreaming("chat_general", {
     messages,
     temperature: route.temperature,
     maxTokens: route.maxTokens,
   }, route);
+
+  // If the model call returned a hard error and we have a provisional row,
+  // stamp the failure evidence so we have an audit trail even when the
+  // request would otherwise die with no row.
+  if (result.error && provisionalMessageId) {
+    try {
+      await supabase
+        .from("strategy_messages")
+        .update({
+          content_json: {
+            text: "",
+            provisional: false,
+            error: result.error,
+            routing_decision: {
+              status: "failed",
+              mode,
+              mode_reason: modeReason,
+              intent: intent.intent,
+              resource_hits: resourceHits.length,
+              ki_hits: kiHits,
+              intended_provider: route.primaryProvider,
+              intended_model: route.model,
+              actual_provider: result.provider,
+              actual_model: result.model,
+              fallback_used: result.fallbackUsed,
+              fallback_reason: result.fallbackReason ?? null,
+              error_type: result.error.type,
+              error_message: result.error.message,
+              routing_reason: route._routingReason,
+              v2: v2EvidenceBase
+                ? {
+                  ...v2EvidenceBase.decision && {},
+                  version: "v2",
+                  mode: v2EvidenceBase.decision.mode,
+                  ask_shape: v2EvidenceBase.decision.askShape,
+                  signal_score: v2EvidenceBase.decision.signalScore,
+                  claude_fallback: route.primaryProvider === "anthropic" &&
+                    result.provider !== "anthropic",
+                  retrieval: {
+                    strong_resource_hits: v2EvidenceBase.signals.strongResourceHits,
+                    strong_ki_hits: v2EvidenceBase.signals.strongKiHits,
+                    total_hits: v2EvidenceBase.signals.totalHits,
+                    has_entity_context: v2EvidenceBase.signals.hasEntityContext,
+                    mentions_known_entity: v2EvidenceBase.signals.mentionsKnownEntity,
+                  },
+                }
+                : null,
+              finalized_at: new Date().toISOString(),
+            },
+          },
+          provider_used: result.provider,
+          model_used: result.model,
+          fallback_used: result.fallbackUsed === true,
+          latency_ms: result.latencyMs,
+        })
+        .eq("id", provisionalMessageId);
+      console.warn(`[v2] provisional row finalized as failure id=${provisionalMessageId} reason=${result.error.type}`);
+    } catch (e) {
+      console.error(`[v2] failed to finalize provisional row: ${(e as Error).message}`);
+    }
+  }
+
+  // If the call succeeded but we have a provisional row, delete it so the
+  // success-path insert below doesn't produce a duplicate. (Cheaper than
+  // refactoring the whole success path to update-in-place.)
+  if (!result.error && provisionalMessageId) {
+    try {
+      await supabase.from("strategy_messages").delete().eq("id", provisionalMessageId);
+    } catch (e) {
+      console.warn(`[v2] failed to clean provisional row on success: ${(e as Error).message}`);
+    }
+  }
 
   if (result.error) {
     return new Response(
