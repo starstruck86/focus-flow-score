@@ -4519,6 +4519,10 @@ async function handleChat(
     retrievalDiagnostics,
     retrievalSucceeded,
     intent,
+    rawAccountContext,
+    rawLibraryContext,
+    rawResourceContextBlock,
+    rawWorkingThesisBlock,
   } = await buildChatSystemPrompt({
     supabase,
     userId,
