@@ -4439,6 +4439,111 @@ function evaluateHybridGuard(
   return { checked: true, passed: reasons.length === 0, failure_reasons: reasons };
 }
 
+// ── HYBRID DETERMINISTIC REWRITE (no second LLM call) ──
+// Repackages an off-contract hybrid output into the required ## schema by
+// preserving original content. No new claims, no fabricated citations.
+function rewriteHybridOutput(
+  intent: string,
+  text: string,
+): { applied: boolean; text: string; reason: string | null } {
+  if (intent !== "account_brief" && intent !== "ninety_day_plan") {
+    return { applied: false, text, reason: null };
+  }
+
+  const FORBIDDEN_OPENERS = [
+    /^(\s*)the dominant lever[^.]*\.\s*/i,
+    /^(\s*)the dominant move[^.]*\.\s*/i,
+    /^(\s*)the real lever[^.]*\.\s*/i,
+    /^(\s*)what actually matters[^.]*\.\s*/i,
+    /^(\s*)the key motion[^.]*\.\s*/i,
+  ];
+  let working = text || "";
+  for (const re of FORBIDDEN_OPENERS) {
+    working = working.replace(re, "");
+  }
+  working = working.trimStart();
+
+  // Parse legacy bold-label sections: "**Label:**" or "**Label**".
+  const sections = new Map<string, string>();
+  const labelRe = /\*\*([^*\n]{2,80}?)\*\*:?\s*/g;
+  const matches: Array<{ label: string; start: number; end: number }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = labelRe.exec(working)) !== null) {
+    matches.push({ label: m[1].trim().toLowerCase(), start: m.index, end: m.index + m[0].length });
+  }
+  let preamble = working;
+  if (matches.length >= 1) {
+    preamble = working.slice(0, matches[0].start).trim();
+    for (let i = 0; i < matches.length; i++) {
+      const body = working.slice(matches[i].end, i + 1 < matches.length ? matches[i + 1].start : working.length).trim();
+      sections.set(matches[i].label, body);
+    }
+  }
+
+  const get = (...keys: string[]): string => {
+    for (const k of keys) {
+      for (const [label, body] of sections) {
+        if (label.includes(k)) return body;
+      }
+    }
+    return "";
+  };
+
+  const cleanBody = (s: string) => s.replace(/^\s*[-•]\s*/gm, "- ").trim();
+
+  if (intent === "account_brief") {
+    const snapshot = cleanBody(
+      get("company snapshot", "snapshot", "company overview", "overview", "company")
+        || preamble
+        || "Limited public details available; see Operator Read for derived context.",
+    );
+    const stakeholders = cleanBody(
+      get("stakeholder map", "stakeholders", "buying committee", "key contacts", "contacts")
+        || "No named stakeholders surfaced in this pass — pull from CRM before outreach.",
+    );
+    const operatorRead = cleanBody(
+      get("commercial pov", "operator read", "buying motion", "lead angle", "top risks", "risks", "thesis", "commercial")
+        || preamble
+        || "Operator framing pending additional discovery.",
+    );
+    const nextMoves = cleanBody(
+      get("next moves", "pipeline creation plan", "next steps", "actions", "recommended actions")
+        || "1. Confirm executive sponsor in CRM.\n2. Validate buying motion with named contact.\n3. Draft tailored outreach citing Company Snapshot facts.",
+    );
+
+    const out = `## Company Snapshot\n${snapshot}\n\n## Stakeholders On File\n${stakeholders}\n\n## Operator Read\n${operatorRead}\n\n## Next Moves\n${nextMoves}`;
+    return { applied: true, text: out, reason: "account_brief_repackaged" };
+  }
+
+  // ninety_day_plan
+  const accountContext = cleanBody(
+    get("account context", "context", "company snapshot", "snapshot", "overview")
+      || preamble
+      || "Account context pending — pull baseline from CRM and prior call notes.",
+  );
+  const days1 = cleanBody(
+    get("days 1", "first 30", "learning priorities", "learn", "ramp learn", "weeks 1", "month 1")
+      || preamble
+      || "1. Master account history, products, and prior touch points.\n2. Map current stakeholders and gaps.\n3. Identify top 3 hypotheses to validate.",
+  );
+  const days2 = cleanBody(
+    get("days 31", "days 30", "second 30", "engage", "outreach", "pipeline creation plan", "month 2", "weeks 5")
+      || "1. Initiate sequenced outreach to mapped stakeholders.\n2. Book a discovery meeting with the most likely champion.\n3. Test value hypotheses against live signal.",
+  );
+  const days3 = cleanBody(
+    get("days 61", "third 30", "advance", "success metrics", "close plan", "month 3", "weeks 9")
+      || "1. Convert validated discovery into a qualified opportunity.\n2. Align on mutual success criteria with sponsor.\n3. Stage commercial conversation with named economic buyer.",
+  );
+  const operatorRead = cleanBody(
+    get("commercial pov", "operator read", "buying motion", "lead angle", "top risks", "risks", "thesis")
+      || preamble
+      || "Operator framing pending additional discovery.",
+  );
+
+  const out = `## Account Context\n${accountContext}\n\n## Days 1–30 — Learn\n${days1}\n\n## Days 31–60 — Engage\n${days2}\n\n## Days 61–90 — Advance\n${days3}\n\n## Operator Read\n${operatorRead}`;
+  return { applied: true, text: out, reason: "ninety_day_plan_repackaged" };
+}
+
 function assertRoutingEvidence(args: {
   finalText: string;
   upstreamRetrievalSucceeded: boolean;
@@ -5520,7 +5625,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         }
         const auditedVisible = audit.text;
 
-        // ── HYBRID GUARD (diagnostic only) ──
+        // ── HYBRID GUARD (diagnostic) ──
         const hybridGuard = evaluateHybridGuard(intent.intent, auditedVisible);
         if (hybridGuard.checked) {
           try {
@@ -5535,8 +5640,33 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           } catch { /* never throw from telemetry */ }
         }
 
+        // ── HYBRID DETERMINISTIC REWRITE (single pass, no second LLM) ──
+        let finalVisible = auditedVisible;
+        let hybridRewriteApplied = false;
+        let hybridRewriteReason: string | null = null;
+        let hybridGuardAfter = hybridGuard;
+        if (hybridGuard.checked && !hybridGuard.passed) {
+          const rw = rewriteHybridOutput(intent.intent, auditedVisible);
+          if (rw.applied) {
+            finalVisible = rw.text;
+            hybridRewriteApplied = true;
+            hybridRewriteReason = rw.reason;
+            hybridGuardAfter = evaluateHybridGuard(intent.intent, finalVisible);
+            try {
+              console.log(JSON.stringify({
+                diag: "hybrid_rewrite_result",
+                intent: intent.intent,
+                rewrite_applied: true,
+                failures_before: hybridGuard.failure_reasons,
+                failures_after: hybridGuardAfter.failure_reasons,
+                output_head_after: (finalVisible || "").slice(0, 200),
+              }));
+            } catch { /* never throw */ }
+          }
+        }
+
         assertRoutingEvidence({
-          finalText: auditedVisible,
+          finalText: finalVisible,
           upstreamRetrievalSucceeded: retrievalSucceeded,
           resourceHits,
           kiHits: kiHitList,
@@ -5548,7 +5678,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         // delta, then [DONE]. Client renders this atomically — no
         // first-token-drop risk.
         const sseChunk = `data: ${
-          JSON.stringify({ choices: [{ delta: { content: auditedVisible } }] })
+          JSON.stringify({ choices: [{ delta: { content: finalVisible } }] })
         }\n\ndata: [DONE]\n\n`;
         controller.enqueue(new TextEncoder().encode(sseChunk));
         controller.close();
@@ -5562,7 +5692,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           fallback_used: false,
           latency_ms: latency,
           content_json: {
-            text: auditedVisible,
+            text: finalVisible,
             sources_used: pack.sourceCount,
             retrieval_meta: pack.retrievalMeta,
             retrieval_handoff: retrievalDiagnostics,
@@ -5593,12 +5723,16 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 hybrid_guard_checked: hybridGuard.checked,
                 hybrid_guard_passed: hybridGuard.passed,
                 hybrid_guard_failure_reasons: hybridGuard.failure_reasons,
+                hybrid_rewrite_applied: hybridRewriteApplied,
+                hybrid_rewrite_reason: hybridRewriteReason,
+                hybrid_rewrite_failures_before: hybridRewriteApplied ? hybridGuard.failure_reasons : [],
+                hybrid_rewrite_failures_after: hybridRewriteApplied ? hybridGuardAfter.failure_reasons : [],
                 short_form_diagnostics: mode === "short_form" ? {
                   kind: shortFormKind ?? null,
                   prompt_chars: (content || "").length,
                   system_prompt_chars: effectiveSystemPrompt.length,
                   max_tokens_cap: route.maxTokens,
-                  output_chars: (auditedVisible || "").length,
+                  output_chars: (finalVisible || "").length,
                   latency_ms: result.latencyMs,
                 } : null,
               };
@@ -5606,12 +5740,12 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 try {
                   const wq = v2ValidateResponse({
                     userPrompt: content || "",
-                    responseBody: auditedVisible || "",
+                    responseBody: finalVisible || "",
                     priorTurnPrompt: v2EvidenceBase.priorTurnPrompt,
                   });
                   const aud = v2AuditResponse({
                     decision: v2EvidenceBase.decision,
-                    body: auditedVisible || "",
+                    body: finalVisible || "",
                     hadLibraryHits: (resourceHits.length + kiHits) > 0,
                     resourceTitles: v2EvidenceBase.resourceTitles,
                     kiIds: v2EvidenceBase.kiIds,
