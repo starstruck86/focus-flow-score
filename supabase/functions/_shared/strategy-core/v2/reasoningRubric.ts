@@ -292,25 +292,40 @@ export function scoreRubric(args: ScoreRubricInput): RubricScores {
   const decisionLogic = clamp01(decisionHits / 3);
   const decisionLogicStrict = clamp01(decisionHitsStrict / 3);
 
-  // libraryLeverage — Phase 2.5: literal RESOURCE[…] / KI[id] citations are the only thing that counts when strong hits exist
+  // libraryLeverage — Phase 3: RELAXED (drives score) + STRICT (dual-log).
+  // Relaxed only penalizes when vague refs dominate (vague >= literal) OR
+  // when literal discipline collapses (<2 literals under strong-signal).
+  // Strict preserves Phase 2.5's harsh "any vague ref docks 0.30" rule for
+  // ~1 week of comparison logging.
   let libraryLeverage: number;
+  let libraryLeverageStrict: number;
   if (args.hadLibraryHits) {
     const literalResourceCites = (text.match(LITERAL_RESOURCE_CITATION_RE) || []).length;
     const literalKiCites = (text.match(LITERAL_KI_CITATION_RE) || []).length;
     const literalCites = literalResourceCites + literalKiCites;
 
     if (totalStrongHits >= 5) {
-      // Strong signal: ONLY literal citations count. Vague refs are penalty.
+      // STRICT (Phase 2.5)
+      const baseFromLiteralStrict = clamp01(literalCites / 3);
+      const vaguePenaltyStrict = vagueLibraryHits * 0.3;
+      libraryLeverageStrict = clamp01(baseFromLiteralStrict - vaguePenaltyStrict);
+
+      // RELAXED (Phase 3)
       const baseFromLiteral = clamp01(literalCites / 3);
-      const vaguePenalty = vagueLibraryHits * 0.3;
+      const vagueDominates = vagueLibraryHits >= literalCites;
+      const literalsTooFew = literalCites < 2;
+      const vaguePenalty = (vagueDominates || literalsTooFew)
+        ? vagueLibraryHits * 0.3
+        : 0;
       libraryLeverage = clamp01(baseFromLiteral - vaguePenalty);
     } else {
-      // Partial/thin signal: literal preferred, but informal refs still earn some credit
       const informalCites = (text.match(/\b(per your\s+\w+|from your\s+(?:KI|playbook|library|resources?))\b/gi) || []).length;
       libraryLeverage = clamp01((literalCites * 1.0 + informalCites * 0.4) / 3);
+      libraryLeverageStrict = libraryLeverage;
     }
   } else {
     libraryLeverage = EXTENSION_FLAG_RE.test(text) ? 1 : 0.4;
+    libraryLeverageStrict = libraryLeverage;
   }
 
   // audienceFit
