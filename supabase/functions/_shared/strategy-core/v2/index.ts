@@ -61,6 +61,9 @@ export function isV2Enabled(args?: {
 }): boolean {
   if (args?.threadOverride === true) return true;
   if (args?.userOverride === true) return true;
-  const envFlag = (Deno.env.get("STRATEGY_V2_REASONING") || "").toLowerCase();
-  return envFlag === "true" || envFlag === "1" || envFlag === "on";
+  const raw = Deno.env.get("STRATEGY_V2_REASONING") || "";
+  const envFlag = raw.toLowerCase().trim();
+  const enabled = envFlag === "true" || envFlag === "1" || envFlag === "on" || envFlag === "yes";
+  console.log(`[v2-flag] env_present=${raw.length > 0} env_len=${raw.length} enabled=${enabled}`);
+  return enabled;
 }

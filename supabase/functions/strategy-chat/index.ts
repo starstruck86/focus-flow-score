@@ -1971,7 +1971,9 @@ serve(async (req) => {
       depth,
       force_primary_failure,
       pickedResourceIds,
+      _v2,
     } = body;
+    const v2RequestOverride = _v2 === true;
     // Sidecar: explicit resource IDs the user picked from /library this turn.
     // Validated to a clean string[] before being passed downstream.
     const cleanPickedResourceIds: string[] = Array.isArray(pickedResourceIds)
@@ -2146,6 +2148,7 @@ serve(async (req) => {
       contextPack,
       forceFallback,
       cleanPickedResourceIds,
+      v2RequestOverride,
     );
   } catch (e) {
     console.error("strategy-chat error:", e);
@@ -4468,6 +4471,7 @@ async function handleChat(
   pack: ContextPack,
   forceFallback?: boolean,
   pickedResourceIds: string[] = [],
+  v2RequestOverride: boolean = false,
 ) {
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
@@ -4579,7 +4583,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
   // ═══════════════════════════════════════════════════════════════
   let v2Decision: any = null;
   let v2EvidenceBase: any = null;
-  const v2Active = isV2Enabled();
+  const v2Active = isV2Enabled({ userOverride: v2RequestOverride });
   if (v2Active) {
     try {
       const priorTurnPrompt = (() => {
