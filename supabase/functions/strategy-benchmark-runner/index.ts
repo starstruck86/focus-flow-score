@@ -554,6 +554,57 @@ async function judgeWithClaude(admin: any, runId: string, askIndex: number, ask:
 // ─── Diagnostics: contract compliance + decision-logic signals ──
 // Pure-text inspectors. NO behavior change. Persisted into payload
 // alongside each Strategy result for offline analysis.
+
+// strategy-chat returns its answer as an SSE stream (lines like
+// `data: {"choices":[{"delta":{"content":"..."}}]}` plus a final
+// `data: [DONE]`). The benchmark runner accumulates the raw stream
+// into `strategyOut.text`, so naive header/regex checks were running
+// against the wrapper, not the visible answer. This helper extracts
+// the actual visible Strategy text. If the input is not SSE-shaped it
+// returns the raw text unchanged.
+function extractVisibleStrategyText(raw: string): { text: string; source: "parsed_sse" | "raw_text" } {
+  const input = raw ?? "";
+  if (!input) return { text: "", source: "raw_text" };
+  // Quick sniff — only treat as SSE if we see at least one data: frame
+  // that looks like JSON. Avoids false positives on plain markdown that
+  // happens to mention "data:".
+  const looksLikeSse = /(^|\n)\s*data:\s*[{\[]/.test(input) || /(^|\n)\s*data:\s*\[DONE\]/.test(input);
+  if (!looksLikeSse) return { text: input, source: "raw_text" };
+
+  let out = "";
+  // Split on newlines; SSE frames are separated by blank lines but each
+  // data line is independently parseable.
+  for (const lineRaw of input.split(/\r?\n/)) {
+    const line = lineRaw.trimEnd();
+    if (!line.startsWith("data:")) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    let obj: any;
+    try { obj = JSON.parse(payload); } catch { continue; }
+    // OpenAI/Lovable AI streaming shape
+    const choices = obj?.choices;
+    if (Array.isArray(choices)) {
+      for (const c of choices) {
+        const delta = c?.delta?.content ?? c?.message?.content;
+        if (typeof delta === "string") out += delta;
+      }
+      continue;
+    }
+    // Anthropic-style streaming
+    if (obj?.type === "content_block_delta" && typeof obj?.delta?.text === "string") {
+      out += obj.delta.text;
+      continue;
+    }
+    // Generic fallbacks
+    if (typeof obj?.delta?.content === "string") out += obj.delta.content;
+    else if (typeof obj?.content === "string") out += obj.content;
+    else if (typeof obj?.text === "string") out += obj.text;
+  }
+
+  // If parsing produced nothing meaningful, fall back to raw.
+  if (!out.trim()) return { text: input, source: "raw_text" };
+  return { text: out, source: "parsed_sse" };
+}
 const FORBIDDEN_OPENING_PHRASES = [
   "Commercial POV:",
   "Buying Motion:",
@@ -868,13 +919,19 @@ async function runBenchmarkInBackground(
       // so we infer from the prompt for tagging purposes only. The
       // strategy-chat function continues to do the real classification.
       const _diagIntent = inferIntentForDiagnostics(ask.prompt);
-      const contract_compliance = buildContractCompliance(_diagIntent, strategyOut.text || "");
-      const decision_logic_diagnostics = buildDecisionLogicDiagnostics(strategyOut.text || "");
+      // Strategy output arrives as an SSE stream; the runner accumulates
+      // the wrapper text. For diagnostics we need the *visible* answer.
+      const _strategyVisible = extractVisibleStrategyText(strategyOut.text || "");
+      const _strategyTextForDiag = _strategyVisible.text;
+      const contract_compliance = buildContractCompliance(_diagIntent, _strategyTextForDiag);
+      const decision_logic_diagnostics = buildDecisionLogicDiagnostics(_strategyTextForDiag);
+      const strategy_text_source = _strategyVisible.source;
       try {
         console.log(JSON.stringify({
           diag: "strategy_output_diagnostics",
           ask_index: ask.index,
           inferred_intent: _diagIntent,
+          strategy_text_source,
           contract_compliance,
           decision_logic_diagnostics,
         }));
@@ -890,15 +947,23 @@ async function runBenchmarkInBackground(
         ask_index: ask.index, prompt: ask.prompt, category: ask.category,
         completed_at: new Date().toISOString(),
         outputs_meta, heuristics: heur, judge, failure_mode: failure,
-        contract_compliance, decision_logic_diagnostics,
+        contract_compliance, decision_logic_diagnostics, strategy_text_source,
       });
+      // When saveOutputs is true, also surface the parsed visible Strategy
+      // text alongside the raw stream so downstream tooling can inspect
+      // the actual answer without re-parsing SSE frames.
+      const persistedOutputs = saveOutputs
+        ? outputs.map((o) =>
+            o.system === "strategy"
+              ? { ...o, visible_text: _strategyTextForDiag, text_source: strategy_text_source }
+              : o,
+          )
+        : outputs.map((o) => ({ system: o.system, latency_ms_total: o.latency_ms_total, attempts: o.attempts, error: o.error, http_status: o.http_status, response_length: o.response_length, provider: o.provider, model: o.model, timing_breakdown: o.timing_breakdown }));
       persistedResults.push({
         ask,
-        outputs: saveOutputs
-          ? outputs
-          : outputs.map((o) => ({ system: o.system, latency_ms_total: o.latency_ms_total, attempts: o.attempts, error: o.error, http_status: o.http_status, response_length: o.response_length, provider: o.provider, model: o.model, timing_breakdown: o.timing_breakdown })),
+        outputs: persistedOutputs,
         heur, judge, failure,
-        contract_compliance, decision_logic_diagnostics,
+        contract_compliance, decision_logic_diagnostics, strategy_text_source,
       });
 
       const summarySoFar = results.reduce((acc: any, r) => { acc[r.judge.winner] = (acc[r.judge.winner] ?? 0) + 1; return acc; }, { strategy: 0, claude: 0, gpt: 0, tie: 0 });
