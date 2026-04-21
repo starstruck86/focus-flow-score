@@ -5519,6 +5519,22 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           );
         }
         const auditedVisible = audit.text;
+
+        // ── HYBRID GUARD (diagnostic only) ──
+        const hybridGuard = evaluateHybridGuard(intent.intent, auditedVisible);
+        if (hybridGuard.checked) {
+          try {
+            console.log(JSON.stringify({
+              diag: "hybrid_guard_result",
+              intent: intent.intent,
+              passed: hybridGuard.passed,
+              failure_reasons: hybridGuard.failure_reasons,
+              prompt: (content || "").slice(0, 200),
+              output_head: (auditedVisible || "").slice(0, 200),
+            }));
+          } catch { /* never throw from telemetry */ }
+        }
+
         assertRoutingEvidence({
           finalText: auditedVisible,
           upstreamRetrievalSucceeded: retrievalSucceeded,
