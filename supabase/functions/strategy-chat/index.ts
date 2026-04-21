@@ -4393,6 +4393,52 @@ function buildRetrievalDiagnostics(args: {
   };
 }
 
+// ── HYBRID CONTRACT GUARD (diagnostic only) ──
+// Detects whether account_brief / ninety_day_plan output actually followed
+// the hybrid contract. Logs only — does not rewrite, retry, or block.
+function evaluateHybridGuard(
+  intent: string,
+  text: string,
+): { checked: boolean; passed: boolean; failure_reasons: string[] } {
+  if (intent !== "account_brief" && intent !== "ninety_day_plan") {
+    return { checked: false, passed: true, failure_reasons: [] };
+  }
+  const reasons: string[] = [];
+  const head = (text || "").slice(0, 200).toLowerCase();
+  const body = text || "";
+
+  if (intent === "account_brief") {
+    if (!/##\s*Company Snapshot/i.test(body)) reasons.push("missing_company_snapshot_header");
+    if (!/##\s*Stakeholders/i.test(body)) reasons.push("missing_stakeholders_header");
+    if (!/##\s*Operator Read/i.test(body)) reasons.push("missing_operator_read_header");
+    if (!/##\s*Next Moves/i.test(body)) reasons.push("missing_next_moves_header");
+  } else {
+    if (!/##\s*Account Context/i.test(body)) reasons.push("missing_account_context_header");
+    if (!/##\s*Days\s*1\s*[–\-]\s*30/i.test(body)) reasons.push("missing_days_1_30_header");
+    if (!/##\s*Days\s*31\s*[–\-]\s*60/i.test(body)) reasons.push("missing_days_31_60_header");
+    if (!/##\s*Days\s*61\s*[–\-]\s*90/i.test(body)) reasons.push("missing_days_61_90_header");
+    if (!/##\s*Operator Read/i.test(body)) reasons.push("missing_operator_read_header");
+  }
+
+  if (head.includes("the dominant move")) reasons.push("forbidden_dominant_move_opening");
+  if (head.includes("the dominant lever")) reasons.push("forbidden_dominant_lever_opening");
+
+  const legacyLabels = [
+    /\*\*Most Likely Buying Motion:?\*\*/i,
+    /\*\*Stakeholder Map:?\*\*/i,
+    /\*\*Top Risks:?\*\*/i,
+    /\*\*Learning Priorities:?\*\*/i,
+    /\*\*Pipeline Creation Plan:?\*\*/i,
+    /\*\*Commercial POV:?\*\*/i,
+    /\*\*Buying Motion:?\*\*/i,
+    /\*\*Lead Angle:?\*\*/i,
+  ];
+  const legacyHits = legacyLabels.reduce((n, re) => n + (re.test(body) ? 1 : 0), 0);
+  if (legacyHits >= 2) reasons.push("opened_with_legacy_bold_schema");
+
+  return { checked: true, passed: reasons.length === 0, failure_reasons: reasons };
+}
+
 function assertRoutingEvidence(args: {
   finalText: string;
   upstreamRetrievalSucceeded: boolean;
