@@ -664,6 +664,191 @@ async function buildSameContextBlock(admin: any, userId: string, accountId: stri
   return lines.join("\n\n");
 }
 
+// ─── Async background execution ─────────────────────────────────
+async function runBenchmarkInBackground(
+  admin: any,
+  runId: string,
+  asUserId: string,
+  body: any,
+  baselineMode: BaselineMode,
+  judgeMode: JudgeMode,
+  saveOutputs: boolean,
+  customAsks: string[] | undefined,
+) {
+  const updateRow = async (patch: Record<string, any>) => {
+    try {
+      const { error } = await admin
+        .from("strategy_benchmark_runs")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", runId);
+      if (error) console.error("[benchmark] update err:", error.message);
+    } catch (e: any) {
+      console.error("[benchmark] update exception:", e?.message || e);
+    }
+  };
+
+  try {
+    await updateRow({ current_step: "selecting_account" });
+    const account = await selectBestAccount(admin, asUserId, body?.account_id);
+    const recentMsg = await getRecentMessage(admin, asUserId, account.id);
+    const asks: BenchmarkAsk[] = customAsks?.length
+      ? customAsks.map((p, i) => ({ index: i + 1, prompt: p, category: categorizeCustomAsk(p) }))
+      : buildDefaultAsks(account.name, recentMsg);
+
+    await updateRow({
+      current_step: "minting_jwt",
+      account_id: account.id,
+      account_name: account.name,
+      ask_count: asks.length,
+      payload: {
+        account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
+        save_outputs: saveOutputs,
+        checkpoints: [],
+        results: [],
+      },
+    });
+
+    const userJwt = await mintUserJwt(admin, asUserId);
+    const threadId = await createScratchThread(admin, asUserId, account.id);
+
+    const sameContextBlock = baselineMode === "raw_only"
+      ? null
+      : await buildSameContextBlock(admin, asUserId, account.id, account.name);
+
+    await updateRow({
+      current_step: `ready:thread_${threadId.slice(0, 8)}`,
+      payload: {
+        account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
+        thread_id: threadId,
+        save_outputs: saveOutputs,
+        checkpoints: [],
+        results: [],
+      },
+    });
+
+    const results: Array<{ ask: BenchmarkAsk; outputs: SystemOutput[]; heur: Record<string, HeuristicScore>; judge: JudgeScore; failure: StrategyFailureMode }> = [];
+    const checkpoints: any[] = [];
+    const persistedResults: any[] = [];
+
+    for (const ask of asks) {
+      const stepLabel = `ask_${ask.index}_of_${asks.length}`;
+      console.log(`[benchmark] ${stepLabel}: ${ask.prompt.slice(0, 80)}`);
+      await updateRow({ current_step: `${stepLabel}:providers` });
+
+      const rawContext = (baselineMode === "same_context" || baselineMode === "both") && sameContextBlock
+        ? sameContextBlock
+        : undefined;
+
+      // PARALLEL provider calls — Promise.allSettled so one failure does not kill the ask
+      const settled = await Promise.allSettled([
+        callStrategy(userJwt, threadId, ask.prompt),
+        callClaudeRaw(ask.prompt, account.name, rawContext),
+        callGptRaw(ask.prompt, account.name, rawContext),
+      ]);
+      const emptyOut = (sys: SystemOutput["system"], err: string): SystemOutput =>
+        ({ system: sys, text: "", latencyMs: 0, attempts: 0, error: err });
+      const strategyOut = settled[0].status === "fulfilled" ? settled[0].value : emptyOut("strategy", String((settled[0] as any).reason?.message ?? (settled[0] as any).reason));
+      const claudeOut   = settled[1].status === "fulfilled" ? settled[1].value : emptyOut("claude",   String((settled[1] as any).reason?.message ?? (settled[1] as any).reason));
+      const gptOut      = settled[2].status === "fulfilled" ? settled[2].value : emptyOut("gpt",      String((settled[2] as any).reason?.message ?? (settled[2] as any).reason));
+      const outputs = [strategyOut, claudeOut, gptOut];
+
+      const heur = (judgeMode === "llm_only")
+        ? { strategy: emptyHeur(), claude: emptyHeur(), gpt: emptyHeur() }
+        : {
+            strategy: scoreHeuristic(strategyOut.text, ask, account.name),
+            claude: scoreHeuristic(claudeOut.text, ask, account.name),
+            gpt: scoreHeuristic(gptOut.text, ask, account.name),
+          };
+
+      await updateRow({ current_step: `${stepLabel}:judge` });
+      const judge = (judgeMode === "heuristics_only")
+        ? heuristicWinnerAsJudge(heur)
+        : await judgeWithClaude(ask, outputs, account.name);
+
+      const failure = classifyStrategyFailure(ask, strategyOut, heur.strategy, judge, account.name);
+      results.push({ ask, outputs, heur, judge, failure });
+
+      const outputsMeta = outputs.map((o) => ({
+        system: o.system, latencyMs: o.latencyMs, attempts: o.attempts, error: o.error,
+        httpStatus: o.meta?.http, length: (o.text ?? "").length,
+      }));
+      checkpoints.push({
+        ask_index: ask.index,
+        prompt: ask.prompt,
+        category: ask.category,
+        completed_at: new Date().toISOString(),
+        outputs_meta: outputsMeta,
+        heuristics: heur,
+        judge,
+        failure_mode: failure,
+      });
+      persistedResults.push({
+        ask,
+        outputs: saveOutputs
+          ? outputs
+          : outputs.map((o) => ({
+              system: o.system, latencyMs: o.latencyMs, attempts: o.attempts,
+              error: o.error, httpStatus: o.meta?.http, length: (o.text ?? "").length,
+            })),
+        heur, judge, failure,
+      });
+
+      // Recompute summary + failures so far
+      const summarySoFar = results.reduce((acc: any, r) => { acc[r.judge.winner] = (acc[r.judge.winner] ?? 0) + 1; return acc; },
+        { strategy: 0, claude: 0, gpt: 0, tie: 0 });
+      const failuresSoFar: Record<string, number> = {};
+      for (const r of results) if (r.failure !== "none") failuresSoFar[r.failure] = (failuresSoFar[r.failure] ?? 0) + 1;
+
+      await updateRow({
+        completed_asks: results.length,
+        current_step: `${stepLabel}:done`,
+        summary: summarySoFar,
+        failures: failuresSoFar,
+        payload: {
+          account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
+          thread_id: threadId,
+          save_outputs: saveOutputs,
+          checkpoints,
+          results: persistedResults,
+        },
+      });
+    }
+
+    const markdown = buildMarkdown(account, results, baselineMode, judgeMode);
+    const summary = results.reduce((acc: any, r) => { acc[r.judge.winner] = (acc[r.judge.winner] ?? 0) + 1; return acc; },
+      { strategy: 0, claude: 0, gpt: 0, tie: 0 });
+    const failureCounts: Record<string, number> = {};
+    for (const r of results) if (r.failure !== "none") failureCounts[r.failure] = (failureCounts[r.failure] ?? 0) + 1;
+
+    await updateRow({
+      status: "completed",
+      current_step: "completed",
+      completed_asks: results.length,
+      summary,
+      failures: failureCounts,
+      markdown,
+      completed_at: new Date().toISOString(),
+      payload: {
+        account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
+        thread_id: threadId,
+        save_outputs: saveOutputs,
+        checkpoints,
+        results: persistedResults,
+      },
+    });
+    console.log(`[benchmark] run ${runId} completed`);
+  } catch (e: any) {
+    const msg = e?.message || String(e);
+    console.error(`[benchmark] run ${runId} fatal:`, msg, e?.stack);
+    await updateRow({
+      status: "failed",
+      current_step: "failed",
+      error: msg,
+      completed_at: new Date().toISOString(),
+    });
+  }
+}
+
 // ─── Main handler ───────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -686,6 +871,52 @@ serve(async (req) => {
   try { body = await req.json(); } catch {
     return new Response(JSON.stringify({ error: "invalid json" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  const action: string = body?.action ?? "run";
+
+  // ── STATUS endpoint ──
+  if (action === "status") {
+    const runId = body?.run_id;
+    if (!runId) {
+      return new Response(JSON.stringify({ error: "run_id required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data, error } = await admin
+      .from("strategy_benchmark_runs")
+      .select("*")
+      .eq("id", runId)
+      .maybeSingle();
+    if (error || !data) {
+      return new Response(JSON.stringify({ error: error?.message || "run not found" }), {
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const checkpoints = (data.payload as any)?.checkpoints ?? [];
+    return new Response(JSON.stringify({
+      ok: true,
+      run_id: data.id,
+      status: data.status,
+      current_step: data.current_step,
+      completed_asks: data.completed_asks,
+      total_asks: data.ask_count,
+      summary: data.summary,
+      failures: data.failures,
+      error: data.error,
+      updated_at: data.updated_at,
+      created_at: data.created_at,
+      completed_at: data.completed_at,
+      account: { id: data.account_id, name: data.account_name },
+      checkpoints_count: checkpoints.length,
+      checkpoints,
+      ...(data.status === "completed"
+        ? { markdown: data.markdown, results: (data.payload as any)?.results ?? [] }
+        : {}),
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
+  // ── KICKOFF ──
   const asUserId: string | undefined = body?.as_user_id;
   if (!asUserId) {
     return new Response(JSON.stringify({ error: "as_user_id required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -695,123 +926,39 @@ serve(async (req) => {
   const saveOutputs: boolean = body?.save_outputs !== false;
   const customAsks: string[] | undefined = Array.isArray(body?.asks) ? body.asks : undefined;
 
-  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-
+  // Pre-select account so kickoff response carries the picked account + signal.
+  let account: any;
   try {
-    const account = await selectBestAccount(admin, asUserId, body?.account_id);
-    const recentMsg = await getRecentMessage(admin, asUserId, account.id);
-    const asks: BenchmarkAsk[] = customAsks?.length
-      ? customAsks.map((p, i) => ({ index: i + 1, prompt: p, category: categorizeCustomAsk(p) }))
-      : buildDefaultAsks(account.name, recentMsg);
+    account = await selectBestAccount(admin, asUserId, body?.account_id);
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: `account selection failed: ${e?.message || String(e)}` }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
-    const userJwt = await mintUserJwt(admin, asUserId);
-    const threadId = await createScratchThread(admin, asUserId, account.id);
+  const askCount = customAsks?.length || 6;
 
-    // baseline context for raw models (only when mode demands it)
-    const sameContextBlock = baselineMode === "raw_only"
-      ? null
-      : await buildSameContextBlock(admin, asUserId, account.id, account.name);
-
-    const results: Array<{ ask: BenchmarkAsk; outputs: SystemOutput[]; heur: Record<string, HeuristicScore>; judge: JudgeScore; failure: StrategyFailureMode }> = [];
-
-    for (const ask of asks) {
-      console.log(`[benchmark] ask ${ask.index}/${asks.length}: ${ask.prompt.slice(0, 80)}`);
-
-      // Decide what extra context to give raw models for this ask, per baseline_mode
-      const rawContext = (baselineMode === "same_context" || baselineMode === "both") && sameContextBlock
-        ? sameContextBlock
-        : undefined;
-
-      // Strategy is the path under test — always run.
-      // Raw models run in parallel; on baseline_mode="raw_only" they get no context (default sys prompt).
-      const [strategyOut, claudeOut, gptOut] = await Promise.all([
-        callStrategy(userJwt, threadId, ask.prompt),
-        callClaudeRaw(ask.prompt, account.name, rawContext),
-        callGptRaw(ask.prompt, account.name, rawContext),
-      ]);
-      const outputs = [strategyOut, claudeOut, gptOut];
-
-      const heur = (judgeMode === "llm_only")
-        ? { strategy: emptyHeur(), claude: emptyHeur(), gpt: emptyHeur() }
-        : {
-            strategy: scoreHeuristic(strategyOut.text, ask, account.name),
-            claude: scoreHeuristic(claudeOut.text, ask, account.name),
-            gpt: scoreHeuristic(gptOut.text, ask, account.name),
-          };
-
-      const judge = (judgeMode === "heuristics_only")
-        ? heuristicWinnerAsJudge(heur)
-        : await judgeWithClaude(ask, outputs, account.name);
-
-      const failure = classifyStrategyFailure(ask, strategyOut, heur.strategy, judge, account.name);
-      results.push({ ask, outputs, heur, judge, failure });
-    }
-
-    const markdown = buildMarkdown(account, results, baselineMode, judgeMode);
-
-    const summary = results.reduce((acc: any, r) => {
-      acc[r.judge.winner] = (acc[r.judge.winner] ?? 0) + 1; return acc;
-    }, { strategy: 0, claude: 0, gpt: 0, tie: 0 });
-
-    const failureCounts: Record<string, number> = {};
-    for (const r of results) if (r.failure !== "none") failureCounts[r.failure] = (failureCounts[r.failure] ?? 0) + 1;
-
-    // ── Persistence (always; save_outputs only controls whether raw text is stored) ──
-    const persistedResults = results.map((r) => ({
-      ask: r.ask,
-      outputs: r.outputs.map((o) => saveOutputs
-        ? o
-        : { system: o.system, latencyMs: o.latencyMs, attempts: o.attempts, error: o.error, length: o.text.length }),
-      heur: r.heur,
-      judge: r.judge,
-      failure: r.failure,
-    }));
-
-    let runId: string | null = null;
-    let persisted = false;
-    let persistError: string | null = null;
-    try {
-      const ins = await admin
-        .from("strategy_benchmark_runs")
-        .insert({
-          user_id: asUserId,
-          account_id: account.id,
-          account_name: account.name,
-          baseline_mode: baselineMode,
-          judge_mode: judgeMode,
-          ask_count: results.length,
-          summary,
-          failures: failureCounts,
-          payload: {
-            account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
-            thread_id: threadId,
-            save_outputs: saveOutputs,
-            results: persistedResults,
-          },
-          markdown,
-        })
-        .select("id")
-        .single();
-      if (ins.error) {
-        persistError = ins.error.message;
-        console.error("[benchmark] persist error:", ins.error);
-      } else {
-        runId = ins.data.id;
-        persisted = true;
-      }
-    } catch (e: any) {
-      persistError = e?.message || String(e);
-      console.error("[benchmark] persist exception:", e);
-    }
-
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        run_id: runId,
-        persisted,
-        persist_error: persistError,
-        persisted_table: persisted ? "strategy_benchmark_runs" : null,
-        request_body_used: {
+  // Insert run row UP FRONT (status=running) so caller can poll immediately.
+  const { data: inserted, error: insErr } = await admin
+    .from("strategy_benchmark_runs")
+    .insert({
+      user_id: asUserId,
+      account_id: account.id,
+      account_name: account.name,
+      baseline_mode: baselineMode,
+      judge_mode: judgeMode,
+      ask_count: askCount,
+      status: "running",
+      current_step: "queued",
+      completed_asks: 0,
+      summary: {},
+      failures: {},
+      payload: {
+        account: { id: account.id, name: account.name, signal: account._signal, selection_reason: account._selection_reason },
+        save_outputs: saveOutputs,
+        checkpoints: [],
+        results: [],
+        request_body: {
           as_user_id: asUserId,
           account_id: body?.account_id ?? null,
           asks: customAsks ?? null,
@@ -819,39 +966,63 @@ serve(async (req) => {
           judge_mode: judgeMode,
           save_outputs: saveOutputs,
         },
-        config: { baseline_mode: baselineMode, judge_mode: judgeMode, save_outputs: saveOutputs, ask_count: asks.length },
-        baseline_mode: baselineMode,
-        judge_mode: judgeMode,
-        save_outputs: saveOutputs,
-        account: {
-          id: account.id, name: account.name,
-          signal: account._signal,
-          selected_account_signal: account._signal,
-          selection_reason: account._selection_reason,
-          selected_account_reason: account._selection_reason,
-        },
-        thread_id: threadId,
-        summary,
-        failures: failureCounts,
-        results: results.map((r) => ({
-          ask: r.ask,
-          judge: r.judge,
-          failure: r.failure,
-          heur: r.heur,
-          outputs_meta: r.outputs.map((o) => ({
-            system: o.system, latencyMs: o.latencyMs, attempts: o.attempts, error: o.error, length: o.text.length,
-          })),
-        })),
-        markdown,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  } catch (e: any) {
-    console.error("[benchmark] fatal:", e);
-    return new Response(JSON.stringify({ error: e?.message || String(e), stack: e?.stack }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+      },
+      markdown: "",
+    })
+    .select("id")
+    .single();
+
+  if (insErr || !inserted) {
+    return new Response(JSON.stringify({
+      error: "persist_failed_at_kickoff",
+      persist_error: insErr?.message || "unknown",
+    }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
+
+  const runId = inserted.id;
+
+  // Detach the actual benchmark work — survive client disconnect.
+  const work = runBenchmarkInBackground(admin, runId, asUserId, body, baselineMode, judgeMode, saveOutputs, customAsks);
+  // @ts-ignore EdgeRuntime is provided by Supabase edge runtime
+  if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+    // @ts-ignore
+    EdgeRuntime.waitUntil(work);
+  } else {
+    // local fallback (won't be used in production)
+    work.catch((e) => console.error("[benchmark] background error:", e));
+  }
+
+  return new Response(JSON.stringify({
+    ok: true,
+    run_id: runId,
+    status: "running",
+    account: {
+      id: account.id, name: account.name,
+      signal: account._signal,
+      selection_reason: account._selection_reason,
+      selected_account_signal: account._signal,
+      selected_account_reason: account._selection_reason,
+    },
+    selection_reason: account._selection_reason,
+    signal: account._signal,
+    config: { baseline_mode: baselineMode, judge_mode: judgeMode, save_outputs: saveOutputs, ask_count: askCount },
+    request_body_used: {
+      as_user_id: asUserId,
+      account_id: body?.account_id ?? null,
+      asks: customAsks ?? null,
+      baseline_mode: baselineMode,
+      judge_mode: judgeMode,
+      save_outputs: saveOutputs,
+    },
+    poll_instructions: {
+      method: "POST",
+      path: "/functions/v1/strategy-benchmark-runner",
+      headers: { "x-strategy-validation-key": "<key>", "Content-Type": "application/json" },
+      body: { action: "status", run_id: runId },
+      poll_every_ms: 5000,
+      terminal_states: ["completed", "failed"],
+    },
+  }), { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 });
 
 function emptyHeur(): HeuristicScore {
