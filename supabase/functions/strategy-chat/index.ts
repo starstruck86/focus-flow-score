@@ -4487,10 +4487,43 @@ async function buildChatSystemPrompt(args: {
   // a binding MODE LOCK block. This is the single biggest lever against
   // the production drift pattern (e.g. asking for a template and getting
   // an email back).
+  const _hasAccountContext = !!accountId ||
+    (!!contextSection && contextSection.length >= 200);
   const intent = classifyChatIntent(userContent, {
-    hasAccountContext: !!accountId || (!!contextSection && contextSection.length >= 200),
+    hasAccountContext: _hasAccountContext,
   });
   const modeLockBlock = buildModeLockBlock(intent);
+
+  // ── DIAGNOSTIC: prove which contract was actually selected at runtime.
+  // Maps intent.intent → the contract block that the case branch in
+  // buildModeLockBlock injects (see switch around line 2764).
+  const _contractFor = (k: string, sub?: string | null): string => {
+    if (k === "account_brief" || k === "ninety_day_plan") {
+      return "hybridBriefContract";
+    }
+    if (k === "message" && sub === "rewrite_audience") {
+      return "message_rewrite_audience";
+    }
+    if (k === "freeform" || k === "bootstrap") return "freeform";
+    if (
+      k === "analysis" || k === "next_steps" || k === "pitch" ||
+      k === "message" || k === "synthesis" || k === "creation" ||
+      k === "evaluation"
+    ) {
+      return "operatorReasoningContract";
+    }
+    return `other:${k}`;
+  };
+  console.log(JSON.stringify({
+    diag: "intent_classification",
+    prompt: (userContent || "").slice(0, 120),
+    classified_intent: intent.intent,
+    sub_intent: (intent as any).subIntent ?? null,
+    contract_used: _contractFor(intent.intent, (intent as any).subIntent ?? null),
+    has_account_context: _hasAccountContext,
+    account_id: accountId ?? null,
+    context_section_len: contextSection?.length ?? 0,
+  }));
 
   // No account, no thread context → don't force Strategy Core onto small talk.
   // EXCEPTIONS: explicit library picks OR grounded asks ("using my resources",
