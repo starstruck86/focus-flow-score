@@ -2319,6 +2319,8 @@ type ChatIntent =
   | "pitch" // exact wording for a moment
   | "next_steps"
   | "analysis"
+  | "account_brief" // hybrid: facts-first account summary + operator read
+  | "ninety_day_plan" // hybrid: literal 30/60/90 timeline + operator read
   | "provenance"
   | "freeform";
 
@@ -2332,6 +2334,8 @@ interface IntentResult {
   isBusinessCase?: boolean;
   /** Sub-flag: this is a CFO/finance audience ask. */
   isCFO?: boolean;
+  /** Sub-flag for message mode: this is an audience rewrite ask. */
+  subIntent?: "rewrite_audience";
 }
 
 function classifyChatIntent(
@@ -2449,6 +2453,20 @@ function classifyChatIntent(
     return { intent: "evaluation", isBusinessCase, isCFO };
   }
 
+  // 1.65 NINETY-DAY PLAN (HYBRID) — must beat the generic CREATION block
+  // below. Triggers on "30/60/90 day plan", "ninety day plan", or
+  // "new AE/rep/seller … plan/ramp". This mode produces a literal
+  // Days 1–30 / 31–60 / 61–90 timeline first, then the operator read —
+  // not a "dominant lever" thesis with bullets.
+  const NINETY_DAY_PLAN_RE =
+    /\b((30|60|90|ninety)[\s-]?day\s+(plan|ramp|onboarding)|(new|first)\s+(ae|rep|seller|sales(person|\s+rep)?)\b[^.?!]{0,60}\b(plan|ramp))\b/;
+  if (NINETY_DAY_PLAN_RE.test(text)) {
+    console.log(
+      `[mode-lock] intent_forced_ninety_day_plan text="${text.slice(0, 80)}"`,
+    );
+    return { intent: "ninety_day_plan", isBusinessCase, isCFO };
+  }
+
   // 1.7 CREATION — user is asking us to BUILD an asset (email, script,
   // talk track, plan, one-pager, business case, guide, playbook chapter,
   // 90-day plan, renewal memo, account brief, etc).
@@ -2468,18 +2486,35 @@ function classifyChatIntent(
     return { intent: "creation", isBusinessCase, isCFO };
   }
 
-  // 1.8 ACCOUNT BRIEF (FIX A) — "tell me about / brief me on / walk me
+  // 1.75 REWRITE AUDIENCE (FIX D) — "rewrite this for a CFO", "tighten
+  // this for the board", "tailor this for procurement". Routes into
+  // message mode with a rewrite_audience sub-intent so the operator
+  // contract composes and we don't fall to freeform. Must beat the
+  // ACCOUNT_BRIEF / ANALYSIS regex by sitting after creation but before
+  // them — neither matches rewrite phrasing anyway.
+  const REWRITE_AUDIENCE_RE =
+    /\b(rewrite|reword|rephrase|tighten|punch\s+up|sharpen|tailor|adapt|translate)\s+(this|that|the\s+(following|below|above)|it)\b[^.?!]{0,80}\b(for|to|as)\s+(a|an|the)?\s*(cfo|ceo|coo|cmo|cio|cto|cro|cso|chro|vp|svp|evp|director|manager|exec(utive)?|board|customer|prospect|champion|economic\s+buyer|technical\s+buyer|end\s+user|engineer|developer|finance|procurement|legal|it|operations|hr)/;
+  const SHORT_REWRITE_RE = /^(rewrite|reword|rephrase|tighten|punch\s+up|sharpen)\b/;
+  if (REWRITE_AUDIENCE_RE.test(text) || SHORT_REWRITE_RE.test(text)) {
+    console.log(
+      `[mode-lock] intent_forced_message_rewrite_audience text="${text.slice(0, 80)}"`,
+    );
+    return { intent: "message", subIntent: "rewrite_audience", isBusinessCase, isCFO };
+  }
+
+  // 1.8 ACCOUNT BRIEF (HYBRID) — "tell me about / brief me on / walk me
   // through / who is / give me the rundown on <X>" with account context
-  // is an analysis ask, not freeform. Same for "what do you know about".
-  // Without this, "Tell me about this account" falls all the way to
-  // freeform and the operator contract never composes.
+  // routes to a dedicated facts-first hybrid mode (not generic analysis).
+  // The hybrid contract requires Company Snapshot → Stakeholders →
+  // Operator Read → Next Moves so the encyclopedia answer comes first
+  // and the operator angle comes second.
   const ACCOUNT_BRIEF_RE =
     /\b(tell me about|brief me (?:on|about)|walk me through|give me (?:the )?(?:rundown|overview|background|context|summary) (?:on|of|about)|who (?:is|are) (?:they|this|the (?:account|company|customer|prospect|client))|what do (?:i|we|you) know about|fill me in on|catch me up on|prep me on|background on|context on|update me on)\b/;
   if (hasAccountContext && ACCOUNT_BRIEF_RE.test(text)) {
     console.log(
-      `[mode-lock] intent_forced_analysis_account_brief text="${text.slice(0, 80)}"`,
+      `[mode-lock] intent_forced_account_brief text="${text.slice(0, 80)}"`,
     );
-    return { intent: "analysis", isBusinessCase, isCFO };
+    return { intent: "account_brief", isBusinessCase, isCFO };
   }
 
   // 2. Template — "what template", "give me a template", "template for"
@@ -2536,7 +2571,7 @@ function classifyChatIntent(
 }
 
 function buildModeLockBlock(intent: IntentResult): string {
-  const { intent: kind, sentenceCap, rawConstraint, isBusinessCase, isCFO } = intent;
+  const { intent: kind, sentenceCap, rawConstraint, isBusinessCase, isCFO, subIntent } = intent;
 
   const constraintLine = sentenceCap
     ? `\n- HARD CONSTRAINT: Output EXACTLY ${sentenceCap} sentence${sentenceCap === 1 ? "" : "s"} (the user said "${rawConstraint}"). No more. No less. Count them before you finish.`
@@ -2674,6 +2709,58 @@ Rules:
 - If you genuinely cannot infer the audience from context, ask the user in ONE short line at the very end (e.g. "Who is this going to — CFO or VP Sales? I'll re-tune.") instead of guessing.`
     : "";
 
+  // ── HYBRID BRIEF CONTRACT (account_brief + ninety_day_plan ONLY) ──
+  // The operator contract was REPLACING the obvious answer shape on
+  // "tell me about this account" and "give me a 90-day plan" — leading
+  // with "the dominant move is…" instead of the encyclopedia / timeline
+  // the user expects first. This contract puts facts/structure FIRST
+  // and operator interpretation SECOND. It REPLACES the operator
+  // contract for these two modes; do not compose both.
+  const hybridBriefContract = (kind === "account_brief" || kind === "ninety_day_plan")
+    ? `
+
+═══ HYBRID ANSWER CONTRACT — FACTS FIRST, OPERATOR SECOND ═══
+This ask requires a baseline answer shape BEFORE operator framing. Do NOT lead with "the dominant move", "the dominant lever", "the real lever", or "what actually matters". Do NOT skip the obvious answer to jump straight to a thesis. The structural sections come first; the operator read comes after.
+
+${kind === "account_brief" ? `REQUIRED ORDER (every section is mandatory; do not collapse them):
+
+## Company Snapshot
+2–4 sentences. Who they are, what they do, business model, scale. Use the account context above PLUS your general knowledge of this company. If the company is well-known (public brands, major retailers, large enterprises), give the encyclopedia answer first — don't pretend you don't know them. Cover: what they sell / how they make money / notable brands or products / approximate scale.
+
+## Stakeholders On File
+List every contact you have from account context with name, title, and one short line on relevance to the deal. If fewer than 3 contacts are on file, write "Thin contact map — only N on file" and name who's missing structurally (e.g. "no economic buyer identified").
+
+## Operator Read
+NOW the thesis. 3–5 sentences. The dominant motion (top-down vs bottom-up), who matters most, what's actually at stake commercially, where leakage will happen if ignored.
+
+## Next Moves (this week)
+3 numbered concrete actions. Each: WHO (named contact or named role) / WHAT (specific verb + artifact) / WHY (consequence to pipeline, velocity, win rate, or ACV). Tie at least one move to a named contact from the Stakeholders section above.` : ""}${kind === "ninety_day_plan" ? `REQUIRED ORDER (every section is mandatory; do not collapse them):
+
+## Account Context
+2–3 sentences on the company + current state (contacts on file, open opps, signal density). Use the account context above PLUS your general knowledge of this company.
+
+## Days 1–30 — Learn
+Bulleted list. Cover: research targets (their business model, recent news, competitive set), internal alignment (CSM, SE, leadership), stakeholder mapping. Name specific contacts to meet from the account context above. Each bullet is a concrete action, not a category.
+
+## Days 31–60 — Engage
+Bulleted list. Cover: discovery calls (who, on what), multi-thread targets (which roles to add), hypotheses to test, success metrics for the period (e.g. "3 active stakeholders, 1 qualified opp"). Each bullet is concrete.
+
+## Days 61–90 — Advance
+Bulleted list. Cover: pipeline goals (in dollars or count), MAP / mutual action plan, expansion bets, what "on track" looks like at day 90 (e.g. "1 deal in late-stage, 2 in mid-funnel, exec sponsor identified"). Each bullet is concrete.
+
+## Operator Read
+2–3 sentences. The ONE bet that determines whether this ramp succeeds, and what kills it if you get it wrong.` : ""}
+
+═══ HARD RULES ═══
+- LEAD with the structural sections in the order above. The Operator Read comes AFTER, never before.
+- FORBIDDEN OPENING PHRASES: "the dominant lever", "the dominant move", "the real lever", "the real bet", "what actually matters", "the one thing that matters", "the highest-leverage", "the core insight is" — none of these may appear in the first paragraph or as the first section.
+- Library citations (KI[…], PLAYBOOK[…], "Exact Resource Title") belong INSIDE Next Moves / Engage / Advance sections, not as section headers and not in the opening Snapshot/Context.
+- If the library has nothing relevant, OMIT citations entirely. Do not fabricate. Do not write KI[unknown] or PLAYBOOK[tbd].
+- Do NOT use [BRACKETED_PLACEHOLDER] tokens. If you don't know a fact, omit it or describe it directionally.
+- Use real names from the account context above wherever possible. "Brooks Comstock (VP, Growth Marketing)" beats "the VP of marketing".
+- Be CONCRETE. "Schedule discovery calls" is a category; "Schedule a 30-min discovery with Brooks Comstock to validate the brand-portfolio expansion thesis" is an action.`
+    : "";
+
   switch (kind) {
     case "bootstrap":
       return `═══ MODE LOCK: BOOTSTRAP (ORIENTATION) ═══
@@ -2723,11 +2810,24 @@ The user asked for an EMAIL. Return ONLY the email BODY in body-only format.
 - DIRECT-ASK RULE: the email MUST contain ONE clear ask anchored to a decision, date, or named artifact (e.g. "Are we aligned to move forward on the [pricing we discussed] by [date], or is there a blocker I should address?"). No vague "checking in" energy.
 - Only add a Subject, greeting, or signoff if the user EXPLICITLY asks for one.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
 
-    case "message":
+    case "message": {
+      const rewriteLine = subIntent === "rewrite_audience"
+        ? `\n- AUDIENCE REWRITE: Output ONLY the rewritten text first (no preamble, no "here's the rewrite", no "Say this:" prefix for this sub-mode). Then a single "**Why this lands:**" header followed by 2–3 short bullets naming the specific shifts you made and which audience priority each maps to (e.g. "Replaced 'great product' with 'reduces CAC by X%' — CFOs decide on cash, not capability").`
+        : "";
       return `═══ MODE LOCK: MESSAGE / SCRIPT ═══
-The user asked for exact wording (voicemail, SMS, LinkedIn note, script, DM).
+The user asked for exact wording (voicemail, SMS, LinkedIn note, script, DM, rewrite).
 - FORBIDDEN: an email, a plan, a framework, multiple versions unless asked.
-- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${rewriteLine}${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+    }
+
+    case "account_brief":
+      return `═══ MODE LOCK: ACCOUNT BRIEF (HYBRID — FACTS FIRST) ═══
+The user asked for an account brief / overview / "tell me about this account". This is NOT a thesis. The structural answer (Company Snapshot → Stakeholders → Operator Read → Next Moves) comes first; the operator interpretation comes second.${hybridBriefContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+
+    case "ninety_day_plan":
+      return `═══ MODE LOCK: 30/60/90 DAY PLAN (HYBRID — TIMELINE FIRST) ═══
+The user asked for a ramp / 90-day plan. This is NOT a thesis. The literal Days 1–30 / 31–60 / 61–90 timeline comes first; the operator read comes after.${hybridBriefContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+
 
     case "pitch":
       return `═══ MODE LOCK: PITCH (exact words) ═══
