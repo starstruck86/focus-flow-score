@@ -373,6 +373,8 @@ export function scoreRubric(args: ScoreRubricInput): RubricScores {
       libraryLeverage,
       audienceFit,
       overall: 0.5,
+      decisionLogicStrict,
+      libraryLeverageStrict,
     };
   }
 
@@ -383,6 +385,11 @@ export function scoreRubric(args: ScoreRubricInput): RubricScores {
     decisionLogic,
     libraryLeverage,
     audienceFit,
+    overall: clamp01(overall),
+    decisionLogicStrict,
+    libraryLeverageStrict,
+  };
+}
     overall: clamp01(overall),
   };
 }
