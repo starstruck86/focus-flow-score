@@ -2709,6 +2709,58 @@ Rules:
 - If you genuinely cannot infer the audience from context, ask the user in ONE short line at the very end (e.g. "Who is this going to — CFO or VP Sales? I'll re-tune.") instead of guessing.`
     : "";
 
+  // ── HYBRID BRIEF CONTRACT (account_brief + ninety_day_plan ONLY) ──
+  // The operator contract was REPLACING the obvious answer shape on
+  // "tell me about this account" and "give me a 90-day plan" — leading
+  // with "the dominant move is…" instead of the encyclopedia / timeline
+  // the user expects first. This contract puts facts/structure FIRST
+  // and operator interpretation SECOND. It REPLACES the operator
+  // contract for these two modes; do not compose both.
+  const hybridBriefContract = (kind === "account_brief" || kind === "ninety_day_plan")
+    ? `
+
+═══ HYBRID ANSWER CONTRACT — FACTS FIRST, OPERATOR SECOND ═══
+This ask requires a baseline answer shape BEFORE operator framing. Do NOT lead with "the dominant move", "the dominant lever", "the real lever", or "what actually matters". Do NOT skip the obvious answer to jump straight to a thesis. The structural sections come first; the operator read comes after.
+
+${kind === "account_brief" ? `REQUIRED ORDER (every section is mandatory; do not collapse them):
+
+## Company Snapshot
+2–4 sentences. Who they are, what they do, business model, scale. Use the account context above PLUS your general knowledge of this company. If the company is well-known (public brands, major retailers, large enterprises), give the encyclopedia answer first — don't pretend you don't know them. Cover: what they sell / how they make money / notable brands or products / approximate scale.
+
+## Stakeholders On File
+List every contact you have from account context with name, title, and one short line on relevance to the deal. If fewer than 3 contacts are on file, write "Thin contact map — only N on file" and name who's missing structurally (e.g. "no economic buyer identified").
+
+## Operator Read
+NOW the thesis. 3–5 sentences. The dominant motion (top-down vs bottom-up), who matters most, what's actually at stake commercially, where leakage will happen if ignored.
+
+## Next Moves (this week)
+3 numbered concrete actions. Each: WHO (named contact or named role) / WHAT (specific verb + artifact) / WHY (consequence to pipeline, velocity, win rate, or ACV). Tie at least one move to a named contact from the Stakeholders section above.` : ""}${kind === "ninety_day_plan" ? `REQUIRED ORDER (every section is mandatory; do not collapse them):
+
+## Account Context
+2–3 sentences on the company + current state (contacts on file, open opps, signal density). Use the account context above PLUS your general knowledge of this company.
+
+## Days 1–30 — Learn
+Bulleted list. Cover: research targets (their business model, recent news, competitive set), internal alignment (CSM, SE, leadership), stakeholder mapping. Name specific contacts to meet from the account context above. Each bullet is a concrete action, not a category.
+
+## Days 31–60 — Engage
+Bulleted list. Cover: discovery calls (who, on what), multi-thread targets (which roles to add), hypotheses to test, success metrics for the period (e.g. "3 active stakeholders, 1 qualified opp"). Each bullet is concrete.
+
+## Days 61–90 — Advance
+Bulleted list. Cover: pipeline goals (in dollars or count), MAP / mutual action plan, expansion bets, what "on track" looks like at day 90 (e.g. "1 deal in late-stage, 2 in mid-funnel, exec sponsor identified"). Each bullet is concrete.
+
+## Operator Read
+2–3 sentences. The ONE bet that determines whether this ramp succeeds, and what kills it if you get it wrong.` : ""}
+
+═══ HARD RULES ═══
+- LEAD with the structural sections in the order above. The Operator Read comes AFTER, never before.
+- FORBIDDEN OPENING PHRASES: "the dominant lever", "the dominant move", "the real lever", "the real bet", "what actually matters", "the one thing that matters", "the highest-leverage", "the core insight is" — none of these may appear in the first paragraph or as the first section.
+- Library citations (KI[…], PLAYBOOK[…], "Exact Resource Title") belong INSIDE Next Moves / Engage / Advance sections, not as section headers and not in the opening Snapshot/Context.
+- If the library has nothing relevant, OMIT citations entirely. Do not fabricate. Do not write KI[unknown] or PLAYBOOK[tbd].
+- Do NOT use [BRACKETED_PLACEHOLDER] tokens. If you don't know a fact, omit it or describe it directionally.
+- Use real names from the account context above wherever possible. "Brooks Comstock (VP, Growth Marketing)" beats "the VP of marketing".
+- Be CONCRETE. "Schedule discovery calls" is a category; "Schedule a 30-min discovery with Brooks Comstock to validate the brand-portfolio expansion thesis" is an action.`
+    : "";
+
   switch (kind) {
     case "bootstrap":
       return `═══ MODE LOCK: BOOTSTRAP (ORIENTATION) ═══
