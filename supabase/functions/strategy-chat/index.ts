@@ -2450,23 +2450,36 @@ function classifyChatIntent(
   }
 
   // 1.7 CREATION — user is asking us to BUILD an asset (email, script,
-  // talk track, plan, one-pager, business case, guide, playbook chapter)
-  // grounded explicitly in their library. This is different from a plain
-  // "email" ask because the grounding signal is explicit. We let the
-  // narrower email/message/pitch classifiers handle ungrounded asks
-  // (those are routine drafts, not library-derived assets).
-  // Dual-signal: artifact noun + grounding phrase.
+  // talk track, plan, one-pager, business case, guide, playbook chapter,
+  // 90-day plan, renewal memo, account brief, etc).
+  // FIX A: when account context is present, drop the hard grounding-phrase
+  // requirement — real operators say "give me a 90-day plan as a new AE
+  // at <account>" without ever begging the model to use the library.
   const CREATE_VERB_RE =
-    /\b(write|draft|create|build|construct|design|put together|turn (?:this |these |that )?into|generate|produce)\b/;
+    /\b(write|draft|create|build|construct|design|put together|turn (?:this |these |that )?into|generate|produce|give me|need)\b/;
   const CREATE_NOUN_RE =
-    /\b(email|e-mail|outreach|cold\s+(?:email|call|message)|script|talk\s+track|call\s+plan|meeting\s+plan|account\s+plan|one[- ]?pager|onepager|business\s+case|guide|playbook(?:\s+chapter)?|sequence|cadence|deck|outline|brief|summary|agenda|message|note|voicemail|talking\s+points)\b/;
+    /\b(email|e-mail|outreach|cold\s+(?:email|call|message)|script|talk\s+track|call\s+plan|meeting\s+plan|account\s+plan|one[- ]?pager|onepager|business\s+case|guide|playbook(?:\s+chapter)?|sequence|cadence|deck|outline|brief|summary|agenda|message|note|voicemail|talking\s+points|(?:30|60|90|120)[- ]?day\s+plan|onboarding\s+plan|ramp\s+plan|renewal\s+memo|renewal\s+brief|account\s+brief|deal\s+memo|deal\s+brief)\b/;
   const hasCreateVerb = CREATE_VERB_RE.test(text);
   const hasCreateNoun = CREATE_NOUN_RE.test(text);
-  if (hasGrounding && hasCreateVerb && hasCreateNoun) {
+  if ((hasGrounding || hasAccountContext) && hasCreateVerb && hasCreateNoun) {
     console.log(
-      `[mode-lock] intent_forced_creation text="${text.slice(0, 80)}" verb=${hasCreateVerb} noun=${hasCreateNoun} grounding=${hasGrounding}`,
+      `[mode-lock] intent_forced_creation text="${text.slice(0, 80)}" verb=${hasCreateVerb} noun=${hasCreateNoun} grounding=${hasGrounding} accountCtx=${hasAccountContext}`,
     );
     return { intent: "creation", isBusinessCase, isCFO };
+  }
+
+  // 1.8 ACCOUNT BRIEF (FIX A) — "tell me about / brief me on / walk me
+  // through / who is / give me the rundown on <X>" with account context
+  // is an analysis ask, not freeform. Same for "what do you know about".
+  // Without this, "Tell me about this account" falls all the way to
+  // freeform and the operator contract never composes.
+  const ACCOUNT_BRIEF_RE =
+    /\b(tell me about|brief me (?:on|about)|walk me through|give me (?:the )?(?:rundown|overview|background|context|summary) (?:on|of|about)|who (?:is|are) (?:they|this|the (?:account|company|customer|prospect|client))|what do (?:i|we|you) know about|fill me in on|catch me up on|prep me on|background on|context on|update me on)\b/;
+  if (hasAccountContext && ACCOUNT_BRIEF_RE.test(text)) {
+    console.log(
+      `[mode-lock] intent_forced_analysis_account_brief text="${text.slice(0, 80)}"`,
+    );
+    return { intent: "analysis", isBusinessCase, isCFO };
   }
 
   // 2. Template — "what template", "give me a template", "template for"
@@ -2570,8 +2583,14 @@ function buildModeLockBlock(intent: IntentResult): string {
   // The thinking layer. Forces pattern extraction → POV → weighting → decision
   // logic → consequence framing. Without this, the model produces book-smart
   // summaries instead of operator-grade synthesis.
+  // FIX B: Operator contract + application layer must compose into the
+  // everyday operator modes too — analysis, next_steps, pitch, message.
+  // Without this, "what should I do next?" and "tell me about this account"
+  // (which routes to analysis via Fix A) get no decision logic, no
+  // weighting, no consequence framing — just book-smart prose.
   const isGroundedMode = kind === "synthesis" || kind === "creation" || kind === "evaluation";
-  const operatorReasoningContract = isGroundedMode
+  const isOperatorMode = isGroundedMode || kind === "analysis" || kind === "next_steps" || kind === "pitch" || kind === "message";
+  const operatorReasoningContract = isOperatorMode
     ? `
 
 ═══ OPERATOR REASONING CONTRACT (NON-NEGOTIABLE — THINKING LAYER) ═══
@@ -2615,7 +2634,9 @@ This contract overrides the urge to be polite, balanced, or comprehensive. Be op
   // The output is not "done" when it's correct — it must be adapted to the
   // real-world situation, audience, and industry. We append this block to
   // every grounded mode and a post-gen guard verifies the appendix exists.
-  const applicationLayer = isGroundedMode
+  // FIX B: Application layer also extends to analysis/next_steps/pitch/message
+  // so audience+situation+industry adaptation runs everywhere it matters.
+  const applicationLayer = isOperatorMode
     ? `
 
 ═══ APPLICATION LAYER (MANDATORY — RUNS AFTER YOUR PRIMARY OUTPUT) ═══
@@ -2706,7 +2727,7 @@ The user asked for an EMAIL. Return ONLY the email BODY in body-only format.
       return `═══ MODE LOCK: MESSAGE / SCRIPT ═══
 The user asked for exact wording (voicemail, SMS, LinkedIn note, script, DM).
 - FORBIDDEN: an email, a plan, a framework, multiple versions unless asked.
-- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- REQUIRED: Start with "Say this:" or "Send this:" then the exact words. Nothing else except (optionally) one short upgrade line.${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "pitch":
       return `═══ MODE LOCK: PITCH (exact words) ═══
@@ -2716,14 +2737,14 @@ The user asked how to PITCH or POSITION something. Give the exact words to say.
         isCFO
           ? `\n- CFO AUDIENCE: lead with money. Frame on cost of inaction, payback period, or risk-adjusted return. Use real \$ figures or % deltas IF they exist in context. If they don't, write a directional sentence with NO bracket placeholders. No SDR-style "want to learn about your priorities" openings — CFOs hate it.`
           : ""
-      }${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+      }${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "next_steps":
       return `═══ MODE LOCK: NEXT STEPS ═══
 The user asked WHAT TO DO NEXT. Return numbered actions.
 - FORBIDDEN: a cold email (no "Subject:", no "Hi"), a script, a pitch, a thesis, a framework, a "here's how to think about this" preface.
 - REQUIRED: Start with "Do this next:" then a numbered list (3–6 items max). Each item is a concrete action with a strong verb first AND a real named target from context AND a concrete outcome. Use ONLY names/dates/numbers that actually appear in the thread/account context. If you don't have a name, write the role ("the economic buyer", "the CFO") — never "[name]" or "[Client]". No commentary between items. No trailing upgrade line.
-- ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm the budget owner this week or this slips to next quarter").${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- ECONOMIC ANCHOR: at least ONE step must reference money, decision deadline, or named risk (e.g. "Confirm the budget owner this week or this slips to next quarter").${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "analysis":
       return `═══ MODE LOCK: STRATEGIC ANALYSIS (DECISION FORCE LAYER) ═══
@@ -2773,7 +2794,7 @@ You are not here to be right. You are here to be **usefully opinionated under in
 
 - FORBIDDEN META/PROVENANCE LANGUAGE (server guard will STRIP): "this comes from", "this is based on", "based on the (available |provided |given )?context", "informed by", "derived from", "pulled from", "the thesis is based on", "this assessment uses", "this analysis draws on", "where this comes from", "according to (the|your) (thread|context|notes|account)", "given the limited context", "without more information", "to provide a more accurate", "here's how to think about", "the way to think about this is".
 - FORBIDDEN: an email, a template, a script, a "here's how to think about it" essay, a recap of what data you do/don't have, hedges, passive evasions, multiple scenarios, branching options.
-- IF DATA IS THIN: do NOT generalize, do NOT list possibilities. Make the SINGLE strongest reasonable inference, frame it as "Assume X — this deal will Y unless Z", and use the discovery question to confirm/kill it. NEVER substitute meta-commentary. NEVER emit bracket placeholders. NEVER hedge. NEVER branch.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- IF DATA IS THIN: do NOT generalize, do NOT list possibilities. Make the SINGLE strongest reasonable inference, frame it as "Assume X — this deal will Y unless Z", and use the discovery question to confirm/kill it. NEVER substitute meta-commentary. NEVER emit bracket placeholders. NEVER hedge. NEVER branch.${economicLayer}${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "provenance":
       return `═══ MODE LOCK: PROVENANCE ═══
