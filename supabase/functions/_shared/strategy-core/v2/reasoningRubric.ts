@@ -151,13 +151,16 @@ const FLUFF_PHRASES = [
   "tell a story", "be human",
 ];
 
-// Phase 2: detect balanced-survey patterns (operatorPOV killer)
+// Phase 2.5: detect balanced-survey patterns harder (operatorPOV killer)
 const BALANCED_SURVEY_MARKERS = [
   /\bon (?:the )?one hand\b[^.]{0,200}\bon the other hand\b/i,
   /\bboth approaches have merit\b/i,
   /\bdepends on (?:your |the )?context\b/i,
   /\bit depends\b/i,
-  /\bthere are (?:several|many|multiple) (?:ways|approaches|options)\b/i,
+  /\bthere are (?:several|many|multiple) (?:ways|approaches|options|patterns|themes)\b/i,
+  /\bmultiple (?:themes|patterns) emerge\b/i,
+  /\boperators? (?:converge|diverge) on\b/i, // Phase 2.5 — flagged as survey unless POV follows in same paragraph
+  /\bcommon (?:threads|themes) (?:include|are)\b/i,
 ];
 
 const EXTENSION_FLAG_RE =
@@ -173,22 +176,54 @@ const WHAT_DOESNT_MATTER_MARKERS = [
   /\bdon't (?:focus|spend|waste)\b/i,
   /\bdoesn't move (?:the |your )?(?:number|deal|needle)\b/i,
   /\bnot worth\b/i,
+  /\boverrated\b/i,
+  /\boverweight(?:ed)?\b/i,
+  /\bcorrelation,? not cause\b/i,
 ];
+
+// Phase 2.5: vague library-reference patterns (FAIL when strong hits exist)
+const VAGUE_LIBRARY_REFERENCE_MARKERS = [
+  /\byour\s+(?:KI|ki)\s+on\s+\w+/i,
+  /\byour\s+library\s+(?:suggests|shows|argues|says|has|on)/i,
+  /\bfrom\s+your\s+library\b/i,
+  /\byour\s+playbook\s+(?:suggests|shows|argues|says)/i,
+  /\byour\s+resources?\s+(?:show|suggest|argue|say)/i,
+  /\bthe\s+library\s+(?:suggests|shows|argues)/i,
+  /\bper\s+your\s+(?:notes|materials)\b/i,
+];
+
+// Phase 2.5: literal citation patterns (PASS markers when strong hits exist)
+const LITERAL_RESOURCE_CITATION_RE = /RESOURCE\[\s*"?[^\]"]+"?\s*\]/g;
+const LITERAL_KI_CITATION_RE = /KI\[\s*[a-f0-9]{6,}\s*\]/gi;
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
-export function scoreRubric(args: {
+export interface ScoreRubricInput {
   body: string;
   mode: V2Mode;
   askShape: V2AskShape;
   hadLibraryHits: boolean;
   audienceMentioned: boolean;
-}): RubricScores {
+  /** Phase 2.5: literal hit counts so we can enforce citation discipline. */
+  resourceTitles?: string[];
+  kiIds?: string[];
+  kiTitles?: string[];
+}
+
+export function scoreRubric(args: ScoreRubricInput): RubricScores {
   const text = args.body || "";
   const lower = text.toLowerCase();
   const wc = text.trim().split(/\s+/).filter(Boolean).length;
+
+  const resourceHitCount = args.resourceTitles?.length || 0;
+  const kiHitCount = args.kiIds?.length || 0;
+  const totalStrongHits = resourceHitCount + kiHitCount;
+  const isStrongSignalSynthesis =
+    args.askShape === "synthesis_framework" &&
+    args.mode === "A_strong" &&
+    resourceHitCount >= 5;
 
   // commercialSharpness — Phase 2: stricter, needs 3+ commercial terms for full credit
   let commercialHits = 0;
@@ -197,7 +232,7 @@ export function scoreRubric(args: {
   }
   const commercialSharpness = clamp01(commercialHits / 4);
 
-  // operatorPOV — Phase 2: harder fluff penalty + balanced-survey penalty
+  // operatorPOV — Phase 2.5: harder fluff penalty + balanced-survey penalty + vague-library penalty when strong signal
   let povHits = 0;
   for (const p of POV_PHRASES) {
     if (lower.includes(p)) povHits++;
@@ -205,12 +240,17 @@ export function scoreRubric(args: {
   const fluffHits = FLUFF_PHRASES.filter((p) => lower.includes(p)).length;
   const balancedSurveyHits = BALANCED_SURVEY_MARKERS.filter((re) => re.test(text)).length;
   const whatDoesntMatterHits = WHAT_DOESNT_MATTER_MARKERS.filter((re) => re.test(text)).length;
+  const vagueLibraryHits = VAGUE_LIBRARY_REFERENCE_MARKERS.filter((re) => re.test(text)).length;
+
+  // Phase 2.5: extra POV penalty for vague library refs when we KNOW there are strong hits
+  const vaguePOVPenalty = totalStrongHits >= 5 ? vagueLibraryHits * 0.25 : 0;
 
   const operatorPOV = clamp01(
     (povHits / 3) +
     (whatDoesntMatterHits >= 1 ? 0.25 : 0) -
     (fluffHits * 0.3) -
-    (balancedSurveyHits * 0.4),
+    (balancedSurveyHits * 0.4) -
+    vaguePOVPenalty,
   );
 
   // decisionLogic — Phase 2: needs 2+ markers for full credit, numbered list strongly weighted
@@ -220,11 +260,23 @@ export function scoreRubric(args: {
   }
   const decisionLogic = clamp01(decisionHits / 3);
 
-  // libraryLeverage — Phase 2: when hits exist, require 2+ explicit references
+  // libraryLeverage — Phase 2.5: literal RESOURCE[…] / KI[id] citations are the only thing that counts when strong hits exist
   let libraryLeverage: number;
   if (args.hadLibraryHits) {
-    const cites = (text.match(/\b(KI\[|RESOURCE\[|per your\s+\w+|from your\s+(?:KI|playbook|library|resources?)|your library on|your KI on)\b/gi) || []).length;
-    libraryLeverage = clamp01(cites / 3); // harder bar than Phase 1
+    const literalResourceCites = (text.match(LITERAL_RESOURCE_CITATION_RE) || []).length;
+    const literalKiCites = (text.match(LITERAL_KI_CITATION_RE) || []).length;
+    const literalCites = literalResourceCites + literalKiCites;
+
+    if (totalStrongHits >= 5) {
+      // Strong signal: ONLY literal citations count. Vague refs are penalty.
+      const baseFromLiteral = clamp01(literalCites / 3);
+      const vaguePenalty = vagueLibraryHits * 0.3;
+      libraryLeverage = clamp01(baseFromLiteral - vaguePenalty);
+    } else {
+      // Partial/thin signal: literal preferred, but informal refs still earn some credit
+      const informalCites = (text.match(/\b(per your\s+\w+|from your\s+(?:KI|playbook|library|resources?))\b/gi) || []).length;
+      libraryLeverage = clamp01((literalCites * 1.0 + informalCites * 0.4) / 3);
+    }
   } else {
     libraryLeverage = EXTENSION_FLAG_RE.test(text) ? 1 : 0.4;
   }
@@ -256,7 +308,28 @@ export function scoreRubric(args: {
     weightedSum += scoreMap[d] * w;
     weightTotal += w;
   }
-  const overall = weightTotal > 0 ? weightedSum / weightTotal : 0;
+  let overall = weightTotal > 0 ? weightedSum / weightTotal : 0;
+
+  // Phase 2.5 STRONG-SIGNAL SYNTHESIS STOP-RULE
+  // If ask=synthesis_framework, mode=A_strong, hits>=5, the answer MUST contain:
+  //   - explicit POV language
+  //   - at least one literal resource title (RESOURCE[…]) or KI[…] reference
+  //   - at least one tradeoff/deprioritization statement
+  //   - at least one commercial consequence statement
+  // Otherwise → mark FAIL (overall capped at 0.35)
+  if (isStrongSignalSynthesis) {
+    const hasPOV = povHits >= 1;
+    const literalCount =
+      (text.match(LITERAL_RESOURCE_CITATION_RE) || []).length +
+      (text.match(LITERAL_KI_CITATION_RE) || []).length;
+    const hasLiteralCitation = literalCount >= 1;
+    const hasTradeoff = whatDoesntMatterHits >= 1;
+    const hasCommercial = commercialHits >= 1;
+    const stopRulePassed = hasPOV && hasLiteralCitation && hasTradeoff && hasCommercial;
+    if (!stopRulePassed) {
+      overall = Math.min(overall, 0.35);
+    }
+  }
 
   // Word-count floor
   if (wc < 60 && args.askShape !== "short_form") {

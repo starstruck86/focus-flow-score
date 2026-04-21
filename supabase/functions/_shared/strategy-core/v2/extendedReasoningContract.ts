@@ -99,15 +99,28 @@ REQUIRED:
 - End with the 3–5 highest-leverage moves to run in week 1, numbered.`,
 
   synthesis_framework: `═══ ASK SHAPE: SYNTHESIS / FRAMEWORK ═══
-Extract real cross-source patterns. NOT a bulleted list of what each source says. NOT a balanced overview.
+You are extracting cross-source patterns and committing to a directional read. NOT a balanced overview. NOT a "here's what each source says" tour. NOT a survey.
 
-REQUIRED:
-- Open with your POV on the dominant pattern across the library and why it matters more than the others.
-- Use UNEQUAL weighting. State explicitly: "Pattern A drives outcomes. Pattern B is correlation. Pattern C is noise."
-- For the patterns that matter: tie each to a commercial outcome (win rate, velocity, ACV, churn).
-- Call out where the library disagrees with itself and which side you take.
-- Name what's table stakes vs what's the actual edge.
-- End with: how the rep USES this on Monday morning in a live deal — concrete, numbered moves. Not "be aware of."`,
+NON-NEGOTIABLES — every synthesis answer MUST contain ALL of:
+
+1. ONE-LINE POV at the top — commit to the dominant pattern. Use phrases like "The dominant pattern is X." / "What actually drives outcomes is X." / "The real lever across these sources is X." Do NOT open with "Operators converge on…" or "There are several patterns…" without immediately naming a winner.
+
+2. UNEQUAL WEIGHTING — explicitly rank the patterns: "Pattern A drives outcomes. Pattern B is correlation, not cause. Pattern C is table-stakes noise — ignore it." If you list patterns without weighting them, you have failed.
+
+3. WHAT'S OVERRATED — call out what mediocre reps overweight, what's table stakes, what looks important but doesn't move the number. Be explicit. "Reps overweight X — it doesn't move win rate." / "Ignore Y — table stakes." / "Z is correlation, not cause."
+
+4. COMMERCIAL CONSEQUENCE — for the top patterns, tie each to a measurable outcome (win rate delta, cycle time, ACV, no-decision rate, churn, forecast accuracy). NOT "improves discovery" — "shifts win rate from X to Y" / "cuts no-decision losses" / "compresses cycle by N weeks."
+
+5. DISAGREEMENT — when sources disagree, name the disagreement and take a side. "Source A says X, Source B says Y — A is right because Z."
+
+6. EXECUTABLE NEXT MOVES — end with 3–5 numbered moves the rep runs THIS WEEK on a live deal. Specific. Each tied to a commercial outcome. NOT "be aware of pain quantification" — "On your next discovery, ask Q1, Q2, Q3 and quantify the answer in dollars before EOW."
+
+FORBIDDEN OPENERS for synthesis:
+- "Operators converge on…" / "Operators diverge on…" (unless immediately followed by a committed POV)
+- "There are several patterns…" / "Multiple themes emerge…"
+- "Both approaches have merit"
+- "It depends on context"
+- Any balanced-survey structure without a named winner in the first 50 words`,
 
   rewrite_audience: `═══ ASK SHAPE: REWRITE / ADAPT FOR AUDIENCE ═══
 Deliver the rewritten asset directly. After it, in 2–4 lines, name the specific shifts you made for the audience/industry/situation and why each shift matters commercially.`,
@@ -128,6 +141,47 @@ When you reason beyond what the library actually contains, end your response wit
    *Extended beyond your library on: [specific topic]. Add a resource on this to ground next time.*
 Skip this line entirely if your reasoning stayed within the library or if there was no library to lean on (Mode D handles that differently).`;
 
+// ═══ Strong-signal citation discipline ═══
+// When the library has real signal (≥5 resource hits OR strong synthesis ask),
+// vague references like "your KI on discovery" or "from your library" are a
+// FAILURE. The model MUST name actual titles and KI ids.
+function buildCitationDisciplineBlock(args: {
+  resourceTitles?: string[];
+  kiIds?: string[];
+  kiTitles?: string[];
+}): string {
+  const titles = (args.resourceTitles || []).filter((t) => t && t.trim().length > 0);
+  const kis = (args.kiIds || []).filter((k) => k && k.trim().length > 0);
+  const kiTitles = (args.kiTitles || []).filter((t) => t && t.trim().length > 0);
+  if (titles.length === 0 && kis.length === 0) return "";
+
+  const titleList = titles.slice(0, 12).map((t) => `   • ${t}`).join("\n");
+  const kiList = kis.slice(0, 8).map((id, i) => `   • KI[${id.slice(0, 8)}]${kiTitles[i] ? ` ${kiTitles[i]}` : ""}`).join("\n");
+
+  return `═══ CITATION DISCIPLINE — STRONG SIGNAL ═══
+Your library returned ${titles.length} resource hit(s) and ${kis.length} KI hit(s) for this ask. Strong signal = strict citation rules.
+
+WHEN YOU REFERENCE A SOURCE, NAME IT LITERALLY.
+PASS:
+   - "From RESOURCE[\"Discovery Masterclass: Everything You Need…\"]: …"
+   - "Per KI[abcd1234] on quantifying pain: …"
+   - "RESOURCE[\"30-60-90 Plan Template\"] argues that …"
+FAIL (treat these as failures, do NOT use):
+   - "your KI on discovery"
+   - "your library suggests"
+   - "from your playbook"
+   - "your resources show"
+   - any vague gesture toward the library without naming a title or KI id
+
+LITERAL TITLES AVAILABLE THIS TURN:
+${titleList || "   (none)"}
+
+KI IDS AVAILABLE THIS TURN:
+${kiList || "   (none)"}
+
+When you cite, use the EXACT title (substring matches are tolerated by the auditor — quote enough of the title to be unambiguous). When you reference a KI, use the 8-char id form KI[xxxxxxxx]. Citing fabricated titles is worse than not citing — only cite from the lists above.`;
+}
+
 // ═══ Public builder ═══
 export function buildV2SystemPrompt(args: {
   decision: DispatchDecision;
@@ -136,6 +190,9 @@ export function buildV2SystemPrompt(args: {
   resourceContextBlock?: string;
   workingThesisBlock?: string;
   audienceMentioned: boolean;
+  resourceTitles?: string[];
+  kiIds?: string[];
+  kiTitles?: string[];
 }): string {
   const { decision, accountContext, libraryContext, resourceContextBlock, workingThesisBlock } = args;
 
@@ -151,6 +208,20 @@ export function buildV2SystemPrompt(args: {
   // Mode C and short-form skip the extension rule entirely
   if (decision.mode !== "C_general" && decision.askShape !== "short_form") {
     parts.push(EXTENSION_RULE);
+  }
+
+  // Strong-signal citation discipline — only when there's real library to cite.
+  // Triggered by Mode A/B with ≥3 resource hits, OR by synthesis_framework with any hits.
+  const totalHits = (args.resourceTitles?.length || 0) + (args.kiIds?.length || 0);
+  const isStrongSynth = decision.askShape === "synthesis_framework" && totalHits >= 3;
+  const isStrongMode = (decision.mode === "A_strong" || decision.mode === "B_partial") && (args.resourceTitles?.length || 0) >= 3;
+  if (isStrongSynth || isStrongMode) {
+    const block = buildCitationDisciplineBlock({
+      resourceTitles: args.resourceTitles,
+      kiIds: args.kiIds,
+      kiTitles: args.kiTitles,
+    });
+    if (block) parts.push(block);
   }
 
   // Rubric — mode-aware

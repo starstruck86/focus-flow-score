@@ -4248,6 +4248,11 @@ async function buildChatSystemPrompt(args: {
   retrievalSucceeded: boolean;
   intent: IntentResult;
   modeLockBlock: string;
+  /** Raw context blocks — surfaced so V2 can reuse the same retrieval. */
+  rawAccountContext?: string;
+  rawLibraryContext?: string;
+  rawResourceContextBlock?: string;
+  rawWorkingThesisBlock?: string;
 }> {
   const {
     supabase,
@@ -4450,6 +4455,10 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     retrievalSucceeded: !!resources && !retrievalError,
     intent,
     modeLockBlock,
+    rawAccountContext: assembled?.contextBlock || "",
+    rawLibraryContext: library?.contextString || "",
+    rawResourceContextBlock: resources?.contextBlock || "",
+    rawWorkingThesisBlock: workingThesisBlock || "",
   };
 }
 
@@ -4510,6 +4519,10 @@ async function handleChat(
     retrievalDiagnostics,
     retrievalSucceeded,
     intent,
+    rawAccountContext,
+    rawLibraryContext,
+    rawResourceContextBlock,
+    rawWorkingThesisBlock,
   } = await buildChatSystemPrompt({
     supabase,
     userId,
@@ -4616,10 +4629,17 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           hasEntityContext: !!accountId,
           mentionsKnownEntity: !!(pack.account?.name && new RegExp(`\\b${pack.account.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(content || "")),
         },
-        accountContext: contextSection || undefined,
-        libraryContext: undefined,
-        resourceContextBlock: undefined,
-        workingThesisBlock: priorThesis ? JSON.stringify(priorThesis) : undefined,
+        // Phase 2.5 fix: thread the SAME retrieval the V1 prompt uses into V2.
+        // Without these, strong-signal synthesis had no library to cite —
+        // which is exactly what produced the vague "your KI on…" failures.
+        accountContext: rawAccountContext || contextSection || undefined,
+        libraryContext: rawLibraryContext || undefined,
+        resourceContextBlock: rawResourceContextBlock || undefined,
+        workingThesisBlock: rawWorkingThesisBlock || (priorThesis ? JSON.stringify(priorThesis) : undefined),
+        // Pass literal hit lists so the audit can verify citation discipline.
+        resourceTitles: resourceHits.map((h) => h.title),
+        kiIds: kiHitList.map((k) => k.id),
+        kiTitles: kiHitList.map((k) => k.title),
       });
       v2Decision = v2.decision;
       effectiveSystemPrompt = v2.systemPrompt;
@@ -4634,6 +4654,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           mentionsKnownEntity: false,
         },
         priorTurnPrompt,
+        resourceTitles: resourceHits.map((h) => h.title),
+        kiIds: kiHitList.map((k) => k.id),
+        kiTitles: kiHitList.map((k) => k.title),
       };
       console.log(
         `[v2] mode=${v2.decision.mode} ask_shape=${v2.decision.askShape} signal=${v2.decision.signalScore} override=${v2.decision.override ?? "none"}`,
@@ -4785,6 +4808,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 decision: v2EvidenceBase.decision,
                 body: auditedVisible || "",
                 hadLibraryHits: (resourceHits.length + kiHits) > 0,
+                resourceTitles: v2EvidenceBase.resourceTitles,
+                kiIds: v2EvidenceBase.kiIds,
+                kiTitles: v2EvidenceBase.kiTitles,
               });
               base.v2 = v2AssembleEvidence({
                 decision: v2EvidenceBase.decision,
@@ -5061,6 +5087,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                     decision: v2EvidenceBase.decision,
                     body: auditedVisible || "",
                     hadLibraryHits: (resourceHits.length + kiHits) > 0,
+                    resourceTitles: v2EvidenceBase.resourceTitles,
+                    kiIds: v2EvidenceBase.kiIds,
+                    kiTitles: v2EvidenceBase.kiTitles,
                   });
                   base.v2 = v2AssembleEvidence({
                     decision: v2EvidenceBase.decision,
