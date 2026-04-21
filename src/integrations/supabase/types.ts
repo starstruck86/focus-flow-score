@@ -8419,6 +8419,10 @@ export type Database = {
           id: string
         }[]
       }
+      get_resource_lifecycle_summary: {
+        Args: { p_user_id: string }
+        Returns: Json
+      }
       is_approved_user: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
