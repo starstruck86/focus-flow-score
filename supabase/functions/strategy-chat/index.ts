@@ -20,6 +20,13 @@ import {
   validateWorkingThesisState,
   type WorkingThesisState,
 } from "../_shared/strategy-core/index.ts";
+import {
+  assembleRoutingEvidence as v2AssembleEvidence,
+  auditResponse as v2AuditResponse,
+  buildV2Prompt,
+  isV2Enabled,
+  validateResponse as v2ValidateResponse,
+} from "../_shared/strategy-core/v2/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
