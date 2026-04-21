@@ -94,11 +94,16 @@ interface RetryConfig {
 }
 
 // ─── Audit logger (best-effort) ─────────────────────────────────
-// IMPORTANT: admin client must be passed explicitly. Module-level singletons
-// are unreliable inside EdgeRuntime.waitUntil(...) after the kickoff response
-// returns, which previously caused background audit rows to silently drop.
+// IMPORTANT: writes use direct PostgREST fetch with explicit service-role
+// headers, NOT the supabase-js client. The shared client's auth state was
+// being lost / mutated inside EdgeRuntime.waitUntil(...) after the kickoff
+// response returned, causing every background insert to fail with an RLS
+// error even though the client was constructed with the service-role key.
+// A direct fetch with explicit headers sidesteps any client-state weirdness.
+// (The `admin` arg is kept in the signature for API compatibility with the
+// rest of the file; it is not actually used here.)
 async function audit(
-  admin: any,
+  _admin: any,
   runId: string,
   event_type: string,
   opts: {
@@ -111,23 +116,31 @@ async function audit(
     details?: Record<string, any>;
   } = {},
 ) {
-  if (!admin) {
-    console.error("[audit] no admin client provided for event", event_type);
-    return;
-  }
   try {
-    const { error } = await admin.from("strategy_benchmark_audit_logs").insert({
-      run_id: runId,
-      ask_index: opts.ask_index ?? null,
-      event_type,
-      event_level: opts.level ?? "info",
-      system: opts.system ?? null,
-      provider: opts.provider ?? null,
-      model: opts.model ?? null,
-      message: opts.message ?? "",
-      details: opts.details ?? {},
+    const resp = await fetch(`${SUPABASE_URL}/rest/v1/strategy_benchmark_audit_logs`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SERVICE_ROLE_KEY,
+        "Authorization": `Bearer ${SERVICE_ROLE_KEY}`,
+        "Prefer": "return=minimal",
+      },
+      body: JSON.stringify({
+        run_id: runId,
+        ask_index: opts.ask_index ?? null,
+        event_type,
+        event_level: opts.level ?? "info",
+        system: opts.system ?? null,
+        provider: opts.provider ?? null,
+        model: opts.model ?? null,
+        message: opts.message ?? "",
+        details: opts.details ?? {},
+      }),
     });
-    if (error) console.error("[audit] insert err:", error.message);
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => "");
+      console.error(`[audit] insert err: ${resp.status} ${txt} (event=${event_type})`);
+    }
   } catch (e: any) {
     // Best-effort: never throw out of audit().
     console.error("[audit] exception:", e?.message || e);
