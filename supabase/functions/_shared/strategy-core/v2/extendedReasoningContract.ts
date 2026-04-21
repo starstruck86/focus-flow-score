@@ -244,10 +244,50 @@ export function buildV2SystemPrompt(args: {
   const thesis = (workingThesisBlock || "").trim();
   if (thesis) parts.push(thesis);
 
-  // Final binding line — short, no theater
-  parts.push(
-    `Write the response now. Direct, sharp, useful. No preamble, no meta-commentary about your approach.`,
-  );
+  // ═══ Phase 2.6: SYNTHESIS TAIL BLOCK ═══
+  // For strong-signal synthesis asks, re-emit the non-negotiables AT THE END
+  // so they are the last thing the model sees before generating.
+  // This is the highest-recency slot — and synthesis is the failure mode
+  // we are specifically targeting.
+  if (isStrongSynth || (decision.askShape === "synthesis_framework" && decision.mode === "A_strong")) {
+    const titleSample = (args.resourceTitles || []).slice(0, 6)
+      .map((t) => `"${t}"`).join(", ");
+    parts.push(`═══ FINAL INSTRUCTIONS — STRONG-SIGNAL SYNTHESIS ═══
+Before you write a single word, read this. These rules override anything above if they conflict.
+
+YOUR JOB: synthesize patterns from the rep's library and COMMIT to a directional read. You are not summarizing sources. You are not surveying the field. You are an operator telling this rep what actually drives outcomes — and what doesn't.
+
+REQUIRED in this exact spirit (not as headers):
+
+1. OPEN WITH POV. First sentence commits to the dominant pattern. Examples:
+   ✓ "The dominant driver across these resources is X — everything else is downstream."
+   ✓ "What actually moves win rate here is X. The rest is correlation."
+   ✗ "Operators converge on several patterns…"  ← FORBIDDEN unless immediately followed by a named winner.
+   ✗ "There are multiple themes in your library…"  ← FORBIDDEN.
+   ✗ "Both approaches have merit…"  ← FORBIDDEN.
+
+2. UNEQUAL WEIGHTING. Rank the patterns. Say what's load-bearing and what's noise.
+   ✓ "Pattern A drives outcomes. Pattern B is table stakes. Pattern C is what mediocre reps overweight."
+
+3. CITE LITERAL TITLES INLINE. ${titleSample ? `You have these titles available: ${titleSample}${(args.resourceTitles?.length || 0) > 6 ? ", …" : ""}.` : "Cite using RESOURCE[\"title\"] or KI[id] form."} Vague refs like "your KI on discovery" or "your library suggests" are FAILURES.
+
+4. WHAT'S OVERRATED. Explicitly call it out. "Reps overweight X — it doesn't move the number." "Ignore Y — table stakes."
+
+5. COMMERCIAL CONSEQUENCE for top patterns. Tie to win rate, cycle time, ACV, no-decision rate, churn, forecast confidence. Vague "improves discovery" does NOT count.
+
+6. EXECUTABLE NEXT MOVES. End with 3–5 numbered moves the rep runs THIS WEEK on a live deal. Specific. Each tied to a commercial outcome.
+
+If the response reads like a balanced overview of what each source says, you have failed.
+If you don't name a winner in the first 50 words, you have failed.
+If you reference the library without naming literal titles or KI ids, you have failed.
+
+Write the synthesis now. POV first. Commit.`);
+  } else {
+    // Final binding line for non-synthesis paths — short, no theater
+    parts.push(
+      `Write the response now. Direct, sharp, useful. No preamble, no meta-commentary about your approach.`,
+    );
+  }
 
   return parts.join("\n\n");
 }

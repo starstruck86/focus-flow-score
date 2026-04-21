@@ -4661,6 +4661,28 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       console.log(
         `[v2] mode=${v2.decision.mode} ask_shape=${v2.decision.askShape} signal=${v2.decision.signalScore} override=${v2.decision.override ?? "none"}`,
       );
+
+      // ═══ Phase 2.6 — Evidence-based routing override ═══
+      // Strong-signal synthesis collapses into balanced-survey behavior on
+      // gpt-4o (Test A failed). Claude Sonnet 4.5 produced operator-grade
+      // synthesis on Test B. Route synthesis_framework + A_strong to Claude.
+      if (
+        v2.decision.askShape === "synthesis_framework" &&
+        v2.decision.mode === "A_strong" &&
+        PROVIDER_HEALTH.anthropicDirect
+      ) {
+        route = {
+          ...route,
+          primaryProvider: "anthropic",
+          model: "claude-sonnet-4-5-20250929",
+          fallbackProvider: "openai",
+          fallbackModel: "gpt-4o",
+          _routingReason: "v2_synthesis_strong_to_claude",
+        };
+        console.log(
+          `[v2] routing override: synthesis_framework+A_strong → claude-sonnet-4-5`,
+        );
+      }
     } catch (e) {
       console.error(`[v2] dispatch failed, falling back to V1: ${(e as Error).message}`);
       v2Decision = null;
