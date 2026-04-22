@@ -159,13 +159,31 @@ function groupCanaryRuns(runs: TaskRunRow[]): CanaryRunGroup[] {
       group.fallback_success = fb.success === true ? true : (group.fallback_success ?? (fb.success === false ? false : null));
     }
   }
-  // Compute collision result if mode === collision
+  // Compute collision result if mode === collision.
+  // CORRECT logic: only trust evidence we can actually prove.
+  //   - meta.collision_evidence (stamped by run-validation-canary) is the
+  //     authoritative source — use it when available.
+  //   - Otherwise, >1 distinct run id ⇒ duplicate rows created (false).
+  //   - 1 distinct run id WITHOUT evidence ⇒ insufficient (null), because
+  //     a single row may mean only one attempt completed or got tagged.
   for (const g of byValidator.values()) {
-    if (g.mode === 'collision') {
-      const ids = new Set(g.runs.map((r) => r.id));
-      // If both attempts converged on the same run_id, the group will only
-      // contain ONE row (idempotent path returned existing run).
-      g.same_run_id_returned = ids.size === 1 && g.runs.length >= 1;
+    if (g.mode !== 'collision') continue;
+    const stamped = g.runs
+      .map((r) => r.meta?.collision_evidence)
+      .find((c) => c && typeof c === 'object');
+    if (stamped) {
+      g.same_run_id_returned =
+        typeof stamped.same_run_id_returned === 'boolean'
+          ? stamped.same_run_id_returned
+          : null;
+      continue;
+    }
+    const ids = new Set(g.runs.map((r) => r.id));
+    if (ids.size > 1) {
+      g.same_run_id_returned = false;
+    } else {
+      // Insufficient evidence — do NOT claim idempotency on a lone row.
+      g.same_run_id_returned = null;
     }
   }
   return Array.from(byValidator.values()).sort((a, b) =>
