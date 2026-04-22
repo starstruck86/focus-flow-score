@@ -277,7 +277,7 @@ export function ValidationStatusDrawer({
           ) : gaps.length === 0 ? (
             <p className="text-xs text-muted-foreground">No gaps detected.</p>
           ) : (
-            <ul className="space-y-1 text-xs text-amber-700 dark:text-amber-400">
+            <ul className="space-y-1 text-xs text-muted-foreground">
               {gaps.map((g, i) => <li key={i}>• {g}</li>)}
             </ul>
           )}
