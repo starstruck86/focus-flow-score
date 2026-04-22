@@ -308,9 +308,22 @@ export function ValidationStatusDrawer({
 
     const orphans = (orphansRes.data ?? []).length;
     const laneCount24h = routing.length;
+    const laneMix24h: LaneMix = routing.reduce(
+      (acc, r) => {
+        if (r.lane === 'direct') acc.direct += 1;
+        else if (r.lane === 'assisted') acc.assisted += 1;
+        else if (r.lane === 'deep_work') acc.deep_work += 1;
+        acc.total += 1;
+        return acc;
+      },
+      { direct: 0, assisted: 0, deep_work: 0, total: 0 } as LaneMix,
+    );
     const fallbackEvents = runs.filter((r) => r.meta?.authoring_fallback?.triggered === true);
     const fallbackSeen = fallbackEvents.some((r) => r.meta?.authoring_fallback?.success === true);
     const deepWorkRuns24h = runs.filter((r) => r.created_at >= since24h).length;
+    const failures24h = runs.filter(
+      (r) => r.status === 'failed' && r.created_at >= since24h,
+    );
     const canaryGroups = groupCanaryRuns(runs).slice(0, 10);
 
     setSnap({
@@ -318,8 +331,10 @@ export function ValidationStatusDrawer({
       duplicates,
       orphans,
       laneCount24h,
+      laneMix24h,
       fallbackSeen,
       deepWorkRuns24h,
+      failures24h: failures24h.slice(0, 3),
       recentRuns: runs.slice(0, 10),
       recentRouting: routing.slice(0, 10),
       fallbackEvents: fallbackEvents.slice(0, 10),
