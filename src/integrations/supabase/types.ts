@@ -3724,6 +3724,63 @@ export type Database = {
         }
         Relationships: []
       }
+      lifecycle_audit_events: {
+        Row: {
+          after_blocked_reason: string | null
+          after_canonical_state: string | null
+          auto_healed: boolean
+          before_blocked_reason: string | null
+          before_canonical_state: string | null
+          content_length: number | null
+          created_at: string
+          details: Json | null
+          id: string
+          ki_active: number
+          ki_active_with_contexts: number
+          ki_total: number
+          resource_id: string
+          resource_title: string | null
+          user_id: string
+          violation_type: string
+        }
+        Insert: {
+          after_blocked_reason?: string | null
+          after_canonical_state?: string | null
+          auto_healed?: boolean
+          before_blocked_reason?: string | null
+          before_canonical_state?: string | null
+          content_length?: number | null
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ki_active?: number
+          ki_active_with_contexts?: number
+          ki_total?: number
+          resource_id: string
+          resource_title?: string | null
+          user_id: string
+          violation_type: string
+        }
+        Update: {
+          after_blocked_reason?: string | null
+          after_canonical_state?: string | null
+          auto_healed?: boolean
+          before_blocked_reason?: string | null
+          before_canonical_state?: string | null
+          content_length?: number | null
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ki_active?: number
+          ki_active_with_contexts?: number
+          ki_total?: number
+          resource_id?: string
+          resource_title?: string | null
+          user_id?: string
+          violation_type?: string
+        }
+        Relationships: []
+      }
       mock_call_sessions: {
         Row: {
           call_type: string
