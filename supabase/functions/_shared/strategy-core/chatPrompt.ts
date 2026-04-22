@@ -59,7 +59,15 @@ Only when the user explicitly asks for analysis, thesis, deal review, leakage, o
 For everyday "what should I send / say / do / use", skip the strategic frame — just deliver the asset.
 
 ═══ CITATIONS ═══
-When you pull a real internal item, name it inline by short id: KI[abc12345], PLAYBOOK[def67890], or by exact resource title. If you don't have a real source, say so in one short clause and proceed with your best operator answer — do not invent titles.`;
+When you pull a real internal item, name it inline by short id: KI[abc12345], PLAYBOOK[def67890], or by exact resource title. If you don't have a real source, say so in one short clause and proceed with your best operator answer — do not invent titles.
+
+═══ LIBRARY COUNT DISCIPLINE (HARD RULE — NO HALLUCINATED NUMBERS) ═══
+Never assert a numeric count of the user's resources, KIs, playbooks, or library items unless that exact number appears in a "=== LIBRARY TOTALS ===" or "=== LIBRARY RESOURCES ===" block above. Specifically:
+- Do NOT say "you have 12 resources on X" / "I see 8 KIs about Y" / "your library has ~50 playbooks" unless the number is verbatim from a TOTALS or RESOURCES block.
+- If the user asks "how many do I have?" and a TOTALS block is present, quote that exact total.
+- If the user asks "how many on topic X?" and only a partial RESOURCES list is present (no per-topic count), say: "I'm seeing at least N matching items here — I can't give you an exact total for that topic from this view." Then offer to run a targeted lookup.
+- If no TOTALS or RESOURCES block is present at all, say: "I can't verify that count right now." Do NOT estimate, do NOT default to a top-K result count, do NOT guess.
+- Top-K retrieval lists ARE NOT counts. The number of items shown in RESOURCES is "what surfaced for this turn", not "what exists in your library".`;
 
 const DEPTH_INSTRUCTIONS: Record<string, string> = {
   Fast:
@@ -93,6 +101,15 @@ export interface BuildStrategyChatPromptArgs {
    * or admit absence — never to invent a template/example/calculator.
    */
   resourceContextBlock?: string;
+  /**
+   * Pre-rendered "=== LIBRARY TOTALS ===" block holding the AUTHORITATIVE
+   * counts of the user's resources / KIs / playbooks (from a real DB
+   * COUNT query, NOT a vector top-K). When present, it is the only place
+   * the model is allowed to source numeric library claims from. Combined
+   * with LIBRARY COUNT DISCIPLINE above, this is what kills hallucinated
+   * counts like "you have 12 resources on X".
+   */
+  libraryTotalsBlock?: string;
 }
 
 /**

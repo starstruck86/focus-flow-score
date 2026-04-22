@@ -24,6 +24,7 @@
 import { retrieveLibraryContext } from "./libraryRetrieval.ts";
 import { callClaude, callLovableAI, callPerplexity, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
+import { authorBySectionBatches } from "./sectionAuthor.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
 // ── Internal: write a progress step to the run row (best-effort). ─
@@ -246,23 +247,78 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           primary_error: (primaryErrForLog || "").slice(0, 200),
           fallback_error: fbMsg.slice(0, 300),
         }));
-        fallbackMeta = {
-          triggered: true,
-          primary_model: authoringModel,
-          fallback_model: FALLBACK_MODEL,
-          success: false,
-          forced: forceAuthoringFailure,
-          primary_error: claudeMsg.slice(0, 500),
-          fallback_error: fbMsg.slice(0, 500),
-        };
-        // Best-effort persist before throwing
-        try {
-          await supabase
-            .from("task_runs")
-            .update({ meta: { authoring_fallback: fallbackMeta } })
-            .eq("id", runId);
-        } catch { /* swallow */ }
-        throw new Error(`primary(claude): ${claudeMsg.slice(0, 150)} | fallback(${FALLBACK_MODEL}): ${fbMsg.slice(0, 200)}`);
+
+        // ── Section-batched rescue ────────────────────────────────
+        // The monolithic ladder failed. Before giving up, try authoring
+        // one small batch at a time (Claude → Gemini per batch). This is
+        // the reliability layer that keeps deep-work runs from going
+        // 100% black on a single timeout. It is *additive*: the existing
+        // path runs first; this only fires when both primary and fallback
+        // monolithic calls failed.
+        console.warn(JSON.stringify({
+          tag: "[authoring:section_batch_rescue_start]",
+          run_id: runId,
+          task_type: taskType,
+        }));
+        const rescue = await authorBySectionBatches({
+          runId,
+          taskType,
+          systemPrompt: handler.buildDocumentSystemPrompt(),
+          baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
+          synthesis,
+        });
+
+        if (rescue.sections_authored > 0) {
+          console.log(JSON.stringify({
+            tag: "[authoring:section_batch_rescue_success]",
+            run_id: runId,
+            sections_authored: rescue.sections_authored,
+            sections_total: rescue.draft.sections.length,
+            any_fallback_success: rescue.any_fallback_success,
+          }));
+          documentRaw = JSON.stringify(rescue.draft);
+          fallbackMeta = {
+            triggered: true,
+            primary_model: authoringModel,
+            fallback_model: FALLBACK_MODEL,
+            success: true,
+            forced: forceAuthoringFailure,
+            primary_error: claudeMsg.slice(0, 500),
+            fallback_error: fbMsg.slice(0, 500),
+            section_batch_rescue: {
+              used: true,
+              sections_authored: rescue.sections_authored,
+              sections_total: rescue.draft.sections.length,
+              any_fallback_success: rescue.any_fallback_success,
+              batches: rescue.batchOutcomes,
+            },
+          };
+        } else {
+          fallbackMeta = {
+            triggered: true,
+            primary_model: authoringModel,
+            fallback_model: FALLBACK_MODEL,
+            success: false,
+            forced: forceAuthoringFailure,
+            primary_error: claudeMsg.slice(0, 500),
+            fallback_error: fbMsg.slice(0, 500),
+            section_batch_rescue: {
+              used: true,
+              sections_authored: 0,
+              sections_total: rescue.draft.sections.length,
+              any_fallback_success: false,
+              batches: rescue.batchOutcomes,
+            },
+          };
+          // Best-effort persist before throwing
+          try {
+            await supabase
+              .from("task_runs")
+              .update({ meta: { authoring_fallback: fallbackMeta } })
+              .eq("id", runId);
+          } catch { /* swallow */ }
+          throw new Error(`primary(claude): ${claudeMsg.slice(0, 120)} | fallback(${FALLBACK_MODEL}): ${fbMsg.slice(0, 150)} | section_batch_rescue: 0/${rescue.draft.sections.length} sections`);
+        }
       }
     }
 
