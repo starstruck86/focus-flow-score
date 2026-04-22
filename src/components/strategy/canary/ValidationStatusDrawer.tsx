@@ -323,18 +323,34 @@ export function ValidationStatusDrawer({
       toast.error('Cannot rerun — original thread_id missing');
       return;
     }
-    // Silent if user cancels prompt
+
+    // Lightweight confirmation for destructive/expensive modes only.
+    if (group.mode === 'fallback') {
+      const ok = window.confirm(
+        'Re-run fallback canary? This intentionally forces primary authoring failure.',
+      );
+      if (!ok) return;
+    } else if (group.mode === 'collision') {
+      const ok = window.confirm(
+        'Re-run collision canary? This fires two near-simultaneous generate attempts.',
+      );
+      if (!ok) return;
+    }
+
+    // Silent if user cancels validation-key prompt
     const wasCached = !!getCachedValidationKey();
     const key = ensureValidationKey();
     if (!key) {
-      // No toast, no error state — user intentionally cancelled
       if (!wasCached) refreshKeyStatus();
       return;
     }
     refreshKeyStatus();
     setLastRerunError(null);
     setRerunningId(group.validator_run_id);
-    toast(`Re-running canary (${group.mode})…`);
+    const friendlyMode =
+      group.mode === 'normal' ? 'Normal' :
+      group.mode === 'fallback' ? 'Fallback' :
+      group.mode === 'collision' ? 'Collision' : group.mode;
     try {
       const { data, error } = await supabase.functions.invoke('run-validation-canary', {
         body: {
@@ -349,14 +365,13 @@ export function ValidationStatusDrawer({
       if (data.ok !== true) {
         throw new Error(data.error || 'Canary endpoint returned ok=false');
       }
-      toast.success(`Canary started — validator_run_id ${String(data?.validator_run_id || '').slice(0, 8)}…`);
+      toast.success(`${friendlyMode} canary started`);
     } catch (e: any) {
       const msg = e?.message || String(e);
       setLastRerunError({ vrid: group.validator_run_id, message: msg });
       toast.error(`Rerun failed: ${msg}`);
     } finally {
       setRerunningId(null);
-      // Always refresh so drawer state never stays stale
       try { await load(); } catch { /* ignore */ }
     }
   }, [load, refreshKeyStatus]);
