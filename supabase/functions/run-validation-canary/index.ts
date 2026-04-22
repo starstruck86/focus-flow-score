@@ -244,10 +244,23 @@ Deno.serve(async (req) => {
         callRunStrategyTask(authHeader, body.task_type, baseInputs),
         callRunStrategyTask(authHeader, body.task_type, baseInputs),
       ]);
-      const sameId = !!(a.run_id && b.run_id && a.run_id === b.run_id);
-      // Stamp meta once on the (possibly single) created row.
+      const bothReturned = !!(a.run_id && b.run_id);
+      const sameId = bothReturned && a.run_id === b.run_id;
+      // Stamp meta once on the (possibly single) created row, including
+      // the collision evidence so the drawer can derive a deterministic
+      // verdict even when both attempts collapse onto a single row.
       const ids = Array.from(new Set([a.run_id, b.run_id].filter(Boolean) as string[]));
-      await Promise.all(ids.map((id) => stampValidationMeta(supabase, id, metaPayload)));
+      const collisionMeta = {
+        ...metaPayload,
+        collision_evidence: {
+          first_run_id: a.run_id ?? null,
+          second_run_id: b.run_id ?? null,
+          both_returned: bothReturned,
+          same_run_id_returned: bothReturned ? sameId : null,
+          distinct_run_ids: ids,
+        },
+      };
+      await Promise.all(ids.map((id) => stampValidationMeta(supabase, id, collisionMeta)));
       return jsonResponse({
         ok: !!(a.run_id || b.run_id),
         mode: "collision",
