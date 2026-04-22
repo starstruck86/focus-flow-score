@@ -8,15 +8,19 @@
 //   1. Readiness Summary  — duplicates / orphans / lane telemetry /
 //                            fallback success / 24h deep-work runs /
 //                            recommendation
-//   2. Latest Evidence    — last 10 task_runs, last 10 routing_decisions,
-//                            recent fallback events
-//   3. Validation Gaps    — explicit empty-state callouts so the operator
-//                            knows what's missing
+//   2. Validation Gaps    — explicit empty-state callouts
+//   3. Latest deep-work runs (last 10)
+//   4. Latest routing decisions (last 10)
+//   5. Recent fallback events
+//   6. Canary Runs        — recent validation-canary invocations grouped
+//                            by validator_run_id, with one-click rerun
+//   7. Verdict Rules      — collapsed by default; static deterministic
+//                            ENABLE / HOLD / DO NOT ENABLE rules
 //
 // Empty states are explicit. Partial data renders safely.
 // ════════════════════════════════════════════════════════════════
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -29,9 +33,16 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import { RefreshCw, CheckCircle2, AlertCircle, XCircle, Info } from 'lucide-react';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { RefreshCw, CheckCircle2, AlertCircle, XCircle, Info, ChevronDown, RotateCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { ensureValidationKey } from '@/lib/strategy/canary/validationKey';
 
 interface TaskRunRow {
   id: string;
@@ -51,6 +62,18 @@ interface RoutingRow {
   auto_promoted: boolean | null;
 }
 
+interface CanaryRunGroup {
+  validator_run_id: string;
+  mode: string;
+  thread_id: string | null;
+  task_type: string;
+  created_at: string;
+  runs: TaskRunRow[];
+  fallback_triggered: boolean;
+  fallback_success: boolean | null;
+  same_run_id_returned: boolean | null;
+}
+
 interface Snapshot {
   loading: boolean;
   duplicates: number | null;
@@ -61,6 +84,7 @@ interface Snapshot {
   recentRuns: TaskRunRow[];
   recentRouting: RoutingRow[];
   fallbackEvents: TaskRunRow[];
+  canaryGroups: CanaryRunGroup[];
   errors: string[];
 }
 
@@ -74,6 +98,7 @@ const EMPTY: Snapshot = {
   recentRuns: [],
   recentRouting: [],
   fallbackEvents: [],
+  canaryGroups: [],
   errors: [],
 };
 
@@ -96,6 +121,50 @@ function StatusBadge({ kind, label }: { kind: 'pass' | 'warn' | 'fail' | 'info';
   );
 }
 
+function groupCanaryRuns(runs: TaskRunRow[]): CanaryRunGroup[] {
+  const byValidator = new Map<string, CanaryRunGroup>();
+  for (const r of runs) {
+    const vc = r.meta?.validation_canary;
+    if (!vc?.validator_run_id) continue;
+    const vid = String(vc.validator_run_id);
+    let group = byValidator.get(vid);
+    if (!group) {
+      group = {
+        validator_run_id: vid,
+        mode: String(vc.mode ?? 'unknown'),
+        thread_id: vc.thread_id ?? null,
+        task_type: r.task_type,
+        created_at: r.created_at,
+        runs: [],
+        fallback_triggered: false,
+        fallback_success: null,
+        same_run_id_returned: null,
+      };
+      byValidator.set(vid, group);
+    }
+    group.runs.push(r);
+    // Earliest created_at wins for sort
+    if (r.created_at < group.created_at) group.created_at = r.created_at;
+    const fb = r.meta?.authoring_fallback;
+    if (fb?.triggered) {
+      group.fallback_triggered = true;
+      group.fallback_success = fb.success === true ? true : (group.fallback_success ?? (fb.success === false ? false : null));
+    }
+  }
+  // Compute collision result if mode === collision
+  for (const g of byValidator.values()) {
+    if (g.mode === 'collision') {
+      const ids = new Set(g.runs.map((r) => r.id));
+      // If both attempts converged on the same run_id, the group will only
+      // contain ONE row (idempotent path returned existing run).
+      g.same_run_id_returned = ids.size === 1 && g.runs.length >= 1;
+    }
+  }
+  return Array.from(byValidator.values()).sort((a, b) =>
+    b.created_at.localeCompare(a.created_at),
+  );
+}
+
 export function ValidationStatusDrawer({
   open,
   onOpenChange,
@@ -105,13 +174,13 @@ export function ValidationStatusDrawer({
 }) {
   const { user } = useAuth();
   const [snap, setSnap] = useState<Snapshot>(EMPTY);
+  const [rerunningId, setRerunningId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
     setSnap((s) => ({ ...s, loading: true, errors: [] }));
     const errors: string[] = [];
 
-    // Run all queries in parallel — partial failure must not blank the panel.
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const stallCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
@@ -122,7 +191,7 @@ export function ValidationStatusDrawer({
         .eq('user_id', user.id)
         .in('task_type', DEEP_TASK_TYPES)
         .order('created_at', { ascending: false })
-        .limit(30),
+        .limit(50),
       supabase
         .from('routing_decisions')
         .select('id, lane, created_at, thread_id, override_used, auto_promoted')
@@ -153,7 +222,6 @@ export function ValidationStatusDrawer({
     const runs = (runsRes.data ?? []) as TaskRunRow[];
     const routing = (routingRes.data ?? []) as RoutingRow[];
 
-    // Duplicate active rows per (thread_id, task_type)
     let duplicates = 0;
     const seen = new Map<string, number>();
     for (const r of (dupRes.data ?? []) as Array<{ thread_id: string | null; task_type: string }>) {
@@ -168,6 +236,7 @@ export function ValidationStatusDrawer({
     const fallbackEvents = runs.filter((r) => r.meta?.authoring_fallback?.triggered === true);
     const fallbackSeen = fallbackEvents.some((r) => r.meta?.authoring_fallback?.success === true);
     const deepWorkRuns24h = runs.filter((r) => r.created_at >= since24h).length;
+    const canaryGroups = groupCanaryRuns(runs).slice(0, 10);
 
     setSnap({
       loading: false,
@@ -179,6 +248,7 @@ export function ValidationStatusDrawer({
       recentRuns: runs.slice(0, 10),
       recentRouting: routing.slice(0, 10),
       fallbackEvents: fallbackEvents.slice(0, 10),
+      canaryGroups,
       errors,
     });
   }, [user]);
@@ -187,7 +257,7 @@ export function ValidationStatusDrawer({
     if (open) load();
   }, [open, load]);
 
-  const recommendation: { kind: 'pass' | 'warn' | 'fail'; label: string } = (() => {
+  const recommendation: { kind: 'pass' | 'warn' | 'fail'; label: string } = useMemo(() => {
     if (snap.loading) return { kind: 'warn', label: 'Loading…' };
     if ((snap.duplicates ?? 0) > 0 || (snap.orphans ?? 0) > 0) {
       return { kind: 'fail', label: 'Blocked — duplicates or orphans present' };
@@ -195,7 +265,7 @@ export function ValidationStatusDrawer({
     if ((snap.laneCount24h ?? 0) === 0) return { kind: 'warn', label: 'Needs traffic — no lane telemetry' };
     if (!snap.fallbackSeen) return { kind: 'warn', label: 'Needs traffic — no fallback success recorded' };
     return { kind: 'pass', label: 'Ready to test' };
-  })();
+  }, [snap]);
 
   const gaps: string[] = [];
   if ((snap.laneCount24h ?? 0) === 0) gaps.push('No lane telemetry recorded in last 24h');
@@ -203,6 +273,35 @@ export function ValidationStatusDrawer({
   if ((snap.deepWorkRuns24h ?? 0) === 0) gaps.push('No deep-work runs in last 24h');
   if ((snap.duplicates ?? 0) > 0) gaps.push(`${snap.duplicates} duplicate active run(s) for same (thread_id, task_type)`);
   if ((snap.orphans ?? 0) > 0) gaps.push(`${snap.orphans} orphaned authoring run(s) older than 5min`);
+
+  const handleRerun = useCallback(async (group: CanaryRunGroup) => {
+    if (!group.thread_id) {
+      toast.error('Cannot rerun — original thread_id missing');
+      return;
+    }
+    const key = ensureValidationKey();
+    if (!key) return;
+    setRerunningId(group.validator_run_id);
+    toast(`Re-running canary (${group.mode})…`);
+    try {
+      const { data, error } = await supabase.functions.invoke('run-validation-canary', {
+        body: {
+          mode: group.mode,
+          thread_id: group.thread_id,
+          task_type: group.task_type,
+          validation_key: key,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Canary started — validator_run_id ${String(data?.validator_run_id || '').slice(0, 8)}…`);
+      await load();
+    } catch (e: any) {
+      toast.error(`Rerun failed: ${e?.message || String(e)}`);
+    } finally {
+      setRerunningId(null);
+    }
+  }, [load]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -284,7 +383,81 @@ export function ValidationStatusDrawer({
 
           <Separator className="my-5" />
 
-          {/* SECTION 3 — Latest task_runs */}
+          {/* SECTION 3 — Canary Runs (validator_run_id grouped) */}
+          <h3 className="text-sm font-semibold mb-2">Canary runs</h3>
+          {snap.loading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : snap.canaryGroups.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No canary-tagged runs yet. Use <code className="font-mono">run-validation-canary</code> to seed evidence.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {snap.canaryGroups.map((g) => {
+                const isRerunning = rerunningId === g.validator_run_id;
+                return (
+                  <li key={g.validator_run_id} className="rounded border border-border/60 p-2.5 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Badge variant="outline" className="h-5 text-[10px] uppercase">{g.mode}</Badge>
+                        <span className="font-mono truncate">{g.task_type}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[10px]"
+                        disabled={isRerunning || !g.thread_id}
+                        onClick={() => handleRerun(g)}
+                      >
+                        <RotateCw className={`h-3 w-3 mr-1 ${isRerunning ? 'animate-spin' : ''}`} />
+                        Re-run
+                      </Button>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                      <span>vrid: <span className="font-mono">{g.validator_run_id.slice(0, 8)}…</span></span>
+                      <span>{new Date(g.created_at).toLocaleString()}</span>
+                      <span>runs: {g.runs.length}</span>
+                      {g.mode === 'fallback' && (
+                        <>
+                          <StatusBadge
+                            kind={g.fallback_triggered ? 'pass' : 'warn'}
+                            label={`fb: ${g.fallback_triggered ? 'triggered' : 'not seen'}`}
+                          />
+                          <StatusBadge
+                            kind={g.fallback_success === true ? 'pass' : g.fallback_success === false ? 'fail' : 'info'}
+                            label={`success: ${g.fallback_success === null ? 'n/a' : g.fallback_success ? 'yes' : 'no'}`}
+                          />
+                        </>
+                      )}
+                      {g.mode === 'collision' && (
+                        <StatusBadge
+                          kind={g.same_run_id_returned ? 'pass' : 'warn'}
+                          label={`same id: ${g.same_run_id_returned === null ? 'n/a' : g.same_run_id_returned ? 'yes' : 'no'}`}
+                        />
+                      )}
+                    </div>
+                    <ul className="mt-1.5 space-y-0.5 font-mono text-[10px]">
+                      {g.runs.map((r) => (
+                        <li key={r.id} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{r.id.slice(0, 8)}…</span>
+                          <Badge
+                            variant={r.status === 'completed' ? 'default' : r.status === 'failed' ? 'destructive' : 'secondary'}
+                            className="h-4 text-[9px]"
+                          >
+                            {r.status}
+                          </Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <Separator className="my-5" />
+
+          {/* SECTION 4 — Latest task_runs */}
           <h3 className="text-sm font-semibold mb-2">Latest deep-work runs</h3>
           {snap.loading ? (
             <Skeleton className="h-24 w-full" />
@@ -308,7 +481,7 @@ export function ValidationStatusDrawer({
 
           <Separator className="my-5" />
 
-          {/* SECTION 4 — Routing decisions */}
+          {/* SECTION 5 — Routing decisions */}
           <h3 className="text-sm font-semibold mb-2">Latest routing decisions</h3>
           {snap.loading ? (
             <Skeleton className="h-24 w-full" />
@@ -329,7 +502,7 @@ export function ValidationStatusDrawer({
 
           <Separator className="my-5" />
 
-          {/* SECTION 5 — Fallback events */}
+          {/* SECTION 6 — Fallback events */}
           <h3 className="text-sm font-semibold mb-2">Recent fallback events</h3>
           {snap.loading ? (
             <Skeleton className="h-12 w-full" />
@@ -355,6 +528,47 @@ export function ValidationStatusDrawer({
               })}
             </ul>
           )}
+
+          <Separator className="my-5" />
+
+          {/* SECTION 7 — Verdict Rules (collapsible) */}
+          <Collapsible>
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-semibold hover:text-foreground/80">
+              <span>Verdict rules</span>
+              <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 space-y-3 text-xs text-muted-foreground">
+              <div>
+                <div className="font-medium text-foreground mb-1">ENABLE — only if all true</div>
+                <ul className="space-y-0.5 pl-3">
+                  <li>• duplicates = 0</li>
+                  <li>• orphans = 0</li>
+                  <li>• normal run succeeds</li>
+                  <li>• fallback run succeeds</li>
+                  <li>• collision returns same run_id</li>
+                  <li>• no unexplained failures</li>
+                  <li>• lane telemetry exists</li>
+                </ul>
+              </div>
+              <div>
+                <div className="font-medium text-foreground mb-1">HOLD</div>
+                <ul className="space-y-0.5 pl-3">
+                  <li>• system looks structurally good but required live evidence is missing</li>
+                </ul>
+              </div>
+              <div>
+                <div className="font-medium text-foreground mb-1">DO NOT ENABLE</div>
+                <ul className="space-y-0.5 pl-3">
+                  <li>• duplicates appear</li>
+                  <li>• orphans appear</li>
+                  <li>• fallback fails</li>
+                  <li>• collision creates multiple active rows</li>
+                  <li>• Discovery Prep regresses</li>
+                  <li>• lane telemetry remains absent after validation attempts</li>
+                </ul>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </ScrollArea>
       </SheetContent>
     </Sheet>
