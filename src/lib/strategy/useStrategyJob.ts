@@ -20,6 +20,16 @@ export interface StrategyJobState {
   progressStep: string | null;
   result: { draft: unknown; review: unknown } | null;
   error: string | null;
+  failedStage: string | null;
+  retryHint: string | null;
+}
+
+function deriveRetryHint(err?: string | null, stage?: string | null): string {
+  if (!err) return 'Try again in a moment.';
+  if (/timeout|stalled/i.test(err)) return 'The job stalled. Retry — usually transient.';
+  if (/rate.?limit/i.test(err)) return 'Model rate-limited. Wait 30s and retry.';
+  if (/cards|library/i.test(err)) return 'Library context unavailable. Retry; falls back to zero-card mode.';
+  return `Failed at "${stage ?? 'unknown'}". Retry or report if it repeats.`;
 }
 
 const PROGRESS_LABELS: Record<string, string> = {
@@ -43,6 +53,8 @@ const initialState: StrategyJobState = {
   progressStep: null,
   result: null,
   error: null,
+  failedStage: null,
+  retryHint: null,
 };
 
 async function callRunStrategyJob(body: Record<string, unknown>) {
