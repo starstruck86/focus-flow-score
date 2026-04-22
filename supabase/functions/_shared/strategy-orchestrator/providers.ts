@@ -60,7 +60,18 @@ export async function callOpenAI(
 
 export async function callClaude(
   messages: { role: string; content: string }[],
-  opts: { model?: string; maxTokens?: number; temperature?: number } = {},
+  opts: {
+    model?: string;
+    maxTokens?: number;
+    temperature?: number;
+    /** Per-attempt wall-clock cap. Default 75s — must stay below the
+     *  caller's outer stage budget (e.g. AUTHORING_TIMEOUT_MS=100s). */
+    timeoutMs?: number;
+    /** Max attempts including the first. Default 3. Authoring callers
+     *  pass 1 because the outer stage has its own race that would fire
+     *  before retries can complete. */
+    maxAttempts?: number;
+  } = {},
 ): Promise<string> {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
@@ -87,11 +98,11 @@ export async function callClaude(
   };
   if (systemPrompt) body.system = systemPrompt;
 
-  // Hard timeout + retry on transient failures. Without this, a hung
-  // Anthropic socket leaves the background promise stuck forever and the
-  // task_runs row sits in `pending` indefinitely.
-  const TIMEOUT_MS = 180_000; // 3 minutes per attempt — Claude long-form authoring needs headroom.
-  const MAX_ATTEMPTS = 3;
+  // Fix 2 — bounded inner timeout. Defaults stay safe for non-authoring
+  // callers; authoring passes timeoutMs=75_000, maxAttempts=1 so the inner
+  // call cannot outlive the outer 100s race in runTask.ts.
+  const TIMEOUT_MS = opts.timeoutMs ?? 75_000;
+  const MAX_ATTEMPTS = Math.max(1, opts.maxAttempts ?? 3);
   let lastErr: unknown = null;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
