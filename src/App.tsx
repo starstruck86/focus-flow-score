@@ -59,6 +59,7 @@ const SkillBuilderAudit = lazy(() => import("./pages/SkillBuilderAudit"));
 const ReliabilityQA = lazy(() => import("./pages/ReliabilityQA"));
 const ObservabilityDashboard = lazy(() => import("./pages/ObservabilityDashboard"));
 const SmokeTest = lazy(() => import("./pages/SmokeTest"));
+const LifecycleReconciliation = lazy(() => import("./pages/LifecycleReconciliation"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -235,6 +236,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>
                         <SmokeTest />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/admin/lifecycle-reconciliation" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback text="Loading reconciliation…" />}>
+                        <LifecycleReconciliation />
                       </Suspense>
                     </ProtectedRoute>
                   } />
