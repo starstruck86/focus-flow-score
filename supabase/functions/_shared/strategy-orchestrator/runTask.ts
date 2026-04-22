@@ -343,16 +343,20 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   }
 
   // ── Stage 5: Finalize the run row ────────────────────────────
+  const finalizePatch: Record<string, unknown> = {
+    draft_output: draftOutput,
+    review_output: reviewOutput,
+    status: "completed",
+    progress_step: "completed",
+    completed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  if (fallbackMeta) {
+    finalizePatch.meta = { authoring_fallback: fallbackMeta };
+  }
   const { error: updateErr } = await supabase
     .from("task_runs")
-    .update({
-      draft_output: draftOutput,
-      review_output: reviewOutput,
-      status: "completed",
-      progress_step: "completed",
-      completed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
+    .update(finalizePatch)
     .eq("id", runId);
   if (updateErr) {
     console.error("[orchestrator] finalize update error:", updateErr);
