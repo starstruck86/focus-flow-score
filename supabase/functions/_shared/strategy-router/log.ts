@@ -26,9 +26,17 @@ export async function logRoutingDecision(
       downgrade_warning: payload.decision.downgrade_warning,
     });
     if (error) {
-      console.warn("[router-log] insert error:", error.message);
+      console.warn(JSON.stringify({
+        tag: "[strategy-router:log_failed]",
+        reason: error.message,
+        thread_id: payload.thread_id,
+      }));
     }
   } catch (e) {
-    console.warn("[router-log] threw:", (e as Error).message);
+    console.warn(JSON.stringify({
+      tag: "[strategy-router:log_failed]",
+      reason: (e as Error).message,
+      thread_id: payload.thread_id,
+    }));
   }
 }
