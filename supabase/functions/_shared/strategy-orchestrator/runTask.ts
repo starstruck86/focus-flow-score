@@ -115,13 +115,14 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // dangling timer that keeps the worker alive past the request.
   let authoringTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  // Fix 3 — Authoring fallback ladder.
-  // Primary: Claude (existing locked template). Fallback (once): Lovable AI
-  // gemini-2.5-pro with the *same* prompt payload + same JSON expectations.
+  // Authoring fallback ladder (Gemini removed per model policy).
+  // Primary: Claude (formatting/authoring per policy).
+  // Fallback (once): OpenAI GPT-5 (ChatGPT — reasoning/synthesis per policy)
+  // with the *same* prompt payload + same JSON expectations.
   // Fallback only triggers on transient/availability failures (404/429/5xx,
   // timeout, credits exhausted, unavailable) — NOT on logic/schema bugs
   // (which would also fail on the fallback and just waste the stage budget).
-  const FALLBACK_MODEL = "google/gemini-2.5-pro";
+  const FALLBACK_MODEL = "openai/gpt-5";
   const isFallbackEligible = (err: any): boolean => {
     const msg = String(err?.message || err || "").toLowerCase();
     if (err?.status === 429 || err?.status === 402) return true;
@@ -209,9 +210,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       let fallbackTimeoutId: ReturnType<typeof setTimeout> | null = null;
       try {
         documentRaw = await Promise.race<string>([
-          callLovableAI(authoringMessages, {
+          callOpenAI(authoringMessages, {
             model: FALLBACK_MODEL,
-            temperature: 0.3,
             maxTokens: 12000,
           }),
           new Promise<string>((_, reject) => {
@@ -250,11 +250,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
 
         // ── Section-batched rescue ────────────────────────────────
         // The monolithic ladder failed. Before giving up, try authoring
-        // one small batch at a time (Claude → Gemini per batch). This is
+        // one small batch at a time (Claude → ChatGPT per batch). This is
         // the reliability layer that keeps deep-work runs from going
         // 100% black on a single timeout. It is *additive*: the existing
         // path runs first; this only fires when both primary and fallback
-        // monolithic calls failed.
+        // monolithic calls failed. Gemini is intentionally NOT used.
         console.warn(JSON.stringify({
           tag: "[authoring:section_batch_rescue_start]",
           run_id: runId,
