@@ -79,10 +79,47 @@ Deno.serve(async (req) => {
     const { inputs } = body;
     if (!inputs?.company_name) return jsonResponse({ error: "inputs.company_name is required" }, 400);
 
-    const { run_id, status } = await runStrategyTaskInBackground({
-      userId: user.id, supabase, inputs, taskType,
-    });
-    return jsonResponse({ run_id, status });
+    try {
+      const { run_id, status } = await runStrategyTaskInBackground({
+        userId: user.id, supabase, inputs, taskType,
+      });
+      return jsonResponse({ run_id, status });
+    } catch (e: any) {
+      // Fix 1 — idempotency: partial unique index `task_runs_one_active_per_thread_task`
+      // blocks a second active row for the same (thread_id, task_type). When that
+      // happens, return the existing active run instead of erroring so concurrent
+      // callers converge on the same run_id.
+      const code = e?.code || e?.cause?.code;
+      const threadId = inputs?.thread_id || null;
+      if (code === "23505" && threadId) {
+        const { data: existing, error: lookupErr } = await supabase
+          .from("task_runs")
+          .select("id, status, task_type")
+          .eq("user_id", user.id)
+          .eq("thread_id", threadId)
+          .eq("task_type", taskType)
+          .in("status", ["pending", "running"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!lookupErr && existing) {
+          console.log(JSON.stringify({
+            tag: "run-strategy-task:idempotent_hit",
+            thread_id: threadId,
+            task_type: taskType,
+            run_id: existing.id,
+            status: existing.status,
+          }));
+          return jsonResponse({
+            run_id: existing.id,
+            status: existing.status,
+            task_type: existing.task_type,
+            idempotent: true,
+          });
+        }
+      }
+      throw e;
+    }
   } catch (e: any) {
     console.error("[run-strategy-task] error:", e);
     const status = e?.status || 500;
