@@ -444,6 +444,20 @@ export function ValidationStatusDrawer({
               <span className="font-medium">Recommendation</span>
               <StatusBadge kind={recommendation.kind} label={recommendation.label} />
             </div>
+
+            {!snap.loading && verdict.reasons.length > 0 && (
+              <ul className="mt-1 space-y-0.5 pl-3 text-[11px] text-muted-foreground">
+                {verdict.reasons.map((r, i) => <li key={i}>• {r}</li>)}
+              </ul>
+            )}
+
+            {!snap.loading && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <EvidenceChip label="Normal run" state={verdict.chips.normal} />
+                <EvidenceChip label="Fallback run" state={verdict.chips.fallback} />
+                <EvidenceChip label="Collision run" state={verdict.chips.collision} />
+              </div>
+            )}
           </div>
 
           <Separator className="my-5" />
