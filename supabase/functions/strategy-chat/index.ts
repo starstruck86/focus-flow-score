@@ -28,12 +28,95 @@ import {
   isV2Enabled,
   validateResponse as v2ValidateResponse,
 } from "../_shared/strategy-core/v2/index.ts";
+import { routeRequest, type RoutingDecision } from "../_shared/strategy-router/index.ts";
+import { logRoutingDecision } from "../_shared/strategy-router/log.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-router-bypass, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-trace-id",
 };
+
+function toRoutingMeta(decision: RoutingDecision) {
+  return {
+    lane: decision.lane,
+    deep_intent: decision.signals.deep_intent,
+    promotion_offered: decision.promotion_offered,
+    auto_promoted: decision.auto_promoted,
+    override_used: decision.override_used,
+  };
+}
+
+function withRoutingMeta(
+  contentJson: Record<string, unknown>,
+  decision?: RoutingDecision | null,
+): Record<string, unknown> {
+  if (!decision) return contentJson;
+  return {
+    ...contentJson,
+    routing_meta: toRoutingMeta(decision),
+  };
+}
+
+function buildDeepWorkInputs(
+  decision: RoutingDecision,
+  content: string,
+  threadId: string,
+  pack: ContextPack,
+): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    thread_id: threadId,
+    original_message: content,
+    account_id: pack.account?.id ?? null,
+    opportunity_id: pack.opportunity?.id ?? null,
+    company_name: pack.account?.name ?? undefined,
+    website: pack.account?.website ?? undefined,
+    industry: pack.account?.industry ?? undefined,
+    opportunity: pack.opportunity?.name ?? undefined,
+    stage: pack.opportunity?.stage ?? undefined,
+    prior_notes: pack.account?.notes ?? pack.opportunity?.notes ?? undefined,
+  };
+
+  if (decision.task_type === "ninety_day_plan") {
+    return {
+      ...base,
+      objective: content,
+      desired_outcome: content,
+      starting_position: pack.opportunity?.stage ?? pack.account?.outreach_status ?? undefined,
+    };
+  }
+
+  return {
+    ...base,
+    desired_focus: content,
+  };
+}
+
+async function startAutoPromotedStrategyJob(
+  authHeader: string,
+  taskType: string,
+  inputs: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const resp = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/run-strategy-job`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: authHeader,
+      apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    },
+    body: JSON.stringify({
+      action: "generate",
+      task_type: taskType,
+      inputs,
+    }),
+  });
+
+  const json = await resp.json().catch(() => ({} as Record<string, unknown>));
+  if (!resp.ok) {
+    throw new Error((json as { error?: string }).error || `run-strategy-job failed (${resp.status})`);
+  }
+  return json as Record<string, unknown>;
+}
 
 // ═══════════════════════════════════════════════════════════
 // LAYER 1 — DIRECT PROVIDER ADAPTERS
@@ -4926,6 +5009,7 @@ async function handleChat(
   forceFallback?: boolean,
   pickedResourceIds: string[] = [],
   v2RequestOverride: boolean = false,
+  routingDecision: RoutingDecision | null = null,
 ) {
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
