@@ -136,9 +136,24 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
   ];
 
-  // Validation-only forced failure hook. Honored ONLY when run-validation-canary
-  // sets it on inputs. Never set from UI paths.
-  const forceAuthoringFailure = (inputs as any)?.__validation_force_authoring_failure === true;
+  // Validation-only forced failure hook. Honored ONLY when BOTH:
+  //   1. inputs.__validation_force_authoring_failure === true
+  //   2. inputs.__validation_origin === "run-validation-canary"
+  // The origin marker is set server-side by run-validation-canary and is
+  // NEVER set by any UI path. This hardens against accidental leakage of
+  // the force-failure flag into normal user runs (e.g. via copy/paste of
+  // inputs from a validation run).
+  const validationOrigin = (inputs as any)?.__validation_origin;
+  const forceAuthoringFailure =
+    (inputs as any)?.__validation_force_authoring_failure === true &&
+    validationOrigin === "run-validation-canary";
+  if ((inputs as any)?.__validation_force_authoring_failure === true && !forceAuthoringFailure) {
+    console.warn(JSON.stringify({
+      tag: "[authoring:force_failure_ignored]",
+      run_id: runId,
+      reason: "missing or invalid __validation_origin marker",
+    }));
+  }
 
   // Track fallback metadata so we can persist it durably to task_runs.meta
   // for queryability after logs roll off.
