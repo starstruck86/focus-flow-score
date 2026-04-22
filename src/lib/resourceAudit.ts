@@ -18,6 +18,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllPages } from '@/lib/supabasePagination';
 import { inferTags, mergeTags } from './resourceTags';
 import { isContentBacked as contractIsContentBacked, ENRICHED_STATUSES } from './pipelineContract';
 
