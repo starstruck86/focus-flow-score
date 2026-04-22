@@ -113,26 +113,107 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // Track the timeout id so we can clear it on success and not leak a
   // dangling timer that keeps the worker alive past the request.
   let authoringTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  // Fix 3 — Authoring fallback ladder.
+  // Primary: Claude (existing locked template). Fallback (once): Lovable AI
+  // gemini-2.5-pro with the *same* prompt payload + same JSON expectations.
+  // Fallback only triggers on transient/availability failures (404/429/5xx,
+  // timeout, credits exhausted, unavailable) — NOT on logic/schema bugs
+  // (which would also fail on the fallback and just waste the stage budget).
+  const FALLBACK_MODEL = "google/gemini-2.5-pro";
+  const isFallbackEligible = (err: any): boolean => {
+    const msg = String(err?.message || err || "").toLowerCase();
+    if (err?.status === 429 || err?.status === 402) return true;
+    if (/\b(404|408|409|429|5\d{2})\b/.test(msg)) return true;
+    if (msg.includes("timeout") || msg.includes("timed out") || msg.includes("aborted")) return true;
+    if (msg.includes("credits exhausted") || msg.includes("rate limited")) return true;
+    if (msg.includes("unavailable") || msg.includes("overloaded")) return true;
+    return false;
+  };
+
+  const authoringMessages = [
+    { role: "system", content: handler.buildDocumentSystemPrompt() },
+    { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
+  ];
+
   try {
-    const documentRaw = await Promise.race<string>([
-      callClaude([
-        { role: "system", content: handler.buildDocumentSystemPrompt() },
-        { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
-      ], {
-        model: authoringModel,
-        maxTokens: 12000,
-        temperature: 0.3,
-        timeoutMs: AUTHORING_INNER_TIMEOUT_MS,
-        maxAttempts: 1,
-      }),
-      new Promise<string>((_, reject) => {
-        authoringTimeoutId = setTimeout(
-          () => reject(new Error(`Document authoring timed out after ${AUTHORING_TIMEOUT_MS / 1000}s`)),
-          AUTHORING_TIMEOUT_MS,
-        );
-      }),
-    ]);
-    if (authoringTimeoutId) clearTimeout(authoringTimeoutId);
+    let documentRaw: string;
+    let primaryErrForLog: string | null = null;
+    try {
+      documentRaw = await Promise.race<string>([
+        callClaude(authoringMessages, {
+          model: authoringModel,
+          maxTokens: 12000,
+          temperature: 0.3,
+          timeoutMs: AUTHORING_INNER_TIMEOUT_MS,
+          maxAttempts: 1,
+        }),
+        new Promise<string>((_, reject) => {
+          authoringTimeoutId = setTimeout(
+            () => reject(new Error(`Document authoring timed out after ${AUTHORING_TIMEOUT_MS / 1000}s`)),
+            AUTHORING_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      if (authoringTimeoutId) { clearTimeout(authoringTimeoutId); authoringTimeoutId = null; }
+    } catch (claudeErr: any) {
+      if (authoringTimeoutId) { clearTimeout(authoringTimeoutId); authoringTimeoutId = null; }
+      const claudeMsg = String(claudeErr?.message || claudeErr);
+      if (!isFallbackEligible(claudeErr)) {
+        // Non-transient (e.g. invalid prompt/schema bug) — propagate as before.
+        throw claudeErr;
+      }
+      primaryErrForLog = claudeMsg;
+      console.error(JSON.stringify({
+        tag: "[authoring:fallback_triggered]",
+        run_id: runId,
+        primary_model: authoringModel,
+        fallback_model: FALLBACK_MODEL,
+        primary_error: claudeMsg.slice(0, 300),
+      }));
+      const fallbackStartedAt = Date.now();
+      console.log(JSON.stringify({
+        tag: "[authoring:fallback_start]",
+        run_id: runId,
+        fallback_model: FALLBACK_MODEL,
+      }));
+
+      let fallbackTimeoutId: ReturnType<typeof setTimeout> | null = null;
+      try {
+        documentRaw = await Promise.race<string>([
+          callLovableAI(authoringMessages, {
+            model: FALLBACK_MODEL,
+            temperature: 0.3,
+            maxTokens: 12000,
+          }),
+          new Promise<string>((_, reject) => {
+            fallbackTimeoutId = setTimeout(
+              () => reject(new Error(`Fallback authoring timed out after ${AUTHORING_TIMEOUT_MS / 1000}s`)),
+              AUTHORING_TIMEOUT_MS,
+            );
+          }),
+        ]);
+        if (fallbackTimeoutId) clearTimeout(fallbackTimeoutId);
+        console.log(JSON.stringify({
+          tag: "[authoring:fallback_success]",
+          run_id: runId,
+          fallback_model: FALLBACK_MODEL,
+          duration_ms: Date.now() - fallbackStartedAt,
+        }));
+      } catch (fallbackErr: any) {
+        if (fallbackTimeoutId) clearTimeout(fallbackTimeoutId);
+        const fbMsg = String(fallbackErr?.message || fallbackErr);
+        console.error(JSON.stringify({
+          tag: "[authoring:fallback_failed]",
+          run_id: runId,
+          fallback_model: FALLBACK_MODEL,
+          duration_ms: Date.now() - fallbackStartedAt,
+          primary_error: (primaryErrForLog || "").slice(0, 200),
+          fallback_error: fbMsg.slice(0, 300),
+        }));
+        throw new Error(`primary(claude): ${claudeMsg.slice(0, 150)} | fallback(${FALLBACK_MODEL}): ${fbMsg.slice(0, 200)}`);
+      }
+    }
 
     // safeParseJSON returns `null` for unparseable input — treat that as a
     // hard failure rather than silently shipping an empty `sections: []`
