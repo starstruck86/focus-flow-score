@@ -2332,6 +2332,59 @@ serve(async (req) => {
         forceFallback,
       );
     }
+
+    const routerBypass = req.headers.get("x-router-bypass") === "1";
+    let routingDecision: RoutingDecision | null = null;
+    if (!routerBypass) {
+      routingDecision = routeRequest({
+        message: content || "",
+        thread: {
+          account_id: contextPack.account?.id ?? null,
+          opportunity_id: contextPack.opportunity?.id ?? null,
+        },
+        explicit_task_type: typeof body?.task_type === "string" ? body.task_type : null,
+        override: typeof body?.override === "string" ? body.override : null,
+        library_precheck_count: 0,
+      });
+      await logRoutingDecision(supabase, {
+        user_id: userId,
+        thread_id: threadId ?? null,
+        decision: routingDecision,
+      });
+      console.log("[strategy-router:decision]", JSON.stringify({
+        user_id: userId,
+        thread_id: threadId,
+        lane: routingDecision.lane,
+        task_type: routingDecision.task_type,
+        auto_promoted: routingDecision.auto_promoted,
+        promotion_offered: routingDecision.promotion_offered,
+        override_used: routingDecision.override_used,
+      }));
+
+      if (
+        routingDecision.lane === "deep_work" &&
+        routingDecision.auto_promoted &&
+        routingDecision.task_type &&
+        authHeader
+      ) {
+        const started = await startAutoPromotedStrategyJob(
+          authHeader,
+          routingDecision.task_type,
+          buildDeepWorkInputs(routingDecision, content || "", threadId, contextPack),
+        );
+        return new Response(JSON.stringify({
+          kind: "deep_work",
+          run_id: started.run_id,
+          status: started.status,
+          task_type: routingDecision.task_type,
+          auto_promoted: true,
+          routing_meta: toRoutingMeta(routingDecision),
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     return await handleChat(
       supabase,
       threadId,
@@ -2343,6 +2396,7 @@ serve(async (req) => {
       forceFallback,
       cleanPickedResourceIds,
       v2RequestOverride,
+      routingDecision,
     );
   } catch (e) {
     console.error("strategy-chat error:", e);
@@ -5253,7 +5307,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           model_used: route.model,
           fallback_used: false,
           latency_ms: 0,
-          content_json: {
+          content_json: withRoutingMeta({
             text: "",
             provisional: true,
             routing_decision: {
@@ -5281,7 +5335,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
               },
               created_at: new Date().toISOString(),
             },
-          },
+          }, routingDecision),
         })
         .select("id")
         .single();
@@ -5306,7 +5360,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       await supabase
         .from("strategy_messages")
         .update({
-          content_json: {
+          content_json: withRoutingMeta({
             text: "",
             provisional: false,
             error: result.error,
@@ -5346,7 +5400,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
                 : null,
               finalized_at: new Date().toISOString(),
             },
-          },
+          }, routingDecision),
           provider_used: result.provider,
           model_used: result.model,
           fallback_used: result.fallbackUsed === true,
