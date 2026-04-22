@@ -146,6 +146,10 @@ function validateDerived(parsed: unknown): DerivedCard | null {
 
 async function deriveOne(sourceType: SourceType, row: Record<string, unknown>): Promise<DerivedCard | null> {
   try {
+    // NOTE: callLovableAI does not surface response_format; schema is enforced via
+    // (a) explicit JSON-only system prompt and (b) validateDerived() below.
+    // RESPONSE_SCHEMA is kept inline as documentation + future strict-mode upgrade.
+    void RESPONSE_SCHEMA;
     const raw = await callLovableAI([
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: buildUserPrompt(sourceType, row) },
@@ -153,11 +157,7 @@ async function deriveOne(sourceType: SourceType, row: Record<string, unknown>): 
       model: "google/gemini-2.5-flash",
       temperature: 0.2,
       maxTokens: 1200,
-      responseFormat: {
-        type: "json_schema",
-        json_schema: { name: "library_card", strict: true, schema: RESPONSE_SCHEMA },
-      },
-    } as any);
+    });
     const parsed = safeParseJSON<unknown>(raw);
     return validateDerived(parsed);
   } catch (e) {
