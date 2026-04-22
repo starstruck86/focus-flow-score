@@ -3042,6 +3042,7 @@ export type Database = {
           id: string
           ki_fingerprint: string | null
           knowledge_type: string
+          library_role: string | null
           macro_situation: string | null
           micro_strategy: string | null
           product_area: string | null
@@ -3084,6 +3085,7 @@ export type Database = {
           id?: string
           ki_fingerprint?: string | null
           knowledge_type?: string
+          library_role?: string | null
           macro_situation?: string | null
           micro_strategy?: string | null
           product_area?: string | null
@@ -3126,6 +3128,7 @@ export type Database = {
           id?: string
           ki_fingerprint?: string | null
           knowledge_type?: string
+          library_role?: string | null
           macro_situation?: string | null
           micro_strategy?: string | null
           product_area?: string | null
@@ -3517,6 +3520,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      library_cards: {
+        Row: {
+          anti_patterns: string[] | null
+          applies_to_contexts: string[] | null
+          confidence: number | null
+          derivation_version: number
+          derived_at: string
+          example_snippet: string | null
+          id: string
+          library_role: string
+          source_ids: string[]
+          source_type: string
+          the_move: string
+          title: string
+          user_id: string
+          when_to_use: string | null
+          why_it_works: string | null
+        }
+        Insert: {
+          anti_patterns?: string[] | null
+          applies_to_contexts?: string[] | null
+          confidence?: number | null
+          derivation_version?: number
+          derived_at?: string
+          example_snippet?: string | null
+          id?: string
+          library_role: string
+          source_ids: string[]
+          source_type: string
+          the_move: string
+          title: string
+          user_id: string
+          when_to_use?: string | null
+          why_it_works?: string | null
+        }
+        Update: {
+          anti_patterns?: string[] | null
+          applies_to_contexts?: string[] | null
+          confidence?: number | null
+          derivation_version?: number
+          derived_at?: string
+          example_snippet?: string | null
+          id?: string
+          library_role?: string
+          source_ids?: string[]
+          source_type?: string
+          the_move?: string
+          title?: string
+          user_id?: string
+          when_to_use?: string | null
+          why_it_works?: string | null
+        }
+        Relationships: []
       }
       library_reconciliation_items: {
         Row: {
@@ -4256,6 +4313,7 @@ export type Database = {
           failure_consequences: string[]
           id: string
           key_questions: string[]
+          library_role: string | null
           minimum_effective_version: string
           persona_fit: string[]
           pressure_tactics: string[]
@@ -4282,6 +4340,7 @@ export type Database = {
           failure_consequences?: string[]
           id?: string
           key_questions?: string[]
+          library_role?: string | null
           minimum_effective_version?: string
           persona_fit?: string[]
           pressure_tactics?: string[]
@@ -4308,6 +4367,7 @@ export type Database = {
           failure_consequences?: string[]
           id?: string
           key_questions?: string[]
+          library_role?: string | null
           minimum_effective_version?: string
           persona_fit?: string[]
           pressure_tactics?: string[]
@@ -5785,6 +5845,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      routing_decisions: {
+        Row: {
+          auto_promoted: boolean
+          created_at: string
+          downgrade_warning: boolean
+          id: string
+          lane: string
+          override_used: string | null
+          signals: Json
+          thread_id: string | null
+          user_id: string
+        }
+        Insert: {
+          auto_promoted?: boolean
+          created_at?: string
+          downgrade_warning?: boolean
+          id?: string
+          lane: string
+          override_used?: string | null
+          signals: Json
+          thread_id?: string | null
+          user_id: string
+        }
+        Update: {
+          auto_promoted?: boolean
+          created_at?: string
+          downgrade_warning?: boolean
+          id?: string
+          lane?: string
+          override_used?: string | null
+          signals?: Json
+          thread_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       sales_age_snapshots: {
         Row: {
