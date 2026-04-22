@@ -220,7 +220,15 @@ async function listTable(
 }
 
 const RESOURCE_FIELDS = ["title", "description", "content", "tags"];
-const KI_FIELDS = ["title", "description", "content", "tags"];
+const KI_FIELDS = [
+  "title",
+  "tactic_summary",
+  "how_to_execute",
+  "why_it_matters",
+  "when_to_use",
+  "source_excerpt",
+  "tags",
+];
 
 export async function runLibraryLookup(
   supabase: any,
