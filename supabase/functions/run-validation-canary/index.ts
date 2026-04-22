@@ -202,20 +202,31 @@ Deno.serve(async (req) => {
       validator_run_id: validatorRunId,
     }));
 
-    const metaPayload = {
+    const requestedAt = new Date().toISOString();
+    const baseMetaPayload: Record<string, unknown> = {
       mode: body.mode,
       thread_id: body.thread_id,
+      task_type: body.task_type,
       validator_run_id: validatorRunId,
+      requested_at: requestedAt,
     };
 
     if (body.mode === "normal") {
       const r = await callRunStrategyTask(authHeader, body.task_type, baseInputs);
+      const idempotent = r.idempotent === true;
+      const metaPayload = {
+        ...baseMetaPayload,
+        forced_primary_failure_requested: false,
+        idempotent_short_circuit: idempotent,
+        fresh_run_created: !idempotent && !!r.run_id,
+      };
       if (r.run_id) await stampValidationMeta(supabase, r.run_id, metaPayload);
       return jsonResponse({
         ok: !r.error,
         mode: "normal",
         validator_run_id: validatorRunId,
         run_id: r.run_id ?? null,
+        idempotent,
         first_run_id: null,
         second_run_id: null,
         same_run_id_returned: null,
@@ -231,12 +242,20 @@ Deno.serve(async (req) => {
         __validation_force_authoring_failure: true,
       };
       const r = await callRunStrategyTask(authHeader, body.task_type, fbInputs);
+      const idempotent = r.idempotent === true;
+      const metaPayload = {
+        ...baseMetaPayload,
+        forced_primary_failure_requested: true,
+        idempotent_short_circuit: idempotent,
+        fresh_run_created: !idempotent && !!r.run_id,
+      };
       if (r.run_id) await stampValidationMeta(supabase, r.run_id, metaPayload);
       return jsonResponse({
         ok: !r.error,
         mode: "fallback",
         validator_run_id: validatorRunId,
         run_id: r.run_id ?? null,
+        idempotent,
         first_run_id: null,
         second_run_id: null,
         same_run_id_returned: null,
@@ -252,12 +271,16 @@ Deno.serve(async (req) => {
       ]);
       const bothReturned = !!(a.run_id && b.run_id);
       const sameId = bothReturned && a.run_id === b.run_id;
-      // Stamp meta once on the (possibly single) created row, including
-      // the collision evidence so the drawer can derive a deterministic
-      // verdict even when both attempts collapse onto a single row.
       const ids = Array.from(new Set([a.run_id, b.run_id].filter(Boolean) as string[]));
+      // For collision, "idempotent_short_circuit" describes whether at least
+      // one of the two parallel calls returned an existing pending run rather
+      // than creating a fresh one.
+      const idempotent = a.idempotent === true || b.idempotent === true;
       const collisionMeta = {
-        ...metaPayload,
+        ...baseMetaPayload,
+        forced_primary_failure_requested: false,
+        idempotent_short_circuit: idempotent,
+        fresh_run_created: !idempotent && ids.length > 0,
         collision_evidence: {
           first_run_id: a.run_id ?? null,
           second_run_id: b.run_id ?? null,
@@ -271,6 +294,7 @@ Deno.serve(async (req) => {
         ok: !!(a.run_id || b.run_id),
         mode: "collision",
         validator_run_id: validatorRunId,
+        idempotent,
         run_id: null,
         first_run_id: a.run_id ?? null,
         second_run_id: b.run_id ?? null,
