@@ -101,6 +101,15 @@ export interface BuildStrategyChatPromptArgs {
    * or admit absence — never to invent a template/example/calculator.
    */
   resourceContextBlock?: string;
+  /**
+   * Pre-rendered "=== LIBRARY TOTALS ===" block holding the AUTHORITATIVE
+   * counts of the user's resources / KIs / playbooks (from a real DB
+   * COUNT query, NOT a vector top-K). When present, it is the only place
+   * the model is allowed to source numeric library claims from. Combined
+   * with LIBRARY COUNT DISCIPLINE above, this is what kills hallucinated
+   * counts like "you have 12 resources on X".
+   */
+  libraryTotalsBlock?: string;
 }
 
 /**
