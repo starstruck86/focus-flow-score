@@ -292,52 +292,30 @@ export function ValidationStatusDrawer({
     }
   }, [open, load, refreshKeyStatus]);
 
-  // Derived counts for canary evidence
-  const canaryStats = useMemo(() => {
-    const groups = snap.canaryGroups;
-    const normalOk = groups.some((g) => g.mode === 'normal' && g.runs.some((r) => r.status === 'completed' || r.status === 'running' || r.status === 'pending'));
-    const fallbackOk = groups.some((g) => g.mode === 'fallback' && g.fallback_triggered && g.fallback_success === true);
-    const fallbackBad = groups.some((g) => g.mode === 'fallback' && g.fallback_triggered && g.fallback_success === false);
-    const collisionOk = groups.some((g) => g.mode === 'collision' && g.same_run_id_returned === true);
-    const collisionBad = groups.some((g) => g.mode === 'collision' && g.same_run_id_returned === false && g.runs.length > 1);
-    return { normalOk, fallbackOk, fallbackBad, collisionOk, collisionBad, hasAny: groups.length > 0 };
-  }, [snap.canaryGroups]);
+  // Single source of truth: pure verdict helper
+  const verdict = useMemo(() => deriveVerdict({
+    duplicates: snap.duplicates ?? 0,
+    orphans: snap.orphans ?? 0,
+    laneCount24h: snap.laneCount24h ?? 0,
+    fallbackSeen: !!snap.fallbackSeen,
+    groups: snap.canaryGroups,
+  }), [snap]);
 
   const recommendation: { kind: 'pass' | 'warn' | 'fail'; label: string } = useMemo(() => {
     if (snap.loading) return { kind: 'warn', label: 'Loading…' };
+    if (verdict.status === 'ready') return { kind: 'pass', label: verdict.label };
+    if (verdict.status === 'blocked') return { kind: 'fail', label: verdict.label };
+    return { kind: 'warn', label: verdict.label };
+  }, [snap.loading, verdict]);
 
-    // BLOCKED
-    if ((snap.duplicates ?? 0) > 0) return { kind: 'fail', label: 'Blocked — duplicates present' };
-    if ((snap.orphans ?? 0) > 0) return { kind: 'fail', label: 'Blocked — orphans present' };
-    if (canaryStats.fallbackBad) return { kind: 'fail', label: 'Blocked — fallback canary failed' };
-    if (canaryStats.collisionBad) return { kind: 'fail', label: 'Blocked — collision created multiple rows' };
-
-    // READY TO TEST
-    if (
-      (snap.laneCount24h ?? 0) > 0 &&
-      canaryStats.normalOk &&
-      canaryStats.fallbackOk &&
-      canaryStats.collisionOk
-    ) {
-      return { kind: 'pass', label: 'Ready to test' };
-    }
-
-    // NEEDS TRAFFIC (default fall-through)
-    return { kind: 'warn', label: 'Needs traffic — missing live evidence' };
-  }, [snap, canaryStats]);
-
+  // Legacy gaps section (kept for at-a-glance scanning)
   const gaps: string[] = [];
   if ((snap.laneCount24h ?? 0) === 0) gaps.push('No lane telemetry recorded in last 24h');
   if (!snap.fallbackSeen) gaps.push('No fallback success recorded');
   if ((snap.deepWorkRuns24h ?? 0) === 0) gaps.push('No deep-work runs in last 24h');
   if ((snap.duplicates ?? 0) > 0) gaps.push(`${snap.duplicates} duplicate active run(s) for same (thread_id, task_type)`);
   if ((snap.orphans ?? 0) > 0) gaps.push(`${snap.orphans} orphaned authoring run(s) older than 5min`);
-  if (!canaryStats.hasAny) gaps.push('No canary-tagged runs recorded');
-  else {
-    if (!canaryStats.normalOk) gaps.push('No normal canary run recorded');
-    if (!canaryStats.fallbackOk) gaps.push('No successful fallback canary recorded');
-    if (!canaryStats.collisionOk) gaps.push('No collision canary with same run_id recorded');
-  }
+  if (snap.canaryGroups.length === 0) gaps.push('No canary-tagged runs recorded');
 
   const handleRerun = useCallback(async (group: CanaryRunGroup) => {
     if (!group.thread_id) {
