@@ -456,7 +456,27 @@ export function ValidationStatusDrawer({
       setRerunningId(null);
       try { await load(); } catch { /* ignore */ }
     }
-  }, [load, refreshKeyStatus]);
+  }, [load, refreshKeyStatus, requireFresh, snap.recentRuns]);
+
+  // Lane telemetry health: distinguishes "no traffic yet" from "should have
+  // been written but wasn't" by looking at recent canary attempts and recent
+  // deep-work runs in the loaded snapshot.
+  const laneHealth: { state: ChipState; label: string; explainer: string | null } = useMemo(() => {
+    const lane = snap.laneCount24h ?? 0;
+    if (lane > 0) {
+      return { state: 'verified', label: 'Lane telemetry healthy', explainer: null };
+    }
+    const hasRecentActivity =
+      snap.canaryGroups.length > 0 || (snap.deepWorkRuns24h ?? 0) > 0;
+    if (hasRecentActivity) {
+      return {
+        state: 'failed',
+        label: 'Lane telemetry expected but absent',
+        explainer: 'No routing_decisions rows were recorded in the last 24h',
+      };
+    }
+    return { state: 'missing', label: 'Lane telemetry missing', explainer: null };
+  }, [snap.laneCount24h, snap.canaryGroups.length, snap.deepWorkRuns24h]);
 
   const handleClearKey = useCallback(() => {
     clearCachedValidationKey();
