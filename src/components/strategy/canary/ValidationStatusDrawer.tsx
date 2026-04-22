@@ -558,7 +558,11 @@ export function ValidationStatusDrawer({
                 <EvidenceChip label="Normal run" state={verdict.chips.normal} />
                 <EvidenceChip label="Fallback run" state={verdict.chips.fallback} />
                 <EvidenceChip label="Collision run" state={verdict.chips.collision} />
+                <EvidenceChip label={laneHealth.label} state={laneHealth.state} />
               </div>
+            )}
+            {!snap.loading && laneHealth.explainer && (
+              <p className="mt-1 pl-3 text-[11px] text-destructive">• {laneHealth.explainer}</p>
             )}
           </div>
 
