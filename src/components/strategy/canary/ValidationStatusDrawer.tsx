@@ -448,7 +448,27 @@ export function ValidationStatusDrawer({
           <Separator className="my-5" />
 
           {/* SECTION 3 — Canary Runs (validator_run_id grouped) */}
-          <h3 className="text-sm font-semibold mb-2">Canary runs</h3>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold">Canary runs</h3>
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <span>
+                Validation key:{' '}
+                <span className={keyCached ? 'text-emerald-600' : 'text-amber-600'}>
+                  {keyCached ? 'cached' : 'not cached'}
+                </span>
+              </span>
+              {keyCached && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 px-1.5 text-[10px]"
+                  onClick={handleClearKey}
+                >
+                  Clear key
+                </Button>
+              )}
+            </div>
+          </div>
           {snap.loading ? (
             <Skeleton className="h-24 w-full" />
           ) : snap.canaryGroups.length === 0 ? (
@@ -459,12 +479,26 @@ export function ValidationStatusDrawer({
             <ul className="space-y-2">
               {snap.canaryGroups.map((g) => {
                 const isRerunning = rerunningId === g.validator_run_id;
+                const distinctIds = Array.from(new Set(g.runs.map((r) => r.id)));
+                const collisionVerdict: { kind: 'pass' | 'fail' | 'info'; label: string } =
+                  g.mode === 'collision'
+                    ? distinctIds.length === 0
+                      ? { kind: 'info', label: '⚪ Insufficient evidence' }
+                      : distinctIds.length === 1
+                        ? { kind: 'pass', label: '✅ Idempotent' }
+                        : { kind: 'fail', label: '❌ Duplicate rows created' }
+                    : { kind: 'info', label: '' };
+                const showRerunError = lastRerunError?.vrid === g.validator_run_id;
                 return (
                   <li key={g.validator_run_id} className="rounded border border-border/60 p-2.5 text-xs">
+                    {/* Correlation header */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <Badge variant="outline" className="h-5 text-[10px] uppercase">{g.mode}</Badge>
                         <span className="font-mono truncate">{g.task_type}</span>
+                        <Badge variant="secondary" className="h-5 text-[10px]">
+                          {g.runs.length} {g.runs.length === 1 ? 'run' : 'runs'}
+                        </Badge>
                       </div>
                       <Button
                         variant="ghost"
@@ -479,8 +513,10 @@ export function ValidationStatusDrawer({
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
                       <span>vrid: <span className="font-mono">{g.validator_run_id.slice(0, 8)}…</span></span>
+                      {g.thread_id && (
+                        <span>thread: <span className="font-mono">{g.thread_id.slice(0, 8)}…</span></span>
+                      )}
                       <span>{new Date(g.created_at).toLocaleString()}</span>
-                      <span>runs: {g.runs.length}</span>
                       {g.mode === 'fallback' && (
                         <>
                           <StatusBadge
@@ -493,17 +529,45 @@ export function ValidationStatusDrawer({
                           />
                         </>
                       )}
-                      {g.mode === 'collision' && (
-                        <StatusBadge
-                          kind={g.same_run_id_returned ? 'pass' : 'warn'}
-                          label={`same id: ${g.same_run_id_returned === null ? 'n/a' : g.same_run_id_returned ? 'yes' : 'no'}`}
-                        />
-                      )}
                     </div>
+
+                    {/* Collision evidence block */}
+                    {g.mode === 'collision' && (
+                      <div className="mt-2 rounded border border-border/40 bg-muted/30 p-2 text-[10px] space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">Collision evidence</span>
+                          <StatusBadge kind={collisionVerdict.kind} label={collisionVerdict.label} />
+                        </div>
+                        <div className="text-muted-foreground">
+                          same_run_id_returned:{' '}
+                          <span className="font-mono">
+                            {g.same_run_id_returned === null ? 'n/a' : g.same_run_id_returned ? 'yes' : 'no'}
+                          </span>
+                          {' · '}distinct run ids: <span className="font-mono">{distinctIds.length}</span>
+                        </div>
+                        {distinctIds.length > 0 && (
+                          <ul className="font-mono space-y-0.5">
+                            {distinctIds.map((id) => (
+                              <li key={id} className="truncate">• {id}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Associated task_runs */}
                     <ul className="mt-1.5 space-y-0.5 font-mono text-[10px]">
                       {g.runs.map((r) => (
                         <li key={r.id} className="flex items-center justify-between gap-2">
-                          <span className="truncate">{r.id.slice(0, 8)}…</span>
+                          <span className="truncate flex-1">
+                            {r.id.slice(0, 8)}…
+                            {r.progress_step && (
+                              <span className="ml-2 text-muted-foreground">{r.progress_step}</span>
+                            )}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {new Date(r.created_at).toLocaleTimeString()}
+                          </span>
                           <Badge
                             variant={r.status === 'completed' ? 'default' : r.status === 'failed' ? 'destructive' : 'secondary'}
                             className="h-4 text-[9px]"
@@ -513,6 +577,12 @@ export function ValidationStatusDrawer({
                         </li>
                       ))}
                     </ul>
+
+                    {showRerunError && (
+                      <div className="mt-2 rounded border border-destructive/40 bg-destructive/5 p-1.5 text-[10px] text-destructive">
+                        Last rerun failed: {lastRerunError!.message}
+                      </div>
+                    )}
                   </li>
                 );
               })}
