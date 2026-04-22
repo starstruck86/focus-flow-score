@@ -129,6 +129,23 @@ function StatusBadge({ kind, label }: { kind: 'pass' | 'warn' | 'fail' | 'info';
   );
 }
 
+function EvidenceChip({ label, state }: { label: string; state: ChipState }) {
+  const { icon, cls } =
+    state === 'verified'
+      ? { icon: '✅', cls: 'border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' }
+      : state === 'failed'
+        ? { icon: '❌', cls: 'border-destructive/30 bg-destructive/10 text-destructive' }
+        : { icon: '⚪', cls: 'border-border bg-muted/40 text-muted-foreground' };
+  const stateLabel = state === 'verified' ? 'Verified' : state === 'failed' ? 'Failed' : 'Missing';
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${cls}`}>
+      <span aria-hidden>{icon}</span>
+      <span>{label}</span>
+      <span className="opacity-70">· {stateLabel}</span>
+    </span>
+  );
+}
+
 function groupCanaryRuns(runs: TaskRunRow[]): CanaryRunGroup[] {
   const byValidator = new Map<string, CanaryRunGroup>();
   for (const r of runs) {
