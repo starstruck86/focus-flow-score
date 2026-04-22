@@ -22,7 +22,7 @@
 // ════════════════════════════════════════════════════════════════
 
 import { retrieveLibraryContext } from "./libraryRetrieval.ts";
-import { callClaude, callLovableAI, callPerplexity, safeParseJSON } from "./providers.ts";
+import { callClaude, callOpenAI, callPerplexity, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
 import { authorBySectionBatches } from "./sectionAuthor.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
@@ -84,11 +84,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // ── Stage 2: Synthesis — STRONG model (openai/gpt-5 via Lovable AI Gateway).
   // We run this in the background, so wall-clock is no longer a constraint.
   await setProgress(supabase, runId, "synthesis");
-  console.log(`[stage-2] synthesis via Lovable AI (openai/gpt-5)...`);
-  const synthesisRaw = await callLovableAI([
+  console.log(`[stage-2] synthesis via OpenAI ChatGPT (gpt-5)...`);
+  const synthesisRaw = await callOpenAI([
     { role: "system", content: "You are a senior sales strategist. Synthesize research + internal IP into actionable intelligence. Return structured JSON only. No markdown fences, no preamble." },
     { role: "user", content: handler.buildSynthesisPrompt(inputs, research, library) },
-  ], { model: "openai/gpt-5", maxTokens: 12000 });
+  ], { model: "gpt-5", maxTokens: 12000 });
   const synthesis = safeParseJSON<any>(synthesisRaw) ?? { raw: synthesisRaw };
   console.log(`[stage-2] synthesis fields: ${Object.keys(synthesis).length}`);
 
@@ -401,10 +401,10 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     await setProgress(supabase, runId, "review");
     console.log("[stage-4] generating playbook-grounded review...");
     try {
-      const reviewRaw = await callLovableAI([
+      const reviewRaw = await callOpenAI([
         { role: "system", content: "You are a senior sales leader reviewing a prep document. Be specific, actionable, and grounded in the provided internal playbooks/KIs." },
         { role: "user", content: handler.buildReviewPrompt(inputs, draftOutput, library) },
-      ], { model: "google/gemini-2.5-flash", temperature: 0.4, maxTokens: 4000 });
+      ], { model: "gpt-5-mini", temperature: 0.4, maxTokens: 4000 });
       const parsed = safeParseJSON<any>(reviewRaw);
       if (parsed) reviewOutput = { ...reviewOutput, ...parsed };
     } catch (e: any) {
