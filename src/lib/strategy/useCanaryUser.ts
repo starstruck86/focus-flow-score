@@ -1,16 +1,11 @@
 // ════════════════════════════════════════════════════════════════
-// useCanaryUser — hardcoded canary gate for Cycle 1 hardening UI.
-// Add pilot user UUID(s) to CANARY_USER_IDS to expose the canary-only
-// RoutingDetails developer panel.
+// useCanaryUser — legacy boolean gate.
+// Delegates to useCanaryMode so callers automatically pick up the
+// localStorage operator toggle in addition to the hardcoded allowlist.
 // ════════════════════════════════════════════════════════════════
 
-import { useAuth } from '@/contexts/AuthContext';
-
-const CANARY_USER_IDS = new Set<string>([
-  // Add pilot user UUID(s) here.
-]);
+import { useCanaryMode } from './useCanaryMode';
 
 export function useCanaryUser(): boolean {
-  const { user } = useAuth();
-  return !!user && CANARY_USER_IDS.has(user.id);
+  return useCanaryMode().isCanary;
 }

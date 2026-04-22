@@ -7483,6 +7483,7 @@ export type Database = {
           error: string | null
           id: string
           inputs: Json
+          meta: Json
           opportunity_id: string | null
           progress_step: string | null
           review_output: Json | null
@@ -7501,6 +7502,7 @@ export type Database = {
           error?: string | null
           id?: string
           inputs?: Json
+          meta?: Json
           opportunity_id?: string | null
           progress_step?: string | null
           review_output?: Json | null
@@ -7519,6 +7521,7 @@ export type Database = {
           error?: string | null
           id?: string
           inputs?: Json
+          meta?: Json
           opportunity_id?: string | null
           progress_step?: string | null
           review_output?: Json | null
