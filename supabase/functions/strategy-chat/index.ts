@@ -1018,7 +1018,7 @@ async function callWithFallback(
     }
 
     console.warn(
-      `[routing] primary failed: ${result.error.message}. Trying fallback=${route.fallbackProvider} model=${route.fallbackModel}`,
+      `[routing] primary failed: ${result.error?.message ?? "unknown error"}. Trying fallback=${route.fallbackProvider} model=${route.fallbackModel}`,
     );
     clearTimeout(timeout);
     const fallbackController = new AbortController();
