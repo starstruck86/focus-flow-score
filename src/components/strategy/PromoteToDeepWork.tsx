@@ -4,11 +4,16 @@
 // account attached, or composer was set to auto without context).
 //
 // Always passes an explicit taskType — never inferred at submit.
+//
+// Hardening (Cycle 1):
+//   - promotedRef guard prevents duplicate launches from double-click.
+//   - Failure UI surfaces error + failed stage + retry hint + Retry button.
+//   - Retry resets promotedRef so the user is never wedged.
 // ════════════════════════════════════════════════════════════════
 
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle } from 'lucide-react';
 import { useStrategyJob, type StrategyTaskType } from '@/lib/strategy/useStrategyJob';
 import { toast } from 'sonner';
 
@@ -34,11 +39,16 @@ export function PromoteToDeepWork({
   onPromoted,
   className,
 }: PromoteToDeepWorkProps) {
-  const { start } = useStrategyJob();
+  const { state, start } = useStrategyJob();
   const [isStarting, setIsStarting] = useState(false);
+  const promotedRef = useRef(false);
 
-  const handleClick = async () => {
-    if (isStarting) return;
+  const launch = useCallback(async () => {
+    if (promotedRef.current || isStarting) {
+      console.log('[strategy-ui:dup_prevented]', JSON.stringify({ kind: 'promote' }));
+      return;
+    }
+    promotedRef.current = true;
     setIsStarting(true);
     try {
       const runId = await start(
@@ -52,28 +62,65 @@ export function PromoteToDeepWork({
       );
       onPromoted(runId, taskType);
     } catch (e) {
+      // Reset on failure so Retry can re-launch.
+      promotedRef.current = false;
       const msg = e instanceof Error ? e.message : 'Failed to promote to deep work';
       toast.error(msg);
     } finally {
       setIsStarting(false);
     }
-  };
+  }, [isStarting, start, taskType, inputs, threadId, originalMessage, onPromoted]);
+
+  const handleRetry = useCallback(async () => {
+    promotedRef.current = false;
+    await launch();
+  }, [launch]);
+
+  const failed = state.status === 'failed';
 
   return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      onClick={handleClick}
-      disabled={isStarting}
-      className={className}
-    >
-      {isStarting ? (
-        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-      ) : (
-        <Sparkles className="mr-2 h-3.5 w-3.5" />
+    <div className={className}>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={launch}
+        disabled={isStarting || failed}
+      >
+        {isStarting ? (
+          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Sparkles className="mr-2 h-3.5 w-3.5" />
+        )}
+        {LABEL[taskType]}
+      </Button>
+
+      {failed && (
+        <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs">
+          <div className="flex items-center gap-1.5 font-medium text-destructive">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Deep work failed
+          </div>
+          {state.error && (
+            <div className="mt-1 text-muted-foreground">{state.error}</div>
+          )}
+          {state.failedStage && (
+            <div className="text-muted-foreground">Stage: {state.failedStage}</div>
+          )}
+          {state.retryHint && (
+            <div className="mt-1 text-foreground">{state.retryHint}</div>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2"
+            onClick={handleRetry}
+            disabled={isStarting}
+          >
+            Retry
+          </Button>
+        </div>
       )}
-      {LABEL[taskType]}
-    </Button>
+    </div>
   );
 }
