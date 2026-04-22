@@ -112,6 +112,8 @@ export function StrategyShell() {
   const [canaryDrawerOpen, setCanaryDrawerOpen] = useState(false);
   const [canaryReadonly, setCanaryReadonly] = useState<CanaryReviewRow | null>(null);
   const [lastCanaryReview, setLastCanaryReview] = useState<CanaryReviewRow | null>(null);
+  const [validationDrawerOpen, setValidationDrawerOpen] = useState(false);
+  const { isCanary, localEnabled, setLocalEnabled, isAllowlisted } = useCanaryMode();
 
   useEffect(() => {
     if (!user) return;
