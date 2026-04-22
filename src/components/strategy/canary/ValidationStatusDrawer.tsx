@@ -388,6 +388,24 @@ export function ValidationStatusDrawer({
       return;
     }
 
+    // Fresh-run gate (local UI policy). Block before any side effect / prompt.
+    if (requireFresh) {
+      const hasActive = snap.recentRuns.some(
+        (r) =>
+          r.task_type === group.task_type &&
+          (r.status === 'pending' || r.status === 'running') &&
+          (r.meta?.validation_canary?.thread_id === group.thread_id ||
+            // Fall back to current group rows if meta is sparse
+            group.runs.some((gr) => gr.id === r.id && (r.status === 'pending' || r.status === 'running'))),
+      );
+      if (hasActive) {
+        const msg = 'Fresh run required, but an active run already exists for this thread/task';
+        setLastRerunError({ vrid: group.validator_run_id, message: msg });
+        toast.error(msg);
+        return;
+      }
+    }
+
     // Lightweight confirmation for destructive/expensive modes only.
     if (group.mode === 'fallback') {
       const ok = window.confirm(
