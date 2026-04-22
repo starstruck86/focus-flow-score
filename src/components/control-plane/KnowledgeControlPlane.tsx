@@ -2,7 +2,8 @@
  * Knowledge Control Plane — trust-first, lifecycle-driven, operable workspace.
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { RefreshCw, Filter, Clock, Info } from 'lucide-react';
+import { RefreshCw, Filter, Clock, Info, ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
@@ -326,6 +327,12 @@ export function KnowledgeControlPlane() {
               {new Date(cpSummary.lastUpdated).toLocaleTimeString()}
             </span>
           )}
+          <Button asChild variant="outline" size="sm" className="h-7 text-xs gap-1.5">
+            <Link to="/admin/lifecycle-reconciliation">
+              <ShieldCheck className="h-3 w-3" />
+              Reconciliation
+            </Link>
+          </Button>
           <Button
             variant="outline" size="sm"
             onClick={() => { refetch(); queueRefresh(); }} disabled={isRefetching}
