@@ -45,6 +45,12 @@ export {
 } from "./chatPrompt.ts";
 
 export {
+  getLibraryTotals,
+  renderLibraryTotalsBlock,
+  type LibraryTotals,
+} from "./libraryTotals.ts";
+
+export {
   extractCandidatePhrases,
   inferResourceCategories,
   inferTopicScopes,

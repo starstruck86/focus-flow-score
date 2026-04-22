@@ -31,7 +31,17 @@ export async function logRoutingDecision(
         reason: error.message,
         thread_id: payload.thread_id,
       }));
+      return;
     }
+    // Explicit success-side confirmation. Lets validation distinguish
+    // "no traffic yet" from "write path broken" without needing to query
+    // the DB. Insert is intentionally minimal so log volume stays sane.
+    console.log(JSON.stringify({
+      tag: "[strategy-router:logged]",
+      thread_id: payload.thread_id,
+      lane: payload.decision.lane,
+      auto_promoted: payload.decision.auto_promoted,
+    }));
   } catch (e) {
     console.warn(JSON.stringify({
       tag: "[strategy-router:log_failed]",
