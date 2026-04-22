@@ -26,18 +26,23 @@ export interface InsertCanaryReviewInput {
 export async function insertCanaryReview(
   input: InsertCanaryReviewInput,
 ): Promise<CanaryReviewRow> {
-  const { data, error } = await supabase
-    .from('canary_reviews')
-    .insert({
-      user_id: input.userId,
-      raw_input: input.rawInput,
-      parsed_json: input.parsed as unknown as Record<string, unknown>,
-      evidence_summary: input.evidence as unknown as Record<string, unknown>,
-      recommendation: input.recommendation,
-      decision: input.decision,
-      decision_notes: input.decisionNotes,
-      flag_state: input.flagState as unknown as Record<string, unknown>,
+  const payload = {
+    user_id: input.userId,
+    raw_input: input.rawInput,
+    parsed_json: input.parsed as unknown as Record<string, unknown>,
+    evidence_summary: input.evidence as unknown as Record<string, unknown>,
+    recommendation: input.recommendation,
+    decision: input.decision,
+    decision_notes: input.decisionNotes,
+    flag_state: input.flagState as unknown as Record<string, unknown>,
+  };
+  const { data, error } = await (supabase
+    .from('canary_reviews') as unknown as {
+      insert: (p: typeof payload) => {
+        select: (cols: string) => { single: () => Promise<{ data: unknown; error: unknown }> };
+      };
     })
+    .insert(payload)
     .select('*')
     .single();
 
