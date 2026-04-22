@@ -6,10 +6,12 @@ import {
   buildStrategyChatSystemPrompt,
   emptyWorkingThesisState,
   extractThesisPatchFromProse,
+  getLibraryTotals,
   inferTopicScopes,
   loadWorkingThesisState,
   mergeWorkingThesisState,
   recordResourceUsage,
+  renderLibraryTotalsBlock,
   renderWorkingThesisStateBlock,
   retrieveLibraryContext,
   retrieveResourceContext,
@@ -4871,7 +4873,7 @@ async function buildChatSystemPrompt(args: {
   // links + category backstop).
   const scopes = deriveLibraryScopes(pack.account, userContent);
   let retrievalError: { message: string; stack?: string | null; stage?: string } | null = null;
-  const [assembled, library, workingThesis, resources] = await Promise.all([
+  const [assembled, library, workingThesis, resources, libraryTotals] = await Promise.all([
     accountId
       ? assembleStrategyContext({ supabase, userId, accountId }).catch((e) => {
         console.warn(
@@ -4918,6 +4920,16 @@ async function buildChatSystemPrompt(args: {
         stage: 'retrieveResourceContext',
       };
       console.error('[strategy-chat] retrieveResourceContext failed:', safeJson(retrievalError));
+      return null;
+    }),
+    // Authoritative DB-backed library totals. Always fetched so any
+    // resource-count question can be answered from real numbers (or
+    // explicitly refused). Never uses vector retrieval / top-K.
+    getLibraryTotals(supabase, userId).catch((e) => {
+      console.warn(
+        "[strategy-chat] getLibraryTotals failed:",
+        (e as Error).message,
+      );
       return null;
     }),
   ]);
@@ -4995,6 +5007,9 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     libraryContext: library?.contextString || "",
     workingThesisBlock,
     resourceContextBlock: resources?.contextBlock || "",
+    libraryTotalsBlock: libraryTotals
+      ? renderLibraryTotalsBlock(libraryTotals)
+      : "",
   });
 
   // Prepend the MODE LOCK so it's the FIRST thing the model reads,

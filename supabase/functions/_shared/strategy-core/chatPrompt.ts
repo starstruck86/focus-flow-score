@@ -159,6 +159,15 @@ export function buildStrategyChatSystemPrompt(
     parts.push(res);
   }
 
+  // Authoritative library totals — already self-headers ("=== LIBRARY
+  // TOTALS ==="). This is the ONLY place the model is allowed to source
+  // numeric library claims from (see LIBRARY COUNT DISCIPLINE rule).
+  // When absent, the model must refuse to assert counts.
+  const totals = (args.libraryTotalsBlock || "").trim();
+  if (totals) {
+    parts.push(totals);
+  }
+
   // Working thesis state — placed AFTER static context so the live
   // operating model is the last thing the model sees before the user
   // turn. Already self-headers ("=== CURRENT WORKING THESIS STATE ===").
