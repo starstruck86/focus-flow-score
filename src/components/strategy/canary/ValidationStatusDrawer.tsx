@@ -582,10 +582,77 @@ export function ValidationStatusDrawer({
 
           <Separator className="my-5" />
 
+          {/* SECTION 2.5 — SQL snapshots (live state at refresh) */}
+          <h3 className="text-sm font-semibold mb-2">SQL snapshots</h3>
+          {snap.loading ? (
+            <Skeleton className="h-20 w-full" />
+          ) : (
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span>Duplicates</span>
+                <StatusBadge
+                  kind={(snap.duplicates ?? 0) === 0 ? 'pass' : 'fail'}
+                  label={`${(snap.duplicates ?? 0) === 0 ? 'pass' : 'fail'} · ${snap.duplicates ?? 0}`}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Orphans</span>
+                <StatusBadge
+                  kind={(snap.orphans ?? 0) === 0 ? 'pass' : 'fail'}
+                  label={`${(snap.orphans ?? 0) === 0 ? 'pass' : 'fail'} · ${snap.orphans ?? 0}`}
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <span>Failures (24h)</span>
+                  <Badge variant="secondary" className="h-4 text-[10px]">
+                    {snap.failures24h.length}
+                  </Badge>
+                </div>
+                {snap.failures24h.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 pl-3 font-mono text-[10px] text-muted-foreground">
+                    {snap.failures24h.map((r) => (
+                      <li key={r.id} className="truncate">
+                        • {r.id.slice(0, 8)}… · {r.task_type} · {r.status}
+                        {r.error && (
+                          <span className="text-destructive"> — {String(r.error).slice(0, 80)}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <span>Lane mix (24h)</span>
+                  <Badge variant="secondary" className="h-4 text-[10px]">
+                    total {snap.laneMix24h.total}
+                  </Badge>
+                </div>
+                <div className="mt-1 pl-3 text-[10px] text-muted-foreground font-mono">
+                  direct: {snap.laneMix24h.direct} · assisted: {snap.laneMix24h.assisted} · deep_work: {snap.laneMix24h.deep_work}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Separator className="my-5" />
+
           {/* SECTION 3 — Canary Runs (validator_run_id grouped) */}
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
             <h3 className="text-sm font-semibold">Canary runs</h3>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <Switch
+                  id="require-fresh"
+                  checked={requireFresh}
+                  onCheckedChange={setRequireFresh}
+                  className="scale-75"
+                />
+                <Label htmlFor="require-fresh" className="text-[10px] cursor-pointer">
+                  Require fresh run
+                </Label>
+              </div>
               <span>
                 Validation key:{' '}
                 <span className={keyCached ? 'text-emerald-600' : 'text-amber-600'}>
