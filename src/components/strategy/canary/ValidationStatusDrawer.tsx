@@ -175,6 +175,17 @@ function groupCanaryRuns(runs: TaskRunRow[]): CanaryRunGroup[] {
         thread_id: vc.thread_id ?? null,
         task_type: r.task_type,
         created_at: r.created_at,
+        requested_at: typeof vc.requested_at === 'string' ? vc.requested_at : null,
+        forced_primary_failure_requested:
+          typeof vc.forced_primary_failure_requested === 'boolean'
+            ? vc.forced_primary_failure_requested
+            : null,
+        idempotent_short_circuit:
+          typeof vc.idempotent_short_circuit === 'boolean'
+            ? vc.idempotent_short_circuit
+            : null,
+        fresh_run_created:
+          typeof vc.fresh_run_created === 'boolean' ? vc.fresh_run_created : null,
         runs: [],
         fallback_triggered: false,
         fallback_success: null,
