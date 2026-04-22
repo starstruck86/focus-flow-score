@@ -724,6 +724,13 @@ export function StrategyShell() {
           e.target.value = '';
         }}
       />
+      {/* Cycle 1 canary operator drawer */}
+      <CanaryReviewDrawer
+        open={canaryDrawerOpen}
+        onOpenChange={(o) => { setCanaryDrawerOpen(o); if (!o) setCanaryReadonly(null); }}
+        readonlyReview={canaryReadonly}
+        onSaved={handleCanarySaved}
+      />
     </div>
   );
 }
