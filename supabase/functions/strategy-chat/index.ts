@@ -1032,7 +1032,7 @@ async function callWithFallback(
       );
       fallbackResult.fallbackUsed = true;
       console.log(
-        `[routing] fallback task=${taskType} provider=${fallbackResult.provider} model=${fallbackResult.model} latency=${fallbackResult.latencyMs}ms reason=${result.error.message}`,
+        `[routing] fallback task=${taskType} provider=${fallbackResult.provider} model=${fallbackResult.model} latency=${fallbackResult.latencyMs}ms reason=${result.error?.message ?? "unknown error"}`,
       );
       return fallbackResult;
     } finally {
