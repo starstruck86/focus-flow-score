@@ -219,7 +219,10 @@ async function listTable(
   }
 }
 
-const RESOURCE_FIELDS = ["title", "description", "content", "tags"];
+// NOTE: PostgREST `ilike` does not work on text[] columns (e.g. tags),
+// and a single bad operand short-circuits the whole or() filter, returning
+// zero results. So we restrict to text columns only.
+const RESOURCE_FIELDS = ["title", "description", "content"];
 const KI_FIELDS = [
   "title",
   "tactic_summary",
@@ -227,7 +230,6 @@ const KI_FIELDS = [
   "why_it_matters",
   "when_to_use",
   "source_excerpt",
-  "tags",
 ];
 
 export async function runLibraryLookup(
