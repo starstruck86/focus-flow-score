@@ -76,10 +76,21 @@ interface CanaryRunGroup {
   thread_id: string | null;
   task_type: string;
   created_at: string;
+  requested_at: string | null;
+  forced_primary_failure_requested: boolean | null;
+  idempotent_short_circuit: boolean | null;
+  fresh_run_created: boolean | null;
   runs: TaskRunRow[];
   fallback_triggered: boolean;
   fallback_success: boolean | null;
   same_run_id_returned: boolean | null;
+}
+
+interface LaneMix {
+  direct: number;
+  assisted: number;
+  deep_work: number;
+  total: number;
 }
 
 interface Snapshot {
@@ -87,8 +98,10 @@ interface Snapshot {
   duplicates: number | null;
   orphans: number | null;
   laneCount24h: number | null;
+  laneMix24h: LaneMix;
   fallbackSeen: boolean | null;
   deepWorkRuns24h: number | null;
+  failures24h: TaskRunRow[];
   recentRuns: TaskRunRow[];
   recentRouting: RoutingRow[];
   fallbackEvents: TaskRunRow[];
@@ -101,8 +114,10 @@ const EMPTY: Snapshot = {
   duplicates: null,
   orphans: null,
   laneCount24h: null,
+  laneMix24h: { direct: 0, assisted: 0, deep_work: 0, total: 0 },
   fallbackSeen: null,
   deepWorkRuns24h: null,
+  failures24h: [],
   recentRuns: [],
   recentRouting: [],
   fallbackEvents: [],
