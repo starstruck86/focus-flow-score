@@ -701,6 +701,7 @@ interface LLMRoute {
   useTools: boolean;
   reasoning?: { effort: string };
   _smokeTestForceFail?: boolean;
+  _routingReason?: string;
 }
 
 // PROVIDER POLICY:
