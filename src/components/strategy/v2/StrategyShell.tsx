@@ -607,6 +607,11 @@ export function StrategyShell() {
         onNewThread={() => handleNewThread()}
       />
 
+      {/* Cycle 1 — canary review pill (operator workflow entry point) */}
+      <div className="shrink-0 w-full flex justify-end px-4 py-1" style={{ borderBottom: '1px solid hsl(var(--sv-hairline))' }}>
+        <CanaryReviewPill lastReview={lastCanaryReview} onClick={openCanaryReview} />
+      </div>
+
       <StrategyCanvas
         messages={messages}
         isLoading={isLoading}
