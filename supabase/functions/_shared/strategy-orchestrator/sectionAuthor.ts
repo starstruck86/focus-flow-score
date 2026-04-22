@@ -1,14 +1,18 @@
 // ════════════════════════════════════════════════════════════════
 // Section-batched authoring — Stage 3 reliability layer.
 //
-// Purpose: when the monolithic one-shot authoring call (Claude → Gemini
+// Purpose: when the monolithic one-shot authoring call (Claude → ChatGPT
 // fallback) fully fails (typically due to wall-clock timeouts on 19
 // sections in a single 12k-token response), we *don't* fail the run.
 // Instead we author the document in small batches (≤3 sections each),
-// trying Claude per batch and falling back to Gemini per batch. Each
-// batch is small enough to comfortably finish inside its inner timeout
-// budget. Surviving batches assemble into the same `{ sections: [...] }`
-// draft_output shape the rest of the pipeline already expects.
+// trying Claude per batch and falling back to ChatGPT (OpenAI GPT-5)
+// per batch. Each batch is small enough to comfortably finish inside
+// its inner timeout budget. Surviving batches assemble into the same
+// `{ sections: [...] }` draft_output shape the rest of the pipeline
+// already expects.
+//
+// MODEL POLICY: only Claude + OpenAI ChatGPT are used. Gemini / Lovable AI
+// are explicitly NOT part of this path.
 //
 // This is purely additive: the public draft_output contract is identical,
 // task types are unchanged, the registry/handler API is untouched. The
@@ -16,7 +20,7 @@
 // after the existing authoring ladder has exhausted itself.
 // ════════════════════════════════════════════════════════════════
 
-import { callClaude, callLovableAI, safeParseJSON } from "./providers.ts";
+import { callClaude, callOpenAI, safeParseJSON } from "./providers.ts";
 import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
 
 /** A small, fixed grouping of section ids. Tuned so each batch's expected
@@ -36,8 +40,8 @@ const DISCOVERY_PREP_BATCHES: { ids: string[] }[] = [
 
 const SECTION_INNER_TIMEOUT_MS = 60_000;
 const SECTION_OUTER_TIMEOUT_MS = 70_000;
-const FALLBACK_MODEL = "google/gemini-2.5-pro";
 const PRIMARY_MODEL = "claude-sonnet-4-5-20250929";
+const FALLBACK_MODEL = "gpt-5"; // OpenAI ChatGPT — Gemini explicitly excluded
 
 export interface SectionBatchResult {
   /** Assembled `{ sections: [...] }` draft. Always returned, even if some
@@ -91,7 +95,8 @@ async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
 }
 
 /** Author a single batch. Returns the parsed sections array on success.
- *  Tries Claude first; on transient failure, falls back to Gemini. */
+ *  Tries Claude first; on transient failure, falls back to OpenAI ChatGPT.
+ *  Gemini is intentionally NOT used. */
 async function authorOneBatch(
   args: AuthorBatchArgs,
   sectionIds: string[],
@@ -130,18 +135,20 @@ async function authorOneBatch(
       run_id: args.runId,
       batch: sectionIds,
       primary_error: claudeMsg,
+      fallback_provider: "openai",
+      fallback_model: FALLBACK_MODEL,
     }));
 
-    // Fallback: Gemini via Lovable AI Gateway
+    // Fallback: OpenAI ChatGPT (gpt-5). Gemini is explicitly NOT used.
     try {
       const raw = await withTimeout(
-        callLovableAI(messages, {
+        callOpenAI(messages, {
           model: FALLBACK_MODEL,
           temperature: 0.3,
           maxTokens: 8000,
         }),
         SECTION_OUTER_TIMEOUT_MS,
-        `[section-author:gemini] batch=${sectionIds.join(",")}`,
+        `[section-author:openai] batch=${sectionIds.join(",")}`,
       );
       const parsed = safeParseJSON<any>(raw);
       if (parsed && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
@@ -149,6 +156,7 @@ async function authorOneBatch(
           tag: "[section-author:fallback_success]",
           run_id: args.runId,
           batch: sectionIds,
+          fallback_model: FALLBACK_MODEL,
         }));
         return { sections: parsed.sections, primary_status: "failed", fallback_status: "success", error: claudeMsg };
       }
@@ -156,7 +164,7 @@ async function authorOneBatch(
         sections: [],
         primary_status: "failed",
         fallback_status: "failed",
-        error: `claude: ${claudeMsg} | fallback: no sections array`,
+        error: `claude: ${claudeMsg} | fallback(${FALLBACK_MODEL}): no sections array`,
       };
     } catch (fbErr: any) {
       const fbMsg = String(fbErr?.message || fbErr).slice(0, 300);
@@ -164,13 +172,14 @@ async function authorOneBatch(
         tag: "[section-author:fallback_failed]",
         run_id: args.runId,
         batch: sectionIds,
+        fallback_model: FALLBACK_MODEL,
         fallback_error: fbMsg,
       }));
       return {
         sections: [],
         primary_status: "failed",
         fallback_status: "failed",
-        error: `claude: ${claudeMsg} | fallback: ${fbMsg}`,
+        error: `claude: ${claudeMsg} | fallback(${FALLBACK_MODEL}): ${fbMsg}`,
       };
     }
   }
@@ -237,6 +246,8 @@ export async function authorBySectionBatches(args: {
     run_id: args.runId,
     batches: DISCOVERY_PREP_BATCHES.length,
     sections_total: DISCOVERY_PREP_SECTIONS.length,
+    primary_model: PRIMARY_MODEL,
+    fallback_model: FALLBACK_MODEL,
   }));
 
   for (const batch of DISCOVERY_PREP_BATCHES) {
@@ -303,6 +314,8 @@ export async function authorBySectionBatches(args: {
     sections_authored: collected.size,
     sections_total: DISCOVERY_PREP_SECTIONS.length,
     any_fallback_success: anyFallbackSuccess,
+    primary_model: PRIMARY_MODEL,
+    fallback_model: FALLBACK_MODEL,
   }));
 
   return {

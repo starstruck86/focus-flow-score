@@ -22,7 +22,7 @@
 // ════════════════════════════════════════════════════════════════
 
 import { retrieveLibraryContext } from "./libraryRetrieval.ts";
-import { callClaude, callLovableAI, callPerplexity, safeParseJSON } from "./providers.ts";
+import { callClaude, callOpenAI, callPerplexity, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
 import { authorBySectionBatches } from "./sectionAuthor.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
@@ -84,11 +84,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // ── Stage 2: Synthesis — STRONG model (openai/gpt-5 via Lovable AI Gateway).
   // We run this in the background, so wall-clock is no longer a constraint.
   await setProgress(supabase, runId, "synthesis");
-  console.log(`[stage-2] synthesis via Lovable AI (openai/gpt-5)...`);
-  const synthesisRaw = await callLovableAI([
+  console.log(`[stage-2] synthesis via OpenAI ChatGPT (gpt-5)...`);
+  const synthesisRaw = await callOpenAI([
     { role: "system", content: "You are a senior sales strategist. Synthesize research + internal IP into actionable intelligence. Return structured JSON only. No markdown fences, no preamble." },
     { role: "user", content: handler.buildSynthesisPrompt(inputs, research, library) },
-  ], { model: "openai/gpt-5", maxTokens: 12000 });
+  ], { model: "gpt-5", maxTokens: 12000 });
   const synthesis = safeParseJSON<any>(synthesisRaw) ?? { raw: synthesisRaw };
   console.log(`[stage-2] synthesis fields: ${Object.keys(synthesis).length}`);
 
@@ -115,13 +115,14 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // dangling timer that keeps the worker alive past the request.
   let authoringTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  // Fix 3 — Authoring fallback ladder.
-  // Primary: Claude (existing locked template). Fallback (once): Lovable AI
-  // gemini-2.5-pro with the *same* prompt payload + same JSON expectations.
+  // Authoring fallback ladder (Gemini removed per model policy).
+  // Primary: Claude (formatting/authoring per policy).
+  // Fallback (once): OpenAI GPT-5 (ChatGPT — reasoning/synthesis per policy)
+  // with the *same* prompt payload + same JSON expectations.
   // Fallback only triggers on transient/availability failures (404/429/5xx,
   // timeout, credits exhausted, unavailable) — NOT on logic/schema bugs
   // (which would also fail on the fallback and just waste the stage budget).
-  const FALLBACK_MODEL = "google/gemini-2.5-pro";
+  const FALLBACK_MODEL = "openai/gpt-5";
   const isFallbackEligible = (err: any): boolean => {
     const msg = String(err?.message || err || "").toLowerCase();
     if (err?.status === 429 || err?.status === 402) return true;
@@ -209,9 +210,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       let fallbackTimeoutId: ReturnType<typeof setTimeout> | null = null;
       try {
         documentRaw = await Promise.race<string>([
-          callLovableAI(authoringMessages, {
+          callOpenAI(authoringMessages, {
             model: FALLBACK_MODEL,
-            temperature: 0.3,
             maxTokens: 12000,
           }),
           new Promise<string>((_, reject) => {
@@ -250,11 +250,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
 
         // ── Section-batched rescue ────────────────────────────────
         // The monolithic ladder failed. Before giving up, try authoring
-        // one small batch at a time (Claude → Gemini per batch). This is
+        // one small batch at a time (Claude → ChatGPT per batch). This is
         // the reliability layer that keeps deep-work runs from going
         // 100% black on a single timeout. It is *additive*: the existing
         // path runs first; this only fires when both primary and fallback
-        // monolithic calls failed.
+        // monolithic calls failed. Gemini is intentionally NOT used.
         console.warn(JSON.stringify({
           tag: "[authoring:section_batch_rescue_start]",
           run_id: runId,
@@ -401,10 +401,10 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     await setProgress(supabase, runId, "review");
     console.log("[stage-4] generating playbook-grounded review...");
     try {
-      const reviewRaw = await callLovableAI([
+      const reviewRaw = await callOpenAI([
         { role: "system", content: "You are a senior sales leader reviewing a prep document. Be specific, actionable, and grounded in the provided internal playbooks/KIs." },
         { role: "user", content: handler.buildReviewPrompt(inputs, draftOutput, library) },
-      ], { model: "google/gemini-2.5-flash", temperature: 0.4, maxTokens: 4000 });
+      ], { model: "gpt-5-mini", temperature: 0.4, maxTokens: 4000 });
       const parsed = safeParseJSON<any>(reviewRaw);
       if (parsed) reviewOutput = { ...reviewOutput, ...parsed };
     } catch (e: any) {
