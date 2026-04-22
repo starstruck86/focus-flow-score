@@ -24,6 +24,7 @@
 import { retrieveLibraryContext } from "./libraryRetrieval.ts";
 import { callClaude, callLovableAI, callPerplexity, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
+import { authorBySectionBatches } from "./sectionAuthor.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
 // ── Internal: write a progress step to the run row (best-effort). ─
