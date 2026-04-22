@@ -994,6 +994,45 @@ export type Database = {
           },
         ]
       }
+      canary_reviews: {
+        Row: {
+          created_at: string
+          decision: string
+          decision_notes: string | null
+          evidence_summary: Json
+          flag_state: Json
+          id: string
+          parsed_json: Json
+          raw_input: string
+          recommendation: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          decision: string
+          decision_notes?: string | null
+          evidence_summary: Json
+          flag_state?: Json
+          id?: string
+          parsed_json: Json
+          raw_input: string
+          recommendation: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          decision?: string
+          decision_notes?: string | null
+          evidence_summary?: Json
+          flag_state?: Json
+          id?: string
+          parsed_json?: Json
+          raw_input?: string
+          recommendation?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       closed_loop_sessions: {
         Row: {
           attempts: Json
