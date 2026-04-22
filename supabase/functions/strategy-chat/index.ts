@@ -5202,6 +5202,48 @@ async function handleChat(
     });
   }
 
+  // ── Candidate pending action ─────────────────────────────
+  // Even when detectLookupIntent didn't fire (e.g. the user phrased the
+  // ask too loosely to extract a clean topic), if the message clearly
+  // references the library + counts/lists we attach a pending_action so
+  // any assistant offer phrasing ("want me to run a targeted lookup?")
+  // is automatically bound to the next "yes" reply. This eliminates the
+  // contradictory "I can offer a lookup" → "I can't run a lookup" loop.
+  const candidatePending: PendingLookupAction | null = (() => {
+    const t = (content || "").toLowerCase();
+    const mentionsLibrary =
+      /\b(resources?|kis?|knowledge[\s-]?items?|library|tactics?|playbooks?)\b/.test(t);
+    const mentionsCounts =
+      /\b(how\s+many|count|number\s+of|total|list|show|find|give\s+me)\b/.test(t);
+    if (!mentionsLibrary || !mentionsCounts) return null;
+    // Try to lift a topic; if extraction fails, fall back to "" so the
+    // pending action is informative even without a clean noun phrase.
+    // The model can still acknowledge and the next "yes" will run it
+    // against the cleaned text.
+    const guess = detectLookupIntent(content || "");
+    if (guess) return buildPendingLookupAction(guess);
+    // Build a lightweight one with the cleaned text as topic.
+    const cleaned = (content || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s\-]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2)
+      .filter((w) => !/^(the|and|for|with|how|many|count|list|show|find|give|me|my|our|your|are|do|does|of|to|in|on|about|what|which|that|this|these|those)$/.test(w))
+      .slice(0, 6)
+      .join(" ");
+    if (!cleaned) return null;
+    const target: "resources" | "knowledge_items" | "both" =
+      /\bresources?\b/.test(t) && !/\bkis?\b|knowledge/.test(t) ? "resources"
+      : /\bkis?\b|knowledge/.test(t) && !/\bresources?\b/.test(t) ? "knowledge_items"
+      : "both";
+    return {
+      pending_action: "resource_lookup",
+      lookup_type: /\b(list|show|find|give\s+me)\b/.test(t) ? "list" : "count",
+      topic: cleaned,
+      target,
+      offered_at: new Date().toISOString(),
+    };
+  })();
 
   // Initial route is provisional — replaced below once we know the mode.
   let route = resolveLLMRoute("chat_general");
