@@ -5098,6 +5098,111 @@ async function handleChat(
     content_json: { text: content },
   });
 
+  // ═══════════════════════════════════════════════════════════════
+  // TARGETED LIBRARY LOOKUP INTERCEPT
+  //
+  // Two paths to a real DB-backed lookup, both bypass the LLM:
+  //   1. Direct intent in the user message
+  //      ("how many resources about cold calling?")
+  //   2. Affirmative reply ("yes", "do it", …) when the previous
+  //      assistant message offered a lookup via content_json.pending_action
+  //
+  // Hard guardrail: we never persist a pending_action unless this
+  // function is wired up. So the assistant cannot offer a lookup it
+  // can't fulfil.
+  // ═══════════════════════════════════════════════════════════════
+  let lookupIntent: LookupIntent | null = detectLookupIntent(content || "");
+  if (!lookupIntent) {
+    // Check for an affirmative reply against the most recent assistant
+    // message's pending_action (look back ~3 messages to skip
+    // the user row we just inserted).
+    if (detectAffirmative(content || "")) {
+      try {
+        const { data: prior } = await supabase
+          .from("strategy_messages")
+          .select("id, role, content_json, created_at")
+          .eq("thread_id", threadId)
+          .eq("role", "assistant")
+          .order("created_at", { ascending: false })
+          .limit(1);
+        const last = Array.isArray(prior) && prior.length ? prior[0] : null;
+        const pending = (last?.content_json as any)?.pending_action as
+          | PendingLookupAction
+          | undefined;
+        const fromPending = pendingActionToIntent(pending ?? null);
+        if (fromPending) {
+          lookupIntent = fromPending;
+          console.log(JSON.stringify({
+            tag: "[strategy-chat:lookup_resume_pending]",
+            thread_id: threadId,
+            topic: fromPending.topic,
+            kind: fromPending.kind,
+            target: fromPending.target,
+          }));
+        }
+      } catch (e) {
+        console.warn(`[strategy-chat] pending-action resume failed: ${(e as Error).message}`);
+      }
+    } else if (detectNegative(content || "")) {
+      // Clear any pending action quietly — falls through to normal chat.
+      console.log(JSON.stringify({
+        tag: "[strategy-chat:lookup_pending_cleared]",
+        thread_id: threadId,
+      }));
+    }
+  }
+
+  if (lookupIntent) {
+    console.log(JSON.stringify({
+      tag: "[strategy-chat:lookup_run]",
+      thread_id: threadId,
+      kind: lookupIntent.kind,
+      target: lookupIntent.target,
+      topic: lookupIntent.topic,
+    }));
+    const lookupResult = await runLibraryLookup(supabase, userId, lookupIntent);
+    const replyText = renderLookupResultText(lookupResult);
+
+    await supabase.from("strategy_messages").insert({
+      thread_id: threadId,
+      user_id: userId,
+      role: "assistant",
+      message_type: "chat",
+      provider_used: "system",
+      model_used: "library-lookup",
+      fallback_used: false,
+      latency_ms: 0,
+      content_json: {
+        text: replyText,
+        library_lookup: {
+          intent: lookupResult.intent,
+          resources_total: lookupResult.resources_total,
+          knowledge_items_total: lookupResult.knowledge_items_total,
+          resource_samples: lookupResult.resource_samples,
+          ki_samples: lookupResult.ki_samples,
+          computed_at: lookupResult.computed_at,
+        },
+        routing_decision: withRoutingMeta({
+          mode: "library_lookup",
+          mode_reason: "direct_db_query",
+          intent: "resource_lookup",
+        }, routingDecision),
+      },
+    });
+
+    const sseChunk = `data: ${
+      JSON.stringify({ choices: [{ delta: { content: replyText } }] })
+    }\n\ndata: [DONE]\n\n`;
+    return new Response(sseChunk, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+      },
+    });
+  }
+
+
   // Initial route is provisional — replaced below once we know the mode.
   let route = resolveLLMRoute("chat_general");
   if (forceFallback) route._smokeTestForceFail = true;
