@@ -179,6 +179,12 @@ export function ValidationStatusDrawer({
   const { user } = useAuth();
   const [snap, setSnap] = useState<Snapshot>(EMPTY);
   const [rerunningId, setRerunningId] = useState<string | null>(null);
+  const [keyCached, setKeyCached] = useState<boolean>(false);
+  const [lastRerunError, setLastRerunError] = useState<{ vrid: string; message: string } | null>(null);
+
+  const refreshKeyStatus = useCallback(() => {
+    setKeyCached(!!getCachedValidationKey());
+  }, []);
 
   const load = useCallback(async () => {
     if (!user) return;
