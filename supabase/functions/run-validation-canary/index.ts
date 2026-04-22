@@ -15,6 +15,13 @@
 //   - Body must include validation_key === STRATEGY_VALIDATION_KEY
 //   - No service-role bypass
 //   - This endpoint is for canary operators only
+//
+// Validator run association:
+//   - One validator_run_id (uuid) is generated per endpoint call.
+//   - It is forwarded on inputs and stamped into task_runs.meta.validation_canary
+//     so evidence can be queried/grouped after the fact, even when logs
+//     roll off. Collision mode uses the SAME validator_run_id for both
+//     attempted runs.
 // ════════════════════════════════════════════════════════════════
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -34,6 +41,12 @@ function jsonResponse(body: unknown, status = 200) {
 
 const ALLOWED_TASK_TYPES = new Set(["discovery_prep", "account_brief", "ninety_day_plan"]);
 const ALLOWED_MODES = new Set(["normal", "fallback", "collision"]);
+
+// Any input key prefixed with __validation_ is reserved for this endpoint.
+// We strip every such key from operator-provided inputs before adding our
+// own server-controlled markers, so callers cannot smuggle additional
+// validation flags into the pipeline.
+const RESERVED_VALIDATION_PREFIX = "__validation_";
 
 interface CanaryBody {
   mode: string;
@@ -59,6 +72,27 @@ async function callRunStrategyTask(
   });
   const json = await resp.json().catch(() => ({}));
   return json;
+}
+
+// Best-effort: stamp meta.validation_canary onto a created task_runs row so
+// the drawer can group recent canary runs by validator_run_id.
+async function stampValidationMeta(
+  supabase: any,
+  runId: string,
+  payload: { mode: string; thread_id: string; validator_run_id: string },
+) {
+  try {
+    const { data: row } = await supabase
+      .from("task_runs")
+      .select("meta")
+      .eq("id", runId)
+      .maybeSingle();
+    const existing = (row?.meta as Record<string, unknown> | null) || {};
+    const next = { ...existing, validation_canary: payload };
+    await supabase.from("task_runs").update({ meta: next }).eq("id", runId);
+  } catch (e) {
+    console.warn("[validation-canary] meta stamp failed:", (e as Error).message);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -96,8 +130,26 @@ Deno.serve(async (req) => {
     if (!ALLOWED_TASK_TYPES.has(body.task_type)) {
       return jsonResponse({ error: "Invalid task_type" }, 400);
     }
-    if (!body.thread_id) {
+    if (!body.thread_id || typeof body.thread_id !== "string") {
       return jsonResponse({ error: "thread_id is required" }, 400);
+    }
+
+    // Strip ANY operator-provided __validation_* keys. Only this endpoint
+    // is allowed to set validation markers on inputs.
+    const operatorInputs: Record<string, unknown> = { ...(body.inputs ?? {}) };
+    const strippedKeys: string[] = [];
+    for (const k of Object.keys(operatorInputs)) {
+      if (k.startsWith(RESERVED_VALIDATION_PREFIX)) {
+        strippedKeys.push(k);
+        delete operatorInputs[k];
+      }
+    }
+    if (strippedKeys.length > 0) {
+      console.warn(JSON.stringify({
+        tag: "[validation-canary:stripped_reserved_keys]",
+        user_id: user.id,
+        keys: strippedKeys,
+      }));
     }
 
     // Pull a default company name from the linked thread / account so the
@@ -111,7 +163,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!thread) return jsonResponse({ error: "Thread not found" }, 404);
 
-    let companyName = (body.inputs?.company_name as string) || thread.title || "Validation Canary";
+    let companyName = (operatorInputs.company_name as string) || thread.title || "Validation Canary";
     if (thread.linked_account_id) {
       const { data: acct } = await supabase
         .from("accounts")
@@ -121,10 +173,18 @@ Deno.serve(async (req) => {
       if (acct?.name) companyName = acct.name;
     }
 
+    // One validator_run_id per endpoint invocation.
+    const validatorRunId = crypto.randomUUID();
+
     const baseInputs: Record<string, unknown> = {
-      ...(body.inputs ?? {}),
+      ...operatorInputs,
       thread_id: body.thread_id,
       company_name: companyName,
+      // Server-controlled origin marker. runTask.ts only honors validation
+      // flags when this exact value is present.
+      __validation_origin: "run-validation-canary",
+      __validation_run_id: validatorRunId,
+      __validation_mode: body.mode,
     };
 
     console.log(JSON.stringify({
@@ -133,13 +193,22 @@ Deno.serve(async (req) => {
       mode: body.mode,
       task_type: body.task_type,
       thread_id: body.thread_id,
+      validator_run_id: validatorRunId,
     }));
+
+    const metaPayload = {
+      mode: body.mode,
+      thread_id: body.thread_id,
+      validator_run_id: validatorRunId,
+    };
 
     if (body.mode === "normal") {
       const r = await callRunStrategyTask(authHeader, body.task_type, baseInputs);
+      if (r.run_id) await stampValidationMeta(supabase, r.run_id, metaPayload);
       return jsonResponse({
         ok: !r.error,
         mode: "normal",
+        validator_run_id: validatorRunId,
         run_id: r.run_id ?? null,
         first_run_id: null,
         second_run_id: null,
@@ -149,17 +218,18 @@ Deno.serve(async (req) => {
     }
 
     if (body.mode === "fallback") {
-      // The forced-failure flag is a validation-only key on inputs. runTask
-      // strips/honors it server-side and ONLY when the request originated
-      // from this validation endpoint (it is never set by UI paths).
+      // Fallback ONLY: add the force-failure flag. Normal/collision modes
+      // never set this. runTask.ts additionally requires the origin marker.
       const fbInputs = {
         ...baseInputs,
         __validation_force_authoring_failure: true,
       };
       const r = await callRunStrategyTask(authHeader, body.task_type, fbInputs);
+      if (r.run_id) await stampValidationMeta(supabase, r.run_id, metaPayload);
       return jsonResponse({
         ok: !r.error,
         mode: "fallback",
+        validator_run_id: validatorRunId,
         run_id: r.run_id ?? null,
         first_run_id: null,
         second_run_id: null,
@@ -169,17 +239,19 @@ Deno.serve(async (req) => {
     }
 
     if (body.mode === "collision") {
-      // Fire both requests as close to simultaneously as possible. The
-      // second call should hit the partial-unique-index path in
-      // run-strategy-task and converge on the same run_id.
+      // Both attempts share the same validator_run_id.
       const [a, b] = await Promise.all([
         callRunStrategyTask(authHeader, body.task_type, baseInputs),
         callRunStrategyTask(authHeader, body.task_type, baseInputs),
       ]);
       const sameId = !!(a.run_id && b.run_id && a.run_id === b.run_id);
+      // Stamp meta once on the (possibly single) created row.
+      const ids = Array.from(new Set([a.run_id, b.run_id].filter(Boolean) as string[]));
+      await Promise.all(ids.map((id) => stampValidationMeta(supabase, id, metaPayload)));
       return jsonResponse({
         ok: !!(a.run_id || b.run_id),
         mode: "collision",
+        validator_run_id: validatorRunId,
         run_id: null,
         first_run_id: a.run_id ?? null,
         second_run_id: b.run_id ?? null,
