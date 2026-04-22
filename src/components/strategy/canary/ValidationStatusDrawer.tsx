@@ -310,14 +310,29 @@ export function ValidationStatusDrawer({
   if ((snap.deepWorkRuns24h ?? 0) === 0) gaps.push('No deep-work runs in last 24h');
   if ((snap.duplicates ?? 0) > 0) gaps.push(`${snap.duplicates} duplicate active run(s) for same (thread_id, task_type)`);
   if ((snap.orphans ?? 0) > 0) gaps.push(`${snap.orphans} orphaned authoring run(s) older than 5min`);
+  if (!canaryStats.hasAny) gaps.push('No canary-tagged runs recorded');
+  else {
+    if (!canaryStats.normalOk) gaps.push('No normal canary run recorded');
+    if (!canaryStats.fallbackOk) gaps.push('No successful fallback canary recorded');
+    if (!canaryStats.collisionOk) gaps.push('No collision canary with same run_id recorded');
+  }
 
   const handleRerun = useCallback(async (group: CanaryRunGroup) => {
     if (!group.thread_id) {
+      setLastRerunError({ vrid: group.validator_run_id, message: 'Original thread_id missing' });
       toast.error('Cannot rerun — original thread_id missing');
       return;
     }
+    // Silent if user cancels prompt
+    const wasCached = !!getCachedValidationKey();
     const key = ensureValidationKey();
-    if (!key) return;
+    if (!key) {
+      // No toast, no error state — user intentionally cancelled
+      if (!wasCached) refreshKeyStatus();
+      return;
+    }
+    refreshKeyStatus();
+    setLastRerunError(null);
     setRerunningId(group.validator_run_id);
     toast(`Re-running canary (${group.mode})…`);
     try {
@@ -329,16 +344,28 @@ export function ValidationStatusDrawer({
           validation_key: key,
         },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) throw new Error(error.message || 'Edge function error');
+      if (!data) throw new Error('Empty response from canary endpoint');
+      if (data.ok !== true) {
+        throw new Error(data.error || 'Canary endpoint returned ok=false');
+      }
       toast.success(`Canary started — validator_run_id ${String(data?.validator_run_id || '').slice(0, 8)}…`);
-      await load();
     } catch (e: any) {
-      toast.error(`Rerun failed: ${e?.message || String(e)}`);
+      const msg = e?.message || String(e);
+      setLastRerunError({ vrid: group.validator_run_id, message: msg });
+      toast.error(`Rerun failed: ${msg}`);
     } finally {
       setRerunningId(null);
+      // Always refresh so drawer state never stays stale
+      try { await load(); } catch { /* ignore */ }
     }
-  }, [load]);
+  }, [load, refreshKeyStatus]);
+
+  const handleClearKey = useCallback(() => {
+    clearCachedValidationKey();
+    refreshKeyStatus();
+    toast('Validation key cleared');
+  }, [refreshKeyStatus]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
