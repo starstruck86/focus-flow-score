@@ -314,7 +314,7 @@ Deno.serve(async (req) => {
       playbooks: totals.playbook,
       cards_upserted: totals.knowledge_item.upserted + totals.playbook.upserted,
     };
-    console.log(`[derive-library-cards] done ${JSON.stringify(summary)}`);
+    console.log("[derive-cards:summary]", JSON.stringify(summary));
     return jsonResponse(summary);
   } catch (e: any) {
     console.error("[derive-library-cards] error:", e);
