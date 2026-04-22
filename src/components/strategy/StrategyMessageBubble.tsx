@@ -11,6 +11,8 @@ import {
 import { toast } from 'sonner';
 import type { StrategyMessage } from '@/types/strategy';
 import { SourceInspectorPanel } from './SourceInspectorPanel';
+import { LaneBadge, type Lane } from './LaneBadge';
+import { RoutingDetails, type RoutingMeta } from './RoutingDetails';
 
 /** Extract only human-readable text from content_json, never raw debug/provider metadata */
 function extractDisplayText(contentJson: any): string {
@@ -62,6 +64,8 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
   const modelUsed = contentJson?.model_used;
   const providerUsed = contentJson?.provider_used;
   const fallbackUsed = contentJson?.fallback_used;
+  const routingMeta = (contentJson?.routing_meta ?? undefined) as RoutingMeta | undefined;
+  const lane: Lane | undefined = routingMeta?.lane;
 
   if (message.message_type === 'workflow_update') {
     return (
@@ -133,6 +137,7 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
         )}
         {!isUser && !isSystem && text && (
           <div className="mt-2 pt-1.5 border-t border-border/15 flex items-center gap-1.5 flex-wrap">
+            {lane && <LaneBadge lane={lane} />}
             {providerUsed && (
               <span className="text-[9px] text-muted-foreground/65 flex items-center gap-0.5">
                 <Cpu className="h-2 w-2" />
@@ -153,6 +158,9 @@ export function StrategyMessageBubble({ message, onSaveAsMemory, onTransformOutp
               </Button>
             )}
           </div>
+        )}
+        {!isUser && !isSystem && routingMeta && (
+          <RoutingDetails meta={routingMeta} />
         )}
       </div>
     </div>

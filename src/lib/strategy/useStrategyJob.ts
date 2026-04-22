@@ -20,6 +20,16 @@ export interface StrategyJobState {
   progressStep: string | null;
   result: { draft: unknown; review: unknown } | null;
   error: string | null;
+  failedStage: string | null;
+  retryHint: string | null;
+}
+
+function deriveRetryHint(err?: string | null, stage?: string | null): string {
+  if (!err) return 'Try again in a moment.';
+  if (/timeout|stalled/i.test(err)) return 'The job stalled. Retry — usually transient.';
+  if (/rate.?limit/i.test(err)) return 'Model rate-limited. Wait 30s and retry.';
+  if (/cards|library/i.test(err)) return 'Library context unavailable. Retry; falls back to zero-card mode.';
+  return `Failed at "${stage ?? 'unknown'}". Retry or report if it repeats.`;
 }
 
 const PROGRESS_LABELS: Record<string, string> = {
@@ -43,6 +53,8 @@ const initialState: StrategyJobState = {
   progressStep: null,
   result: null,
   error: null,
+  failedStage: null,
+  retryHint: null,
 };
 
 async function callRunStrategyJob(body: Record<string, unknown>) {
@@ -104,7 +116,17 @@ export function useStrategyJob() {
       }));
 
       if (status.status === 'failed') {
-        throw new Error((status.error as string) || 'Strategy job failed');
+        const errMsg = (status.error as string) || 'Strategy job failed';
+        const failedStage = (status.progress_step as string) || null;
+        setState((prev) => ({
+          ...prev,
+          status: 'failed',
+          error: errMsg,
+          failedStage,
+          retryHint: deriveRetryHint(errMsg, failedStage),
+          progressStep: null,
+        }));
+        throw new Error(errMsg);
       }
       if (status.status === 'completed') {
         setState({
@@ -114,6 +136,8 @@ export function useStrategyJob() {
           progressStep: PROGRESS_LABELS.completed,
           result: { draft: status.draft, review: status.review },
           error: null,
+          failedStage: null,
+          retryHint: null,
         });
         return;
       }
@@ -128,7 +152,7 @@ export function useStrategyJob() {
     if (inFlightRef.current) throw new Error('A strategy job is already in flight');
     inFlightRef.current = true;
     cancelRef.current = false;
-    setState({ runId: null, taskType, status: 'pending', progressStep: PROGRESS_LABELS.queued, result: null, error: null });
+    setState({ runId: null, taskType, status: 'pending', progressStep: PROGRESS_LABELS.queued, result: null, error: null, failedStage: null, retryHint: null });
 
     try {
       const start = await callRunStrategyJob({
@@ -145,7 +169,14 @@ export function useStrategyJob() {
       return runId;
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to run strategy job';
-      setState((prev) => ({ ...prev, status: 'failed', error: msg, progressStep: null }));
+      setState((prev) => ({
+        ...prev,
+        status: 'failed',
+        error: msg,
+        failedStage: prev.failedStage ?? null,
+        retryHint: prev.retryHint ?? deriveRetryHint(msg, prev.failedStage ?? null),
+        progressStep: null,
+      }));
       throw e;
     } finally {
       inFlightRef.current = false;
@@ -153,15 +184,25 @@ export function useStrategyJob() {
   }, [pollUntilDone]);
 
   const attach = useCallback((runId: string, taskType: StrategyTaskType) => {
-    if (inFlightRef.current) return;
+    if (inFlightRef.current || activeRunIdRef.current === runId) {
+      console.log('[strategy-ui:dup_prevented]', JSON.stringify({ kind: 'attach', run_id: runId }));
+      return;
+    }
     inFlightRef.current = true;
     cancelRef.current = false;
     activeRunIdRef.current = runId;
-    setState({ runId, taskType, status: 'running', progressStep: PROGRESS_LABELS.queued, result: null, error: null });
+    setState({ runId, taskType, status: 'running', progressStep: PROGRESS_LABELS.queued, result: null, error: null, failedStage: null, retryHint: null });
     pollUntilDone(runId, taskType)
       .catch((e) => {
         const msg = e instanceof Error ? e.message : 'Strategy job failed';
-        setState((prev) => ({ ...prev, status: 'failed', error: msg, progressStep: null }));
+        setState((prev) => ({
+          ...prev,
+          status: 'failed',
+          error: msg,
+          failedStage: prev.failedStage ?? null,
+          retryHint: prev.retryHint ?? deriveRetryHint(msg, prev.failedStage ?? null),
+          progressStep: null,
+        }));
       })
       .finally(() => {
         inFlightRef.current = false;
