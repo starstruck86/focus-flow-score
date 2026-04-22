@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Unit tests for resourceStateResolver.ts — the SINGLE SOURCE OF TRUTH for
  * canonical resource lifecycle state.
