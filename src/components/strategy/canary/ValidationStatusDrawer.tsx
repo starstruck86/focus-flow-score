@@ -47,6 +47,10 @@ import {
   getCachedValidationKey,
   clearCachedValidationKey,
 } from '@/lib/strategy/canary/validationKey';
+import {
+  deriveVerdict,
+  type ChipState,
+} from '@/lib/strategy/canary/validationVerdict';
 
 interface TaskRunRow {
   id: string;
@@ -125,6 +129,23 @@ function StatusBadge({ kind, label }: { kind: 'pass' | 'warn' | 'fail' | 'info';
   );
 }
 
+function EvidenceChip({ label, state }: { label: string; state: ChipState }) {
+  const { icon, cls } =
+    state === 'verified'
+      ? { icon: '✅', cls: 'border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' }
+      : state === 'failed'
+        ? { icon: '❌', cls: 'border-destructive/30 bg-destructive/10 text-destructive' }
+        : { icon: '⚪', cls: 'border-border bg-muted/40 text-muted-foreground' };
+  const stateLabel = state === 'verified' ? 'Verified' : state === 'failed' ? 'Failed' : 'Missing';
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${cls}`}>
+      <span aria-hidden>{icon}</span>
+      <span>{label}</span>
+      <span className="opacity-70">· {stateLabel}</span>
+    </span>
+  );
+}
+
 function groupCanaryRuns(runs: TaskRunRow[]): CanaryRunGroup[] {
   const byValidator = new Map<string, CanaryRunGroup>();
   for (const r of runs) {
@@ -155,13 +176,31 @@ function groupCanaryRuns(runs: TaskRunRow[]): CanaryRunGroup[] {
       group.fallback_success = fb.success === true ? true : (group.fallback_success ?? (fb.success === false ? false : null));
     }
   }
-  // Compute collision result if mode === collision
+  // Compute collision result if mode === collision.
+  // CORRECT logic: only trust evidence we can actually prove.
+  //   - meta.collision_evidence (stamped by run-validation-canary) is the
+  //     authoritative source — use it when available.
+  //   - Otherwise, >1 distinct run id ⇒ duplicate rows created (false).
+  //   - 1 distinct run id WITHOUT evidence ⇒ insufficient (null), because
+  //     a single row may mean only one attempt completed or got tagged.
   for (const g of byValidator.values()) {
-    if (g.mode === 'collision') {
-      const ids = new Set(g.runs.map((r) => r.id));
-      // If both attempts converged on the same run_id, the group will only
-      // contain ONE row (idempotent path returned existing run).
-      g.same_run_id_returned = ids.size === 1 && g.runs.length >= 1;
+    if (g.mode !== 'collision') continue;
+    const stamped = g.runs
+      .map((r) => r.meta?.collision_evidence)
+      .find((c) => c && typeof c === 'object');
+    if (stamped) {
+      g.same_run_id_returned =
+        typeof stamped.same_run_id_returned === 'boolean'
+          ? stamped.same_run_id_returned
+          : null;
+      continue;
+    }
+    const ids = new Set(g.runs.map((r) => r.id));
+    if (ids.size > 1) {
+      g.same_run_id_returned = false;
+    } else {
+      // Insufficient evidence — do NOT claim idempotency on a lone row.
+      g.same_run_id_returned = null;
     }
   }
   return Array.from(byValidator.values()).sort((a, b) =>
@@ -270,52 +309,30 @@ export function ValidationStatusDrawer({
     }
   }, [open, load, refreshKeyStatus]);
 
-  // Derived counts for canary evidence
-  const canaryStats = useMemo(() => {
-    const groups = snap.canaryGroups;
-    const normalOk = groups.some((g) => g.mode === 'normal' && g.runs.some((r) => r.status === 'completed' || r.status === 'running' || r.status === 'pending'));
-    const fallbackOk = groups.some((g) => g.mode === 'fallback' && g.fallback_triggered && g.fallback_success === true);
-    const fallbackBad = groups.some((g) => g.mode === 'fallback' && g.fallback_triggered && g.fallback_success === false);
-    const collisionOk = groups.some((g) => g.mode === 'collision' && g.same_run_id_returned === true);
-    const collisionBad = groups.some((g) => g.mode === 'collision' && g.same_run_id_returned === false && g.runs.length > 1);
-    return { normalOk, fallbackOk, fallbackBad, collisionOk, collisionBad, hasAny: groups.length > 0 };
-  }, [snap.canaryGroups]);
+  // Single source of truth: pure verdict helper
+  const verdict = useMemo(() => deriveVerdict({
+    duplicates: snap.duplicates ?? 0,
+    orphans: snap.orphans ?? 0,
+    laneCount24h: snap.laneCount24h ?? 0,
+    fallbackSeen: !!snap.fallbackSeen,
+    groups: snap.canaryGroups,
+  }), [snap]);
 
   const recommendation: { kind: 'pass' | 'warn' | 'fail'; label: string } = useMemo(() => {
     if (snap.loading) return { kind: 'warn', label: 'Loading…' };
+    if (verdict.status === 'ready') return { kind: 'pass', label: verdict.label };
+    if (verdict.status === 'blocked') return { kind: 'fail', label: verdict.label };
+    return { kind: 'warn', label: verdict.label };
+  }, [snap.loading, verdict]);
 
-    // BLOCKED
-    if ((snap.duplicates ?? 0) > 0) return { kind: 'fail', label: 'Blocked — duplicates present' };
-    if ((snap.orphans ?? 0) > 0) return { kind: 'fail', label: 'Blocked — orphans present' };
-    if (canaryStats.fallbackBad) return { kind: 'fail', label: 'Blocked — fallback canary failed' };
-    if (canaryStats.collisionBad) return { kind: 'fail', label: 'Blocked — collision created multiple rows' };
-
-    // READY TO TEST
-    if (
-      (snap.laneCount24h ?? 0) > 0 &&
-      canaryStats.normalOk &&
-      canaryStats.fallbackOk &&
-      canaryStats.collisionOk
-    ) {
-      return { kind: 'pass', label: 'Ready to test' };
-    }
-
-    // NEEDS TRAFFIC (default fall-through)
-    return { kind: 'warn', label: 'Needs traffic — missing live evidence' };
-  }, [snap, canaryStats]);
-
+  // Legacy gaps section (kept for at-a-glance scanning)
   const gaps: string[] = [];
   if ((snap.laneCount24h ?? 0) === 0) gaps.push('No lane telemetry recorded in last 24h');
   if (!snap.fallbackSeen) gaps.push('No fallback success recorded');
   if ((snap.deepWorkRuns24h ?? 0) === 0) gaps.push('No deep-work runs in last 24h');
   if ((snap.duplicates ?? 0) > 0) gaps.push(`${snap.duplicates} duplicate active run(s) for same (thread_id, task_type)`);
   if ((snap.orphans ?? 0) > 0) gaps.push(`${snap.orphans} orphaned authoring run(s) older than 5min`);
-  if (!canaryStats.hasAny) gaps.push('No canary-tagged runs recorded');
-  else {
-    if (!canaryStats.normalOk) gaps.push('No normal canary run recorded');
-    if (!canaryStats.fallbackOk) gaps.push('No successful fallback canary recorded');
-    if (!canaryStats.collisionOk) gaps.push('No collision canary with same run_id recorded');
-  }
+  if (snap.canaryGroups.length === 0) gaps.push('No canary-tagged runs recorded');
 
   const handleRerun = useCallback(async (group: CanaryRunGroup) => {
     if (!group.thread_id) {
@@ -323,18 +340,34 @@ export function ValidationStatusDrawer({
       toast.error('Cannot rerun — original thread_id missing');
       return;
     }
-    // Silent if user cancels prompt
+
+    // Lightweight confirmation for destructive/expensive modes only.
+    if (group.mode === 'fallback') {
+      const ok = window.confirm(
+        'Re-run fallback canary? This intentionally forces primary authoring failure.',
+      );
+      if (!ok) return;
+    } else if (group.mode === 'collision') {
+      const ok = window.confirm(
+        'Re-run collision canary? This fires two near-simultaneous generate attempts.',
+      );
+      if (!ok) return;
+    }
+
+    // Silent if user cancels validation-key prompt
     const wasCached = !!getCachedValidationKey();
     const key = ensureValidationKey();
     if (!key) {
-      // No toast, no error state — user intentionally cancelled
       if (!wasCached) refreshKeyStatus();
       return;
     }
     refreshKeyStatus();
     setLastRerunError(null);
     setRerunningId(group.validator_run_id);
-    toast(`Re-running canary (${group.mode})…`);
+    const friendlyMode =
+      group.mode === 'normal' ? 'Normal' :
+      group.mode === 'fallback' ? 'Fallback' :
+      group.mode === 'collision' ? 'Collision' : group.mode;
     try {
       const { data, error } = await supabase.functions.invoke('run-validation-canary', {
         body: {
@@ -349,14 +382,13 @@ export function ValidationStatusDrawer({
       if (data.ok !== true) {
         throw new Error(data.error || 'Canary endpoint returned ok=false');
       }
-      toast.success(`Canary started — validator_run_id ${String(data?.validator_run_id || '').slice(0, 8)}…`);
+      toast.success(`${friendlyMode} canary started`);
     } catch (e: any) {
       const msg = e?.message || String(e);
       setLastRerunError({ vrid: group.validator_run_id, message: msg });
       toast.error(`Rerun failed: ${msg}`);
     } finally {
       setRerunningId(null);
-      // Always refresh so drawer state never stays stale
       try { await load(); } catch { /* ignore */ }
     }
   }, [load, refreshKeyStatus]);
@@ -429,6 +461,20 @@ export function ValidationStatusDrawer({
               <span className="font-medium">Recommendation</span>
               <StatusBadge kind={recommendation.kind} label={recommendation.label} />
             </div>
+
+            {!snap.loading && verdict.reasons.length > 0 && (
+              <ul className="mt-1 space-y-0.5 pl-3 text-[11px] text-muted-foreground">
+                {verdict.reasons.map((r, i) => <li key={i}>• {r}</li>)}
+              </ul>
+            )}
+
+            {!snap.loading && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <EvidenceChip label="Normal run" state={verdict.chips.normal} />
+                <EvidenceChip label="Fallback run" state={verdict.chips.fallback} />
+                <EvidenceChip label="Collision run" state={verdict.chips.collision} />
+              </div>
+            )}
           </div>
 
           <Separator className="my-5" />
@@ -480,15 +526,19 @@ export function ValidationStatusDrawer({
               {snap.canaryGroups.map((g) => {
                 const isRerunning = rerunningId === g.validator_run_id;
                 const distinctIds = Array.from(new Set(g.runs.map((r) => r.id)));
+                // Collision verdict — driven by deterministic same_run_id_returned
+                // (set in groupCanaryRuns from stamped meta first, distinct
+                // run-id count second; null = insufficient evidence).
                 const collisionVerdict: { kind: 'pass' | 'fail' | 'info'; label: string } =
                   g.mode === 'collision'
-                    ? distinctIds.length === 0
-                      ? { kind: 'info', label: '⚪ Insufficient evidence' }
-                      : distinctIds.length === 1
-                        ? { kind: 'pass', label: '✅ Idempotent' }
-                        : { kind: 'fail', label: '❌ Duplicate rows created' }
+                    ? g.same_run_id_returned === true
+                      ? { kind: 'pass', label: '✅ Idempotent' }
+                      : g.same_run_id_returned === false
+                        ? { kind: 'fail', label: '❌ Duplicate rows created' }
+                        : { kind: 'info', label: '⚪ Insufficient evidence' }
                     : { kind: 'info', label: '' };
                 const showRerunError = lastRerunError?.vrid === g.validator_run_id;
+                const rerunLabel = isRerunning ? 'Running…' : 'Re-run';
                 return (
                   <li key={g.validator_run_id} className="rounded border border-border/60 p-2.5 text-xs">
                     {/* Correlation header */}
@@ -504,11 +554,13 @@ export function ValidationStatusDrawer({
                         variant="ghost"
                         size="sm"
                         className="h-6 px-2 text-[10px]"
+                        // Per-spec: disable ONLY this row's button during its own request.
                         disabled={isRerunning || !g.thread_id}
                         onClick={() => handleRerun(g)}
+                        title={!g.thread_id ? 'Original thread_id missing' : undefined}
                       >
                         <RotateCw className={`h-3 w-3 mr-1 ${isRerunning ? 'animate-spin' : ''}`} />
-                        Re-run
+                        {rerunLabel}
                       </Button>
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
