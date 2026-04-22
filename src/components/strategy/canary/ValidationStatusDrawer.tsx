@@ -38,6 +38,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { RefreshCw, CheckCircle2, AlertCircle, XCircle, Info, ChevronDown, RotateCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -246,6 +248,10 @@ export function ValidationStatusDrawer({
   const [rerunningId, setRerunningId] = useState<string | null>(null);
   const [keyCached, setKeyCached] = useState<boolean>(false);
   const [lastRerunError, setLastRerunError] = useState<{ vrid: string; message: string } | null>(null);
+  // Local-only safety toggle: when on, refuse rerun if a fresh row would not
+  // be created (i.e. there is already an active pending/running row for the
+  // same thread_id + task_type).
+  const [requireFresh, setRequireFresh] = useState<boolean>(false);
 
   const refreshKeyStatus = useCallback(() => {
     setKeyCached(!!getCachedValidationKey());
