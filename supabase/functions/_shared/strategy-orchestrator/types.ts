@@ -4,7 +4,7 @@
 // follow-up, etc.) plug into the same pipeline via TaskHandler.
 // ════════════════════════════════════════════════════════════════
 
-export type TaskType = "discovery_prep"; // expand: "recap_email" | "followup" | ...
+export type TaskType = "discovery_prep" | "account_brief" | "ninety_day_plan";
 
 export interface TaskInputs {
   company_name?: string;
