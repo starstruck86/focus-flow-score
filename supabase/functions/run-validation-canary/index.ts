@@ -76,10 +76,12 @@ async function callRunStrategyTask(
 
 // Best-effort: stamp meta.validation_canary onto a created task_runs row so
 // the drawer can group recent canary runs by validator_run_id.
+// We MERGE with any existing validation_canary payload so caller-stamped
+// fields (e.g. collision_evidence) survive.
 async function stampValidationMeta(
   supabase: any,
   runId: string,
-  payload: { mode: string; thread_id: string; validator_run_id: string },
+  payload: Record<string, unknown>,
 ) {
   try {
     const { data: row } = await supabase
@@ -88,7 +90,11 @@ async function stampValidationMeta(
       .eq("id", runId)
       .maybeSingle();
     const existing = (row?.meta as Record<string, unknown> | null) || {};
-    const next = { ...existing, validation_canary: payload };
+    const existingCanary = (existing.validation_canary as Record<string, unknown> | undefined) || {};
+    const next = {
+      ...existing,
+      validation_canary: { ...existingCanary, ...payload },
+    };
     await supabase.from("task_runs").update({ meta: next }).eq("id", runId);
   } catch (e) {
     console.warn("[validation-canary] meta stamp failed:", (e as Error).message);
