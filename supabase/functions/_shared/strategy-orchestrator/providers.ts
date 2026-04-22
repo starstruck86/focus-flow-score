@@ -44,15 +44,22 @@ export async function callOpenAI(
   const key = Deno.env.get("OPENAI_API_KEY");
   if (!key) throw new Error("OPENAI_API_KEY not configured");
 
+  const model = opts.model || "gpt-4o";
+  // gpt-5 family (and newer reasoning models) reject `max_tokens` and
+  // custom `temperature`. They require `max_completion_tokens` and use
+  // a fixed default temperature. Switch the body shape per model.
+  const isNewSchema = /^(gpt-5|o\d)/i.test(model);
+  const body: Record<string, unknown> = { model, messages };
+  if (isNewSchema) {
+    body.max_completion_tokens = opts.maxTokens || 8192;
+  } else {
+    body.max_tokens = opts.maxTokens || 8192;
+    body.temperature = opts.temperature ?? 0.4;
+  }
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: opts.model || "gpt-4o",
-      messages,
-      temperature: opts.temperature ?? 0.4,
-      max_tokens: opts.maxTokens || 8192,
-    }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
