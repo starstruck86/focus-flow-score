@@ -526,15 +526,19 @@ export function ValidationStatusDrawer({
               {snap.canaryGroups.map((g) => {
                 const isRerunning = rerunningId === g.validator_run_id;
                 const distinctIds = Array.from(new Set(g.runs.map((r) => r.id)));
+                // Collision verdict — driven by deterministic same_run_id_returned
+                // (set in groupCanaryRuns from stamped meta first, distinct
+                // run-id count second; null = insufficient evidence).
                 const collisionVerdict: { kind: 'pass' | 'fail' | 'info'; label: string } =
                   g.mode === 'collision'
-                    ? distinctIds.length === 0
-                      ? { kind: 'info', label: '⚪ Insufficient evidence' }
-                      : distinctIds.length === 1
-                        ? { kind: 'pass', label: '✅ Idempotent' }
-                        : { kind: 'fail', label: '❌ Duplicate rows created' }
+                    ? g.same_run_id_returned === true
+                      ? { kind: 'pass', label: '✅ Idempotent' }
+                      : g.same_run_id_returned === false
+                        ? { kind: 'fail', label: '❌ Duplicate rows created' }
+                        : { kind: 'info', label: '⚪ Insufficient evidence' }
                     : { kind: 'info', label: '' };
                 const showRerunError = lastRerunError?.vrid === g.validator_run_id;
+                const rerunLabel = isRerunning ? 'Running…' : 'Re-run';
                 return (
                   <li key={g.validator_run_id} className="rounded border border-border/60 p-2.5 text-xs">
                     {/* Correlation header */}
@@ -550,11 +554,13 @@ export function ValidationStatusDrawer({
                         variant="ghost"
                         size="sm"
                         className="h-6 px-2 text-[10px]"
+                        // Per-spec: disable ONLY this row's button during its own request.
                         disabled={isRerunning || !g.thread_id}
                         onClick={() => handleRerun(g)}
+                        title={!g.thread_id ? 'Original thread_id missing' : undefined}
                       >
                         <RotateCw className={`h-3 w-3 mr-1 ${isRerunning ? 'animate-spin' : ''}`} />
-                        Re-run
+                        {rerunLabel}
                       </Button>
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
