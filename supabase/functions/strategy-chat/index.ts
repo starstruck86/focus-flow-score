@@ -701,6 +701,7 @@ interface LLMRoute {
   useTools: boolean;
   reasoning?: { effort: string };
   _smokeTestForceFail?: boolean;
+  _routingReason?: string;
 }
 
 // PROVIDER POLICY:
@@ -1017,7 +1018,7 @@ async function callWithFallback(
     }
 
     console.warn(
-      `[routing] primary failed: ${result.error.message}. Trying fallback=${route.fallbackProvider} model=${route.fallbackModel}`,
+      `[routing] primary failed: ${result.error?.message ?? "unknown error"}. Trying fallback=${route.fallbackProvider} model=${route.fallbackModel}`,
     );
     clearTimeout(timeout);
     const fallbackController = new AbortController();
@@ -1031,7 +1032,7 @@ async function callWithFallback(
       );
       fallbackResult.fallbackUsed = true;
       console.log(
-        `[routing] fallback task=${taskType} provider=${fallbackResult.provider} model=${fallbackResult.model} latency=${fallbackResult.latencyMs}ms reason=${result.error.message}`,
+        `[routing] fallback task=${taskType} provider=${fallbackResult.provider} model=${fallbackResult.model} latency=${fallbackResult.latencyMs}ms reason=${result.error?.message ?? "unknown error"}`,
       );
       return fallbackResult;
     } finally {
