@@ -159,9 +159,12 @@ Deno.serve(async (req) => {
       __cardsContext: cardsBundle.contextString,
     };
 
-    console.log(
-      `[run-strategy-job] start task=${taskType} user=${user.id.slice(0, 8)} scopes=${scopes.length} cards=${cardsBundle.cards.length}`,
-    );
+    console.log("[strategy-job:start]", JSON.stringify({
+      task_type: taskType,
+      user_id: user.id,
+      scopes: scopes.length,
+      cards: cardsBundle.cards.length,
+    }));
 
     const { run_id, status } = await runStrategyTaskInBackground({
       userId: user.id,
@@ -181,7 +184,9 @@ Deno.serve(async (req) => {
       },
     });
   } catch (e: any) {
-    console.error("[run-strategy-job] error:", e);
+    console.error("[strategy-job:error]", JSON.stringify({
+      error: e?.message ?? String(e),
+    }));
     const status = e?.status || 500;
     return jsonResponse({ error: e?.message || "Internal error" }, status);
   }
