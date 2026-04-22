@@ -38,6 +38,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { RefreshCw, CheckCircle2, AlertCircle, XCircle, Info, ChevronDown, RotateCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -76,10 +78,21 @@ interface CanaryRunGroup {
   thread_id: string | null;
   task_type: string;
   created_at: string;
+  requested_at: string | null;
+  forced_primary_failure_requested: boolean | null;
+  idempotent_short_circuit: boolean | null;
+  fresh_run_created: boolean | null;
   runs: TaskRunRow[];
   fallback_triggered: boolean;
   fallback_success: boolean | null;
   same_run_id_returned: boolean | null;
+}
+
+interface LaneMix {
+  direct: number;
+  assisted: number;
+  deep_work: number;
+  total: number;
 }
 
 interface Snapshot {
@@ -87,8 +100,10 @@ interface Snapshot {
   duplicates: number | null;
   orphans: number | null;
   laneCount24h: number | null;
+  laneMix24h: LaneMix;
   fallbackSeen: boolean | null;
   deepWorkRuns24h: number | null;
+  failures24h: TaskRunRow[];
   recentRuns: TaskRunRow[];
   recentRouting: RoutingRow[];
   fallbackEvents: TaskRunRow[];
@@ -101,8 +116,10 @@ const EMPTY: Snapshot = {
   duplicates: null,
   orphans: null,
   laneCount24h: null,
+  laneMix24h: { direct: 0, assisted: 0, deep_work: 0, total: 0 },
   fallbackSeen: null,
   deepWorkRuns24h: null,
+  failures24h: [],
   recentRuns: [],
   recentRouting: [],
   fallbackEvents: [],
@@ -160,6 +177,17 @@ function groupCanaryRuns(runs: TaskRunRow[]): CanaryRunGroup[] {
         thread_id: vc.thread_id ?? null,
         task_type: r.task_type,
         created_at: r.created_at,
+        requested_at: typeof vc.requested_at === 'string' ? vc.requested_at : null,
+        forced_primary_failure_requested:
+          typeof vc.forced_primary_failure_requested === 'boolean'
+            ? vc.forced_primary_failure_requested
+            : null,
+        idempotent_short_circuit:
+          typeof vc.idempotent_short_circuit === 'boolean'
+            ? vc.idempotent_short_circuit
+            : null,
+        fresh_run_created:
+          typeof vc.fresh_run_created === 'boolean' ? vc.fresh_run_created : null,
         runs: [],
         fallback_triggered: false,
         fallback_success: null,
@@ -220,6 +248,10 @@ export function ValidationStatusDrawer({
   const [rerunningId, setRerunningId] = useState<string | null>(null);
   const [keyCached, setKeyCached] = useState<boolean>(false);
   const [lastRerunError, setLastRerunError] = useState<{ vrid: string; message: string } | null>(null);
+  // Local-only safety toggle: when on, refuse rerun if a fresh row would not
+  // be created (i.e. there is already an active pending/running row for the
+  // same thread_id + task_type).
+  const [requireFresh, setRequireFresh] = useState<boolean>(false);
 
   const refreshKeyStatus = useCallback(() => {
     setKeyCached(!!getCachedValidationKey());
@@ -282,9 +314,22 @@ export function ValidationStatusDrawer({
 
     const orphans = (orphansRes.data ?? []).length;
     const laneCount24h = routing.length;
+    const laneMix24h: LaneMix = routing.reduce(
+      (acc, r) => {
+        if (r.lane === 'direct') acc.direct += 1;
+        else if (r.lane === 'assisted') acc.assisted += 1;
+        else if (r.lane === 'deep_work') acc.deep_work += 1;
+        acc.total += 1;
+        return acc;
+      },
+      { direct: 0, assisted: 0, deep_work: 0, total: 0 } as LaneMix,
+    );
     const fallbackEvents = runs.filter((r) => r.meta?.authoring_fallback?.triggered === true);
     const fallbackSeen = fallbackEvents.some((r) => r.meta?.authoring_fallback?.success === true);
     const deepWorkRuns24h = runs.filter((r) => r.created_at >= since24h).length;
+    const failures24h = runs.filter(
+      (r) => r.status === 'failed' && r.created_at >= since24h,
+    );
     const canaryGroups = groupCanaryRuns(runs).slice(0, 10);
 
     setSnap({
@@ -292,8 +337,10 @@ export function ValidationStatusDrawer({
       duplicates,
       orphans,
       laneCount24h,
+      laneMix24h,
       fallbackSeen,
       deepWorkRuns24h,
+      failures24h: failures24h.slice(0, 3),
       recentRuns: runs.slice(0, 10),
       recentRouting: routing.slice(0, 10),
       fallbackEvents: fallbackEvents.slice(0, 10),
@@ -339,6 +386,24 @@ export function ValidationStatusDrawer({
       setLastRerunError({ vrid: group.validator_run_id, message: 'Original thread_id missing' });
       toast.error('Cannot rerun — original thread_id missing');
       return;
+    }
+
+    // Fresh-run gate (local UI policy). Block before any side effect / prompt.
+    if (requireFresh) {
+      const hasActive = snap.recentRuns.some(
+        (r) =>
+          r.task_type === group.task_type &&
+          (r.status === 'pending' || r.status === 'running') &&
+          (r.meta?.validation_canary?.thread_id === group.thread_id ||
+            // Fall back to current group rows if meta is sparse
+            group.runs.some((gr) => gr.id === r.id && (r.status === 'pending' || r.status === 'running'))),
+      );
+      if (hasActive) {
+        const msg = 'Fresh run required, but an active run already exists for this thread/task';
+        setLastRerunError({ vrid: group.validator_run_id, message: msg });
+        toast.error(msg);
+        return;
+      }
     }
 
     // Lightweight confirmation for destructive/expensive modes only.
@@ -391,7 +456,27 @@ export function ValidationStatusDrawer({
       setRerunningId(null);
       try { await load(); } catch { /* ignore */ }
     }
-  }, [load, refreshKeyStatus]);
+  }, [load, refreshKeyStatus, requireFresh, snap.recentRuns]);
+
+  // Lane telemetry health: distinguishes "no traffic yet" from "should have
+  // been written but wasn't" by looking at recent canary attempts and recent
+  // deep-work runs in the loaded snapshot.
+  const laneHealth: { state: ChipState; label: string; explainer: string | null } = useMemo(() => {
+    const lane = snap.laneCount24h ?? 0;
+    if (lane > 0) {
+      return { state: 'verified', label: 'Lane telemetry healthy', explainer: null };
+    }
+    const hasRecentActivity =
+      snap.canaryGroups.length > 0 || (snap.deepWorkRuns24h ?? 0) > 0;
+    if (hasRecentActivity) {
+      return {
+        state: 'failed',
+        label: 'Lane telemetry expected but absent',
+        explainer: 'No routing_decisions rows were recorded in the last 24h',
+      };
+    }
+    return { state: 'missing', label: 'Lane telemetry missing', explainer: null };
+  }, [snap.laneCount24h, snap.canaryGroups.length, snap.deepWorkRuns24h]);
 
   const handleClearKey = useCallback(() => {
     clearCachedValidationKey();
@@ -473,7 +558,11 @@ export function ValidationStatusDrawer({
                 <EvidenceChip label="Normal run" state={verdict.chips.normal} />
                 <EvidenceChip label="Fallback run" state={verdict.chips.fallback} />
                 <EvidenceChip label="Collision run" state={verdict.chips.collision} />
+                <EvidenceChip label={laneHealth.label} state={laneHealth.state} />
               </div>
+            )}
+            {!snap.loading && laneHealth.explainer && (
+              <p className="mt-1 pl-3 text-[11px] text-destructive">• {laneHealth.explainer}</p>
             )}
           </div>
 
@@ -493,10 +582,77 @@ export function ValidationStatusDrawer({
 
           <Separator className="my-5" />
 
+          {/* SECTION 2.5 — SQL snapshots (live state at refresh) */}
+          <h3 className="text-sm font-semibold mb-2">SQL snapshots</h3>
+          {snap.loading ? (
+            <Skeleton className="h-20 w-full" />
+          ) : (
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span>Duplicates</span>
+                <StatusBadge
+                  kind={(snap.duplicates ?? 0) === 0 ? 'pass' : 'fail'}
+                  label={`${(snap.duplicates ?? 0) === 0 ? 'pass' : 'fail'} · ${snap.duplicates ?? 0}`}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Orphans</span>
+                <StatusBadge
+                  kind={(snap.orphans ?? 0) === 0 ? 'pass' : 'fail'}
+                  label={`${(snap.orphans ?? 0) === 0 ? 'pass' : 'fail'} · ${snap.orphans ?? 0}`}
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <span>Failures (24h)</span>
+                  <Badge variant="secondary" className="h-4 text-[10px]">
+                    {snap.failures24h.length}
+                  </Badge>
+                </div>
+                {snap.failures24h.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 pl-3 font-mono text-[10px] text-muted-foreground">
+                    {snap.failures24h.map((r) => (
+                      <li key={r.id} className="truncate">
+                        • {r.id.slice(0, 8)}… · {r.task_type} · {r.status}
+                        {r.error && (
+                          <span className="text-destructive"> — {String(r.error).slice(0, 80)}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <span>Lane mix (24h)</span>
+                  <Badge variant="secondary" className="h-4 text-[10px]">
+                    total {snap.laneMix24h.total}
+                  </Badge>
+                </div>
+                <div className="mt-1 pl-3 text-[10px] text-muted-foreground font-mono">
+                  direct: {snap.laneMix24h.direct} · assisted: {snap.laneMix24h.assisted} · deep_work: {snap.laneMix24h.deep_work}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Separator className="my-5" />
+
           {/* SECTION 3 — Canary Runs (validator_run_id grouped) */}
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
             <h3 className="text-sm font-semibold">Canary runs</h3>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <Switch
+                  id="require-fresh"
+                  checked={requireFresh}
+                  onCheckedChange={setRequireFresh}
+                  className="scale-75"
+                />
+                <Label htmlFor="require-fresh" className="text-[10px] cursor-pointer">
+                  Require fresh run
+                </Label>
+              </div>
               <span>
                 Validation key:{' '}
                 <span className={keyCached ? 'text-emerald-600' : 'text-amber-600'}>
@@ -543,12 +699,27 @@ export function ValidationStatusDrawer({
                   <li key={g.validator_run_id} className="rounded border border-border/60 p-2.5 text-xs">
                     {/* Correlation header */}
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                         <Badge variant="outline" className="h-5 text-[10px] uppercase">{g.mode}</Badge>
                         <span className="font-mono truncate">{g.task_type}</span>
                         <Badge variant="secondary" className="h-5 text-[10px]">
                           {g.runs.length} {g.runs.length === 1 ? 'run' : 'runs'}
                         </Badge>
+                        {g.idempotent_short_circuit === true && (
+                          <Badge variant="outline" className="h-5 text-[10px] border-amber-600/40 text-amber-700 dark:text-amber-400">
+                            Short-circuited to active run
+                          </Badge>
+                        )}
+                        {g.idempotent_short_circuit === false && g.fresh_run_created === true && (
+                          <Badge variant="outline" className="h-5 text-[10px] border-emerald-600/40 text-emerald-700 dark:text-emerald-400">
+                            Fresh run
+                          </Badge>
+                        )}
+                        {g.forced_primary_failure_requested === true && (
+                          <Badge variant="outline" className="h-5 text-[10px] border-border/60 text-muted-foreground">
+                            forced primary failure
+                          </Badge>
+                        )}
                       </div>
                       <Button
                         variant="ghost"
