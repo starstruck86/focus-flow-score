@@ -623,8 +623,32 @@ export function StrategyShell() {
       />
 
       {/* Cycle 1 — canary review pill (operator workflow entry point) */}
-      <div className="shrink-0 w-full flex justify-end px-4 py-1" style={{ borderBottom: '1px solid hsl(var(--sv-hairline))' }}>
+      <div className="shrink-0 w-full flex items-center justify-end gap-1 px-4 py-1" style={{ borderBottom: '1px solid hsl(var(--sv-hairline))' }}>
         <CanaryReviewPill lastReview={lastCanaryReview} onClick={openCanaryReview} />
+        {user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Strategy options">
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="text-xs">Operator</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={isCanary}
+                disabled={isAllowlisted}
+                onCheckedChange={(checked) => setLocalEnabled(!!checked)}
+              >
+                Canary mode
+                {isAllowlisted && <span className="ml-auto text-[10px] text-muted-foreground">allowlisted</span>}
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setValidationDrawerOpen(true)}>
+                Validation status…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       <StrategyCanvas
@@ -745,6 +769,11 @@ export function StrategyShell() {
         onOpenChange={(o) => { setCanaryDrawerOpen(o); if (!o) setCanaryReadonly(null); }}
         readonlyReview={canaryReadonly}
         onSaved={handleCanarySaved}
+      />
+      {/* Validation status drawer (read-only) */}
+      <ValidationStatusDrawer
+        open={validationDrawerOpen}
+        onOpenChange={setValidationDrawerOpen}
       />
     </div>
   );
