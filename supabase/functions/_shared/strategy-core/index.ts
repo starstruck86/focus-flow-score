@@ -51,6 +51,21 @@ export {
 } from "./libraryTotals.ts";
 
 export {
+  buildPendingLookupAction,
+  detectAffirmative,
+  detectLookupIntent,
+  detectNegative,
+  pendingActionToIntent,
+  renderLookupResultText,
+  runLibraryLookup,
+  type LookupIntent,
+  type LookupKind,
+  type LookupResult,
+  type LookupTarget,
+  type PendingLookupAction,
+} from "./libraryLookup.ts";
+
+export {
   extractCandidatePhrases,
   inferResourceCategories,
   inferTopicScopes,
