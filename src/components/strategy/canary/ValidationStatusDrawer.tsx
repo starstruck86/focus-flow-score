@@ -699,12 +699,27 @@ export function ValidationStatusDrawer({
                   <li key={g.validator_run_id} className="rounded border border-border/60 p-2.5 text-xs">
                     {/* Correlation header */}
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                         <Badge variant="outline" className="h-5 text-[10px] uppercase">{g.mode}</Badge>
                         <span className="font-mono truncate">{g.task_type}</span>
                         <Badge variant="secondary" className="h-5 text-[10px]">
                           {g.runs.length} {g.runs.length === 1 ? 'run' : 'runs'}
                         </Badge>
+                        {g.idempotent_short_circuit === true && (
+                          <Badge variant="outline" className="h-5 text-[10px] border-amber-600/40 text-amber-700 dark:text-amber-400">
+                            Short-circuited to active run
+                          </Badge>
+                        )}
+                        {g.idempotent_short_circuit === false && g.fresh_run_created === true && (
+                          <Badge variant="outline" className="h-5 text-[10px] border-emerald-600/40 text-emerald-700 dark:text-emerald-400">
+                            Fresh run
+                          </Badge>
+                        )}
+                        {g.forced_primary_failure_requested === true && (
+                          <Badge variant="outline" className="h-5 text-[10px] border-border/60 text-muted-foreground">
+                            forced primary failure
+                          </Badge>
+                        )}
                       </div>
                       <Button
                         variant="ghost"
