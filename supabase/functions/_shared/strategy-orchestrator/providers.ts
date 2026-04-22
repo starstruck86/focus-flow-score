@@ -1,5 +1,10 @@
 // ════════════════════════════════════════════════════════════════
-// Multi-LLM provider adapters (Perplexity, OpenAI, Claude, Lovable AI)
+// Multi-LLM provider adapters (Perplexity, OpenAI, Claude).
+//
+// MODEL POLICY: Gemini / Lovable AI Gateway are explicitly NOT part
+// of the Strategy execution path. The previously-exported
+// `callLovableAI` adapter has been removed to prevent any code in
+// this workflow from accidentally routing through Gemini.
 // Same adapter pattern shared across all Strategy tasks.
 // ════════════════════════════════════════════════════════════════
 
@@ -155,64 +160,9 @@ export async function callClaude(
   throw lastErr ?? new Error("Claude: exhausted retries");
 }
 
-export async function callLovableAI(
-  messages: { role: string; content: string }[],
-  opts: { model?: string; temperature?: number; maxTokens?: number } = {},
-): Promise<string> {
-  const key = Deno.env.get("LOVABLE_API_KEY");
-  if (!key) throw new Error("LOVABLE_API_KEY not configured");
-
-  const model = opts.model || "google/gemini-2.5-flash";
-  // GPT-5 family rejects custom temperature and uses max_completion_tokens.
-  const isGpt5 = model.startsWith("openai/gpt-5");
-  const body: Record<string, unknown> = { model, messages };
-  if (isGpt5) {
-    if (opts.maxTokens) body.max_completion_tokens = opts.maxTokens;
-  } else {
-    body.temperature = opts.temperature ?? 0.4;
-    body.max_tokens = opts.maxTokens || 4000;
-  }
-
-  // Retry transient 5xx errors with exponential backoff (gateway hiccups, especially on gpt-5).
-  // 4 attempts: 0s, 2s, 6s, 14s (cumulative ~22s before final failure).
-  const maxAttempts = 4;
-  let lastErr: unknown = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        const content = data.choices?.[0]?.message?.content || "";
-        return content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      }
-      const status = resp.status;
-      const errText = await resp.text().catch(() => "");
-      console.error(`[lovable-ai] error ${status} model=${model} attempt=${attempt}/${maxAttempts}: ${errText.slice(0, 400)}`);
-      if (status === 429) throw { status: 429, message: "Rate limited" };
-      if (status === 402) throw { status: 402, message: "AI credits exhausted" };
-      // Retry on transient 5xx; fail immediately on other 4xx.
-      const isTransient = status >= 500 && status < 600;
-      if (!isTransient || attempt === maxAttempts) {
-        throw new Error(`Lovable AI error: ${status}${isTransient ? " (after retries)" : ""}`);
-      }
-      lastErr = new Error(`Lovable AI ${status}`);
-    } catch (e: any) {
-      // Re-throw non-retryable errors immediately.
-      if (e?.status === 429 || e?.status === 402) throw e;
-      if (attempt === maxAttempts) throw (lastErr ?? e);
-      lastErr = e;
-    }
-    // Exponential backoff: 2s, 6s, 14s
-    const delayMs = 2000 * (Math.pow(2, attempt) - 1);
-    console.log(`[lovable-ai] retrying in ${delayMs}ms…`);
-    await new Promise((r) => setTimeout(r, delayMs));
-  }
-  throw lastErr ?? new Error("Lovable AI: exhausted retries");
-}
+// callLovableAI was removed per model policy (no Gemini / Lovable AI
+// in the Strategy execution path). All authoring & synthesis paths now
+// route through callClaude (formatting) and callOpenAI (reasoning).
 
 /** Robust JSON extraction from model output (handles fences, prose preamble). */
 export function safeParseJSON<T = any>(raw: string): T | null {
