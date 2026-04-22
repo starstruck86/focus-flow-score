@@ -92,10 +92,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   console.log(`[stage-2] synthesis fields: ${Object.keys(synthesis).length}`);
 
   // ── Stage 3: Claude document authoring (locked template) ─────
-  // Hard fail-fast contract: 90s wall-clock cap on this stage. If the
-  // model call hangs (provider socket stuck, retry loop wedged, etc.)
-  // we surface a clear error instead of letting the background promise
-  // die silently and stranding the row in `pending`.
+  // Fix 2 — Stall containment:
+  //   Inner Claude call:  timeoutMs=75_000, maxAttempts=1   (providers.ts)
+  //   Outer stage race:   AUTHORING_TIMEOUT_MS=100_000      (this file)
+  // The inner call therefore *cannot* outlive the outer race, and the
+  // outer race always wins by ≥25s, leaving budget for the failure write.
   await setProgress(supabase, runId, "document_authoring");
   // Heartbeat write right before the call — proves the worker is alive
   // and resets the reaper window so we know any subsequent stall is
@@ -105,10 +106,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   const authoringStartedAt = Date.now();
   console.log(JSON.stringify({ tag: "stage-3:start", run_id: runId, stage: "document_authoring", model: authoringModel }));
 
-  const AUTHORING_TIMEOUT_MS = 90_000;
+  const AUTHORING_TIMEOUT_MS = 100_000;
+  const AUTHORING_INNER_TIMEOUT_MS = 75_000;
   let draftOutput: any;
   let sectionCount = 0;
-  // Track the timeout id so we can clear it on success and not leak a 90s
+  // Track the timeout id so we can clear it on success and not leak a
   // dangling timer that keeps the worker alive past the request.
   let authoringTimeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
@@ -116,7 +118,13 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       callClaude([
         { role: "system", content: handler.buildDocumentSystemPrompt() },
         { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
-      ], { model: authoringModel, maxTokens: 12000, temperature: 0.3 }),
+      ], {
+        model: authoringModel,
+        maxTokens: 12000,
+        temperature: 0.3,
+        timeoutMs: AUTHORING_INNER_TIMEOUT_MS,
+        maxAttempts: 1,
+      }),
       new Promise<string>((_, reject) => {
         authoringTimeoutId = setTimeout(
           () => reject(new Error(`Document authoring timed out after ${AUTHORING_TIMEOUT_MS / 1000}s`)),
@@ -161,19 +169,33 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       success: false,
       error: message,
     }));
-    // Mark the row failed immediately so the UI exits the loading state
-    // without waiting for the 7-min reaper.
+
+    // Fix 2 — guaranteed terminal failure write.
+    // The previous version awaited the update inside a try/catch, but if the
+    // worker was being torn down (EdgeRuntime promise resolution race), the
+    // network round-trip could be cancelled mid-flight, leaving the row in
+    // `pending` + `progress_step='document_authoring'` indefinitely.
+    // We now (a) bind the failure write to EdgeRuntime.waitUntil so the
+    // platform keeps the worker alive until the write lands, and (b) still
+    // await it so the surrounding `throw` cannot race the DB call.
+    const failureWrite = supabase
+      .from("task_runs")
+      .update({
+        status: "failed",
+        progress_step: "failed",
+        error: prefixed.slice(0, 1000),
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", runId);
+
+    // @ts-ignore — EdgeRuntime is provided by the platform.
+    if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(failureWrite);
+    }
     try {
-      await supabase
-        .from("task_runs")
-        .update({
-          status: "failed",
-          progress_step: "failed",
-          error: prefixed.slice(0, 1000),
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", runId);
+      await failureWrite;
     } catch (writeErr) {
       console.error(`[stage-3] failed to mark run failed:`, (writeErr as Error).message);
     }
