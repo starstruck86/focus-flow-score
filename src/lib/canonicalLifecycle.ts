@@ -211,6 +211,13 @@ export function deriveCanonicalStage(
 export function deriveBlockedReason(
   resource: {
     content_length?: number | null;
+    /**
+     * OPTIONAL: a short prefix (~300 chars) used ONLY for placeholder/auth-gate
+     * detection. NEVER treated as the full content. Length is NOT compared to
+     * `content_length`. Pass null/undefined when prefix is unavailable.
+     */
+    content_prefix?: string | null;
+    /** @deprecated Legacy alias for content_prefix. Treated as prefix-only. */
     content?: string | null;
     manual_content_present?: boolean | null;
     enrichment_status?: string | null;
@@ -222,21 +229,33 @@ export function deriveBlockedReason(
   ki: { total: number; active: number; activeWithContexts: number },
 ): BlockedReason {
   const contentLength = resource.content_length ?? 0;
-  const actualContent = resource.content ?? '';
-  const actualLength = actualContent.length;
+  // Prefix is the ~300-char head used purely for placeholder detection.
+  // It is NEVER compared to contentLength (that produced false empty_content).
+  const prefix = resource.content_prefix ?? resource.content ?? '';
+  const prefixLength = prefix.length;
+  const hasFullContent = contentLength >= MIN_CONTENT_LENGTH || resource.manual_content_present === true;
 
-  // Rule B: Placeholder content is NOT real content
-  if (isPlaceholderContent(actualContent) && !resource.manual_content_present) {
-    if (actualLength > 0 && !resource.file_url) {
-      return 'auth_capture_incomplete';
-    }
-    return actualLength > 0 ? 'placeholder_content' : 'empty_content';
+  // ── KI-based truth ALWAYS wins ────────────────────────────
+  // If KIs exist, the resource has real extracted content by definition.
+  // Never report empty_content / no_extraction in this branch.
+  if (ki.total > 0) {
+    if (ki.active === 0) return 'no_activation';
+    if (ki.activeWithContexts === 0) return 'missing_contexts';
+    return 'none';
   }
 
-  const isContentBacked = Math.max(contentLength, actualLength) >= MIN_CONTENT_LENGTH || resource.manual_content_present === true;
+  // ── Placeholder / auth-gated detection (prefix-only) ──────
+  if (isPlaceholderContent(prefix) && !resource.manual_content_present) {
+    if (prefixLength > 0 && !resource.file_url) {
+      return 'auth_capture_incomplete';
+    }
+    if (prefixLength > 0) return 'placeholder_content';
+    // Empty prefix + no full content = truly empty
+    if (!hasFullContent) return 'empty_content';
+  }
 
-  // Stale blocker: content-backed but stuck in failed/blocked state
-  if (isContentBacked && (
+  // ── Stale blocker: full content present but stuck in failed bucket ──
+  if (hasFullContent && (
     resource.manual_input_required === true ||
     resource.enrichment_status === 'failed' ||
     resource.recovery_queue_bucket === 'manual_input' ||
@@ -245,25 +264,10 @@ export function deriveBlockedReason(
     return 'stale_blocker_state';
   }
 
-  // Empty content (stale content_length)
-  if (contentLength > 300 && actualLength < 100) {
-    return 'empty_content';
-  }
+  if (!hasFullContent) return 'empty_content';
 
-  if (!isContentBacked) return 'empty_content';
-
-  // Rule A/C: Has real content but no KI — needs extraction (not "blocked")
-  if (ki.total === 0 && ENRICHED_STATUSES.includes(resource.enrichment_status ?? '')) {
-    return 'no_extraction';
-  }
-
-  // Has KI but none active
-  if (ki.total > 0 && ki.active === 0) return 'no_activation';
-
-  // Active but no contexts
-  if (ki.active > 0 && ki.activeWithContexts === 0) return 'missing_contexts';
-
-  return 'none';
+  // Has real content, no KIs yet → extraction has not produced output.
+  return 'no_extraction';
 }
 
 // ── Main audit function ────────────────────────────────────
@@ -342,13 +346,28 @@ export async function auditCanonicalLifecycle(): Promise<LifecycleSummary> {
   };
 
   for (const r of resources as any[]) {
-    // Inject content prefix for placeholder detection (deriveCanonicalStage / deriveBlockedReason use r.content)
+    // Inject content prefix as `content_prefix` (NOT `content`) so derive
+    // helpers cannot mistake a 300-char head for the full document body.
     const contentPrefix = contentPrefixMap.get(r.id) ?? '';
+    (r as any).content_prefix = contentPrefix;
+    // Keep `content` populated for legacy placeholder detection in
+    // deriveCanonicalStage, but derivation logic must never measure its length.
     (r as any).content = contentPrefix;
 
     const ki = kiMap.get(r.id) ?? { total: 0, active: 0, activeWithContexts: 0 };
     const stage = deriveCanonicalStage(r, ki);
     const blocked = deriveBlockedReason(r, ki);
+
+    // Invariant guard — warn on impossible KI/blocked combinations.
+    if (ki.total > 0 && (blocked === 'empty_content' || blocked === 'no_extraction')) {
+      // eslint-disable-next-line no-console
+      console.warn('[canonicalLifecycle] INVALID STATE', {
+        resource_id: r.id,
+        title: r.title,
+        ki_total: ki.total,
+        blocked,
+      });
+    }
     const isEnriched = ENRICHED_STATUSES.includes(r.enrichment_status ?? '');
     const isContentBacked = (r.content_length ?? 0) >= MIN_CONTENT_LENGTH || r.manual_content_present === true;
 

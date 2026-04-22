@@ -18,6 +18,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllPages } from '@/lib/supabasePagination';
 import { inferTags, mergeTags } from './resourceTags';
 import { isContentBacked as contractIsContentBacked, ENRICHED_STATUSES } from './pipelineContract';
 
@@ -138,18 +139,35 @@ function checkTagQuality(r: any, ki: { total: number; active: number; hasContext
 // ── Main Audit ─────────────────────────────────────────────
 
 export async function auditResourceReadiness(): Promise<AuditSummary> {
-  const { data: resources, error: rErr } = await supabase
-    .from('resources')
-    .select('id, title, content, content_length, content_status, enrichment_status, last_quality_score, last_quality_tier, failure_reason, recovery_status, recovery_queue_bucket, manual_input_required, manual_content_present, resolution_method, extraction_method, tags, updated_at, resource_type, file_url')
-    .order('updated_at', { ascending: false })
-    .limit(500);
+  // Paginate the full resource set — the previous .limit(500) silently
+  // truncated libraries with >500 rows and produced inconsistent dashboard totals.
+  let resources: any[];
+  try {
+    resources = await fetchAllPages<any>((from, to) =>
+      supabase
+        .from('resources')
+        .select('id, title, content, content_length, content_status, enrichment_status, last_quality_score, last_quality_tier, failure_reason, recovery_status, recovery_queue_bucket, manual_input_required, manual_content_present, resolution_method, extraction_method, tags, updated_at, resource_type, file_url')
+        .order('updated_at', { ascending: false })
+        .range(from, to),
+    );
+  } catch {
+    return emptyAudit();
+  }
 
-  if (rErr || !resources) return emptyAudit();
+  if (!resources || resources.length === 0) return emptyAudit();
 
-  // Fetch knowledge items with richer metadata
-  const { data: kiRows } = await supabase
-    .from('knowledge_items' as any)
-    .select('source_resource_id, active, applies_to_contexts, chapter, knowledge_type, product_area, competitor_name');
+  // Fetch knowledge items with richer metadata — paginated for the same reason.
+  let kiRows: any[] = [];
+  try {
+    kiRows = await fetchAllPages<any>((from, to) =>
+      supabase
+        .from('knowledge_items' as any)
+        .select('source_resource_id, active, applies_to_contexts, chapter, knowledge_type, product_area, competitor_name')
+        .range(from, to),
+    );
+  } catch {
+    kiRows = [];
+  }
 
   const kiMap = new Map<string, {
     total: number; active: number; hasContexts: boolean;
