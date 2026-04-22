@@ -57,8 +57,21 @@ import { SlashMenu, type SlashVerb } from './SlashMenu';
 import { LibraryPicker, type LibraryItem } from './LibraryPicker';
 import { CanaryReviewDrawer } from '@/components/strategy/canary/CanaryReviewDrawer';
 import { CanaryReviewPill } from '@/components/strategy/canary/CanaryReviewPill';
+import { ValidationStatusDrawer } from '@/components/strategy/canary/ValidationStatusDrawer';
 import { fetchLatestCanaryReview } from '@/lib/strategy/canary/repository';
 import type { CanaryReviewRow } from '@/lib/strategy/canary/types';
+import { useCanaryMode } from '@/lib/strategy/useCanaryMode';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { MoreHorizontal } from 'lucide-react';
 
 import '@/styles/strategy-v2.css';
 
