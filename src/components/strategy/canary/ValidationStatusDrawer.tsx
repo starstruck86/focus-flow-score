@@ -47,6 +47,10 @@ import {
   getCachedValidationKey,
   clearCachedValidationKey,
 } from '@/lib/strategy/canary/validationKey';
+import {
+  deriveVerdict,
+  type ChipState,
+} from '@/lib/strategy/canary/validationVerdict';
 
 interface TaskRunRow {
   id: string;
