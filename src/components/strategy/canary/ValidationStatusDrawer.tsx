@@ -42,7 +42,11 @@ import { RefreshCw, CheckCircle2, AlertCircle, XCircle, Info, ChevronDown, Rotat
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { ensureValidationKey } from '@/lib/strategy/canary/validationKey';
+import {
+  ensureValidationKey,
+  getCachedValidationKey,
+  clearCachedValidationKey,
+} from '@/lib/strategy/canary/validationKey';
 
 interface TaskRunRow {
   id: string;
