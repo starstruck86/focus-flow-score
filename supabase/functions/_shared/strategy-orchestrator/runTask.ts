@@ -136,10 +136,21 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
   ];
 
+  // Validation-only forced failure hook. Honored ONLY when run-validation-canary
+  // sets it on inputs. Never set from UI paths.
+  const forceAuthoringFailure = (inputs as any)?.__validation_force_authoring_failure === true;
+
+  // Track fallback metadata so we can persist it durably to task_runs.meta
+  // for queryability after logs roll off.
+  let fallbackMeta: Record<string, unknown> | null = null;
+
   try {
     let documentRaw: string;
     let primaryErrForLog: string | null = null;
     try {
+      if (forceAuthoringFailure) {
+        throw new Error("forced primary authoring failure (validation canary)");
+      }
       documentRaw = await Promise.race<string>([
         callClaude(authoringMessages, {
           model: authoringModel,
@@ -159,7 +170,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     } catch (claudeErr: any) {
       if (authoringTimeoutId) { clearTimeout(authoringTimeoutId); authoringTimeoutId = null; }
       const claudeMsg = String(claudeErr?.message || claudeErr);
-      if (!isFallbackEligible(claudeErr)) {
+      if (!forceAuthoringFailure && !isFallbackEligible(claudeErr)) {
         // Non-transient (e.g. invalid prompt/schema bug) — propagate as before.
         throw claudeErr;
       }
@@ -170,6 +181,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         primary_model: authoringModel,
         fallback_model: FALLBACK_MODEL,
         primary_error: claudeMsg.slice(0, 300),
+        forced: forceAuthoringFailure,
       }));
       const fallbackStartedAt = Date.now();
       console.log(JSON.stringify({
@@ -200,6 +212,14 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           fallback_model: FALLBACK_MODEL,
           duration_ms: Date.now() - fallbackStartedAt,
         }));
+        fallbackMeta = {
+          triggered: true,
+          primary_model: authoringModel,
+          fallback_model: FALLBACK_MODEL,
+          success: true,
+          forced: forceAuthoringFailure,
+          primary_error: claudeMsg.slice(0, 500),
+        };
       } catch (fallbackErr: any) {
         if (fallbackTimeoutId) clearTimeout(fallbackTimeoutId);
         const fbMsg = String(fallbackErr?.message || fallbackErr);
@@ -211,6 +231,22 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           primary_error: (primaryErrForLog || "").slice(0, 200),
           fallback_error: fbMsg.slice(0, 300),
         }));
+        fallbackMeta = {
+          triggered: true,
+          primary_model: authoringModel,
+          fallback_model: FALLBACK_MODEL,
+          success: false,
+          forced: forceAuthoringFailure,
+          primary_error: claudeMsg.slice(0, 500),
+          fallback_error: fbMsg.slice(0, 500),
+        };
+        // Best-effort persist before throwing
+        try {
+          await supabase
+            .from("task_runs")
+            .update({ meta: { authoring_fallback: fallbackMeta } })
+            .eq("id", runId);
+        } catch { /* swallow */ }
         throw new Error(`primary(claude): ${claudeMsg.slice(0, 150)} | fallback(${FALLBACK_MODEL}): ${fbMsg.slice(0, 200)}`);
       }
     }
