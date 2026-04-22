@@ -55,6 +55,10 @@ import { SaveToast, type SaveToastState } from './SaveToast';
 import { LinkPicker, type LinkPickerSelection } from './LinkPicker';
 import { SlashMenu, type SlashVerb } from './SlashMenu';
 import { LibraryPicker, type LibraryItem } from './LibraryPicker';
+import { CanaryReviewDrawer } from '@/components/strategy/canary/CanaryReviewDrawer';
+import { CanaryReviewPill } from '@/components/strategy/canary/CanaryReviewPill';
+import { fetchLatestCanaryReview } from '@/lib/strategy/canary/repository';
+import type { CanaryReviewRow } from '@/lib/strategy/canary/types';
 
 import '@/styles/strategy-v2.css';
 
@@ -90,6 +94,29 @@ export function StrategyShell() {
   // out-of-band on the next sendMessage and cleared after. Never visible
   // in the composer (the composer only ever shows the human title).
   const [pendingResourceIds, setPendingResourceIds] = useState<string[]>([]);
+
+  // ----- Cycle 1 Canary operator workflow -----
+  const [canaryDrawerOpen, setCanaryDrawerOpen] = useState(false);
+  const [canaryReadonly, setCanaryReadonly] = useState<CanaryReviewRow | null>(null);
+  const [lastCanaryReview, setLastCanaryReview] = useState<CanaryReviewRow | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    fetchLatestCanaryReview(user.id)
+      .then((row) => { if (!cancelled) setLastCanaryReview(row); })
+      .catch(() => { /* non-critical */ });
+    return () => { cancelled = true; };
+  }, [user]);
+
+  const openCanaryReview = useCallback(() => {
+    setCanaryReadonly(lastCanaryReview);
+    setCanaryDrawerOpen(true);
+  }, [lastCanaryReview]);
+
+  const handleCanarySaved = useCallback((row: CanaryReviewRow) => {
+    setLastCanaryReview(row);
+  }, []);
 
   const threadId = activeThread?.id ?? null;
 
@@ -580,6 +607,11 @@ export function StrategyShell() {
         onNewThread={() => handleNewThread()}
       />
 
+      {/* Cycle 1 — canary review pill (operator workflow entry point) */}
+      <div className="shrink-0 w-full flex justify-end px-4 py-1" style={{ borderBottom: '1px solid hsl(var(--sv-hairline))' }}>
+        <CanaryReviewPill lastReview={lastCanaryReview} onClick={openCanaryReview} />
+      </div>
+
       <StrategyCanvas
         messages={messages}
         isLoading={isLoading}
@@ -691,6 +723,13 @@ export function StrategyShell() {
           if (files && files.length) uploadFiles(files);
           e.target.value = '';
         }}
+      />
+      {/* Cycle 1 canary operator drawer */}
+      <CanaryReviewDrawer
+        open={canaryDrawerOpen}
+        onOpenChange={(o) => { setCanaryDrawerOpen(o); if (!o) setCanaryReadonly(null); }}
+        readonlyReview={canaryReadonly}
+        onSaved={handleCanarySaved}
       />
     </div>
   );
