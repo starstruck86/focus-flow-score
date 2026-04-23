@@ -124,17 +124,34 @@ export function detectLookupIntent(rawText: string): LookupIntent | null {
 }
 
 // ── Affirmative reply detection ───────────────────────────
-const AFFIRMATIVE_RE =
-  /^\s*(yes|yep|yeah|yup|sure|ok(?:ay)?|please(?:\s+do)?|do\s+it|run\s+it|go\s+(?:for\s+it|ahead)|sounds\s+good|let'?s\s+do\s+it|pull\s+it\s+up|please\s+run\s+it|yes[, ]+(?:please|run\s+it|do\s+it)|y)\s*[.!]?\s*$/i;
-const NEGATIVE_RE =
-  /^\s*(no|nope|nah|never\s*mind|cancel|stop|skip|don'?t|forget\s+it)\s*[.!]?\s*$/i;
+//
+// We accept short, unambiguous "yes"-like replies. To avoid false
+// positives we cap the message length: if the user wrote a sentence
+// longer than ~60 chars it's almost certainly not just "do it" — they
+// changed topic and we should not silently fire the pending lookup.
+//
+// Patterns are anchored to start (so "yes" / "yep" / "do it" / "go ahead"
+// / "okay, run it" / "sounds good" / "please do" / "yeah do it" all
+// match) and tolerate trailing punctuation or a short tail like
+// "please" / "now" / "thanks".
+const AFFIRMATIVE_LEAD =
+  /^\s*(?:yes|yep|yeah|yup|sure|ok(?:ay)?|y|aye|affirmative|please(?:\s+do(?:\s+it)?)?|do\s+it|run\s+it|go\s+(?:for\s+it|ahead)|sounds?\s+good|let'?s\s+do\s+(?:it|that)|let'?s\s+go|pull\s+it\s+up|fire\s+it|hit\s+it|proceed)\b/i;
+const NEGATIVE_LEAD =
+  /^\s*(?:no|nope|nah|never\s*mind|nvm|cancel|stop|skip|don'?t|forget\s+it|hold\s+off|not\s+(?:now|yet))\b/i;
+const MAX_AFFIRMATIVE_LEN = 60;
 
 export function detectAffirmative(rawText: string): boolean {
-  return AFFIRMATIVE_RE.test((rawText || "").trim());
+  const t = (rawText || "").trim();
+  if (!t || t.length > MAX_AFFIRMATIVE_LEN) return false;
+  // Reject if it also contains a clear negative lead — ambiguous → no.
+  if (NEGATIVE_LEAD.test(t)) return false;
+  return AFFIRMATIVE_LEAD.test(t);
 }
 
 export function detectNegative(rawText: string): boolean {
-  return NEGATIVE_RE.test((rawText || "").trim());
+  const t = (rawText || "").trim();
+  if (!t || t.length > MAX_AFFIRMATIVE_LEN) return false;
+  return NEGATIVE_LEAD.test(t);
 }
 
 // ── Real DB-backed search ─────────────────────────────────
