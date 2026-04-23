@@ -285,7 +285,16 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
   }, [getDaveSession, invalidateDaveCache]);
 
   return (
-    <div data-testid="app-layout" className={`min-h-screen bg-background flex flex-col w-full ${SHELL.top.safeArea}`}>
+    <div
+      data-testid="app-layout"
+      className={cn(
+        'bg-background flex flex-col w-full',
+        SHELL.top.safeArea,
+        // /strategy locks to viewport height so the canvas/artifact scrolls,
+        // not the outer page. Other routes keep min-h-screen.
+        location.pathname === '/strategy' ? 'h-[100dvh] overflow-hidden' : 'min-h-screen',
+      )}
+    >
       {location.pathname !== '/strategy' && (
         <header
           data-testid="app-header"
@@ -352,7 +361,11 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
         className={cn(
           'flex-1 overflow-x-hidden',
           location.pathname === '/strategy'
-            ? 'flex flex-col min-h-0 overflow-hidden pb-[calc(var(--shell-nav-height)*1px+env(safe-area-inset-bottom))]'
+            // Lock /strategy main to a fixed available-height box so the inner
+            // flex chain (StrategyShell → center column → canvas) is what
+            // scrolls — never the outer page. The BottomNav is fixed-position,
+            // so we subtract its height + safe-area instead of using padding.
+            ? 'flex flex-col min-h-0 overflow-hidden h-[calc(100dvh-var(--shell-nav-height)*1px-env(safe-area-inset-bottom))]'
             : `overflow-y-auto ${SHELL.main.bottomPad}`,
         )}
       >
