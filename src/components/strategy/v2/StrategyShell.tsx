@@ -71,9 +71,18 @@ import {
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal } from 'lucide-react';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { MoreHorizontal, PanelLeft } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { StrategyThreadsSidebar } from './StrategyThreadsSidebar';
+import { StrategyProgressPanel } from './StrategyProgressPanel';
+import { ArtifactInlineCard } from './ArtifactInlineCard';
+import { ArtifactWorkspace } from './ArtifactWorkspace';
+import { useThreadTaskRuns } from '@/hooks/strategy/useThreadTaskRuns';
 
 import '@/styles/strategy-v2.css';
+
+const SIDEBAR_COLLAPSED_KEY = 'sv-sidebar-collapsed';
 
 export function StrategyShell() {
   const { user } = useAuth();
