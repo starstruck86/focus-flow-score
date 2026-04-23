@@ -104,7 +104,7 @@ async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
 /** Author a single batch. Returns the parsed sections array on success.
  *  Tries Claude first; on transient failure, falls back to OpenAI ChatGPT.
  *  Gemini is intentionally NOT used. */
-async function authorOneBatch(
+export async function authorOneBatch(
   args: AuthorBatchArgs,
   sectionIds: string[],
 ): Promise<{ sections: any[]; primary_status: "success" | "failed"; fallback_status?: "success" | "failed"; error?: string }> {
