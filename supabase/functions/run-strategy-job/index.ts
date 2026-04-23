@@ -18,6 +18,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyRedline, runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/runTask.ts";
 import { getHandler } from "../_shared/strategy-orchestrator/registry.ts";
 import { getCards } from "../_shared/strategy-orchestrator/libraryCards.ts";
+import { failStalePendingRun } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";
 import type { TaskType } from "../_shared/strategy-orchestrator/types.ts";
 
 const corsHeaders = {
@@ -73,26 +74,9 @@ Deno.serve(async (req) => {
         .single();
       if (error || !row) return jsonResponse({ error: "Run not found" }, 404);
 
-      // Stale-run reaper (parity with run-discovery-prep).
       let effectiveRow: any = row;
       if (row.status === "pending") {
-        const lastUpdate = new Date(row.updated_at).getTime();
-        const ageMs = Date.now() - lastUpdate;
-        if (ageMs > 7 * 60 * 1000) {
-          const reaperMessage = `Run stalled at "${row.progress_step || "unknown"}" (no progress for ${Math.round(ageMs / 1000)}s). Please retry.`;
-          await supabase
-            .from("task_runs")
-            .update({
-              status: "failed",
-              progress_step: "failed",
-              error: reaperMessage,
-              completed_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", runId)
-            .eq("user_id", user.id);
-          effectiveRow = { ...row, status: "failed", progress_step: "failed", error: reaperMessage };
-        }
+        effectiveRow = await failStalePendingRun({ supabase, row, runId, userId: user.id });
       }
 
       return jsonResponse({
