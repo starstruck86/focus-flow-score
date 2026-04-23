@@ -174,12 +174,24 @@ export async function processOneBatch(args: {
   );
 
   const ok = result.sections.length > 0;
+  // Standardized model attribution per batch:
+  //   "claude"           → Claude authored on first try
+  //   "openai_fallback"  → Claude failed, OpenAI fallback succeeded
+  //   "none"             → both failed (placeholder will be assembled)
+  const modelUsed: "claude" | "openai_fallback" | "none" =
+    result.primary_status === "success"
+      ? "claude"
+      : result.fallback_status === "success"
+        ? "openai_fallback"
+        : "none";
+
   await supabase
     .from("task_run_sections")
     .update({
       status: ok ? "completed" : "failed",
       primary_status: result.primary_status,
       fallback_status: result.fallback_status ?? null,
+      model_used: modelUsed,
       sections: result.sections,
       error: result.error ?? null,
       completed_at: new Date().toISOString(),
