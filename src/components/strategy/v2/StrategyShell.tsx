@@ -75,6 +75,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { MoreHorizontal, PanelLeft } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { StrategyThreadsSidebar } from './StrategyThreadsSidebar';
+import { StrategyGlobalNavBar } from './StrategyGlobalNavBar';
 import { StrategyProgressPanel } from './StrategyProgressPanel';
 import { ArtifactInlineCard } from './ArtifactInlineCard';
 import { ArtifactWorkspace } from './ArtifactWorkspace';
@@ -678,9 +679,14 @@ export function StrategyShell() {
 
   return (
     <div
-      className="strategy-v2 flex flex-1 min-h-0 w-full"
+      className="strategy-v2 flex flex-col flex-1 min-h-0 w-full"
       style={{ background: 'hsl(var(--sv-paper))' }}
     >
+      {/* Compact global nav rail (desktop only) — replaces the dual-row
+          BottomNav on /strategy so the workspace owns the vertical space. */}
+      <StrategyGlobalNavBar />
+
+      <div className="flex flex-1 min-h-0 w-full">
       {/* Desktop persistent sidebar */}
       {!isMobile && sidebarNode()}
 
@@ -919,6 +925,7 @@ export function StrategyShell() {
         open={validationDrawerOpen}
         onOpenChange={setValidationDrawerOpen}
       />
+      </div>
     </div>
   );
 }
