@@ -179,10 +179,24 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // for queryability after logs roll off.
   let fallbackMeta: Record<string, unknown> | null = null;
 
+  // ── Bounded-batch-first policy for discovery_prep ────────────────
+  // The 19-section monolithic Claude pass is fragile and historically
+  // exhausts the stage budget on retries, starving the per-batch ladder.
+  // For discovery_prep we now skip the monolith entirely and execute the
+  // per-batch ladder as the PRIMARY authoring path. Claude remains first
+  // per batch; ChatGPT (gpt-5) fallback is per-batch and exception-only.
+  // Other task types still use the monolithic-first path below.
+  const BOUNDED_BATCH_FIRST = taskType === "discovery_prep";
+
   try {
     let documentRaw: string;
     let primaryErrForLog: string | null = null;
     try {
+      if (BOUNDED_BATCH_FIRST) {
+        // Force-fall through to the section-batched rescue branch, which
+        // is now the *primary* authoring path for discovery_prep.
+        throw new Error("bounded_batch_first: skipping monolithic authoring (discovery_prep policy)");
+      }
       if (forceAuthoringFailure) {
         throw new Error("forced primary authoring failure (validation canary)");
       }
