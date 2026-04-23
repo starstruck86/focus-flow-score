@@ -69,7 +69,7 @@ export interface SectionBatchResult {
   sections_authored: number;
 }
 
-interface AuthorBatchArgs {
+export interface AuthorBatchArgs {
   systemPrompt: string;
   userPromptBuilder: (sectionIds: string[]) => string;
   runId: string;
