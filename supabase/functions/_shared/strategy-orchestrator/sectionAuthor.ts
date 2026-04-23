@@ -28,18 +28,34 @@ import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
  *  timeout on the first attempt — fallback (ChatGPT) stays exception-only
  *  per the model policy. Larger groupings starved fallback / forced the
  *  per-batch ladder to lean on retries. */
+// Heavy batches identified from run b206f346 telemetry: any 2-section group
+// that combined two analytically dense sections forced Claude past the 60s
+// inner timeout (batches 4, 8, 9, 10 all needed fallback at 100s+). The fix
+// is to keep light pairs together (cover+participants, cx_audit etc.) and
+// split heavy pairs into singletons so each Claude call is bounded by ONE
+// section's worth of analysis. Singletons that previously timed out
+// (cockpit, appendix) remain singletons — see PRIMARY_MODEL_HEAVY policy
+// below if they continue to fall back. Section order preserved for assembly.
 export const DISCOVERY_PREP_BATCHES: { ids: string[] }[] = [
   { ids: ["cockpit"] },                                 // largest single section
-  { ids: ["cover", "participants"] },
+  { ids: ["cover", "participants"] },                   // light pair (succeeded 17s)
   { ids: ["cx_audit"] },
   { ids: ["executive_snapshot"] },
-  { ids: ["value_selling", "discovery_questions"] },
-  { ids: ["customer_examples", "pivot_statements"] },
+  // Split: value_selling + discovery_questions (was heavy, 120s fallback)
+  { ids: ["value_selling"] },
+  { ids: ["discovery_questions"] },
+  { ids: ["customer_examples", "pivot_statements"] },   // light pair (succeeded 59s)
   { ids: ["objection_handling"] },
-  { ids: ["marketing_team", "exit_criteria"] },
-  { ids: ["revenue_pathway", "metrics_intelligence"] },
-  { ids: ["loyalty_analysis", "tech_stack"] },
-  { ids: ["competitive_war_game", "hypotheses_risks"] },
+  { ids: ["marketing_team", "exit_criteria"] },         // light pair (succeeded 50s)
+  // Split: revenue_pathway + metrics_intelligence (was heavy, 104s fallback)
+  { ids: ["revenue_pathway"] },
+  { ids: ["metrics_intelligence"] },
+  // Split: loyalty_analysis + tech_stack (was heavy, 101s fallback)
+  { ids: ["loyalty_analysis"] },
+  { ids: ["tech_stack"] },
+  // Split: competitive_war_game + hypotheses_risks (was heavy, 111s fallback)
+  { ids: ["competitive_war_game"] },
+  { ids: ["hypotheses_risks"] },
   { ids: ["appendix"] },                                // largest single section
 ];
 
