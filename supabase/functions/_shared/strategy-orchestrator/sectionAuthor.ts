@@ -61,6 +61,21 @@ export const DISCOVERY_PREP_BATCHES: { ids: string[] }[] = [
 
 const SECTION_INNER_TIMEOUT_MS = 60_000;
 const SECTION_OUTER_TIMEOUT_MS = 70_000;
+// Heavy-singleton override: these three sections consistently exceed the
+// default 60s/70s budget on Claude (telemetry: cockpit ~112s, appendix
+// ~120s, competitive_war_game ~111s). They remain singletons in the batch
+// map; we only extend the per-batch timeout when the batch IS exactly one
+// of these. All other batches keep the default budget. Fallback gets the
+// same extended budget for these singletons so it can actually finish.
+const HEAVY_SINGLETON_SECTIONS = new Set(["cockpit", "competitive_war_game", "appendix"]);
+const HEAVY_SINGLETON_INNER_TIMEOUT_MS = 140_000;
+const HEAVY_SINGLETON_OUTER_TIMEOUT_MS = 150_000;
+function timeoutsForBatch(sectionIds: string[]): { inner: number; outer: number; heavy: boolean } {
+  if (sectionIds.length === 1 && HEAVY_SINGLETON_SECTIONS.has(sectionIds[0])) {
+    return { inner: HEAVY_SINGLETON_INNER_TIMEOUT_MS, outer: HEAVY_SINGLETON_OUTER_TIMEOUT_MS, heavy: true };
+  }
+  return { inner: SECTION_INNER_TIMEOUT_MS, outer: SECTION_OUTER_TIMEOUT_MS, heavy: false };
+}
 const PRIMARY_MODEL = "claude-sonnet-4-5-20250929";
 // NATIVE OpenAI model id (no "openai/" gateway prefix). callOpenAI hits
 // api.openai.com directly and rejects gateway-style ids with 400.
