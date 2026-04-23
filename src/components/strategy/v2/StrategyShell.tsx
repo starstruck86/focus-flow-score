@@ -701,7 +701,8 @@ export function StrategyShell() {
               onClick={() => setMobileSidebarOpen(true)}
               className="h-9 w-9 flex items-center justify-center sv-hover-bg shrink-0"
               style={{ color: 'hsl(var(--sv-muted))' }}
-              aria-label="Open threads"
+              aria-label="Open Strategy threads"
+              data-testid="strategy-mobile-sidebar-trigger"
             >
               <PanelLeft className="h-4 w-4" />
             </button>
