@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { logServiceRoleUsage, logCrossUserAccess, logValidationWarnings, logAuthMethod } from '../_shared/securityLog.ts';
 import { logEnforcementEvent } from '../_shared/enforcementLog.ts';
 
