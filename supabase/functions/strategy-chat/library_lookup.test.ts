@@ -79,15 +79,15 @@ function makeFakeSupabase(seed: {
 const USER_ID = "user-1";
 const FAKE = makeFakeSupabase({
   resources: [
-    { id: "r1", user_id: USER_ID, title: "Cold Calling 101", description: "intro", content: "" },
-    { id: "r2", user_id: USER_ID, title: "Advanced cold-call openers", description: "" },
+    { id: "r1", user_id: USER_ID, title: "Cold Calling 101", description: "intro to cold calling", content: "" },
+    { id: "r2", user_id: USER_ID, title: "Advanced cold calling openers", description: "" },
     { id: "r3", user_id: USER_ID, title: "Discovery call playbook", description: "" },
     { id: "r4", user_id: USER_ID, title: "Email templates", description: "" },
     { id: "rOther", user_id: "other", title: "cold calling for others", description: "" },
   ],
   knowledge_items: [
-    { id: "k1", user_id: USER_ID, title: "Pattern interrupt for cold calls", tactic_summary: "use a pattern interrupt" },
-    { id: "k2", user_id: USER_ID, title: "Objection: 'we already have a vendor'", tactic_summary: "" },
+    { id: "k1", user_id: USER_ID, title: "Pattern interrupt for cold calling", tactic_summary: "pattern interrupt on cold calling" },
+    { id: "k2", user_id: USER_ID, title: "Objection handling: 'we already have a vendor'", tactic_summary: "objection handling tactic" },
     { id: "k3", user_id: USER_ID, title: "Discovery: pain question stack", tactic_summary: "" },
   ],
 });
