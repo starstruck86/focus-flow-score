@@ -5,7 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   ArrowLeft, FileText, MessageSquareWarning, Check, Download,
-  ChevronDown, ChevronUp, Pencil, Loader2, FileDown,
+  ChevronDown, ChevronUp, Pencil, Loader2, FileDown, Copy, Star,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeTaskRunResult, type TaskRunResult, type Redline, type DiscoverySection } from '@/hooks/strategy/useTaskExecution';
@@ -277,6 +277,7 @@ export function TaskOutputViewer({ result, onBack, onApplyRedline, onRejectRedli
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(sections.map((s) => s.id))
   );
+  const [importantSections, setImportantSections] = useState<Set<string>>(new Set());
   const [isDownloading, setIsDownloading] = useState<'docx' | 'pdf' | null>(null);
 
   const companyName = sections.find(s => s.id === 'cover')?.content?.opportunity
@@ -290,6 +291,27 @@ export function TaskOutputViewer({ result, onBack, onApplyRedline, onRejectRedli
       return next;
     });
   };
+
+  const toggleImportant = (id: string) => {
+    setImportantSections(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const copySection = useCallback(async (section: DiscoverySection) => {
+    try {
+      const c = section.content;
+      const body = typeof c === 'string'
+        ? c
+        : (() => { try { return JSON.stringify(c, null, 2); } catch { return ''; } })();
+      await navigator.clipboard.writeText(`## ${section.name}\n\n${body}`);
+      toast.success(`Copied "${section.name}"`);
+    } catch {
+      toast.error('Could not copy section');
+    }
+  }, []);
 
   const handleDownloadDocx = useCallback(async () => {
     setIsDownloading('docx');
