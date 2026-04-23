@@ -33,6 +33,28 @@ export class RouteErrorBoundary extends Component<Props, State> {
       metadata: { componentStack: errorInfo.componentStack?.slice(0, 1000) },
     });
     recordError(appError);
+
+    // Auto-recover from stale-bundle chunk load failures (post-deploy).
+    // Browsers throw "Importing a module script failed" / "Failed to fetch dynamically imported module"
+    // when a lazy chunk referenced by an older app shell is no longer on the CDN.
+    // Hard-reload once with a cache buster so the user gets the fresh bundle.
+    const msg = String(error?.message || '');
+    const isChunkLoadError =
+      msg.includes('Importing a module script failed') ||
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes('error loading dynamically imported module') ||
+      /ChunkLoadError/i.test(error?.name || '');
+
+    if (isChunkLoadError) {
+      const KEY = '__chunk_reload_attempt__';
+      const attempted = sessionStorage.getItem(KEY);
+      if (!attempted) {
+        sessionStorage.setItem(KEY, String(Date.now()));
+        const url = new URL(window.location.href);
+        url.searchParams.set('_r', String(Date.now()));
+        window.location.replace(url.toString());
+      }
+    }
   }
 
   handleRetry = () => {
