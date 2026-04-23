@@ -1,4 +1,5 @@
 import { NavLink as RouterNavLink, useLocation } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -111,8 +112,37 @@ export function useActiveTabColor(): NavColor {
 }
 
 export function BottomNav() {
+  const navRef = useRef<HTMLElement | null>(null);
+
+  // ─── Dynamic height sync ──────────────────────────────────────────────
+  // The BottomNav's rendered height varies with viewport / safe-area / font
+  // scaling. We measure it and publish the pixel value to
+  // `--shell-nav-height` so every consumer (page padding, FAB clearance,
+  // /strategy main height) stays perfectly aligned with reality. This fixes
+  // composer/BottomNav collisions where the static 101px reserve under-
+  // estimated the actual ~140–150px footprint at certain breakpoints.
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const apply = (h: number) => {
+      if (h > 0) root.style.setProperty('--shell-nav-height', String(Math.round(h)));
+    };
+    apply(el.getBoundingClientRect().height);
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) apply(entry.contentRect.height);
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      // Restore design-system default so other mounts start from a known baseline.
+      root.style.setProperty('--shell-nav-height', '101');
+    };
+  }, []);
+
   return (
     <nav
+      ref={navRef}
       data-testid="bottom-nav"
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 pb-[env(safe-area-inset-bottom)] backdrop-blur-md"
       style={{ background: 'hsl(var(--card))' }}
