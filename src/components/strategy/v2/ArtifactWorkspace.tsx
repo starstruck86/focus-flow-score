@@ -65,7 +65,10 @@ export function ArtifactWorkspace({ result, onClose }: Props) {
     <section
       className="flex flex-col min-h-0 shrink-0 sv-enter-fade-right"
       style={{
-        width: 'min(720px, 56vw)',
+        // Wider so the TOC rail (~200px) plus the document column does not
+        // clip on 1440px viewports. Cap at 880px so very wide screens stay
+        // readable.
+        width: 'min(880px, 62vw)',
         borderLeft: '1px solid hsl(var(--sv-hairline))',
         background: 'hsl(var(--sv-paper))',
       }}
