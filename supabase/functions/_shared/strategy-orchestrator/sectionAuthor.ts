@@ -28,7 +28,7 @@ import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
  *  timeout on the first attempt — fallback (ChatGPT) stays exception-only
  *  per the model policy. Larger groupings starved fallback / forced the
  *  per-batch ladder to lean on retries. */
-const DISCOVERY_PREP_BATCHES: { ids: string[] }[] = [
+export const DISCOVERY_PREP_BATCHES: { ids: string[] }[] = [
   { ids: ["cockpit"] },                                 // largest single section
   { ids: ["cover", "participants"] },
   { ids: ["cx_audit"] },
@@ -69,7 +69,7 @@ export interface SectionBatchResult {
   sections_authored: number;
 }
 
-interface AuthorBatchArgs {
+export interface AuthorBatchArgs {
   systemPrompt: string;
   userPromptBuilder: (sectionIds: string[]) => string;
   runId: string;
@@ -104,7 +104,7 @@ async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
 /** Author a single batch. Returns the parsed sections array on success.
  *  Tries Claude first; on transient failure, falls back to OpenAI ChatGPT.
  *  Gemini is intentionally NOT used. */
-async function authorOneBatch(
+export async function authorOneBatch(
   args: AuthorBatchArgs,
   sectionIds: string[],
 ): Promise<{ sections: any[]; primary_status: "success" | "failed"; fallback_status?: "success" | "failed"; error?: string }> {
@@ -196,7 +196,7 @@ async function authorOneBatch(
  *  fragments from the full discovery_prep schema. Keeps the contract — the
  *  model still returns `{ sections: [...] }` — but only for the requested
  *  section ids, so each call is small and fast. */
-function buildBatchUserPrompt(
+export function buildBatchUserPrompt(
   baseUserPrompt: string,
   sectionIds: string[],
 ): string {
