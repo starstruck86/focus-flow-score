@@ -339,7 +339,7 @@ export async function authorBySectionBatches(args: {
         runId: args.runId,
         taskType: args.taskType,
       },
-      batch.ids,
+      [...batch.ids],
     );
     const durationMs = Date.now() - startedAt;
     console.log(JSON.stringify({
