@@ -52,8 +52,11 @@ export async function callOpenAI(
   const body: Record<string, unknown> = { model, messages };
   if (isNewSchema) {
     body.max_completion_tokens = opts.maxTokens || 8192;
-    if (opts.reasoningEffort) {
-      body.reasoning = { effort: opts.reasoningEffort };
+    // Chat Completions API uses top-level `reasoning_effort` (string),
+    // NOT the Responses-API `reasoning: { effort }` shape. Sending the
+    // object form returns 400 "Unknown parameter: 'reasoning'".
+    if (opts.reasoningEffort && opts.reasoningEffort !== "none") {
+      body.reasoning_effort = opts.reasoningEffort;
     }
   } else {
     body.max_tokens = opts.maxTokens || 8192;
