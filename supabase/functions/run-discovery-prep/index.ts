@@ -14,7 +14,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyRedline, runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/runTask.ts";
 import { findRecentActiveRun } from "../_shared/strategy-orchestrator/idempotency.ts";
 import { failStalePendingRun } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";
-import { startProgressiveDiscoveryPrep } from "../_shared/strategy-orchestrator/progressiveEntry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
