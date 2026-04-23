@@ -41,7 +41,9 @@ const DISCOVERY_PREP_BATCHES: { ids: string[] }[] = [
 const SECTION_INNER_TIMEOUT_MS = 60_000;
 const SECTION_OUTER_TIMEOUT_MS = 70_000;
 const PRIMARY_MODEL = "claude-sonnet-4-5-20250929";
-const FALLBACK_MODEL = "openai/gpt-5"; // OpenAI ChatGPT — Gemini explicitly excluded
+// NATIVE OpenAI model id (no "openai/" gateway prefix). callOpenAI hits
+// api.openai.com directly and rejects gateway-style ids with 400.
+const FALLBACK_MODEL = "gpt-5"; // OpenAI ChatGPT — Gemini explicitly excluded
 
 export interface SectionBatchResult {
   /** Assembled `{ sections: [...] }` draft. Always returned, even if some
