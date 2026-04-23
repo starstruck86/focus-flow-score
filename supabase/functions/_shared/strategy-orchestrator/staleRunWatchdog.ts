@@ -25,8 +25,20 @@ const DEFAULT_PENDING_TIMEOUT_MS = 7 * 60 * 1000;
 // Safety ceiling: anything pending longer than this is reaped no matter what.
 const HARD_PENDING_CEILING_MS = 14 * 60 * 1000;
 
+// Resolve a progress_step (which may be suffixed like
+// "document_authoring:batch_5_of_12") to its base stage key so the
+// per-stage timeout applies even while the bounded batch ladder is
+// emitting per-batch heartbeats.
+function resolveStageKey(step: string): string {
+  if (!step) return "";
+  if (WATCHED_STAGE_TIMEOUTS_MS[step]) return step;
+  const base = step.split(":")[0];
+  return WATCHED_STAGE_TIMEOUTS_MS[base] ? base : step;
+}
+
 function buildErrorMessage(step: string, ageMs: number): string {
-  return WATCHED_STAGE_TIMEOUTS_MS[step]
+  const key = resolveStageKey(step);
+  return WATCHED_STAGE_TIMEOUTS_MS[key]
     ? `stage_timeout:${step} (no progress for ${Math.round(ageMs / 1000)}s)`
     : `stage_timeout:${step || "unknown"} (generic pending watchdog after ${Math.round(ageMs / 1000)}s)`;
 }
@@ -45,7 +57,8 @@ export async function failStalePendingRun(args: {
     : "unknown";
   const lastUpdate = new Date(row.updated_at).getTime();
   const ageMs = Date.now() - lastUpdate;
-  const timeoutMs = WATCHED_STAGE_TIMEOUTS_MS[step] ?? DEFAULT_PENDING_TIMEOUT_MS;
+  const stageKey = resolveStageKey(step);
+  const timeoutMs = WATCHED_STAGE_TIMEOUTS_MS[stageKey] ?? DEFAULT_PENDING_TIMEOUT_MS;
 
   if (!Number.isFinite(lastUpdate) || ageMs <= timeoutMs) return row;
 
@@ -111,7 +124,8 @@ export async function sweepStalePendingRuns(args: {
       : "unknown";
     const lastUpdate = new Date(row.updated_at).getTime();
     const ageMs = Date.now() - lastUpdate;
-    const timeoutMs = WATCHED_STAGE_TIMEOUTS_MS[step] ?? DEFAULT_PENDING_TIMEOUT_MS;
+    const stageKey = resolveStageKey(step);
+    const timeoutMs = WATCHED_STAGE_TIMEOUTS_MS[stageKey] ?? DEFAULT_PENDING_TIMEOUT_MS;
     const exceeded = Number.isFinite(lastUpdate) &&
       (ageMs > timeoutMs || ageMs > HARD_PENDING_CEILING_MS);
     if (!exceeded) continue;
