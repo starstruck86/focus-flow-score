@@ -36,28 +36,30 @@ import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
 // section's worth of analysis. Singletons that previously timed out
 // (cockpit, appendix) remain singletons — see PRIMARY_MODEL_HEAVY policy
 // below if they continue to fall back. Section order preserved for assembly.
-export const DISCOVERY_PREP_BATCHES: { ids: string[] }[] = [
-  { ids: ["cockpit"] },                                 // largest single section
-  { ids: ["cover", "participants"] },                   // light pair (succeeded 17s)
-  { ids: ["cx_audit"] },
-  { ids: ["executive_snapshot"] },
-  // Split: value_selling + discovery_questions (was heavy, 120s fallback)
-  { ids: ["value_selling"] },
-  { ids: ["discovery_questions"] },
-  { ids: ["customer_examples", "pivot_statements"] },   // light pair (succeeded 59s)
-  { ids: ["objection_handling"] },
-  { ids: ["marketing_team", "exit_criteria"] },         // light pair (succeeded 50s)
-  // Split: revenue_pathway + metrics_intelligence (was heavy, 104s fallback)
-  { ids: ["revenue_pathway"] },
-  { ids: ["metrics_intelligence"] },
-  // Split: loyalty_analysis + tech_stack (was heavy, 101s fallback)
-  { ids: ["loyalty_analysis"] },
-  { ids: ["tech_stack"] },
-  // Split: competitive_war_game + hypotheses_risks (was heavy, 111s fallback)
-  { ids: ["competitive_war_game"] },
-  { ids: ["hypotheses_risks"] },
-  { ids: ["appendix"] },                                // largest single section
-];
+// ── STANDARDIZED BATCH MAP (LOCKED) ──────────────────────────────
+// Validated by canary a66b3dec (2025-04): 16/16 batches completed,
+// 19/19 sections assembled, Claude-primary 13/16, fallback 3/16, 0
+// duplicates / 0 orphans. This is the canonical, repeatable plan for
+// discovery_prep deep research. Do NOT reshape per-run. Any future
+// change requires a new canary + standardization pass.
+export const DISCOVERY_PREP_BATCHES: ReadonlyArray<{ ids: readonly string[] }> = Object.freeze([
+  Object.freeze({ ids: Object.freeze(["cockpit"]) }),                                 // heavy singleton
+  Object.freeze({ ids: Object.freeze(["cover", "participants"]) }),                   // light pair
+  Object.freeze({ ids: Object.freeze(["cx_audit"]) }),
+  Object.freeze({ ids: Object.freeze(["executive_snapshot"]) }),
+  Object.freeze({ ids: Object.freeze(["value_selling"]) }),
+  Object.freeze({ ids: Object.freeze(["discovery_questions"]) }),
+  Object.freeze({ ids: Object.freeze(["customer_examples", "pivot_statements"]) }),   // light pair
+  Object.freeze({ ids: Object.freeze(["objection_handling"]) }),
+  Object.freeze({ ids: Object.freeze(["marketing_team", "exit_criteria"]) }),         // light pair
+  Object.freeze({ ids: Object.freeze(["revenue_pathway"]) }),
+  Object.freeze({ ids: Object.freeze(["metrics_intelligence"]) }),
+  Object.freeze({ ids: Object.freeze(["loyalty_analysis"]) }),
+  Object.freeze({ ids: Object.freeze(["tech_stack"]) }),
+  Object.freeze({ ids: Object.freeze(["competitive_war_game"]) }),                    // heavy singleton
+  Object.freeze({ ids: Object.freeze(["hypotheses_risks"]) }),
+  Object.freeze({ ids: Object.freeze(["appendix"]) }),                                // heavy singleton
+]) as ReadonlyArray<{ ids: readonly string[] }>;
 
 const SECTION_INNER_TIMEOUT_MS = 60_000;
 const SECTION_OUTER_TIMEOUT_MS = 70_000;
