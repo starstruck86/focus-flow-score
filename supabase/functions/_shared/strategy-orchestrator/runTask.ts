@@ -423,6 +423,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           throw new Error(`primary(claude): ${claudeMsg.slice(0, 120)} | fallback(${FALLBACK_MODEL}): ${fbMsg.slice(0, 150)} | section_batch_rescue: 0/${rescue.draft.sections.length} sections`);
         }
       }
+      } // end else (legacy monolithic-fallback branch)
     }
 
     // safeParseJSON returns `null` for unparseable input — treat that as a
