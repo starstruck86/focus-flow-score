@@ -7483,6 +7483,7 @@ export type Database = {
           error: string | null
           fallback_status: string | null
           id: string
+          model_used: string | null
           primary_status: string | null
           run_id: string
           section_ids: string[]
@@ -7500,6 +7501,7 @@ export type Database = {
           error?: string | null
           fallback_status?: string | null
           id?: string
+          model_used?: string | null
           primary_status?: string | null
           run_id: string
           section_ids: string[]
@@ -7517,6 +7519,7 @@ export type Database = {
           error?: string | null
           fallback_status?: string | null
           id?: string
+          model_used?: string | null
           primary_status?: string | null
           run_id?: string
           section_ids?: string[]
