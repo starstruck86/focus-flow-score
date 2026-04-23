@@ -273,45 +273,38 @@ function ThreadGroup({
         <span>{label}</span>
       </div>
       <ul className="space-y-px">
-        {threads.map((t) => (
+        {threads.map((t) => {
+          const isActive = activeThreadId === t.id;
+          const isRunning = runningThreadIds?.has(t.id) ?? false;
+          const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
+          return (
           <li key={t.id}>
             <button
               onClick={() => onPick(t.id)}
-              className={cn(
-                'w-full text-left px-3 py-1.5 rounded-[6px] flex items-center gap-2 group transition-colors',
-              )}
+              className={cn('w-full text-left pr-3 py-1.5 rounded-[6px] flex items-center gap-2 group transition-colors')}
               style={{
-                background: activeThreadId === t.id ? 'hsl(var(--sv-hover))' : 'transparent',
+                background: isActive ? 'hsl(var(--sv-clay) / 0.08)' : 'transparent',
                 color: 'hsl(var(--sv-ink))',
+                paddingLeft: 10,
+                borderLeft: isActive ? '2px solid hsl(var(--sv-clay))' : '2px solid transparent',
               }}
-              onMouseEnter={(e) => {
-                if (activeThreadId !== t.id) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)';
-              }}
-              onMouseLeave={(e) => {
-                if (activeThreadId !== t.id) e.currentTarget.style.background = 'transparent';
-              }}
+              onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
+              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
               title={t.title || 'Untitled thread'}
             >
-              <span className="flex-1 min-w-0 truncate text-[13px]">
+              <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
                 {t.title || 'Untitled thread'}
               </span>
-              {runningThreadIds?.has(t.id) && (
-                <Loader2
-                  className="h-3 w-3 shrink-0 animate-spin"
-                  style={{ color: 'hsl(var(--sv-clay))' }}
-                  aria-label="Run in progress"
-                />
+              {isRunning && (
+                <Loader2 className="h-3 w-3 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Run in progress" />
               )}
-              {artifactThreadIds?.has(t.id) && !runningThreadIds?.has(t.id) && (
-                <FileText
-                  className="h-3 w-3 shrink-0"
-                  style={{ color: 'hsl(var(--sv-clay) / 0.7)' }}
-                  aria-label="Has artifact"
-                />
+              {hasArtifact && !isRunning && (
+                <FileText className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} aria-label="Has artifact" />
               )}
             </button>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );
