@@ -15,12 +15,15 @@
 
 const WATCHED_STAGE_TIMEOUTS_MS: Record<string, number> = {
   synthesis: 6 * 60 * 1000,
-  document_authoring: 6 * 60 * 1000,
+  // Bumped: bounded-batch-first authoring runs up to 12 batches sequentially.
+  // Each batch heartbeats updated_at on completion, so this is a safety
+  // bound for a single stalled batch, not the expected total duration.
+  document_authoring: 9 * 60 * 1000,
 };
 
 const DEFAULT_PENDING_TIMEOUT_MS = 7 * 60 * 1000;
 // Safety ceiling: anything pending longer than this is reaped no matter what.
-const HARD_PENDING_CEILING_MS = 10 * 60 * 1000;
+const HARD_PENDING_CEILING_MS = 14 * 60 * 1000;
 
 function buildErrorMessage(step: string, ageMs: number): string {
   return WATCHED_STAGE_TIMEOUTS_MS[step]
