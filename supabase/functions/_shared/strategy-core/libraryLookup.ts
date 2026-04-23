@@ -138,13 +138,18 @@ const AFFIRMATIVE_LEAD =
   /^\s*(?:yes|yep|yeah|yup|sure|ok(?:ay)?|y|aye|affirmative|please(?:\s+do(?:\s+it)?)?|do\s+it|run\s+it|go\s+(?:for\s+it|ahead)|sounds?\s+good|let'?s\s+do\s+(?:it|that)|let'?s\s+go|pull\s+it\s+up|fire\s+it|hit\s+it|proceed)\b/i;
 const NEGATIVE_LEAD =
   /^\s*(?:no|nope|nah|never\s*mind|nvm|cancel|stop|skip|don'?t|forget\s+it|hold\s+off|not\s+(?:now|yet))\b/i;
+// Anywhere-in-string clear cancel/reverse signals — used to reject
+// ambiguous "yes but actually never mind" style replies.
+const NEGATIVE_ANYWHERE =
+  /\b(?:never\s*mind|cancel|forget\s+it|skip\s+it|hold\s+off|not\s+(?:now|yet)|don'?t\s+(?:bother|run))\b/i;
 const MAX_AFFIRMATIVE_LEN = 60;
 
 export function detectAffirmative(rawText: string): boolean {
   const t = (rawText || "").trim();
   if (!t || t.length > MAX_AFFIRMATIVE_LEN) return false;
-  // Reject if it also contains a clear negative lead — ambiguous → no.
+  // Reject if a negative lead OR a clear cancel signal anywhere — ambiguous → no.
   if (NEGATIVE_LEAD.test(t)) return false;
+  if (NEGATIVE_ANYWHERE.test(t)) return false;
   return AFFIRMATIVE_LEAD.test(t);
 }
 
