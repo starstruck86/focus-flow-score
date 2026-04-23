@@ -12,7 +12,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyRedline, runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/runTask.ts";
-import { failStalePendingRun } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";
+import { failStalePendingRun, sweepStalePendingRuns } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -82,6 +82,23 @@ Deno.serve(async (req) => {
     const taskType = body.task_type || "discovery_prep";
     const { inputs } = body;
     if (!inputs?.company_name) return jsonResponse({ error: "inputs.company_name is required" }, 400);
+
+    // Time-gated reaper — runs at the start of every generate so stranded
+    // pending rows from earlier sessions can't survive even if no client
+    // ever polls status. Scoped to this user.
+    try {
+      const sweep = await sweepStalePendingRuns({ supabase, userId: user.id });
+      if (sweep.reaped > 0) {
+        console.log(JSON.stringify({
+          tag: "[run-strategy-task:pre_generate_sweep]",
+          user_id: user.id,
+          reaped: sweep.reaped,
+          ids: sweep.ids,
+        }));
+      }
+    } catch (sweepErr) {
+      console.warn("[run-strategy-task:sweep_error]", String(sweepErr).slice(0, 200));
+    }
 
     try {
       const { run_id, status } = await runStrategyTaskInBackground({
