@@ -258,6 +258,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           systemPrompt: handler.buildDocumentSystemPrompt(),
           baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
           synthesis,
+          supabase,
         });
         if (rescue.sections_authored > 0) {
           console.log(JSON.stringify({
@@ -369,6 +370,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           systemPrompt: handler.buildDocumentSystemPrompt(),
           baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
           synthesis,
+          supabase,
         });
 
         if (rescue.sections_authored > 0) {
