@@ -111,20 +111,38 @@ export function useActiveTabColor(): NavColor {
   return match?.color || 'today';
 }
 
-export function BottomNav() {
+/**
+ * BottomNav
+ *
+ * Variants:
+ *   - default: dual-row (10 routes), used on every page except /strategy.
+ *   - condensed: single-row (5 primary routes), used on /strategy mobile so
+ *     the composer + canvas reclaim ~50% of the previous nav footprint
+ *     while still exposing global navigation. The remaining 5 routes are
+ *     reachable via the persistent Strategy sidebar's "more" affordances
+ *     (Dave / global search / breadcrumbs in other surfaces).
+ *   - hidden: not rendered. Used on /strategy desktop where the
+ *     `StrategyGlobalNavBar` top rail replaces it.
+ */
+export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'condensed' | 'hidden' } = {}) {
   const navRef = useRef<HTMLElement | null>(null);
 
   // ─── Dynamic height sync ──────────────────────────────────────────────
   // The BottomNav's rendered height varies with viewport / safe-area / font
   // scaling. We measure it and publish the pixel value to
   // `--shell-nav-height` so every consumer (page padding, FAB clearance,
-  // /strategy main height) stays perfectly aligned with reality. This fixes
-  // composer/BottomNav collisions where the static 101px reserve under-
-  // estimated the actual ~140–150px footprint at certain breakpoints.
+  // /strategy main height) stays perfectly aligned with reality. When the
+  // variant is `hidden` we publish 0 so /strategy can reclaim the space.
   useEffect(() => {
+    const root = document.documentElement;
+    if (variant === 'hidden') {
+      root.style.setProperty('--shell-nav-height', '0');
+      return () => {
+        root.style.setProperty('--shell-nav-height', '101');
+      };
+    }
     const el = navRef.current;
     if (!el) return;
-    const root = document.documentElement;
     const apply = (h: number) => {
       if (h > 0) root.style.setProperty('--shell-nav-height', String(Math.round(h)));
     };
@@ -138,12 +156,17 @@ export function BottomNav() {
       // Restore design-system default so other mounts start from a known baseline.
       root.style.setProperty('--shell-nav-height', '101');
     };
-  }, []);
+  }, [variant]);
+
+  if (variant === 'hidden') return null;
+
+  const condensed = variant === 'condensed';
 
   return (
     <nav
       ref={navRef}
       data-testid="bottom-nav"
+      data-variant={variant}
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 pb-[env(safe-area-inset-bottom)] backdrop-blur-md"
       style={{ background: 'hsl(var(--card))' }}
     >
@@ -152,10 +175,14 @@ export function BottomNav() {
         <div className="flex items-center justify-around h-12">
           {navRow1.map(item => <NavItem key={item.to} item={item} />)}
         </div>
-        <div className="h-px bg-border/30 mx-4" />
-        <div className="flex items-center justify-around h-12">
-          {navRow2.map(item => <NavItem key={item.to} item={item} />)}
-        </div>
+        {!condensed && (
+          <>
+            <div className="h-px bg-border/30 mx-4" />
+            <div className="flex items-center justify-around h-12">
+              {navRow2.map(item => <NavItem key={item.to} item={item} />)}
+            </div>
+          </>
+        )}
       </div>
     </nav>
   );
