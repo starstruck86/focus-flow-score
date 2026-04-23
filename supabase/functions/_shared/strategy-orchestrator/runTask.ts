@@ -109,8 +109,22 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   const authoringStartedAt = Date.now();
   console.log(JSON.stringify({ tag: "stage-3:start", run_id: runId, stage: "document_authoring", model: authoringModel }));
 
-  const AUTHORING_TIMEOUT_MS = 100_000;
-  const AUTHORING_INNER_TIMEOUT_MS = 75_000;
+  // Monolithic authoring is best-effort and intentionally short-budgeted.
+  // Claude remains the FIRST authoring pass (policy), but we don't let the
+  // giant 19-section one-shot consume the entire stage budget on retries
+  // for an oversized payload. If Claude can't land the monolith inside
+  // ~60s, we hand off to the per-batch ladder where Claude is *still*
+  // first — just on payloads small enough to actually succeed.
+  // Outer race must stay below combined budget so section-batched rescue
+  // (10 batches × ~70s outer cap, sequential, runs only on monolithic
+  // total failure) is reachable inside the worker lifetime.
+  const AUTHORING_TIMEOUT_MS = 60_000;
+  const AUTHORING_INNER_TIMEOUT_MS = 45_000;
+  // Fallback (OpenAI) on the *monolithic* path is also short-budgeted —
+  // it is an exception-only safety net here, not the main path. The real
+  // safety net for sustained Claude failure is the per-batch ladder below,
+  // which is itself Claude-first per batch.
+  const MONOLITHIC_FALLBACK_TIMEOUT_MS = 60_000;
   let draftOutput: any;
   let sectionCount = 0;
   // Track the timeout id so we can clear it on success and not leak a
@@ -220,8 +234,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           }),
           new Promise<string>((_, reject) => {
             fallbackTimeoutId = setTimeout(
-              () => reject(new Error(`Fallback authoring timed out after ${AUTHORING_TIMEOUT_MS / 1000}s`)),
-              AUTHORING_TIMEOUT_MS,
+              () => reject(new Error(`Fallback authoring timed out after ${MONOLITHIC_FALLBACK_TIMEOUT_MS / 1000}s`)),
+              MONOLITHIC_FALLBACK_TIMEOUT_MS,
             );
           }),
         ]);
