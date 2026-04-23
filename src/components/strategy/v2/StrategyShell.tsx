@@ -770,6 +770,13 @@ export function StrategyShell() {
           messages={messages}
           isLoading={isLoading}
           isSending={isSending}
+          onPickPrompt={(prompt) => {
+            const ta = composerRef.current as
+              (HTMLTextAreaElement & { insertText?: (t: string) => void })
+              | null;
+            ta?.insertText?.(prompt);
+            requestAnimationFrame(() => ta?.focus());
+          }}
         />
 
       {trustState === 'blocked' ? (
