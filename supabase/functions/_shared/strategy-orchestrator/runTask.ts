@@ -124,7 +124,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // Fallback only triggers on transient/availability failures (404/429/5xx,
   // timeout, credits exhausted, unavailable) — NOT on logic/schema bugs
   // (which would also fail on the fallback and just waste the stage budget).
-  const FALLBACK_MODEL = "openai/gpt-5";
+  // NATIVE OpenAI API model id (no "openai/" gateway prefix).
+  // Sending "openai/gpt-5" to api.openai.com/v1/chat/completions returns 400.
+  const FALLBACK_MODEL = "gpt-5";
   const isFallbackEligible = (err: any): boolean => {
     const msg = String(err?.message || err || "").toLowerCase();
     if (err?.status === 429 || err?.status === 402) return true;
