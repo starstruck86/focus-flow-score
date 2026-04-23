@@ -12,6 +12,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyRedline, runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/runTask.ts";
+import { findRecentActiveRun } from "../_shared/strategy-orchestrator/idempotency.ts";
 import { failStalePendingRun } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";
 
 const corsHeaders = {
@@ -87,6 +88,30 @@ Deno.serve(async (req) => {
     // ── Start async generation ────────────────────────────────
     const { inputs } = body;
     if (!inputs?.company_name) return jsonResponse({ error: "inputs.company_name is required" }, 400);
+
+    // Pre-insert idempotency: converge near-simultaneous identical generates
+    // to the same run_id. Covers both threaded and thread-less callers.
+    try {
+      const existing = await findRecentActiveRun({
+        supabase, userId: user.id, taskType: "discovery_prep", inputs,
+      });
+      if (existing) {
+        console.log(JSON.stringify({
+          tag: "run-discovery-prep:idempotent_preinsert_hit",
+          run_id: existing.id,
+          status: existing.status,
+          had_thread_id: !!inputs?.thread_id,
+        }));
+        return jsonResponse({
+          run_id: existing.id,
+          status: existing.status,
+          task_type: "discovery_prep",
+          idempotent: true,
+        });
+      }
+    } catch (preErr) {
+      console.warn("[run-discovery-prep:preinsert_dedupe_error]", String(preErr).slice(0, 200));
+    }
 
     const { run_id, status } = await runStrategyTaskInBackground({
       userId: user.id,

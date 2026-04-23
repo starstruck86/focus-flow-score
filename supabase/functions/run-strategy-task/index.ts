@@ -12,6 +12,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyRedline, runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/runTask.ts";
+import { findRecentActiveRun } from "../_shared/strategy-orchestrator/idempotency.ts";
 import { failStalePendingRun, sweepStalePendingRuns } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";
 
 const corsHeaders = {
@@ -98,6 +99,31 @@ Deno.serve(async (req) => {
       }
     } catch (sweepErr) {
       console.warn("[run-strategy-task:sweep_error]", String(sweepErr).slice(0, 200));
+    }
+
+    // Pre-insert idempotency: converge near-simultaneous identical generates
+    // to the same run_id. Covers both threaded and thread-less callers.
+    try {
+      const existing = await findRecentActiveRun({
+        supabase, userId: user.id, taskType, inputs,
+      });
+      if (existing) {
+        console.log(JSON.stringify({
+          tag: "run-strategy-task:idempotent_preinsert_hit",
+          task_type: taskType,
+          run_id: existing.id,
+          status: existing.status,
+          had_thread_id: !!inputs?.thread_id,
+        }));
+        return jsonResponse({
+          run_id: existing.id,
+          status: existing.status,
+          task_type: taskType,
+          idempotent: true,
+        });
+      }
+    } catch (preErr) {
+      console.warn("[run-strategy-task:preinsert_dedupe_error]", String(preErr).slice(0, 200));
     }
 
     try {
