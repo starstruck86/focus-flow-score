@@ -196,7 +196,7 @@ export async function authorOneBatch(
  *  fragments from the full discovery_prep schema. Keeps the contract — the
  *  model still returns `{ sections: [...] }` — but only for the requested
  *  section ids, so each call is small and fast. */
-function buildBatchUserPrompt(
+export function buildBatchUserPrompt(
   baseUserPrompt: string,
   sectionIds: string[],
 ): string {
