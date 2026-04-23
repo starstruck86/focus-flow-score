@@ -797,8 +797,29 @@ export function StrategyShell() {
           onAttachFiles={() => slashFileInputRef.current?.click()}
         />
       )}
+      </div>
+      {/* End center column */}
 
-      {/* Summoned surfaces — portals, no layout shift */}
+      {/* Right-side artifact workspace (desktop only) */}
+      {showArtifactPanel && latestCompleted && (
+        <ArtifactWorkspace
+          result={latestCompleted.result}
+          onClose={() => setArtifactPanelOpen(false)}
+        />
+      )}
+
+      {/* Mobile artifact sheet */}
+      {isMobile && latestCompleted && (
+        <Sheet open={artifactPanelOpen} onOpenChange={setArtifactPanelOpen}>
+          <SheetContent side="right" className="p-0 w-full sm:w-[480px]">
+            <ArtifactWorkspace
+              result={latestCompleted.result}
+              onClose={() => setArtifactPanelOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
+      )}
+
       <StrategySwitcher
         open={switcherOpen}
         threads={threads}
