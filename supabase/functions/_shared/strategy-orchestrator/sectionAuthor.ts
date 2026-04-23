@@ -23,19 +23,24 @@
 import { callClaude, callOpenAI, safeParseJSON } from "./providers.ts";
 import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
 
-/** A small, fixed grouping of section ids. Tuned so each batch's expected
- *  output stays well under the per-call token budget and inner timeout. */
+/** A small, fixed grouping of section ids. Tightened to ≤2 sections per
+ *  batch so each Claude-first authoring call lands inside its inner
+ *  timeout on the first attempt — fallback (ChatGPT) stays exception-only
+ *  per the model policy. Larger groupings starved fallback / forced the
+ *  per-batch ladder to lean on retries. */
 const DISCOVERY_PREP_BATCHES: { ids: string[] }[] = [
-  { ids: ["cockpit"] },                                       // largest single section
+  { ids: ["cockpit"] },                                 // largest single section
   { ids: ["cover", "participants"] },
-  { ids: ["cx_audit", "executive_snapshot"] },
+  { ids: ["cx_audit"] },
+  { ids: ["executive_snapshot"] },
   { ids: ["value_selling", "discovery_questions"] },
-  { ids: ["customer_examples", "pivot_statements", "objection_handling"] },
+  { ids: ["customer_examples", "pivot_statements"] },
+  { ids: ["objection_handling"] },
   { ids: ["marketing_team", "exit_criteria"] },
   { ids: ["revenue_pathway", "metrics_intelligence"] },
   { ids: ["loyalty_analysis", "tech_stack"] },
   { ids: ["competitive_war_game", "hypotheses_risks"] },
-  { ids: ["appendix"] },                                      // largest single section
+  { ids: ["appendix"] },                                // largest single section
 ];
 
 const SECTION_INNER_TIMEOUT_MS = 60_000;
