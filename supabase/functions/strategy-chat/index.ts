@@ -5118,23 +5118,38 @@ async function handleChat(
     // the user row we just inserted).
     if (detectAffirmative(content || "")) {
       try {
+        // Look back across the last 3 assistant messages for a pending
+        // lookup. We scan multiple rows so a benign system-emitted message
+        // (e.g. a streaming heartbeat or an empty placeholder) between the
+        // offer and the user's "yes" can't strand the pending action.
         const { data: prior } = await supabase
           .from("strategy_messages")
           .select("id, role, content_json, created_at")
           .eq("thread_id", threadId)
           .eq("role", "assistant")
           .order("created_at", { ascending: false })
-          .limit(1);
-        const last = Array.isArray(prior) && prior.length ? prior[0] : null;
-        const pending = (last?.content_json as any)?.pending_action as
-          | PendingLookupAction
-          | undefined;
-        const fromPending = pendingActionToIntent(pending ?? null);
+          .limit(3);
+        const candidates = Array.isArray(prior) ? prior : [];
+        let fromPending: LookupIntent | null = null;
+        let resumedFromMessageId: string | null = null;
+        for (const row of candidates) {
+          const pending = (row?.content_json as any)?.pending_action as
+            | PendingLookupAction
+            | undefined;
+          const intent = pendingActionToIntent(pending ?? null);
+          if (intent) {
+            fromPending = intent;
+            resumedFromMessageId = row.id;
+            break;
+          }
+        }
         if (fromPending) {
           lookupIntent = fromPending;
           console.log(JSON.stringify({
             tag: "[strategy-chat:lookup_resume_pending]",
             thread_id: threadId,
+            resumed_from_message_id: resumedFromMessageId,
+            scanned: candidates.length,
             topic: fromPending.topic,
             kind: fromPending.kind,
             target: fromPending.target,
