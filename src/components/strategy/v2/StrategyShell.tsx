@@ -178,6 +178,21 @@ export function StrategyShell() {
   const { memories } = useStrategyMemory(memoryObjectType, memoryObjectId);
   const { uploads, uploadFiles } = useStrategyUploads(threadId);
   const { artifacts } = useStrategyArtifacts(threadId);
+  const { active: activeRun, latestCompleted } = useThreadTaskRuns(threadId);
+  const { rows: allTaskRunsForThread } = useThreadTaskRuns(null); // no-op placeholder; per-thread indicators below
+
+  // Track which run id was most recently observed in-flight, so we can show
+  // "freshly completed" copy on the inline artifact card.
+  const [recentlyCompletedRunId, setRecentlyCompletedRunId] = useState<string | null>(null);
+  const prevActiveIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevActiveIdRef.current && !activeRun && latestCompleted?.row.id === prevActiveIdRef.current) {
+      setRecentlyCompletedRunId(latestCompleted.row.id);
+      setArtifactPanelOpen(true);
+    }
+    prevActiveIdRef.current = activeRun?.id ?? null;
+  }, [activeRun, latestCompleted?.row.id]);
+
   const { proposals } = useStrategyProposals(threadId);
 
   // Phase 2 — selection + save gesture
