@@ -9,19 +9,24 @@
 import { useEffect, useRef } from 'react';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 import { StrategyMessage } from './StrategyMessage';
+import { StrategyEmptyState } from './StrategyEmptyState';
 
 interface Props {
   messages: StrategyMessageT[];
   isLoading: boolean;
   isSending: boolean;
+  /** Called when a user clicks an empty-state prompt chip. */
+  onPickPrompt?: (prompt: string) => void;
 }
 
-export function StrategyCanvas({ messages, isLoading, isSending }: Props) {
+export function StrategyCanvas({ messages, isLoading, isSending, onPickPrompt }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [messages.length, isSending]);
+
+  const showEmptyState = !isLoading && !isSending && messages.length === 0;
 
   return (
     <div
@@ -32,7 +37,9 @@ export function StrategyCanvas({ messages, isLoading, isSending }: Props) {
         className="mx-auto px-6 pt-12 pb-32"
         style={{ maxWidth: 760 }}
       >
-        {/* Empty state intentionally blank — invitation lives in composer placeholder */}
+        {showEmptyState && onPickPrompt && (
+          <StrategyEmptyState onPickPrompt={onPickPrompt} />
+        )}
         {messages.map((m, i) => (
           <div key={m.id} style={{ marginTop: i === 0 ? 0 : 32 }}>
             <StrategyMessage message={m} />

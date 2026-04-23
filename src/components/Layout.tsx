@@ -363,15 +363,17 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
       <BackToToday />
       {!hideFloatingFab && location.pathname !== '/strategy' && <GlobalFAB position="bottom-left" />}
 
-      {/* Dave is the PRIMARY floating action — bottom-right, thumb-accessible */}
-      {!daveDrift && !hideFloatingFab && (
+      {/* Dave is the PRIMARY floating action — bottom-right, thumb-accessible.
+          Hidden on /strategy mobile so it doesn't overlap the composer send arrow.
+          Desktop /strategy keeps the FAB (no overlap there). */}
+      {!daveDrift && !hideFloatingFab && !(location.pathname === '/strategy') && (
         <DaveMicFAB
           onTap={handleOpenDave}
           isLoading={isFetchingDaveSession}
           isActive={daveOpen}
         />
       )}
-      {daveDrift && !daveOpen && !hideFloatingFab && (
+      {daveDrift && !daveOpen && !hideFloatingFab && !(location.pathname === '/strategy') && (
         <div className={`fixed right-4 ${SHELL.fab.bottom} z-50`}>
           <button
             onClick={() => toast.error(
