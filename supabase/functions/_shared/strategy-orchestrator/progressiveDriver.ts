@@ -174,12 +174,24 @@ export async function processOneBatch(args: {
   );
 
   const ok = result.sections.length > 0;
+  // Standardized model attribution per batch:
+  //   "claude"           → Claude authored on first try
+  //   "openai_fallback"  → Claude failed, OpenAI fallback succeeded
+  //   "none"             → both failed (placeholder will be assembled)
+  const modelUsed: "claude" | "openai_fallback" | "none" =
+    result.primary_status === "success"
+      ? "claude"
+      : result.fallback_status === "success"
+        ? "openai_fallback"
+        : "none";
+
   await supabase
     .from("task_run_sections")
     .update({
       status: ok ? "completed" : "failed",
       primary_status: result.primary_status,
       fallback_status: result.fallback_status ?? null,
+      model_used: modelUsed,
       sections: result.sections,
       error: result.error ?? null,
       completed_at: new Date().toISOString(),
@@ -285,6 +297,20 @@ export async function assembleAndFinalize(args: {
 
   // Merge progressive metadata + authoring telemetry.
   const meta = (runRow?.meta as any) || {};
+  const totalBatches = (rows as any[]).length;
+  const fallbackBatches = (rows as any[]).filter((r) => r.fallback_status === "success").length;
+  const fallbackPct = totalBatches > 0 ? fallbackBatches / totalBatches : 0;
+  const driftWarning = fallbackPct > 0.30;
+  if (driftWarning) {
+    console.warn(JSON.stringify({
+      tag: "[authoring:drift_warning]",
+      run_id: runId,
+      fallback_batches: fallbackBatches,
+      total_batches: totalBatches,
+      fallback_pct: Number(fallbackPct.toFixed(3)),
+      threshold: 0.30,
+    }));
+  }
   const newMeta = {
     ...meta,
     authoring_progressive: {
@@ -293,6 +319,9 @@ export async function assembleAndFinalize(args: {
       sections_claude_authored: claudeAuthored,
       sections_fallback_authored: fallbackAuthored,
       batches_failed: failedBatches,
+      batches_total: totalBatches,
+      fallback_pct: Number(fallbackPct.toFixed(3)),
+      drift_warning: driftWarning,
       assembled_at: new Date().toISOString(),
     },
   };
