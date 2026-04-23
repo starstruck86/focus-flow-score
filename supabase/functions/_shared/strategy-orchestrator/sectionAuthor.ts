@@ -145,6 +145,17 @@ export async function authorOneBatch(
     { role: "user", content: userPrompt },
   ];
 
+  const { inner: innerMs, outer: outerMs, heavy } = timeoutsForBatch(sectionIds);
+  if (heavy) {
+    console.log(JSON.stringify({
+      tag: "[section-author:heavy_singleton_override]",
+      run_id: args.runId,
+      batch: sectionIds,
+      inner_ms: innerMs,
+      outer_ms: outerMs,
+    }));
+  }
+
   // Primary: Claude
   try {
     const raw = await withTimeout(
@@ -152,10 +163,10 @@ export async function authorOneBatch(
         model: PRIMARY_MODEL,
         maxTokens: 8000,
         temperature: 0.3,
-        timeoutMs: SECTION_INNER_TIMEOUT_MS,
+        timeoutMs: innerMs,
         maxAttempts: 1,
       }),
-      SECTION_OUTER_TIMEOUT_MS,
+      outerMs,
       `[section-author:claude] batch=${sectionIds.join(",")}`,
     );
     const parsed = safeParseJSON<any>(raw);
@@ -185,7 +196,7 @@ export async function authorOneBatch(
           temperature: 0.3,
           maxTokens: 8000,
         }),
-        SECTION_OUTER_TIMEOUT_MS,
+        outerMs,
         `[section-author:openai] batch=${sectionIds.join(",")}`,
       );
       const parsed = safeParseJSON<any>(raw);
