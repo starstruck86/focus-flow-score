@@ -219,8 +219,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     } catch (claudeErr: any) {
       if (authoringTimeoutId) { clearTimeout(authoringTimeoutId); authoringTimeoutId = null; }
       const claudeMsg = String(claudeErr?.message || claudeErr);
-      if (!forceAuthoringFailure && !isFallbackEligible(claudeErr)) {
-        // Non-transient (e.g. invalid prompt/schema bug) — propagate as before.
+      // For BOUNDED_BATCH_FIRST runs, claudeErr is a synthetic skip-marker;
+      // do NOT apply the transient-only filter (it would propagate).
+      if (!BOUNDED_BATCH_FIRST && !forceAuthoringFailure && !isFallbackEligible(claudeErr)) {
         throw claudeErr;
       }
       primaryErrForLog = claudeMsg;
@@ -231,13 +232,83 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         fallback_model: FALLBACK_MODEL,
         primary_error: claudeMsg.slice(0, 300),
         forced: forceAuthoringFailure,
+        bounded_batch_first: BOUNDED_BATCH_FIRST,
       }));
       const fallbackStartedAt = Date.now();
       console.log(JSON.stringify({
         tag: "[authoring:fallback_start]",
         run_id: runId,
         fallback_model: FALLBACK_MODEL,
+        bounded_batch_first: BOUNDED_BATCH_FIRST,
       }));
+
+      // BOUNDED_BATCH_FIRST: skip monolithic OpenAI fallback, go straight
+      // to per-batch ladder (Claude-first per batch). This IS the primary
+      // authoring path for discovery_prep.
+      if (BOUNDED_BATCH_FIRST) {
+        console.warn(JSON.stringify({
+          tag: "[authoring:section_batch_rescue_start]",
+          run_id: runId,
+          task_type: taskType,
+          reason: "bounded_batch_first",
+        }));
+        const rescue = await authorBySectionBatches({
+          runId,
+          taskType,
+          systemPrompt: handler.buildDocumentSystemPrompt(),
+          baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
+          synthesis,
+        });
+        if (rescue.sections_authored > 0) {
+          console.log(JSON.stringify({
+            tag: "[authoring:section_batch_rescue_success]",
+            run_id: runId,
+            sections_authored: rescue.sections_authored,
+            sections_total: rescue.draft.sections.length,
+            any_fallback_success: rescue.any_fallback_success,
+            bounded_batch_first: true,
+          }));
+          documentRaw = JSON.stringify(rescue.draft);
+          fallbackMeta = {
+            triggered: false,
+            bounded_batch_first: true,
+            primary_model: authoringModel,
+            fallback_model: FALLBACK_MODEL,
+            success: true,
+            forced: forceAuthoringFailure,
+            section_batch_rescue: {
+              used: true,
+              primary_path: true,
+              sections_authored: rescue.sections_authored,
+              sections_total: rescue.draft.sections.length,
+              any_fallback_success: rescue.any_fallback_success,
+              batches: rescue.batchOutcomes,
+            },
+          };
+        } else {
+          fallbackMeta = {
+            triggered: false,
+            bounded_batch_first: true,
+            primary_model: authoringModel,
+            fallback_model: FALLBACK_MODEL,
+            success: false,
+            forced: forceAuthoringFailure,
+            section_batch_rescue: {
+              used: true,
+              primary_path: true,
+              sections_authored: 0,
+              sections_total: rescue.draft.sections.length,
+              any_fallback_success: false,
+              batches: rescue.batchOutcomes,
+            },
+          };
+          try {
+            await supabase.from("task_runs").update({ meta: { authoring_fallback: fallbackMeta } }).eq("id", runId);
+          } catch { /* swallow */ }
+          throw new Error(`bounded_batch_first: 0/${rescue.draft.sections.length} sections authored`);
+        }
+        // Done — skip legacy monolithic fallback below.
+      } else {
 
       let fallbackTimeoutId: ReturnType<typeof setTimeout> | null = null;
       try {
