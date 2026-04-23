@@ -364,17 +364,24 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
       {!hideFloatingFab && location.pathname !== '/strategy' && <GlobalFAB position="bottom-left" />}
 
       {/* Dave is the PRIMARY floating action — bottom-right, thumb-accessible.
-          Hidden on /strategy mobile so it doesn't overlap the composer send arrow.
-          Desktop /strategy keeps the FAB (no overlap there). */}
-      {!daveDrift && !hideFloatingFab && !(location.pathname === '/strategy') && (
-        <DaveMicFAB
-          onTap={handleOpenDave}
-          isLoading={isFetchingDaveSession}
-          isActive={daveOpen}
-        />
+          On /strategy we hide on mobile only (md:hidden) to avoid overlapping the
+          composer send arrow. Desktop /strategy keeps the FAB. */}
+      {!daveDrift && !hideFloatingFab && (
+        <div className={location.pathname === '/strategy' ? 'hidden md:block' : 'contents'}>
+          <DaveMicFAB
+            onTap={handleOpenDave}
+            isLoading={isFetchingDaveSession}
+            isActive={daveOpen}
+          />
+        </div>
       )}
-      {daveDrift && !daveOpen && !hideFloatingFab && !(location.pathname === '/strategy') && (
-        <div className={`fixed right-4 ${SHELL.fab.bottom} z-50`}>
+      {daveDrift && !daveOpen && !hideFloatingFab && (
+        <div
+          className={cn(
+            `fixed right-4 ${SHELL.fab.bottom} z-50`,
+            location.pathname === '/strategy' && 'hidden md:flex',
+          )}
+        >
           <button
             onClick={() => toast.error(
               `Dave is unavailable: deployment version mismatch (${daveDrift.expected} vs ${daveDrift.actual}). Redeploy dave functions to fix.`,
