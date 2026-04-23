@@ -87,6 +87,24 @@ const SIDEBAR_COLLAPSED_KEY = 'sv-sidebar-collapsed';
 export function StrategyShell() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
+
+  // Sidebar (left) — persisted collapse, mobile sheet
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+  });
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((c) => {
+      const next = !c;
+      try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  // Artifact workspace (right) — opened via inline card or completion event
+  const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
 
   const {
     threads,
