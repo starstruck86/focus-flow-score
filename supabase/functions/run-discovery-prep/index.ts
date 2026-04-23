@@ -12,6 +12,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyRedline, runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/runTask.ts";
+import { failStalePendingRun } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,33 +57,9 @@ Deno.serve(async (req) => {
         .single();
       if (error || !row) return jsonResponse({ error: "Run not found" }, 404);
 
-      // Stale-run reaper. If a row is still `pending` but hasn't been
-      // touched in >7 minutes, the background promise is dead (edge worker
-      // recycled, provider socket hung past timeout, etc.). Mark it failed
-      // so the UI exits the loading state and the user can retry.
       let effectiveRow = row as any;
       if (row.status === "pending") {
-        const lastUpdate = new Date(row.updated_at).getTime();
-        const ageMs = Date.now() - lastUpdate;
-        if (ageMs > 7 * 60 * 1000) {
-          await supabase
-            .from("task_runs")
-            .update({
-              status: "failed",
-              progress_step: "failed",
-              error: `Run stalled at "${row.progress_step || "unknown"}" (no progress for ${Math.round(ageMs / 1000)}s). Please retry.`,
-              completed_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", runId)
-            .eq("user_id", user.id);
-          effectiveRow = {
-            ...row,
-            status: "failed",
-            progress_step: "failed",
-            error: `Run stalled at "${row.progress_step || "unknown"}" (no progress for ${Math.round(ageMs / 1000)}s). Please retry.`,
-          };
-        }
+        effectiveRow = await failStalePendingRun({ supabase, row, runId, userId: user.id });
       }
 
       return jsonResponse({
