@@ -261,7 +261,32 @@ export async function authorBySectionBatches(args: {
     fallback_model: FALLBACK_MODEL,
   }));
 
+  let batchIndex = 0;
   for (const batch of DISCOVERY_PREP_BATCHES) {
+    batchIndex++;
+    // ── Heartbeat: refresh updated_at + progress_step between batches so
+    // the document_authoring stale-run watchdog (which only sees elapsed
+    // time on updated_at) doesn't reap a healthy long-running batch
+    // sequence as stalled. Best-effort; failures are swallowed so the
+    // ladder always continues.
+    if (args.supabase) {
+      try {
+        await args.supabase
+          .from("task_runs")
+          .update({
+            progress_step: `document_authoring:batch_${batchIndex}_of_${DISCOVERY_PREP_BATCHES.length}`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", args.runId);
+      } catch (e) {
+        console.warn(JSON.stringify({
+          tag: "[section-author:heartbeat_failed]",
+          run_id: args.runId,
+          batch_index: batchIndex,
+          error: String((e as Error)?.message || e).slice(0, 200),
+        }));
+      }
+    }
     const startedAt = Date.now();
     const result = await authorOneBatch(
       {
