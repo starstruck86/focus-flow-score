@@ -58,14 +58,15 @@ export function StrategyProgressPanel({ active }: Props) {
 
   return (
     <div
-      className="mx-auto"
+      className="mx-auto sv-enter-fade"
       style={{ maxWidth: 760, width: '100%', padding: '8px 24px 0' }}
     >
       <div
         className="rounded-[8px] px-3.5 py-2.5"
         style={{
           border: '1px solid hsl(var(--sv-hairline))',
-          background: 'hsl(var(--sv-hover) / 0.5)',
+          background: 'hsl(var(--sv-paper))',
+          boxShadow: 'var(--sv-shadow-e1)',
         }}
       >
         <div className="flex items-center gap-2">
@@ -74,36 +75,49 @@ export function StrategyProgressPanel({ active }: Props) {
             {label}
           </span>
           {batch && (
-            <span className="text-[11px] tabular-nums" style={{ color: 'hsl(var(--sv-muted))' }}>
-              {batch.current}/{batch.total}
+            <span
+              className="text-[11px] tabular-nums px-1.5 py-0.5 rounded-[3px]"
+              style={{
+                color: 'hsl(var(--sv-muted))',
+                background: 'hsl(var(--sv-hover))',
+              }}
+            >
+              {batch.current} / {batch.total}
             </span>
           )}
           <span className="flex-1" />
-          {fallbackPct !== null && (
+          {fallbackPct !== null && fallbackPct > 0 && (
             <span
               className="text-[10px] font-mono px-1.5 py-0.5 rounded-[3px]"
               style={{
                 color: driftWarning ? 'hsl(var(--sv-amber))' : 'hsl(var(--sv-muted))',
-                background: driftWarning ? 'hsl(var(--sv-amber) / 0.1)' : 'transparent',
+                background: driftWarning ? 'hsl(var(--sv-amber) / 0.1)' : 'hsl(var(--sv-hover) / 0.6)',
               }}
               title={driftWarning ? 'Fallback usage above 30%' : 'Fallback authoring rate'}
             >
-              fallback {Math.round(fallbackPct * 100)}%
+              {Math.round(fallbackPct * 100)}% fallback
             </span>
           )}
         </div>
-        {pct !== null && (
+        {pct !== null ? (
           <div
-            className="mt-2 h-1 rounded-full overflow-hidden"
+            className="mt-2 h-[3px] rounded-full overflow-hidden"
             style={{ background: 'hsl(var(--sv-hairline))' }}
           >
             <div
-              className="h-full transition-all duration-500"
+              className="h-full transition-all duration-700 ease-out"
               style={{
                 width: `${pct}%`,
                 background: 'hsl(var(--sv-clay))',
               }}
             />
+          </div>
+        ) : (
+          <div
+            className="mt-2 h-[3px] rounded-full overflow-hidden"
+            style={{ background: 'hsl(var(--sv-hairline))' }}
+          >
+            <div className="h-full sv-bar-shimmer" style={{ width: '40%' }} />
           </div>
         )}
       </div>

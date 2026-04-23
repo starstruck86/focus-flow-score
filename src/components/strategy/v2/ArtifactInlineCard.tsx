@@ -67,7 +67,7 @@ export function ArtifactInlineCard({ title, result, freshlyCompleted, onOpen }: 
   return (
     <div
       data-strategy-artifact-card
-      className="rounded-[10px] my-2"
+      className={`rounded-[10px] my-2 ${freshlyCompleted ? 'sv-artifact-highlight' : 'sv-enter-fade'}`}
       style={{
         border: '1px solid hsl(var(--sv-hairline))',
         background: 'hsl(var(--sv-paper))',
