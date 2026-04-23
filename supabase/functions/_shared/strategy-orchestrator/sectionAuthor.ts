@@ -228,6 +228,10 @@ export async function authorBySectionBatches(args: {
   systemPrompt: string;
   baseUserPrompt: string;
   synthesis: any;
+  /** Optional Supabase client used to heartbeat task_runs.updated_at
+   *  between batches so the stage watchdog doesn't reap a healthy run
+   *  mid-ladder. Best-effort; failures are swallowed. */
+  supabase?: any;
 }): Promise<SectionBatchResult> {
   // Only discovery_prep has a defined batch plan today. Other task types
   // can plug in by exporting their own batch list later — for now we just
