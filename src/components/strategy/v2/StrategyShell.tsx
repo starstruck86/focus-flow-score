@@ -71,13 +71,40 @@ import {
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal } from 'lucide-react';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { MoreHorizontal, PanelLeft } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { StrategyThreadsSidebar } from './StrategyThreadsSidebar';
+import { StrategyProgressPanel } from './StrategyProgressPanel';
+import { ArtifactInlineCard } from './ArtifactInlineCard';
+import { ArtifactWorkspace } from './ArtifactWorkspace';
+import { useThreadTaskRuns } from '@/hooks/strategy/useThreadTaskRuns';
 
 import '@/styles/strategy-v2.css';
+
+const SIDEBAR_COLLAPSED_KEY = 'sv-sidebar-collapsed';
 
 export function StrategyShell() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
+
+  // Sidebar (left) — persisted collapse, mobile sheet
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+  });
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((c) => {
+      const next = !c;
+      try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  // Artifact workspace (right) — opened via inline card or completion event
+  const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
 
   const {
     threads,
@@ -151,6 +178,21 @@ export function StrategyShell() {
   const { memories } = useStrategyMemory(memoryObjectType, memoryObjectId);
   const { uploads, uploadFiles } = useStrategyUploads(threadId);
   const { artifacts } = useStrategyArtifacts(threadId);
+  const { active: activeRun, latestCompleted } = useThreadTaskRuns(threadId);
+  const { rows: allTaskRunsForThread } = useThreadTaskRuns(null); // no-op placeholder; per-thread indicators below
+
+  // Track which run id was most recently observed in-flight, so we can show
+  // "freshly completed" copy on the inline artifact card.
+  const [recentlyCompletedRunId, setRecentlyCompletedRunId] = useState<string | null>(null);
+  const prevActiveIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevActiveIdRef.current && !activeRun && latestCompleted?.row.id === prevActiveIdRef.current) {
+      setRecentlyCompletedRunId(latestCompleted.row.id);
+      setArtifactPanelOpen(true);
+    }
+    prevActiveIdRef.current = activeRun?.id ?? null;
+  }, [activeRun, latestCompleted?.row.id]);
+
   const { proposals } = useStrategyProposals(threadId);
 
   // Phase 2 — selection + save gesture
@@ -604,58 +646,131 @@ export function StrategyShell() {
     return null;
   }, [linkedContext]);
 
+  // Per-thread indicators for sidebar (in-flight + has-artifact)
+  // We use the active thread's signals as a minimum; richer cross-thread
+  // dots can be layered later without touching the engine.
+  const runningThreadIds = useMemo(() => {
+    const s = new Set<string>();
+    if (activeRun && threadId) s.add(threadId);
+    return s;
+  }, [activeRun, threadId]);
+  const artifactThreadIds = useMemo(() => {
+    const s = new Set<string>();
+    if (latestCompleted && threadId) s.add(threadId);
+    return s;
+  }, [latestCompleted, threadId]);
+
+  const sidebarNode = (onAfterSelect?: () => void) => (
+    <StrategyThreadsSidebar
+      threads={threads}
+      activeThreadId={threadId}
+      onSelectThread={(id) => setActiveThreadId(id)}
+      onNewThread={() => handleNewThread()}
+      collapsed={sidebarCollapsed}
+      onToggleCollapsed={toggleSidebar}
+      runningThreadIds={runningThreadIds}
+      artifactThreadIds={artifactThreadIds}
+      onAfterSelect={onAfterSelect}
+    />
+  );
+
+  const showArtifactPanel = artifactPanelOpen && latestCompleted && !isMobile;
+
   return (
     <div
-      className="strategy-v2 flex flex-col flex-1 min-h-0 w-full"
+      className="strategy-v2 flex flex-1 min-h-0 w-full"
       style={{ background: 'hsl(var(--sv-paper))' }}
     >
-      <StrategyTopBar
-        title={activeThread?.title ?? 'Untitled thread'}
-        onTitleChange={(next) => activeThread && updateThread(activeThread.id, { title: next })}
-        entityName={entityName}
-        trustState={trustState}
-        unresolvedProposalCount={unresolvedProposalCount}
-        onOpenSwitcher={() => setSwitcherOpen(true)}
-        onOpenInspector={() => setInspectorOpen(true)}
-        onChipClick={() => setLinkPickerOpen(true)}
-        chipRef={chipRef}
-        onNewThread={() => handleNewThread()}
-      />
+      {/* Desktop persistent sidebar */}
+      {!isMobile && sidebarNode()}
 
-      {/* Cycle 1 — canary review pill (operator workflow entry point) */}
-      <div className="shrink-0 w-full flex items-center justify-end gap-1 px-4 py-1" style={{ borderBottom: '1px solid hsl(var(--sv-hairline))' }}>
-        <CanaryReviewPill lastReview={lastCanaryReview} onClick={openCanaryReview} />
-        {user && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Strategy options">
-                <MoreHorizontal className="h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="text-xs">Operator</DropdownMenuLabel>
-              <DropdownMenuCheckboxItem
-                checked={isCanary}
-                disabled={isAllowlisted}
-                onCheckedChange={(checked) => setLocalEnabled(!!checked)}
-              >
-                Canary mode
-                {isAllowlisted && <span className="ml-auto text-[10px] text-muted-foreground">allowlisted</span>}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setValidationDrawerOpen(true)}>
-                Validation status…
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+      {/* Mobile sidebar drawer */}
+      {isMobile && (
+        <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+          <SheetContent side="left" className="p-0 w-[280px]">
+            {sidebarNode(() => setMobileSidebarOpen(false))}
+          </SheetContent>
+        </Sheet>
+      )}
+
+      {/* Center column — chat */}
+      <div className="flex flex-col flex-1 min-w-0 min-h-0">
+        <div className="flex items-center gap-1" style={{ borderBottom: '1px solid hsl(var(--sv-hairline))' }}>
+          {isMobile && (
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="h-9 w-9 flex items-center justify-center sv-hover-bg shrink-0"
+              style={{ color: 'hsl(var(--sv-muted))' }}
+              aria-label="Open threads"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
+          )}
+          <div className="flex-1 min-w-0">
+            <StrategyTopBar
+              title={activeThread?.title ?? 'Untitled thread'}
+              onTitleChange={(next) => activeThread && updateThread(activeThread.id, { title: next })}
+              entityName={entityName}
+              trustState={trustState}
+              unresolvedProposalCount={unresolvedProposalCount}
+              onOpenSwitcher={() => setSwitcherOpen(true)}
+              onOpenInspector={() => setInspectorOpen(true)}
+              onChipClick={() => setLinkPickerOpen(true)}
+              chipRef={chipRef}
+              onNewThread={() => handleNewThread()}
+            />
+          </div>
+        </div>
+
+        {/* Cycle 1 — canary review pill */}
+        <div className="shrink-0 w-full flex items-center justify-end gap-1 px-4 py-1" style={{ borderBottom: '1px solid hsl(var(--sv-hairline))' }}>
+          <CanaryReviewPill lastReview={lastCanaryReview} onClick={openCanaryReview} />
+          {user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Strategy options">
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="text-xs">Operator</DropdownMenuLabel>
+                <DropdownMenuCheckboxItem
+                  checked={isCanary}
+                  disabled={isAllowlisted}
+                  onCheckedChange={(checked) => setLocalEnabled(!!checked)}
+                >
+                  Canary mode
+                  {isAllowlisted && <span className="ml-auto text-[10px] text-muted-foreground">allowlisted</span>}
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setValidationDrawerOpen(true)}>
+                  Validation status…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+
+        {/* Live progress strip */}
+        <StrategyProgressPanel active={activeRun} />
+
+        {/* Inline artifact card — surfaces completed deep-work without dumping content */}
+        {latestCompleted && (
+          <div className="mx-auto w-full px-6 pt-3" style={{ maxWidth: 760 }}>
+            <ArtifactInlineCard
+              title={`Discovery Prep`}
+              result={latestCompleted.result}
+              freshlyCompleted={recentlyCompletedRunId === latestCompleted.row.id}
+              onOpen={() => setArtifactPanelOpen(true)}
+            />
+          </div>
         )}
-      </div>
 
-      <StrategyCanvas
-        messages={messages}
-        isLoading={isLoading}
-        isSending={isSending}
-      />
+        <StrategyCanvas
+          messages={messages}
+          isLoading={isLoading}
+          isSending={isSending}
+        />
 
       {trustState === 'blocked' ? (
         <BlockedComposer
@@ -682,8 +797,29 @@ export function StrategyShell() {
           onAttachFiles={() => slashFileInputRef.current?.click()}
         />
       )}
+      </div>
+      {/* End center column */}
 
-      {/* Summoned surfaces — portals, no layout shift */}
+      {/* Right-side artifact workspace (desktop only) */}
+      {showArtifactPanel && latestCompleted && (
+        <ArtifactWorkspace
+          result={latestCompleted.result}
+          onClose={() => setArtifactPanelOpen(false)}
+        />
+      )}
+
+      {/* Mobile artifact sheet */}
+      {isMobile && latestCompleted && (
+        <Sheet open={artifactPanelOpen} onOpenChange={setArtifactPanelOpen}>
+          <SheetContent side="right" className="p-0 w-full sm:w-[480px]">
+            <ArtifactWorkspace
+              result={latestCompleted.result}
+              onClose={() => setArtifactPanelOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
+      )}
+
       <StrategySwitcher
         open={switcherOpen}
         threads={threads}
