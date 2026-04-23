@@ -234,8 +234,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           }),
           new Promise<string>((_, reject) => {
             fallbackTimeoutId = setTimeout(
-              () => reject(new Error(`Fallback authoring timed out after ${AUTHORING_TIMEOUT_MS / 1000}s`)),
-              AUTHORING_TIMEOUT_MS,
+              () => reject(new Error(`Fallback authoring timed out after ${MONOLITHIC_FALLBACK_TIMEOUT_MS / 1000}s`)),
+              MONOLITHIC_FALLBACK_TIMEOUT_MS,
             );
           }),
         ]);
