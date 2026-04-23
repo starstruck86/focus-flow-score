@@ -7474,6 +7474,68 @@ export type Database = {
         }
         Relationships: []
       }
+      task_run_sections: {
+        Row: {
+          attempts: number
+          batch_index: number
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          fallback_status: string | null
+          id: string
+          primary_status: string | null
+          run_id: string
+          section_ids: string[]
+          sections: Json
+          started_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          batch_index: number
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          fallback_status?: string | null
+          id?: string
+          primary_status?: string | null
+          run_id: string
+          section_ids: string[]
+          sections?: Json
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          batch_index?: number
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          fallback_status?: string | null
+          id?: string
+          primary_status?: string | null
+          run_id?: string
+          section_ids?: string[]
+          sections?: Json
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_run_sections_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "task_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_runs: {
         Row: {
           account_id: string | null
