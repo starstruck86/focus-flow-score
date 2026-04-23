@@ -5,7 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   ArrowLeft, FileText, MessageSquareWarning, Check, Download,
-  ChevronDown, ChevronUp, Pencil, Loader2, FileDown,
+  ChevronDown, ChevronUp, Pencil, Loader2, FileDown, Copy, Star,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeTaskRunResult, type TaskRunResult, type Redline, type DiscoverySection } from '@/hooks/strategy/useTaskExecution';
@@ -277,6 +277,7 @@ export function TaskOutputViewer({ result, onBack, onApplyRedline, onRejectRedli
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(sections.map((s) => s.id))
   );
+  const [importantSections, setImportantSections] = useState<Set<string>>(new Set());
   const [isDownloading, setIsDownloading] = useState<'docx' | 'pdf' | null>(null);
 
   const companyName = sections.find(s => s.id === 'cover')?.content?.opportunity
@@ -290,6 +291,27 @@ export function TaskOutputViewer({ result, onBack, onApplyRedline, onRejectRedli
       return next;
     });
   };
+
+  const toggleImportant = (id: string) => {
+    setImportantSections(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const copySection = useCallback(async (section: DiscoverySection) => {
+    try {
+      const c = section.content;
+      const body = typeof c === 'string'
+        ? c
+        : (() => { try { return JSON.stringify(c, null, 2); } catch { return ''; } })();
+      await navigator.clipboard.writeText(`## ${section.name}\n\n${body}`);
+      toast.success(`Copied "${section.name}"`);
+    } catch {
+      toast.error('Could not copy section');
+    }
+  }, []);
 
   const handleDownloadDocx = useCallback(async () => {
     setIsDownloading('docx');
@@ -390,17 +412,23 @@ export function TaskOutputViewer({ result, onBack, onApplyRedline, onRejectRedli
               )}
               {sections.map((section) => {
                 const isExpanded = expandedSections.has(section.id);
+                const isImportant = importantSections.has(section.id);
                 const icon = SECTION_ICONS[section.id] || '📄';
                 const hasRedline = redlines.some(r => r.section_id === section.id && r.status === 'pending');
                 const wasEdited = redlines.some(r => r.section_id === section.id && r.status === 'accepted');
 
                 return (
-                  <Card key={section.id} className={cn(
-                    'border-border/15 shadow-none',
-                    hasRedline && 'border-l-2 border-l-amber-400/50',
-                    wasEdited && 'border-l-2 border-l-green-400/50',
-                    section.id === 'appendix' && 'border-t-2 border-t-border/30 mt-4'
-                  )}>
+                  <Card
+                    key={section.id}
+                    data-section-anchor={section.id}
+                    className={cn(
+                      'border-border/15 shadow-none scroll-mt-4 group/section',
+                      hasRedline && 'border-l-2 border-l-amber-400/50',
+                      wasEdited && 'border-l-2 border-l-green-400/50',
+                      isImportant && 'border-l-2 border-l-primary/60',
+                      section.id === 'appendix' && 'border-t-2 border-t-border/30 mt-4',
+                    )}
+                  >
                     <CardHeader
                       className="px-3 py-2 cursor-pointer hover:bg-muted/10 transition-colors"
                       onClick={() => toggleSection(section.id)}
@@ -408,17 +436,48 @@ export function TaskOutputViewer({ result, onBack, onApplyRedline, onRejectRedli
                       <div className="flex items-center gap-2">
                         <span className="text-xs">{icon}</span>
                         {isExpanded ? <ChevronUp className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
-                        <CardTitle className="text-xs font-semibold text-foreground/80">{section.name}</CardTitle>
+                        <CardTitle className="text-xs font-semibold text-foreground/80 flex-1 truncate">{section.name}</CardTitle>
+
+                        {/* Status badges (always visible) */}
                         {hasRedline && (
-                          <Badge variant="outline" className="text-[8px] border-amber-400/30 text-amber-600 ml-auto">
+                          <Badge variant="outline" className="text-[8px] border-amber-400/30 text-amber-600">
                             <Pencil className="h-2 w-2 mr-0.5" /> Edit suggested
                           </Badge>
                         )}
                         {wasEdited && (
-                          <Badge variant="outline" className="text-[8px] border-green-400/30 text-green-600 ml-auto">
+                          <Badge variant="outline" className="text-[8px] border-green-400/30 text-green-600">
                             <Check className="h-2 w-2 mr-0.5" /> Updated
                           </Badge>
                         )}
+
+                        {/* Hover controls — show on section hover or when active */}
+                        <div className={cn(
+                          'flex items-center gap-0.5 transition-opacity',
+                          isImportant ? 'opacity-100' : 'opacity-0 group-hover/section:opacity-100',
+                        )}>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); toggleImportant(section.id); }}
+                            className="h-6 w-6 rounded-md hover:bg-muted/40 flex items-center justify-center"
+                            title={isImportant ? 'Unmark important' : 'Mark important'}
+                            aria-label={isImportant ? 'Unmark important' : 'Mark important'}
+                          >
+                            <Star
+                              className="h-3 w-3"
+                              fill={isImportant ? 'currentColor' : 'none'}
+                              style={{ color: isImportant ? 'hsl(var(--primary))' : undefined }}
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); copySection(section); }}
+                            className="h-6 w-6 rounded-md hover:bg-muted/40 flex items-center justify-center text-muted-foreground"
+                            title="Copy section"
+                            aria-label="Copy section"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
                       </div>
                     </CardHeader>
                     {isExpanded && (
