@@ -693,8 +693,14 @@ export function StrategyShell() {
       {/* Mobile sidebar drawer */}
       {isMobile && (
         <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-          <SheetContent side="left" className="p-0 w-[280px]">
-            {sidebarNode(() => setMobileSidebarOpen(false))}
+          <SheetContent
+            side="left"
+            className="p-0 w-[280px] flex flex-col"
+            style={{ background: 'hsl(var(--sv-paper))' }}
+          >
+            <div className="flex flex-1 min-h-0">
+              {sidebarNode(() => setMobileSidebarOpen(false))}
+            </div>
           </SheetContent>
         </Sheet>
       )}
