@@ -12,6 +12,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyRedline, runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/runTask.ts";
+import { failStalePendingRun } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,15 +54,18 @@ Deno.serve(async (req) => {
         .eq("user_id", user.id)
         .single();
       if (error || !row) return jsonResponse({ error: "Run not found" }, 404);
+      const effectiveRow = row.status === "pending"
+        ? await failStalePendingRun({ supabase, row, runId, userId: user.id })
+        : row;
       return jsonResponse({
-        run_id: row.id,
-        status: row.status,
-        progress_step: row.progress_step,
-        error: row.error,
-        completed_at: row.completed_at,
-        updated_at: row.updated_at,
-        draft: row.draft_output,
-        review: row.review_output,
+        run_id: effectiveRow.id,
+        status: effectiveRow.status,
+        progress_step: effectiveRow.progress_step,
+        error: effectiveRow.error,
+        completed_at: effectiveRow.completed_at,
+        updated_at: effectiveRow.updated_at,
+        draft: effectiveRow.draft_output,
+        review: effectiveRow.review_output,
       });
     }
 

@@ -39,7 +39,7 @@ export async function callPerplexity(
 
 export async function callOpenAI(
   messages: { role: string; content: string }[],
-  opts: { model?: string; temperature?: number; maxTokens?: number } = {},
+  opts: { model?: string; temperature?: number; maxTokens?: number; reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh" | "none" } = {},
 ): Promise<string> {
   const key = Deno.env.get("OPENAI_API_KEY");
   if (!key) throw new Error("OPENAI_API_KEY not configured");
@@ -52,6 +52,9 @@ export async function callOpenAI(
   const body: Record<string, unknown> = { model, messages };
   if (isNewSchema) {
     body.max_completion_tokens = opts.maxTokens || 8192;
+    if (opts.reasoningEffort) {
+      body.reasoning = { effort: opts.reasoningEffort };
+    }
   } else {
     body.max_tokens = opts.maxTokens || 8192;
     body.temperature = opts.temperature ?? 0.4;

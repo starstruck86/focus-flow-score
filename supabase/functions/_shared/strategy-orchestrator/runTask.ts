@@ -25,6 +25,7 @@ import { retrieveLibraryContext } from "./libraryRetrieval.ts";
 import { callClaude, callOpenAI, callPerplexity, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
 import { authorBySectionBatches } from "./sectionAuthor.ts";
+import { failStalePendingRun } from "./staleRunWatchdog.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
 // ── Internal: write a progress step to the run row (best-effort). ─
@@ -81,16 +82,17 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     console.log(`[stage-1] research complete: ${research.totalChars} chars`);
   }
 
-  // ── Stage 2: Synthesis — STRONG model (openai/gpt-5 via Lovable AI Gateway).
-  // We run this in the background, so wall-clock is no longer a constraint.
+  // ── Stage 2: Synthesis — high-quality ChatGPT reasoning, tuned for
+  // reliability without collapsing into shallow/minimal thinking.
   await setProgress(supabase, runId, "synthesis");
-  console.log(`[stage-2] synthesis via OpenAI ChatGPT (gpt-5)...`);
+  const synthesisModel = "gpt-5-mini";
+  console.log(JSON.stringify({ tag: "stage-2:start", run_id: runId, model: synthesisModel, reasoning_effort: "medium" }));
   const synthesisRaw = await callOpenAI([
     { role: "system", content: "You are a senior sales strategist. Synthesize research + internal IP into actionable intelligence. Return structured JSON only. No markdown fences, no preamble." },
     { role: "user", content: handler.buildSynthesisPrompt(inputs, research, library) },
-  ], { model: "gpt-5", maxTokens: 12000 });
+  ], { model: synthesisModel, maxTokens: 16000, reasoningEffort: "medium" });
   const synthesis = safeParseJSON<any>(synthesisRaw) ?? { raw: synthesisRaw };
-  console.log(`[stage-2] synthesis fields: ${Object.keys(synthesis).length}`);
+  console.log(JSON.stringify({ tag: "stage-2:end", run_id: runId, model: synthesisModel, synthesis_fields: Object.keys(synthesis).length }));
 
   // ── Stage 3: Claude document authoring (locked template) ─────
   // Fix 2 — Stall containment:
@@ -529,6 +531,22 @@ export async function runStrategyTaskInBackground(
     } catch (e: any) {
       console.error(`[orchestrator] background run=${runId} failed:`, e?.message || e);
       try {
+        const { data: latest } = await ctx.supabase
+          .from("task_runs")
+          .select("id, status, progress_step, error, updated_at")
+          .eq("id", runId)
+          .maybeSingle();
+
+        if (latest?.status === "pending") {
+          const staleRow = await failStalePendingRun({
+            supabase: ctx.supabase,
+            row: latest,
+            runId,
+            userId: ctx.userId,
+          });
+          if (staleRow?.status === "failed") return;
+        }
+
         await ctx.supabase
           .from("task_runs")
           .update({
