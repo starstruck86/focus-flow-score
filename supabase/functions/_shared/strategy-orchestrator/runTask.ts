@@ -25,6 +25,12 @@ import { retrieveLibraryContext } from "./libraryRetrieval.ts";
 import { callClaude, callOpenAI, callPerplexity, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
 import { authorBySectionBatches } from "./sectionAuthor.ts";
+import {
+  ensureSectionRows,
+  invokeNextStep,
+  persistSynthesisArtifact,
+  TOTAL_BATCHES,
+} from "./progressiveDriver.ts";
 import { failStalePendingRun } from "./staleRunWatchdog.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
@@ -93,6 +99,49 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   ], { model: synthesisModel, maxTokens: 16000, reasoningEffort: "medium" });
   const synthesis = safeParseJSON<any>(synthesisRaw) ?? { raw: synthesisRaw };
   console.log(JSON.stringify({ tag: "stage-2:end", run_id: runId, model: synthesisModel, synthesis_fields: Object.keys(synthesis).length }));
+
+  // ── Progressive execution switch (discovery_prep only) ─────────
+  // Persist synthesis as the single source of truth, pre-create
+  // task_run_sections rows, and kick off batch 0 in a fresh isolate
+  // via HTTP self-invoke. Return immediately so this isolate exits
+  // cleanly — the per-batch ladder (Claude-first per batch, OpenAI
+  // fallback per batch) and assembly run in run-discovery-prep-step.
+  if (taskType === "discovery_prep") {
+    await setProgress(supabase, runId, "document_authoring");
+    try {
+      await persistSynthesisArtifact({
+        supabase,
+        runId,
+        synthesis,
+        systemPrompt: handler.buildDocumentSystemPrompt(),
+        baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
+        libraryCounts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
+        researchChars: research.totalChars,
+      });
+      await ensureSectionRows({ supabase, runId, userId });
+      console.log(JSON.stringify({
+        tag: "[progressive:handoff]",
+        run_id: runId,
+        total_batches: TOTAL_BATCHES,
+      }));
+      invokeNextStep({ runId, batchIndex: 0, userId });
+      return;
+    } catch (e: any) {
+      const msg = String(e?.message || e).slice(0, 500);
+      console.error(JSON.stringify({ tag: "[progressive:handoff_failed]", run_id: runId, error: msg }));
+      await supabase
+        .from("task_runs")
+        .update({
+          status: "failed",
+          progress_step: "failed",
+          error: `progressive_handoff: ${msg}`,
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", runId);
+      return;
+    }
+  }
 
   // ── Stage 3: Claude document authoring (locked template) ─────
   // Fix 2 — Stall containment:
