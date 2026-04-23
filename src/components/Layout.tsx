@@ -34,6 +34,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/BottomNav';
 import { SHELL } from '@/lib/layout';
 import { GlobalRefreshButton } from '@/components/GlobalRefreshButton';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 
 
@@ -83,6 +84,14 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
   const [searchParams, setSearchParams] = useSearchParams();
   const { setPageContext } = useCopilot();
   const activeColor = useActiveTabColor();
+  const isMobile = useIsMobile();
+  const isStrategy = location.pathname === '/strategy';
+  // /strategy desktop replaces the bottom nav with a top global rail.
+  // /strategy mobile keeps a single-row condensed bottom nav so users
+  // can still reach Today/Tasks/New Logo/Renewals from the workspace.
+  const bottomNavVariant: 'default' | 'condensed' | 'hidden' = isStrategy
+    ? (isMobile ? 'condensed' : 'hidden')
+    : 'default';
   
   // Dave state
   const [daveOpen, setDaveOpen] = useState(false);
@@ -372,7 +381,7 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
         {children}
       </main>
 
-      <BottomNav />
+      <BottomNav variant={bottomNavVariant} />
       <BackToToday />
       {!hideFloatingFab && location.pathname !== '/strategy' && <GlobalFAB position="bottom-left" />}
 
