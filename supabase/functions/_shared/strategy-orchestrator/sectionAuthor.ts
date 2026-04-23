@@ -28,7 +28,7 @@ import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
  *  timeout on the first attempt — fallback (ChatGPT) stays exception-only
  *  per the model policy. Larger groupings starved fallback / forced the
  *  per-batch ladder to lean on retries. */
-const DISCOVERY_PREP_BATCHES: { ids: string[] }[] = [
+export const DISCOVERY_PREP_BATCHES: { ids: string[] }[] = [
   { ids: ["cockpit"] },                                 // largest single section
   { ids: ["cover", "participants"] },
   { ids: ["cx_audit"] },
