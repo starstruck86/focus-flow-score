@@ -39,7 +39,7 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
     >
       <div
         className="mx-auto px-6 pt-4 pb-12"
-        style={{ maxWidth: 720 }}
+        style={{ maxWidth: 680 }}
       >
         {showEmptyState && onPickPrompt && (
           <StrategyEmptyState onPickPrompt={onPickPrompt} />
@@ -54,7 +54,7 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
             i === messages.length - 1 &&
             !!onQuickAction;
           return (
-            <div key={m.id} style={{ marginTop: i === 0 ? 0 : 16 }}>
+            <div key={m.id} style={{ marginTop: i === 0 ? 0 : 14 }}>
               <StrategyMessage
                 message={m}
                 onQuickAction={isLastAssistant ? onQuickAction : undefined}
@@ -63,7 +63,7 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
           );
         })}
         {isSending && (
-          <div style={{ marginTop: messages.length === 0 ? 0 : 16 }}>
+          <div style={{ marginTop: messages.length === 0 ? 0 : 14 }}>
             <StrategyMessage
               message={{
                 id: '__streaming__',
