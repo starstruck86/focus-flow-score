@@ -653,16 +653,13 @@ export function StrategyShell() {
 
   const handleSend = useCallback((text: string) => {
     if (pendingThreadId || isCreatingThread || isSending) return;
-    // Clear the per-surface draft for the workspace we're sending from and
-    // exit that workspace so the conversation/canvas takes focus. This keeps
-    // each workspace as a clean launch surface, never a sticky chat view.
+    // The surface we're sending from. Each workspace owns its own thread —
+    // sending stays in that workspace and binds the resulting thread to it.
     const sendingFrom = lastSurfaceKeyRef.current;
-    if (sendingFrom && sendingFrom !== 'work') {
+    // Clear the per-surface draft for the workspace we're sending from
+    // (the message has just been promoted into the conversation).
+    if (sendingFrom) {
       surfaceDraftsRef.current[sendingFrom] = '';
-      // Re-pin the key so the swap effect doesn't snapshot the (now empty)
-      // composer back into the previous bucket on the way out.
-      lastSurfaceKeyRef.current = 'work';
-      setActiveSurface(null);
     }
     // Snapshot + clear sidecar IDs synchronously so a second send can't
     // accidentally re-attach the same picked resource.
@@ -677,6 +674,9 @@ export function StrategyShell() {
           queuedInitialMessageRef.current = text;
           // Re-stash so the queued send (after thread mounts) still sees them.
           if (sidecar) setPendingResourceIds(sidecar);
+          // Remember which surface owns this new thread so the resolution
+          // effect can bind it to the right bucket.
+          pendingThreadSurfaceRef.current = sendingFrom ?? 'work';
           setPendingThreadId(newId);
         } else {
           setIsCreatingThread(false);
@@ -684,6 +684,11 @@ export function StrategyShell() {
         }
       })();
       return;
+    }
+    // Thread already exists — make sure the *current* surface owns it so
+    // the next surface-switch round-trip restores the right conversation.
+    if (sendingFrom) {
+      surfaceThreadsRef.current[sendingFrom] = threadId;
     }
     sendMessage(text, sidecar ? { pickedResourceIds: sidecar } : undefined);
   }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds]);
