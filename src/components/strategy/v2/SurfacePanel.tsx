@@ -568,91 +568,46 @@ function PillGrid({
   );
 }
 
-// ───────────────── Custom pills row (with Add) ─────────────────
+// ───────────────── Custom pills row (execution only) ─────────────────
+//
+// Workspaces render existing custom pills as run-only chips, visually
+// consistent with built-in pills. All creation, editing, duplication, and
+// deletion happen in /strategy/settings — never inside a workspace.
 
 function CustomPillsRow({
-  pills, onLaunch, onEdit, onAdd,
+  pills, onLaunch,
 }: {
   pills: CustomPill[];
   onLaunch: (p: CustomPill) => void;
-  onEdit: (p: CustomPill) => void;
-  onAdd: () => void;
 }) {
+  if (pills.length === 0) return null;
   return (
-    <div>
-      <div className="flex items-center gap-1.5 mb-2">
-        <Sparkles className="h-3 w-3" style={{ color: 'hsl(var(--sv-clay) / 0.8)' }} />
-        <span className="text-[10.5px] font-medium uppercase tracking-[0.09em]" style={{ color: 'hsl(var(--sv-muted))' }}>
-          Your pills
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {pills.map((p) => (
-          <div
-            key={p.id}
-            className="inline-flex items-stretch rounded-full overflow-hidden"
-            style={{
-              border: '1px solid hsl(var(--sv-clay) / 0.35)',
-              background: 'hsl(var(--sv-clay) / 0.05)',
-            }}
-          >
-            <button
-              onClick={() => onLaunch(p)}
-              className="px-3 py-1.5 text-[12.5px] inline-flex items-center gap-1.5 transition-colors"
-              style={{ color: 'hsl(var(--sv-ink))' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-clay) / 0.10)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              title={p.description || p.instruction || 'Run this pill'}
-              data-testid={`custom-pill-${p.id}`}
-            >
-              <Sparkles className="h-3 w-3" style={{ color: 'hsl(var(--sv-clay))' }} />
-              <span className="truncate max-w-[180px]">{p.name}</span>
-            </button>
-            <button
-              onClick={() => onEdit(p)}
-              className="px-2 py-1.5 transition-colors"
-              style={{ color: 'hsl(var(--sv-muted))', borderLeft: '1px solid hsl(var(--sv-clay) / 0.25)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-clay) / 0.10)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              aria-label={`Edit pill ${p.name}`}
-              title="Edit pill"
-              data-testid={`custom-pill-edit-${p.id}`}
-            >
-              <Pencil className="h-3 w-3" />
-            </button>
-          </div>
-        ))}
-
-        {/* + New pill */}
+    <div className="flex flex-wrap gap-2">
+      {pills.map((p) => (
         <button
-          onClick={onAdd}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12.5px] transition-colors border-dashed"
+          key={p.id}
+          onClick={() => onLaunch(p)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12.5px] transition-colors"
           style={{
-            border: '1px dashed hsl(var(--sv-hairline))',
-            background: 'transparent',
-            color: 'hsl(var(--sv-muted))',
+            border: '1px solid hsl(var(--sv-clay) / 0.35)',
+            background: 'hsl(var(--sv-clay) / 0.05)',
+            color: 'hsl(var(--sv-ink))',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.5)';
-            e.currentTarget.style.borderColor = 'hsl(var(--sv-clay) / 0.4)';
-            e.currentTarget.style.color = 'hsl(var(--sv-clay))';
+            e.currentTarget.style.background = 'hsl(var(--sv-clay) / 0.10)';
+            e.currentTarget.style.borderColor = 'hsl(var(--sv-clay) / 0.5)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.borderColor = 'hsl(var(--sv-hairline))';
-            e.currentTarget.style.color = 'hsl(var(--sv-muted))';
+            e.currentTarget.style.background = 'hsl(var(--sv-clay) / 0.05)';
+            e.currentTarget.style.borderColor = 'hsl(var(--sv-clay) / 0.35)';
           }}
-          data-testid="surface-add-pill"
+          title={p.description || p.instruction || 'Run this pill'}
+          data-testid={`custom-pill-${p.id}`}
         >
-          <Plus className="h-3 w-3" />
-          <span>{pills.length === 0 ? 'New pill' : 'New pill'}</span>
+          <Sparkles className="h-3 w-3" style={{ color: 'hsl(var(--sv-clay))' }} />
+          <span className="truncate max-w-[180px]">{p.name}</span>
         </button>
-      </div>
-      {pills.length === 0 && (
-        <p className="mt-1.5 text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
-          Pills are programmable shortcuts — like lightweight custom GPTs.
-        </p>
-      )}
+      ))}
     </div>
   );
 }
