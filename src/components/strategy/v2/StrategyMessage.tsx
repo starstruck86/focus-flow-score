@@ -93,9 +93,9 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
               li: ({ children }) => <li style={{ margin: '0.15rem 0' }}>{children}</li>,
               strong: ({ children }) => <strong style={{ fontWeight: 650 }}>{children}</strong>,
               em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
-              code: ({ children, ...rest }: any) => (
+              code: ({ children, className }: any) => (
                 <code
-                  {...rest}
+                  className={className}
                   style={{
                     fontFamily: 'var(--sv-sans)',
                     background: 'hsl(var(--sv-hover))',
