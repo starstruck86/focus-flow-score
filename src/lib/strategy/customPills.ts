@@ -39,6 +39,20 @@ export interface CustomPill {
   runMode?: PillRunMode;
   /** Ask clarifying questions before generating. */
   askClarifying?: boolean;
+  /** Hide from the surface without deleting. Defaults to true (visible). */
+  isActive?: boolean;
+  /** Sort key inside the surface; lower = earlier. Defaults to createdAt order. */
+  orderIndex?: number;
+  /** Stub: attachment placeholders (resources / templates / files / context). */
+  attachments?: {
+    resourceIds?: string[];
+    templateIds?: string[];
+    fileIds?: string[];
+    /** Predefined context tokens like "account", "opportunity", "prior_threads". */
+    contextTokens?: string[];
+    /** "Use all workspace knowledge" toggle. */
+    useAllWorkspaceKnowledge?: boolean;
+  };
   createdAt: string;
   updatedAt: string;
 }
