@@ -75,6 +75,8 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { MoreHorizontal, PanelLeft } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { StrategyThreadsSidebar } from './StrategyThreadsSidebar';
+import { StrategyNavSidebar, type StrategyMode } from './StrategyNavSidebar';
+import { useUserArtifacts } from '@/hooks/strategy/useUserArtifacts';
 import { StrategyGlobalNavBar } from './StrategyGlobalNavBar';
 import { StrategyProgressPanel } from './StrategyProgressPanel';
 import { ArtifactInlineCard } from './ArtifactInlineCard';
@@ -106,6 +108,9 @@ export function StrategyShell() {
 
   // Artifact workspace (right) — opened via inline card or completion event
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
+
+  // New nav sidebar — Mode hint state
+  const [activeMode, setActiveMode] = useState<StrategyMode>(null);
 
   const {
     threads,
@@ -661,14 +666,46 @@ export function StrategyShell() {
     return s;
   }, [latestCompleted, threadId]);
 
+  // User-scoped artifacts feed for the new sidebar Artifacts section
+  const { rows: userArtifacts } = useUserArtifacts(20);
+
+  // Open the /library slash command in the composer (mirrors the slash route).
+  const handleOpenLibraryFromSidebar = useCallback(() => {
+    setSlashQuery('/library ');
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      const ta = composerRef.current as
+        (HTMLTextAreaElement & { insertText?: (t: string) => void })
+        | null;
+      ta?.insertText?.('/library ');
+    });
+  }, []);
+
+  // Pick a mode → set hint state, focus composer (does NOT gate input).
+  const handlePickMode = useCallback((m: StrategyMode) => {
+    setActiveMode(m);
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }, []);
+
+  // Open an artifact row → switch to its thread + open the workspace panel.
+  const handleOpenArtifactFromSidebar = useCallback((a: { thread_id: string | null }) => {
+    if (a.thread_id) setActiveThreadId(a.thread_id);
+    setArtifactPanelOpen(true);
+  }, [setActiveThreadId]);
+
   const sidebarNode = (onAfterSelect?: () => void) => (
-    <StrategyThreadsSidebar
+    <StrategyNavSidebar
+      collapsed={sidebarCollapsed}
+      onToggleCollapsed={toggleSidebar}
+      activeMode={activeMode}
+      onPickMode={handlePickMode}
+      onOpenLibrary={handleOpenLibraryFromSidebar}
+      artifacts={userArtifacts}
+      onOpenArtifact={handleOpenArtifactFromSidebar}
       threads={threads}
       activeThreadId={threadId}
       onSelectThread={(id) => setActiveThreadId(id)}
-      onNewThread={() => handleNewThread()}
-      collapsed={sidebarCollapsed}
-      onToggleCollapsed={toggleSidebar}
+      onNewWork={() => handleNewThread()}
       runningThreadIds={runningThreadIds}
       artifactThreadIds={artifactThreadIds}
       onAfterSelect={onAfterSelect}
@@ -806,25 +843,37 @@ export function StrategyShell() {
           ref={composerRef}
           disabled={isSending || !!pendingThreadId || isCreatingThread}
           placeholder={
-            messages.length === 0
-              ? 'What are you thinking about?'
-              : entityName ? `Message about ${entityName}…` : 'Message…'
+            activeMode === 'brainstorm'
+              ? 'Brainstorm anything — angles, ideas, half-formed thoughts…'
+              : activeMode === 'deep_research'
+                ? 'Ask anything, paste notes, or start with an account or company…'
+                : activeMode === 'refine'
+                  ? 'Paste a draft, an output, or a snippet to refine…'
+                  : messages.length === 0
+                    ? 'What are you thinking about?'
+                    : entityName ? `Message about ${entityName}…` : 'Message…'
           }
-          serifPlaceholder={messages.length === 0}
+          serifPlaceholder={messages.length === 0 && !activeMode}
           onSend={handleSend}
           onSlashChange={setSlashQuery}
           onRectChange={setComposerRect}
           onAttachFiles={() => slashFileInputRef.current?.click()}
           momentumHint={
             // Context-aware "what's next?" line under the composer.
-            // Priority: streaming > artifact-just-landed > linked-entity > null (let composer fall back to its empty/typing hints)
+            // Priority: streaming > artifact-just-landed > active mode > linked-entity > null
             isSending
               ? 'Strategy is thinking…'
               : (latestCompleted && artifactPanelOpen)
                 ? 'Ask a follow-up to refine · / to revise · ⌘S to save'
-                : entityName && messages.length > 0
-                  ? `Grounded on ${entityName} · / for actions · ⌘S save`
-                  : null
+                : activeMode === 'brainstorm'
+                  ? 'Brainstorm mode · think out loud — Strategy will shape it later.'
+                  : activeMode === 'deep_research'
+                    ? 'Deep Research mode · ask anything, paste notes, or start with an account.'
+                    : activeMode === 'refine'
+                      ? 'Refine mode · paste a draft and Strategy will sharpen it.'
+                      : entityName && messages.length > 0
+                        ? `Grounded on ${entityName} · / for actions · ⌘S save`
+                        : null
           }
         />
       )}
