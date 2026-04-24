@@ -959,7 +959,42 @@ function TopMatchCard({
 }
 // ───────────────── Work thread list ─────────────────
 
-function WorkThreadList({
+// ───────────────── Work command center ─────────────────
+//
+// Work is the operating-system view for ALL threads — search, filter, group.
+// Default layout: Continue (pinned) → Artifact Ready (pinned) → Recent (flat).
+// Test/debug/regression/benchmark/scratch threads are HIDDEN by default and
+// only surface when the "Needs Cleanup" chip is active.
+
+type WorkFilterKey =
+  | 'all' | 'continue' | 'artifact_ready' | 'cleanup'
+  | 'brainstorm' | 'deep_research' | 'refine'
+  | 'library' | 'artifacts' | 'projects';
+
+const WORK_FILTERS: Array<{ key: WorkFilterKey; label: string }> = [
+  { key: 'all',            label: 'All' },
+  { key: 'continue',       label: 'Continue' },
+  { key: 'artifact_ready', label: 'Artifact Ready' },
+  { key: 'brainstorm',     label: 'Brainstorm' },
+  { key: 'deep_research',  label: 'Deep Research' },
+  { key: 'refine',         label: 'Refine' },
+  { key: 'library',        label: 'Library' },
+  { key: 'artifacts',      label: 'Artifacts' },
+  { key: 'projects',       label: 'Projects' },
+  { key: 'cleanup',        label: 'Needs Cleanup' },
+];
+
+/** Heuristic: a thread looks like junk (test/debug/regression/benchmark/scratch). */
+function isCleanupThread(t: StrategyThread): boolean {
+  const title = (t.title || '').toLowerCase();
+  if (/^\[benchmark\]/i.test(t.title || '')) return true;
+  if (/\b(test|debug|regression|qa|scratch|tmp|temp|sandbox|wip)\b/i.test(title)) return true;
+  // Untitled-style placeholders that never got a real prompt.
+  if (isUntitledTitle(t.title)) return true;
+  return false;
+}
+
+function WorkCommandCenter({
   threads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
 }: {
   threads: StrategyThread[];
@@ -968,48 +1003,344 @@ function WorkThreadList({
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
 }) {
-  // Annotate with origin tags so each row can show "→ Deep Research" etc.
-  const items = useMemo<AnnotatedThread[]>(() => {
-    const tags = getAllThreadTags();
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<WorkFilterKey>('all');
+
+  const tags = useMemo(() => getAllThreadTags(), [threads]);
+
+  // Annotate every thread with its origin label + display title — these are
+  // the fields we search against and render in rows.
+  const annotated = useMemo(() => {
     return threads.map((t) => {
-      const tag = tags[t.id];
+      const tag = tags[t.id] ?? null;
       const origin = tag ? SURFACE_SHORT_LABEL[tag] : null;
+      const cleanup = isCleanupThread(t);
+      const title = displayThreadTitle(t);
+      const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
+      const isRunning = runningThreadIds?.has(t.id) ?? false;
       return {
         thread: t,
-        reason: origin ? `From ${origin}` : 'Freeform',
-        group: origin ?? 'Freeform',
+        tag,
+        origin,
+        title,
+        cleanup,
+        hasArtifact,
+        isRunning,
       };
     });
-  }, [threads]);
+  }, [threads, tags, artifactThreadIds, runningThreadIds]);
 
-  if (threads.length === 0) {
-    return (
-      <div
-        className="rounded-[10px] p-5 text-center"
-        style={{
-          border: '1px dashed hsl(var(--sv-hairline))',
-          background: 'hsl(var(--sv-hover) / 0.3)',
-        }}
-      >
-        <Briefcase className="h-5 w-5 mx-auto mb-2" style={{ color: 'hsl(var(--sv-muted))' }} />
-        <p className="text-[13px]" style={{ color: 'hsl(var(--sv-ink))' }}>
-          No work yet
-        </p>
-        <p className="mt-1 text-[11.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
-          Start typing below — your threads will show up here.
-        </p>
-      </div>
-    );
-  }
+  // Cleanup chip shows ONLY junk; every other view hides junk by default.
+  const visible = useMemo(() => {
+    if (filter === 'cleanup') return annotated.filter((a) => a.cleanup);
+    return annotated.filter((a) => !a.cleanup);
+  }, [annotated, filter]);
+
+  // Search across display title + workspace label + artifact status.
+  const searched = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return visible;
+    return visible.filter((a) => {
+      if (a.title.toLowerCase().includes(q)) return true;
+      if (a.origin?.toLowerCase().includes(q)) return true;
+      if (a.hasArtifact && 'artifact'.includes(q)) return true;
+      if (a.isRunning && 'running'.includes(q)) return true;
+      return false;
+    });
+  }, [visible, query]);
+
+  // Apply chip filters.
+  const filtered = useMemo(() => {
+    switch (filter) {
+      case 'all':
+      case 'cleanup':
+        return searched;
+      case 'continue':
+        return searched.filter((a) => !a.hasArtifact);
+      case 'artifact_ready':
+        return searched.filter((a) => a.hasArtifact);
+      case 'brainstorm':
+      case 'deep_research':
+      case 'refine':
+      case 'library':
+      case 'artifacts':
+      case 'projects':
+        return searched.filter((a) => a.tag === filter);
+      default:
+        return searched;
+    }
+  }, [searched, filter]);
+
+  // Smart grouping (default = 'all'): pinned Continue + Artifact Ready, then
+  // a flat "Recent" list. For specific chip filters we render a single flat
+  // list — the chip itself is the group label.
+  const continueItems = useMemo(() => {
+    if (filter !== 'all') return [];
+    // Continue = active + running + recent non-artifact threads worth returning to.
+    return filtered
+      .filter((a) => !a.hasArtifact)
+      .sort((a, b) => {
+        // active first, then running, then recency.
+        const aScore = (a.thread.id === activeThreadId ? 0 : a.isRunning ? 1 : 2);
+        const bScore = (b.thread.id === activeThreadId ? 0 : b.isRunning ? 1 : 2);
+        if (aScore !== bScore) return aScore - bScore;
+        return new Date(b.thread.updated_at).getTime() - new Date(a.thread.updated_at).getTime();
+      })
+      .slice(0, 5);
+  }, [filtered, filter, activeThreadId]);
+
+  const artifactItems = useMemo(() => {
+    if (filter !== 'all') return [];
+    return filtered
+      .filter((a) => a.hasArtifact)
+      .sort((a, b) => new Date(b.thread.updated_at).getTime() - new Date(a.thread.updated_at).getTime())
+      .slice(0, 5);
+  }, [filtered, filter]);
+
+  const restItems = useMemo(() => {
+    if (filter !== 'all') {
+      return [...filtered].sort(
+        (a, b) => new Date(b.thread.updated_at).getTime() - new Date(a.thread.updated_at).getTime(),
+      );
+    }
+    const pinnedIds = new Set([
+      ...continueItems.map((a) => a.thread.id),
+      ...artifactItems.map((a) => a.thread.id),
+    ]);
+    return filtered
+      .filter((a) => !pinnedIds.has(a.thread.id))
+      .sort((a, b) => new Date(b.thread.updated_at).getTime() - new Date(a.thread.updated_at).getTime());
+  }, [filtered, filter, continueItems, artifactItems]);
+
+  const toRows = (
+    items: typeof annotated,
+  ): AnnotatedThread[] =>
+    items.map((a) => ({
+      thread: a.thread,
+      reason: a.origin ? `From ${a.origin}` : 'Freeform',
+      group: a.origin ?? 'Freeform',
+    }));
+
+  const totalCount = filtered.length;
+  const hasAny = annotated.length > 0;
+
   return (
-    <ThreadRows
-      items={items}
-      activeThreadId={activeThreadId}
-      onSelect={onSelect}
-      runningThreadIds={runningThreadIds}
-      artifactThreadIds={artifactThreadIds}
-      showOriginTag
-    />
+    <div className="space-y-4">
+      {/* Search + filter chips */}
+      <div className="space-y-2">
+        <div
+          className="flex items-center gap-2 rounded-[8px] px-2.5 py-1.5"
+          style={{
+            border: '1px solid hsl(var(--sv-hairline))',
+            background: 'hsl(var(--sv-paper))',
+          }}
+        >
+          <Search className="h-3.5 w-3.5 shrink-0" style={{ color: 'hsl(var(--sv-muted))' }} />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search threads, workspaces, or artifacts…"
+            className="flex-1 bg-transparent outline-none text-[13px] placeholder:text-muted-foreground/50"
+            style={{ color: 'hsl(var(--sv-ink))' }}
+            data-testid="work-search"
+          />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              className="text-[11px] px-1.5 py-0.5 rounded"
+              style={{ color: 'hsl(var(--sv-muted))' }}
+              aria-label="Clear search"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5" data-testid="work-filters">
+          {WORK_FILTERS.map((f) => {
+            const active = filter === f.key;
+            return (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className="text-[11.5px] px-2.5 py-1 rounded-full transition-colors whitespace-nowrap"
+                style={{
+                  border: '1px solid ' + (active ? 'hsl(var(--sv-clay) / 0.35)' : 'hsl(var(--sv-hairline))'),
+                  background: active ? 'hsl(var(--sv-clay) / 0.10)' : 'hsl(var(--sv-paper))',
+                  color: active ? 'hsl(var(--sv-clay))' : 'hsl(var(--sv-ink) / 0.75)',
+                  fontWeight: active ? 600 : 500,
+                }}
+                data-testid={`work-filter-${f.key}`}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Empty states */}
+      {!hasAny && (
+        <WorkEmptyState
+          icon={Briefcase}
+          title="No work yet"
+          body="Start typing below — your threads will show up here."
+        />
+      )}
+
+      {hasAny && totalCount === 0 && (
+        <WorkEmptyState
+          icon={query ? Search : filter === 'cleanup' ? Trash2 : Briefcase}
+          title={
+            query
+              ? `No matches for "${query}"`
+              : filter === 'cleanup'
+                ? 'Nothing to clean up'
+                : `Nothing in ${WORK_FILTERS.find((f) => f.key === filter)?.label}`
+          }
+          body={
+            query
+              ? 'Try a different keyword, or clear the search.'
+              : filter === 'cleanup'
+                ? 'Your workspace is tidy. Test, debug, and untitled threads land here.'
+                : 'Switch filters above, or jump into a workspace from the sidebar.'
+          }
+        />
+      )}
+
+      {/* Smart default layout */}
+      {filter === 'all' && totalCount > 0 && (
+        <>
+          {continueItems.length > 0 && (
+            <WorkGroup
+              icon={PlayCircle}
+              label="Continue"
+              hint="Active and recent threads worth returning to"
+              count={continueItems.length}
+            >
+              <ThreadRows
+                items={toRows(continueItems)}
+                activeThreadId={activeThreadId}
+                onSelect={onSelect}
+                runningThreadIds={runningThreadIds}
+                artifactThreadIds={artifactThreadIds}
+                showOriginTag
+              />
+            </WorkGroup>
+          )}
+          {artifactItems.length > 0 && (
+            <WorkGroup
+              icon={FileText}
+              label="Artifact Ready"
+              hint="Threads with generated artifacts"
+              count={artifactItems.length}
+            >
+              <ThreadRows
+                items={toRows(artifactItems)}
+                activeThreadId={activeThreadId}
+                onSelect={onSelect}
+                runningThreadIds={runningThreadIds}
+                artifactThreadIds={artifactThreadIds}
+                showOriginTag
+              />
+            </WorkGroup>
+          )}
+          {restItems.length > 0 && (
+            <WorkGroup
+              icon={Briefcase}
+              label="Recent"
+              hint="Everything else, by last update"
+              count={restItems.length}
+            >
+              <ThreadRows
+                items={toRows(restItems)}
+                activeThreadId={activeThreadId}
+                onSelect={onSelect}
+                runningThreadIds={runningThreadIds}
+                artifactThreadIds={artifactThreadIds}
+                showOriginTag
+              />
+            </WorkGroup>
+          )}
+        </>
+      )}
+
+      {/* Filter-narrowed flat list */}
+      {filter !== 'all' && totalCount > 0 && (
+        <ThreadRows
+          items={toRows(restItems)}
+          activeThreadId={activeThreadId}
+          onSelect={onSelect}
+          runningThreadIds={runningThreadIds}
+          artifactThreadIds={artifactThreadIds}
+          showOriginTag
+        />
+      )}
+    </div>
+  );
+}
+
+function WorkGroup({
+  icon: Icon, label, hint, count, children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  hint?: string;
+  count: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-2" data-testid={`work-group-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+      <header className="flex items-center gap-2 px-1">
+        <Icon className="h-3.5 w-3.5" style={{ color: 'hsl(var(--sv-clay) / 0.85)' }} />
+        <span
+          className="text-[12px] tracking-tight"
+          style={{ color: 'hsl(var(--sv-ink))', fontWeight: 600 }}
+        >
+          {label}
+        </span>
+        <span
+          className="text-[10.5px] px-1.5 py-px rounded tabular-nums"
+          style={{ background: 'hsl(var(--sv-hover) / 0.6)', color: 'hsl(var(--sv-muted))' }}
+        >
+          {count}
+        </span>
+        {hint && (
+          <span className="text-[11px] truncate" style={{ color: 'hsl(var(--sv-muted))' }}>
+            · {hint}
+          </span>
+        )}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function WorkEmptyState({
+  icon: Icon, title, body,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div
+      className="rounded-[10px] p-5 text-center"
+      style={{
+        border: '1px dashed hsl(var(--sv-hairline))',
+        background: 'hsl(var(--sv-hover) / 0.3)',
+      }}
+      data-testid="work-empty-state"
+    >
+      <Icon className="h-5 w-5 mx-auto mb-2" style={{ color: 'hsl(var(--sv-muted))' }} />
+      <p className="text-[13px]" style={{ color: 'hsl(var(--sv-ink))' }}>
+        {title}
+      </p>
+      <p className="mt-1 text-[11.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
+        {body}
+      </p>
+    </div>
   );
 }
 
