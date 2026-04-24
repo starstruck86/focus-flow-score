@@ -208,12 +208,27 @@ export function SurfacePanel({
             <HeaderIcon className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2
-              className="text-[18px] leading-tight tracking-tight"
-              style={{ fontFamily: 'var(--sv-serif)', color: 'hsl(var(--sv-ink))', fontWeight: 500 }}
-            >
-              {meta.label}
-            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2
+                className="text-[18px] leading-tight tracking-tight"
+                style={{ fontFamily: 'var(--sv-serif)', color: 'hsl(var(--sv-ink))', fontWeight: 500 }}
+              >
+                {meta.label}
+              </h2>
+              {meta.tag && (
+                <span
+                  className="text-[9.5px] uppercase tracking-[0.12em] px-1.5 py-px rounded"
+                  style={{
+                    background: 'hsl(var(--sv-clay) / 0.10)',
+                    color: 'hsl(var(--sv-clay))',
+                    fontWeight: 600,
+                  }}
+                  data-testid={`surface-tag-${surface}`}
+                >
+                  {meta.tag}
+                </span>
+              )}
+            </div>
             <p className="text-[12.5px] mt-0.5" style={{ color: 'hsl(var(--sv-muted))' }}>
               {meta.description}
             </p>
