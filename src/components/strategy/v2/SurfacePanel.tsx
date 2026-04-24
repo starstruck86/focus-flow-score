@@ -898,14 +898,14 @@ function TopMatchCard({
         <button
           onClick={() => onSelect(t.id)}
           className="text-left flex items-center gap-2 w-full"
-          title={t.title || 'Untitled thread'}
+          title={displayThreadTitle(t)}
           data-testid={`top-match-open-${t.id}`}
         >
           <span
             className="flex-1 min-w-0 truncate text-[14px]"
             style={{ color: 'hsl(var(--sv-ink))', fontWeight: 600 }}
           >
-            {t.title || 'Untitled thread'}
+            {displayThreadTitle(t)}
           </span>
           {isRunning && (
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Running" />
