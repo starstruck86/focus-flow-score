@@ -8,17 +8,27 @@
  * directly below as the active/recent thread list. The sidebar never expands
  * inline pills, never nests, and never mixes navigation with actions.
  *
+ * Work rail thread controls (lightweight, client-safe):
+ *   - Double-click a thread title to rename inline (Enter saves, Escape cancels).
+ *   - Hover (or active row) reveals a star icon → pin/unpin as a Project.
+ *     Pinned threads sort to the top with a subtle star badge.
+ *   - Pin state is persisted via `pinnedThreads` (localStorage today; the
+ *     contract is shaped so a future DB column can replace it transparently).
+ *
  * UI ONLY. No backend/engine changes.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, PanelLeftClose, PanelLeftOpen, Sparkles,
   Lightbulb, Microscope, Wand2, BookOpen, FolderKanban, Loader2, FileText,
-  Briefcase, Settings,
+  Briefcase, Settings, Star,
 } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
 import { displayThreadTitle, isUntitledTitle } from '@/lib/strategy/threadNaming';
 import { isCleanupThread } from '@/lib/strategy/threadCleanup';
+import {
+  getPinnedThreadIds, togglePinnedThread, subscribePinnedThreads,
+} from '@/lib/strategy/pinnedThreads';
 import { cn } from '@/lib/utils';
 
 export type StrategyMode = 'brainstorm' | 'deep_research' | 'refine' | null;
@@ -52,6 +62,8 @@ interface Props {
   onNewWork: () => void;
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
+  /** Persist a renamed thread title. Caller wires this to updateThread(). */
+  onRenameThread?: (id: string, nextTitle: string) => void;
 
   // Mobile
   onAfterSelect?: () => void;
@@ -80,9 +92,22 @@ export function StrategyNavSidebar({
   activeSurface, onPickSurface,
   threads, activeThreadId, onSelectThread, onNewWork,
   runningThreadIds, artifactThreadIds,
+  onRenameThread,
   onAfterSelect,
   onOpenManageStrategy,
 }: Props) {
+  // Pinned threads (localStorage today; subscribe so cross-tab + same-tab
+  // changes both refresh the rail).
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => getPinnedThreadIds());
+  useEffect(() => {
+    return subscribePinnedThreads(() => setPinnedIds(getPinnedThreadIds()));
+  }, []);
+
+  // Inline rename state — only one row may edit at a time.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState('');
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+
   // Hide cleanup/test/debug/regression/benchmark/scratch threads from the
   // default rail. Use the shared `isCleanupThread` heuristic so the legacy
   // sidebar matches what the Work command center hides by default.
@@ -90,18 +115,47 @@ export function StrategyNavSidebar({
     const visible = threads.filter((t) => !isCleanupThread(t));
     const hidden = threads.length - visible.length;
     const score = (t: StrategyThread) => {
+      // Pinned threads always sort first (after active).
       if (t.id === activeThreadId) return 0;
+      if (pinnedIds.has(t.id)) return 0.5;
       if (runningThreadIds?.has(t.id)) return 1;
       if (artifactThreadIds?.has(t.id)) return 2;
       return isUntitledTitle(t.title) ? 4 : 3;
     };
     const sorted = [...visible].sort((a, b) => score(a) - score(b));
     return { visibleThreads: sorted, hiddenTestCount: hidden };
-  }, [threads, activeThreadId, runningThreadIds, artifactThreadIds]);
+  }, [threads, activeThreadId, runningThreadIds, artifactThreadIds, pinnedIds]);
 
   const handlePickSurface = (s: StrategySurfaceKey) => {
     onPickSurface(activeSurface === s ? null : s);
     onAfterSelect?.();
+  };
+
+  const beginRename = (t: StrategyThread) => {
+    setEditingId(t.id);
+    setDraftTitle(displayThreadTitle(t));
+    requestAnimationFrame(() => {
+      const el = renameInputRef.current;
+      if (el) { el.focus(); el.select(); }
+    });
+  };
+
+  const commitRename = (t: StrategyThread) => {
+    const next = draftTitle.trim();
+    setEditingId(null);
+    if (!next) return;
+    if (next === displayThreadTitle(t)) return;
+    onRenameThread?.(t.id, next);
+  };
+
+  const cancelRename = () => {
+    setEditingId(null);
+    setDraftTitle('');
+  };
+
+  const togglePin = (id: string) => {
+    togglePinnedThread(id);
+    setPinnedIds(getPinnedThreadIds());
   };
 
   // ────────────── Collapsed rail ──────────────
@@ -207,22 +261,9 @@ export function StrategyNavSidebar({
           />
         ))}
 
-        {/* Subtle "+ Add Mode" hint at bottom of mode list (visual only). */}
-        <button
-          type="button"
-          onClick={() => { onOpenManageStrategy?.(); onAfterSelect?.(); }}
-          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-[6px] text-[12px] transition-colors text-left"
-          style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.5)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-          title="Add a workspace or pill"
-          data-testid="nav-add-mode"
-        >
-          <Plus className="h-3 w-3 shrink-0" />
-          <span>Add Mode</span>
-        </button>
-
-        {/* Manage Strategy — open a settings panel for workspaces and pills. */}
+        {/* Manage Strategy — single entry point for workspaces and pills.
+            "Add Mode" intentionally removed: creation lives only in
+            Strategy Settings, not the navigation rail. */}
         <button
           type="button"
           onClick={() => { onOpenManageStrategy?.(); onAfterSelect?.(); }}
@@ -266,28 +307,78 @@ export function StrategyNavSidebar({
               const isActive = activeThreadId === t.id;
               const isRunning = runningThreadIds?.has(t.id) ?? false;
               const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
+              const isPinned = pinnedIds.has(t.id);
+              const isEditing = editingId === t.id;
               const isUntitled = isUntitledTitle(t.title);
               const displayTitle = displayThreadTitle(t);
               return (
-                <li key={t.id}>
+                <li key={t.id} className="group relative">
                   <button
-                    onClick={() => handlePickThread(t.id)}
+                    onClick={() => { if (!isEditing) handlePickThread(t.id); }}
+                    onDoubleClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      beginRename(t);
+                    }}
                     className={cn('w-full text-left pr-3 py-1.5 rounded-[6px] flex flex-col gap-0.5 transition-colors')}
                     style={{
-                      background: isActive ? 'hsl(var(--sv-clay) / 0.08)' : 'transparent',
+                      background: isActive
+                        ? 'hsl(var(--sv-clay) / 0.08)'
+                        : isPinned ? 'hsl(var(--sv-clay) / 0.04)' : 'transparent',
                       color: 'hsl(var(--sv-ink))',
                       paddingLeft: 10,
-                      borderLeft: isActive ? '2px solid hsl(var(--sv-clay))' : '2px solid transparent',
-                      opacity: isUntitled && !isActive && !isRunning && !hasArtifact ? 0.65 : 1,
+                      borderLeft: isActive
+                        ? '2px solid hsl(var(--sv-clay))'
+                        : isPinned ? '2px solid hsl(var(--sv-clay) / 0.45)' : '2px solid transparent',
+                      opacity: isUntitled && !isActive && !isRunning && !hasArtifact && !isPinned ? 0.65 : 1,
                     }}
                     onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
-                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                    title={displayTitle}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = isPinned ? 'hsl(var(--sv-clay) / 0.04)' : 'transparent';
+                      }
+                    }}
+                    title={isEditing ? undefined : `${displayTitle} — double-click to rename`}
                   >
                     <div className="w-full flex items-center gap-2">
-                      <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
-                        {displayTitle}
-                      </span>
+                      {isEditing ? (
+                        <input
+                          ref={renameInputRef}
+                          value={draftTitle}
+                          onChange={(e) => setDraftTitle(e.target.value)}
+                          onBlur={() => commitRename(t)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              commitRename(t);
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              cancelRename();
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 min-w-0 truncate text-[13px] bg-transparent border-0 outline-none"
+                          style={{
+                            color: 'hsl(var(--sv-ink))',
+                            fontWeight: isActive ? 600 : 400,
+                          }}
+                          aria-label="Rename thread"
+                        />
+                      ) : (
+                        <span
+                          className="flex-1 min-w-0 truncate text-[13px]"
+                          style={{ fontWeight: isActive || isPinned ? 600 : 400 }}
+                        >
+                          {displayTitle}
+                        </span>
+                      )}
+                      {isPinned && !isEditing && (
+                        <Star
+                          className="h-3 w-3 shrink-0"
+                          style={{ color: 'hsl(var(--sv-clay))', fill: 'hsl(var(--sv-clay))' }}
+                          aria-label="Pinned"
+                        />
+                      )}
                       {isRunning && (
                         <Loader2 className="h-3 w-3 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Running" />
                       )}
@@ -300,12 +391,44 @@ export function StrategyNavSidebar({
                       style={{ color: 'hsl(var(--sv-muted))' }}
                     >
                       <span className="truncate">
-                        {isRunning ? 'Running…' : hasArtifact ? 'Artifact ready' : 'Chat'}
+                        {isPinned ? 'Project' : isRunning ? 'Running…' : hasArtifact ? 'Artifact ready' : 'Chat'}
                       </span>
                       <span aria-hidden style={{ opacity: 0.5 }}>·</span>
                       <span className="shrink-0 tabular-nums">{relativeTime(t.updated_at)}</span>
                     </div>
                   </button>
+
+                  {/* Pin/unpin affordance — visible on hover, on active row,
+                      or whenever the thread is already pinned. Sits over the
+                      row to avoid layout shift. */}
+                  {!isEditing && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        togglePin(t.id);
+                      }}
+                      className={cn(
+                        'absolute top-1 right-1 h-5 w-5 rounded-[4px] flex items-center justify-center transition-opacity',
+                        isPinned || isActive
+                          ? 'opacity-100'
+                          : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+                      )}
+                      style={{
+                        color: isPinned ? 'hsl(var(--sv-clay))' : 'hsl(var(--sv-muted))',
+                        background: 'hsl(var(--sv-paper) / 0.9)',
+                      }}
+                      title={isPinned ? 'Unpin from Projects' : 'Pin as Project'}
+                      aria-label={isPinned ? 'Unpin thread' : 'Pin thread as project'}
+                      aria-pressed={isPinned}
+                    >
+                      <Star
+                        className="h-3 w-3"
+                        style={{ fill: isPinned ? 'hsl(var(--sv-clay))' : 'transparent' }}
+                      />
+                    </button>
+                  )}
                 </li>
               );
             })}
