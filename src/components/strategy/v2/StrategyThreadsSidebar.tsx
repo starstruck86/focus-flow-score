@@ -310,12 +310,12 @@ function ThreadGroup({
               }}
               onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
               onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-              title={t.title || 'Untitled thread'}
+              title={displayThreadTitle(t)}
             >
               {/* Row 1 — title + status icon */}
               <div className="w-full flex items-center gap-2">
                 <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
-                  {t.title || 'Untitled thread'}
+                  {displayThreadTitle(t)}
                 </span>
                 {isRunning && (
                   <Loader2 className="h-3 w-3 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Run in progress" />
