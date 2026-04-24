@@ -548,23 +548,33 @@ function CustomPillsRow({
 // ───────────────── Recent in surface ─────────────────
 
 function RecentInSurface({
-  label, surface, threads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  label, surface, ownThreads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
 }: {
   label: string;
   surface: StrategySurfaceKey;
-  threads: StrategyThread[];
-  fallbackThreads: StrategyThread[];
+  ownThreads: AnnotatedThread[];
+  fallbackThreads: AnnotatedThread[];
   activeThreadId: string | null;
   onSelect: (id: string) => void;
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
 }) {
-  const hasOwn = threads.length > 0;
+  const hasOwn = ownThreads.length > 0;
   const hasFallback = !hasOwn && fallbackThreads.length > 0;
   const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'Relevant recent work' : `Recent in ${label}`);
-  const showThreads = hasOwn ? threads : (hasFallback ? fallbackThreads : []);
+  const annotated: AnnotatedThread[] = hasOwn ? ownThreads : (hasFallback ? fallbackThreads : []);
 
-  // Mode-specific microcopy — gives each surface a distinct identity.
+  // Group annotated threads by their `group` field, preserving insertion order.
+  const groups = useMemo(() => {
+    const map = new Map<string, AnnotatedThread[]>();
+    for (const a of annotated) {
+      const arr = map.get(a.group) ?? [];
+      arr.push(a);
+      map.set(a.group, arr);
+    }
+    return Array.from(map.entries());
+  }, [annotated]);
+
   const fallbackHint = (() => {
     if (!hasFallback) return null;
     switch (surface) {
@@ -595,21 +605,35 @@ function RecentInSurface({
           {heading}
         </span>
       </div>
-      {showThreads.length > 0 ? (
-        <>
-          <ThreadRows
-            threads={showThreads}
-            activeThreadId={activeThreadId}
-            onSelect={onSelect}
-            runningThreadIds={runningThreadIds}
-            artifactThreadIds={artifactThreadIds}
-          />
+      {annotated.length > 0 ? (
+        <div className="space-y-3">
+          {groups.map(([groupName, items]) => (
+            <div key={groupName}>
+              {groups.length > 1 && (
+                <div
+                  className="text-[10px] font-medium tracking-[0.08em] mb-1.5"
+                  style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+                  data-testid={`group-${groupName.toLowerCase().replace(/\s+/g, '-')}`}
+                >
+                  {groupName}
+                </div>
+              )}
+              <ThreadRows
+                items={items}
+                activeThreadId={activeThreadId}
+                onSelect={onSelect}
+                runningThreadIds={runningThreadIds}
+                artifactThreadIds={artifactThreadIds}
+                showReason
+              />
+            </div>
+          ))}
           {fallbackHint && (
-            <p className="mt-1.5 text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
               {fallbackHint}
             </p>
           )}
-        </>
+        </div>
       ) : (
         <div
           className="rounded-[8px] px-3 py-2.5 text-[12px]"
