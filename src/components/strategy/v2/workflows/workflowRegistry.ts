@@ -18,38 +18,43 @@
 export type FieldKind = 'text' | 'textarea' | 'select';
 
 export interface WorkflowField {
-  key: string;            // internal key (matches token in promptTemplate)
-  label: string;          // visible field label
+  key: string;
+  label: string;
   placeholder?: string;
   kind: FieldKind;
   required?: boolean;
-  options?: string[];     // for kind === 'select'
-  rows?: number;          // for kind === 'textarea'
+  options?: string[];
+  rows?: number;
 }
 
 export type WorkflowFamily = 'mode' | 'library' | 'artifact';
 
+/** Output shape preferred by this pill - drives engine routing + prompt header. */
+export type PillOutputType =
+  | 'chat' | 'artifact' | 'word' | 'pdf' | 'excel' | 'powerpoint' | 'email' | 'task';
+
+/** What happens when the user clicks a pill. */
+export type PillRunMode = 'insert' | 'send';
+
 export interface WorkflowDef {
   id: string;
   family: WorkflowFamily;
-  /** Section id this workflow lives in (e.g. 'brainstorm', 'library', 'discovery_prep_template'). */
   groupId: string;
   label: string;
   description: string;
-  /** Used in the form sheet header; defaults to label. */
   formTitle?: string;
   fields: WorkflowField[];
   /** Tokens reference field labels in {{Title Case}} form. */
   promptTemplate: string;
-  /**
-   * Optional "system" instruction — how Strategy should think for this pill.
-   * Prepended to the compiled prompt as a leading directive. Editable on
-   * custom pills; read-only for built-ins (none defined today).
-   */
+  /** Hidden "system" instruction - prepended at run time. */
   instruction?: string;
-  /** True when this workflow originates from a user-defined custom pill. */
+  /** Default output shape - surfaced in prompt header so the engine knows. */
+  outputType?: PillOutputType;
+  /** Insert into composer (default) or send immediately on click. */
+  runMode?: PillRunMode;
+  /** Ask clarifying questions before generating. */
+  askClarifying?: boolean;
   isCustom?: boolean;
-  /** When isCustom, the source pill id (lets the form sheet expose Edit/Delete). */
   customPillId?: string;
 }
 
