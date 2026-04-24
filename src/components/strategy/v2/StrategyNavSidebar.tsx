@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
 import { displayThreadTitle, isUntitledTitle } from '@/lib/strategy/threadNaming';
+import { isCleanupThread } from '@/lib/strategy/threadCleanup';
 import { cn } from '@/lib/utils';
 
 export type StrategyMode = 'brainstorm' | 'deep_research' | 'refine' | null;
@@ -54,6 +55,9 @@ interface Props {
 
   // Mobile
   onAfterSelect?: () => void;
+
+  /** Open the Manage Strategy panel (workspaces + pills). */
+  onOpenManageStrategy?: () => void;
 }
 
 const TOP_NAV: {
@@ -77,11 +81,13 @@ export function StrategyNavSidebar({
   threads, activeThreadId, onSelectThread, onNewWork,
   runningThreadIds, artifactThreadIds,
   onAfterSelect,
+  onOpenManageStrategy,
 }: Props) {
-  // Filter test/benchmark threads out of Work; sort active+ready first.
+  // Hide cleanup/test/debug/regression/benchmark/scratch threads from the
+  // default rail. Use the shared `isCleanupThread` heuristic so the legacy
+  // sidebar matches what the Work command center hides by default.
   const { visibleThreads, hiddenTestCount } = useMemo(() => {
-    const isTest = (t: StrategyThread) => /^\[benchmark\]/i.test(t.title || '');
-    const visible = threads.filter((t) => !isTest(t));
+    const visible = threads.filter((t) => !isCleanupThread(t));
     const hidden = threads.length - visible.length;
     const score = (t: StrategyThread) => {
       if (t.id === activeThreadId) return 0;
