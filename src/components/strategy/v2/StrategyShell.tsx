@@ -158,6 +158,10 @@ export function StrategyShell() {
   // becomes the surface's "current conversation" without bleeding to others.
   // The 'work' bucket is the global all-threads view.
   const surfaceThreadsRef = useRef<Record<string, string | null>>({});
+  // Surface that initiated the in-flight thread creation. The pending-thread
+  // resolution effect uses it to bind the new thread to the right surface
+  // bucket, so "send from Brainstorm" → Brainstorm owns this thread.
+  const pendingThreadSurfaceRef = useRef<DraftKey | null>(null);
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
