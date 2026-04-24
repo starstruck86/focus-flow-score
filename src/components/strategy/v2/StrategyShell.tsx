@@ -1117,11 +1117,20 @@ export function StrategyShell() {
         readonlyReview={canaryReadonly}
         onSaved={handleCanarySaved}
       />
-      {/* Workflow form — Click → Configure → Run for every Mode pill / Library workflow / Artifact template */}
+      {/* Workflow form — Click → Configure → Run for every Mode pill / Library workflow / Artifact template / Custom pill */}
       <WorkflowFormSheet
         workflow={activeWorkflow}
         onClose={() => setActiveWorkflow(null)}
         onRun={handleRunWorkflow}
+        onEditCustom={handleEditCustomPillById}
+      />
+      {/* Pill editor — create/edit programmable shortcuts (custom GPT-style) */}
+      <PillEditorSheet
+        open={pillEditorOpen}
+        editing={editingPill}
+        surface={pillEditorSurface}
+        onClose={() => { setPillEditorOpen(false); setEditingPill(null); }}
+        onSaved={handlePillSaved}
       />
       {/* Promote-to-Library — explicit, never automatic. Outputs are contextual by default. */}
       <PromoteToLibrarySheet
