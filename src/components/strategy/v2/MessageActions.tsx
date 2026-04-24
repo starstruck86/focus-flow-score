@@ -7,6 +7,7 @@
  *
  * Visible actions: Regenerate · Shorten · Expand · Improve
  */
+import { forwardRef } from 'react';
 import { RotateCcw, Minimize2, Maximize2, Sparkles } from 'lucide-react';
 
 interface Props {
@@ -20,9 +21,13 @@ const ACTIONS: { label: string; prompt: string; Icon: typeof RotateCcw }[] = [
   { label: 'Improve',    prompt: 'Improve that response — make it sharper, more specific, more opinionated.', Icon: Sparkles },
 ];
 
-export function MessageActions({ onAction }: Props) {
+// forwardRef so React never warns when a parent (e.g. a layout wrapper or
+// react-markdown component pipeline) attempts to attach a ref. We don't
+// actually need the ref internally, but we forward it onto the root div.
+export const MessageActions = forwardRef<HTMLDivElement, Props>(function MessageActions({ onAction }, ref) {
   return (
     <div
+      ref={ref}
       className="flex flex-wrap items-center gap-1 mt-2 -ml-1.5"
       style={{ opacity: 0.85 }}
     >
@@ -51,4 +56,4 @@ export function MessageActions({ onAction }: Props) {
       ))}
     </div>
   );
-}
+});
