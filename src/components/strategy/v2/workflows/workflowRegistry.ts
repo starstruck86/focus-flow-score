@@ -41,6 +41,16 @@ export interface WorkflowDef {
   fields: WorkflowField[];
   /** Tokens reference field labels in {{Title Case}} form. */
   promptTemplate: string;
+  /**
+   * Optional "system" instruction — how Strategy should think for this pill.
+   * Prepended to the compiled prompt as a leading directive. Editable on
+   * custom pills; read-only for built-ins (none defined today).
+   */
+  instruction?: string;
+  /** True when this workflow originates from a user-defined custom pill. */
+  isCustom?: boolean;
+  /** When isCustom, the source pill id (lets the form sheet expose Edit/Delete). */
+  customPillId?: string;
 }
 
 // ──────────────────────────── MODE PILLS ────────────────────────────
@@ -457,12 +467,19 @@ export const ARTIFACT_TEMPLATE_DEFS: WorkflowDef[] = ARTIFACT_TEMPLATES;
 
 /** Compile a prompt template using the user-supplied values. */
 export function compileWorkflowPrompt(def: WorkflowDef, values: Record<string, string>): string {
-  let out = def.promptTemplate;
+  let body = def.promptTemplate;
   for (const field of def.fields) {
     const raw = values[field.key]?.trim() ?? '';
     const replacement = raw.length > 0 ? raw : '(not specified)';
     // Replace ALL occurrences of the {{Label}} token.
-    out = out.split(`{{${field.label}}}`).join(replacement);
+    body = body.split(`{{${field.label}}}`).join(replacement);
   }
-  return out.trim();
+  body = body.trim();
+
+  // Prepend instruction (custom-GPT style) when present.
+  const instruction = def.instruction?.trim();
+  if (instruction) {
+    return `Instruction: ${instruction}\n\n${body}`.trim();
+  }
+  return body;
 }
