@@ -484,7 +484,23 @@ export function SurfacePanel({
             />
           )}
 
-          {/* Work surface: command center (search + filters + grouping) */}
+          {/* Quiet pointer to where pills are created/managed */}
+          {surface !== 'projects' && surface !== 'work' && (
+            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
+              <Sparkles className="h-3 w-3" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} />
+              <span>
+                {customPills.length === 0 ? 'No custom pills yet. ' : ''}
+                <Link
+                  to="/strategy/settings"
+                  className="underline-offset-2 hover:underline"
+                  style={{ color: 'hsl(var(--sv-clay))' }}
+                  data-testid="manage-pills-link"
+                >
+                  Manage pills in Strategy Settings →
+                </Link>
+              </span>
+            </div>
+          )}
           {surface === 'work' && (
             <WorkCommandCenter
               threads={workThreads}
