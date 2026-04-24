@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Settings } from 'lucide-react';
 import { ManageStrategyPanel } from '@/components/strategy/v2/ManageStrategyPanel';
 import { PillEditorPanel } from '@/components/strategy/v2/PillEditorPanel';
+import { GlobalInstructionsPanel } from '@/components/strategy/v2/GlobalInstructionsPanel';
 import { listCustomPills, type CustomPill } from '@/lib/strategy/customPills';
 import type { StrategySurfaceKey } from '@/components/strategy/v2/StrategyNavSidebar';
 import '@/styles/strategy-v2.css';
@@ -80,6 +81,12 @@ export default function StrategySettings() {
                 <p className="text-[12.5px] mb-5" style={{ color: 'hsl(var(--sv-muted))' }}>
                   Configure workspaces and pills like custom GPTs. Changes save instantly.
                 </p>
+
+                {/* Phase 1 — Global Instructions Engine (UI + persistence only) */}
+                <div className="mb-8">
+                  <GlobalInstructionsPanel />
+                </div>
+
                 <ManageStrategyPanel
                   pillsVersion={version}
                   onAddPill={(surface) => navigate(`/strategy/settings/pill/new?surface=${surface}`)}
