@@ -48,7 +48,10 @@ const CHIPS: PromptChip[] = [
 
 export function StrategyEmptyState({ onPickPrompt }: Props) {
   return (
-    <div className="flex flex-col items-center text-center select-none pt-10 pb-12 px-6">
+    // Center vertically so the empty state reads as the room's focal point,
+    // not a header floating above a void. min-h tuned to fit above the composer
+    // without forcing a scroll.
+    <div className="flex flex-col items-center justify-center text-center select-none px-6" style={{ minHeight: '52vh' }}>
       <h1
         className="text-[28px] leading-[1.15] tracking-tight"
         style={{
@@ -60,14 +63,13 @@ export function StrategyEmptyState({ onPickPrompt }: Props) {
         Where would you like to start?
       </h1>
       <p
-        className="mt-3 text-[14px] max-w-[480px]"
+        className="mt-3 text-[14px] max-w-[440px]"
         style={{ color: 'hsl(var(--sv-muted))', fontFamily: 'var(--sv-sans)' }}
       >
-        Strategy is your sales workspace. Ask a question, draft a deep-work
-        artifact, or pick one of the starting points below.
+        Type anything below — or pick a starting point.
       </p>
 
-      <div className="mt-7 flex flex-wrap items-center justify-center gap-2 max-w-[560px]">
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-2 max-w-[560px]">
         {CHIPS.map((chip) => (
           <button
             key={chip.label}
@@ -80,12 +82,21 @@ export function StrategyEmptyState({ onPickPrompt }: Props) {
             }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover))'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-paper))'; }}
+            title={`Insert: "${chip.prompt.trim()}…"`}
           >
             <span style={{ color: 'hsl(var(--sv-clay))' }}>{chip.icon}</span>
             <span>{chip.label}</span>
           </button>
         ))}
       </div>
+
+      {/* Quiet momentum line — tells the user the cursor is already where it needs to be */}
+      <p
+        className="mt-8 text-[11px] tracking-wide"
+        style={{ color: 'hsl(var(--sv-muted) / 0.7)', fontFamily: 'var(--sv-sans)' }}
+      >
+        ↓ Cursor is in the composer · Enter to send · / for actions
+      </p>
     </div>
   );
 }

@@ -45,6 +45,25 @@ function relativeBucket(updatedAt: string): 'today' | 'yesterday' | 'last7' | 'o
   return 'older';
 }
 
+/** Compact relative time: "2m" "3h" "Yesterday" "3d" "12 Apr" */
+function relativeTime(updatedAt: string): string {
+  const ts = new Date(updatedAt).getTime();
+  const now = Date.now();
+  const diffMin = Math.floor((now - ts) / 60000);
+  if (diffMin < 1) return 'Now';
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD === 1) return 'Yesterday';
+  if (diffD < 7) return `${diffD}d`;
+  try {
+    return new Date(updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch {
+    return `${diffD}d`;
+  }
+}
+
 const BUCKET_LABEL: Record<string, string> = {
   today: 'Today',
   yesterday: 'Yesterday',
@@ -281,7 +300,7 @@ function ThreadGroup({
           <li key={t.id}>
             <button
               onClick={() => onPick(t.id)}
-              className={cn('w-full text-left pr-3 py-1.5 rounded-[6px] flex items-center gap-2 group transition-colors')}
+              className={cn('w-full text-left pr-3 py-1.5 rounded-[6px] flex flex-col gap-0.5 group transition-colors')}
               style={{
                 background: isActive ? 'hsl(var(--sv-clay) / 0.08)' : 'transparent',
                 color: 'hsl(var(--sv-ink))',
@@ -292,15 +311,29 @@ function ThreadGroup({
               onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
               title={t.title || 'Untitled thread'}
             >
-              <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
-                {t.title || 'Untitled thread'}
-              </span>
-              {isRunning && (
-                <Loader2 className="h-3 w-3 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Run in progress" />
-              )}
-              {hasArtifact && !isRunning && (
-                <FileText className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} aria-label="Has artifact" />
-              )}
+              {/* Row 1 — title + status icon */}
+              <div className="w-full flex items-center gap-2">
+                <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
+                  {t.title || 'Untitled thread'}
+                </span>
+                {isRunning && (
+                  <Loader2 className="h-3 w-3 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Run in progress" />
+                )}
+                {hasArtifact && !isRunning && (
+                  <FileText className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} aria-label="Has artifact" />
+                )}
+              </div>
+              {/* Row 2 — status word + relative time, gives the eye something to scan */}
+              <div
+                className="w-full flex items-center gap-1.5 text-[10.5px] leading-none"
+                style={{ color: 'hsl(var(--sv-muted))' }}
+              >
+                <span className="truncate">
+                  {isRunning ? 'Running…' : hasArtifact ? 'Artifact ready' : 'Chat'}
+                </span>
+                <span aria-hidden style={{ opacity: 0.5 }}>·</span>
+                <span className="shrink-0 tabular-nums">{relativeTime(t.updated_at)}</span>
+              </div>
             </button>
           </li>
           );
