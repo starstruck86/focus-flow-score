@@ -167,6 +167,33 @@ export function StrategyShell() {
   // in the composer (the composer only ever shows the human title).
   const [pendingResourceIds, setPendingResourceIds] = useState<string[]>([]);
 
+  // ── Surface-switch draft swap ────────────────────────────────────────────
+  // When the user moves between workspaces, save the in-flight draft under
+  // the previous surface and restore the next surface's draft. This makes
+  // each workspace feel like its own independent starting surface — a draft
+  // typed in Brainstorm never bleeds into Deep Research.
+  useEffect(() => {
+    const ta = composerRef.current as
+      (HTMLTextAreaElement & { getValue?: () => string; setValue?: (t: string) => void })
+      | null;
+    if (!ta?.getValue || !ta?.setValue) {
+      // Composer not mounted yet — just remember the new key.
+      lastSurfaceKeyRef.current = draftKeyOf(activeSurface);
+      return;
+    }
+    const prevKey = lastSurfaceKeyRef.current;
+    const nextKey = draftKeyOf(activeSurface);
+    if (prevKey === nextKey) return;
+    // Persist the current draft for the surface we're leaving.
+    surfaceDraftsRef.current[prevKey] = ta.getValue();
+    // Load the draft for the surface we're entering (default = empty).
+    const incoming = surfaceDraftsRef.current[nextKey] ?? '';
+    ta.setValue(incoming);
+    lastSurfaceKeyRef.current = nextKey;
+    // Clear any in-flight slash query so we don't carry "/library" between surfaces.
+    setSlashQuery(null);
+  }, [activeSurface, draftKeyOf]);
+
   // ----- Cycle 1 Canary operator workflow -----
   const [canaryDrawerOpen, setCanaryDrawerOpen] = useState(false);
   const [canaryReadonly, setCanaryReadonly] = useState<CanaryReviewRow | null>(null);
