@@ -6,7 +6,7 @@
  * "TypeError" strings never surface to the toast layer.
  */
 import { describe, it, expect } from 'vitest';
-import { mapSendErrorToFriendlyMessage } from '../useStrategyMessages';
+import { mapSendErrorToFriendlyMessage } from '../sendErrorMapping';
 
 const NETWORK_COPY =
   "Connection hiccup — Strategy couldn't reach the AI provider. Check your network and try again.";
