@@ -666,14 +666,46 @@ export function StrategyShell() {
     return s;
   }, [latestCompleted, threadId]);
 
+  // User-scoped artifacts feed for the new sidebar Artifacts section
+  const { rows: userArtifacts } = useUserArtifacts(20);
+
+  // Open the /library slash command in the composer (mirrors the slash route).
+  const handleOpenLibraryFromSidebar = useCallback(() => {
+    setSlashQuery('/library ');
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      const ta = composerRef.current as
+        (HTMLTextAreaElement & { insertText?: (t: string) => void })
+        | null;
+      ta?.insertText?.('/library ');
+    });
+  }, []);
+
+  // Pick a mode → set hint state, focus composer (does NOT gate input).
+  const handlePickMode = useCallback((m: StrategyMode) => {
+    setActiveMode(m);
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }, []);
+
+  // Open an artifact row → switch to its thread + open the workspace panel.
+  const handleOpenArtifactFromSidebar = useCallback((a: { thread_id: string | null }) => {
+    if (a.thread_id) setActiveThreadId(a.thread_id);
+    setArtifactPanelOpen(true);
+  }, [setActiveThreadId]);
+
   const sidebarNode = (onAfterSelect?: () => void) => (
-    <StrategyThreadsSidebar
+    <StrategyNavSidebar
+      collapsed={sidebarCollapsed}
+      onToggleCollapsed={toggleSidebar}
+      activeMode={activeMode}
+      onPickMode={handlePickMode}
+      onOpenLibrary={handleOpenLibraryFromSidebar}
+      artifacts={userArtifacts}
+      onOpenArtifact={handleOpenArtifactFromSidebar}
       threads={threads}
       activeThreadId={threadId}
       onSelectThread={(id) => setActiveThreadId(id)}
-      onNewThread={() => handleNewThread()}
-      collapsed={sidebarCollapsed}
-      onToggleCollapsed={toggleSidebar}
+      onNewWork={() => handleNewThread()}
       runningThreadIds={runningThreadIds}
       artifactThreadIds={artifactThreadIds}
       onAfterSelect={onAfterSelect}
