@@ -18,16 +18,31 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, X, Wand2, Save } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Plus, Trash2, X, Wand2, Save, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   emptyPillForSurface,
   upsertCustomPill,
   deleteCustomPill,
+  duplicateCustomPill,
   type CustomPill,
 } from '@/lib/strategy/customPills';
 import type { StrategySurfaceKey } from './StrategyNavSidebar';
-import type { WorkflowField } from './workflows/workflowRegistry';
+import {
+  type WorkflowField,
+  type PillOutputType,
+  type PillRunMode,
+  OUTPUT_TYPE_LABEL,
+} from './workflows/workflowRegistry';
+
+const SURFACE_OPTIONS: Array<{ value: StrategySurfaceKey; label: string }> = [
+  { value: 'brainstorm',    label: 'Brainstorm' },
+  { value: 'deep_research', label: 'Deep Research' },
+  { value: 'refine',        label: 'Refine' },
+  { value: 'library',       label: 'Library' },
+  { value: 'artifacts',     label: 'Artifacts' },
+];
 
 interface Props {
   open: boolean;
