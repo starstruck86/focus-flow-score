@@ -996,7 +996,7 @@ function ThreadRows({
                 background: isActive ? 'hsl(var(--sv-clay) / 0.08)' : (isTopMatch ? 'hsl(var(--sv-clay) / 0.03)' : 'transparent'),
                 border: '1px solid ' + (isActive ? 'hsl(var(--sv-clay) / 0.30)' : (isTopMatch ? 'hsl(var(--sv-clay) / 0.22)' : 'hsl(var(--sv-hairline))')),
                 color: 'hsl(var(--sv-ink))',
-                opacity: isUntitled && !isActive && !isRunning && !hasArtifact ? 0.7 : 1,
+                opacity: (isUntitled && !isActive && !isRunning && !hasArtifact ? 0.7 : 1) * confOpacity,
               }}
               onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
               onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = isTopMatch ? 'hsl(var(--sv-clay) / 0.03)' : 'transparent'; }}
