@@ -681,6 +681,8 @@ export function StrategyShell() {
 
   const handleRunWorkflow = useCallback((compiledPrompt: string) => {
     setActiveWorkflow(null);
+    // Close the surface panel so the new conversation gets focus.
+    setActiveSurface(null);
     // Route through the same send path freeform typing uses.
     handleSend(compiledPrompt);
     requestAnimationFrame(() => composerRef.current?.focus());
