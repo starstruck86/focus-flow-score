@@ -11,20 +11,34 @@
  * The pill is converted to a WorkflowDef at runtime and runs through the
  * same compileWorkflowPrompt → send pipeline as built-in pills.
  */
-import type { WorkflowDef, WorkflowField, WorkflowFamily } from '@/components/strategy/v2/workflows/workflowRegistry';
+import type {
+  WorkflowDef,
+  WorkflowField,
+  WorkflowFamily,
+  PillOutputType,
+  PillRunMode,
+} from '@/components/strategy/v2/workflows/workflowRegistry';
 import type { StrategySurfaceKey } from '@/components/strategy/v2/StrategyNavSidebar';
 
 const STORAGE_KEY = 'sv-custom-pills-v1';
 
 export interface CustomPill {
-  id: string;                     // local UUID
-  surface: StrategySurfaceKey;    // which workspace it belongs to
-  name: string;                   // visible label
-  description: string;            // short tagline
-  instruction: string;            // "how Strategy thinks" — prepended to prompt
-  fields: WorkflowField[];        // input schema
+  id: string;
+  surface: StrategySurfaceKey;
+  name: string;
+  description: string;
+  /** Hidden "system" instruction — prepended at run time. */
+  instruction: string;
+  /** Inputs the prompt template can reference via {{Label}} tokens. */
+  fields: WorkflowField[];
   /** Optional template — if blank, we auto-build from fields. */
   promptTemplate?: string;
+  /** Default output shape (chat by default). */
+  outputType?: PillOutputType;
+  /** Insert into composer (default) or send immediately. */
+  runMode?: PillRunMode;
+  /** Ask clarifying questions before generating. */
+  askClarifying?: boolean;
   createdAt: string;
   updatedAt: string;
 }
