@@ -256,32 +256,52 @@ export function StrategyNavSidebar({
               No artifacts yet. Discovery preps and deal reviews will appear here.
             </p>
           ) : (
-            <div className="px-1.5 space-y-2">
+            <div className="px-1.5 space-y-1.5">
               {artifactsGrouped.map(([groupName, items]) => (
                 <div key={groupName}>
                   <div
-                    className="px-2 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-[0.06em]"
-                    style={{ color: 'hsl(var(--sv-muted))' }}
+                    className="px-2 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-[0.06em]"
+                    style={{ color: 'hsl(var(--sv-muted) / 0.75)' }}
                   >
                     {groupName}
                   </div>
                   <ul className="space-y-px">
-                    {items.slice(0, 6).map((a) => (
+                    {items.slice(0, 3).map((a) => (
                       <li key={a.id}>
                         <button
                           onClick={() => { onOpenArtifact(a); onAfterSelect?.(); }}
-                          className="w-full text-left px-2 py-1.5 rounded-[6px] flex items-center gap-2 group transition-colors"
+                          className="w-full text-left px-2 py-1.5 rounded-[6px] flex items-start gap-2 group transition-colors"
                           style={{ color: 'hsl(var(--sv-ink))' }}
                           onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                           title={a.title}
                         >
-                          <FileText className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} />
-                          <span className="flex-1 min-w-0 truncate text-[12.5px]">{a.title}</span>
-                          <ChevronRight className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-50" />
+                          <FileText className="h-3 w-3 shrink-0 mt-[3px]" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} />
+                          <div className="flex-1 min-w-0 flex flex-col gap-px">
+                            <span className="truncate text-[12.5px] leading-tight">
+                              {a.context ? a.context : a.type_label}
+                            </span>
+                            <span
+                              className="truncate text-[10.5px] leading-tight"
+                              style={{ color: 'hsl(var(--sv-muted))' }}
+                            >
+                              {a.context ? `${a.type_label} · ${shortDate(a.completed_at ?? a.created_at)}` : shortDate(a.completed_at ?? a.created_at)}
+                            </span>
+                          </div>
+                          <ChevronRight className="h-3 w-3 shrink-0 mt-[3px] opacity-0 group-hover:opacity-50" />
                         </button>
                       </li>
                     ))}
+                    {items.length > 3 && (
+                      <li>
+                        <span
+                          className="block px-2 py-0.5 text-[10.5px]"
+                          style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
+                        >
+                          +{items.length - 3} more
+                        </span>
+                      </li>
+                    )}
                   </ul>
                 </div>
               ))}
