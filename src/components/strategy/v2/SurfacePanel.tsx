@@ -116,6 +116,20 @@ export function SurfacePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threads, surface, pillsVersion]);
 
+  // ── Fallback: recent Work threads (shown when surface has none) ─
+  // Keeps the workspace from ever feeling empty: if the user hasn't run a
+  // pill in this surface yet, we surface their recent freeform work so
+  // there's always something useful one tap away.
+  const fallbackRecentWork = useMemo(() => {
+    if (surface === 'work' || surface === 'projects') return [];
+    if (recentThreadsForSurface.length > 0) return [];
+    const isTest = (t: StrategyThread) => /^\[benchmark\]/i.test(t.title || '');
+    const tags = getAllThreadTags();
+    return threads
+      .filter((t) => !isTest(t) && !tags[t.id]) // freeform / Work only
+      .slice(0, 4);
+  }, [threads, surface, recentThreadsForSurface.length]);
+
   // ── Work surface: all threads, sorted active/ready/recent ─────
   const workThreads = useMemo(() => {
     if (surface !== 'work') return [];
