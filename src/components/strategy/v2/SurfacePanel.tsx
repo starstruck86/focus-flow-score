@@ -274,7 +274,8 @@ export function SurfacePanel({
             <RecentInSurface
               label={meta.label}
               threads={recentThreadsForSurface}
-              fallbackThreads={fallbackRecentWork}
+              fallbackThreads={relevantFallbackWork}
+              surface={surface}
               activeThreadId={activeThreadId}
               onSelect={onSelectThread}
               runningThreadIds={runningThreadIds}
