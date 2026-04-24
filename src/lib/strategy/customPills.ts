@@ -86,8 +86,13 @@ export function listCustomPills(): CustomPill[] {
   return safeRead();
 }
 
-export function listCustomPillsForSurface(surface: StrategySurfaceKey): CustomPill[] {
-  return safeRead().filter((p) => p.surface === surface);
+export function listCustomPillsForSurface(
+  surface: StrategySurfaceKey,
+  opts: { includeHidden?: boolean } = {},
+): CustomPill[] {
+  const pills = safeRead().filter((p) => p.surface === surface);
+  const visible = opts.includeHidden ? pills : pills.filter((p) => p.isActive !== false);
+  return sortPills(visible);
 }
 
 export function upsertCustomPill(pill: CustomPill): CustomPill[] {
