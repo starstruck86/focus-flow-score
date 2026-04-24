@@ -118,13 +118,11 @@ export function SurfacePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threads, surface, pillsVersion]);
 
-  // ── Relevant fallback (strict, per-surface) ─────────────────────
+  // ── Relevant fallback (strict, per-surface, with reasons & groups) ──
   // Only show threads that *clearly belong* to this workspace's intent.
-  // Empty is acceptable — we never pad with random work.
-  //
-  // Strategy: keyword/structure matching against thread titles + artifact
-  // signal. Excludes debug/test/regression threads everywhere.
-  const relevantFallbackWork = useMemo(() => {
+  // Each thread carries a `reason` (why it surfaced) and a `group` (light
+  // bucket for visual organization). Empty is acceptable.
+  const relevantFallbackWork = useMemo<AnnotatedThread[]>(() => {
     if (surface === 'work' || surface === 'projects') return [];
     if (recentThreadsForSurface.length > 0) return [];
 
@@ -142,51 +140,99 @@ export function SurfacePanel({
     // Already-tagged threads belong to their own surface — don't borrow.
     const candidates = threads.filter((t) => !isExcluded(t) && !tags[t.id]);
     const hasArtifact = (t: StrategyThread) => artifactThreadIds?.has(t.id) ?? false;
+    const ageDays = (t: StrategyThread) =>
+      (Date.now() - new Date(t.updated_at).getTime()) / 86_400_000;
 
-    // Per-surface relevance keywords. A thread must MATCH to be eligible.
-    const matchers: Record<string, (t: StrategyThread) => boolean> = {
+    // Per-surface annotators. Returns null if the thread doesn't qualify;
+    // otherwise returns a `{ reason, group }` annotation.
+    type Annotator = (t: StrategyThread) => { reason: string; group: string } | null;
+    const annotators: Record<string, Annotator> = {
       brainstorm: (t) => {
         const s = (t.title || '').toLowerCase();
-        // Ideation / messaging / POV / hypothesis signals
-        return /\b(idea|ideas|brainstorm|angle|angles|hook|hooks|pov|point of view|hypothes|messaging|campaign|pitch|positioning|narrative|theme)\b/.test(s)
-          // Short, no-artifact, fresh threads also count as ideation
-          || (!hasArtifact(t) && s.length > 0 && s.length < 50);
+        if (/\b(idea|ideas|brainstorm|angle|angles|hook|hooks|pov|point of view|hypothes)\b/.test(s))
+          return { reason: 'Ideation language', group: 'Ideation' };
+        if (/\b(messaging|campaign|pitch|positioning|narrative|theme)\b/.test(s))
+          return { reason: 'Messaging direction', group: 'Messaging' };
+        if (!hasArtifact(t) && (t.title || '').length > 0 && (t.title || '').length < 50)
+          return { reason: 'Short, no structured output', group: 'Early-stage' };
+        return null;
       },
       deep_research: (t) => {
         const s = (t.title || '').toLowerCase();
-        return /\b(research|analysis|analyze|brief|deep dive|deep-dive|account|company|competitor|competitive|market|industry|risk|risks|gap|gaps|landscape|teardown|profile)\b/.test(s)
-          // Artifact-bearing threads with substantive titles read as research
-          || (hasArtifact(t) && s.length >= 25);
+        if (hasArtifact(t) && (t.title || '').length >= 25)
+          return { reason: 'Structured artifact', group: 'Structured work' };
+        if (/\b(research|analysis|analyze|brief|deep dive|deep-dive|teardown|profile)\b/.test(s))
+          return { reason: 'Long-form analysis', group: 'Structured work' };
+        if (/\b(account|company|competitor|competitive|market|industry|landscape)\b/.test(s))
+          return { reason: 'Account / market focus', group: 'Recent analysis' };
+        if (/\b(risk|risks|gap|gaps)\b/.test(s))
+          return { reason: 'Risk / gap framing', group: 'Recent analysis' };
+        return null;
       },
       refine: (t) => {
         const s = (t.title || '').toLowerCase();
-        return /\b(refine|rewrite|edit|tighten|polish|improve|sharpen|revise|draft|email|follow.?up|exec|executive|tone|shorten|condense)\b/.test(s)
-          // Threads with an artifact attached are typically refinement targets
-          || hasArtifact(t);
+        if (hasArtifact(t) && ageDays(t) < 3)
+          return { reason: 'Recently edited draft', group: 'Drafts to polish' };
+        if (hasArtifact(t))
+          return { reason: 'Draft with artifact', group: 'Drafts to polish' };
+        if (/\b(refine|rewrite|edit|tighten|polish|improve|sharpen|revise)\b/.test(s))
+          return { reason: 'Refinement language', group: 'Edits in progress' };
+        if (/\b(draft|email|follow.?up|exec|executive|tone|shorten|condense)\b/.test(s))
+          return { reason: 'Needs polishing', group: 'Edits in progress' };
+        return null;
       },
       library: (t) => {
         const s = (t.title || '').toLowerCase();
-        return /\b(framework|synthesis|pattern|insight|insights|playbook|library|knowledge|principle|principles|methodology|model)\b/.test(s);
+        if (/\b(framework|methodology|model|playbook)\b/.test(s))
+          return { reason: 'Framework work', group: 'Frameworks' };
+        if (/\b(synthesis|pattern|insight|insights|principle|principles)\b/.test(s))
+          return { reason: 'Synthesis / pattern', group: 'Insights' };
+        if (/\b(library|knowledge)\b/.test(s))
+          return { reason: 'Knowledge work', group: 'Insights' };
+        return null;
       },
       artifacts: (t) => {
+        if (!hasArtifact(t)) return null;
         const s = (t.title || '').toLowerCase();
-        return /\b(template|artifact|discovery prep|deal review|outreach plan|demo plan|follow.?up|prep|plan)\b/.test(s)
-          && hasArtifact(t);
+        if (/\b(template)\b/.test(s))
+          return { reason: 'Template work', group: 'Templates' };
+        if (/\b(discovery prep|deal review|outreach plan|demo plan|follow.?up|prep|plan)\b/.test(s))
+          return { reason: 'Structured artifact', group: 'Generated artifacts' };
+        return { reason: 'Artifact attached', group: 'Generated artifacts' };
       },
     };
 
-    const matcher = matchers[surface];
-    if (!matcher) return [];
+    const annotate = annotators[surface];
+    if (!annotate) return [];
 
-    const matched = candidates.filter(matcher);
-    if (matched.length === 0) return [];
+    const annotated: AnnotatedThread[] = [];
+    for (const t of candidates) {
+      const a = annotate(t);
+      if (!a) continue;
+      annotated.push({ thread: t, reason: a.reason, group: a.group });
+    }
+    if (annotated.length === 0) return [];
 
-    // Sort matched threads by recency for display.
-    return matched
-      .slice()
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-      .slice(0, 4);
+    return annotated
+      .sort((a, b) => new Date(b.thread.updated_at).getTime() - new Date(a.thread.updated_at).getTime())
+      .slice(0, 6);
   }, [threads, surface, recentThreadsForSurface.length, artifactThreadIds]);
+
+  // Annotate the user's *own* tagged threads too, so they get the same
+  // explainability chips/grouping as fallback threads.
+  const annotatedRecentForSurface = useMemo<AnnotatedThread[]>(() => {
+    if (recentThreadsForSurface.length === 0) return [];
+    const hasArtifact = (t: StrategyThread) => artifactThreadIds?.has(t.id) ?? false;
+    const isRunning = (t: StrategyThread) => runningThreadIds?.has(t.id) ?? false;
+    return recentThreadsForSurface.map((t) => {
+      // Light, surface-aware reasoning for owned threads.
+      let reason = 'You ran this here';
+      let group = 'Your work';
+      if (isRunning(t)) { reason = 'Running now'; group = 'Active'; }
+      else if (hasArtifact(t)) { reason = 'Has artifact'; group = 'With artifact'; }
+      return { thread: t, reason, group };
+    });
+  }, [recentThreadsForSurface, artifactThreadIds, runningThreadIds]);
 
   // ── Work surface: all threads, sorted active/ready/recent ─────
   const workThreads = useMemo(() => {
