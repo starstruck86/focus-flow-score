@@ -62,11 +62,13 @@ interface Props {
 const SURFACE_HEADER: Record<StrategySurfaceKey, {
   label: string;
   description: string;
+  /** Short identity tag — communicates the "feel" of the mode. */
+  tag?: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = {
-  brainstorm:    { label: 'Brainstorm',    icon: Lightbulb,    description: 'Generate ideas, angles, hooks, and points of view.' },
-  deep_research: { label: 'Deep Research', icon: Microscope,   description: 'Analyze companies, competitors, and markets in depth.' },
-  refine:        { label: 'Refine',        icon: Wand2,        description: 'Improve, tighten, and elevate existing output.' },
+  brainstorm:    { label: 'Brainstorm',    icon: Lightbulb,    tag: 'Generative',  description: 'Spin up angles, hooks, and points of view fast — quantity over polish.' },
+  deep_research: { label: 'Deep Research', icon: Microscope,   tag: 'Analytical',  description: 'Investigate companies, competitors, and markets with structured rigor.' },
+  refine:        { label: 'Refine',        icon: Wand2,        tag: 'Editorial',   description: 'Tighten, sharpen, and elevate something you\'ve already drafted.' },
   library:       { label: 'Library',       icon: BookOpen,     description: 'Create from your knowledge.' },
   artifacts:     { label: 'Artifacts',     icon: FileText,     description: 'Reusable document templates.' },
   projects:      { label: 'Projects',      icon: FolderKanban, description: 'Promoted long-term work.' },
