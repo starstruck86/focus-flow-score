@@ -43,12 +43,23 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
   const isUser = role === 'user';
 
   if (!text.trim()) {
-    // Streaming placeholder — three soft dots in clay, no bubble
+    // Streaming placeholder — three pulsing dots + "Thinking…" label.
     return (
-      <div className="flex items-center gap-1.5 py-1" style={{ paddingLeft: role === 'user' ? 40 : 0 }}>
-        <span className="h-1 w-1 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.5)', animationDelay: '0ms' }} />
-        <span className="h-1 w-1 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.5)', animationDelay: '120ms' }} />
-        <span className="h-1 w-1 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.5)', animationDelay: '240ms' }} />
+      <div
+        className="flex items-center gap-2 py-1"
+        style={{ paddingLeft: role === 'user' ? 40 : 0 }}
+      >
+        <span className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.55)', animationDelay: '0ms' }} />
+          <span className="h-1.5 w-1.5 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.55)', animationDelay: '120ms' }} />
+          <span className="h-1.5 w-1.5 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.55)', animationDelay: '240ms' }} />
+        </span>
+        <span
+          className="text-[12px]"
+          style={{ color: 'hsl(var(--sv-muted))', fontFamily: 'var(--sv-sans)' }}
+        >
+          Thinking…
+        </span>
       </div>
     );
   }
@@ -115,7 +126,9 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
     );
   }
 
-  // Assistant — serif, flush left, full width
+  // Assistant — serif, flush left, full width. Claude-grade hierarchy:
+  // 18px section headers, 15px body, 1.65 line-height, generous gaps
+  // between sections, tight gaps between bullets. Optimised for scan.
   return (
     <div
       data-strategy-selectable
@@ -131,32 +144,88 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          p: ({ children }) => <p style={{ margin: 0 }}>{children}</p>,
-          ul: ({ children }) => <ul style={{ margin: '0.55rem 0 0', paddingLeft: '1.2rem' }}>{children}</ul>,
-          ol: ({ children }) => <ol style={{ margin: '0.55rem 0 0', paddingLeft: '1.2rem' }}>{children}</ol>,
-          li: ({ children }) => <li style={{ margin: '0.2rem 0' }}>{children}</li>,
+          p: ({ children }) => (
+            <p style={{ margin: '0 0 12px' }}>{children}</p>
+          ),
+          ul: ({ children }) => (
+            <ul style={{ margin: '0 0 12px', paddingLeft: '1.25rem' }}>{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol style={{ margin: '0 0 12px', paddingLeft: '1.4rem' }}>{children}</ol>
+          ),
+          li: ({ children }) => (
+            <li style={{ margin: '0 0 6px', paddingLeft: '0.15rem' }}>{children}</li>
+          ),
           strong: ({ children }) => <strong style={{ fontWeight: 700 }}>{children}</strong>,
           em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
-          h1: ({ children }) => <h1 style={{ fontSize: '1.35rem', margin: '0 0 0.4rem', fontWeight: 700 }}>{children}</h1>,
-          h2: ({ children }) => <h2 style={{ fontSize: '1.1rem', margin: '0.2rem 0 0.35rem', fontWeight: 700 }}>{children}</h2>,
-          h3: ({ children }) => <h3 style={{ fontSize: '1rem', margin: '0.15rem 0 0.3rem', fontWeight: 650 }}>{children}</h3>,
-              code: ({ children, className }: any) => (
-                <code
-                  className={className}
-                  style={{
-                    fontFamily: 'var(--sv-sans)',
-                    background: 'hsl(var(--sv-hover))',
-                    borderRadius: 4,
-                    padding: '0.1rem 0.3rem',
-                  }}
-                >
-                  {children}
-                </code>
-              ),
+          h1: ({ children }) => (
+            <h1
+              style={{
+                fontSize: '20px',
+                lineHeight: 1.3,
+                margin: '4px 0 10px',
+                fontWeight: 700,
+                fontFamily: 'var(--sv-sans)',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              {children}
+            </h1>
+          ),
+          h2: ({ children }) => (
+            <h2
+              style={{
+                fontSize: '18px',
+                lineHeight: 1.3,
+                margin: '18px 0 8px',
+                fontWeight: 600,
+                fontFamily: 'var(--sv-sans)',
+                letterSpacing: '-0.005em',
+              }}
+            >
+              {children}
+            </h2>
+          ),
+          h3: ({ children }) => (
+            <h3
+              style={{
+                fontSize: '15px',
+                lineHeight: 1.3,
+                margin: '14px 0 6px',
+                fontWeight: 600,
+                fontFamily: 'var(--sv-sans)',
+              }}
+            >
+              {children}
+            </h3>
+          ),
+          hr: () => (
+            <hr
+              style={{
+                margin: '16px 0',
+                border: 0,
+                borderTop: '1px solid hsl(var(--sv-hairline))',
+              }}
+            />
+          ),
+          code: ({ children, className }: any) => (
+            <code
+              className={className}
+              style={{
+                fontFamily: 'var(--sv-sans)',
+                background: 'hsl(var(--sv-hover))',
+                borderRadius: 4,
+                padding: '0.1rem 0.3rem',
+                fontSize: '0.92em',
+              }}
+            >
+              {children}
+            </code>
+          ),
           blockquote: ({ children }) => (
             <blockquote
               style={{
-                margin: '0.55rem 0 0',
+                margin: '12px 0',
                 paddingLeft: '0.85rem',
                 borderLeft: '2px solid hsl(var(--sv-hairline))',
                 color: 'hsl(var(--sv-muted))',

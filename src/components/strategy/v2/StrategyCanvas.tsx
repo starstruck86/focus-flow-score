@@ -39,7 +39,7 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
     >
       <div
         className="mx-auto px-6 pt-4 pb-12"
-        style={{ maxWidth: 760 }}
+        style={{ maxWidth: 720 }}
       >
         {showEmptyState && onPickPrompt && (
           <StrategyEmptyState onPickPrompt={onPickPrompt} />
