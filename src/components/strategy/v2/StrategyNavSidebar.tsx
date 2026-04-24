@@ -83,7 +83,7 @@ const TOP_NAV: {
   { key: 'refine',        label: 'Refine',        icon: Wand2 },
   { key: 'library',       label: 'Library',       icon: BookOpen },
   { key: 'artifacts',     label: 'Artifacts',     icon: FileText },
-  { key: 'projects',      label: 'Projects',      icon: FolderKanban, muted: true },
+  { key: 'projects',      label: 'Projects',      icon: FolderKanban },
   { key: 'work',          label: 'Work',          icon: Briefcase },
 ];
 
@@ -251,13 +251,7 @@ export function StrategyNavSidebar({
             muted={n.muted}
             onClick={() => handlePickSurface(n.key)}
             testId={`nav-${n.key}`}
-            trailing={
-              n.key === 'projects' ? (
-                <span className="text-[10px] px-1.5 py-px rounded-full" style={{ background: 'hsl(var(--sv-hover))', color: 'hsl(var(--sv-muted))' }}>
-                  Soon
-                </span>
-              ) : null
-            }
+            trailing={null}
           />
         ))}
 
