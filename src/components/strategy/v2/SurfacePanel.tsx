@@ -198,61 +198,63 @@ export function SurfacePanel({
       (Date.now() - new Date(t.updated_at).getTime()) / 86_400_000;
 
     // Per-surface annotators. Returns null if the thread doesn't qualify;
-    // otherwise returns a `{ reason, group }` annotation.
-    type Annotator = (t: StrategyThread) => { reason: string; group: string } | null;
+    // otherwise returns a `{ reason, group, nextAction, priority }` annotation.
+    // Reasons are written as decisions ("Strong match for X"), not metadata.
+    type Annotation = { reason: string; group: string; nextAction?: string; priority: number };
+    type Annotator = (t: StrategyThread) => Annotation | null;
     const annotators: Record<string, Annotator> = {
       brainstorm: (t) => {
         const s = (t.title || '').toLowerCase();
         if (/\b(idea|ideas|brainstorm|angle|angles|hook|hooks|pov|point of view|hypothes)\b/.test(s))
-          return { reason: 'Ideation language', group: 'Ideation' };
+          return { reason: 'Strong match for Brainstorm', group: 'Ideation', nextAction: 'expand or branch', priority: 100 };
         if (/\b(messaging|campaign|pitch|positioning|narrative|theme)\b/.test(s))
-          return { reason: 'Messaging direction', group: 'Messaging' };
+          return { reason: 'Messaging direction', group: 'Messaging', nextAction: 'sharpen or test angles', priority: 80 };
         if (!hasArtifact(t) && (t.title || '').length > 0 && (t.title || '').length < 50)
-          return { reason: 'Short, no structured output', group: 'Early-stage' };
+          return { reason: 'Ideation-style thread', group: 'Early-stage', nextAction: 'develop further', priority: 50 };
         return null;
       },
       deep_research: (t) => {
         const s = (t.title || '').toLowerCase();
         if (hasArtifact(t) && (t.title || '').length >= 25)
-          return { reason: 'Structured artifact', group: 'Structured work' };
+          return { reason: 'Strong match for Deep Research', group: 'Structured work', nextAction: 'expand or refine', priority: 100 };
         if (/\b(research|analysis|analyze|brief|deep dive|deep-dive|teardown|profile)\b/.test(s))
-          return { reason: 'Long-form analysis', group: 'Structured work' };
+          return { reason: 'Long-form analysis', group: 'Structured work', nextAction: 'extend or cite', priority: 90 };
         if (/\b(account|company|competitor|competitive|market|industry|landscape)\b/.test(s))
-          return { reason: 'Account / market focus', group: 'Recent analysis' };
+          return { reason: 'Account / market focus', group: 'Recent analysis', nextAction: 'go deeper', priority: 70 };
         if (/\b(risk|risks|gap|gaps)\b/.test(s))
-          return { reason: 'Risk / gap framing', group: 'Recent analysis' };
+          return { reason: 'Risk / gap framing', group: 'Recent analysis', nextAction: 'pressure-test', priority: 60 };
         return null;
       },
       refine: (t) => {
         const s = (t.title || '').toLowerCase();
         if (hasArtifact(t) && ageDays(t) < 3)
-          return { reason: 'Recently edited draft', group: 'Drafts to polish' };
+          return { reason: 'Recently edited draft', group: 'Drafts to polish', nextAction: 'tighten or rewrite', priority: 100 };
         if (hasArtifact(t))
-          return { reason: 'Draft with artifact', group: 'Drafts to polish' };
+          return { reason: 'Draft with artifact', group: 'Drafts to polish', nextAction: 'polish or reuse', priority: 85 };
         if (/\b(refine|rewrite|edit|tighten|polish|improve|sharpen|revise)\b/.test(s))
-          return { reason: 'Refinement language', group: 'Edits in progress' };
+          return { reason: 'Strong match for Refine', group: 'Edits in progress', nextAction: 'continue editing', priority: 75 };
         if (/\b(draft|email|follow.?up|exec|executive|tone|shorten|condense)\b/.test(s))
-          return { reason: 'Needs polishing', group: 'Edits in progress' };
+          return { reason: 'Needs polishing', group: 'Edits in progress', nextAction: 'tighten tone', priority: 65 };
         return null;
       },
       library: (t) => {
         const s = (t.title || '').toLowerCase();
         if (/\b(framework|methodology|model|playbook)\b/.test(s))
-          return { reason: 'Framework work', group: 'Frameworks' };
+          return { reason: 'Framework work', group: 'Frameworks', nextAction: 'reuse or extend', priority: 90 };
         if (/\b(synthesis|pattern|insight|insights|principle|principles)\b/.test(s))
-          return { reason: 'Synthesis / pattern', group: 'Insights' };
+          return { reason: 'Synthesis / pattern', group: 'Insights', nextAction: 'apply elsewhere', priority: 75 };
         if (/\b(library|knowledge)\b/.test(s))
-          return { reason: 'Knowledge work', group: 'Insights' };
+          return { reason: 'Knowledge work', group: 'Insights', nextAction: 'reuse', priority: 60 };
         return null;
       },
       artifacts: (t) => {
         if (!hasArtifact(t)) return null;
         const s = (t.title || '').toLowerCase();
         if (/\b(template)\b/.test(s))
-          return { reason: 'Template work', group: 'Templates' };
+          return { reason: 'Template work', group: 'Templates', nextAction: 'edit template', priority: 95 };
         if (/\b(discovery prep|deal review|outreach plan|demo plan|follow.?up|prep|plan)\b/.test(s))
-          return { reason: 'Structured artifact', group: 'Generated artifacts' };
-        return { reason: 'Artifact attached', group: 'Generated artifacts' };
+          return { reason: 'Strong match for Artifacts', group: 'Generated artifacts', nextAction: 'reuse as template', priority: 85 };
+        return { reason: 'Artifact attached', group: 'Generated artifacts', nextAction: 'reuse', priority: 60 };
       },
     };
 
@@ -263,12 +265,17 @@ export function SurfacePanel({
     for (const t of candidates) {
       const a = annotate(t);
       if (!a) continue;
-      annotated.push({ thread: t, reason: a.reason, group: a.group });
+      annotated.push({ thread: t, reason: a.reason, group: a.group, nextAction: a.nextAction, priority: a.priority });
     }
     if (annotated.length === 0) return [];
 
+    // Sort: priority desc, then recency. Top result becomes the "Top match".
     return annotated
-      .sort((a, b) => new Date(b.thread.updated_at).getTime() - new Date(a.thread.updated_at).getTime())
+      .sort((a, b) => {
+        const dp = (b.priority ?? 0) - (a.priority ?? 0);
+        if (dp !== 0) return dp;
+        return new Date(b.thread.updated_at).getTime() - new Date(a.thread.updated_at).getTime();
+      })
       .slice(0, 6);
   }, [threads, surface, recentThreadsForSurface.length, artifactThreadIds]);
 
@@ -278,13 +285,19 @@ export function SurfacePanel({
     if (recentThreadsForSurface.length === 0) return [];
     const hasArtifact = (t: StrategyThread) => artifactThreadIds?.has(t.id) ?? false;
     const isRunning = (t: StrategyThread) => runningThreadIds?.has(t.id) ?? false;
-    return recentThreadsForSurface.map((t) => {
-      // Light, surface-aware reasoning for owned threads.
+    return recentThreadsForSurface.map((t, idx) => {
       let reason = 'You ran this here';
       let group = 'Your work';
-      if (isRunning(t)) { reason = 'Running now'; group = 'Active'; }
-      else if (hasArtifact(t)) { reason = 'Has artifact'; group = 'With artifact'; }
-      return { thread: t, reason, group };
+      let nextAction: string | undefined;
+      let priority = 50;
+      if (isRunning(t)) {
+        reason = 'Running now'; group = 'Active'; nextAction = 'open to follow'; priority = 100;
+      } else if (hasArtifact(t)) {
+        reason = 'Has artifact'; group = 'With artifact'; nextAction = 'expand or refine'; priority = 80;
+      }
+      // First (most recent) gets a slight bump so it earns the "Top match" badge.
+      if (idx === 0) priority += 5;
+      return { thread: t, reason, group, nextAction, priority };
     });
   }, [recentThreadsForSurface, artifactThreadIds, runningThreadIds]);
 
