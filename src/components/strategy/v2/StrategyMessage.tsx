@@ -66,16 +66,15 @@ export function StrategyMessage({ message }: Props) {
         data-strategy-selectable
         data-message-id={message.id}
         data-message-role="user"
-        className="max-w-[78%] text-[15px] break-words"
+        className="text-[15px] break-words flex justify-end"
         style={{
           fontFamily: 'var(--sv-sans)',
           color: 'hsl(var(--sv-ink))',
           lineHeight: 1.65,
-          marginLeft: 0,
         }}
       >
         <div
-          className="rounded-[8px] px-3 py-2"
+          className="rounded-[10px] px-3 py-2 max-w-[78%]"
           style={{
             background: 'hsl(var(--sv-hover) / 0.55)',
             border: '1px solid hsl(var(--sv-hairline))',
