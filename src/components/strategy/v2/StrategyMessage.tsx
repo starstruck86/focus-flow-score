@@ -93,9 +93,9 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
               li: ({ children }) => <li style={{ margin: '0.15rem 0' }}>{children}</li>,
               strong: ({ children }) => <strong style={{ fontWeight: 650 }}>{children}</strong>,
               em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
-              code: ({ children, ...rest }: any) => (
+              code: ({ children, className }: any) => (
                 <code
-                  {...rest}
+                  className={className}
                   style={{
                     fontFamily: 'var(--sv-sans)',
                     background: 'hsl(var(--sv-hover))',
@@ -140,19 +140,19 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
           h1: ({ children }) => <h1 style={{ fontSize: '1.35rem', margin: '0 0 0.4rem', fontWeight: 700 }}>{children}</h1>,
           h2: ({ children }) => <h2 style={{ fontSize: '1.1rem', margin: '0.2rem 0 0.35rem', fontWeight: 700 }}>{children}</h2>,
           h3: ({ children }) => <h3 style={{ fontSize: '1rem', margin: '0.15rem 0 0.3rem', fontWeight: 650 }}>{children}</h3>,
-          code: ({ children, ...rest }: any) => (
-            <code
-              {...rest}
-              style={{
-                fontFamily: 'var(--sv-sans)',
-                background: 'hsl(var(--sv-hover))',
-                borderRadius: 4,
-                padding: '0.1rem 0.3rem',
-              }}
-            >
-              {children}
-            </code>
-          ),
+              code: ({ children, className }: any) => (
+                <code
+                  className={className}
+                  style={{
+                    fontFamily: 'var(--sv-sans)',
+                    background: 'hsl(var(--sv-hover))',
+                    borderRadius: 4,
+                    padding: '0.1rem 0.3rem',
+                  }}
+                >
+                  {children}
+                </code>
+              ),
           blockquote: ({ children }) => (
             <blockquote
               style={{

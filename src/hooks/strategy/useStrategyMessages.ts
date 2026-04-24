@@ -3,8 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { StrategyMessage } from '@/types/strategy';
 import { toast } from 'sonner';
+import { mapSendErrorToFriendlyMessage } from './sendErrorMapping';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
+
+// Re-export for callers that already import it from this module.
+export { mapSendErrorToFriendlyMessage };
 
 interface UseStrategyMessagesOpts {
   /** Called after an assistant streamed response completes. Receives the final text. */
@@ -149,18 +153,8 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
       }
     } catch (e: any) {
       // Translate raw network/provider errors into something a user can act on.
-      // "Failed to fetch" / "Load failed" / TypeError mean the request never
-      // reached our backend (offline, blocked, transient). Anything else falls
-      // through to the original message.
-      const raw = String(e?.message || '');
-      const isNetworkError = /failed to fetch|load failed|networkerror|network request failed|fetch failed/i.test(raw)
-        || e?.name === 'TypeError';
-      const friendly = isNetworkError
-        ? 'Connection hiccup — Strategy couldn\'t reach the AI provider. Check your network and try again.'
-        : raw.includes('Error 5')
-          ? 'The AI provider is having a moment. Please retry — usually clears in a few seconds.'
-          : raw || 'Something went wrong sending your message. Please try again.';
-      toast.error(friendly);
+      // Logic lives in mapSendErrorToFriendlyMessage so it stays unit-testable.
+      toast.error(mapSendErrorToFriendlyMessage(e));
       setMessages(prev => prev.filter(m => m.id !== optimisticId));
     } finally {
       setIsSending(false);
