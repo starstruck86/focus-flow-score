@@ -997,6 +997,7 @@ export function StrategyShell() {
       onNewWork={() => { handleNewThread(); setActiveSurface(null); }}
       runningThreadIds={runningThreadIds}
       artifactThreadIds={artifactThreadIds}
+      onRenameThread={(id, nextTitle) => updateThread(id, { title: nextTitle })}
       onAfterSelect={onAfterSelect}
       onOpenManageStrategy={handleOpenManageStrategy}
     />
