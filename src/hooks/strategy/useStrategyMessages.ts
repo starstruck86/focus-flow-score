@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { StrategyMessage } from '@/types/strategy';
 import { toast } from 'sonner';
 import { mapSendErrorToFriendlyMessage } from './sendErrorMapping';
+import { buildGlobalInstructionsPayload } from '@/lib/strategy/buildGlobalInstructionsPayload';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
