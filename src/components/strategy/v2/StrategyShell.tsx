@@ -79,6 +79,10 @@ import { StrategyNavSidebar, type StrategyMode, type StrategySurfaceKey } from '
 import { SurfacePanel } from './SurfacePanel';
 import { WorkflowFormSheet } from './workflows/WorkflowFormSheet';
 import type { WorkflowDef } from './workflows/workflowRegistry';
+import { PillEditorSheet } from './PillEditorSheet';
+import type { CustomPill } from '@/lib/strategy/customPills';
+import { listCustomPills } from '@/lib/strategy/customPills';
+import { tagThread } from '@/lib/strategy/threadTags';
 import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
 import { StrategyGlobalNavBar } from './StrategyGlobalNavBar';
 import { StrategyProgressPanel } from './StrategyProgressPanel';
