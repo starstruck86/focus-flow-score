@@ -109,6 +109,9 @@ export function StrategyShell() {
   // Artifact workspace (right) — opened via inline card or completion event
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
 
+  // New nav sidebar — Mode hint state
+  const [activeMode, setActiveMode] = useState<StrategyMode>(null);
+
   const {
     threads,
     activeThread,
