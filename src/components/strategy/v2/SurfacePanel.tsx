@@ -199,13 +199,9 @@ export function SurfacePanel({
     const tags = getAllThreadTags();
 
     // Universal exclusions — never surface these in mode workspaces.
-    const isExcluded = (t: StrategyThread) => {
-      const title = (t.title || '').toLowerCase();
-      if (/^\[benchmark\]/i.test(t.title || '')) return true;
-      if (/\b(test|debug|regression|qa|scratch|tmp|temp|sandbox|wip)\b/i.test(title)) return true;
-      if (/^untitled/i.test(t.title || '') || !t.title) return true;
-      return false;
-    };
+    // Reuses the same `isCleanupThread` rule so what's hidden from Work's
+    // default view is also hidden from per-surface fallbacks.
+    const isExcluded = (t: StrategyThread) => isCleanupThread(t);
 
     // Already-tagged threads belong to their own surface — don't borrow.
     const candidates = threads.filter((t) => !isExcluded(t) && !tags[t.id]);
