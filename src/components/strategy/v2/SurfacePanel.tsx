@@ -948,7 +948,7 @@ function WorkThreadList({
 
 function ThreadRows({
   items, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
-  showReason, showOriginTag, showNextAction, topMatchId, topMatchLabel, vibe,
+  showReason, showOriginTag, showNextAction, showConfidence, topMatchId, topMatchLabel, vibe,
 }: {
   items: AnnotatedThread[];
   activeThreadId: string | null;
@@ -961,6 +961,8 @@ function ThreadRows({
   showOriginTag?: boolean;
   /** Show the suggested next action after the reason. */
   showNextAction?: boolean;
+  /** Apply subtle opacity to medium/low-confidence rows. */
+  showConfidence?: boolean;
   /** ID of the thread that should display the "Top match" badge. */
   topMatchId?: string | null;
   /** Workspace label used in the top-match badge — e.g. "Deep Research". */
@@ -971,12 +973,17 @@ function ThreadRows({
   const v = vibe ?? DEFAULT_VIBE;
   return (
     <ul className={v.rowSpacing}>
-      {items.map(({ thread: t, reason, group, nextAction }) => {
+      {items.map(({ thread: t, reason, group, nextAction, priority }) => {
         const isActive = activeThreadId === t.id;
         const isRunning = runningThreadIds?.has(t.id) ?? false;
         const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
         const isUntitled = !t.title || /^untitled/i.test(t.title);
         const isTopMatch = !!topMatchId && topMatchId === t.id;
+        const conf = confidenceFromPriority(priority);
+        // Subtle opacity step for confidence — high=1, medium=0.92, low=0.78
+        const confOpacity = showConfidence
+          ? (conf === 'high' ? 1 : conf === 'medium' ? 0.92 : 0.78)
+          : 1;
         // Origin tag: only show when group looks like a real surface label
         // and not the default "Freeform"/"Your work" buckets.
         const originTag = showOriginTag && group !== 'Freeform' ? group : null;
