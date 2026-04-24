@@ -857,6 +857,17 @@ export function StrategyShell() {
         {/* Live progress strip */}
         <StrategyProgressPanel active={activeRun} />
 
+        {/* Surface panel — Modes / Library / Artifacts. Pills only appear here. */}
+        {activeSurface && (
+          <SurfacePanel
+            surface={activeSurface}
+            activeMode={activeMode}
+            onPickMode={handlePickMode}
+            onLaunchWorkflow={handleLaunchWorkflow}
+            onClose={() => { setActiveSurface(null); setActiveMode(null); }}
+          />
+        )}
+
         {/* Inline artifact card — surfaces completed deep-work without dumping content */}
         {latestCompleted && (
           <div className="mx-auto w-full px-6 pt-3" style={{ maxWidth: 760 }}>
