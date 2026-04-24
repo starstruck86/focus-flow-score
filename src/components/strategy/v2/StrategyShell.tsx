@@ -79,6 +79,7 @@ import { StrategyNavSidebar, type StrategyMode, type StrategySurfaceKey } from '
 import { SurfacePanel } from './SurfacePanel';
 import { WorkflowFormSheet } from './workflows/WorkflowFormSheet';
 import type { WorkflowDef } from './workflows/workflowRegistry';
+import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflows/workflowRegistry';
 import { PillEditorSheet } from './PillEditorSheet';
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
