@@ -26,7 +26,7 @@ import {
   X, Lightbulb, Microscope, Wand2, BookOpen, FileText,
   ClipboardList, ClipboardCheck, Send, Presentation, Mail, FilePlus,
   Layers, MessageSquareQuote, Shapes, ArrowRight, FolderKanban,
-  Plus, Pencil, Sparkles, Loader2, Briefcase, Search, Trash2, PlayCircle,
+  Sparkles, Loader2, Briefcase, Search, Trash2, PlayCircle,
 } from 'lucide-react';
 import {
   MODE_PILLS, LIBRARY_DEFS, ARTIFACT_TEMPLATE_DEFS,
