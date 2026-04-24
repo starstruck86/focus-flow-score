@@ -43,12 +43,23 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
   const isUser = role === 'user';
 
   if (!text.trim()) {
-    // Streaming placeholder — three soft dots in clay, no bubble
+    // Streaming placeholder — three pulsing dots + "Thinking…" label.
     return (
-      <div className="flex items-center gap-1.5 py-1" style={{ paddingLeft: role === 'user' ? 40 : 0 }}>
-        <span className="h-1 w-1 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.5)', animationDelay: '0ms' }} />
-        <span className="h-1 w-1 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.5)', animationDelay: '120ms' }} />
-        <span className="h-1 w-1 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.5)', animationDelay: '240ms' }} />
+      <div
+        className="flex items-center gap-2 py-1"
+        style={{ paddingLeft: role === 'user' ? 40 : 0 }}
+      >
+        <span className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.55)', animationDelay: '0ms' }} />
+          <span className="h-1.5 w-1.5 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.55)', animationDelay: '120ms' }} />
+          <span className="h-1.5 w-1.5 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.55)', animationDelay: '240ms' }} />
+        </span>
+        <span
+          className="text-[12px]"
+          style={{ color: 'hsl(var(--sv-muted))', fontFamily: 'var(--sv-sans)' }}
+        >
+          Thinking…
+        </span>
       </div>
     );
   }
