@@ -998,7 +998,7 @@ export function StrategyShell() {
       runningThreadIds={runningThreadIds}
       artifactThreadIds={artifactThreadIds}
       onAfterSelect={onAfterSelect}
-      onOpenManageStrategy={() => setManageOpen(true)}
+      onOpenManageStrategy={handleOpenManageStrategy}
     />
   );
 
