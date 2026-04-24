@@ -233,7 +233,7 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
       <div
         className="mx-auto px-[14px] text-[12px] leading-none"
         style={{
-          maxWidth: 760,
+          maxWidth: 860,
           color: 'hsl(var(--sv-muted))',
           minHeight: 14,
           marginTop: 6,
