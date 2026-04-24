@@ -864,7 +864,7 @@ function ThreadRows({
                     }}
                     data-testid={`top-match-${t.id}`}
                   >
-                    Top match
+                    {topMatchLabel ? `Top match for ${topMatchLabel}` : 'Top match'}
                   </span>
                 )}
                 {originTag && (
@@ -892,19 +892,28 @@ function ThreadRows({
                 </span>
               </div>
               {showReason && reason && (
-                <span
-                  className="text-[10.5px] pl-px inline-flex items-center gap-1 flex-wrap"
-                  style={{ color: 'hsl(var(--sv-muted) / 0.9)' }}
+                <div
+                  className="pl-px flex flex-col gap-0.5"
                   data-testid={`reason-${t.id}`}
                 >
-                  <span style={{ color: 'hsl(var(--sv-ink) / 0.65)', fontWeight: 500 }}>{reason}</span>
+                  {/* Line 1: the decision / reason. */}
+                  <span
+                    className="text-[10.5px]"
+                    style={{ color: 'hsl(var(--sv-ink) / 0.65)', fontWeight: 500 }}
+                  >
+                    {reason}
+                  </span>
+                  {/* Line 2: the suggested next move. */}
                   {showNextAction && nextAction && (
-                    <>
-                      <span style={{ color: 'hsl(var(--sv-muted) / 0.5)' }}>→</span>
-                      <span style={{ color: 'hsl(var(--sv-clay) / 0.85)' }}>{nextAction}</span>
-                    </>
+                    <span
+                      className="text-[10.5px]"
+                      style={{ color: 'hsl(var(--sv-clay) / 0.9)' }}
+                      data-testid={`next-action-${t.id}`}
+                    >
+                      Next: {nextAction}
+                    </span>
                   )}
-                </span>
+                </div>
               )}
             </button>
           </li>
