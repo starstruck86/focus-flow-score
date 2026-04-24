@@ -118,7 +118,7 @@ const SURFACE_GUIDANCE: Partial<Record<StrategySurfaceKey, string>> = {
   artifacts:     'Pick a template above to start a structured doc.',
 };
 
-
+export function SurfacePanel({
   surface, onLaunchWorkflow, onClose,
   threads, activeThreadId, onSelectThread,
   pillsVersion, onAddPill, onEditPill,
