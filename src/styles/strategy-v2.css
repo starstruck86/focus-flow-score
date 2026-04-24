@@ -122,11 +122,3 @@
 .sv-artifact-highlight {
   animation: sv-artifact-highlight 900ms ease-out;
 }
-
-
-/* Mobile drawer — lighter scrim than shadcn's default bg-black/80, so the
-   panel feels like a calm side-sheet (Claude/ChatGPT) rather than a debug overlay. */
-.strategy-mobile-drawer ~ [data-radix-dialog-overlay],
-[data-state="open"] > .strategy-mobile-drawer { /* no-op selector to anchor */ }
-[data-radix-dialog-overlay]:has(~ * .strategy-mobile-drawer),
-.strategy-mobile-drawer-overlay { background-color: hsl(var(--sv-ink) / 0.32) !important; backdrop-filter: blur(2px); }
