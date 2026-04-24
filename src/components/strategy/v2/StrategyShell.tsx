@@ -219,14 +219,33 @@ export function StrategyShell() {
       surfaceDraftsRef.current[prevKey] = ta.getValue();
     }
     // Snapshot the live active thread under the *previous* surface bucket.
-    // (We use the threads-hook ref via setActiveThreadId below — read here.)
-    surfaceThreadsRef.current[prevKey] = activeThreadIdRef.current;
+    // For 'work' (the global view), this captures whatever thread the user
+    // had open in the all-threads list. For mode surfaces, it's whatever
+    // they were chatting with inside that workspace.
+    setSurfaceThread(prevKey, activeThreadIdRef.current);
 
     // 2. Restore the next surface's draft + active thread.
     const incomingDraft = surfaceDraftsRef.current[nextKey] ?? '';
     if (ta?.setValue) ta.setValue(incomingDraft);
-    const incomingThread = surfaceThreadsRef.current[nextKey] ?? null;
+    // CRITICAL: only restore a thread if this surface has *previously* owned
+    // one. First entry into a workspace must NEVER inherit the previous
+    // surface's (or global Work's) active thread — it should land on the
+    // launcher/empty state. `Object.prototype.hasOwnProperty` guards against
+    // the `?? null` falling through to the global thread by accident.
+    const hasOwnThread = Object.prototype.hasOwnProperty.call(
+      surfaceThreadsRef.current, nextKey,
+    );
+    const incomingThread = hasOwnThread
+      ? (surfaceThreadsRef.current[nextKey] ?? null)
+      : null;
+    // Always set the global thread id to match what THIS surface owns
+    // (which may be null on first entry). The canvas + composer follow it.
     setActiveThreadId(incomingThread);
+    // Mirror to state so render-time isolation works without depending
+    // on the async global setActiveThreadId.
+    if (!hasOwnThread) {
+      setSurfaceThread(nextKey, null);
+    }
 
     lastSurfaceKeyRef.current = nextKey;
     // Clear any in-flight slash query so we don't carry "/library" between surfaces.
