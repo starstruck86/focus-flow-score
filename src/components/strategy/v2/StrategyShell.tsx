@@ -724,10 +724,10 @@ export function StrategyShell() {
     // Thread already exists — make sure the *current* surface owns it so
     // the next surface-switch round-trip restores the right conversation.
     if (sendingFrom) {
-      surfaceThreadsRef.current[sendingFrom] = threadId;
+      setSurfaceThread(sendingFrom, threadId);
     }
     sendMessage(text, sidecar ? { pickedResourceIds: sidecar } : undefined);
-  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds]);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
