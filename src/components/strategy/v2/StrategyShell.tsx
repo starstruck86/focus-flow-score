@@ -829,29 +829,26 @@ export function StrategyShell() {
   const pendingThreadTagRef = useRef<StrategySurfaceKey | null>(null);
 
   // ---------- Custom pills (programmable shortcuts) ----------
+  // Create / edit / manage live on the /strategy/settings page now (no
+  // modals). The sidebar "Add Mode" / "Manage Strategy" entries and the
+  // per-workspace "+ New pill" / pencil actions all navigate there.
   const [pillsVersion, setPillsVersion] = useState(0);
-  const [pillEditorOpen, setPillEditorOpen] = useState(false);
-  const [editingPill, setEditingPill] = useState<CustomPill | null>(null);
-  const [pillEditorSurface, setPillEditorSurface] = useState<StrategySurfaceKey>('brainstorm');
-  const [manageOpen, setManageOpen] = useState(false);
 
   const handleAddPill = useCallback((surface: StrategySurfaceKey) => {
-    setEditingPill(null);
-    setPillEditorSurface(surface);
-    setPillEditorOpen(true);
-  }, []);
+    navigate(`/strategy/settings/pill/new?surface=${surface}`);
+  }, [navigate]);
 
   const handleEditPill = useCallback((pill: CustomPill) => {
-    setEditingPill(pill);
-    setPillEditorSurface(pill.surface);
-    setPillEditorOpen(true);
-  }, []);
+    navigate(`/strategy/settings/pill/${pill.id}`);
+  }, [navigate]);
 
   const handleEditCustomPillById = useCallback((customPillId: string) => {
-    const pill = listCustomPills().find((p) => p.id === customPillId);
-    if (!pill) return;
-    handleEditPill(pill);
-  }, [handleEditPill]);
+    navigate(`/strategy/settings/pill/${customPillId}`);
+  }, [navigate]);
+
+  const handleOpenManageStrategy = useCallback(() => {
+    navigate('/strategy/settings');
+  }, [navigate]);
 
   const handlePillSaved = useCallback(() => {
     setPillsVersion((v) => v + 1);
