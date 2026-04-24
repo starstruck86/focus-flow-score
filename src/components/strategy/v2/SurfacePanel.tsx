@@ -110,6 +110,11 @@ interface Props {
   /** Per-thread indicators */
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
+  /** True when this surface currently owns an active thread — collapses the
+   *  launcher into a compact header so the canvas can render below. */
+  hasActiveThread?: boolean;
+  /** Clear this surface's active thread (back to the empty/launch state). */
+  onNewThreadInSurface?: () => void;
 }
 
 const SURFACE_HEADER: Record<StrategySurfaceKey, {
