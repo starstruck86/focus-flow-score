@@ -2178,6 +2178,7 @@ serve(async (req) => {
       force_primary_failure,
       pickedResourceIds,
       _v2,
+      globalInstructions: globalInstructionsRaw,
     } = body;
     const v2RequestOverride = _v2 === true;
     // Sidecar: explicit resource IDs the user picked from /library this turn.
@@ -2185,6 +2186,12 @@ serve(async (req) => {
     const cleanPickedResourceIds: string[] = Array.isArray(pickedResourceIds)
       ? pickedResourceIds.filter((s: unknown) => typeof s === 'string' && /^[0-9a-f-]{16,}$/i.test(s))
       : [];
+
+    // Phase 2: Lightweight Global Instructions sidecar. Validated to a safe
+    // shape so a malformed/oversized client payload can never crash the
+    // chat path or leak unbounded text into the system prompt. Returns null
+    // when absent/invalid → server treats as "no behavior change".
+    const cleanGlobalInstructions = sanitizeGlobalInstructions(globalInstructionsRaw);
 
     // ── Debug: OpenAI key health check ──────────────────────
     // Phase 0 acceptance gate. Returns 200 only when the key is shaped
@@ -2409,6 +2416,7 @@ serve(async (req) => {
       cleanPickedResourceIds,
       v2RequestOverride,
       routingDecision,
+      cleanGlobalInstructions,
     );
   } catch (e) {
     console.error("strategy-chat error:", e);
@@ -5111,6 +5119,7 @@ async function handleChat(
   pickedResourceIds: string[] = [],
   v2RequestOverride: boolean = false,
   routingDecision: RoutingDecision | null = null,
+  globalInstructions: CleanGlobalInstructions | null = null,
 ) {
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
@@ -5479,6 +5488,18 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     .filter((m, idx, arr) =>
       !(idx === arr.length - 1 && m.role === "user" && m.text === content)
     );
+  // Phase 2 — Append lightweight Global Instructions LAST (after V1 mode-lock
+  // and V2 dispatcher prompt), so they sit closest to the user turn but
+  // never override the core grounding/audit/synthesis machinery above.
+  // Returns "" when payload is null/empty → exact baseline behavior.
+  const giBlock = renderGlobalInstructionsBlock(globalInstructions);
+  if (giBlock) {
+    effectiveSystemPrompt = `${effectiveSystemPrompt}${giBlock}`;
+    console.log(
+      `[global-instructions] injected: tone=${globalInstructions?.outputPreferences.tone} density=${globalInstructions?.outputPreferences.density} format=${globalInstructions?.outputPreferences.format} strict=${globalInstructions?.strictMode} self_correct=${globalInstructions?.selfCorrectOnce} free_text_chars=${globalInstructions?.globalInstructions.length ?? 0}`,
+    );
+  }
+
   const messages = [
     { role: "system" as const, content: effectiveSystemPrompt },
     ...priorMessages.map((m) => ({
@@ -6554,3 +6575,153 @@ function triggerRollupAsync(supabase: any, threadId: string, userId: string) {
     console.error("[auto-rollup] failed:", e)
   );
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase 2 — Lightweight Global Instructions block.
+//
+// The client (useStrategyMessages) sends a small payload mirroring
+// StrategyGlobalInstructionsConfig (only when the engine is enabled).
+// We sanitize aggressively so a malformed or oversized blob can never
+// crash the chat path or balloon the system prompt. When sanitization
+// returns null, the chat path emits ZERO additional bytes — preserving
+// the exact baseline behavior expected by Phase 2 acceptance test #1.
+//
+// Discovery Prep SOP is intentionally NOT injected in Phase 2.
+// ──────────────────────────────────────────────────────────────────────
+type CleanGlobalInstructions = {
+  globalInstructions: string;
+  outputPreferences: {
+    tone: "direct" | "consultative" | "executive";
+    density: "concise" | "balanced" | "deep";
+    format: "structured" | "freeform";
+    alwaysEndWithNextStep: boolean;
+  };
+  libraryBehavior: {
+    useRelevantLibraryByDefault: boolean;
+    preferPlaybooksOverLooseKnowledgeItems: boolean;
+    citeSourcesWhenUsed: boolean;
+    neverInventMetrics: boolean;
+    unknownsBecomeQuestions: boolean;
+  };
+  strictMode: boolean;
+  selfCorrectOnce: boolean;
+};
+
+const GLOBAL_INSTRUCTIONS_MAX_CHARS = 4000;
+
+function sanitizeGlobalInstructions(raw: unknown): CleanGlobalInstructions | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, any>;
+
+  const tone = ["direct", "consultative", "executive"].includes(r?.outputPreferences?.tone)
+    ? r.outputPreferences.tone
+    : "direct";
+  const density = ["concise", "balanced", "deep"].includes(r?.outputPreferences?.density)
+    ? r.outputPreferences.density
+    : "balanced";
+  const format = ["structured", "freeform"].includes(r?.outputPreferences?.format)
+    ? r.outputPreferences.format
+    : "structured";
+
+  const gi = typeof r.globalInstructions === "string"
+    ? r.globalInstructions.slice(0, GLOBAL_INSTRUCTIONS_MAX_CHARS).trim()
+    : "";
+
+  return {
+    globalInstructions: gi,
+    outputPreferences: {
+      tone,
+      density,
+      format,
+      alwaysEndWithNextStep: r?.outputPreferences?.alwaysEndWithNextStep !== false,
+    },
+    libraryBehavior: {
+      useRelevantLibraryByDefault: r?.libraryBehavior?.useRelevantLibraryByDefault !== false,
+      preferPlaybooksOverLooseKnowledgeItems:
+        r?.libraryBehavior?.preferPlaybooksOverLooseKnowledgeItems !== false,
+      citeSourcesWhenUsed: r?.libraryBehavior?.citeSourcesWhenUsed !== false,
+      neverInventMetrics: r?.libraryBehavior?.neverInventMetrics !== false,
+      unknownsBecomeQuestions: r?.libraryBehavior?.unknownsBecomeQuestions !== false,
+    },
+    strictMode: r?.strictMode === true,
+    selfCorrectOnce: r?.selfCorrectOnce === true,
+  };
+}
+
+/**
+ * Render the lightweight USER STRATEGY INSTRUCTIONS block.
+ * Returns empty string when the payload has no actionable signal — in
+ * that case the system prompt is unchanged from baseline.
+ *
+ * Placement contract: appended AFTER the core app/system contracts and
+ * AFTER any V1 mode-lock or V2 dispatcher prompt — but BEFORE the final
+ * user turn. This keeps the engine as guidance, never overriding the
+ * core grounding/audit/synthesis machinery.
+ */
+function renderGlobalInstructionsBlock(g: CleanGlobalInstructions | null): string {
+  if (!g) return "";
+  const hasFreeText = g.globalInstructions.length > 0;
+  const lines: string[] = [];
+
+  lines.push("");
+  lines.push("═══ USER STRATEGY INSTRUCTIONS (lightweight guidance) ═══");
+  lines.push(
+    "These are the operator's persistent preferences. Honor them when they don't conflict with the core contracts above (grounding, citation discipline, synthesis mode, audit). They are guidance, not overrides.",
+  );
+
+  if (hasFreeText) {
+    lines.push("");
+    lines.push("OPERATOR INSTRUCTIONS:");
+    lines.push(g.globalInstructions);
+  }
+
+  // Output preferences — short, declarative, no hard mandates.
+  const tonePhrase = g.outputPreferences.tone === "executive"
+    ? "Executive: terse, decisive, no hedging."
+    : g.outputPreferences.tone === "consultative"
+    ? "Consultative: collaborative, walk through reasoning briefly."
+    : "Direct: cut to the point, plain language, no fluff.";
+  const densityPhrase = g.outputPreferences.density === "concise"
+    ? "Concise: shortest path to the answer."
+    : g.outputPreferences.density === "deep"
+    ? "Deep: include reasoning + supporting detail when useful."
+    : "Balanced: enough detail to be useful, no padding.";
+  const formatPhrase = g.outputPreferences.format === "freeform"
+    ? "Freeform when the ask is conversational; structure only when it materially helps."
+    : "Structured when the ask is non-trivial (headings/bullets/numbered steps).";
+
+  lines.push("");
+  lines.push("OUTPUT PREFERENCES:");
+  lines.push(`- Tone: ${tonePhrase}`);
+  lines.push(`- Density: ${densityPhrase}`);
+  lines.push(`- Format: ${formatPhrase}`);
+  if (g.outputPreferences.alwaysEndWithNextStep) {
+    lines.push("- Close with a single concrete next step when the ask is action-oriented (skip for pure brainstorm/refine).");
+  }
+
+  // Library behavior — phrased as preferences, never as gates. The real
+  // grounding/citation discipline lives in the core contracts above.
+  const libRules: string[] = [];
+  if (g.libraryBehavior.useRelevantLibraryByDefault) libRules.push("Lean on relevant library context when it's already retrieved.");
+  if (g.libraryBehavior.preferPlaybooksOverLooseKnowledgeItems) libRules.push("Prefer playbook-grade resources over loose KIs when both apply.");
+  if (g.libraryBehavior.citeSourcesWhenUsed) libRules.push("Cite the source title when you use library content.");
+  if (g.libraryBehavior.neverInventMetrics) libRules.push("Never invent numeric metrics — if a stat isn't in context, say so or ask.");
+  if (g.libraryBehavior.unknownsBecomeQuestions) libRules.push("Convert genuine unknowns into one specific clarifying question rather than guessing.");
+  if (libRules.length > 0) {
+    lines.push("");
+    lines.push("LIBRARY BEHAVIOR (preferences, not gates):");
+    for (const r of libRules) lines.push(`- ${r}`);
+  }
+
+  if (g.strictMode) {
+    lines.push("");
+    lines.push("STRICT MODE: When the operator's instructions and a stylistic default conflict, the operator's instructions win — but the core grounding/citation contracts above always win over both.");
+  }
+  if (g.selfCorrectOnce) {
+    lines.push("");
+    lines.push("SELF-CORRECT ONCE: Before finalizing, do one quick self-check that you respected the OPERATOR INSTRUCTIONS and OUTPUT PREFERENCES. If you violated them, fix it inline. Do not narrate the check.");
+  }
+
+  return lines.join("\n");
+}
+

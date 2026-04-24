@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { StrategyMessage } from '@/types/strategy';
 import { toast } from 'sonner';
 import { mapSendErrorToFriendlyMessage } from './sendErrorMapping';
+import { buildGlobalInstructionsPayload } from '@/lib/strategy/buildGlobalInstructionsPayload';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
@@ -71,6 +72,9 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
           pickedResourceIds: Array.isArray(options?.pickedResourceIds) && options.pickedResourceIds.length > 0
             ? options.pickedResourceIds
             : undefined,
+          // Phase 2: lightweight Global Instructions. Null when the engine is
+          // disabled — server treats absence as "no behavior change".
+          globalInstructions: buildGlobalInstructionsPayload() ?? undefined,
         }),
       });
 
