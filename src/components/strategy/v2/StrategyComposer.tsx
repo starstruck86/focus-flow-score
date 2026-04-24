@@ -27,6 +27,12 @@ interface Props {
   onRectChange?: (rect: DOMRect | null) => void;
   /** Phase 1.5: open the file picker (same as /upload). */
   onAttachFiles?: () => void;
+  /**
+   * Context-aware momentum hint shown beneath the composer.
+   * Overrides the default static hint when provided. Pass null to hide it.
+   * Examples: "Ask a follow-up · / to revise · ⌘S save"
+   */
+  momentumHint?: string | null;
 }
 
 export interface StrategyComposerHandle {
@@ -36,7 +42,7 @@ export interface StrategyComposerHandle {
 }
 
 export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function StrategyComposer(
-  { disabled, placeholder = 'Message…', serifPlaceholder = false, onSend, onSlashChange, onRectChange, onAttachFiles }, ref
+  { disabled, placeholder = 'Message…', serifPlaceholder = false, onSend, onSlashChange, onRectChange, onAttachFiles, momentumHint }, ref
 ) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -114,8 +120,11 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
   };
 
   // Phase 1.6 — discoverability hints
-  const showEmptyHint = serifPlaceholder && !value;
-  const showTypingHint = value.length > 0 && !value.startsWith('/');
+  // Context hint (e.g. "Ask a follow-up · / to revise") wins over the
+  // generic empty/typing copy when the parent supplies one.
+  const hasContextHint = typeof momentumHint === 'string' && momentumHint.length > 0;
+  const showEmptyHint = !hasContextHint && serifPlaceholder && !value;
+  const showTypingHint = !hasContextHint && value.length > 0 && !value.startsWith('/');
 
   return (
     <div
@@ -202,7 +211,7 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           <ArrowUp size={16} strokeWidth={1.75} />
         </button>
       </div>
-      {/* Phase 1.6 — discoverability hint line. Same place, two states. */}
+      {/* Phase 1.6 — discoverability hint line. Three states: context | empty | typing. */}
       <div
         className="mx-auto px-[14px] text-[12px] leading-none"
         style={{
@@ -210,11 +219,12 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           color: 'hsl(var(--sv-muted))',
           minHeight: 14,
           marginTop: 6,
-          opacity: showEmptyHint || showTypingHint ? 0.7 : 0,
+          opacity: hasContextHint || showEmptyHint || showTypingHint ? 0.75 : 0,
           fontFamily: 'var(--sv-sans)',
         }}
-        aria-hidden={!(showEmptyHint || showTypingHint)}
+        aria-hidden={!(hasContextHint || showEmptyHint || showTypingHint)}
       >
+        {hasContextHint && <>{momentumHint}</>}
         {showEmptyHint && <>Type to start · / for actions · ⌘K to switch</>}
         {showTypingHint && <>⌘S save · / actions · ⌘K switch</>}
       </div>
