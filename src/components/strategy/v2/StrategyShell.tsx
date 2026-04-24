@@ -112,7 +112,9 @@ export function StrategyShell() {
   // Artifact workspace (right) — opened via inline card or completion event
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
 
-  // New nav sidebar — Mode hint state
+  // New nav model — selected surface (Modes / Library / Artifacts) and the
+  // sub-mode within Modes. Only ONE surface is open at a time.
+  const [activeSurface, setActiveSurface] = useState<StrategySurfaceKey | null>(null);
   const [activeMode, setActiveMode] = useState<StrategyMode>(null);
 
   const {
@@ -727,23 +729,30 @@ export function StrategyShell() {
     });
   }, [latestCompleted, linkedContext, activeThread, buildArtifactMarkdown]);
 
-  // Pick a mode → set hint state, focus composer (does NOT gate input).
+  // Pick a mode within the Modes surface → keep the surface open so pills appear.
   const handlePickMode = useCallback((m: StrategyMode) => {
     setActiveMode(m);
     requestAnimationFrame(() => composerRef.current?.focus());
+  }, []);
+
+  // Pick a top-level surface (Modes / Library / Artifacts) from the sidebar.
+  // Toggling the same surface closes it. Switching surfaces clears the
+  // sub-mode so we always land on the surface's own picker.
+  const handlePickSurface = useCallback((s: StrategySurfaceKey | null) => {
+    setActiveSurface(s);
+    if (s !== 'modes') setActiveMode(null);
   }, []);
 
   const sidebarNode = (onAfterSelect?: () => void) => (
     <StrategyNavSidebar
       collapsed={sidebarCollapsed}
       onToggleCollapsed={toggleSidebar}
-      activeMode={activeMode}
-      onPickMode={handlePickMode}
-      onLaunchWorkflow={handleLaunchWorkflow}
+      activeSurface={activeSurface}
+      onPickSurface={handlePickSurface}
       threads={threads}
       activeThreadId={threadId}
-      onSelectThread={(id) => setActiveThreadId(id)}
-      onNewWork={() => handleNewThread()}
+      onSelectThread={(id) => { setActiveThreadId(id); setActiveSurface(null); }}
+      onNewWork={() => { handleNewThread(); setActiveSurface(null); }}
       runningThreadIds={runningThreadIds}
       artifactThreadIds={artifactThreadIds}
       onAfterSelect={onAfterSelect}
