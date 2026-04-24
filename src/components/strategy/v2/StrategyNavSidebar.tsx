@@ -87,8 +87,7 @@ export function StrategyNavSidebar({
       if (t.id === activeThreadId) return 0;
       if (runningThreadIds?.has(t.id)) return 1;
       if (artifactThreadIds?.has(t.id)) return 2;
-      const isUntitled = !t.title || /^untitled/i.test(t.title);
-      return isUntitled ? 4 : 3;
+      return isUntitledTitle(t.title) ? 4 : 3;
     };
     const sorted = [...visible].sort((a, b) => score(a) - score(b));
     return { visibleThreads: sorted, hiddenTestCount: hidden };
