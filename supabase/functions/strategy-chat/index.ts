@@ -2178,6 +2178,7 @@ serve(async (req) => {
       force_primary_failure,
       pickedResourceIds,
       _v2,
+      globalInstructions: globalInstructionsRaw,
     } = body;
     const v2RequestOverride = _v2 === true;
     // Sidecar: explicit resource IDs the user picked from /library this turn.
@@ -2185,6 +2186,12 @@ serve(async (req) => {
     const cleanPickedResourceIds: string[] = Array.isArray(pickedResourceIds)
       ? pickedResourceIds.filter((s: unknown) => typeof s === 'string' && /^[0-9a-f-]{16,}$/i.test(s))
       : [];
+
+    // Phase 2: Lightweight Global Instructions sidecar. Validated to a safe
+    // shape so a malformed/oversized client payload can never crash the
+    // chat path or leak unbounded text into the system prompt. Returns null
+    // when absent/invalid → server treats as "no behavior change".
+    const cleanGlobalInstructions = sanitizeGlobalInstructions(globalInstructionsRaw);
 
     // ── Debug: OpenAI key health check ──────────────────────
     // Phase 0 acceptance gate. Returns 200 only when the key is shaped
