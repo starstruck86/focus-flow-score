@@ -1066,15 +1066,21 @@ export function StrategyShell() {
           ref={composerRef}
           disabled={isSending || !!pendingThreadId || isCreatingThread}
           placeholder={
-            activeMode === 'brainstorm'
+            activeSurface === 'brainstorm'
               ? 'Brainstorm anything — angles, ideas, half-formed thoughts…'
-              : activeMode === 'deep_research'
+              : activeSurface === 'deep_research'
                 ? 'Ask anything, paste notes, or start with an account or company…'
-                : activeMode === 'refine'
+                : activeSurface === 'refine'
                   ? 'Paste a draft, an output, or a snippet to refine…'
-                  : messages.length === 0
-                    ? 'What are you thinking about?'
-                    : entityName ? `Message about ${entityName}…` : 'Message…'
+                  : activeSurface === 'library'
+                    ? 'Search the library or ask Strategy to pull from it…'
+                    : activeSurface === 'artifacts'
+                      ? 'Pick an artifact pill above, or describe what to build…'
+                      : activeSurface === 'projects'
+                        ? 'Describe the project — Strategy will scope it…'
+                        : messages.length === 0
+                          ? 'What are you thinking about?'
+                          : entityName ? `Message about ${entityName}…` : 'Message…'
           }
           serifPlaceholder={messages.length === 0 && !activeMode}
           onSend={handleSend}
