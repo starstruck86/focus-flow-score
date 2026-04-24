@@ -116,19 +116,61 @@ export function SurfacePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threads, surface, pillsVersion]);
 
-  // ── Fallback: recent Work threads (shown when surface has none) ─
-  // Keeps the workspace from ever feeling empty: if the user hasn't run a
-  // pill in this surface yet, we surface their recent freeform work so
-  // there's always something useful one tap away.
-  const fallbackRecentWork = useMemo(() => {
+  // ── Relevant fallback (contextual, per-surface scoring) ─────────
+  // When the user hasn't run a pill in this surface yet, we still want the
+  // workspace to feel intentional — show recent work that *matches the kind
+  // of work this surface is for*, not random threads.
+  //
+  // Signals available per thread: artifactThreadIds (structured output),
+  // runningThreadIds (in flight), title length (proxy for depth), updated_at.
+  // We score against simple heuristics defined per surface.
+  const relevantFallbackWork = useMemo(() => {
     if (surface === 'work' || surface === 'projects') return [];
     if (recentThreadsForSurface.length > 0) return [];
     const isTest = (t: StrategyThread) => /^\[benchmark\]/i.test(t.title || '');
     const tags = getAllThreadTags();
-    return threads
-      .filter((t) => !isTest(t) && !tags[t.id]) // freeform / Work only
-      .slice(0, 4);
-  }, [threads, surface, recentThreadsForSurface.length]);
+    const candidates = threads.filter((t) => !isTest(t) && !tags[t.id]);
+
+    const now = Date.now();
+    const recencyBoost = (t: StrategyThread) => {
+      const ageH = Math.max(1, (now - new Date(t.updated_at).getTime()) / 3_600_000);
+      // Smooth decay: ~1.0 for fresh, ~0.4 after a week
+      return 1 / Math.log2(ageH + 2);
+    };
+    const titleLen = (t: StrategyThread) => (t.title || '').trim().length;
+    const isUntitled = (t: StrategyThread) => !t.title || /^untitled/i.test(t.title);
+    const hasArtifact = (t: StrategyThread) => artifactThreadIds?.has(t.id) ?? false;
+
+    const score = (t: StrategyThread) => {
+      const r = recencyBoost(t);
+      const len = titleLen(t);
+      const art = hasArtifact(t) ? 1 : 0;
+      const untitled = isUntitled(t) ? 1 : 0;
+      switch (surface) {
+        case 'brainstorm':
+          // Prefer ideation: short / no-artifact / fresh
+          return (r * 1.2) + (1 - art) * 0.8 + (len > 0 && len < 40 ? 0.5 : 0) - untitled * 0.3;
+        case 'deep_research':
+          // Prefer depth: artifacts + longer titles
+          return art * 1.4 + Math.min(len / 60, 1) * 0.8 + r * 0.6 - untitled * 0.5;
+        case 'refine':
+          // Prefer artifacts and recently-edited drafts
+          return art * 1.6 + r * 1.0 + Math.min(len / 50, 1) * 0.4 - untitled * 0.6;
+        case 'library':
+        case 'artifacts':
+          // Prefer threads that produced artifacts (templates/outputs)
+          return art * 1.5 + r * 0.7 - untitled * 0.4;
+        default:
+          return r;
+      }
+    };
+
+    return [...candidates]
+      .map((t) => ({ t, s: score(t) }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 4)
+      .map((x) => x.t);
+  }, [threads, surface, recentThreadsForSurface.length, artifactThreadIds]);
 
   // ── Work surface: all threads, sorted active/ready/recent ─────
   const workThreads = useMemo(() => {
