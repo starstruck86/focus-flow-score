@@ -1,36 +1,43 @@
 /**
  * StrategyNavSidebar — pure navigation. ChatGPT-style.
  *
- * The sidebar lists FIVE sections in a fixed order:
- *   Modes · Library · Artifacts · Projects · Work
+ * Flat top-level entries (no "Modes" abstraction):
+ *   Brainstorm · Deep Research · Refine · Library · Artifacts · Projects · Work
  *
- * Clicking Modes / Library / Artifacts switches the workspace into that
- * surface (rendered above the canvas). The sidebar itself never expands
- * inline pills, never shows nested workflow lists, and never mixes
- * navigation with actions.
- *
- * Projects: placeholder (no projects yet).
- * Work:     active + recent threads.
+ * Clicking any of the first six switches the workspace surface. Work lives
+ * directly below as the active/recent thread list. The sidebar never expands
+ * inline pills, never nests, and never mixes navigation with actions.
  *
  * UI ONLY. No backend/engine changes.
  */
 import { useMemo } from 'react';
 import {
   Plus, PanelLeftClose, PanelLeftOpen, Sparkles,
-  Lightbulb, BookOpen, FolderKanban, Loader2, FileText, ChevronRight,
+  Lightbulb, Microscope, Wand2, BookOpen, FolderKanban, Loader2, FileText,
 } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
 import { cn } from '@/lib/utils';
 
 export type StrategyMode = 'brainstorm' | 'deep_research' | 'refine' | null;
-export type StrategySurfaceKey = 'modes' | 'library' | 'artifacts';
+
+/**
+ * Direct top-level surfaces. The three modes are now first-class entries
+ * (no "Modes" grouping). Library/Artifacts/Projects unchanged.
+ */
+export type StrategySurfaceKey =
+  | 'brainstorm'
+  | 'deep_research'
+  | 'refine'
+  | 'library'
+  | 'artifacts'
+  | 'projects';
 
 interface Props {
   // Layout
   collapsed: boolean;
   onToggleCollapsed: () => void;
 
-  // Surface picker (Modes / Library / Artifacts switches workspace)
+  // Surface picker
   activeSurface: StrategySurfaceKey | null;
   onPickSurface: (s: StrategySurfaceKey | null) => void;
 
@@ -45,6 +52,20 @@ interface Props {
   // Mobile
   onAfterSelect?: () => void;
 }
+
+const TOP_NAV: {
+  key: StrategySurfaceKey;
+  label: string;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  muted?: boolean;
+}[] = [
+  { key: 'brainstorm',    label: 'Brainstorm',    icon: Lightbulb },
+  { key: 'deep_research', label: 'Deep Research', icon: Microscope },
+  { key: 'refine',        label: 'Refine',        icon: Wand2 },
+  { key: 'library',       label: 'Library',       icon: BookOpen },
+  { key: 'artifacts',     label: 'Artifacts',     icon: FileText },
+  { key: 'projects',      label: 'Projects',      icon: FolderKanban, muted: true },
+];
 
 export function StrategyNavSidebar({
   collapsed, onToggleCollapsed,
@@ -89,10 +110,16 @@ export function StrategyNavSidebar({
         <RailButton onClick={onToggleCollapsed} title="Expand sidebar"><PanelLeftOpen className="h-4 w-4" /></RailButton>
         <RailButton onClick={onNewWork} title="New Work" tone="clay"><Plus className="h-4 w-4" /></RailButton>
         <div className="h-px w-6 my-1" style={{ background: 'hsl(var(--sv-hairline))' }} />
-        <RailButton onClick={() => handlePickSurface('modes')} title="Modes" highlighted={activeSurface === 'modes'}><Lightbulb className="h-4 w-4" /></RailButton>
-        <RailButton onClick={() => handlePickSurface('library')} title="Library" highlighted={activeSurface === 'library'}><BookOpen className="h-4 w-4" /></RailButton>
-        <RailButton onClick={() => handlePickSurface('artifacts')} title="Artifacts" highlighted={activeSurface === 'artifacts'}><FileText className="h-4 w-4" /></RailButton>
-        <RailButton onClick={() => { /* placeholder */ }} title="Projects"><FolderKanban className="h-4 w-4" /></RailButton>
+        {TOP_NAV.map((n) => (
+          <RailButton
+            key={n.key}
+            onClick={() => handlePickSurface(n.key)}
+            title={n.label}
+            highlighted={activeSurface === n.key}
+          >
+            <n.icon className="h-4 w-4" />
+          </RailButton>
+        ))}
       </aside>
     );
   }
@@ -150,42 +177,41 @@ export function StrategyNavSidebar({
         </button>
       </div>
 
-      {/* ── Top-level nav (single tap → opens surface) ── */}
-      <nav className="px-2 shrink-0" aria-label="Strategy sections">
-        <NavRow
-          icon={Lightbulb}
-          label="Modes"
-          active={activeSurface === 'modes'}
-          onClick={() => handlePickSurface('modes')}
-          testId="nav-modes"
-        />
-        <NavRow
-          icon={BookOpen}
-          label="Library"
-          active={activeSurface === 'library'}
-          onClick={() => handlePickSurface('library')}
-          testId="nav-library"
-        />
-        <NavRow
-          icon={FileText}
-          label="Artifacts"
-          active={activeSurface === 'artifacts'}
-          onClick={() => handlePickSurface('artifacts')}
-          testId="nav-artifacts"
-        />
-        <NavRow
-          icon={FolderKanban}
-          label="Projects"
-          active={false}
-          muted
-          onClick={() => { /* projects placeholder */ }}
-          testId="nav-projects"
-          trailing={
-            <span className="text-[10px] px-1.5 py-px rounded-full" style={{ background: 'hsl(var(--sv-hover))', color: 'hsl(var(--sv-muted))' }}>
-              Soon
-            </span>
-          }
-        />
+      {/* ── Flat top-level nav (no group header, no nesting) ── */}
+      <nav className="px-2 shrink-0 space-y-px" aria-label="Strategy sections">
+        {TOP_NAV.map((n) => (
+          <NavRow
+            key={n.key}
+            icon={n.icon}
+            label={n.label}
+            active={activeSurface === n.key}
+            muted={n.muted}
+            onClick={() => handlePickSurface(n.key)}
+            testId={`nav-${n.key}`}
+            trailing={
+              n.key === 'projects' ? (
+                <span className="text-[10px] px-1.5 py-px rounded-full" style={{ background: 'hsl(var(--sv-hover))', color: 'hsl(var(--sv-muted))' }}>
+                  Soon
+                </span>
+              ) : null
+            }
+          />
+        ))}
+
+        {/* Subtle "+ Add Mode" hint at bottom of mode list (visual only). */}
+        <button
+          type="button"
+          onClick={() => { /* future: open add-mode flow */ }}
+          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-[6px] text-[12px] transition-colors text-left"
+          style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.5)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          title="Add a custom mode (coming soon)"
+          data-testid="nav-add-mode"
+        >
+          <Plus className="h-3 w-3 shrink-0" />
+          <span>Add Mode</span>
+        </button>
       </nav>
 
       <div className="mt-3 mx-3 h-px shrink-0" style={{ background: 'hsl(var(--sv-hairline))' }} />
@@ -302,7 +328,7 @@ function NavRow({
     >
       <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: active ? 'hsl(var(--sv-clay))' : 'hsl(var(--sv-muted))' }} />
       <span className="flex-1 truncate">{label}</span>
-      {trailing ?? <ChevronRight className="h-3 w-3 shrink-0 opacity-40" />}
+      {trailing}
     </button>
   );
 }
