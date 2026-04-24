@@ -78,6 +78,7 @@ import { StrategyThreadsSidebar } from './StrategyThreadsSidebar';
 import { StrategyNavSidebar, type StrategyMode } from './StrategyNavSidebar';
 import { WorkflowFormSheet } from './workflows/WorkflowFormSheet';
 import type { WorkflowDef } from './workflows/workflowRegistry';
+import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
 import { StrategyGlobalNavBar } from './StrategyGlobalNavBar';
 import { StrategyProgressPanel } from './StrategyProgressPanel';
 import { ArtifactInlineCard } from './ArtifactInlineCard';
@@ -684,6 +685,47 @@ export function StrategyShell() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---------- Promote-to-Library (explicit; outputs are NEVER auto-Library) ----------
+  const [promotePayload, setPromotePayload] = useState<PromotePayload | null>(null);
+
+  /** Build a markdown body from a completed task_run result. */
+  const buildArtifactMarkdown = useCallback((title: string, result: typeof latestCompleted extends infer R ? R extends { result: infer X } ? X : never : never): string => {
+    const sections = (result?.draft?.sections ?? []) as Array<{ name: string; content: unknown }>;
+    const lines: string[] = [`# ${title}`, ''];
+    for (const s of sections) {
+      lines.push(`## ${s.name}`);
+      lines.push('');
+      const c = s.content;
+      if (typeof c === 'string') lines.push(c);
+      else if (c && typeof c === 'object') {
+        try { lines.push(JSON.stringify(c, null, 2)); } catch { /* ignore */ }
+      }
+      lines.push('');
+    }
+    return lines.join('\n').trim();
+  }, []);
+
+  /** Open the Promote sheet for the latest completed artifact in this thread. */
+  const handlePromoteCurrentArtifact = useCallback(() => {
+    if (!latestCompleted) {
+      toast('No completed artifact to promote yet');
+      return;
+    }
+    const ctxName = linkedContext?.account?.name
+      ?? linkedContext?.opportunity?.name
+      ?? null;
+    const baseTitle = ctxName
+      ? `${ctxName} — Discovery Prep`
+      : (activeThread?.title || 'Discovery Prep');
+    setPromotePayload({
+      defaultName: baseTitle,
+      content: buildArtifactMarkdown(baseTitle, latestCompleted.result as never),
+      threadId: activeThread?.id ?? null,
+      accountId: activeThread?.linked_account_id ?? null,
+      opportunityId: activeThread?.linked_opportunity_id ?? null,
+    });
+  }, [latestCompleted, linkedContext, activeThread, buildArtifactMarkdown]);
+
   // Pick a mode → set hint state, focus composer (does NOT gate input).
   const handlePickMode = useCallback((m: StrategyMode) => {
     setActiveMode(m);
@@ -810,7 +852,9 @@ export function StrategyShell() {
               title={`Discovery Prep`}
               result={latestCompleted.result}
               freshlyCompleted={recentlyCompletedRunId === latestCompleted.row.id}
+              contextLabel={entityName}
               onOpen={() => setArtifactPanelOpen(true)}
+              onPromote={handlePromoteCurrentArtifact}
             />
           </div>
         )}
@@ -883,7 +927,9 @@ export function StrategyShell() {
       {showArtifactPanel && latestCompleted && (
         <ArtifactWorkspace
           result={latestCompleted.result}
+          contextLabel={entityName}
           onClose={() => setArtifactPanelOpen(false)}
+          onPromote={handlePromoteCurrentArtifact}
         />
       )}
 
@@ -893,7 +939,9 @@ export function StrategyShell() {
           <SheetContent side="right" className="p-0 w-full sm:w-[480px]">
             <ArtifactWorkspace
               result={latestCompleted.result}
+              contextLabel={entityName}
               onClose={() => setArtifactPanelOpen(false)}
+              onPromote={handlePromoteCurrentArtifact}
             />
           </SheetContent>
         </Sheet>
@@ -990,6 +1038,11 @@ export function StrategyShell() {
         workflow={activeWorkflow}
         onClose={() => setActiveWorkflow(null)}
         onRun={handleRunWorkflow}
+      />
+      {/* Promote-to-Library — explicit, never automatic. Outputs are contextual by default. */}
+      <PromoteToLibrarySheet
+        payload={promotePayload}
+        onClose={() => setPromotePayload(null)}
       />
       {/* Validation status drawer (read-only) */}
       <ValidationStatusDrawer
