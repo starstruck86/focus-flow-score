@@ -44,11 +44,24 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
         {showEmptyState && onPickPrompt && (
           <StrategyEmptyState onPickPrompt={onPickPrompt} />
         )}
-        {messages.map((m, i) => (
-          <div key={m.id} style={{ marginTop: i === 0 ? 0 : 16 }}>
-            <StrategyMessage message={m} />
-          </div>
-        ))}
+        {messages.map((m, i) => {
+          // Quick actions render only on the most recent assistant message,
+          // and only when no response is currently streaming. Mirrors how
+          // ChatGPT/Claude scope iteration controls to the latest turn.
+          const isLastAssistant =
+            !isSending &&
+            m.role === 'assistant' &&
+            i === messages.length - 1 &&
+            !!onQuickAction;
+          return (
+            <div key={m.id} style={{ marginTop: i === 0 ? 0 : 16 }}>
+              <StrategyMessage
+                message={m}
+                onQuickAction={isLastAssistant ? onQuickAction : undefined}
+              />
+            </div>
+          );
+        })}
         {isSending && (
           <div style={{ marginTop: messages.length === 0 ? 0 : 16 }}>
             <StrategyMessage
