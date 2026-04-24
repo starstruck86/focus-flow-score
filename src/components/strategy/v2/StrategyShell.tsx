@@ -80,8 +80,9 @@ import { SurfacePanel } from './SurfacePanel';
 import { WorkflowFormSheet } from './workflows/WorkflowFormSheet';
 import type { WorkflowDef } from './workflows/workflowRegistry';
 import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflows/workflowRegistry';
-import { PillEditorSheet } from './PillEditorSheet';
-import { ManageStrategySheet } from './ManageStrategySheet';
+// PillEditorSheet / ManageStrategySheet are no longer mounted in the runtime
+// shell. Pill creation/editing and workspace management live on the
+// /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
 import { tagThread } from '@/lib/strategy/threadTags';
