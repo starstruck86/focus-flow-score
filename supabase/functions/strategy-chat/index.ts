@@ -2416,6 +2416,7 @@ serve(async (req) => {
       cleanPickedResourceIds,
       v2RequestOverride,
       routingDecision,
+      cleanGlobalInstructions,
     );
   } catch (e) {
     console.error("strategy-chat error:", e);
