@@ -75,6 +75,8 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { MoreHorizontal, PanelLeft } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { StrategyThreadsSidebar } from './StrategyThreadsSidebar';
+import { StrategyNavSidebar, type StrategyMode } from './StrategyNavSidebar';
+import { useUserArtifacts } from '@/hooks/strategy/useUserArtifacts';
 import { StrategyGlobalNavBar } from './StrategyGlobalNavBar';
 import { StrategyProgressPanel } from './StrategyProgressPanel';
 import { ArtifactInlineCard } from './ArtifactInlineCard';
