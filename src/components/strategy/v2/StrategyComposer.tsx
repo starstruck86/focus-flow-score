@@ -142,7 +142,7 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
 
   return (
     <div
-      className="w-full px-6 pb-4 pt-1"
+      className="w-full px-6 pb-3 pt-1"
       style={{
         background: 'hsl(var(--sv-paper))',
       }}
@@ -151,7 +151,7 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
         ref={wrapRef}
         className="mx-auto relative"
         style={{
-          maxWidth: 760,
+          maxWidth: 860,
           minHeight: 56,
           background: 'hsl(var(--sv-paper))',
           display: 'flex',
@@ -233,7 +233,7 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
       <div
         className="mx-auto px-[14px] text-[12px] leading-none"
         style={{
-          maxWidth: 760,
+          maxWidth: 860,
           color: 'hsl(var(--sv-muted))',
           minHeight: 14,
           marginTop: 6,
