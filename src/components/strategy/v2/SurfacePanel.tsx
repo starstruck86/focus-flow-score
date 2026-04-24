@@ -669,44 +669,56 @@ function RecentInSurface({
       </div>
       {annotated.length > 0 ? (
         <div className={vibe.groupSpacing}>
-          {groups.map(([groupName, items], idx) => (
-            <div key={groupName}>
-              {groups.length > 1 && (
-                <div
-                  className="flex items-center gap-2 mb-2"
-                  data-testid={`group-${groupName.toLowerCase().replace(/\s+/g, '-')}`}
-                >
-                  <span
-                    className="text-[10px] font-semibold uppercase tracking-[0.1em]"
-                    style={{ color: 'hsl(var(--sv-ink) / 0.6)' }}
-                  >
-                    {groupName}
-                  </span>
+          {groups.map(([groupName, items], idx) => {
+            const contextHint = groupContextHint(idx, groups.length);
+            return (
+              <div key={groupName}>
+                {groups.length > 1 && (
                   <div
-                    className="flex-1 h-px"
-                    style={{ background: 'hsl(var(--sv-hairline))' }}
-                  />
-                  <span
-                    className="text-[10px] tabular-nums"
-                    style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
+                    className="flex items-center gap-2 mb-2"
+                    data-testid={`group-${groupName.toLowerCase().replace(/\s+/g, '-')}`}
                   >
-                    {items.length}
-                  </span>
-                </div>
-              )}
-              <ThreadRows
-                items={items}
-                activeThreadId={activeThreadId}
-                onSelect={onSelect}
-                runningThreadIds={runningThreadIds}
-                artifactThreadIds={artifactThreadIds}
-                showReason
-                showNextAction
-                topMatchId={idx === 0 ? topMatchId : null}
-                vibe={vibe}
-              />
-            </div>
-          ))}
+                    <span
+                      className="text-[10px] font-semibold uppercase tracking-[0.1em]"
+                      style={{ color: 'hsl(var(--sv-ink) / 0.6)' }}
+                    >
+                      {groupName}
+                    </span>
+                    {contextHint && (
+                      <span
+                        className="text-[9.5px] italic lowercase tracking-normal"
+                        style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+                      >
+                        · {contextHint}
+                      </span>
+                    )}
+                    <div
+                      className="flex-1 h-px"
+                      style={{ background: 'hsl(var(--sv-hairline))' }}
+                    />
+                    <span
+                      className="text-[10px] tabular-nums"
+                      style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
+                    >
+                      {items.length}
+                    </span>
+                  </div>
+                )}
+                <ThreadRows
+                  items={items}
+                  activeThreadId={activeThreadId}
+                  onSelect={onSelect}
+                  runningThreadIds={runningThreadIds}
+                  artifactThreadIds={artifactThreadIds}
+                  showReason
+                  showNextAction
+                  topMatchId={idx === 0 ? topMatchId : null}
+                  topMatchLabel={label}
+                  vibe={vibe}
+                />
+              </div>
+            );
+          })}
           {fallbackHint && (
             <p className="mt-1 text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
               {fallbackHint}
