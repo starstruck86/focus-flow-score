@@ -40,6 +40,24 @@ import { getAllThreadTags } from '@/lib/strategy/threadTags';
 import type { StrategySurfaceKey } from './StrategyNavSidebar';
 import type { StrategyThread } from '@/types/strategy';
 
+/** A thread enriched with explainability metadata for display. */
+interface AnnotatedThread {
+  thread: StrategyThread;
+  /** Short reason chip — e.g. "Structured artifact". */
+  reason: string;
+  /** Light grouping bucket — e.g. "Structured work". */
+  group: string;
+}
+
+/** Short label for a surface key (used by Work origin tags). */
+const SURFACE_SHORT_LABEL: Partial<Record<string, string>> = {
+  brainstorm: 'Brainstorm',
+  deep_research: 'Deep Research',
+  refine: 'Refine',
+  library: 'Library',
+  artifacts: 'Artifacts',
+};
+
 interface Props {
   surface: StrategySurfaceKey;
   onLaunchWorkflow: (def: WorkflowDef) => void;
