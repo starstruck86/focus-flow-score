@@ -207,7 +207,7 @@ export function SurfacePanel({
       brainstorm: (t) => {
         const s = (t.title || '').toLowerCase();
         if (/\b(idea|ideas|brainstorm|angle|angles|hook|hooks|pov|point of view|hypothes)\b/.test(s))
-          return { reason: 'Strong match for Brainstorm', group: 'Ideation', nextAction: 'expand or branch', priority: 100 };
+          return { reason: 'Strong match for Brainstorm', group: 'Ideation', nextAction: 'expand into a full POV', priority: 100 };
         if (/\b(messaging|campaign|pitch|positioning|narrative|theme)\b/.test(s))
           return { reason: 'Messaging direction', group: 'Messaging', nextAction: 'sharpen or test angles', priority: 80 };
         if (!hasArtifact(t) && (t.title || '').length > 0 && (t.title || '').length < 50)
@@ -217,7 +217,7 @@ export function SurfacePanel({
       deep_research: (t) => {
         const s = (t.title || '').toLowerCase();
         if (hasArtifact(t) && (t.title || '').length >= 25)
-          return { reason: 'Strong match for Deep Research', group: 'Structured work', nextAction: 'expand or refine', priority: 100 };
+          return { reason: 'Strong match for Deep Research', group: 'Structured work', nextAction: 'expand into a full brief', priority: 100 };
         if (/\b(research|analysis|analyze|brief|deep dive|deep-dive|teardown|profile)\b/.test(s))
           return { reason: 'Long-form analysis', group: 'Structured work', nextAction: 'extend or cite', priority: 90 };
         if (/\b(account|company|competitor|competitive|market|industry|landscape)\b/.test(s))
@@ -229,7 +229,7 @@ export function SurfacePanel({
       refine: (t) => {
         const s = (t.title || '').toLowerCase();
         if (hasArtifact(t) && ageDays(t) < 3)
-          return { reason: 'Recently edited draft', group: 'Drafts to polish', nextAction: 'tighten or rewrite', priority: 100 };
+          return { reason: 'Recently edited draft', group: 'Drafts to polish', nextAction: 'refine for exec audience', priority: 100 };
         if (hasArtifact(t))
           return { reason: 'Draft with artifact', group: 'Drafts to polish', nextAction: 'polish or reuse', priority: 85 };
         if (/\b(refine|rewrite|edit|tighten|polish|improve|sharpen|revise)\b/.test(s))
@@ -241,7 +241,7 @@ export function SurfacePanel({
       library: (t) => {
         const s = (t.title || '').toLowerCase();
         if (/\b(framework|methodology|model|playbook)\b/.test(s))
-          return { reason: 'Framework work', group: 'Frameworks', nextAction: 'reuse or extend', priority: 90 };
+          return { reason: 'Framework work', group: 'Frameworks', nextAction: 'turn into outreach', priority: 90 };
         if (/\b(synthesis|pattern|insight|insights|principle|principles)\b/.test(s))
           return { reason: 'Synthesis / pattern', group: 'Insights', nextAction: 'apply elsewhere', priority: 75 };
         if (/\b(library|knowledge)\b/.test(s))
