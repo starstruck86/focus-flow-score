@@ -84,7 +84,7 @@ import { PillEditorSheet } from './PillEditorSheet';
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
 import { tagThread } from '@/lib/strategy/threadTags';
-import { buildWorkspaceTitle, WORKSPACE_LABEL } from '@/lib/strategy/threadNaming';
+import { buildWorkspaceTitle, WORKSPACE_LABEL, displayThreadTitle } from '@/lib/strategy/threadNaming';
 import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
 import { StrategyGlobalNavBar } from './StrategyGlobalNavBar';
 import { StrategyProgressPanel } from './StrategyProgressPanel';
