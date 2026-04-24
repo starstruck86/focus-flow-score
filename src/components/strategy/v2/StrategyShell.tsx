@@ -80,8 +80,9 @@ import { SurfacePanel } from './SurfacePanel';
 import { WorkflowFormSheet } from './workflows/WorkflowFormSheet';
 import type { WorkflowDef } from './workflows/workflowRegistry';
 import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflows/workflowRegistry';
-import { PillEditorSheet } from './PillEditorSheet';
-import { ManageStrategySheet } from './ManageStrategySheet';
+// PillEditorSheet / ManageStrategySheet are no longer mounted in the runtime
+// shell. Pill creation/editing and workspace management live on the
+// /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
 import { tagThread } from '@/lib/strategy/threadTags';
@@ -828,29 +829,26 @@ export function StrategyShell() {
   const pendingThreadTagRef = useRef<StrategySurfaceKey | null>(null);
 
   // ---------- Custom pills (programmable shortcuts) ----------
+  // Create / edit / manage live on the /strategy/settings page now (no
+  // modals). The sidebar "Add Mode" / "Manage Strategy" entries and the
+  // per-workspace "+ New pill" / pencil actions all navigate there.
   const [pillsVersion, setPillsVersion] = useState(0);
-  const [pillEditorOpen, setPillEditorOpen] = useState(false);
-  const [editingPill, setEditingPill] = useState<CustomPill | null>(null);
-  const [pillEditorSurface, setPillEditorSurface] = useState<StrategySurfaceKey>('brainstorm');
-  const [manageOpen, setManageOpen] = useState(false);
 
   const handleAddPill = useCallback((surface: StrategySurfaceKey) => {
-    setEditingPill(null);
-    setPillEditorSurface(surface);
-    setPillEditorOpen(true);
-  }, []);
+    navigate(`/strategy/settings/pill/new?surface=${surface}`);
+  }, [navigate]);
 
   const handleEditPill = useCallback((pill: CustomPill) => {
-    setEditingPill(pill);
-    setPillEditorSurface(pill.surface);
-    setPillEditorOpen(true);
-  }, []);
+    navigate(`/strategy/settings/pill/${pill.id}`);
+  }, [navigate]);
 
   const handleEditCustomPillById = useCallback((customPillId: string) => {
-    const pill = listCustomPills().find((p) => p.id === customPillId);
-    if (!pill) return;
-    handleEditPill(pill);
-  }, [handleEditPill]);
+    navigate(`/strategy/settings/pill/${customPillId}`);
+  }, [navigate]);
+
+  const handleOpenManageStrategy = useCallback(() => {
+    navigate('/strategy/settings');
+  }, [navigate]);
 
   const handlePillSaved = useCallback(() => {
     setPillsVersion((v) => v + 1);
@@ -1000,7 +998,7 @@ export function StrategyShell() {
       runningThreadIds={runningThreadIds}
       artifactThreadIds={artifactThreadIds}
       onAfterSelect={onAfterSelect}
-      onOpenManageStrategy={() => setManageOpen(true)}
+      onOpenManageStrategy={handleOpenManageStrategy}
     />
   );
 
@@ -1366,29 +1364,9 @@ export function StrategyShell() {
         onRun={handleRunWorkflow}
         onEditCustom={handleEditCustomPillById}
       />
-      {/* Pill editor — create/edit programmable shortcuts (custom GPT-style) */}
-      <PillEditorSheet
-        open={pillEditorOpen}
-        editing={editingPill}
-        surface={pillEditorSurface}
-        onClose={() => { setPillEditorOpen(false); setEditingPill(null); }}
-        onSaved={handlePillSaved}
-      />
-      {/* Manage Strategy — full configuration surface for workspaces & pills.
-          Opened from the sidebar (replaces the broken "Add Mode" entry). */}
-      <ManageStrategySheet
-        open={manageOpen}
-        onClose={() => setManageOpen(false)}
-        onAddPill={(surface) => {
-          setManageOpen(false);
-          handleAddPill(surface);
-        }}
-        onEditPill={(pill) => {
-          setManageOpen(false);
-          handleEditPill(pill);
-        }}
-        pillsVersion={pillsVersion}
-      />
+      {/* Pill editor + Manage Strategy now live on /strategy/settings.
+          Add/Edit Pill and "Manage Strategy" call navigate(...) instead of
+          opening a sheet. See handleAddPill / handleEditPill below. */}
       {/* Promote-to-Library — explicit, never automatic. Outputs are contextual by default. */}
       <PromoteToLibrarySheet
         payload={promotePayload}
