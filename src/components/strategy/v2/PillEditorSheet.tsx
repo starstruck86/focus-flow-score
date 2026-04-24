@@ -76,9 +76,11 @@ export function PillEditorSheet({ open, editing, surface, onClose, onSaved }: Pr
   const isEdit = !!editing;
   const surfaceLabel = surface === 'deep_research' ? 'Deep Research' : surface.charAt(0).toUpperCase() + surface.slice(1);
 
+  // Save requires only a name now — fields are optional in prompt-first pills
+  // (the prompt template carries [Bracketed] placeholders the user edits inline).
   const canSave = useMemo(() => {
-    return pill.name.trim().length > 0 && pill.fields.length > 0
-      && pill.fields.every((f) => f.label.trim().length > 0);
+    if (pill.name.trim().length === 0) return false;
+    return pill.fields.every((f) => f.label.trim().length > 0);
   }, [pill]);
 
   const handleSave = () => {
