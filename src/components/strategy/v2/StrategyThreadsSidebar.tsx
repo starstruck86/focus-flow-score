@@ -18,6 +18,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, X, PanelLeftClose, PanelLeftOpen, Sparkles, Loader2, FileText, Pin } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
+import { displayThreadTitle } from '@/lib/strategy/threadNaming';
 import { cn } from '@/lib/utils';
 
 interface Props {
