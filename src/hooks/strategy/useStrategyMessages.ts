@@ -72,6 +72,9 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
           pickedResourceIds: Array.isArray(options?.pickedResourceIds) && options.pickedResourceIds.length > 0
             ? options.pickedResourceIds
             : undefined,
+          // Phase 2: lightweight Global Instructions. Null when the engine is
+          // disabled — server treats absence as "no behavior change".
+          globalInstructions: buildGlobalInstructionsPayload() ?? undefined,
         }),
       });
 
