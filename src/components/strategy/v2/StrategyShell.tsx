@@ -713,8 +713,14 @@ export function StrategyShell() {
       (async () => {
         if (!user) return;
         setIsCreatingThread(true);
-        const newId = await createThread('Untitled thread', 'strategy', 'freeform');
+        // Derive a workspace-prefixed title from the first prompt — never
+        // "Untitled thread". e.g. "Brainstorm · CMO messaging angles".
+        const surfaceForTitle = (sendingFrom && sendingFrom !== 'work') ? sendingFrom : null;
+        const derivedTitle = buildWorkspaceTitle(text, surfaceForTitle);
+        const newId = await createThread(derivedTitle, 'strategy', 'freeform');
         if (newId) {
+          // Tag immediately so display title resolution + recents can rely on it.
+          if (surfaceForTitle) tagThread(newId, surfaceForTitle);
           queuedInitialMessageRef.current = text;
           // Re-stash so the queued send (after thread mounts) still sees them.
           if (sidecar) setPendingResourceIds(sidecar);
