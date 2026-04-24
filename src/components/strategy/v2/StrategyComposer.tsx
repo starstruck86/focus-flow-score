@@ -39,6 +39,10 @@ export interface StrategyComposerHandle {
   focus: () => void;
   clearSlash: () => void;
   insertText: (text: string) => void;
+  /** Read current draft text (used to preserve per-surface drafts). */
+  getValue: () => string;
+  /** Replace current draft text (used when switching surfaces). */
+  setValue: (text: string) => void;
 }
 
 export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function StrategyComposer(
@@ -52,6 +56,8 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
     const ta = taRef.current as HTMLTextAreaElement & {
       clearSlash?: () => void;
       insertText?: (text: string) => void;
+      getValue?: () => string;
+      setValue?: (text: string) => void;
     };
     if (ta) {
       ta.clearSlash = () => {
@@ -73,6 +79,14 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           const end = el.value.length;
           try { el.setSelectionRange(end, end); } catch { /* ignore */ }
         });
+      };
+      // Per-surface draft persistence — read the live value without forcing
+      // a re-render, and replace it silently when switching surfaces.
+      ta.getValue = () => value;
+      ta.setValue = (text: string) => {
+        setValue(text);
+        // Don't trigger slash mode for restored drafts.
+        if (!text.startsWith('/')) onSlashChange?.(null);
       };
     }
     return ta;

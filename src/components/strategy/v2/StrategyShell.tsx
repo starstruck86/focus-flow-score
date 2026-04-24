@@ -138,6 +138,19 @@ export function StrategyShell() {
   const slashFileInputRef = useRef<HTMLInputElement>(null);
   const queuedInitialMessageRef = useRef<string | null>(null);
 
+  // ── Per-surface composer drafts ──────────────────────────────────────────
+  // Each workspace has its own independent composer draft. Switching surfaces
+  // saves the current draft under the previous surface key and restores the
+  // draft for the next surface. The 'work' bucket holds the thread-bound
+  // draft (the global "no surface open" view).
+  type DraftKey = StrategySurfaceKey | 'work';
+  const surfaceDraftsRef = useRef<Record<string, string>>({});
+  const lastSurfaceKeyRef = useRef<DraftKey>('work');
+  const draftKeyOf = useCallback(
+    (s: StrategySurfaceKey | null): DraftKey => (s ?? 'work'),
+    [],
+  );
+
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
@@ -153,6 +166,33 @@ export function StrategyShell() {
   // out-of-band on the next sendMessage and cleared after. Never visible
   // in the composer (the composer only ever shows the human title).
   const [pendingResourceIds, setPendingResourceIds] = useState<string[]>([]);
+
+  // ── Surface-switch draft swap ────────────────────────────────────────────
+  // When the user moves between workspaces, save the in-flight draft under
+  // the previous surface and restore the next surface's draft. This makes
+  // each workspace feel like its own independent starting surface — a draft
+  // typed in Brainstorm never bleeds into Deep Research.
+  useEffect(() => {
+    const ta = composerRef.current as
+      (HTMLTextAreaElement & { getValue?: () => string; setValue?: (t: string) => void })
+      | null;
+    if (!ta?.getValue || !ta?.setValue) {
+      // Composer not mounted yet — just remember the new key.
+      lastSurfaceKeyRef.current = draftKeyOf(activeSurface);
+      return;
+    }
+    const prevKey = lastSurfaceKeyRef.current;
+    const nextKey = draftKeyOf(activeSurface);
+    if (prevKey === nextKey) return;
+    // Persist the current draft for the surface we're leaving.
+    surfaceDraftsRef.current[prevKey] = ta.getValue();
+    // Load the draft for the surface we're entering (default = empty).
+    const incoming = surfaceDraftsRef.current[nextKey] ?? '';
+    ta.setValue(incoming);
+    lastSurfaceKeyRef.current = nextKey;
+    // Clear any in-flight slash query so we don't carry "/library" between surfaces.
+    setSlashQuery(null);
+  }, [activeSurface, draftKeyOf]);
 
   // ----- Cycle 1 Canary operator workflow -----
   const [canaryDrawerOpen, setCanaryDrawerOpen] = useState(false);
@@ -575,6 +615,17 @@ export function StrategyShell() {
 
   const handleSend = useCallback((text: string) => {
     if (pendingThreadId || isCreatingThread || isSending) return;
+    // Clear the per-surface draft for the workspace we're sending from and
+    // exit that workspace so the conversation/canvas takes focus. This keeps
+    // each workspace as a clean launch surface, never a sticky chat view.
+    const sendingFrom = lastSurfaceKeyRef.current;
+    if (sendingFrom && sendingFrom !== 'work') {
+      surfaceDraftsRef.current[sendingFrom] = '';
+      // Re-pin the key so the swap effect doesn't snapshot the (now empty)
+      // composer back into the previous bucket on the way out.
+      lastSurfaceKeyRef.current = 'work';
+      setActiveSurface(null);
+    }
     // Snapshot + clear sidecar IDs synchronously so a second send can't
     // accidentally re-attach the same picked resource.
     const sidecar = pendingResourceIds.length > 0 ? pendingResourceIds : undefined;
@@ -736,11 +787,9 @@ export function StrategyShell() {
     // Decide: send immediately or insert?
     const sendNow = def.runMode === 'send' && !hasUnresolvedPlaceholders(compiled);
 
-    // Close the surface panel so chat takes focus.
-    setActiveSurface(null);
-
     if (sendNow) {
-      // Apply the pending tag the same way the form path did.
+      // Send-immediately: leave the surface so the thread/canvas takes focus.
+      setActiveSurface(null);
       const launchedFrom = launchSurfaceRef.current;
       launchSurfaceRef.current = null;
       if (launchedFrom && launchedFrom !== 'work' && launchedFrom !== 'projects') {
@@ -752,11 +801,15 @@ export function StrategyShell() {
       return;
     }
 
-    // Default: insert into composer, focus, and let the user edit.
+    // Insert mode: stay in the current workspace. The pill's prompt becomes
+    // *this workspace's* draft — it does not bleed into other surfaces.
+    // The per-surface draft swap effect will persist it on the next switch.
     const ta = composerRef.current as
       (HTMLTextAreaElement & { insertText?: (t: string) => void })
       | null;
     ta?.insertText?.(compiled);
+    // Pin the lastSurfaceKeyRef so a stale value doesn't overwrite this draft.
+    lastSurfaceKeyRef.current = draftKeyOf(activeSurface);
     requestAnimationFrame(() => composerRef.current?.focus());
     // Tag deferred to send time — pendingThreadTagRef handles fresh threads.
     if (launchSurfaceRef.current && launchSurfaceRef.current !== 'work' && launchSurfaceRef.current !== 'projects') {
@@ -767,7 +820,7 @@ export function StrategyShell() {
     }
   // handleSend declared later — safe at call-time.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSurface, threadId]);
+  }, [activeSurface, threadId, draftKeyOf]);
 
   const handleRunWorkflow = useCallback((compiledPrompt: string) => {
     setActiveWorkflow(null);
@@ -1026,15 +1079,21 @@ export function StrategyShell() {
           ref={composerRef}
           disabled={isSending || !!pendingThreadId || isCreatingThread}
           placeholder={
-            activeMode === 'brainstorm'
+            activeSurface === 'brainstorm'
               ? 'Brainstorm anything — angles, ideas, half-formed thoughts…'
-              : activeMode === 'deep_research'
+              : activeSurface === 'deep_research'
                 ? 'Ask anything, paste notes, or start with an account or company…'
-                : activeMode === 'refine'
+                : activeSurface === 'refine'
                   ? 'Paste a draft, an output, or a snippet to refine…'
-                  : messages.length === 0
-                    ? 'What are you thinking about?'
-                    : entityName ? `Message about ${entityName}…` : 'Message…'
+                  : activeSurface === 'library'
+                    ? 'Search the library or ask Strategy to pull from it…'
+                    : activeSurface === 'artifacts'
+                      ? 'Pick an artifact pill above, or describe what to build…'
+                      : activeSurface === 'projects'
+                        ? 'Describe the project — Strategy will scope it…'
+                        : messages.length === 0
+                          ? 'What are you thinking about?'
+                          : entityName ? `Message about ${entityName}…` : 'Message…'
           }
           serifPlaceholder={messages.length === 0 && !activeMode}
           onSend={handleSend}
