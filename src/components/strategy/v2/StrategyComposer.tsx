@@ -39,6 +39,10 @@ export interface StrategyComposerHandle {
   focus: () => void;
   clearSlash: () => void;
   insertText: (text: string) => void;
+  /** Read current draft text (used to preserve per-surface drafts). */
+  getValue: () => string;
+  /** Replace current draft text (used when switching surfaces). */
+  setValue: (text: string) => void;
 }
 
 export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function StrategyComposer(
