@@ -38,6 +38,7 @@ import {
 } from '@/lib/strategy/customPills';
 import { getAllThreadTags } from '@/lib/strategy/threadTags';
 import { displayThreadTitle, isUntitledTitle, WORKSPACE_SHORT } from '@/lib/strategy/threadNaming';
+import { isCleanupThread } from '@/lib/strategy/threadCleanup';
 import type { StrategySurfaceKey } from './StrategyNavSidebar';
 import type { StrategyThread } from '@/types/strategy';
 
