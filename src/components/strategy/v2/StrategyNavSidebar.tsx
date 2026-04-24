@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
 import type { UserArtifact } from '@/hooks/strategy/useUserArtifacts';
-import { groupForTaskType } from '@/hooks/strategy/useUserArtifacts';
+import { groupForTaskType, shortDate } from '@/hooks/strategy/useUserArtifacts';
 import { cn } from '@/lib/utils';
 
 export type StrategyMode = 'brainstorm' | 'deep_research' | 'refine' | null;
@@ -89,6 +89,24 @@ export function StrategyNavSidebar({
     }
     return Array.from(m.entries());
   }, [artifacts]);
+
+  // Filter test/benchmark threads out of Work; sort active+ready first.
+  const { visibleThreads, hiddenTestCount } = useMemo(() => {
+    const isTest = (t: StrategyThread) => /^\[benchmark\]/i.test(t.title || '');
+    const visible = threads.filter((t) => !isTest(t));
+    const hidden = threads.length - visible.length;
+    // Stable sort: active > running > artifact-ready > untitled-deprio > rest (by updated_at order which is already DB-sorted)
+    const score = (t: StrategyThread) => {
+      if (t.id === activeThreadId) return 0;
+      if (runningThreadIds?.has(t.id)) return 1;
+      if (artifactThreadIds?.has(t.id)) return 2;
+      const isUntitled = !t.title || /^untitled/i.test(t.title);
+      return isUntitled ? 4 : 3;
+    };
+    const sorted = [...visible].sort((a, b) => score(a) - score(b));
+    return { visibleThreads: sorted, hiddenTestCount: hidden };
+  }, [threads, activeThreadId, runningThreadIds, artifactThreadIds]);
+
 
   // ────────────── Collapsed rail ──────────────
   if (collapsed) {
@@ -256,32 +274,52 @@ export function StrategyNavSidebar({
               No artifacts yet. Discovery preps and deal reviews will appear here.
             </p>
           ) : (
-            <div className="px-1.5 space-y-2">
+            <div className="px-1.5 space-y-1.5">
               {artifactsGrouped.map(([groupName, items]) => (
                 <div key={groupName}>
                   <div
-                    className="px-2 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-[0.06em]"
-                    style={{ color: 'hsl(var(--sv-muted))' }}
+                    className="px-2 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-[0.06em]"
+                    style={{ color: 'hsl(var(--sv-muted) / 0.75)' }}
                   >
                     {groupName}
                   </div>
                   <ul className="space-y-px">
-                    {items.slice(0, 6).map((a) => (
+                    {items.slice(0, 3).map((a) => (
                       <li key={a.id}>
                         <button
                           onClick={() => { onOpenArtifact(a); onAfterSelect?.(); }}
-                          className="w-full text-left px-2 py-1.5 rounded-[6px] flex items-center gap-2 group transition-colors"
+                          className="w-full text-left px-2 py-1.5 rounded-[6px] flex items-start gap-2 group transition-colors"
                           style={{ color: 'hsl(var(--sv-ink))' }}
                           onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                           title={a.title}
                         >
-                          <FileText className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} />
-                          <span className="flex-1 min-w-0 truncate text-[12.5px]">{a.title}</span>
-                          <ChevronRight className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-50" />
+                          <FileText className="h-3 w-3 shrink-0 mt-[3px]" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} />
+                          <div className="flex-1 min-w-0 flex flex-col gap-px">
+                            <span className="truncate text-[12.5px] leading-tight">
+                              {a.context ? a.context : a.type_label}
+                            </span>
+                            <span
+                              className="truncate text-[10.5px] leading-tight"
+                              style={{ color: 'hsl(var(--sv-muted))' }}
+                            >
+                              {a.context ? `${a.type_label} · ${shortDate(a.completed_at ?? a.created_at)}` : shortDate(a.completed_at ?? a.created_at)}
+                            </span>
+                          </div>
+                          <ChevronRight className="h-3 w-3 shrink-0 mt-[3px] opacity-0 group-hover:opacity-50" />
                         </button>
                       </li>
                     ))}
+                    {items.length > 3 && (
+                      <li>
+                        <span
+                          className="block px-2 py-0.5 text-[10.5px]"
+                          style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
+                        >
+                          +{items.length - 3} more
+                        </span>
+                      </li>
+                    )}
                   </ul>
                 </div>
               ))}
@@ -312,24 +350,25 @@ export function StrategyNavSidebar({
           </div>
         </Section>
 
-        {/* 5. Work */}
+        {/* 5. Work — benchmark/test threads filtered, active/artifact-ready ranked first */}
         <Section
           label="Work"
-          subtitle={threads.length === 0 ? 'Active and recent threads' : undefined}
-          count={threads.length}
+          subtitle={visibleThreads.length === 0 ? 'Active and recent threads' : undefined}
+          count={visibleThreads.length}
           open={openWork}
           onToggle={() => setOpenWork(o => !o)}
         >
-          {threads.length === 0 ? (
+          {visibleThreads.length === 0 ? (
             <p className="px-3 pt-1 pb-2 text-[11.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
               No work yet. Click <span style={{ color: 'hsl(var(--sv-ink))' }}>New Work</span> above to start.
             </p>
           ) : (
             <ul className="px-1.5 space-y-px">
-              {threads.slice(0, 30).map((t) => {
+              {visibleThreads.slice(0, 30).map((t) => {
                 const isActive = activeThreadId === t.id;
                 const isRunning = runningThreadIds?.has(t.id) ?? false;
                 const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
+                const isUntitled = !t.title || /^untitled/i.test(t.title);
                 return (
                   <li key={t.id}>
                     <button
@@ -340,6 +379,7 @@ export function StrategyNavSidebar({
                         color: 'hsl(var(--sv-ink))',
                         paddingLeft: 10,
                         borderLeft: isActive ? '2px solid hsl(var(--sv-clay))' : '2px solid transparent',
+                        opacity: isUntitled && !isActive && !isRunning && !hasArtifact ? 0.65 : 1,
                       }}
                       onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
                       onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
@@ -370,6 +410,13 @@ export function StrategyNavSidebar({
                   </li>
                 );
               })}
+              {hiddenTestCount > 0 && (
+                <li className="px-2 pt-1.5 pb-0.5">
+                  <span className="text-[10.5px]" style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}>
+                    {hiddenTestCount} test thread{hiddenTestCount === 1 ? '' : 's'} hidden
+                  </span>
+                </li>
+              )}
             </ul>
           )}
         </Section>
@@ -391,18 +438,18 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="mt-1 first:mt-0">
+    <section className="mt-0.5 first:mt-0">
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 group"
+        className="w-full flex items-center gap-1.5 px-3 pt-2.5 pb-1 group"
         aria-expanded={open}
       >
         {open ? (
-          <ChevronDown className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-muted) / 0.7)' }} />
+          <ChevronDown className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-muted) / 0.6)' }} />
         ) : (
-          <ChevronRight className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-muted) / 0.7)' }} />
+          <ChevronRight className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-muted) / 0.6)' }} />
         )}
-        <span className="text-[10.5px] font-semibold uppercase tracking-[0.10em]" style={{ color: 'hsl(var(--sv-muted))' }}>
+        <span className="text-[10.5px] font-medium uppercase tracking-[0.09em]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
           {label}
         </span>
         {typeof count === 'number' && count > 0 && (

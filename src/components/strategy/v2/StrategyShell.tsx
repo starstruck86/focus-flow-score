@@ -727,13 +727,17 @@ export function StrategyShell() {
       {/* Desktop persistent sidebar */}
       {!isMobile && sidebarNode()}
 
-      {/* Mobile sidebar drawer */}
+      {/* Mobile sidebar drawer — lighter overlay (CSS override), intentional width (~85vw, max 320px) */}
       {isMobile && (
         <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
           <SheetContent
             side="left"
-            className="p-0 w-[280px] flex flex-col"
-            style={{ background: 'hsl(var(--sv-paper))' }}
+            className="p-0 flex flex-col strategy-mobile-drawer [&>button]:hidden"
+            style={{
+              background: 'hsl(var(--sv-paper))',
+              width: 'min(85vw, 320px)',
+              boxShadow: '0 0 40px hsl(0 0% 0% / 0.12)',
+            }}
           >
             <div className="flex flex-1 min-h-0">
               {sidebarNode(() => setMobileSidebarOpen(false))}
