@@ -831,8 +831,9 @@ export function StrategyShell() {
     const sendNow = def.runMode === 'send' && !hasUnresolvedPlaceholders(compiled);
 
     if (sendNow) {
-      // Send-immediately: leave the surface so the thread/canvas takes focus.
-      setActiveSurface(null);
+      // Send-immediately: stay in the current workspace. The thread spawned
+      // by this send becomes this surface's active conversation. handleSend
+      // binds the new thread to lastSurfaceKeyRef.current automatically.
       const launchedFrom = launchSurfaceRef.current;
       launchSurfaceRef.current = null;
       if (launchedFrom && launchedFrom !== 'work' && launchedFrom !== 'projects') {
