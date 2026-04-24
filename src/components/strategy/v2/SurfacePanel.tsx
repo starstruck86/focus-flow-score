@@ -133,7 +133,7 @@ export function SurfacePanel({
 
   return (
     <div
-      className="border-b shrink-0"
+      className="flex-1 min-h-0 overflow-y-auto border-b"
       style={{
         background: 'hsl(var(--sv-paper))',
         borderColor: 'hsl(var(--sv-hairline))',
