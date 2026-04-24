@@ -843,25 +843,37 @@ export function StrategyShell() {
           ref={composerRef}
           disabled={isSending || !!pendingThreadId || isCreatingThread}
           placeholder={
-            messages.length === 0
-              ? 'What are you thinking about?'
-              : entityName ? `Message about ${entityName}…` : 'Message…'
+            activeMode === 'brainstorm'
+              ? 'Brainstorm anything — angles, ideas, half-formed thoughts…'
+              : activeMode === 'deep_research'
+                ? 'Ask anything, paste notes, or start with an account or company…'
+                : activeMode === 'refine'
+                  ? 'Paste a draft, an output, or a snippet to refine…'
+                  : messages.length === 0
+                    ? 'What are you thinking about?'
+                    : entityName ? `Message about ${entityName}…` : 'Message…'
           }
-          serifPlaceholder={messages.length === 0}
+          serifPlaceholder={messages.length === 0 && !activeMode}
           onSend={handleSend}
           onSlashChange={setSlashQuery}
           onRectChange={setComposerRect}
           onAttachFiles={() => slashFileInputRef.current?.click()}
           momentumHint={
             // Context-aware "what's next?" line under the composer.
-            // Priority: streaming > artifact-just-landed > linked-entity > null (let composer fall back to its empty/typing hints)
+            // Priority: streaming > artifact-just-landed > active mode > linked-entity > null
             isSending
               ? 'Strategy is thinking…'
               : (latestCompleted && artifactPanelOpen)
                 ? 'Ask a follow-up to refine · / to revise · ⌘S to save'
-                : entityName && messages.length > 0
-                  ? `Grounded on ${entityName} · / for actions · ⌘S save`
-                  : null
+                : activeMode === 'brainstorm'
+                  ? 'Brainstorm mode · think out loud — Strategy will shape it later.'
+                  : activeMode === 'deep_research'
+                    ? 'Deep Research mode · ask anything, paste notes, or start with an account.'
+                    : activeMode === 'refine'
+                      ? 'Refine mode · paste a draft and Strategy will sharpen it.'
+                      : entityName && messages.length > 0
+                        ? `Grounded on ${entityName} · / for actions · ⌘S save`
+                        : null
           }
         />
       )}
