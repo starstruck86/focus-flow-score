@@ -1059,9 +1059,10 @@ export function StrategyShell() {
         <StrategyProgressPanel active={activeRun} />
 
         {/* Surface panel — direct entry for Brainstorm / Deep Research /
-            Refine / Library / Artifacts / Projects / Work. When active, it
-            owns the main workspace body so default thread chrome does not
-            visually compete with it. */}
+            Refine / Library / Artifacts / Projects / Work. When the surface
+            has an active thread, the panel collapses to a compact header
+            and the chat canvas renders below — keeping the workspace as the
+            container for its own conversation. */}
         {showSurfaceWorkspace && (
           <SurfacePanel
             surface={activeSurface!}
@@ -1084,6 +1085,13 @@ export function StrategyShell() {
             onEditPill={handleEditPill}
             runningThreadIds={runningThreadIds}
             artifactThreadIds={artifactThreadIds}
+            hasActiveThread={!!threadId}
+            onNewThreadInSurface={() => {
+              // Clear this surface's active thread → empty state w/ pills
+              const key = lastSurfaceKeyRef.current;
+              if (key) surfaceThreadsRef.current[key] = null;
+              setActiveThreadId(null);
+            }}
           />
         )}
 
@@ -1101,9 +1109,10 @@ export function StrategyShell() {
           </div>
         )}
 
-        {/* Default thread canvas — hidden while a surface workspace is active
-            so the surface fully owns the main body. The composer stays. */}
-        {!showSurfaceWorkspace && (
+        {/* Default thread canvas — shows the active conversation. Renders
+            for the global Work view AND inside any surface that has its own
+            active thread, so each workspace contains its own chat. */}
+        {(!showSurfaceWorkspace || !!threadId) && (
           <StrategyCanvas
             messages={messages}
             isLoading={isLoading}
